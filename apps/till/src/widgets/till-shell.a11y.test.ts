@@ -151,7 +151,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     await expectNoA11yViolations(host);
   });
 
-  it("the bar with its language chooser, closed and open, has no violations", async () => {
+  it("the bar, and More with its language chooser, closed and open, has no violations", async () => {
     const { el, host } = await mountWidget<TillShell>(
       "till-shell",
       {
@@ -164,12 +164,33 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
       theme,
     );
     await expectNoA11yViolations(host);
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
-    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+    const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+    menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+    await vi.waitFor(() =>
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+    );
+    const chooser = menu.querySelector(":scope > .settings-group > wt-language-chooser")!;
     await vi.waitFor(() => {
-      expect(chooser.shadowRoot!.querySelector('[role="menu"]')).not.toBeNull();
+      expect(chooser.shadowRoot!.querySelector('[role="group"]')).not.toBeNull();
     });
     await expectNoA11yViolations(host);
+  });
+
+  it("a handheld's open More, with its Settings group, has no violations", async () => {
+    await atViewport(390, 844, async () => {
+      const { el, host } = await mountWidget<TillShell>(
+        "till-shell",
+        { ...full, formFactor: "tablet-landscape", activeScreen: "floor" },
+        theme,
+      );
+      const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+      expect(menu.querySelector(".zones")!.closest('[role="group"]')?.parentElement).toBe(menu);
+      menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+      await vi.waitFor(() =>
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+      );
+      await expectNoA11yViolations(host);
+    });
   });
 
   it.each(["en-GB", "es-ES"] as const)(
@@ -280,6 +301,24 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
         fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
       });
     }
+  });
+
+  it("the bar with a selected table button and an unsent one has no violations", async () => {
+    const { el, host } = await mountWidget<TillShell>(
+      "till-shell",
+      {
+        formFactor: "phone-portrait",
+        activeScreen: "order",
+        operatorName: "Ana",
+        barTables: [
+          { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+          { tableId: "t9", name: "T9", unsent: false, current: true, held: false },
+        ],
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-bar-table]")).toHaveLength(2);
+    await expectNoA11yViolations(host);
   });
 
   it("kiosk mode with its language chooser has no violations", async () => {

@@ -247,7 +247,16 @@ describe("till-floor-screen: zone tabs", () => {
       "not-sent",
       {
         party: party("p-t2", {
-          unsentDrafts: [{ billId: "b", billNumber: 3, ownerName: "Alex", lineCount: 1 }],
+          unsentDrafts: [
+            {
+              billId: "b",
+              billNumber: 3,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
         }),
       },
       "tab-seated-tint",

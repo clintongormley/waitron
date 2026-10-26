@@ -5,6 +5,7 @@ import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
 import type { TillApi } from "./api/client.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import {
   server,
   api,
@@ -15,6 +16,7 @@ import {
   floor,
   tableOrder,
   table4,
+  table7,
   draft,
   openTable,
   addDish,
@@ -748,6 +750,126 @@ it("refreshes party metadata before using a newer allergy revision without repla
   await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
   await vi.waitFor(() => expect(api.submitDraft).toHaveBeenCalledOnce());
   expect(api.submitDraft!.mock.calls[0]![2].expectedPartyRevision).toBe(5);
+});
+
+describe("a floor read started before the metadata re-read and answering after it", () => {
+  const unsentOn7 = (ownerId: string, ownerName: string) =>
+    table(
+      "t7",
+      "7",
+      party({
+        id: "v7",
+        revision: 9,
+        mainBillId: "wo-7",
+        tableIds: ["t7"],
+        unsentDrafts: [
+          {
+            billId: "wo-7",
+            billNumber: 1,
+            ownerId,
+            ownerName,
+            lineCount: 1,
+            savedAt: "2026-10-26T12:00:00.000Z",
+          },
+        ],
+      }),
+    );
+  const newerParty = {
+    listGroups: vi.fn().mockResolvedValue({ revision: 5, groups: [] }),
+    readCurrentOrders: vi.fn().mockResolvedValue({
+      revision: 5,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    }),
+    previewPartyAllergy: vi
+      .fn()
+      .mockImplementation(async (_id: string, target: AllergySendTarget) => ({
+        ...allergyView(null, target),
+        snapshot: { ...allergyView(null).snapshot, revision: 5 },
+      })),
+  };
+  const sendAll = (el: Parameters<typeof tableOrder>[0]) =>
+    userEvent.click(
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+
+  it.each([
+    ["equal to the list shown before", [table4, table7]],
+    ["different from the list shown before", [table4, unsentOn7("p1", "Ana")]],
+  ])(
+    "leaves the till's Floor on the re-read's newer list when the older answer is %s",
+    async (_, older) => {
+      const before = [table4, table7];
+      const getTablesState = vi.fn().mockResolvedValue(before);
+      const { el } = await mountApp({ getTablesState, ...newerParty });
+      await openTable(el);
+      await addDish(el);
+      let answerOlder!: (tables: typeof before) => void;
+      getTablesState
+        .mockImplementationOnce(() => new Promise((resolve) => (answerOlder = resolve)))
+        .mockResolvedValue([table("t4", "4", party({ revision: 5 })), table7]);
+      const reads = getTablesState.mock.calls.length;
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(getTablesState.mock.calls.length).toBe(reads + 1);
+
+      await sendAll(el);
+      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+      expect(getTablesState.mock.calls.length).toBe(reads + 2);
+      const t4Revision = () =>
+        floor(el)!.tables.find((each) => each.id === "t4")?.party?.revision ?? null;
+      expect(t4Revision()).toBe(5);
+
+      answerOlder(older);
+      await flush(el, 6);
+      expect(t4Revision()).toBe(5);
+    },
+  );
+
+  it("leaves a handheld's bar on the re-read's newer list after a left table's save", async () => {
+    const formFactor = "phone-portrait" as const;
+    const getTablesState = vi.fn().mockResolvedValue([table4, table7]);
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(formFactor)),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "device-1", name: "Device 1", formFactor }),
+      getTablesState,
+      ...newerParty,
+    });
+    const sevenOnBar = () => shell(el).shadowRoot!.querySelector('[data-bar-table="t7"]') !== null;
+    await openTable(el, "t7");
+    await addDish(el);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    const anasOn7 = [table4, unsentOn7("p1", "Ana")];
+    getTablesState.mockResolvedValue(anasOn7);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(sevenOnBar()).toBe(true);
+
+    let answerOlder!: (tables: typeof anasOn7) => void;
+    getTablesState
+      .mockImplementationOnce(() => new Promise((resolve) => (answerOlder = resolve)))
+      .mockResolvedValue([table("t4", "4", party({ revision: 5 })), unsentOn7("p2", "Sam")]);
+    const reads = getTablesState.mock.calls.length;
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    expect(tableOrder(el)!.party?.id).toBe("v1");
+    expect(getTablesState.mock.calls.length).toBe(reads + 1);
+    await addDish(el);
+
+    await sendAll(el);
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(getTablesState.mock.calls.length).toBe(reads + 2);
+
+    answerOlder(anasOn7);
+    await flush(el, 6);
+    expect(sevenOnBar()).toBe(false);
+  });
 });
 
 it("keeps the answer and permits retry after the server refuses an allergy write", async () => {

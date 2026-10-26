@@ -118,7 +118,7 @@ describe("Order's help badge on Fire and Send all", () => {
     expect(getComputedStyle(tip).display).toBe("none");
   });
 
-  it("the handheld's embedded Order tab shows it too, inside the window", async () => {
+  it("the handheld's embedded Order screen shows it too, inside the window", async () => {
     await page.viewport(390, 844);
     const { el } = await mountWithLines({ embedded: true, handheld: true });
     const tip = await helpOn(el);

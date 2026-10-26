@@ -65,7 +65,14 @@ const ready: TableSignal = {
   kind: "ready",
   byStation: [{ stationId: "bar", stationName: "Bar", count: 1 }],
 };
-const unsent = { billId: "wo-3", billNumber: 3, ownerName: "Alex", lineCount: 1 };
+const unsent = {
+  billId: "wo-3",
+  billNumber: 3,
+  ownerId: "p-alex",
+  ownerName: "Alex",
+  lineCount: 1,
+  savedAt: "2026-10-26T12:00:00.000Z",
+};
 
 describe("PRECEDENCE", () => {
   it("is A757 §4's order for the states built today", () => {

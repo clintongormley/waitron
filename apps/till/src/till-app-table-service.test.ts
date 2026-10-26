@@ -1085,10 +1085,10 @@ it("reuses the submission id when a station move gets no answer", async () => {
   );
 });
 
-describe("till-app table ordering: a handheld's Order tab with no table opened", () => {
-  // The Order tab is reachable from the tab strip before any table is opened, so the table-order
-  // screen can emit its actions while the app holds no tab (and no table) to apply them to.
-  async function toEmptyOrderTab(): Promise<{ el: TillApp; screen: TillTableOrderScreen }> {
+describe("till-app table ordering: a handheld's order screen with no table opened", () => {
+  // The address reaches the order screen before any table is opened, so the table-order screen can
+  // emit its actions while the app holds no tab (and no table) to apply them to.
+  async function toEmptyOrderScreen(): Promise<{ el: TillApp; screen: TillTableOrderScreen }> {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
@@ -1096,7 +1096,8 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
     });
     await logIn(el);
-    emit(shell(el), "screen-select", { screen: "order" });
+    history.pushState(null, "", "/tabs/order");
+    window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     const screen = tableOrder(el)!;
     expect(screen.orderId).toBeUndefined();
@@ -1140,7 +1141,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
     ["pay-tab", { method: "cash", amount: "10.00" }, "recordSale"],
   ] as const)("%s sends nothing to the server", async (type, detail, method) => {
-    const { el, screen } = await toEmptyOrderTab();
+    const { el, screen } = await toEmptyOrderScreen();
 
     emit(screen, type, detail);
     await flush(el);
@@ -1730,7 +1731,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(cancelDialog(el)).not.toBeNull();
   });
 
-  it("shows a dismissed Cancel offer only once, even when a handheld's Order tab mounts again", async () => {
+  it("shows a dismissed Cancel offer only once, even when a handheld's order screen mounts again", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
@@ -1756,10 +1757,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
-    emit(shell(el), "screen-select", { screen: "order" });
+    history.pushState(null, "", "/tabs/order");
+    window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     await flush(el);
 
+    expect(tableOrder(el)!.orderId).toBe(openTable.party!.mainBillId);
     expect(cancelDialog(el)).toBeNull();
   });
 
@@ -2109,9 +2112,11 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(reads()).toBe(readsOnLeaving);
     });
 
-    it("treats a handheld's tap on the Order tab it is already on as staying on the order", async () => {
+    it("treats a handheld's tap on the button of the table it is on as staying on the order", async () => {
       const { el, settle } = await changeOnFormFactor(phoneFormFactor);
-      emit(shell(el), "screen-select", { screen: "order" });
+      shell(el)
+        .shadowRoot!.querySelector<HTMLElement>(`[data-bar-table="${openTable.id}"]`)!
+        .click();
       await flush(el);
 
       settle().reject({ code: "ticket.already_started" });

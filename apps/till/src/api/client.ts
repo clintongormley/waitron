@@ -896,8 +896,11 @@ export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 export interface UnsentDraft {
   billId: string;
   billNumber: number;
+  ownerId: string;
   ownerName: string;
   lineCount: number;
+  /** The draft's `updated_at` as the box stored it. */
+  savedAt: string;
 }
 
 /** The party a bill belongs to, at its revision after a void or line edit on the bill; null for a

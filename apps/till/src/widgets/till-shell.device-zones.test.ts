@@ -66,7 +66,7 @@ it("keeps a single counter a plain tab and hides selling screens outside the dev
   expect(labels()).toEqual([]);
   Object.assign(el, { formFactor: "phone-portrait" });
   await el.updateComplete;
-  expect(labels()).toEqual(["Floor", "Order"]);
+  expect(labels()).toEqual(["Floor"]);
 });
 
 it.each(["light", "dark"] as const)(

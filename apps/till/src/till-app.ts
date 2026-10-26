@@ -124,6 +124,7 @@ import {
   pause,
   resendUnanswered,
   type DraftRefused,
+  type DraftSaveOutcome,
   type RetainedDraftCandidate,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
@@ -304,6 +305,13 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
+import {
+  barTables,
+  type BarLocal,
+  type BarTable,
+  type HeldBill,
+  type LocalBill,
+} from "./state/bar-tables.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
 import type {
   AdjustmentAsk,
@@ -425,6 +433,31 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 type Screen = "lock" | "counter" | "floor" | "station";
 
 type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
+
+/** A till draws no table buttons; one shared list, so the shell never sees a new one. */
+const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
+
+interface ReleasedBill {
+  personId: string;
+  bill: LocalBill;
+  savedBefore?: number;
+}
+
+/** A bill this device holds or released, for the bar (D4, D10): its store's lines, and whether
+ * someone else now edits it. A failed save reloads the store from the box and keeps this device's
+ * lines as the candidate. */
+function localBill(
+  ids: Pick<LocalBill, "partyId" | "tableId" | "billId">,
+  store: { readonly lines: readonly unknown[] } | null,
+  sync: DraftSync | undefined,
+): LocalBill {
+  const editorId = sync?.edit?.editorId ?? null;
+  return {
+    ...ids,
+    lines: (store?.lines.length ?? 0) || (sync?.candidate?.lines.length ?? 0),
+    takenByOther: editorId !== null && editorId !== sync?.personId,
+  };
+}
 
 type RefreshList = "held" | "station" | "waiting";
 
@@ -2135,6 +2168,7 @@ export class TillApp extends LitElement {
     this.operatorName = "";
     this.#loginPending = false;
     this.permissions = [];
+    this.floorReturnZoneId = undefined;
     this.#endOperatorSession();
     this.#dropDraft();
     this.#dropLeavingDrafts();
@@ -2448,6 +2482,17 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** The order screen is showing a table whose open has not finished. */
   @state() private tableOpening = false;
+  /** D13: the table {@link #openTableFromEvent} is opening, highlighted on the bar while it loads. */
+  @state() private openingTableId?: string;
+  /** D12: the zone of the table a handheld last held; its Floor opens there while it shows it. */
+  @state() private floorReturnZoneId?: string;
+  /** The last floor read that answered: a failed {@link #reloadTables} empties `tables`, not the bar. */
+  @state() private barFloor: TableState[] = [];
+  /** Kept while its contents are unchanged: a new array makes the shell step back and refit. */
+  #barTableList: readonly BarTable[] = NO_BAR_TABLES;
+  #barTableJson = "[]";
+  #barTableFloor?: readonly TableState[];
+  #barTableInputs = "";
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
   /** An enrolled handheld: its menu browser shows the menu's handheld display. */
@@ -2631,6 +2676,12 @@ export class TillApp extends LitElement {
    * party opens for the person who made it; a sign-out sends that person's and drops the rest; a
    * sign-in by someone else and a server switch drop them. */
   #unsavedDrafts = new Map<string, DraftSync>();
+  /** D10: bills left for another table, in release order, each keeping its answer for the bar until
+   * a floor read started after its save answered (`savedBefore`) has been applied, or while its
+   * failed save sits in {@link #unsavedDrafts}. */
+  #released: ReleasedBill[] = [];
+  /** Each released draft's record, so a record does not keep its draft, store and client alive. */
+  readonly #releasedRecords = new WeakMap<DraftSync, ReleasedBill>();
   readonly #draftCandidates = new Map<string, RetainedDraftCandidate>();
   @state() private resolvingDraftCandidate: DraftSync | null = null;
   #billDraftTimer?: ReturnType<typeof setTimeout>;
@@ -3467,15 +3518,30 @@ export class TillApp extends LitElement {
   }
 
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
+    const from = this.activeTabKey;
     this.activeTabKey = this.#resolveScreen(key ?? null);
+    // Only a move onto the Floor from another tab: on the Floor, the address holds the zone shown.
+    const returnZone =
+      this.activeTabKey === "floor" && from !== "floor" ? this.#floorReturnZone() : undefined;
     if (key !== undefined)
       this.#writeUrl(
         {
           "till-tab": this.activeTabKey ?? null,
+          ...(returnZone === undefined ? {} : { "till-zone": returnZone }),
           ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
         },
         replace,
       );
+  }
+
+  /** D12: {@link floorReturnZoneId} while the Floor shows that zone. */
+  #floorReturnZone(): string | undefined {
+    const zoneId = this.floorReturnZoneId;
+    const navigation = this.#deviceNavigation();
+    return zoneId !== undefined &&
+      (navigation?.floorZoneIds ?? this.zones.map((zone) => zone.id)).includes(zoneId)
+      ? zoneId
+      : undefined;
   }
 
   #allowsDestination(destination: TillDestination): boolean {
@@ -3727,6 +3793,7 @@ export class TillApp extends LitElement {
     if (!current() || view.partyId !== this.orderParty?.id) throw { code: "party.out_of_date" };
     if (view.snapshot.revision === this.orderParty.revision) return;
     if (view.snapshot.revision < this.orderParty.revision) throw { code: "party.out_of_date" };
+    const tablesRead = this.#startTablesRead();
     const [tables, groups, orders] = await this.#allergyRequest((signal) =>
       Promise.all([
         api.getTablesState({ signal }),
@@ -3743,7 +3810,7 @@ export class TillApp extends LitElement {
       orders.revision !== party.revision
     )
       throw { code: "party.out_of_date" };
-    this.tables = tables;
+    this.#applyTables(tablesRead, tables);
     this.orderParty = party;
     this.tabGroups = groups.groups;
     this.currentOrders = orders;
@@ -4092,6 +4159,14 @@ export class TillApp extends LitElement {
       this.#syncDepartmentTransfers();
     if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
       this.#affordanceList = this.#affordances();
+    if (
+      changed.has("activeTableId") &&
+      this.activeTableId !== undefined &&
+      this.formFactor !== "till"
+    ) {
+      this.floorReturnZoneId =
+        this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId ?? undefined;
+    }
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
     if (changed.has("frontDoor")) this.#decideReload();
@@ -5520,13 +5595,20 @@ export class TillApp extends LitElement {
     return this.drill?.kind === "table-order" || this.#activeTab() === this.#tableOrderTabKey();
   }
 
-  /** The URL is written only once the open completes, so a failed open leaves no history entry. */
-  #showOrderScreen(): void {
+  /** The URL is written only once the open completes, so a failed open leaves no history entry.
+   * `openingTableId` is the table the bar marks while it loads; a resume after sign-in marks none. */
+  #showOrderScreen(openingTableId?: string): void {
     this.#openedFrom = this.activeTabKey;
     const orderTabKey = this.#tableOrderTabKey();
     if (orderTabKey !== undefined) this.activeTabKey = this.#resolveScreen(orderTabKey);
     else this.#pushDrill({ kind: "table-order" });
     this.tableOpening = true;
+    this.openingTableId = openingTableId;
+  }
+
+  #endTableOpening(): void {
+    this.tableOpening = false;
+    this.openingTableId = undefined;
   }
 
   /** Both callers' `left()` reads `#orderVisit`, which every newer open moves, so it also stops an
@@ -10490,15 +10572,21 @@ export class TillApp extends LitElement {
 
   /** A read's answer replaces the tables unless a read that started after it was applied first, so
    * a poll answering late never undoes an action's newer read. An answer equal to the tables shown
-   * still counts as applied, but keeps the list shown. */
-  #applyTables(read: TablesRead, tables: TableState[]): void {
+   * still counts as applied, but keeps the array shown. The one writer of `tables` and `barFloor`;
+   * `barFloor` takes only a list the box answered. */
+  #applyTables(read: TablesRead, tables: TableState[], answered = true): void {
     if (read.number <= this.#tablesApplied) return;
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
+    if (answered) this.#forgetReleased((each) => (each.savedBefore ?? read.number) < read.number);
     const json = JSON.stringify(tables);
-    if (json === this.#tablesJson) return;
-    this.#tablesJson = json;
-    this.tables = tables;
+    const changed = json !== this.#tablesJson;
+    if (changed) {
+      this.#tablesJson = json;
+      this.tables = tables;
+    }
+    if (answered) this.barFloor = this.tables;
+    if (!changed) return;
     const party = this.orderParty;
     const latest = tables.find((row) => row.id === this.activeTableId)?.party;
     if (
@@ -10542,12 +10630,22 @@ export class TillApp extends LitElement {
       return;
     }
     const session = this.#operatorSession;
+    const tableId = this.activeTableId;
+    if (tableId !== undefined) {
+      const record = {
+        personId: sync.personId,
+        bill: localBill({ partyId: sync.partyId, tableId, billId: sync.billId }, sync.store, sync),
+      };
+      this.#releasedRecords.set(sync, record);
+      this.#released.push(record);
+    }
     this.#leavingDrafts.set(
       sync,
       sync.flush().then((saved) => {
         if (!this.#leavingDrafts.delete(sync)) return;
         if (saved === "failed" && session === this.#operatorSession)
           this.#unsavedDrafts.set(sync.partyId, sync);
+        if (session === this.#operatorSession) this.#settleReleased(sync, saved);
         sync.drop();
         if (session !== this.#operatorSession || saved === "saved") return;
         if (saved === "failed") {
@@ -10555,6 +10653,23 @@ export class TillApp extends LitElement {
         } else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
       }),
     );
+  }
+
+  /** D10: a saved bill waits for a floor read started after now, a failed one stays while it is
+   * unsaved, and a refused one goes. */
+  #settleReleased(sync: DraftSync, saved: DraftSaveOutcome): void {
+    const record = this.#releasedRecords.get(sync);
+    if (record === undefined || !this.#released.includes(record) || saved === "failed") return;
+    if (saved === "saved") record.savedBefore = this.#tablesRead;
+    else this.#forgetReleased((each) => each === record);
+    if (this.formFactor !== "till") void this.#refreshFloor();
+  }
+
+  #forgetReleased(gone: (record: ReleasedBill) => boolean): void {
+    const kept = this.#released.filter((each) => !gone(each));
+    if (kept.length === this.#released.length) return;
+    this.#released = kept;
+    this.requestUpdate();
   }
 
   /** Settles once every left draft on `partyId` has had its save answered. */
@@ -10570,12 +10685,19 @@ export class TillApp extends LitElement {
     showAtOnce = true,
   ): Promise<void> {
     if (!this.#inShell() || left()) return;
-    const { tableId, seated, guestCount, withTableIds } = (
+    const {
+      tableId,
+      seated,
+      guestCount,
+      withTableIds,
+      fromBar = false,
+    } = (
       event as CustomEvent<{
         tableId: string;
         seated: boolean;
         guestCount?: number | null;
         withTableIds?: string[];
+        fromBar?: boolean;
       }>
     ).detail;
     const unassigned =
@@ -10601,12 +10723,12 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
-    if (showAtOnce) this.#showOrderScreen();
+    if (showAtOnce) this.#showOrderScreen(tableId);
     try {
       const leaving = this.#draftSync;
       if (
         leaving !== undefined &&
-        leaving.partyId !== this.tables.find((row) => row.id === tableId)?.party?.id
+        leaving.partyId !== this.#openingFloor(fromBar).find((row) => row.id === tableId)?.party?.id
       )
         this.#releaseDraft(leaving);
       else if (this.#draftReady) await this.#flushDraft();
@@ -10619,12 +10741,19 @@ export class TillApp extends LitElement {
         abandoned,
         carried,
         showAtOnce,
+        fromBar,
       );
     } finally {
       unlock?.();
       this.#tableOpensPending--;
-      if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
+      if (offerRequest === this.#tableOfferRequest) this.#endTableOpening();
     }
+  }
+
+  /** A bar button opens from the floor the bar is drawn from: a failed reload empties `tables` but
+   * not `barFloor`. */
+  #openingFloor(fromBar: boolean): readonly TableState[] {
+    return fromBar ? this.barFloor : this.tables;
   }
 
   /** `guestCount` is `undefined` to resume a seated table, and a count or null to seat a free one,
@@ -10637,10 +10766,11 @@ export class TillApp extends LitElement {
     left: () => boolean = () => false,
     carried?: { note: string | null; lines: OrderLine[]; carrier: string },
     shownEarly = false,
+    fromBar = false,
   ): Promise<void> {
     try {
       const session = this.#operatorSession;
-      const table = this.tables.find((candidate) => candidate.id === tableId);
+      const table = this.#openingFloor(fromBar).find((candidate) => candidate.id === tableId);
       const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
       const held =
         heldZone === undefined ? undefined : this.#zoneCatalogues.get(heldZone)?.catalogue;
@@ -10832,7 +10962,7 @@ export class TillApp extends LitElement {
       }
       void this.#loadStations();
     } finally {
-      if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
+      if (offerRequest === this.#tableOfferRequest) this.#endTableOpening();
     }
   }
 
@@ -11079,6 +11209,71 @@ export class TillApp extends LitElement {
       : null;
   }
 
+  /** The handheld bar's buttons (D4, D13), the same array while they are unchanged. A floor read
+   * replaces `barFloor` rather than changing it in place, so its identity stands for its contents. */
+  #barTables(): readonly BarTable[] {
+    if (this.formFactor === "till") return NO_BAR_TABLES;
+    const opening = this.openingTableId;
+    const local: BarLocal = {
+      held: this.#heldBill(),
+      released: this.#released.map((each) => each.bill),
+      opening:
+        opening === undefined
+          ? undefined
+          : { tableId: opening, onScreen: this.#orderScreenShown() },
+    };
+    const inputs = JSON.stringify([this.#sessionPersonId, local]);
+    if (this.barFloor === this.#barTableFloor && inputs === this.#barTableInputs)
+      return this.#barTableList;
+    this.#barTableFloor = this.barFloor;
+    this.#barTableInputs = inputs;
+    const next = barTables(this.barFloor, this.#sessionPersonId, local);
+    const json = JSON.stringify(next);
+    if (json !== this.#barTableJson) {
+      this.#barTableJson = json;
+      this.#barTableList = next;
+    }
+    return this.#barTableList;
+  }
+
+  /** D4: the held table's bill, judged by its store's lines and whether another person took it. */
+  #heldBill(): HeldBill | null {
+    const tableId = this.activeTableId;
+    if (tableId === undefined) return null;
+    const party = this.orderParty;
+    const sync =
+      party !== null && this.#draftSync?.partyId === party.id ? this.#draftSync : undefined;
+    const store = this.#tableDraft();
+    // Until its draft is read, the bill has no answer of its own and the floor read decides for it.
+    const known = store !== null || (sync?.candidate ?? null) !== null;
+    const billId = party === null || !known ? null : (this.activeTabId ?? null);
+    return {
+      ...localBill({ partyId: party?.id ?? null, tableId, billId }, store, sync),
+      onScreen: this.#orderScreenShown(),
+    };
+  }
+
+  /** D9: the held bill's button shows its order screen; any other opens its table as a Floor tap
+   * does. Both close an open overlay first. */
+  #onOpenBarTable({ tableId, held }: { tableId: string; held: boolean }): void {
+    if (held) {
+      if (
+        this.#activeTab() === this.#tableOrderTabKey() &&
+        this.drill === undefined &&
+        this.counterOrderList === null
+      )
+        return;
+      this.#requestLeave(() => this.#onTabSelect("order"));
+      return;
+    }
+    this.#requestLeave(() => {
+      if (this.drill !== undefined) this.#popDrill();
+      return this.#onOpenTable(
+        new CustomEvent("open-table", { detail: { tableId, seated: true, fromBar: true } }),
+      );
+    });
+  }
+
   async #openDraft(session: number): Promise<OpenedDraft> {
     this.#dropDraft();
     this.#resetPartylessDraft();
@@ -11089,6 +11284,10 @@ export class TillApp extends LitElement {
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
     kept?.drop();
+    if (kept !== undefined) {
+      const record = this.#releasedRecords.get(kept);
+      this.#forgetReleased((each) => each === record);
+    }
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
@@ -11196,6 +11395,7 @@ export class TillApp extends LitElement {
 
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
+    this.#forgetReleased((each) => each.personId !== personId);
     for (const sync of [...this.#leavingDrafts.keys()])
       if (sync.personId !== personId) {
         sync.drop();
@@ -11213,6 +11413,7 @@ export class TillApp extends LitElement {
       sync.drop();
     this.#leavingDrafts.clear();
     this.#unsavedDrafts.clear();
+    this.#forgetReleased(() => true);
   }
 
   #scheduleBillDraftRefresh(): void {
@@ -11532,6 +11733,7 @@ export class TillApp extends LitElement {
       this.activeTabId === billId;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
+      const tablesRead = this.#startTablesRead();
       const refreshed = await Promise.race([
         Promise.all([
           this.api.getTablesState(),
@@ -11604,7 +11806,7 @@ export class TillApp extends LitElement {
           outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
         return true;
       }
-      this.tables = tables;
+      this.#applyTables(tablesRead, tables);
       this.orderParty = party;
       this.tabGroups = groups.groups;
       this.currentOrders = orders;
@@ -14410,7 +14612,7 @@ export class TillApp extends LitElement {
     try {
       this.#applyTables(read, await this.api.getTablesState());
     } catch {
-      this.#applyTables(read, []);
+      this.#applyTables(read, [], false);
     }
   }
 
@@ -16418,7 +16620,6 @@ export class TillApp extends LitElement {
       }`;
   }
 
-  /** The finished party's order is closed on every face: a till's drill, or a handheld's order tab. */
   #leaveTable(): void {
     this.#forgetParty();
     this.#returnToFloor();
@@ -18017,7 +18218,7 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Inside the shell only a till reaches this: a handheld's order tab is `embedded` and emits no
+   * Inside the shell only a till reaches this: a handheld's order screen is `embedded` and emits no
    * `back-to-floor`.
    */
   #onBackToFloor(): void {
@@ -18054,7 +18255,8 @@ export class TillApp extends LitElement {
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
-    this.tableOpening = false;
+    this.#endTableOpening();
+    this.floorReturnZoneId = undefined;
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
@@ -18071,6 +18273,7 @@ export class TillApp extends LitElement {
     const sync = this.#draftSync;
     const unsaved = [...this.#unsavedDrafts.values()];
     this.#unsavedDrafts.clear();
+    this.#forgetReleased(() => true);
     const own = unsaved.filter((each) => each.personId === this.#sessionPersonId);
     for (const each of unsaved) if (!own.includes(each)) each.drop();
     const leaving = [...this.#leavingDrafts.keys(), ...own];
@@ -18239,8 +18442,12 @@ export class TillApp extends LitElement {
             : this.zones.filter((zone) => navigation.floorZoneIds.includes(zone.id))
         }
         .selectedZoneId=${
+          // After a table, the move onto the Floor wrote its zone into the address (#setActiveTab),
+          // so the Floor reads the address, and a remount keeps a zone tapped since.
           this.formFactor !== "till"
-            ? (navigation?.startingZoneId ?? undefined)
+            ? this.#floorReturnZone() === undefined
+              ? (navigation?.startingZoneId ?? undefined)
+              : undefined
             : navigation?.floorZoneIds.includes(this.deviceZoneSelection?.startingZoneId ?? "")
               ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
               : undefined
@@ -19264,6 +19471,10 @@ export class TillApp extends LitElement {
                           .hoursBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true}
                           .clockError=${this.#attendanceMessage()}
                           .affordances=${this.#affordanceList}
+                          .barTables=${this.#barTables()}
+                          @open-bar-table=${(
+                            event: CustomEvent<{ tableId: string; held: boolean }>,
+                          ) => this.#onOpenBarTable(event.detail)}
                           .kiosk=${this.deviceMode}
                           .canSwitchProfile=${this.approvedProfiles.length > 1}
                           .transferAvailable=${this.transferSnapshot !== undefined}

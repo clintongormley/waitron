@@ -1,13 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import {
-  expectChooserFaces,
-  cleanupWidgets,
-  mountWidget as mountBaseWidget,
-} from "./test-helpers.js";
+import { cleanupWidgets, mountWidget as mountBaseWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
+import type { BarTable } from "../state/bar-tables.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   chooseTheme,
@@ -27,9 +24,9 @@ afterEach(cleanupWidgets);
 
 describe("till-shell", () => {
   it.each([
-    ["working", ["Start break", "Clock out", "My hours", "Fix my hours", "Log out"]],
-    ["on_break", ["End break", "Clock out", "My hours", "Fix my hours", "Log out"]],
-    ["out", ["Clock in", "My hours", "Fix my hours", "Log out"]],
+    ["working", ["Start break", "Clock out", "My hours", "Fix my hours"]],
+    ["on_break", ["End break", "Clock out", "My hours", "Fix my hours"]],
+    ["out", ["Clock in", "My hours", "Fix my hours"]],
   ] as const)("the name opens the %s clock actions with a text state", async (state, labels) => {
     const locale = currentLocale();
     const width = innerWidth;
@@ -259,7 +256,11 @@ describe("till-shell", () => {
     const item = (option: Element) =>
       option.parentElement?.localName === "wt-menu-row" ? option.parentElement : option;
     const zones = el.shadowRoot!.querySelector("wt-button.zones")!;
-    expect(item(profile).nextElementSibling).toBe(item(zones));
+    const settings = item(zones).parentElement!;
+    expect(settings.getAttribute("role")).toBe("group");
+    expect(item(profile).nextElementSibling!.localName).toBe("hr");
+    expect(item(profile).nextElementSibling!.nextElementSibling).toBe(settings);
+    expect(item(zones).previousElementSibling).toBe(settings.firstElementChild);
     expect(item(zones).nextElementSibling).toBe(
       item(el.shadowRoot!.querySelector("wt-button.equipment")!),
     );
@@ -278,7 +279,7 @@ describe("till-shell", () => {
     expect(el.shadowRoot!.querySelector<HTMLElement>(".operator")!.textContent).toContain("Ana");
   });
 
-  it("places the language chooser in the bar, just before the operator's name", async () => {
+  it("places a handheld's language chooser in More, never in the bar", async () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
     await page.viewport(1280, 844);
@@ -289,28 +290,52 @@ describe("till-shell", () => {
         operatorName: "Ana",
         loadLocales: async () => [{ code: "es-ES", label: "Español" }],
       });
-      const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+      expect(el.shadowRoot!.querySelectorAll("wt-language-chooser")).toHaveLength(1);
+      expect(el.shadowRoot!.querySelector("header .session > wt-language-chooser")).toBeNull();
+      const chooser = el.shadowRoot!.querySelector(
+        'header .session > wt-row-actions[data-test="more-menu"] > .settings-group > wt-language-chooser',
+      )!;
       expect(chooser).not.toBeNull();
-      expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
-      const help = el.shadowRoot!.querySelector('[data-test="help-switch"]')!;
-      expect(chooser.nextElementSibling).toBe(help);
-      expect(help.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator-menu"));
+      expect(chooser.getAttribute("layout")).toBe("group");
       expect(chooser.getAttribute("active")).toBe(currentLocale());
     } finally {
       await page.viewport(width, height);
     }
   });
 
-  it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
+  it("names each language in full in More's language group, at 1280 wide and at 390", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<TillShell>("till-shell", {
       formFactor: "tablet-landscape",
       loadLocales: async () => [{ code: "es-ES", label: "Español" }],
     });
-    await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
-      wide: { shown: ["Español"], name: "Español" },
-      phone: { shown: ["ES"], name: "ES Español" },
-    });
+    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    try {
+      for (const w of [1280, 390]) {
+        await page.viewport(w, 844);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        expect(el.shadowRoot!.querySelectorAll("wt-language-chooser")).toHaveLength(1);
+        expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
+        const menu = menuOf(el)! as LitElement;
+        await menu.updateComplete;
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() =>
+          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+        );
+        const choice = await vi.waitFor(() => {
+          const found = chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-es-ES"]');
+          expect(found).not.toBeNull();
+          return found!;
+        });
+        expect(choice.textContent!.trim()).toBe("Español");
+        await expect.element(page.elementLocator(choice)).toHaveAccessibleName("Español");
+        await userEvent.keyboard("{Escape}");
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("updates the chooser's active language when the till locale changes", async () => {
@@ -367,7 +392,7 @@ describe("till-shell", () => {
     expect(el.shadowRoot!.querySelector("wt-theme-chooser")).toBeNull();
   });
 
-  it("keeps the theme chooser out of the bar, and puts Theme in the operator's menu just after Log out", async () => {
+  it("keeps the theme chooser out of the bar, and puts Theme in More's Settings group after the languages, with no name menu on a handheld without the clock", async () => {
     await atViewport(1280, async () => {
       const before = currentLocale();
       setLocale("en-GB");
@@ -380,12 +405,12 @@ describe("till-shell", () => {
         });
         expect(el.shadowRoot!.querySelector("header wt-language-chooser")).not.toBeNull();
         expect(el.shadowRoot!.querySelector("wt-theme-chooser")).toBeNull();
-        const menu = el.shadowRoot!.querySelector<HTMLElement>("wt-row-actions.operator-menu")!;
+        expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).toBeNull();
+        const menu = menuOf(el)! as HTMLElement;
         expect(
-          [...menu.children]
-            .filter((c) => c.slot !== "trigger")
-            .map((c) => c.getAttribute("data-test") ?? c.className),
-        ).toEqual(["logout", "theme-choices"]);
+          menu.querySelector(".settings-group > [data-test=theme-choices]")!.previousElementSibling!
+            .localName,
+        ).toBe("wt-language-chooser");
         await (menu as LitElement).updateComplete;
         await userEvent.click(menu.shadowRoot!.querySelector("button")!);
         const group = menu.querySelector<HTMLElement>('[data-test=theme-choices][role="group"]')!;
@@ -409,7 +434,7 @@ describe("till-shell", () => {
     });
   });
 
-  it("labels the operator's Theme choices in Spanish", async () => {
+  it("labels More's Theme choices in Spanish", async () => {
     await atViewport(1280, async () => {
       const before = currentLocale();
       setLocale("es-ES");
@@ -418,7 +443,7 @@ describe("till-shell", () => {
           formFactor: "tablet-landscape",
           operatorName: "Ana",
         });
-        const menu = el.shadowRoot!.querySelector<WtRowActions>("wt-row-actions.operator-menu")!;
+        const menu = menuOf(el) as WtRowActions;
         await menu.updateComplete;
         await userEvent.click(menu.shadowRoot!.querySelector("button")!);
         const group = menu.querySelector<HTMLElement>('[data-test=theme-choices][role="group"]')!;
@@ -432,7 +457,7 @@ describe("till-shell", () => {
     });
   });
 
-  it("marks the new choice in the operator's menu when the theme choice changes", async () => {
+  it("marks the new choice in More when the theme choice changes", async () => {
     await atViewport(1280, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", {
         formFactor: "tablet-landscape",
@@ -445,7 +470,9 @@ describe("till-shell", () => {
         expect(
           ["light", "dark", "device"].map((choice) =>
             el
-              .shadowRoot!.querySelector(`.operator-menu [data-test=theme-choice-${choice}]`)!
+              .shadowRoot!.querySelector(
+                `[data-test=more-menu] [data-test=theme-choice-${choice}]`,
+              )!
               .getAttribute("aria-pressed"),
           ),
         ).toEqual(["false", "true", "false"]);
@@ -456,14 +483,14 @@ describe("till-shell", () => {
     });
   });
 
-  it("asks for a theme picked in the operator's menu, closes the menu and leaves applying it to the app", async () => {
+  it("asks for a theme picked in More, closes the menu and leaves applying it to the app", async () => {
     await atViewport(1280, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", {
         formFactor: "tablet-landscape",
         activeScreen: "counter",
         operatorName: "Ana",
       });
-      const menu = el.shadowRoot!.querySelector<WtRowActions>("wt-row-actions.operator-menu")!;
+      const menu = menuOf(el) as WtRowActions;
       await menu.updateComplete;
       const popup = menu.shadowRoot!.querySelector("[popover]")!;
       const picks: unknown[] = [];
@@ -486,7 +513,7 @@ describe("till-shell", () => {
   it.each(["light", "dark"] as const)(
     "fills the pressed Theme choice, unlike an unpressed one and the menu's bordered buttons, in the %s theme",
     async (theme) => {
-      await atViewport(1280, async () => {
+      await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>(
           "till-shell",
           {
@@ -505,7 +532,7 @@ describe("till-shell", () => {
           },
           theme,
         );
-        const menu = el.shadowRoot!.querySelector<WtRowActions>("wt-row-actions.operator-menu")!;
+        const menu = menuOf(el) as WtRowActions;
         await menu.updateComplete;
         await userEvent.click(menu.shadowRoot!.querySelector("button")!);
         const hours = menu.querySelector<LitElement>("[data-my-hours]")!;
@@ -618,7 +645,7 @@ describe("till-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(12);
+        expect(controls.length).toBe(11);
         expect(controls.filter((c) => c.classList.contains("zones"))).toHaveLength(1);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
@@ -638,7 +665,7 @@ describe("till-shell", () => {
         for (const tab of header.querySelectorAll(".tab")) {
           expect(tab.getBoundingClientRect().top).toBe(top(".tab:first-child"));
         }
-        expect(top(".station")).toBeGreaterThan(top(".find-bill"));
+        expect(top(".find-bill")).toBeGreaterThan(top(".station"));
       } finally {
         await page.viewport(width, height);
         setLocale(before);
@@ -702,10 +729,10 @@ it.each(["till", "phone-portrait", "tablet-landscape"] as const)(
       const { el } = await mountWidget<TillShell>("till-shell", { formFactor });
       const labels = () =>
         [...el.shadowRoot!.querySelectorAll(".tab")].map((e) => e.textContent!.trim());
-      expect(labels()).toEqual(formFactor === "till" ? ["Counter", "Floor"] : ["Floor", "Order"]);
+      expect(labels()).toEqual(formFactor === "till" ? ["Counter", "Floor"] : ["Floor"]);
       setLocale("es-ES");
       await el.updateComplete;
-      expect(labels()).toEqual(formFactor === "till" ? ["Mostrador", "Sala"] : ["Sala", "Pedido"]);
+      expect(labels()).toEqual(formFactor === "till" ? ["Mostrador", "Sala"] : ["Sala"]);
     } finally {
       setLocale(original);
     }
@@ -738,11 +765,17 @@ const menuActions = [
   [".logout", "logout"],
 ] as const;
 
-/** More's actions at phone width, where Zones on this device sits between Profile and Equipment. */
+/** More's actions at phone width, in More's order: the screens, then Settings, then Log out. */
 const phoneMenuActions = [
-  ...menuActions.slice(0, 5),
+  [".expo", "show-expo"],
+  [".station", "show-station"],
+  [".find-bill", "find-bill"],
+  [".schedule", "show-schedule"],
+  [".profile", "open-profile"],
+  ["[data-open-transfers]", "open-transfers"],
   [".zones", "open-device-zones"],
-  ...menuActions.slice(5),
+  [".equipment", "open-equipment"],
+  [".logout", "logout"],
 ] as const;
 
 /** Wide enough for `full`'s whole bar to fit on one row. */
@@ -765,11 +798,14 @@ const menuOf = (el: TillShell) =>
   el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
 const triggerOf = (el: TillShell) =>
   menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+/** More's items in order, the Settings group's in its place; its rules and heading are not items. */
 const moreItems = (el: TillShell) =>
-  [...menuOf(el)!.querySelectorAll(":scope > *")].map((child) => {
-    const item = child.localName === "wt-menu-row" ? child.firstElementChild! : child;
-    return (item.getAttribute("data-test") ?? item.className) || item.localName;
-  });
+  [...menuOf(el)!.querySelectorAll(":scope > *, :scope > .settings-group > *")]
+    .filter((child) => !child.matches(".settings-group, .menu-rule, .settings-heading"))
+    .map((child) => {
+      const item = child.localName === "wt-menu-row" ? child.firstElementChild! : child;
+      return (item.getAttribute("data-test") ?? item.className) || item.localName;
+    });
 
 describe("till-shell's Zones on this device entry", () => {
   it.each([390, ROOMY_WIDTH])(
@@ -782,12 +818,25 @@ describe("till-shell's Zones on this device entry", () => {
         const zones = menuOf(el)!.querySelector<HTMLElement>("wt-button.zones")!;
         expect(zones.textContent!.trim()).toBe("Zones on this device");
         const equipment = menuOf(el)!.querySelector("wt-button.equipment");
-        if (width === 390) {
-          const item = (option: Element) =>
-            option.parentElement?.localName === "wt-menu-row" ? option.parentElement : option;
-          expect(item(zones).nextElementSibling).toBe(item(equipment!));
-        } else {
-          expect(equipment).toBeNull();
+        const item = (option: Element) =>
+          option.parentElement?.localName === "wt-menu-row" ? option.parentElement : option;
+        expect(item(zones).nextElementSibling).toBe(item(equipment!));
+        if (width === ROOMY_WIDTH) {
+          expect(moreItems(el)).toEqual([
+            "wt-count-badge",
+            "expo",
+            "station",
+            "find-bill",
+            "schedule",
+            "profile",
+            "department-transfers",
+            "wt-button",
+            "zones",
+            "equipment",
+            "wt-language-chooser",
+            "theme-choices",
+            "logout",
+          ]);
           expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
         }
         expect(
@@ -809,11 +858,550 @@ describe("till-shell's Zones on this device entry", () => {
   });
 });
 
+describe("a handheld's More", () => {
+  const working: Partial<TillShell> = {
+    ...full,
+    clockAvailable: true,
+    clockState: {
+      personId: "ana",
+      locationId: "venue",
+      businessDay: "2026-10-14",
+      state: "working",
+      activeLocationId: "venue",
+      lastEntryId: "entry",
+      firstClockIn: false,
+    },
+  };
+
+  /** More's contents in drawing order: a rule is "—", a group opens with "[" and its heading. */
+  const contents = (parent: Element): string[] =>
+    [...parent.children].flatMap((child): string[] => {
+      if (child.hasAttribute("slot")) return [];
+      const item = child.localName === "wt-menu-row" ? child.firstElementChild! : child;
+      if (item.localName === "hr") return ["—"];
+      if (item.classList.contains("operator")) return ["name"];
+      if (item.getAttribute("data-test") === "department-transfers") return ["transfers count"];
+      if (item.localName === "wt-language-chooser") return ["language"];
+      if (item.getAttribute("data-test") === "theme-choices") return ["theme"];
+      if (item.getAttribute("role") === "group") {
+        const heading = item.querySelector(`#${item.getAttribute("aria-labelledby")}`)!;
+        return [
+          `[${heading.textContent!.trim()}`,
+          ...contents(item).filter((label) => label !== heading.textContent!.trim()),
+          "]",
+        ];
+      }
+      return [item.textContent!.trim()];
+    });
+
+  it("holds the name group, the screens, the Settings group and Log out, in that order, at 390", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", working);
+      expect(contents(menuOf(el)!)).toEqual([
+        "name",
+        "Start break",
+        "Clock out",
+        "My hours",
+        "Fix my hours",
+        "—",
+        "Pass",
+        "Kitchen",
+        "Find a bill",
+        "My schedule",
+        "Profile",
+        "transfers count",
+        "Transfers",
+        "—",
+        "[Settings",
+        "Zones on this device",
+        "Equipment",
+        "language",
+        "theme",
+        "]",
+        "—",
+        "Log out",
+      ]);
+    }).finally(() => setLocale(locale));
+  });
+
+  it.each([
+    ["en-GB", "Settings"],
+    ["es-ES", "Ajustes"],
+  ])("names the Settings group by its heading (%s)", async (locale, heading) => {
+    const original = currentLocale();
+    setLocale(locale);
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", working);
+      const menu = menuOf(el)!;
+      const group = menu.querySelector(".zones")!.closest<HTMLElement>('[role="group"]')!;
+      expect(group).not.toBeNull();
+      expect(group.parentElement).toBe(menu);
+      const label = el.shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!;
+      expect(group.contains(label)).toBe(true);
+      expect(label.textContent!.trim()).toBe(heading);
+      await userEvent.click(triggerOf(el));
+      await vi.waitFor(() => expect(label.getBoundingClientRect().height).toBeGreaterThan(0));
+      expect(getComputedStyle(label).visibility).toBe("visible");
+    }).finally(() => setLocale(original));
+  });
+
+  it("keeps Log out and Theme out of the name's menu when the name is on the bar", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    await atViewport(ROOMY_WIDTH, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", working);
+      const name = el.shadowRoot!.querySelector("header .session > wt-row-actions.operator-menu")!;
+      expect(name).not.toBeNull();
+      expect([...name.querySelectorAll("wt-button")].map((b) => b.textContent!.trim())).toEqual([
+        "Start break",
+        "Clock out",
+        "My hours",
+        "Fix my hours",
+      ]);
+      expect(name.querySelector('[data-test="theme-choices"]')).toBeNull();
+      const more = menuOf(el)!;
+      expect(more.querySelector(".operator")).toBeNull();
+      expect(contents(more)).toEqual([
+        "Pass",
+        "Kitchen",
+        "Find a bill",
+        "My schedule",
+        "Profile",
+        "transfers count",
+        "Transfers",
+        "—",
+        "[Settings",
+        "Zones on this device",
+        "Equipment",
+        "language",
+        "theme",
+        "]",
+        "—",
+        "Log out",
+      ]);
+    }).finally(() => setLocale(locale));
+  });
+
+  it.each([
+    ["as text without", {}, []],
+    [
+      "as a menu of its actions with",
+      { clockAvailable: true, clockState: working.clockState },
+      ["Start break", "Clock out", "My hours", "Fix my hours"],
+    ],
+  ] as const)(
+    "draws a handheld's name on the bar %s the clock, and the same group in a narrow More",
+    async (_, clock, actions) => {
+      const locale = currentLocale();
+      setLocale("en-GB");
+      try {
+        await atViewport(ROOMY_WIDTH, async () => {
+          const { el } = await mountWidget<TillShell>("till-shell", { ...full, ...clock });
+          const session = el.shadowRoot!.querySelector("header .session")!;
+          const menu = session.querySelector(":scope > wt-row-actions.operator-menu");
+          if (actions.length === 0) {
+            expect(menu).toBeNull();
+            expect(session.querySelector(":scope > .operator")!.textContent).toContain(
+              "Ana Fernández",
+            );
+          } else {
+            expect(
+              [...menu!.querySelectorAll("wt-button")].map((b) => b.textContent!.trim()),
+            ).toEqual(actions);
+            expect(session.querySelector(":scope > .operator")).toBeNull();
+          }
+        });
+        await atViewport(390, async () => {
+          const { el } = await mountWidget<TillShell>("till-shell", { ...full, ...clock });
+          expect(contents(menuOf(el)!).slice(0, actions.length + 3)).toEqual([
+            "name",
+            ...actions,
+            "—",
+            "Pass",
+          ]);
+        });
+      } finally {
+        setLocale(locale);
+      }
+    },
+  );
+
+  it("a till's More and name menu are unchanged", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    await atViewport(1280, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        ...working,
+        formFactor: "till",
+        activeScreen: "counter",
+      });
+      const name = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
+      expect([...name.querySelectorAll("wt-button")].map((b) => b.textContent!.trim())).toEqual([
+        "Start break",
+        "Clock out",
+        "My hours",
+        "Fix my hours",
+      ]);
+      expect(name.querySelector('[data-test="theme-choices"]')).not.toBeNull();
+      expect(contents(name)).toEqual([
+        "Start break",
+        "Clock out",
+        "My hours",
+        "Fix my hours",
+        "theme",
+      ]);
+      expect(moreItems(el)).toEqual([
+        "find-bill",
+        "schedule",
+        "profile",
+        "wt-language-chooser",
+        "settings",
+        "logout",
+      ]);
+    }).finally(() => setLocale(locale));
+  });
+
+  it("a till without the clock keeps its name menu, holding Theme alone", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      ...full,
+      formFactor: "till",
+      activeScreen: "counter",
+    });
+    const name = el.shadowRoot!.querySelector("header .session > wt-row-actions.operator-menu")!;
+    expect(name).not.toBeNull();
+    expect(contents(name)).toEqual(["theme"]);
+  });
+});
+
 function deepActive(): Element | null {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
   return active;
 }
+
+describe("a handheld's table buttons", () => {
+  const tables: BarTable[] = [
+    { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+    { tableId: "t9", name: "T9", unsent: true, current: false, held: false },
+  ];
+  const tabsOf = (el: TillShell) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('header [role="tab"]'),
+  ];
+  const buttonOf = (el: TillShell, tableId: string) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-bar-table="${tableId}"]`)!;
+
+  it("draws Floor, then one button per table, in the order given", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      barTables: tables,
+    });
+    expect(tabsOf(el).map((tab) => tab.textContent!.trim())).toEqual(["Floor", "T4", "T9"]);
+    for (const table of tables) {
+      const icon = buttonOf(el, table.tableId).querySelector('wt-icon[name="floor-unsent"]');
+      expect(icon).not.toBeNull();
+      expect(icon!.getAttribute("aria-hidden")).toBe("true");
+      expect(buttonOf(el, table.tableId).classList.contains("bar-table")).toBe(true);
+    }
+    expect(
+      [...el.shadowRoot!.querySelectorAll(".tab")].map((tab) => tab.textContent!.trim()),
+    ).toEqual(["Floor"]);
+  });
+
+  it.each([
+    ["en-GB", "T4 unsent"],
+    ["es-ES", "T4 sin enviar"],
+  ] as const)(
+    "names a button with unsent dishes 'T4 unsent', and one without by its name (%s)",
+    async (locale, label) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          activeScreen: "order",
+          barTables: [
+            { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+            { tableId: "t9", name: "T9", unsent: false, current: true, held: false },
+          ],
+        });
+        expect(buttonOf(el, "t4").getAttribute("aria-label")).toBe(label);
+        expect(buttonOf(el, "t9").hasAttribute("aria-label")).toBe(false);
+        expect(buttonOf(el, "t9").querySelector("wt-icon")).toBeNull();
+        expect(buttonOf(el, "t9").textContent!.trim()).toBe("T9");
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
+  it("selects the table on screen and not Floor; selects Floor when no table is current", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "order",
+      barTables: [{ ...tables[0]!, current: true }, tables[1]!],
+    });
+    const selected = () => tabsOf(el).map((tab) => tab.getAttribute("aria-selected"));
+    expect(selected()).toEqual(["false", "true", "false"]);
+    Object.assign(el, { barTables: tables });
+    await el.updateComplete;
+    expect(selected()).toEqual(["true", "false", "false"]);
+  });
+
+  it("emits open-bar-table with the table's id", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      barTables: tables,
+    });
+    const events: CustomEvent[] = [];
+    const listen = (event: Event) => events.push(event as CustomEvent);
+    document.addEventListener("open-bar-table", listen);
+    const screens: unknown[] = [];
+    el.addEventListener("screen-select", (event) => screens.push(event));
+    try {
+      await userEvent.click(buttonOf(el, "t9"));
+    } finally {
+      document.removeEventListener("open-bar-table", listen);
+    }
+    expect(events.map((event) => event.detail)).toEqual([{ tableId: "t9", held: false }]);
+    expect(events[0]!.bubbles).toBe(true);
+    expect(events[0]!.composed).toBe(true);
+    expect(screens).toEqual([]);
+  });
+
+  it("says in open-bar-table whether the button goes back to the held bill", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      barTables: [{ ...tables[0]!, held: true }, tables[1]!],
+    });
+    const details: unknown[] = [];
+    const listen = (event: Event) => details.push((event as CustomEvent).detail);
+    document.addEventListener("open-bar-table", listen);
+    try {
+      await userEvent.click(buttonOf(el, "t4"));
+      await userEvent.click(buttonOf(el, "t9"));
+    } finally {
+      document.removeEventListener("open-bar-table", listen);
+    }
+    expect(details).toEqual([
+      { tableId: "t4", held: true },
+      { tableId: "t9", held: false },
+    ]);
+  });
+
+  it("a till draws no table buttons", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
+      barTables: tables,
+    });
+    expect(el.shadowRoot!.querySelector("[data-bar-table]")).toBeNull();
+    expect(tabsOf(el).map((tab) => tab.textContent!.trim())).toEqual(["Counter", "Floor"]);
+  });
+
+  it("the strip scrolls sideways when the buttons do not fit at 360, keeping Help and More on screen", async () => {
+    setLocale("en-GB");
+    await atViewport(360, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "phone-portrait",
+        activeScreen: "floor",
+        operatorName: "Ana",
+        barTables: Array.from({ length: 10 }, (_, i) => ({
+          tableId: `t${i + 1}`,
+          name: `T${i + 1}`,
+          unsent: true,
+          current: false,
+          held: false,
+        })),
+      });
+      await frame();
+      const strip = el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
+      expect(strip.querySelectorAll("[data-bar-table]")).toHaveLength(10);
+      expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+      const header = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
+      for (const item of [el.shadowRoot!.querySelector("header wt-help-switch")!, menuOf(el)!]) {
+        const box = item.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(header.left);
+        expect(box.right).toBeLessThanOrEqual(header.right + 0.5);
+        expect(box.right).toBeLessThanOrEqual(360 + 0.5);
+      }
+    });
+  });
+
+  describe("the selected table's button is scrolled into the strip's view at 390", () => {
+    const tenTables = (current?: string): BarTable[] =>
+      Array.from({ length: 10 }, (_, i) => ({
+        tableId: `t${i + 1}`,
+        name: `T${i + 1}`,
+        unsent: true,
+        current: `t${i + 1}` === current,
+        held: false,
+      }));
+    const stripOf = (el: TillShell) =>
+      el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
+    const expectInStrip = (el: TillShell, tableId: string) => {
+      const strip = stripOf(el).getBoundingClientRect();
+      const box = buttonOf(el, tableId).getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(strip.left - 0.5);
+      expect(box.right).toBeLessThanOrEqual(strip.right + 0.5);
+    };
+
+    it("when the shell first draws with the last table selected", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t10"),
+        });
+        await frame();
+        expect(stripOf(el).scrollWidth).toBeGreaterThan(stripOf(el).clientWidth);
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+      });
+    });
+
+    it("when the selection moves to the last table, and not again on a redraw that keeps it", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "floor",
+          operatorName: "Ana",
+          barTables: tenTables(),
+        });
+        await frame();
+        expect(stripOf(el).scrollLeft).toBe(0);
+        el.activeScreen = "order";
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        stripOf(el).scrollLeft = 0;
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await frame();
+        expect(stripOf(el).scrollLeft).toBe(0);
+      });
+    });
+
+    it("back towards the start when the selection moves from the last table to the first", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t10"),
+        });
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        el.barTables = tenTables("t1");
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t1"));
+      });
+    });
+
+    it("again when buttons are added before the selected table", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t4").slice(3),
+        });
+        await frame();
+        await vi.waitFor(() => expectInStrip(el, "t4"));
+        const width = stripOf(el).clientWidth;
+        expect(stripOf(el).scrollWidth).toBeGreaterThan(width);
+        el.barTables = tenTables("t4");
+        await el.updateComplete;
+        await frame();
+        expect(stripOf(el).clientWidth).toBe(width);
+        await vi.waitFor(() => expectInStrip(el, "t4"));
+      });
+    });
+
+    it("looks for no button on a redraw that changes no button while the bar is not drawn", async () => {
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          kiosk: true,
+          barTables: tenTables("t10"),
+        });
+        await frame();
+        const lookups = vi.spyOn(el.shadowRoot!, "querySelector");
+        el.operatorName = "Sam";
+        await el.updateComplete;
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await frame();
+        const asked = lookups.mock.calls.map(([selector]) => selector);
+        expect(asked.filter((selector) => selector.startsWith("[data-bar-table"))).toEqual([]);
+      });
+    });
+
+    it("again when the strip narrows under the selected table", async () => {
+      setLocale("en-GB");
+      await atViewport(1280, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "tablet-landscape",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t10"),
+        });
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        await page.viewport(390, 844);
+        await frame();
+        expect(stripOf(el).scrollWidth).toBeGreaterThan(stripOf(el).clientWidth);
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+      });
+    });
+
+    it("waits through a bar with no header, and reveals the table once the header is drawn", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          kiosk: true,
+          barTables: tenTables("t10"),
+        });
+        await frame();
+        expect(el.shadowRoot!.querySelector("header")).toBeNull();
+        el.kiosk = false;
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+      });
+    });
+
+    it("lets a table that goes before the bar has settled go, and reveals it when it comes back", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "floor",
+          operatorName: "Ana",
+          barTables: tenTables(),
+        });
+        await frame();
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        el.barTables = [];
+        await el.updateComplete;
+        await frame();
+        expect(el.shadowRoot!.querySelector("[data-bar-table]")).toBeNull();
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+      });
+    });
+  });
+});
 
 describe("till-shell at phone width", () => {
   const clockedIn: Partial<TillShell> = {
@@ -845,7 +1433,7 @@ describe("till-shell at phone width", () => {
     [360, 640],
     [390, 664],
   ])(
-    "shows Log out inside the open More menu without scrolling at %ix%i, in Spanish",
+    "puts Log out last in More, reachable by scrolling it, at %ix%i, in Spanish",
     async (width, height) => {
       const original = currentLocale();
       setLocale("es-ES");
@@ -857,7 +1445,9 @@ describe("till-shell at phone width", () => {
             await frame();
             const popup = await openMore(el);
             expect(menuOf(el)!.querySelector(".operator")).not.toBeNull();
-            expect(popup.scrollTop).toBe(0);
+            expect(menuOf(el)!.lastElementChild!.classList.contains("logout")).toBe(true);
+            expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+            popup.scrollTop = popup.scrollHeight;
             const box = popup.getBoundingClientRect();
             const logout = menuOf(el)!
               .querySelector<HTMLElement>(".logout")!
@@ -912,7 +1502,7 @@ describe("till-shell at phone width", () => {
           const strip = el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
           const box = strip.getBoundingClientRect();
           const tabs = [...strip.children].map((c) => c.getBoundingClientRect());
-          expect(tabs).toHaveLength(2);
+          expect(tabs).toHaveLength(1);
           expect(strip.scrollWidth, "the tab strip's content fits its box").toBeLessThanOrEqual(
             strip.clientWidth,
           );
@@ -942,7 +1532,7 @@ describe("till-shell at phone width", () => {
           ]
             .map((c) => c.getBoundingClientRect())
             .filter((r) => r.width > 0 && r.height > 0);
-          expect(visible.length).toBe(5);
+          expect(visible.length).toBe(3);
           for (const r of visible) {
             expect(r.top).toBeGreaterThanOrEqual(header.top);
             expect(r.bottom).toBeLessThanOrEqual(header.bottom);
@@ -963,8 +1553,9 @@ describe("till-shell at phone width", () => {
       expect(menu.shadowRoot!.querySelector("wt-icon")!.getAttribute("size")).toBe("lg");
       expect(menu.getAttribute("align")).toBe("end");
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
-      const order = [...menu.children]
+      const order = [...menu.querySelectorAll(":scope > *, :scope > .settings-group > *")]
         .filter((c) => c.slot !== "badge")
+        .filter((c) => !c.matches(".settings-group, .menu-rule, .settings-heading"))
         .map((c) => (c.localName === "wt-menu-row" ? c.firstElementChild! : c))
         .map(
           (c) =>
@@ -973,18 +1564,19 @@ describe("till-shell at phone width", () => {
             c.localName,
         );
       expect(order).toEqual([
-        "find-bill",
+        "operator",
         "expo",
         "station",
+        "find-bill",
         "schedule",
         "profile",
-        "zones",
-        "equipment",
         "department-transfers",
         "data-open-transfers",
-        "operator",
-        "logout",
+        "zones",
+        "equipment",
+        "wt-language-chooser",
         "theme-choices",
+        "logout",
       ]);
       expect(menu.querySelector(".operator")!.textContent).toContain("Ana Fernández");
       expect(menu.querySelector('[data-test="department-transfers"]')!.textContent).toContain(
@@ -1012,7 +1604,7 @@ describe("till-shell at phone width", () => {
       for (const tab of el.shadowRoot!.querySelectorAll<HTMLElement>(".tab")) {
         await userEvent.click(tab);
       }
-      expect(keys).toEqual(["floor", "order"]);
+      expect(keys).toEqual(["floor"]);
     });
   });
 
@@ -1022,23 +1614,32 @@ describe("till-shell at phone width", () => {
       const fired: string[] = [];
       for (const [, type] of phoneMenuActions) el.addEventListener(type, () => fired.push(type));
       const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
-      for (const [index, [selector]] of phoneMenuActions.entries()) {
+      // Tab stops into More for each action: they rise in More's order, and before Log out come
+      // the two languages and the three Theme choices.
+      const steps: number[] = [];
+      for (const [selector] of phoneMenuActions) {
         tabsEls[tabsEls.length - 1]!.focus();
-        await userEvent.tab(); // the language chooser
         await userEvent.tab(); // the Help switch
         await userEvent.tab();
         expect(deepActive()).toBe(triggerOf(el));
         await userEvent.keyboard("{Enter}");
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
-        for (let step = 0; step <= index; step += 1) await userEvent.tab();
         const target = menuOf(el)!.querySelector<HTMLElement>(selector)!;
-        expect(target.contains(deepActive()) || target.shadowRoot!.contains(deepActive())).toBe(
-          true,
-        );
+        const focused = () =>
+          target.contains(deepActive()) || target.shadowRoot!.contains(deepActive());
+        let step = 0;
+        while (!focused() && step < 20) {
+          await userEvent.tab();
+          step += 1;
+        }
+        expect(focused(), selector).toBe(true);
+        steps.push(step);
         await userEvent.keyboard("{Enter}");
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("false"));
       }
       expect(fired).toEqual(phoneMenuActions.map(([, type]) => type));
+      expect(steps.slice(0, -1)).toEqual(steps.slice(0, -1).map((_, index) => index + 1));
+      expect(steps.at(-1)).toBe(steps.at(-2)! + 2 + 3 + 1);
     });
   });
 
@@ -1162,11 +1763,25 @@ describe("till-shell at phone width", () => {
     });
   });
 
-  it("draws the wide handheld header with Find a bill in More and every other button in priority order", async () => {
+  it("draws the wide handheld header with the name, Help and More on the bar and every other entry in More", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", full);
-      expect(moreItems(el)).toEqual(["find-bill", "zones"]);
-      expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
+      expect(moreItems(el)).toEqual([
+        "wt-count-badge",
+        "expo",
+        "station",
+        "find-bill",
+        "schedule",
+        "profile",
+        "department-transfers",
+        "wt-button",
+        "zones",
+        "equipment",
+        "wt-language-chooser",
+        "theme-choices",
+        "logout",
+      ]);
+      expect(el.shadowRoot!.querySelector("header .session > .operator")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       const session = el.shadowRoot!.querySelector("header .session")!;
       expect(
@@ -1176,22 +1791,7 @@ describe("till-shell at phone width", () => {
               (c.hasAttribute("data-open-transfers") ? "data-open-transfers" : c.className)) ||
             c.localName,
         ),
-      ).toEqual([
-        "expo",
-        "station",
-        "schedule",
-        "profile",
-        "equipment",
-        "department-transfers",
-        "data-open-transfers",
-        "wt-language-chooser",
-        "help-switch",
-        "operator-menu",
-        "more-menu",
-      ]);
-      for (const button of session.querySelectorAll(":scope > wt-button")) {
-        expect(button.getAttribute("variant")).toBe("secondary");
-      }
+      ).toEqual(["operator", "help-switch", "more-menu"]);
     });
   });
 
@@ -1201,7 +1801,23 @@ describe("till-shell at phone width", () => {
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(menuOf(el)).not.toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
-      await vi.waitFor(() => expect(moreItems(el)).toEqual(["find-bill", "zones"]));
+      await vi.waitFor(() =>
+        expect(moreItems(el)).toEqual([
+          "wt-count-badge",
+          "expo",
+          "station",
+          "find-bill",
+          "schedule",
+          "profile",
+          "department-transfers",
+          "wt-button",
+          "zones",
+          "equipment",
+          "wt-language-chooser",
+          "theme-choices",
+          "logout",
+        ]),
+      );
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
       await page.viewport(390, 844);
@@ -1213,17 +1829,9 @@ describe("till-shell at phone width", () => {
 });
 
 describe("till-shell above phone width", () => {
-  /** The order in which the bar's items leave for More, first to leave first: each item's key and
-   * the selector of its button. */
-  const leaveOrder = [
-    ["transfers", "[data-open-transfers]"],
-    ["equipment", ".equipment"],
-    ["profile", ".profile"],
-    ["schedule", ".schedule"],
-    ["station", ".station"],
-    ["expo", ".expo"],
-    ["operator", ".logout"],
-  ] as const;
+  /** What leaves a handheld's bar for More, the name alone: its key and the selector of the name
+   * as ☰ draws it. */
+  const leaveOrder = [["operator", ".operator"]] as const;
 
   const settle = async (el: TillShell) => {
     await frame();
@@ -1305,6 +1913,148 @@ describe("till-shell above phone width", () => {
     expect(fired).toEqual(menuActions.map(([, type]) => type));
   }
 
+  const tablesOf = (count: number): BarTable[] =>
+    Array.from({ length: count }, (_, i) => ({
+      tableId: `t${i + 1}`,
+      name: `T${i + 1}`,
+      unsent: true,
+      current: false,
+      held: false,
+    }));
+  /** The fewest table buttons that move `name` into More at the current width, measured on a bar
+   * gaining one button at a time, because how wide the text draws differs between platforms. */
+  async function tablesMoving(name: string): Promise<number> {
+    const { el, host } = await mountWidget<TillShell>("till-shell", {
+      ...full,
+      operatorName: name,
+    });
+    await settle(el);
+    let count = 0;
+    while (menuOf(el)!.querySelector(".operator") === null && count < 40) {
+      count += 1;
+      el.barTables = tablesOf(count);
+      await settle(el);
+    }
+    host.remove();
+    expect(count, name).toBeLessThan(40);
+    return count;
+  }
+  const brandOf = (el: TillShell) =>
+    el.shadowRoot!.querySelector("header > .brand, header > wt-venue-logo");
+  const sessionItems = (el: TillShell) =>
+    [...el.shadowRoot!.querySelectorAll("header .session > *")].map(
+      (item) => (item.getAttribute("data-test") ?? item.className) || item.localName,
+    );
+  const everyEntry = [
+    "wt-count-badge",
+    "expo",
+    "station",
+    "find-bill",
+    "schedule",
+    "profile",
+    "department-transfers",
+    "wt-button",
+    "zones",
+    "equipment",
+    "wt-language-chooser",
+    "theme-choices",
+    "logout",
+  ];
+
+  for (const width of [1280, ROOMY_WIDTH]) {
+    for (const locale of ["en-GB", "es-ES"]) {
+      it(`keeps only Floor, the table buttons, the name, Help and More on a handheld's bar, every other entry in More, at ${width} in ${locale}`, async () => {
+        await withLocale(locale, () =>
+          atViewport(width, async () => {
+            const { el } = await mountWidget<TillShell>("till-shell", {
+              ...full,
+              barTables: tablesOf(2),
+            });
+            await settle(el);
+            expect(
+              [...el.shadowRoot!.querySelectorAll('header .tabs [role="tab"]')].map((tab) =>
+                tab.textContent!.trim(),
+              ),
+            ).toEqual([t("tab.floor"), "T1", "T2"]);
+            expect(sessionItems(el)).toEqual(["operator", "help-switch", "more-menu"]);
+            expect(moreItems(el)).toEqual(everyEntry);
+            expectOneRow(el);
+          }),
+        );
+      });
+    }
+  }
+
+  it("hides the brand first, then moves the name into More, as table buttons fill the bar, and gives both back as they go", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1024, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          ...full,
+          clockAvailable: true,
+          clockState: {
+            personId: "ana",
+            locationId: "venue",
+            businessDay: "2026-10-14",
+            state: "working",
+            activeLocationId: "venue",
+            lastEntryId: "entry",
+            firstClockIn: false,
+          },
+        });
+        await settle(el);
+        const nameInMore = () => menuOf(el)!.querySelector(".operator") !== null;
+        const state = () =>
+          `${brandOf(el) === null ? "-" : "brand"} ${nameInMore() ? "more" : "name"}`;
+        expect(state()).toBe("brand name");
+        const filling = [state()];
+        let count = 0;
+        while (!nameInMore() && count < 40) {
+          count += 1;
+          el.barTables = tablesOf(count);
+          await settle(el);
+          expectOneRow(el);
+          filling.push(state());
+        }
+        expect(filling).toContain("- name");
+        expect(filling.at(-1)).toBe("- more");
+        expect(filling.filter((s) => s === "brand more")).toEqual([]);
+        expect(filling.indexOf("- name")).toBeLessThan(filling.indexOf("- more"));
+        expect(sessionItems(el)).toEqual(["help-switch", "more-menu"]);
+        expect(moreItems(el).slice(0, 2)).toEqual(["wt-count-badge", "operator"]);
+        expect(
+          [...menuOf(el)!.querySelectorAll(":scope > [data-clock-action]")].map((b) =>
+            b.getAttribute("data-clock-action"),
+          ),
+        ).toEqual(["break-start", "out"]);
+        const emptying = [state()];
+        while (count > 0) {
+          count -= 1;
+          el.barTables = tablesOf(count);
+          await settle(el);
+          expectOneRow(el);
+          emptying.push(state());
+        }
+        expect(emptying).toContain("- name");
+        expect(emptying.at(-1)).toBe("brand name");
+        expect(emptying.indexOf("- name")).toBeLessThan(emptying.indexOf("brand name"));
+        expect(emptying.filter((s) => s === "brand more")).toEqual([]);
+        expect(sessionItems(el)).toEqual(["operator-menu", "help-switch", "more-menu"]);
+      }),
+    );
+  });
+
+  it("shows the brand mark at step 0 though More holds every entry", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(ROOMY_WIDTH, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", full);
+        await settle(el);
+        expect(moreItems(el)).toEqual(everyEntry);
+        expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
+        expectOneRow(el);
+      }),
+    );
+  });
+
   for (const width of [700, 1024, 1280]) {
     for (const locale of ["en-GB", "es-ES"]) {
       it(`keeps the bar to one row at ${width} wide in ${locale}, every action reachable once`, async () => {
@@ -1320,164 +2070,6 @@ describe("till-shell above phone width", () => {
     }
   }
 
-  it.each(["en-GB", "es-ES"] as const)(
-    "moves items into More in a fixed order as the screen narrows, in %s",
-    async (locale) => {
-      await withLocale(locale, () =>
-        atViewport(1600, async () => {
-          const { el } = await mountWidget<TillShell>("till-shell", full);
-          await settle(el);
-          let before: string[] = [];
-          const seen = new Set<number>();
-          for (let width = 1600; width >= 660; width -= 40) {
-            await page.viewport(width, 844);
-            await settle(el);
-            const now = inMore(el);
-            expect(now, `${width}`).toEqual(leaveOrder.slice(0, now.length).map(([k]) => k));
-            expect(now.length, `${width}`).toBeGreaterThanOrEqual(before.length);
-            if (now.length > 0)
-              expect(el.shadowRoot!.querySelector(".brand"), `${width}`).toBeNull();
-            expectOneRow(el);
-            seen.add(now.length);
-            before = now;
-          }
-          // The walk saw a bar with some items left and some still on it.
-          expect([...seen].some((n) => n > 0 && n < leaveOrder.length)).toBe(true);
-        }),
-      );
-    },
-  );
-
-  const compactHandheld: Partial<TillShell> = {
-    formFactor: "tablet-landscape",
-    activeScreen: "counter",
-    operatorName: "Ana",
-    affordances: ["find-bill", "station", "expo", "schedule"],
-    transferAvailable: true,
-    transferCount: 1,
-    loadLocales: full.loadLocales!,
-  };
-
-  const service = [".expo", ".station"] as const;
-
-  /** What each item that ranks below Pass and Kitchen draws in the session row. */
-  const belowService: Record<string, readonly string[]> = {
-    transfers: ['[data-test="department-transfers"]', "[data-open-transfers]"],
-    equipment: [".equipment"],
-    profile: [".profile"],
-    schedule: [".schedule"],
-  };
-
-  /** The items of `shell` that rank below Pass and Kitchen, and the viewport widths
-   * just wide enough (`fits`) and just too narrow (`tight`) for its bar to keep both with the
-   * brand mark (the venue's logo, or the word) hidden and those items in More. Measured in the running browser, because how wide the text
-   * draws differs between platforms. */
-  async function serviceWidths(
-    shell: Partial<TillShell>,
-  ): Promise<{ below: string[]; fits: number; tight: number }> {
-    let result = { below: [] as string[], fits: 0, tight: 0 };
-    await atViewport(ROOMY_WIDTH, async () => {
-      const { el, host } = await mountWidget<TillShell>("till-shell", shell);
-      await settle(el);
-      await settle(el);
-      expect(moreItems(el)).toEqual(["find-bill", "zones"]);
-      const header = el.shadowRoot!.querySelector("header")!;
-      const session = header.querySelector<HTMLElement>(".session")!;
-      const width = (node: Element) => node.getBoundingClientRect().width;
-      const px = (value: string) => parseFloat(value);
-      const below = leaveOrder
-        .slice(
-          0,
-          leaveOrder.findIndex(([key]) => key === "station"),
-        )
-        .filter(([, selector]) => header.querySelector(selector) !== null)
-        .map(([key]) => key);
-      const sessionGap = px(getComputedStyle(session).columnGap);
-      const head = getComputedStyle(header);
-      let need =
-        px(head.paddingLeft) +
-        px(head.columnGap) +
-        width(header.querySelector(".tabs")!) +
-        width(session) +
-        px(head.paddingRight);
-      for (const key of below) {
-        for (const selector of belowService[key]!) {
-          need -= width(session.querySelector(`:scope > ${selector}`)!) + sessionGap;
-        }
-      }
-      const offset = window.innerWidth - width(header);
-      await page.viewport(700, 844);
-      await settle(el);
-      host.remove();
-      result = {
-        below,
-        fits: Math.ceil(need + offset) + 2,
-        tight: Math.floor(need + offset) - 2,
-      };
-    });
-    return result;
-  }
-
-  for (const [fixture, shell] of [
-    ["full", full],
-    ["a compact handheld", compactHandheld],
-  ] as const) {
-    for (const locale of ["en-GB", "es-ES"] as const) {
-      it(`moves the transfers, and what ranks below Pass and Kitchen, into More before them, then Kitchen first, with ${fixture} in ${locale}`, async () => {
-        await withLocale(locale, async () => {
-          const { below, fits, tight } = await serviceWidths(shell);
-          expect(below[0]).toBe("transfers");
-          for (const [width, left] of [
-            [fits, below],
-            [tight, [...below, "station"]],
-          ] as const) {
-            await atViewport(width, async () => {
-              const { el, host } = await mountWidget<TillShell>("till-shell", shell);
-              await settle(el);
-              if (width <= 640) {
-                expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).not.toBeNull();
-                expect(inMore(el), `${width}`).toEqual(
-                  fixture === "full"
-                    ? [
-                        "transfers",
-                        "equipment",
-                        "profile",
-                        "schedule",
-                        "station",
-                        "expo",
-                        "operator",
-                      ]
-                    : ["transfers", "equipment", "schedule", "station", "expo", "operator"],
-                );
-                expectOneRow(el);
-                host.remove();
-                return;
-              }
-              expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).toBeNull();
-              expect(inMore(el), `${width}`).toEqual(left);
-              const menu = menuOf(el)!;
-              for (const selector of service) {
-                const found = [
-                  ...el.shadowRoot!.querySelectorAll<HTMLElement>(`header ${selector}`),
-                ];
-                expect(found, `${width} ${selector}`).toHaveLength(1);
-                const moved = left.includes(selector.slice(1));
-                expect(menu.contains(found[0]!), `${width} ${selector}`).toBe(moved);
-                if (moved) continue;
-                const r = found[0]!.getBoundingClientRect();
-                expect(r.width, `${width} ${selector}`).toBeGreaterThan(0);
-                expect(r.left, `${width} ${selector}`).toBeGreaterThanOrEqual(0);
-                expect(r.right, `${width} ${selector}`).toBeLessThanOrEqual(window.innerWidth);
-              }
-              expectOneRow(el);
-              host.remove();
-            });
-          }
-        });
-      });
-    }
-  }
-
   it.each([
     ["en-GB", "Transfers", "Department transfers"],
     ["es-ES", "Traspasos", "Traspasos entre departamentos"],
@@ -1486,11 +2078,15 @@ describe("till-shell above phone width", () => {
     async (locale, short, title) => {
       await withLocale(locale, () =>
         atViewport(ROOMY_WIDTH, async () => {
-          const { el } = await mountWidget<TillShell>("till-shell", full);
+          const { el } = await mountWidget<TillShell>("till-shell", {
+            ...full,
+            formFactor: "till",
+            activeScreen: "counter",
+            transferCount: undefined,
+          });
           await settle(el);
-          expect(moreItems(el)).toEqual(["find-bill", "zones"]);
           const button = el.shadowRoot!.querySelector<HTMLElement>(
-            "header .session > [data-open-transfers]",
+            "header .till-strip > [data-open-transfers]",
           )!;
           expect(button.textContent!.trim()).toBe(short);
           expect(t("department_transfer.short")).toBe(short);
@@ -1504,18 +2100,19 @@ describe("till-shell above phone width", () => {
     ["en-GB", "Log out", "Log out"],
     ["es-ES", "Salir", "Cerrar sesión"],
   ] as const)(
-    "labels Log out %s's short word, in the name menu and inside More, keeping the counter header's full name",
+    "labels Log out %s's short word inside More, where it is with the name on the bar too, keeping the counter header's full name",
     async (locale, label, headerName) => {
       await withLocale(locale, async () => {
         expect(t("action.logout")).toBe(headerName);
         await atViewport(ROOMY_WIDTH, async () => {
           const { el, host } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
-          expect(moreItems(el)).toEqual(["find-bill", "zones"]);
-          const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
-          const onBar = nameMenu.querySelector<HTMLElement>(".logout")!;
-          expect(onBar.textContent!.trim()).toBe(label);
-          await userEvent.click(nameMenu.shadowRoot!.querySelector("button")!);
+          expect(moreItems(el)).toEqual(everyEntry);
+          expect(sessionItems(el)).toEqual(["operator", "help-switch", "more-menu"]);
+          const inMore = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
+          expect([...el.shadowRoot!.querySelectorAll(".logout")]).toEqual([inMore]);
+          expect(inMore.textContent!.trim()).toBe(label);
+          await userEvent.click(triggerOf(el));
           await expect
             .element(page.getByRole("button", { name: label, exact: true }))
             .toBeVisible();
@@ -1535,33 +2132,14 @@ describe("till-shell above phone width", () => {
     },
   );
 
-  it("keeps Pass and Kitchen on a compact handheld's Spanish bar at 800 wide when its measured width fits there", async () => {
-    await withLocale("es-ES", async () => {
-      const { fits, tight } = await serviceWidths(compactHandheld);
-      console.info(`The compact handheld's Spanish bar keeps Pass and Kitchen from ${fits} px.`);
-      await atViewport(800, async () => {
-        const { el } = await mountWidget<TillShell>("till-shell", compactHandheld);
-        await settle(el);
-        expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
-        const moved = inMore(el);
-        if (800 >= fits) {
-          for (const key of ["expo", "station"]) {
-            expect(moved, `fits from ${fits}`).not.toContain(key);
-          }
-        }
-        if (800 <= tight) expect(moved, `fits from ${fits}`).toContain("station");
-        expectOneRow(el);
-      });
-    });
-  });
-
-  it("keeps More in the bar's order, showing only the items that left", async () => {
+  it("keeps More in its own order", async () => {
     await atViewport(1024, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
       const menu = menuOf(el)!;
-      const order = [...menu.children]
+      const order = [...menu.querySelectorAll(":scope > *, :scope > .settings-group > *")]
         .filter((c) => c.slot !== "badge")
+        .filter((c) => !c.matches(".settings-group, .menu-rule, .settings-heading"))
         .map((c) => (c.localName === "wt-menu-row" ? c.firstElementChild! : c))
         .map(
           (c) =>
@@ -1569,25 +2147,31 @@ describe("till-shell above phone width", () => {
               (c.hasAttribute("data-open-transfers") ? "data-open-transfers" : c.className)) ||
             c.localName,
         );
-      const barOrder = [
-        "find-bill",
+      const moreOrder = [
+        "operator",
         "expo",
         "station",
+        "find-bill",
         "schedule",
         "profile",
-        "zones",
-        "equipment",
         "department-transfers",
         "data-open-transfers",
-        "operator",
-        "logout",
+        "zones",
+        "equipment",
+        "wt-language-chooser",
         "theme-choices",
+        "logout",
       ];
       expect(order.length).toBeGreaterThan(0);
-      expect(order).toEqual(barOrder.filter((key) => order.includes(key)));
-      expect(order.length).toBeLessThan(barOrder.length);
+      expect(order).toEqual(moreOrder.filter((key) => order.includes(key)));
+      expect(el.shadowRoot!.querySelector("header .session > .operator")).not.toBeNull();
+      expect(order).toEqual(moreOrder.filter((key) => key !== "operator"));
       for (const key of order) {
-        const selector = key.startsWith("data-") ? `[${key}]` : `.${key}`;
+        const selector = key.startsWith("data-")
+          ? `[${key}]`
+          : key.startsWith("wt-")
+            ? key
+            : `.${key}`;
         if (key === "department-transfers") continue;
         expect(el.shadowRoot!.querySelectorAll(`header ${selector}`), key).toHaveLength(1);
       }
@@ -1595,23 +2179,23 @@ describe("till-shell above phone width", () => {
         expect(button.getAttribute("variant")).toBe("ghost");
         expect(button.getAttribute("align")).toBe("start");
       }
-      for (const button of el.shadowRoot!.querySelectorAll("header .session > wt-button")) {
-        expect(button.getAttribute("variant")).toBe("secondary");
-      }
       const session = el.shadowRoot!.querySelector("header .session")!;
+      expect(session.querySelector(":scope > wt-button")).toBeNull();
       expect(session.lastElementChild).toBe(menu);
     });
   });
 
-  it("puts every item back on the bar, and the name, once the screen is wide enough", async () => {
+  it("puts the name back on the bar, and the brand, once the screen is wide enough", async () => {
     await atViewport(700, async () => {
-      const { el } = await mountWidget<TillShell>("till-shell", full);
+      const tables = tablesOf(await tablesMoving(full.operatorName!));
+      const { el } = await mountWidget<TillShell>("till-shell", { ...full, barTables: tables });
       await settle(el);
-      expect(menuOf(el)).not.toBeNull();
+      expect(inMore(el)).toEqual(["operator"]);
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
       await settle(el);
-      expect(moreItems(el)).toEqual(["find-bill", "zones"]);
+      expect(inMore(el)).toEqual([]);
+      expect(moreItems(el)).toEqual(everyEntry);
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       expectOneRow(el);
     });
@@ -1620,10 +2204,16 @@ describe("till-shell above phone width", () => {
   it("refits when the operator's name grows", async () => {
     await withLocale("en-GB", () =>
       atViewport(1100, async () => {
-        const { el } = await mountWidget<TillShell>("till-shell", full);
+        const long = "María de los Ángeles Fernández-Villaverde y Castro";
+        const count = await tablesMoving(long);
+        expect(await tablesMoving(full.operatorName!)).toBeGreaterThan(count);
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          ...full,
+          barTables: tablesOf(count),
+        });
         await settle(el);
         const was = inMore(el).length;
-        el.operatorName = "María de los Ángeles Fernández-Villaverde y Castro";
+        el.operatorName = long;
         await settle(el);
         expectOneRow(el);
         expect(inMore(el).length).toBeGreaterThan(was);
@@ -1632,7 +2222,7 @@ describe("till-shell above phone width", () => {
     );
   });
 
-  it("refits when actions are added, and gives them back when they go", async () => {
+  it("lists added actions in More and drops them when they go", async () => {
     await atViewport(1280, async () => {
       const few: Partial<TillShell> = {
         ...full,
@@ -1643,17 +2233,30 @@ describe("till-shell above phone width", () => {
       };
       const { el } = await mountWidget<TillShell>("till-shell", few);
       await settle(el);
-      expect(moreItems(el)).toEqual(["zones"]);
+      expect(moreItems(el)).toEqual([
+        "zones",
+        "equipment",
+        "wt-language-chooser",
+        "theme-choices",
+        "logout",
+      ]);
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
       Object.assign(el, full);
       await settle(el);
       expectOneRow(el);
       expect(menuOf(el)).not.toBeNull();
+      expect(moreItems(el)).toEqual(everyEntry);
       await expectEachActionOnce(el);
       Object.assign(el, few);
       await settle(el);
       expectOneRow(el);
-      expect(moreItems(el)).toEqual(["zones"]);
+      expect(moreItems(el)).toEqual([
+        "zones",
+        "equipment",
+        "wt-language-chooser",
+        "theme-choices",
+        "logout",
+      ]);
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
     });
   });
@@ -1682,15 +2285,21 @@ describe("till-shell above phone width", () => {
   it("keeps the visible count as the status while the transfers are on the bar", async () => {
     await withLocale("en-GB", () =>
       atViewport(ROOMY_WIDTH, async () => {
-        const { el } = await mountWidget<TillShell>("till-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          ...full,
+          formFactor: "till",
+          activeScreen: "floor",
+          showCounter: false,
+        });
         await settle(el);
-        expect(moreItems(el)).toEqual(["find-bill", "zones"]);
         const [status, ...rest] = statuses(el);
         expect(rest).toEqual([]);
         expect(status!.getAttribute("data-test")).toBe("department-transfers");
-        expect(status!.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
+        expect(status!.parentElement).toBe(
+          el.shadowRoot!.querySelector("header .till-strip > [data-open-transfers]"),
+        );
         expect(status!.getBoundingClientRect().width).toBeGreaterThan(1);
-        expect(status!.textContent).toContain(
+        expect(status!.getAttribute("aria-label")).toBe(
           t("department_transfer.open").replace("{count}", "2"),
         );
       }),
@@ -1745,12 +2354,14 @@ describe("till-shell above phone width", () => {
   it("waits for an open More to close before giving items back to a wider bar", async () => {
     await withLocale("en-GB", () =>
       atViewport(1024, async () => {
-        const { el } = await mountWidget<TillShell>("till-shell", full);
+        const tables = tablesOf(await tablesMoving(full.operatorName!));
+        const { el } = await mountWidget<TillShell>("till-shell", { ...full, barTables: tables });
         await settle(el);
         const menu = menuOf(el)!;
         await userEvent.click(triggerOf(el));
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
         const held = inMore(el);
+        expect(held).toEqual(["operator"]);
         await page.viewport(ROOMY_WIDTH, 844);
         await settle(el);
         expect(menuOf(el)).toBe(menu);
@@ -1758,41 +2369,8 @@ describe("till-shell above phone width", () => {
         expect(inMore(el)).toEqual(held);
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(moreItems(el)).toEqual(["find-bill", "zones"]);
-        expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
-        expectOneRow(el);
-      }),
-    );
-  });
-
-  it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
-    await withLocale("en-GB", () =>
-      atViewport(660, async () => {
-        const { el } = await mountWidget<TillShell>("till-shell", {
-          ...full,
-          canSwitchProfile: false,
-        });
-        await settle(el);
-        const menu = menuOf(el)!;
-        const held = inMore(el);
-        // Profile would come third in the leaving order, so with three or more items already in
-        // More its arrival shifts the count's slice by one.
-        expect(held).toContain("schedule");
-        await userEvent.click(triggerOf(el));
-        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
-        await page.viewport(ROOMY_WIDTH, 844);
-        await settle(el);
-        el.canSwitchProfile = true;
-        await settle(el);
-        expect(menuOf(el)).toBe(menu);
-        expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
-        expect(popoverOpen(el)).toBe(true);
-        expect(inMore(el)).toEqual(
-          leaveOrder.map(([k]) => k).filter((k) => k === "profile" || held.includes(k)),
-        );
-        await userEvent.keyboard("{Escape}");
-        await settle(el);
-        expect(moreItems(el)).toEqual(["find-bill", "zones"]);
+        expect(inMore(el)).toEqual([]);
+        expect(moreItems(el)).toEqual(everyEntry);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1815,7 +2393,7 @@ describe("till-shell above phone width", () => {
         expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
         expect(popoverOpen(el)).toBe(true);
         expect(inMore(el)).toEqual(everything);
-        expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
+        expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
         await userEvent.keyboard("{Escape}");
         await settle(el);
@@ -1916,7 +2494,7 @@ describe("till-shell above phone width", () => {
             for (let i = 0; i < ticks; i += 1) await Promise.resolve();
             el.kiosk = false;
             await settle(el);
-            expect(moreItems(el), `${ticks}`).toEqual(["find-bill", "zones"]);
+            expect(moreItems(el), `${ticks}`).toEqual(everyEntry);
             expect(el.shadowRoot!.querySelector("header > .brand"), `${ticks}`).not.toBeNull();
             expectOneRow(el);
           }
@@ -1930,22 +2508,34 @@ describe("till-shell above phone width", () => {
   });
 
   it("keeps fitting after it is taken off the page and put back", async () => {
-    await atViewport(ROOMY_WIDTH, async () => {
-      const { el, host } = await mountWidget<TillShell>("till-shell", full);
+    await atViewport(1024, async () => {
+      const tables = tablesOf(await tablesMoving(full.operatorName!));
+      await page.viewport(ROOMY_WIDTH, 844);
+      const { el, host } = await mountWidget<TillShell>("till-shell", {
+        ...full,
+        barTables: tables,
+      });
       await settle(el);
-      expect(moreItems(el)).toEqual(["find-bill", "zones"]);
+      expect(moreItems(el)).toEqual(everyEntry);
       el.remove();
       host.append(el);
       await settle(el);
       await page.viewport(1024, 844);
       await settle(el);
-      expect(menuOf(el)).not.toBeNull();
+      expect(inMore(el)).toEqual(["operator"]);
       expectOneRow(el);
     });
   });
 
   const shortName = { operatorName: "Ana" };
   const longName = { operatorName: "María de los Ángeles Fernández-Villaverde y Castro" };
+  /** Measurements the race batches share, keyed by width, language and what was measured. */
+  const raceMeasures = new Map<string, Promise<unknown>>();
+  const measuredOnce = <T>(what: string, measure: () => Promise<T>): Promise<T> => {
+    const key = `${innerWidth}|${currentLocale()}|${what}`;
+    if (!raceMeasures.has(key)) raceMeasures.set(key, measure());
+    return raceMeasures.get(key) as Promise<T>;
+  };
 
   it.each(
     (
@@ -1978,22 +2568,33 @@ describe("till-shell above phone width", () => {
     async (_how, start, first, second, from, to) => {
       await withLocale("en-GB", () =>
         atViewport(1100, async () => {
-          const { el: fresh } = await mountWidget<TillShell>("till-shell", {
-            ...full,
-            ...start,
-            ...first,
-            ...second,
-          });
-          await settle(fresh);
-          const want = inMore(fresh);
-          fresh.remove();
-          const { el } = await mountWidget<TillShell>("till-shell", { ...full, ...start });
+          const count = await measuredOnce(`tables ${longName.operatorName}`, () =>
+            tablesMoving(longName.operatorName),
+          );
+          const base = { ...full, barTables: tablesOf(count) };
+          const freshMore = (name: Partial<TillShell>) =>
+            measuredOnce(`fresh ${count} ${JSON.stringify(name)}`, async () => {
+              const { el: fresh } = await mountWidget<TillShell>("till-shell", {
+                ...base,
+                ...name,
+              });
+              await settle(fresh);
+              const moved = inMore(fresh);
+              fresh.remove();
+              return moved;
+            });
+          // The fresh bar keeps the short name and moves the long one, so a fit cut short could
+          // leave either answer.
+          expect(await freshMore(shortName)).toEqual([]);
+          expect(await freshMore(longName)).toEqual(["operator"]);
+          const want = await freshMore({ ...start, ...first, ...second });
+          const { el } = await mountWidget<TillShell>("till-shell", { ...base, ...start });
           await settle(el);
           const differs: string[] = [];
           // Each pass starts the second fit one microtask later than the last, so some pass cuts
           // the first short at each of its waits.
           for (let ticks = from; ticks <= to; ticks += 1) {
-            Object.assign(el, full, start);
+            Object.assign(el, base, start);
             await settle(el);
             Object.assign(el, first);
             for (let i = 0; i < ticks; i += 1) await Promise.resolve();
@@ -2002,8 +2603,6 @@ describe("till-shell above phone width", () => {
             expectOneRow(el);
             if (inMore(el).join() !== want.join()) differs.push(`${ticks}: ${inMore(el).join()}`);
           }
-          expect(want.length).toBeGreaterThan(0);
-          expect(want.length).toBeLessThan(leaveOrder.length);
           expect(differs, `fresh: ${want.join()}`).toEqual([]);
         }),
       );
@@ -2033,8 +2632,8 @@ describe("till-shell above phone width", () => {
 
 it.each([
   ["till", ["Counter", "Floor"], "counter", "floor"],
-  ["phone-portrait", ["Floor", "Order"], "floor", "order"],
-  ["tablet-landscape", ["Floor", "Order"], "floor", "order"],
+  ["phone-portrait", ["Floor"], "floor", null],
+  ["tablet-landscape", ["Floor"], "floor", null],
 ] as const)(
   "fixed primary screens for %s work without an authored tab list",
   async (formFactor, labels, _home, second) => {
@@ -2049,13 +2648,22 @@ it.each([
           .filter((button) => button.getAttribute("aria-selected") === "true")
           .map((button) => button.textContent!.trim()),
       ).toEqual([labels[0]]);
-      const selected: unknown[] = [];
-      el.addEventListener("screen-select", (event) => selected.push((event as CustomEvent).detail));
-      await userEvent.click(buttons()[1]!);
-      expect(selected).toEqual([{ screen: second }]);
-      Object.assign(el, { activeScreen: second });
-      await el.updateComplete;
-      expect(buttons()[1]!.getAttribute("aria-selected")).toBe("true");
+      if (second === null) {
+        // D13: the Order screen has no tab on a handheld, so Floor stays selected on it.
+        Object.assign(el, { activeScreen: "order" });
+        await el.updateComplete;
+        expect(buttons()[0]!.getAttribute("aria-selected")).toBe("true");
+      } else {
+        const selected: unknown[] = [];
+        el.addEventListener("screen-select", (event) =>
+          selected.push((event as CustomEvent).detail),
+        );
+        await userEvent.click(buttons()[1]!);
+        expect(selected).toEqual([{ screen: second }]);
+        Object.assign(el, { activeScreen: second });
+        await el.updateComplete;
+        expect(buttons()[1]!.getAttribute("aria-selected")).toBe("true");
+      }
       Object.assign(el, { activeScreen: "retired-custom-screen" });
       await el.updateComplete;
       expect(buttons()[0]!.getAttribute("aria-selected")).toBe("true");

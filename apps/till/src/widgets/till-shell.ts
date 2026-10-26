@@ -26,6 +26,7 @@ import {
 } from "../built-in-screens.js";
 import type { TillClockState } from "../api/client.js";
 import type { TillClockAction } from "../state/clocking.js";
+import type { BarTable } from "../state/bar-tables.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
@@ -36,41 +37,16 @@ import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
 
+/** The screens a tab names: a handheld draws no Order tab. */
+type TabScreen = Exclude<BuiltInScreen, "order">;
+
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
 
 export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 
-type ActionVariant = "secondary" | "ghost";
-
-/** An item of the bar that can move into More; "transfers" is the count and its button together,
- * "operator" the name and everything in its menu together. */
-type BarItem =
-  | "transfers"
-  | "find-bill"
-  | "station"
-  | "expo"
-  | "schedule"
-  | "profile"
-  | "zones"
-  | "equipment"
-  | "operator";
-
-/** First to leave the bar first: the lowest priority first, and who is signed in last. `#items`
- * draws the others in the reverse order, so the rightmost of them leaves first. */
-const LEAVE_ORDER: readonly BarItem[] = [
-  "transfers",
-  "equipment",
-  "profile",
-  "schedule",
-  "station",
-  "expo",
-  "find-bill",
-  "operator",
-];
-
-/** Properties whose change owes a step-back, so may let items come back to the bar. A change of
- * `transferCount` alone does not owe one. */
+/** Properties whose change owes a step-back, so may let the brand mark or the name come back to
+ * the bar. A change of `transferCount` alone does not owe one. */
 const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "formFactor",
   "counterZones",
@@ -89,6 +65,7 @@ const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "clockBusy",
   "clockError",
   "legalName",
+  "barTables",
 ];
 
 function logoKey(state: VenueLogoState): string {
@@ -250,7 +227,8 @@ export class TillShell extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      .tab {
+      .tab,
+      .bar-table {
         flex: none;
         white-space: nowrap;
         min-height: var(--wt-tap-min);
@@ -264,12 +242,14 @@ export class TillShell extends LitElement {
         cursor: pointer;
       }
 
-      .tab:hover {
+      .tab:hover,
+      .bar-table:hover {
         background: var(--wt-color-surface-raised);
       }
 
       .tab[aria-selected="true"],
-      .tab[aria-pressed="true"] {
+      .tab[aria-pressed="true"],
+      .bar-table[aria-selected="true"] {
         background: var(--wt-color-surface-raised);
         border-color: var(--wt-color-border);
       }
@@ -353,12 +333,32 @@ export class TillShell extends LitElement {
         flex: 1;
       }
 
-      .head.phone .tab {
+      .head.phone .tab,
+      .head.phone .bar-table {
         padding: var(--wt-space-2) var(--wt-space-3);
       }
 
       .head.phone .session {
         gap: var(--wt-space-2);
+      }
+
+      .settings-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+
+      .settings-heading {
+        padding: var(--wt-space-1) var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .menu-rule {
+        align-self: stretch;
+        margin: 0;
+        border: 0;
+        border-block-start: 1px solid var(--wt-color-border);
       }
 
       wt-row-actions > span {
@@ -424,6 +424,8 @@ export class TillShell extends LitElement {
   @property({ attribute: false }) transferCount?: number;
   @property({ type: Boolean }) transferAvailable = false;
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
+  /** A handheld's table buttons, after Floor. */
+  @property({ attribute: false }) barTables: readonly BarTable[] = [];
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
   /** Suppresses the whole operator `<header>`: a kitchen display shows its board, no operator
    * chrome (owner decision 2026-09-04). */
@@ -456,91 +458,59 @@ export class TillShell extends LitElement {
     this.#phoneWidth = undefined;
     this.#observer?.disconnect();
     this.#observer = undefined;
-    this.#observedChooser = undefined;
+    this.#stripObserver?.disconnect();
+    this.#stripObserver = undefined;
+    this.#watchedStrip = undefined;
     this.#run += 1;
     this.#stopLogoRetry();
   }
 
-  /** With More closed and above phone width: 0, everything on the bar; 1, the brand mark (the venue's
-   * logo, or the word) hidden; n, the brand mark hidden and the first n − 1 present items of
-   * `LEAVE_ORDER` in More. */
+  /** With More closed and above phone width: 0, the brand mark (the venue's logo, or the word) and
+   * the name on the bar; 1, the brand mark hidden; 2, the brand mark hidden and the name in More. */
   @state() private steps = 0;
-  /** A handheld at phone width whose bar does not fit with the language chooser: it moves to the
-   * end of More. It stays there while More is open, even once the screen widens past phone width;
-   * above phone width it returns to the bar when More closes. */
-  @state() private chooserInMore = false;
   #run = 0;
   #stepBackOwed = false;
   readonly #venueLogo = new VenueLogoController(this);
   // Compared in `updated`, not taken from the controller's `onChange`: a host coming back to the
   // page redraws a changed logo with no `onChange`.
   #drawnLogo?: string;
+  #revealedBar?: string;
   #fittedWidth = 0;
   #fittedLocale?: string;
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
-  #observedChooser?: Element;
+  #stripObserver?: ResizeObserver;
+  #watchedStrip?: Element;
   #watchedPopup?: Element;
-  #shown: ReadonlySet<BarItem> = new Set();
-  #held?: ReadonlySet<BarItem>;
+  #shownName = false;
+  #heldName?: boolean;
   readonly #onPopupToggle = () => {
     this.#release();
     if (this.#menuOpen()) return;
-    const chooserBack = !this.phone && this.chooserInMore;
-    if (chooserBack) this.chooserInMore = false;
-    if (this.#stepBackOwed || this.phone || chooserBack) void this.#fit();
+    if (this.#stepBackOwed) void this.#fit();
   };
 
-  /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
-   * `steps` to cover what it held, so closing it moves nothing back before the fit steps back. Runs before every
-   * render as well as on the toggle event, because a render can come between closing and that
-   * event. */
+  /** An open More can hold the name though `steps` puts it on the bar; once it has closed, above
+   * phone width, raise `steps` to cover it, so closing it moves nothing back before the fit steps
+   * back. Runs before every render as well as on the toggle event, because a render can come between
+   * closing and that event. */
   #release(): void {
-    const held = this.#held;
+    const held = this.#heldName;
     if (held === undefined || this.#menuOpen()) return;
-    this.#held = undefined;
-    if (this.phone) return;
-    const present = this.#present();
-    const covering = Math.max(0, ...present.map((item, i) => (held.has(item) ? i + 2 : 0)));
-    if (covering > this.steps) {
-      this.steps = covering;
-      this.#stepBackOwed = true;
-    }
+    this.#heldName = undefined;
+    if (this.phone || !held || this.steps >= 2) return;
+    this.steps = 2;
+    this.#stepBackOwed = true;
   }
 
-  #present(): BarItem[] {
-    const has: Record<BarItem, boolean> = {
-      transfers: this.transferCount !== undefined || this.transferAvailable,
-      "find-bill": false,
-      station: this.affordances.includes("station"),
-      expo: this.affordances.includes("expo"),
-      schedule: this.affordances.includes("schedule"),
-      profile: this.canSwitchProfile,
-      zones: false,
-      equipment: true,
-      operator: true,
-    };
-    return LEAVE_ORDER.filter((item) => has[item]);
-  }
-
-  /** While More is open no item moves from it to the bar: what it showed stays, whatever `steps`
-   * now selects. */
-  #moved(): ReadonlySet<BarItem> {
-    const present = this.#present();
-    const fitted = this.phone ? present : present.slice(0, Math.max(0, this.steps - 1));
-    const moved = new Set(
-      this.#menuOpen()
-        ? present.filter((item) => fitted.includes(item) || this.#shown.has(item))
-        : fitted,
-    );
-    if (this.affordances.includes("find-bill")) moved.add("find-bill");
-    moved.add("zones");
-    return moved;
+  /** On a handheld everything but the name is always in More. While More is open the name does not
+   * move from it to the bar, whatever `steps` now selects. */
+  #nameInMore(): boolean {
+    return this.phone || this.steps >= 2 || (this.#menuOpen() && this.#shownName);
   }
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
-    if (!this.phone && !this.#menuOpen()) this.chooserInMore = false;
     if (this.formFactor !== "till") this.#release();
   }
 
@@ -559,6 +529,30 @@ export class TillShell extends LitElement {
       void this.#fit();
     }
     this.#retryHiddenLogo();
+    if (changed.has("barTables")) void this.#revealSelectedTable();
+  }
+
+  /** Scrolls the strip, never the page, to show the selected table's button whenever the buttons
+   * change, once the bar's own elements have drawn and so given the strip its width. */
+  async #revealSelectedTable(): Promise<void> {
+    const bar = JSON.stringify(this.barTables);
+    if (bar === this.#revealedBar) return;
+    this.#revealedBar = bar;
+    const tableId = this.barTables.find((table) => table.current)?.tableId;
+    if (tableId === undefined) return;
+    await this.#settled();
+    if (bar !== this.#revealedBar) return;
+    // No button while the bar is not drawn (a kiosk, a kitchen screen); the strip's observer
+    // reveals it once the strip is drawn.
+    const button = this.renderRoot.querySelector<HTMLElement>(
+      `[data-bar-table="${CSS.escape(tableId)}"]`,
+    );
+    if (!button) return;
+    const strip = button.parentElement!;
+    const box = button.getBoundingClientRect();
+    const view = strip.getBoundingClientRect();
+    if (box.left < view.left) strip.scrollLeft -= view.left - box.left;
+    else if (box.right > view.right) strip.scrollLeft += box.right - view.right;
   }
 
   /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out
@@ -592,35 +586,39 @@ export class TillShell extends LitElement {
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
-   * resize it ("reports no ResizeObserver loop", till-shell.test.ts). The chooser is observed
-   * because its label can change once its language list loads. */
+   * resize it ("reports no ResizeObserver loop", till-shell.test.ts). */
   #observe(): void {
     if (this.#observer === undefined) {
       this.#observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          if (entry.target === this) {
-            if (entry.contentRect.width > this.#fittedWidth) this.#stepBackOwed = true;
-            this.#fittedWidth = entry.contentRect.width;
-          } else {
-            this.#stepBackOwed = true;
-          }
+          if (entry.contentRect.width > this.#fittedWidth) this.#stepBackOwed = true;
+          this.#fittedWidth = entry.contentRect.width;
         }
         void this.#fit();
       });
       this.#observer.observe(this);
     }
-    const chooser = this.renderRoot.querySelector(".session > wt-language-chooser") ?? undefined;
-    if (chooser !== this.#observedChooser) {
-      if (this.#observedChooser) this.#observer.unobserve(this.#observedChooser);
-      if (chooser) this.#observer.observe(chooser);
-      this.#observedChooser = chooser;
-    }
+    this.#observeStrip();
     const popup = this.#popup();
     if (popup !== this.#watchedPopup) {
       this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
       popup?.addEventListener("toggle", this.#onPopupToggle);
       this.#watchedPopup = popup;
     }
+  }
+
+  /** A strip that changes width can leave the selected table's button outside it, so its reveal
+   * runs again then; a redraw at the same width leaves a person's own scroll alone. */
+  #observeStrip(): void {
+    const strip = this.renderRoot.querySelector(".head .tabs") ?? undefined;
+    if (strip === this.#watchedStrip) return;
+    this.#stripObserver ??= new ResizeObserver(() => {
+      this.#revealedBar = undefined;
+      void this.#revealSelectedTable();
+    });
+    if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
+    if (strip) this.#stripObserver.observe(strip);
+    this.#watchedStrip = strip;
   }
 
   #popup(): Element | undefined {
@@ -665,13 +663,7 @@ export class TillShell extends LitElement {
     if (this.phone) {
       // More draws its popup after the shell has rendered, so its toggle listener is attached here.
       this.#observe();
-      if (this.#menuOpen()) return;
-      if (this.#stepBackOwed && this.chooserInMore) {
-        this.chooserInMore = false;
-        if (await stale()) return;
-      }
-      this.#stepBackOwed = false;
-      if (this.#wraps()) this.chooserInMore = true;
+      if (!this.#menuOpen()) this.#stepBackOwed = false;
       return;
     }
     if (this.#stepBackOwed && !this.#menuOpen()) {
@@ -688,8 +680,7 @@ export class TillShell extends LitElement {
       }
       this.#stepBackOwed = false;
     }
-    const most = this.#present().length + 1;
-    while (this.#wraps() && this.steps < most) {
+    while (this.#wraps() && this.steps < 2) {
       this.steps += 1;
       if (await stale()) return;
     }
@@ -756,10 +747,19 @@ export class TillShell extends LitElement {
     >`;
   }
 
-  /** The bar's items in the bar's order, those in More when `inMore`, else those on the bar. */
-  #items(moved: ReadonlySet<BarItem>, inMore: boolean): TemplateResult {
-    const variant: ActionVariant = inMore ? "ghost" : "secondary";
-    const here = (item: BarItem) => moved.has(item) === inMore;
+  /** A handheld's More entries for the screens and settings. */
+  #items(): Record<
+    | "find-bill"
+    | "expo"
+    | "station"
+    | "schedule"
+    | "profile"
+    | "zones"
+    | "equipment"
+    | "transfer-count"
+    | "transfer-button",
+    TemplateResult | typeof nothing
+  > {
     const button = (
       cls: string | typeof nothing,
       type: string,
@@ -771,42 +771,31 @@ export class TillShell extends LitElement {
         html`<wt-button
           class=${cls}
           ?data-open-transfers=${opensTransfers}
-          variant=${variant}
-          align=${inMore ? "start" : nothing}
+          variant="ghost"
+          align="start"
           @click=${() => this.#emit(type)}
           >${label}</wt-button
         >`,
-        inMore ? help : undefined,
+        help,
         label,
       );
-    const affordance = (
-      item: ShellAffordance & BarItem,
-      type: string,
-      label: string,
-      help?: HelpKey,
-    ) =>
-      here(item) && this.affordances.includes(item) ? button(item, type, label, help) : nothing;
-    return html`${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
-      "expo",
-      "show-expo",
-      t("expo.open"),
-      "help.more.pass",
-    )}${affordance("station", "show-station", t("station.open"))}${affordance(
-      "schedule",
-      "show-schedule",
-      t("schedule.open"),
-    )}${
-      here("profile") && this.canSwitchProfile
+    const affordance = (item: ShellAffordance, type: string, label: string, help?: HelpKey) =>
+      this.affordances.includes(item) ? button(item, type, label, help) : nothing;
+    return {
+      "find-bill": affordance("find-bill", "find-bill", t("find_bill.open")),
+      expo: affordance("expo", "show-expo", t("expo.open"), "help.more.pass"),
+      station: affordance("station", "show-station", t("station.open")),
+      schedule: affordance("schedule", "show-schedule", t("schedule.open")),
+      profile: this.canSwitchProfile
         ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
-        : nothing
-    }${here("zones") ? button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones") : nothing}${here("equipment") ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment") : nothing}${
-      here("transfers") && this.transferCount !== undefined
-        ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
-            >${this.#transferText()}</span
-          >`
-        : nothing
-    }${
-      here("transfers") && this.transferAvailable
+        : nothing,
+      zones: button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones"),
+      equipment: button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment"),
+      "transfer-count":
+        this.transferCount !== undefined
+          ? html`<span data-test="department-transfers">${this.#transferText()}</span>`
+          : nothing,
+      "transfer-button": this.transferAvailable
         ? button(
             nothing,
             "open-transfers",
@@ -814,19 +803,21 @@ export class TillShell extends LitElement {
             "help.more.transfers",
             true,
           )
-        : nothing
-    }`;
+        : nothing,
+    };
   }
 
-  #operatorAndLogout(variant: ActionVariant): TemplateResult {
-    if (variant === "ghost") return html`${this.#operatorName()}${this.#operatorActions(variant)}`;
+  /** The name and its menu on the bar. A handheld's Theme and Log out are in More instead, so
+   * without the clock its menu would be empty and the name is drawn alone. */
+  #operatorMenu(): TemplateResult {
+    if (this.formFactor !== "till" && !this.clockAvailable) return this.#operatorName();
     return html`<wt-row-actions
       class="operator-menu"
       align="end"
       label=${`${this.operatorName}${this.clockAvailable ? `: ${this.#clockLabel()}` : ""}`}
     >
       <span slot="trigger">${this.#operatorName()}</span>
-      ${this.#operatorActions(variant, this.formFactor !== "till")}
+      ${this.#operatorActions(this.formFactor === "till")}
     </wt-row-actions>`;
   }
 
@@ -852,7 +843,7 @@ export class TillShell extends LitElement {
     >`;
   }
 
-  #operatorActions(variant: ActionVariant, logout = true): TemplateResult {
+  #operatorActions(theme: boolean): TemplateResult {
     const state = this.clockState;
     const foreign =
       state !== null &&
@@ -910,26 +901,30 @@ export class TillShell extends LitElement {
             )}
           `
         : nothing
-    }${
-      logout
-        ? html`<wt-button
-            class="logout"
-            variant=${variant}
-            align=${variant === "ghost" ? "start" : nothing}
-            @click=${() => this.#emit("logout")}
-            >${t("shell.logout")}</wt-button
-          >`
-        : nothing
-    }${themeChoices({
+    }${theme ? this.#themeChoices() : nothing}`;
+  }
+
+  #themeChoices(): TemplateResult {
+    return themeChoices({
       active: currentThemeChoice(),
       labels: themeLabels(),
       onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
-    })}`;
+    });
   }
 
-  #menu(moved: ReadonlySet<BarItem>): TemplateResult {
-    const pending =
-      moved.has("transfers") && this.transferCount !== undefined && this.transferCount > 0;
+  /** A handheld's More, in the design's order: the name's group, the screens, Settings, Log out. */
+  #menu(nameInMore: boolean): TemplateResult {
+    const items = this.#items();
+    const screens = [
+      items.expo,
+      items.station,
+      items["find-bill"],
+      items.schedule,
+      items.profile,
+      items["transfer-count"],
+      items["transfer-button"],
+    ];
+    const pending = this.transferCount !== undefined && this.transferCount > 0;
     return html`<wt-row-actions
       icon="hamburger"
       align="end"
@@ -950,9 +945,26 @@ export class TillShell extends LitElement {
             ></wt-count-badge>`
           : nothing
       }
-      ${this.#items(moved, true)}
-      ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
-      ${this.chooserInMore ? this.#chooser("group") : nothing}
+      ${
+        nameInMore
+          ? html`${this.#operatorName()}${this.#operatorActions(false)}
+              <hr class="menu-rule" />`
+          : nothing
+      }
+      ${
+        screens.some((screen) => screen !== nothing)
+          ? html`${screens}
+              <hr class="menu-rule" />`
+          : nothing
+      }
+      <div class="settings-group" role="group" aria-labelledby="settings-heading">
+        <span id="settings-heading" class="settings-heading">${t("device_zones.settings")}</span>
+        ${items.zones}${items.equipment}${this.#chooser("group")}${this.#themeChoices()}
+      </div>
+      <hr class="menu-rule" />
+      <wt-button class="logout" variant="ghost" align="start" @click=${() => this.#emit("logout")}
+        >${t("shell.logout")}</wt-button
+      >
     </wt-row-actions>`;
   }
 
@@ -1004,16 +1016,32 @@ export class TillShell extends LitElement {
     </button>`;
   }
 
-  #screenTitle(screen: BuiltInScreen): string {
+  #screenTitle(screen: TabScreen): string {
     return screen === "kitchen" ? "" : t(`tab.${screen}`);
   }
 
+  #barTable(table: BarTable): TemplateResult {
+    return html`<button
+      type="button"
+      class="bar-table"
+      role="tab"
+      data-bar-table=${table.tableId}
+      aria-selected=${table.current ? "true" : "false"}
+      aria-label=${table.unsent ? t("shell.table_unsent").replace("{table}", () => table.name) : nothing}
+      @click=${() => this.#emit("open-bar-table", { tableId: table.tableId, held: table.held })}
+    >
+      ${table.unsent ? html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>` : nothing}${table.name}
+    </button>`;
+  }
+
   #primaryTabs(
-    screens: readonly BuiltInScreen[],
-    activeScreen: BuiltInScreen | undefined,
+    screens: readonly TabScreen[],
+    activeScreen: TabScreen | undefined,
     counterMenu: boolean,
     counterLabel: string,
   ): TemplateResult {
+    const tables = this.formFactor === "till" ? [] : this.barTables;
+    const tableOnScreen = tables.some((table) => table.current);
     return html` <nav class="tabs" role=${counterMenu ? nothing : "tablist"}>
       ${screens.map((screen) =>
         screen === "counter" && this.counterZones.length > 1
@@ -1045,7 +1073,7 @@ export class TillShell extends LitElement {
                 type="button"
                 class="tab"
                 role=${counterMenu ? nothing : "tab"}
-                aria-selected=${counterMenu ? nothing : screen === activeScreen ? "true" : "false"}
+                aria-selected=${counterMenu ? nothing : screen === activeScreen && !tableOnScreen ? "true" : "false"}
                 aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
                 @click=${() => this.#emit("screen-select", { screen })}
               >
@@ -1053,17 +1081,19 @@ export class TillShell extends LitElement {
               </button>
             `,
       )}
+      ${tables.map((table) => this.#barTable(table))}
     </nav>`;
   }
 
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
-    const moved = this.#moved();
-    this.#shown = moved;
-    if (this.#menuOpen()) this.#held = moved;
+    const nameInMore = this.#nameInMore();
+    this.#shownName = nameInMore;
+    if (this.#menuOpen()) this.#heldName = nameInMore;
     const screens = builtInScreensFor(this.formFactor).filter(
-      (screen) =>
-        this.formFactor !== "till" || (screen === "counter" ? this.showCounter : this.showFloor),
+      (screen): screen is TabScreen =>
+        screen !== "order" &&
+        (this.formFactor !== "till" || (screen === "counter" ? this.showCounter : this.showFloor)),
     );
     const requestedScreen = resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null);
     const activeScreen = screens.find((screen) => screen === requestedScreen) ?? screens[0];
@@ -1079,7 +1109,7 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill" && item !== "zones") ? nothing : this.#brandMark()}
+                  ${this.formFactor === "till" || this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${
                     this.formFactor === "till"
                       ? html`<div class="till-strip">
@@ -1091,9 +1121,9 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.chooserInMore ? nothing : this.#chooser()}${this.#helpSwitch()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorMenu()}${this.#tillMenu()}` : html`${nameInMore ? nothing : this.#operatorMenu()}${this.#helpSwitch()}${this.#menu(nameInMore)}`}
                   </div>
-                  ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
+                  ${this.formFactor !== "till" ? this.#transferStatus() : nothing}
                 </header>
                 <slot name="notices"></slot>
               `

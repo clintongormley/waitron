@@ -547,6 +547,20 @@ printers-screen files on 2026-10-10, then passed alone and in the seven later ru
 not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root
 (standing rule: a flaky test is fixed, never re-run to green).
 
+## A till late-send PIN test failed once, twice in two days (A1126)
+
+"shows a wrong PIN on the app's line when the dialog was closed while it was sent, and asks afresh
+next time" (`apps/till/src/till-app-late-send.test.ts`, the manager PIN case expecting "Wrong PIN,
+try again") failed once and then passed on reruns, both times in a local combined run. On
+2026-10-25 it failed in A797 slice 1's combined run (`pnpm --filter @waitron/till exec vitest run
+src/till-app ...`). On 2026-10-26 it failed in A797 slice 3 Task 5a's first full run of
+`pnpm --filter @waitron/till exec vitest run src/till-app src/state/bar-tables.test.ts
+src/widgets/till-shell.test.ts`, then passed six times: three alone, two with its file, and two
+later full runs. The suite runs as a till, where slice 3's bar is a fixed empty list. No cause was
+found and the failure output was not kept. **Next action:** reproduce it under load by repeating
+the combined run, keep the failure output, name the cause and fix it (standing rule: a flaky test
+is fixed at the root, never re-run to green).
+
 ## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
 
 2026-10-25 (A1100): artifact uploads now have

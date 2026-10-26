@@ -43,7 +43,9 @@ const moreOf = (el: TillShell) =>
 const barChooser = (el: TillShell) =>
   el.shadowRoot!.querySelector<HTMLElement & LitElement>(".session > wt-language-chooser");
 const moreChooser = (el: TillShell) =>
-  moreOf(el)?.querySelector<HTMLElement & LitElement>(":scope > wt-language-chooser") ?? null;
+  moreOf(el)?.querySelector<HTMLElement & LitElement>(
+    ":scope > wt-language-chooser, :scope > .settings-group > wt-language-chooser",
+  ) ?? null;
 const popupOf = (el: TillShell) => moreOf(el)!.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
 
 /** True when the chooser is in More, false when on the bar; fails when it is in both or neither. */
@@ -57,14 +59,6 @@ async function openMore(el: TillShell): Promise<void> {
   await menu.updateComplete;
   await userEvent.click(menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
   await vi.waitFor(() => expect(popupOf(el).matches(":popover-open")).toBe(true));
-}
-
-async function closeMore(el: TillShell): Promise<void> {
-  await userEvent.keyboard("{Escape}");
-  // Above phone width a closed More with nothing to hold leaves the bar.
-  await vi.waitFor(() =>
-    expect(moreOf(el) === null || !popupOf(el).matches(":popover-open")).toBe(true),
-  );
 }
 
 async function expectTappable(host: HTMLElement & LitElement): Promise<void> {
@@ -113,23 +107,43 @@ const widths = [320, 360, 390] as const;
 const locales = ["en-GB", "es-ES"] as const;
 const cases = widths.flatMap((width) => locales.map((locale) => [width, locale] as const));
 
-describe("till-shell's language chooser at phone width, beside the Help switch", () => {
-  it.each(cases)(
-    "a handheld at %ipx in %s keeps the chooser on the bar only when the bar fits",
+const handheldCases = [320, 390, 1024, 2560].flatMap((width) =>
+  locales.map((locale) => [width, locale] as const),
+);
+
+describe("till-shell's language chooser in More, beside the Help switch", () => {
+  it.each(handheldCases)(
+    "a handheld keeps the language chooser in More at every width, never on the bar: %ipx in %s",
     async (width, locale) => {
       setLocale(locale);
       await page.viewport(width, 844);
       const { el } = await mountWidget<TillShell>("till-shell", handheld);
       await settle(el);
+      expect(barChooser(el)).toBeNull();
+      expect(chooserInMore(el)).toBe(true);
+      expect(moreChooser(el)!.getAttribute("layout")).toBe("group");
       expect(switchOf(el).parentElement!.classList.contains("session")).toBe(true);
       const head = el.shadowRoot!.querySelector<HTMLElement>(".head")!;
       expect(head.scrollWidth).toBeLessThanOrEqual(head.clientWidth);
       const tabs = el.shadowRoot!.querySelector<HTMLElement>(".head .tabs")!;
       expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
-      expect(chooserInMore(el)).toBe(width === 320);
       await expectTappable(switchOf(el));
       await expectTappable(moreOf(el)!);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      // One width per language keeps the run short.
+      if (width !== 320) return;
+      const picked: string[] = [];
+      el.addEventListener("wt-locale-selected", (event) =>
+        picked.push((event as CustomEvent<{ code: string }>).detail.code),
+      );
+      await openMore(el);
+      const other = locale === "en-GB" ? "es-ES" : "en-GB";
+      const chooser = moreChooser(el)!;
+      await vi.waitFor(() =>
+        expect(chooser.shadowRoot!.querySelector(`[data-test="lang-${other}"]`)).not.toBeNull(),
+      );
+      await userEvent.click(chooser.shadowRoot!.querySelector(`[data-test="lang-${other}"]`)!);
+      expect(picked).toEqual([other]);
     },
   );
 
@@ -167,15 +181,19 @@ describe("till-shell's language chooser at phone width, beside the Help switch",
     );
   });
 
-  it("in More the languages come last, after Theme", async () => {
+  it("in More the languages sit in the Settings group, after Equipment and before Theme", async () => {
     await page.viewport(320, 844);
     const { el } = await mountWidget<TillShell>("till-shell", handheld);
     await settle(el);
     await openMore(el);
-    const last = moreOf(el)!.lastElementChild!;
-    expect(last.localName).toBe("wt-language-chooser");
-    expect(last.getAttribute("layout")).toBe("group");
-    expect(last.previousElementSibling!.getAttribute("data-test")).toBe("theme-choices");
+    const chooser = moreChooser(el)!;
+    expect(chooser.parentElement!.classList.contains("settings-group")).toBe(true);
+    expect(chooser.getAttribute("layout")).toBe("group");
+    const before = chooser.previousElementSibling!;
+    expect(
+      (before.localName === "wt-menu-row" ? before.firstElementChild! : before).classList,
+    ).toContain("equipment");
+    expect(chooser.nextElementSibling!.getAttribute("data-test")).toBe("theme-choices");
   });
 
   it("picking a language in More asks for it", async () => {
@@ -194,97 +212,5 @@ describe("till-shell's language chooser at phone width, beside the Help switch",
     );
     await userEvent.click(chooser.shadowRoot!.querySelector('[data-test="lang-es-ES"]')!);
     expect(picked).toEqual(["es-ES"]);
-  });
-
-  it("widening to 390 brings the chooser back to the bar", async () => {
-    await page.viewport(320, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", handheld);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(true);
-    await page.viewport(390, 844);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(false);
-    expect(switchOf(el).previousElementSibling).toBe(barChooser(el));
-  });
-
-  it("the chooser does not move while More is open", async () => {
-    await page.viewport(360, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", handheld);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(false);
-    await openMore(el);
-    await page.viewport(320, 844);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(false);
-    await closeMore(el);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(true);
-  });
-
-  it("widening past phone width with More open keeps the chooser in More until it closes", async () => {
-    setLocale("en-GB");
-    await page.viewport(320, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", handheld);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(true);
-    await openMore(el);
-    const chooser = moreChooser(el)!;
-    await page.viewport(700, 844);
-    await settle(el);
-    expect(popupOf(el).matches(":popover-open")).toBe(true);
-    expect(moreChooser(el)).toBe(chooser);
-    expect(chooserInMore(el)).toBe(true);
-    await closeMore(el);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(false);
-    expect(barChooser(el)).not.toBeNull();
-  });
-
-  it("above phone width the chooser never leaves the bar", async () => {
-    setLocale("es-ES");
-    await page.viewport(660, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", {
-      ...handheld,
-      affordances: ["find-bill", "schedule", "station", "expo"],
-      canSwitchProfile: true,
-      transferAvailable: true,
-      transferCount: 3,
-      clockAvailable: true,
-    });
-    await settle(el);
-    expect(chooserInMore(el)).toBe(false);
-  });
-
-  it("going from 320 to above phone width puts the chooser back on the bar", async () => {
-    await page.viewport(320, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", handheld);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(true);
-    await page.viewport(700, 844);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(false);
-  });
-
-  it("a newer fit that starts while an older one steps back decides where the chooser goes", async () => {
-    await page.viewport(320, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", handheld);
-    await settle(el);
-    expect(chooserInMore(el)).toBe(true);
-    // The step-back puts the chooser on the bar before it measures; when it lands there, change the
-    // form factor so a newer fit starts before the older one has settled.
-    let superseded = false;
-    const watcher = new MutationObserver(() => {
-      if (!superseded && barChooser(el) !== null) {
-        superseded = true;
-        el.formFactor = "tablet-landscape";
-      }
-    });
-    watcher.observe(el.shadowRoot!, { childList: true, subtree: true });
-    el.operatorName = "Bea";
-    await settle(el);
-    watcher.disconnect();
-    expect(superseded).toBe(true);
-    expect(el.formFactor).toBe("tablet-landscape");
-    expect(chooserInMore(el)).toBe(true);
   });
 });

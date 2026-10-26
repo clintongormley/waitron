@@ -343,7 +343,18 @@ describe("till-floor-screen: a table's unsent orders", () => {
     const el = await mountFloor([
       seated(
         {},
-        { unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }] },
+        {
+          unsentDrafts: [
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
+        },
       ),
     ]);
 
@@ -354,7 +365,18 @@ describe("till-floor-screen: a table's unsent orders", () => {
     const el = await mountFloor([
       seated(
         {},
-        { unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 1 }] },
+        {
+          unsentDrafts: [
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
+        },
       ),
     ]);
 
@@ -367,8 +389,22 @@ describe("till-floor-screen: a table's unsent orders", () => {
         {},
         {
           unsentDrafts: [
-            { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
-            { billId: "bill-2", billNumber: 2, ownerName: "Sam", lineCount: 1 },
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+            {
+              billId: "bill-2",
+              billNumber: 2,
+              ownerId: "p-sam",
+              ownerName: "Sam",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
           ],
         },
       ),
@@ -386,8 +422,22 @@ describe("till-floor-screen: a table's unsent orders", () => {
         {},
         {
           unsentDrafts: [
-            { billId: "bill-1", billNumber: 1, ownerName: "", lineCount: 3 },
-            { billId: "bill-2", billNumber: 2, ownerName: "", lineCount: 1 },
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-",
+              ownerName: "",
+              lineCount: 3,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+            {
+              billId: "bill-2",
+              billNumber: 2,
+              ownerId: "p-",
+              ownerName: "",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
           ],
         },
       ),
@@ -406,10 +456,38 @@ describe("till-floor-screen: a table's unsent orders", () => {
         {},
         {
           unsentDrafts: [
-            { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
-            { billId: "bill-2", billNumber: 2, ownerName: "Sam", lineCount: 1 },
-            { billId: "bill-3", billNumber: 3, ownerName: "", lineCount: 4 },
-            { billId: "bill-4", billNumber: 4, ownerName: "", lineCount: 1 },
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+            {
+              billId: "bill-2",
+              billNumber: 2,
+              ownerId: "p-sam",
+              ownerName: "Sam",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+            {
+              billId: "bill-3",
+              billNumber: 3,
+              ownerId: "p-",
+              ownerName: "",
+              lineCount: 4,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+            {
+              billId: "bill-4",
+              billNumber: 4,
+              ownerId: "p-",
+              ownerName: "",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
           ],
         },
       ),
@@ -435,7 +513,16 @@ describe("till-floor-screen: a table's unsent orders", () => {
         { id: `u${i}`, label: `${i + 10}` },
         {
           id: `vu${i}`,
-          unsentDrafts: [{ billId: `bill-u${i}`, billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+          unsentDrafts: [
+            {
+              billId: `bill-u${i}`,
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
         },
       ),
     );
@@ -472,7 +559,18 @@ describe("till-floor-screen: a table's unsent orders", () => {
       table({ id: "t5", label: "5", ...onMap }),
       seated(
         {},
-        { unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }] },
+        {
+          unsentDrafts: [
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
+        },
       ),
     ]);
 
@@ -483,8 +581,22 @@ describe("till-floor-screen: a table's unsent orders", () => {
 
 describe("till-floor-screen: bill editor pairs", () => {
   const pairs = [
-    { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
-    { billId: "bill-2", billNumber: 2, ownerName: "Alex", lineCount: 1 },
+    {
+      billId: "bill-1",
+      billNumber: 1,
+      ownerId: "p-alex",
+      ownerName: "Alex",
+      lineCount: 2,
+      savedAt: "2026-10-26T12:00:00.000Z",
+    },
+    {
+      billId: "bill-2",
+      billNumber: 2,
+      ownerId: "p-alex",
+      ownerName: "Alex",
+      lineCount: 1,
+      savedAt: "2026-10-26T12:00:00.000Z",
+    },
   ];
   const marks = (el: TillFloorScreen) =>
     [...card(el, "t4").querySelectorAll<HTMLElement>("[data-unsent]")].map((mark) =>

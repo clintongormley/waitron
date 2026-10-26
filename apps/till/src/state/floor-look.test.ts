@@ -85,7 +85,14 @@ function today(over: Partial<TableToday> = {}): TableToday {
 }
 
 const free = { party: null, state: "free", condition: "free", hasOpenTab: false } as const;
-const unsent = { billId: "wo-3", billNumber: 3, ownerName: "Alex", lineCount: 1 };
+const unsent = {
+  billId: "wo-3",
+  billNumber: 3,
+  ownerId: "p-alex",
+  ownerName: "Alex",
+  lineCount: 1,
+  savedAt: "2026-10-26T12:00:00.000Z",
+};
 const wait = (band: "warm" | "overdue" | "forgotten"): TableSignal => ({ kind: "long_wait", band });
 const unavailable: TableSignal = { kind: "held_unavailable", groupId: "g1", lineNames: ["Steak"] };
 const bill: TableSignal = { kind: "bill_requested", requestedAt: inMinutes(-3) };

@@ -4,8 +4,8 @@
 
 **Goal:** Build design §8's slices one pull request at a time. This plan outlines every slice and
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
-List/Map**, **slice 1 — Short names, data** and **slice 2 — Short names, dashboard** in full
-tasks; each other slice is expanded into tasks when it starts.
+List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard** and **slice 3 —
+The handheld's bar** in full tasks; each other slice is expanded into tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
 argues from it). Pictures: `docs/backlog/mockups/a797-device-screens/`.
@@ -153,7 +153,8 @@ Language · Theme is built; slice 4 only adds the Zones entry). The floor read's
 `apps/till/src/till-app.ts`, `apps/server/src/order-drafts.ts` (`readUnsentDrafts` `:1242`), the
 floor read's type in `apps/till/src/api/client.ts`, strings en/es. **Risks:** the shell's fit loop
 (`#fit`) and its many width tests (`till-shell.test.ts`); the bill choice on opening is slice 11.
-**Dependencies:** slice 1 (short names), and slice 4's ☰ entry. **Migration:** no.
+**Dependencies:** slice 1 (short names), and slice 4's ☰ entry. **Migration:** no. _Expanded into
+tasks below (2026-10-26)._
 
 ### Slice 4 — Zones on this device on a handheld (FULL; full tasks below)
 
@@ -3457,6 +3458,1092 @@ No guide covers the floor-plan editor today (ran: `grep -rn -i "floor plan" apps
   the driver).
 - After merge: delete the branch local and remote and check the remote one is gone; update the
   ledger; then slice 3.
+
+---
+
+## Slice 3 — The handheld's bar (one PR, branch `feat/a797-3-handheld-bar`)
+
+**What it changes.** On a handheld (phone or tablet) the top bar becomes design §3.1's: **Floor**,
+then **one button per table where the signed-in person has unsent dishes**, reading "✎ T4" (the
+map's ✎ Unsent mark, then the table's short name), then **"?"** and **☰**. The table on screen has
+its button drawn as the selected tab, with ✎ only while something of this person's is unsent there,
+and loses it once they leave a table with nothing of theirs unsent. Several bills at one table give
+one button; a table whose New orders are all sent, or taken over by someone else, has none; a
+finished table never has one. The "Order" tab goes: the table's own button takes its place. Tapping
+**Floor** after leaving a table opens that table's zone. **Everything else is in ☰** at every
+width, in §3.1's order: the person's name and clock actions; Pass, Kitchen, Find a bill, My
+schedule, Profile, Transfers; a **Settings** group of Zones on this device, Equipment, Language and
+Theme; Log out last. On a tablet the person's name also stays on the bar while it fits (picture
+06). To know whose dishes are unsent, the floor read's `UnsentDraft` gains the New order's owner id
+and its saved time (`order_drafts.updated_at`).
+
+Worked example 1 (design §4), as this slice builds it: Ana opens T4, adds dishes, taps **Floor**:
+the Floor opens on Inside (T4's zone) and the bar reads Floor · ✎ T4 · ? · ☰. She opens T9 from
+the Floor, adds two drinks, then removes one, then the other: T9's button stays highlighted,
+without ✎, while she is on T9, and goes when she taps ✎ T4, which opens T4. **One step of design
+§4's example differs (D13):** there Ana *sends* T9's drinks and stays on T9 with its button
+highlighted without ✎; in this slice a send that empties the New order still returns the handheld
+to the Floor (`till-app.ts:11754-11758`), so that moment shows only by the other ways D13 lists.
+Which **bill** a button opens is slice 11's (D9); here a button opens its table the way a tap on
+the Floor does, or returns to the table the app still holds as the Order tab did. _2026-10-26:
+see D9's note._
+
+**Review path: FULL.** **A change to what a server read sends the till** (design §8: "any change to
+what a server read sends to the till"): `UnsentDraft` in `apps/server/src/order-drafts.ts:343-349`,
+filled by `readUnsentDrafts` (`:1245-1286`), reaches the till through `listTablesWithState`
+(`apps/server/src/working-order.ts:8564`, `:8600`) and `GET /api/tables/state`
+(`apps/server/src/till-api.ts:2768`), and is typed again for the till at
+`apps/till/src/api/client.ts:895-901`. Fields are only added; no route starts refusing or serving
+anything, and no route map changes (read: the route is unchanged, only its rows gain two fields).
+**Migration: none.** Both columns exist: `order_drafts.owner_id` and `updated_at`
+(`packages/db/src/schema/order-drafts.ts:33`, `:37`, read). If a task finds it needs one, STOP.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-26 against `main` at
+`493d023d2` (this worktree's base); **(read)** means read in the code at that commit, not run. The
+probes ran in throwaway worktrees (`git worktree add --detach /tmp/a797-3-probe.MtAy/wt
+493d023d2`, `wt2` at probe 1's commit and, for the fresh review's probe E, `wt3` at probe D's),
+removed afterwards; their logs stay in `/tmp/a797-3-probe.MtAy/` (`server-tsc.txt`,
+`till-tsc.txt`, `server-run1.txt`, `shell-runA.txt`, `shell-run2a.txt`, `shell-run1.txt`,
+`shell-run2.txt`, `app-run1.txt`, `app-runE.txt`; the failing-name lists `fA.txt`, `f2a.txt`,
+`f1.txt`, `f2.txt`, `fE.txt`). None of the probe code is in this branch.
+
+### What landed already, and what is on `main` (read; each line opened)
+
+- **Slice 4** (#2041): ☰ → Zones on this device on a handheld, a `BarItem` `"zones"` always in ☰
+  (`apps/till/src/widgets/till-shell.ts:55`, `:519`, `:537`), drawn by `#items` (`:802`).
+- **Slice 5** (#2063): the Ready bar on a handheld's Floor and List/Map kept per zone on the device
+  (`viewMemory`, `apps/till/src/screens/till-floor-screen.ts:894`); a handheld's Floor re-reads
+  every 15 s in list view too (slice 5 D7).
+- **Slices 1–2** (#2076, #2083): `TableState.shortName` on every floor row
+  (`apps/till/src/api/client.ts:2206-2208`: "The table's saved short name, else its full name"), and
+  `tightName` (`apps/till/src/state/floor-today.ts:87-97`), which names a table of today's join by
+  its members' short names ("T4+T5") and any other table by its own; the Ready bar's
+  `readyTables` (`apps/till/src/state/table-signals.ts:58-90`) lists one entry per party, its
+  tables' tight names joined with "+", in the floor read's order.
+- **A582's "?"** is on `main`: `till-shell` draws `wt-help-switch` on a handheld's bar at every
+  width (`#helpSwitch`, `till-shell.ts:729-734`, used at `:1094`), today after the language chooser
+  and **before** the person's name (`:1094`; design-system.md:2311-2313). A582 slice 2b's "language
+  into the account menu" (owner answer Q41 = B) is the **dashboard's** account menu
+  (`docs/backlog/dashboard.md:952-953`), not the till's; on the till, a handheld's chooser sits on
+  the bar and moves to the end of ☰ only at phone width when the bar does not fit (`chooserInMore`,
+  `till-shell.ts:471`, `:665-675`, `:955`). So §3.1's "language into ☰" is new here (D5).
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+`grep -rn "UnsentDraft\|readUnsentDrafts\|unsentDrafts" apps packages --include='*.ts' | grep -v node_modules`
+(ran) → outside tests:
+
+| Where | What it does today |
+| --- | --- |
+| `apps/server/src/order-drafts.ts:343-349` `UnsentDraft` | `billId`, `billNumber`, `ownerName`, `lineCount` |
+| same file `:1245-1286` `readUnsentDrafts` | the open drafts with lines on each party's shown bills, grouped `(billId, ownerId)`, numbered in the bill list's order; one open draft per bill (`order_drafts_open_owner_uq`, `packages/db/src/schema/order-drafts.ts:51-53`) |
+| `apps/server/src/working-order.ts:8144`, `:8564`, `:8600` | the floor read's party carries the map's entry |
+| `apps/server/src/table-signals.ts:214-217` | the `unsent_draft` signal reads `ownerName` only; unchanged |
+| `apps/till/src/api/client.ts:895-901`, `:2069-2070` | the till's copy of the type; `TableParty.unsentDrafts` |
+| `apps/till/src/widgets/table-details-sheet.ts:18`, `:205`; `till-floor-screen.ts:2293`, `:2955`; `apps/till/src/state/table-precedence.ts:49` | the sheet's and map's "Alex has an unsent order" text and the ✎ cue; read `ownerName`/`lineCount`/length; unchanged |
+| `apps/till/src/till-app.ts:10781` | the party it builds after seating a free table: `unsentDrafts: []`; unchanged |
+
+69 test files name `unsentDrafts` (ran: `grep -rln … | grep test | wc -l`); probe 1 says which
+break (below).
+
+**The bar** (`apps/till/src/widgets/till-shell.ts`, read):
+
+| Where | What it does today |
+| --- | --- |
+| `:48-57` `BarItem`; `:61-70` `LEAVE_ORDER` | transfers, equipment, profile, schedule, station, expo, find-bill, operator: first to leave first |
+| `:464-471` `steps`, `chooserInMore` | above phone width, step 1 hides the brand mark and step n moves the first n − 1 present items of `LEAVE_ORDER` into ☰; at phone width the chooser moves into ☰ when the bar wraps |
+| `:494-509` `#release`, `:511-524` `#present`, `:528-539` `#moved` | what ☰ holds; at phone width every present item; `find-bill` and `zones` always |
+| `:656-696` `#fit` | adds steps while `#wraps()` (`:647-652`: the header or the `.tabs` strip overflows); steps back only when owed and ☰ is closed |
+| `:718-727` `#chooser`; `:729-734` `#helpSwitch` | the language chooser (`layout` "menu" on the bar, "group" in a menu) and "?" |
+| `:760-819` `#items` | find-bill, Pass (`expo`), Kitchen (`station`), My schedule, Profile, Zones on this device, Equipment, Transfers, in that order, on the bar or in ☰ |
+| `:821-831` `#operatorAndLogout`; `:855-928` `#operatorActions` | the name's menu: clock actions, My hours, Fix my hours, then **Log out and Theme** on a handheld (`logout = formFactor !== "till"`, `:829`; `themeChoices` always, `:923-927`) |
+| `:930-957` `#menu` | ☰: `#items` in ☰, then the name group, then the chooser when `chooserInMore` |
+| `:959-990` `#tillMenu` | a till's ☰; **unchanged by this slice** |
+| `:1011-1057` `#primaryTabs` | `role="tablist"`, each screen a `button.tab` with `role="tab"` and `aria-selected` (`:1044-1053`); styled `.tab[aria-selected="true"]` (`:271-275`) |
+| `:1059-1115` `render` | handheld: brand mark only at step 0 with nothing but `find-bill`/`zones` moved (`:1082`); tabs = `builtInScreensFor` (Floor, Order, `apps/till/src/built-in-screens.ts:7-8`); session row `items · chooser · ? · name · ☰` (`:1094`) |
+
+**The app** (`apps/till/src/till-app.ts`, read):
+
+| Where | What it does today |
+| --- | --- |
+| `:19233-19289` the one `<till-shell>` | hands it `activeScreen = activeTabKey`, the affordances, the person, clock state, transfers; `screen-select` → `#requestLeave(() => #onTabSelect(screen))`, ignoring the active tab with no overlay |
+| `:2446` `activeTabKey`; `:2450` `tableOpening`; `:2961` `activeTableId`; `:2989` `orderParty`; `:2952` `tables` | the open table and the floor read the app holds |
+| `:2840` `#sessionPersonId` (set `:5071`, cleared `:2134`) | "the person any draft save goes in as": what an `UnsentDraft.ownerId` is compared with (D3) |
+| `:5519-5530` `#orderScreenShown`, `#showOrderScreen`; `:18142-18146` `#tableOrderTabKey` | on a handheld a table opens on the Order screen (a built-in screen), shown at once while it loads |
+| `:10567-10620` `#openTableFromEvent`; `:10632-10840` `#openTable` | opens a table; a different party's draft is **released** (`#releaseDraft`, `:10536-10556`: taken off the screen, its save left to answer, a failure kept in `#unsavedDrafts`, `:2633`); `activeTableId` is set when the open lands (`:10725`, `:10768`) |
+| `:10399-10428` `#onTabSelect` | leaving the Order screen for Floor **flushes** the draft but keeps the table held (`activeTableId`, the draft sync); then re-reads the floor (`:10421-10427`) |
+| `:16422-16455` `#leaveTable`, `#forgetParty`, `#returnToFloor` | a finished table: clears `activeTableId`, then selects Floor |
+| `:11739-11758` | a send that empties the New order shows the Sent toast and **returns to Floor** (`#returnToFloor`); unchanged here |
+| `:11070-11080` `#tableDraft`; `:11149-11152` | the held bill's draft store; every store change redraws the app |
+| `:10476-10500` `#refreshFloor`, `#startTablesRead`, `#applyTables`; `:1953`, `:1956` `#tablesRead`, `#tablesApplied` | the floor read and its read numbers, which let a later read win |
+| `:18237-18250` `<till-floor-screen>` | `.selectedZoneId` on a handheld = the saved choice's start, else `undefined` (slice 4 D2b) |
+
+**The Floor's zone** (`till-floor-screen.ts`, read): the zone on screen comes from the address's
+`till-zone` when the screen connects (`:940-946`) and is replaced by `selectedZoneId` whenever that
+property changes (`:1001`), including its first value on a new element. On a handheld the Floor is
+a new element on every return from the Order screen, because only the active tab is drawn
+(`till-app.ts:18237`, `:18260`). So today a handheld with a saved choice returns to its "Opens
+first" zone, and one without returns to the address's zone, the zone viewed before.
+
+### Plan decisions for slice 3
+
+- **D1. The floor read's `UnsentDraft` gains `ownerId: string` and `savedAt: string`**, the open
+  draft's `owner_id` and `updated_at` as stored (ISO text, `tsString`, as `nowIso()` writes it).
+  `readUnsentDrafts` selects both and groups by `orderDrafts.id` (one open draft per bill, so the
+  rows are the same as today's `(billId, ownerId)` grouping; probe 1 ran this: the only failures
+  were the twelve `toEqual`s that now see two more fields). The till's copy gains both, required.
+  **`savedAt` is not read by the till in this slice**: slice 11 chooses a button's bill by it
+  (design §3.1); it lands now because design §5 and §8 put both fields in this slice's read change,
+  so slice 11 changes no server read. `ownerName` stays (the map's and the sheet's text read it).
+- **D2. A handheld's bar is Floor, the table buttons, then the name (tablet, while it fits), "?"
+  and ☰; nothing else is ever on it.** Pass, Kitchen, Find a bill, My schedule, Profile, Zones on
+  this device, Equipment, Transfers and the language chooser are in ☰ at **every** width. Above
+  phone width the bar still fits itself, but only two things leave it: the brand mark first, then
+  the name (which moves into ☰ with its clock actions). **This departs from `main`**, where a
+  tablet keeps Pass, Kitchen, My schedule, Profile, Equipment and Transfers on the bar while they
+  fit (`LEAVE_ORDER`). **Why:** §3.1 says "Everything else is in ☰ … On a tablet the bar has room
+  for the name as well (picture 06)", and §3.2 "The bar's table buttons … are as on a phone";
+  picture 06 draws Floor, ✎ T4, ✎ T9, ● Ana, ?, ☰ and nothing else. The table buttons take the
+  room those items had. **Alternative, for the owner:** keep today's fit on a tablet, the buttons
+  competing with Pass, Kitchen and the rest for room.
+- **D3. "This person's unsent dishes" are judged by `UnsentDraft.ownerId === #sessionPersonId`**,
+  over every table the floor read lists. A party is listed **once**, with one button, if any of its
+  shown bills has an open New order of this person's with lines (several bills give one button,
+  §3.1); a party whose `state` is not `open` never is (a finished table, §3.1). The button names
+  the party's tables by `tightName`, distinct, joined with "+" (as the Ready bar does), and opens
+  its first table in the read's order (the read orders by `label`,
+  `apps/server/src/working-order.ts`, `order by dt.label`, read). Buttons are in the read's order,
+  so they do not move when one is added. **The device's zone choice does not hide a button**: a
+  table in a zone the device does not show keeps its ✎ button, because the button exists to stop
+  unsent dishes being forgotten, and hiding a zone with such a table is allowed (slice 4 D3b);
+  opening it shows slice 4 D3's blocked order screen there. **Alternative, for the owner:** only
+  the zones the device shows, as the Ready bar does (slice 5 D1).
+- **D4. What the app knows better than the floor read wins, per bill.** The floor read is a
+  snapshot (re-read on every return to Floor, every 15 s while the Floor shows, and after actions);
+  the bar uses three sources, in this order, for each bill:
+  - **The held table's bill** (the bill whose draft sync is bound, `#draftSync` with
+    `#tableDraft()`): unsent when its store has a line **and the bill has not been taken by
+    someone else**, judged as `sync.edit?.editorId != null && sync.edit.editorId !==
+    sync.personId` (`DraftSync.edit`, a public copy of the bill's edit state,
+    `apps/till/src/state/draft-sync.ts:332-334`; the same test `#editorRefusal` makes, `:448-455`).
+    **Not** the store's lock: `#lockAuthority` (`:438-446`) also locks while the draft is still
+    loading (`#edit === null`), while it recovers after a failed save or command
+    (`#recoveryRequired`, set at `:626`, `:664`, `:844`, `:855`, `:863`), and while a local copy
+    is held (`candidate !== null`), and a lock in those cases would drop ✎ exactly when the dishes
+    are at risk (read). So ✎ appears on the first dish added, stays through a failed save, and goes
+    when another person takes the bill or the last dish is sent or removed, without waiting for a
+    read. A free table being seated
+    (`orderParty === null`) uses its partyless draft (`#partylessDraft`).
+  - **A released bill** (D10): what its draft held when it was released, until a floor read that
+    started after its save answered has been applied, or for as long as its save failed and it sits
+    in `#unsavedDrafts`.
+  - **Every other bill**: the floor read.
+- **D5. The language chooser is in ☰ at every width on a handheld**, in the Settings group, as the
+  `layout="group"` row a till's ☰ holds (`#tillMenu`, `:978`); it is never on a handheld's bar, and
+  `chooserInMore`'s phone-width move is deleted. **Why:** §3.1 "the language chooser (picture 01,
+  right)" in ☰, and §6 retires "the language chooser on the phone bar (into ☰)". The kitchen
+  display's corner keeps its chooser (`:1076-1079`), and a till is unchanged.
+- **D6. ☰'s order, on a handheld, at every width** (§3.1, picture 01): (1) when the name is in ☰
+  (phone width, or no room on a tablet): the name with its clock state, the clock actions, My hours,
+  Fix my hours; (2) Pass, Kitchen, Find a bill, My schedule, Profile, Transfers (its count and
+  button), each where offered; (3) a group headed **Settings** (`device_zones.settings`, "Settings"
+  / «Ajustes», today's till word): Zones on this device, Equipment, Language, Theme; (4) Log out.
+  Groups are separated by a token-coloured rule. The Settings group is a `div` with
+  `role="group"` and `aria-labelledby` its visible heading, so a screen reader hears "Settings,
+  group". **Kitchen** (not in §3.1's list) sits after Pass, both being kitchen views; **Transfers**
+  and **Fix my hours** (not in the list) sit last in their groups. **On a tablet with the name on
+  the bar**, the name's own menu holds only the clock actions, My hours and Fix my hours; **Log out
+  and Theme leave the name's menu for ☰** (today they are in it on a handheld, `:829`, `:923`).
+  **Log out is last**, as §3.1 lists it, so with every entry offered a phone's ☰ is taller than
+  360×640 and Log out is reached by scrolling it (probe B: 759 px against a 632 px menu, Spanish,
+  every affordance and the clock). The A681 check that pinned Log out unscrolled changes (Task 4b),
+  and the open backlog entry "On a short phone the till's More menu is taller than the room it
+  gets" gains the handheld's new order (Task 6). **Alternative, for the owner:** Log out before
+  Settings, which keeps it unscrolled. A till's ☰ and name menu are unchanged.
+- **D7. Equipment keeps its name and its one dialog.** Picture 01's "Card reader · printer" row is
+  today's **Equipment** entry ("Equipment" / «Equipo», `equipment.open`), opening today's dialog,
+  which also holds the cash drawer, payment-slip and invoice printers (`strings.ts:787-792`), so
+  "Card reader · printer" would understate it, and it is not a word Q51 (g) settled. Slice 4 D6
+  expected "the card reader and printer as separate entries"; one entry is kept because the dialog
+  is one. **Departure from picture 01**; owner FYI.
+- **D8. Language and Theme keep today's in-menu controls** (the chooser's group row and
+  `themeChoices`' one row), only placed in the Settings group. Each is **already one row** (read:
+  `wt-language-chooser`'s group layout is a label then one pressed-state button per language in a
+  wrapping flex row, `packages/ui/src/components/wt-language-chooser.ts:51-60`, `:234-251`, so it
+  takes a second line only when the languages do not fit the menu's width; `themeChoices` is a
+  label and three icon buttons, `packages/ui/src/theme-choices.ts:60-87`, pinned one row at 320 px
+  by "draws the Theme choices on one row inside More at 320 px"). So drawing picture 01's "Language
+  · Español" value row would save no height and would need a menu opened inside ☰ (the chooser's
+  `menu` layout is its own popover, `:276`): **not a cheap fix for D6's scroll**, which comes from
+  the number of entries. Kept as today; Task 7 measures the group row's height at 360 px in Spanish.
+  Owner FYI.
+- **D9. A table button opens its table; which bill is slice 11's.** A button for **the table the
+  app still holds** (left for Floor, `activeTableId` still set, its draft still bound) returns to
+  it exactly as the Order tab did (`#onTabSelect("order")`: no re-read, the same bill and draft
+  store; `till-app-kitchen-note.test.ts`'s round pins that today through the tab). A button for
+  **any other table** opens it as a tap on the Floor does (`open-table` `{ tableId, seated: true }`
+  through `#onOpenTable`), on the bill that path chooses today (`mainBillId`, else `billToOpen`,
+  `:10731-10741`). Design §3.1's "opens the table on the bill this person last worked on" is slice
+  11 (design §8 item 3: "the choice of bill on opening is slice 11"). Both go through
+  `#requestLeave` and close an open overlay first (Find a bill, Pass, Kitchen, My schedule), as a
+  tab does (`#onTabSelect` pops it, `:10416`). The current table's button with no overlay open does
+  nothing, as the active tab does (`:19281-19286`).
+  _2026-10-26: the held table's button returns to its order only while the floor read seats no
+  other open party there; otherwise it opens the party the read seats there, and a party seated
+  since gets no ✎ for the dishes of the party that left (commits "a table button opens the table it
+  names, and a party seated since shows its ✎" and "a party seated at a table since gets no ✎ for
+  the dishes of the party that left")._
+- **D10. A table left for another table keeps its button.** Opening T9 from T4's screen releases
+  T4's draft (`#releaseDraft`, `till-app.ts:10536-10556`) and no floor read follows, so a bar built
+  from the read alone would drop ✎ T4 until the next Floor visit, though T4's dishes are saved
+  unsent. So the app keeps each released bill's answer (D4: its store had a line and the bill was
+  not someone else's) and acts on the save's three answers (`sync.flush()` resolves `"saved"`,
+  `"failed"` or a refusal `{ refused, ownerName? }`, `:10547-10555`, `draft-sync.ts:239-244`):
+  - **`"saved"`**: the record is marked with `#tablesRead` and, on a handheld, `#refreshFloor()`
+    starts; the record gives way to the first read **started after** the save answered (read
+    numbers, `#tablesRead`/`#tablesApplied`, `:1953`, `:1956`).
+  - **`"failed"`**: the record stays while the draft sits in `#unsavedDrafts` (`:10550`): its
+    dishes are on this device only, so the floor read cannot know them.
+  - **A refusal** (another person took the bill, the draft was out of date, the session ended):
+    the record is dropped at once and, on a handheld, `#refreshFloor()` starts, so the read
+    decides; a refusal says the device's answer is no longer the truth.
+  Every step runs only while the session it started in is the current one, as the callback's own
+  checks do (`session !== this.#operatorSession`, `:10549-10552`), and after its
+  `#leavingDrafts.delete(sync)` guard (`:10548`), so a sign-out or a server switch in between
+  starts no read. Leaving for Floor needs none of this: the table stays held (D4) until the Floor's
+  own read.
+- **D11. The bar refreshes when the floor read does.** While a table is open nothing re-reads the
+  other tables (slice 5 D7: the Floor, and its 15-second read, leave the page), so another device
+  taking over one of this person's other bills shows on this device's bar at the next Floor visit.
+  Nothing new polls. **Alternative, for the owner:** re-read the floor every 15 s on the Order
+  screen too.
+- **D12. Floor, after a table, opens on that table's zone.** The app remembers the zone of the
+  last table it held on a handheld (`floorReturnZoneId`, taken in `willUpdate` whenever
+  `activeTableId` changes to a table, so an open, a move of the party, Finish table and a resumed
+  table all count) and hands the Floor `selectedZoneId` = that zone **when the Floor shows it**,
+  else today's value (the saved "Opens first", else `undefined`); the address's `till-zone` is
+  written with it, so a reload stays there. Slice 5's per-zone List/Map follows, because it is read
+  per zone on screen. Before any table is opened, the Floor opens as today (slice 4 D2b). Signing
+  out forgets it: `#onLogout` (`till-app.ts:18035`) clears it beside its own `till-zone` reset
+  (`:18059`), and so does a server switch (`:2133-2134`). The same person signing back in with a
+  table to resume (`#tableToResume`, `:18038-18047`) gets it again from that table, as any open
+  does. A till is unchanged: its Floor stays on the page under a
+  table, so changing `selectedZoneId` there would move it (`:1001`).
+  _2026-10-26: once a table has been opened, while the Floor shows its zone, the Floor reads the
+  zone from the address, which the move onto the Floor writes (`#setActiveTab`), so a language
+  change keeps a zone tapped since (commit "a language change keeps the Floor on the zone the person
+  tapped")._
+- **D13. The table on screen.** The highlighted button is the table being opened while an open is
+  under way (a new `openingTableId`, set where `#openTableFromEvent` shows the Order screen and
+  cleared in its `finally` under the same `offerRequest === this.#tableOfferRequest` check that
+  clears `tableOpening`, `:10625`, so an older open's clean-up never clears a newer open's mark),
+  else the held table while the Order screen shows. Floor is the
+  selected tab whenever no button is: on the Floor, and on the Order screen with no table (a reload
+  of `/tabs/order` with nothing to resume, `:5210`). The **Order** screen stays a built-in screen
+  (`built-in-screens.ts:7-8`, history still reaches it); only its tab is no longer drawn on a
+  handheld. **Departure from Q51 (b) and design §4 example 1 (driver's ruling, 2026-10-26):** both
+  say Ana sends everything at T9 while on it and its button stays highlighted without ✎ until she
+  taps Floor. This slice keeps today's return to Floor after a send that empties the New order
+  (`:11739-11758`), because what the order screen does after a send is slice 10's (handheld order
+  at phone width); so that state is never reached through a send here. It is reached, and tested,
+  these ways (read: the only `#returnToFloor`/`#leaveTable` callers are a send that empties the
+  New order, `:11758`; an accepted transfer of the open bill, `:2054`; a bill move that leaves
+  the party no bill, `:14538`; and a closed table, `:15967`): **removing the last unsent dish**
+  (a line's removal, or Discard, `#onDiscardDraft` at `:12382`; neither calls either); **another
+  person taking the bill** (D4); and **opening a table with nothing of this person's unsent**. (A
+  partial send keeps ✎: lines remain, `:11754`.) Task 5a pins the first two. Task 6 opens the backlog entry for slice 10.
+  _2026-10-26: `#showOrderScreen` sets it and `#endTableOpening` clears it with `tableOpening`; the stand-in is `shownBill` in bar-tables.ts._
+- **D14. Each button is a tab.** In the bar's `role="tablist"`, a `button` with `role="tab"`,
+  `aria-selected` "true" on the table on screen (as the screen tabs, `:1044-1053`), the class
+  `bar-table` (not `tab`, so the many checks that count `.tab` keep counting screens) with the
+  `.tab` look, and `data-bar-table` = its table id. Its content: `wt-icon name="floor-unsent"`
+  (the map's ✎, registered by `@waitron/ui`'s `floor-chips.ts:15`, which the shell's
+  `@waitron/ui` import loads, `packages/ui/src/index.ts:14`) `aria-hidden`, then the name. With ✎
+  its accessible name is `shell.table_unsent` "{table} unsent" / «{table} sin enviar» (after Q51
+  (g)'s "✎ Bill 2 unsent" «✎ Cuenta 2 sin enviar»; it contains the visible name, WCAG 2.5.3);
+  without, its text. It emits `open-bar-table` `{ tableId }` (bubbles, composed). No help badge (a
+  bar button carries none, design-system.md:2322). The selected look is today's selected tab
+  (`:271-275`), not picture 01's filled blue. When the buttons do not fit, the strip scrolls
+  sideways as it does today (`.tabs`, `:176-184`).
+  _2026-10-26: the event also carries `held`, decided by `goesBack` in bar-tables.ts._
+- **D15. The brand mark stays at step 0 on a wide handheld**, before Floor. Picture 06 draws none,
+  but the spec says nothing of it and it is the venue's logo (design-system.md:5335-5340); with
+  the other items gone it shows whenever everything fits. Owner FYI.
+- **D16. "?" sits after the name and before ☰** on a handheld (picture 06: ● Ana, ?, ☰), so "?"
+  and ☰ stay together at the end whether or not the name is on the bar. `main` draws "?" before the
+  name (`:1094`). A till is unchanged.
+- **D17. Copy.** One new key, `shell.table_unsent` (D14), in `apps/till/src/i18n/strings.ts`, en and
+  es. `tab.order` ("Order" / «Pedido») is read only by `#screenTitle`'s template
+  (`till-shell.ts:1007-1009`; ran: `grep -rn "tab\.order" apps/till/src`): delete it in both
+  languages if the typecheck allows once no tab draws Order, else keep it and say why in the
+  ledger. No other new words.
+
+### Changed test checks (from the probes; the implementer confirms each)
+
+Each probe ran the named suites on the probe worktree. Every failure is listed with its task and
+reason. **Any failure outside these lists is a STOP.** A test listed for an earlier task may fail
+again in a later task for that task's reason only if it is also in the later task's list or in
+the "may fail again" note there.
+
+**Probe 1 (ran): D1 on the server and the till's type.** Server typecheck: 0 errors
+(`server-tsc.txt`). Till typecheck: **44 errors, all in 8 test files, none in a source file**
+(`till-tsc.txt`): `src/screens/till-floor-screen.parties.test.ts` (21),
+`till-floor-screen.precedence.test.ts` (8), `till-floor-screen.a11y.test.ts` (3),
+`till-floor-screen.zone-tabs.test.ts` (1), `src/state/floor-look.test.ts` (3),
+`src/state/table-precedence.test.ts` (2), `src/widgets/table-details-sheet.test.ts` (5),
+`table-details-sheet.a11y.test.ts` (1): every one an `UnsentDraft` literal without the two
+fields. **Fixture-only, Task 2.** And `till-app-drafts.test.ts`'s `lateSaveLiveFloor` (`:1061-1087`)
+builds `unsentDrafts` inside an untyped mock, so the typecheck misses it; it gains `ownerId:
+one.ownerId` and `savedAt` too (Fixture-only, Task 2), so a fake floor says whose draft it is.
+`pnpm --filter @waitron/server exec vitest run src/order-drafts.db.test.ts src/party-main-bill.test.ts src/table-signals.test.ts`
+→ `Test Files 1 failed | 2 passed (3)`, `Tests 12 failed | 328 passed (340)` (`server-run1.txt`).
+The twelve, all in `apps/server/src/order-drafts.db.test.ts`, each a `toEqual` of the floor's
+`unsentDrafts` that gains `ownerId` and `savedAt` with exact values (Task 1, Reason D1): "keeps two
+bills by one editor separate and changes only the taken-over or emptied bill" (`:433`); "numbers
+the bills in their shown order even when their drafts were saved in reverse" (`:459`); "keeps
+Alex's and Sam's drafts apart, refuses Sam's save onto Alex's, and shows each unsent order on the
+table" (`:475`); "does not show a draft with no lines as an unsent order, nor another party's
+drafts" (`:511`); "names an owner with no person record as empty text, wherever the name is shown"
+(`:540`); "shows one floor summary per bill even when its editors have the same name" (`:988`);
+"gives Sam Alex's Beer, adds Sam's Beer into it, and refuses Alex's next save" (`:1866`); "takes a
+bill in place while preserving the taker's own bill and its quantities" (`:1969`); "merges the
+main bills after explicit takeover, retaining every row and the separate bill" (`:3284`);
+"retains source identities and common positions through an ordinary save and takeover"
+(`:4773`); "keeps a source-only draft in the floor count and allows placement saves without fresh
+offers" (`:5175`); "counts each fresh and recalled row once when both sets contain several dishes"
+(`:5281`).
+
+The shell probes ran `pnpm exec vitest run src/widgets/till-shell src/screens/device-screens.phone-margin.test.ts src/screens/till-counter-screen.layout.test.ts src/widgets/guide-sheet.test.ts`
+in `apps/till` (14 files, 359 tests). Probes A–C failed in five shell files (`till-shell.test.ts`,
+`.a11y`, `.help`, `.help-phone`, `.menu-help`); probe D adds a sixth, `till-shell.device-zones.test.ts`.
+The phone-margin, counter-layout, guide-sheet, venue-logo, device-zones look, counter-cleanup and
+pass suites passed in every probe.
+
+**Probe A (ran): D5 and D16 only** — the chooser never on a handheld's bar and always last in ☰,
+☰ always drawn, "?" after the name; the fit unchanged → `Tests 39 failed | 320 passed (359)`
+(`shell-runA.txt`, names in `fA.txt`). **Task 4a.** Reason for each: **D5** unless marked D16.
+- `till-shell.a11y.test.ts` "the bar with its language chooser, closed and open, has no
+  violations" (light and dark): it clicks the bar's chooser; it opens ☰ and checks the chooser's
+  group there instead, still in both themes.
+- `till-shell.help-phone.test.ts`, under "till-shell's language chooser at phone width, beside the
+  Help switch": "a handheld at %ipx in %s keeps the chooser on the bar only when the bar fits"
+  (360 and 390, en-GB and es-ES: four), "widening to 390 brings the chooser back to the bar", "the
+  chooser does not move while More is open", "widening past phone width with More open keeps the
+  chooser in More until it closes", "above phone width the chooser never leaves the bar", "going
+  from 320 to above phone width puts the chooser back on the bar", "a newer fit that starts while
+  an older one steps back decides where the chooser goes": **deleted** with the behaviour (the
+  chooser no longer moves), replaced by Task 4a's new case. The till's cases in that file stay.
+- `till-shell.help.test.ts` "the Help switch is on the bar at the top right, at handheld 390px"
+  and "… 1280px": the bar's order is now name, "?", ☰ (**D16**).
+- `till-shell.test.ts` under "till-shell": "places the language chooser in the bar, just before
+  the operator's name" (becomes: a handheld's chooser is in ☰, never in `.session`); "shows the
+  language's full name at 1280 wide and its short code at 390, always named in full" (it reads the
+  bar's chooser; it reads ☰'s group row, which names each language in full at both widths).
+- `till-shell.test.ts` under "till-shell at phone width": "keeps the header to one row at most 64 px
+  tall" (en-GB, es-ES: the visible controls are 4, not 5); "puts every action button, the
+  operator's name and the transfer count in one menu, by touch" and "reaches every action by
+  keyboard" (☰ gains the chooser); "draws the wide handheld header with Find a bill in More and
+  every other button in priority order" and "switches layout as the screen narrows and widens,
+  keeping the one language chooser" (☰'s exact list gains `wt-language-chooser`).
+- `till-shell.test.ts` under "till-shell above phone width", each a ☰ list that gains the chooser:
+  "moves the transfers, and what ranks below Pass and Kitchen, into More before them, then Kitchen
+  first" (full and compact handheld, en-GB and es-ES: four); "names the bar's transfers button with
+  the short name" (en-GB, es-ES); "labels Log out … short word, in the name menu and inside More,
+  keeping the counter header's full name" (en-GB, es-ES); "keeps Pass and Kitchen on a compact
+  handheld's Spanish bar at 800 wide when its measured width fits there"; "keeps More in the bar's
+  order, showing only the items that left"; "puts every item back on the bar, and the name, once the
+  screen is wide enough"; "refits when actions are added, and gives them back when they go"; "keeps
+  the visible count as the status while the transfers are on the bar"; "waits for an open More to
+  close before giving items back to a wider bar"; "keeps every item in an open More when an item
+  earlier in the leaving order appears"; "leaves kiosk mode cleanly while a fit begun in kiosk mode
+  is still under way"; "keeps fitting after it is taken off the page and put back".
+  A list grows by the chooser at its end; never loosen a list to a count.
+
+**Probe B (ran): probe A plus D6** (☰'s groups and order, Theme and Log out out of the name's menu,
+Log out last) → `Tests 61 failed | 298 passed (359)` (`shell-run2a.txt`, `f2a.txt`). The 22 not in
+probe A are **Task 4b**'s, Reason **D6**:
+- `till-shell.help-phone.test.ts` "in More the languages come last, after Theme" (becomes: the
+  languages sit in the Settings group after Equipment and before Theme).
+- `till-shell.help.test.ts` "above phone width items still leave for More in LEAVE_ORDER's order"
+  (`shell-run2a.txt`: "660: More holds transfers,equipment,profile,schedule,operator" through
+  "1500: More holds operator", 22 widths): it counts the operator as gone when ☰ holds `.logout`,
+  and Log out is now always in ☰ (D6). **Task 4b makes it pass** by reading the operator's
+  departure from ☰'s `.operator` (the name) instead; the leave order it checks still holds until
+  Task 4d. In probe C it passed again, but only because every item was then in ☰, so its prefix
+  check could not fail (read); Task 4d deletes it.
+- `till-shell.menu-help.test.ts` "with help on, More shows a badge beside exactly the options that
+  have help: handheld" and "turning help on from the bar while More is open shows the badges at
+  once": the handheld row's badged labels follow ☰'s new order (Pass, Profile, then Zones on this
+  device, Equipment in the Settings group; Transfers where shown).
+- `till-shell.test.ts` under "till-shell": "the name opens the working / on_break / out clock
+  actions with a text state" (three: the name's menu no longer ends with Log out); "keeps the
+  theme chooser out of the bar, and puts Theme in the operator's menu just after Log out" (becomes:
+  Theme is in ☰'s Settings group, after the languages, and not in the name's menu); "labels the
+  operator's Theme choices in Spanish", "marks the new choice in the operator's menu when the theme
+  choice changes", "asks for a theme picked in the operator's menu, closes the menu and leaves
+  applying it to the app", "fills the pressed Theme choice, unlike an unpressed one and the menu's
+  bordered buttons" (light and dark): each reads Theme in ☰ instead, its assertion unchanged;
+  "offers Profile before Equipment only when the device can switch profile, emitting open-profile"
+  (Profile, then the Settings group's Zones on this device and Equipment); "fits the header, every
+  button on screen, at phone width in en-GB/es-ES with phone-portrait/tablet-landscape" (four:
+  `expected 146 to be greater than 194` is its last line, `top(".station") > top(".find-bill")`
+  (`till-shell.test.ts:640`): in D6's order Kitchen sits above Find a bill, so it becomes
+  `top(".find-bill") > top(".station")`; its control count, 12 at `:621`, is rechecked against
+  the new ☰ and stated exactly).
+- `till-shell.test.ts` under "till-shell above phone width": "moves items into More in a fixed
+  order as the screen narrows" (en-GB, es-ES; Task 4d deletes them, see probe C).
+- `till-shell.test.ts` under "till-shell at phone width": "shows Log out inside the open More menu
+  without scrolling at 360x640, in Spanish" and "… 390x664 …" (`expected 759 to be less than or
+  equal to 632`/`656`): Log out is last (D6). **Rename** to "puts Log out last in More, reachable
+  by scrolling it, at %ix%i, in Spanish": Log out is the menu's last child, the menu scrolls
+  (`scrollHeight > clientHeight`), and after `scrollTop = scrollHeight` Log out lies inside the
+  menu's box. The receipt changes; the owner's alternative is D6's.
+- May fail again in Task 4b for D6 (☰ lists or order): any probe A test whose ☰ list includes the
+  chooser, notably "puts every action button …", "reaches every action by keyboard" (the tab order
+  follows ☰'s new order), "keeps More in the bar's order …", "labels Log out … short word …" (Log
+  out is in ☰ only now) and the a11y case.
+
+**Probe C (ran): probe B plus D2 in the shell's fit** (only the name leaves the bar) → `Tests 76
+failed | 283 passed (359)` (`shell-run1.txt`, `f1.txt`). The 16 not in probe B are **Task 4d**'s,
+Reason **D2**, together with probe B's "moves items into More in a fixed order" (two) and "above
+phone width items still leave for More in LEAVE_ORDER's order" (Task 4b's change; it passes in
+probe C only vacuously, as probe B's line says), which Task 4d deletes:
+- **Deleted with the behaviour** (they state an order among several leaving items, and only the
+  name leaves now): "moves items into More in a fixed order as the screen narrows" (en-GB, es-ES);
+  "moves the transfers, and what ranks below Pass and Kitchen, into More before them, then Kitchen
+  first" (four); "keeps Pass and Kitchen on a compact handheld's Spanish bar at 800 wide when its
+  measured width fits there"; "keeps every item in an open More when an item earlier in the leaving
+  order appears"; `till-shell.help.test.ts` "above phone width items still leave for More in
+  LEAVE_ORDER's order". Replaced by Task 4d's new cases.
+- **Retargeted to the name, keeping each case's behavioural point** (`leaveOrder` in the describe,
+  `:1218-1226`, becomes the one item `["operator", ".operator-menu"]`; the cases fill the bar with
+  `barTables` buttons from Task 4c, so the name competes for room as it will in use): "fits as a
+  fresh bar does when the name grows, then the transfer count changes / the name shrinks, then the
+  transfer count changes / the name grows, then shrinks back before the first refit has finished"
+  (nine batches: their guard `want.length < leaveOrder.length` becomes "the fresh bar keeps the
+  short name and moves the long one", at a width the implementer measures and states); "keeps an
+  open More, and everything in it, when the screen widens out of phone width"; "keeps an open More,
+  gaining what is left, when the screen narrows into phone width"; "keeps everything in More when
+  an open More that held a redraw closes at phone width, and refits once wider"; "refits when the
+  operator's name grows"; "refits when the shell redraws between More closing and its toggle
+  event"; `till-shell.menu-help.test.ts` "on the bar an option with help stays a plain button, with
+  no row" (no option with help is on a handheld's bar now; it moves to a till's bar, whose Pass is a
+  plain button with no row); `till-shell.test.ts` "a handheld's More offers Zones on this device at
+  every width, emitting open-device-zones (2560)" (its roomy half now also finds every other entry
+  in ☰, D2).
+- May fail again in Task 4d: any probe A or B test under "till-shell above phone width", for D2
+  (what is on the bar above phone width). Each keeps its point with the name as the moving item, or
+  is deleted only if it states an order among several leaving items; list each in the ledger.
+
+**Probe D (ran): probe C plus D13/D14's shell part** (no Order tab on a handheld; `barTables`
+buttons) → shell `Tests 82 failed | 277 passed (359)` (`shell-run2.txt`, `f2.txt`). The six not
+in probe C are **Task 4c**'s, Reason **D13** (no Order tab on a handheld; the strip's tabs are
+Floor alone). Task 4c runs before Task 4d, so these six and the 36 below meet a bar that still
+fits the old way; none of them reads the fit (read: each counts or names tabs; not run in that
+order):
+- `till-shell.device-zones.test.ts` "keeps a single counter a plain tab and hides selling screens
+  outside the device selection" (its last step expects `["Floor", "Order"]` for phone-portrait;
+  now `["Floor"]`).
+- `till-shell.test.ts` "fixed primary screens for phone-portrait work without an authored tab
+  list" and "… tablet-landscape …"; "translates fixed primary screens for phone-portrait on a
+  language switch" and "… tablet-landscape …" (`["Floor"]`, `["Sala"]`); under "till-shell at
+  phone width", "shows every tab in full at 360 px with a counter-zone menu, in Spanish" (its
+  handheld row has one tab).
+The same probe ran every `src/till-app*.test.ts` and `src/screens/till-counter-cleanup.look.test.ts`
+(ran: `pnpm exec vitest run src/till-app src/screens/till-counter-cleanup.look.test.ts` →
+`Test Files 2 failed | 38 passed (40)`, `Tests 36 failed | 4313 passed (4349)`, `app-run1.txt`).
+All 36 are **Task 4c**'s, Reason **D13**:
+- `till-app-boot-and-counter.test.ts` "A182 LOOK primary %s" for `phone-floor`, `phone-order`,
+  `tablet-floor`, `tablet-order` × en-GB/es-ES × light/dark × 390/1280 (32, one `it.each` at
+  `:6116-6119`): its `.tab` count for a handheld becomes 1 (`:6325`); the buttons are `.bar-table`,
+  not `.tab` (D14), so Task 5a does not change it again.
+- `till-app-boot-and-counter.test.ts` "navigates the fixed phone-portrait primary screen to order"
+  and "… tablet-landscape …" (`:5847-5868`): their rows click the second `.tab`. The two handheld
+  rows become "draws only Floor as a tab on a %s": one `.tab`, and `history.pushState` to
+  `/tabs/order` plus a `popstate` still mounts the embedded `till-table-order-screen` (the Order
+  screen stays a built-in screen, D13). The till row is unchanged.
+- `till-app-kitchen-note.test.ts` "keeps a note-only round across phone-portrait Floor, Order and
+  Back/Forward while an old read waits" and "… tablet-landscape …" (`:1884-1946`): its table has
+  no unsent dishes, so after Floor it has no button (D3). Replace the click on the second `.tab`
+  with `history.back()` (to `/tabs/order`), and the later `back()`/`forward()` pair with
+  `forward()`/`back()`, so the round still ends on the Order screen with the same draft store,
+  note and revision; every `expect` after the round stays as it is.
+
+**Probe E (ran): Tasks 5a, 5b and 5c in the app, on top of probe D** (worktree
+`/tmp/a797-3-probe.MtAy/wt3` at probe D's commit, removed afterwards): a simplified `#barTables()`
+fed to the shell as a cached array (D3, D4 with the `edit.editorId` takeover test, the held and
+released bills), the `open-bar-table` handler (D9), `floorReturnZoneId` and the Floor's
+`selectedZoneId` (D12), and in `#releaseDraft` the kept record plus a session-guarded
+`#refreshFloor()` after a saved or refused answer on a handheld (D10); and Task 2's
+`lateSaveLiveFloor` fixture with `ownerId: one.ownerId`, the one app-level fixture that names the
+signed-in person, so its fake floor yields buttons. Then (ran: `pnpm exec vitest run src/till-app
+src/screens/till-counter-cleanup.look.test.ts src/widgets/till-shell.test.ts` in `apps/till` →
+`Test Files 3 failed | 38 passed (41)`, `Tests 99 failed | 4360 passed (4459)`, `app-runE.txt`,
+names in `fE.txt`). The 99 are exactly probe D's 63 `till-shell.test.ts` failures and its 36 app
+failures (ran: `comm -23 fE.txt fprev.txt` → nothing new, where `fprev.txt` is `f2.txt` plus
+`app-run1.txt`'s names). So **Tasks 5a–5c change none of today's checks**: the handheld suites that
+count floor reads (`till-app-parties.test.ts`, `till-app-table-service.test.ts`) and
+`till-app-drafts.test.ts`'s tablet cases passed with the extra read in place. The probe's
+`#barTables()` was simpler than Task 3's rule (no partyless held table, no `openingTableId`), so
+**may fail, and why**: a case in `till-app-drafts.test.ts`, `till-app-parties.test.ts`,
+`till-app-table-service.test.ts` or `till-app-open-table.test.ts` that counts `getTablesState`
+calls on a handheld while a draft is released and a refusal comes back (the refusal's read was in
+the probe; a case driving that on a handheld was not found by it), or that counts the shell's
+`[role=tab]` while a free table is being seated. Accept such a change only if the extra read is
+D10's or the extra tab is D13's, the count stays exact, and the ledger names it with that reason;
+anything else is a STOP. Task 3 is a new module.
+A failure in any suite a task names that is not above is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **The same person on two phones.** Ana saves dishes at T4 on phone A; phone B, signed in as
+   Ana, shows ✎ T4 after its next floor read (owner id, not device); tapping it on B opens T4
+   (D3, D9). Task 5a pins it with a floor read naming Ana's id and no local draft.
+2. **A takeover.** Sam takes over Ana's bill at T4. On Ana's device, with T4 on screen: the store
+   locks and the button loses ✎ at once (D4); with T4 not on screen: the button goes at the next
+   floor read (D11). Tasks 3 and 5a.
+3. **Two bills, one table, two people.** Ana's Bill 1 and Sam's Bill 2 at T4: Ana's device shows
+   one ✎ T4, Sam's one ✎ T4; Ana with two bills of her own still sees one (D3). Task 3.
+4. **A party at T4 and T5** (today's join, or a party seated at both): one button "T4+T5",
+   opening T4, the first listed (D3). Task 3, with fixture short names that differ from the full
+   names so the test tells `tightName` from `label`.
+5. **Leaving T4 with new dishes by tapping ✎ T9.** ✎ T4 never leaves the bar, before or after
+   T4's save answers, and stays if that save fails (D10). Task 5c, with the save held open.
+6. **Finish table.** No button for it; the Floor opens on its zone (D3, D12). Task 5b.
+7. **A table in a zone the device hides** keeps its ✎ button; opening it shows ordering blocked
+   (D3; slice 4 D3). Task 5a.
+8. **Floor after a table whose zone the Floor does not show** (reached through Find a bill or a
+   transfer): the Floor opens as before, on the saved "Opens first", the address's zone or the
+   first tab (D12). Task 5b.
+9. **A reload on `/tabs/order` with nothing to resume**: Floor drawn selected, no button selected
+   (D13). Task 4c (shell) and 5a (app).
+10. **A person switch or sign-out**: the bar is rebuilt for the new person and `floorReturnZoneId`
+    forgotten, also when the same person signs back in (D3, D12). Task 5a, 5b.
+11. **A failed save at the open table**: the store locks for recovery, but the bill is still this
+    person's, so T4 keeps ✎ on the Order screen and after Floor (D4). Task 3 (case 12), Task 5a
+    (case 6b).
+12. **A refused save of a released bill** (someone took it meanwhile), and **a sign-out before a
+    released save answers**: the kept button goes and the read decides; no read starts after the
+    sign-out (D10). Task 5c (cases 6, 7).
+13. **App redraws that change no button** (every dish added while ✎ already shows) hand the shell
+    the same array, so the bar does not step back and refit (Task 5a case 6d).
+
+---
+
+**Task order and why.** The server read first (Task 1), then the till's type and fixtures
+(Task 2), then the pure rule that turns a floor read into buttons (Task 3). The shell in four
+parts, each with its probe's list: the language chooser into ☰ and "?" after the name (4a); ☰'s
+groups and order (4b); no Order tab, and the table buttons (4c); the fit that only the name leaves
+(4d), which uses 4c's buttons to fill the bar. Then the app in three parts: the buttons wired (5a),
+Floor on the last table's zone (5b), a left table's kept button (5c). Then docs (Task 6) and the
+LOOK (Task 7). Each leaves the tree green and is sized well under 100 tool calls. **Tasks 4a
+(39 checks, ten deleted) and 4d (about 20 cases rewritten in one describe) are the heaviest**: an
+implementer on either that passes about 150 calls stops at a green (or cleanly red) point, commits
+and hands over (global rule), and a fresh implementer continues. The till is a browser package: check free memory first
+(`memory_pressure | grep free`) and read each run's `Tests` count.
+
+### Task 1: The floor read says whose each New order is, and when it was last saved
+
+**Files:**
+- Modify: `apps/server/src/order-drafts.ts` (`UnsentDraft` `:343-349`; `readUnsentDrafts`
+  `:1245-1286`: select `ownerId: orderDrafts.ownerId` and `savedAt: orderDrafts.updatedAt`, group
+  by `orderDrafts.id`, push both)
+- Test: `apps/server/src/order-drafts.db.test.ts`
+
+**Interfaces:**
+- Produces: `UnsentDraft.ownerId: string` (the draft's `owner_id`), `UnsentDraft.savedAt: string`
+  (its `updated_at`, as stored).
+
+- [ ] **Step 1: Failing tests**, in "floor bill/editor pairs" (`:425`): (a) "carries each unsent
+  order's owner id and the time it was last saved": Alex saves at T4; set that draft's stored
+  `updated_at` to `"2026-01-01T00:00:00.000Z"` through `db.update(orderDrafts)` (a value no save
+  writes, so the read must come from the column); the floor's entry has `ownerId: ALEX` and
+  `savedAt: "2026-01-01T00:00:00.000Z"`; Alex saves again and the entry's `savedAt` equals the
+  stored `updated_at` and is not the old value. (b) "names the taker as the owner once a bill is
+  taken over": Sam takes Alex's bill (the file's takeover helper, as "gives Sam Alex's Beer…",
+  `:1866`, does) and the entry's `ownerId` is `SAM`. Add a helper `savedAtOf(draftId)` reading
+  `order_drafts.updated_at`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/order-drafts.db.test.ts -t "owner id and the time|names the taker"`.
+- [ ] **Step 3: Implement** D1.
+- [ ] **Step 4: Update probe 1's twelve server checks**, each `toEqual` gaining `ownerId` (the
+  saver's constant, `ALEX`/`SAM`/the random `nobody`) and `savedAt: await savedAtOf(<draft>.id)`.
+  Exact values, never `expect.any`. Ledger: each name with Reason D1.
+- [ ] **Step 5: Run** `pnpm --filter @waitron/server exec vitest run src/order-drafts.db.test.ts src/party-main-bill.test.ts src/table-signals.test.ts`
+  → probe 1's 340 tests plus the two new, all pass. Typecheck server; eslint; format check.
+- [ ] **Step 6: Commit** `git commit -s -m "A797-3: the floor read says whose each unsent order is and when it was saved"`
+
+### Task 2: The till's type carries the owner id and saved time (fixtures only)
+
+**Files:**
+- Modify: `apps/till/src/api/client.ts` (`UnsentDraft` `:895-901`: `ownerId: string` after
+  `billNumber`, `savedAt: string` last; one line saying `savedAt` is the New order's last save)
+- Test: probe 1's eight files and `till-app-drafts.test.ts`'s `lateSaveLiveFloor` (Fixture-only)
+
+Nothing reads the fields yet, so no test is written first.
+- [ ] **Step 1:** add the fields; `pnpm --filter @waitron/till typecheck 2>&1 | grep -c "error TS"`
+  → 44, in probe 1's eight files only (a source file in the list is a STOP).
+- [ ] **Step 2: Fixture-only edits** (by a script kept outside the worktree; read its diff): each
+  `UnsentDraft` literal gains `ownerId` (a person id the fixture already uses, else `"p-<owner
+  name in lower case>"`) and `savedAt: "2026-10-26T12:00:00.000Z"`; `lateSaveLiveFloor` gains
+  `ownerId: one.ownerId` and `savedAt: "2026-10-26T12:00:00.000Z"`.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/till typecheck` (0 errors), then
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.parties.test.ts src/screens/till-floor-screen.precedence.test.ts src/screens/till-floor-screen.a11y.test.ts src/screens/till-floor-screen.zone-tabs.test.ts src/state/floor-look.test.ts src/state/table-precedence.test.ts src/widgets/table-details-sheet.test.ts src/widgets/table-details-sheet.a11y.test.ts src/till-app-drafts.test.ts`:
+  all pass, unchanged.
+- [ ] **Step 4:** eslint; `pnpm format:check`; ledger (Fixture-only files);
+  `git commit -s -m "A797-3: the till's floor type carries each unsent order's owner and saved time"`
+
+### Task 3: Which tables get a button, and what each says
+
+**Files:**
+- Create: `apps/till/src/state/bar-tables.ts`, `apps/till/src/state/bar-tables.test.ts`
+
+**Interfaces:**
+- Produces:
+  ```ts
+  export interface BarTable { tableId: string; name: string; unsent: boolean; current: boolean }
+  /** The bill whose draft this device holds or has just released (D4): how many lines its store
+   * holds, and whether someone else now edits the bill (`edit.editorId` set and not this person). */
+  export interface LocalBill {
+    partyId: string | null; tableId: string; billId: string | null; lines: number; takenByOther: boolean;
+  }
+  export function barTables(
+    tables: readonly TableState[],
+    personId: string,
+    local: { held: (LocalBill & { onScreen: boolean }) | null; released: readonly LocalBill[] },
+  ): BarTable[];
+  ```
+  Rules (D3, D4, D13): one entry per open party with a shown bill of `personId`'s unsent, the held
+  party also while `onScreen`; per bill the held answer, else a released one, else the floor's; a
+  local bill is unsent when `lines > 0 && !takenByOther` (D4: never the store's lock); a released
+  bill whose party the read no longer lists, or lists as not open, gives no entry;
+  `name` = the party's tables' `tightName`s (`joinMembersById(tables)`), distinct, joined "+";
+  `tableId` = the held table for the held party, else the party's first table in `tables`'
+  order; entries in `tables`' order; `current` only on the held party while `onScreen`. A held
+  table with `partyId: null` (a free table being seated) is an entry while `onScreen` or `unsent`,
+  named by its own `tightName`. An empty `personId` gives no entries (nobody signed in).
+
+- [ ] **Step 1: Failing tests** (fixture short names differ from labels: label "Terrace 4", short
+  name "T4"):
+  1. "lists a table where this person has unsent dishes, by its short name" — Ana's draft at T4,
+     Sam's at T9 → `[{ tableId: "t4", name: "T4", unsent: true, current: false }]` for Ana.
+  2. "gives one button for several of this person's bills at one table".
+  3. "lists no table whose New orders are someone else's or a closed party's" (Sam's only; a
+     `state: "closed"` party with Ana's draft).
+  4. "names a party at two tables by both short names, opening the first listed" — today's join
+     T4+T5 (`today.joinId`) → `name: "T4+T5"`, `tableId: "t4"`; a party at T4 and T5 with no join
+     → also "T4+T5".
+  5. "keeps the floor read's order when a table is added" — buttons for T2 and T9, then T4 gains a
+     draft → T2, T4, T9.
+  6. "draws the table on screen as current, with ✎ only while something of this person's is unsent"
+     — held T4, `onScreen`, `unsent: false`, no floor draft → `{ unsent: false, current: true }`;
+     `unsent: true` → ✎; held but not on screen and not unsent → no entry.
+  7. "trusts the held bill over the floor read, and the read for the party's other bills" — floor
+     says Ana's draft on Bill 1 and Bill 2; held Bill 1 `unsent: false` → still unsent (Bill 2);
+     floor says only Bill 1, held Bill 1 `unsent: false` → not unsent.
+  8. "trusts a released bill over the floor read" — floor has no draft at T4; released T4 Bill 1
+     `unsent: true` → ✎ T4; floor has Ana's draft at T9, released T9 `unsent: false` → no T9.
+  9. "lists a free table being seated while it is on screen" — held `partyId: null`, table T3.
+  10. "lists nothing with nobody signed in" — `personId: ""`.
+  11. "lists a table in any zone the read gives" (D3: no zone filter) — a table in a second zone.
+  12. "keeps ✎ on a held bill with lines that nobody else has taken, and drops it once someone has"
+      — held T4 `lines: 2, takenByOther: false` → ✎ (whatever else locks the store, D4, I1);
+      `takenByOther: true` → current without ✎, and no entry once not on screen.
+  13. "gives no button for a released bill whose party is gone or closed" — released T4 `lines: 1`
+      with T4's party absent from the read, then with `state: "closed"` → no entry.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/bar-tables.test.ts` (module missing).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run; PASS.** Typecheck till; eslint; format check; ledger;
+  `git commit -s -m "A797-3: which tables get a button on a handheld's bar"`
+
+### Task 4a: A handheld's language chooser is in ☰, and "?" comes after the name
+
+**Files:**
+- Modify: `apps/till/src/widgets/till-shell.ts` (delete `chooserInMore` and its uses, `:468-471`,
+  `:489-491`, `:543`, `:665-675`, `:955`; the handheld session row `:1094` becomes `items · name ·
+  ? · ☰`, ☰ always drawn on a handheld; the chooser drawn last in ☰ as `#chooser("group")`; the
+  observer's chooser watch `:612-617` goes if nothing else needs it)
+- Test: probe A's files: `till-shell.test.ts`, `till-shell.help-phone.test.ts`,
+  `till-shell.help.test.ts`, `till-shell.a11y.test.ts`
+
+- [ ] **Step 1: Failing tests:** in `till-shell.help-phone.test.ts`, "a handheld keeps the language
+  chooser in More at every width, never on the bar" (`it.each` 320, 390, 1024, 2560 × en-GB, es-ES):
+  no `wt-language-chooser` in `.session`; one inside ☰, `layout="group"`; picking a language there
+  asks for it (the existing "picking a language in More asks for it" stays). In
+  `till-shell.help.test.ts`, "a handheld's bar reads name, Help, More at the end" at 1280 (name on
+  the bar) and "Help, More" at 390.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.help-phone.test.ts src/widgets/till-shell.help.test.ts`.
+- [ ] **Step 3: Implement** D5 (the chooser last in ☰ for now; Task 4b moves it into the Settings
+  group) and D16.
+- [ ] **Step 4: Update probe A's 39 checks** as listed (ten deleted, the rest each as its line
+  says); ledger, one line each with its reason.
+- [ ] **Step 5: Run** the probe's suites:
+  `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell src/screens/device-screens.phone-margin.test.ts src/screens/till-counter-screen.layout.test.ts src/widgets/guide-sheet.test.ts`
+  → all pass. Typecheck till; eslint; format check.
+- [ ] **Step 6: Commit** `git commit -s -m "A797-3: a handheld's language chooser is in More, and Help sits after the name"`
+
+### Task 4b: ☰ on a handheld follows design §3.1's order
+
+**Files:**
+- Modify: `apps/till/src/widgets/till-shell.ts` (`#menu` `:930-957`; `#items` `:760-819`, its ☰
+  order; `#operatorActions` `:855-928` gains a `theme` flag, false for a handheld's name menu;
+  `#operatorAndLogout` `:829` passes `logout: false` on a handheld; CSS for the group rule and the
+  heading, `--wt-*` tokens only), `apps/till/src/i18n/strings.ts` only if a word is missing (none
+  expected: the heading is `device_zones.settings`)
+- Test: probe B's files: `till-shell.test.ts`, `till-shell.menu-help.test.ts`,
+  `till-shell.help-phone.test.ts`, `till-shell.help.test.ts`, `till-shell.a11y.test.ts`
+
+- [ ] **Step 1: Failing tests** in `till-shell.test.ts`, a new describe "a handheld's More":
+  (a) "holds the name group, the screens, the Settings group and Log out, in that order, at 390"
+  with `full` plus the clock: the exact list by item — name, clock actions, My hours, Fix my
+  hours; Pass, Kitchen, Find a bill, My schedule, Profile, transfers count and button; the
+  Settings heading, Zones on this device, Equipment, the language group, Theme; Log out last;
+  (b) "names the Settings group by its heading" — `role="group"`, `aria-labelledby` → a visible
+  element reading "Settings", «Ajustes» in es-ES; (c) "keeps Log out and Theme out of the name's
+  menu when the name is on the bar" (2560: the name's menu holds the clock actions, My hours and
+  Fix my hours only; Log out and Theme are in ☰); (d) "a till's More and name menu are unchanged"
+  (the till's lists as today). In `till-shell.a11y.test.ts`, "a handheld's open More, with its
+  Settings group, has no violations" in both themes.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts src/widgets/till-shell.a11y.test.ts -t "handheld's More|Settings group"`.
+- [ ] **Step 3: Implement** D6, D7, D8.
+- [ ] **Step 4: Update probe B's 22 checks**, and any probe A test that fails again for D6 (the
+  note under probe B), as listed; ledger.
+- [ ] **Step 5: Run** Task 4a's Step 5 command → all pass. Typecheck; eslint; format check.
+- [ ] **Step 6: Commit** `git commit -s -m "A797-3: a handheld's More follows the design's order, with a Settings group"`
+
+### Task 4c: No Order tab on a handheld; the table buttons
+
+**Files:**
+- Modify: `apps/till/src/widgets/till-shell.ts` (`@property({ attribute: false }) barTables:
+  readonly BarTable[] = []` (type from Task 3); `render`'s `screens` drops `"order"` on a
+  handheld; Floor is `aria-selected` when no button is `current`; the buttons in `#primaryTabs`'
+  `nav` after the screens, D14; `.bar-table` shares `.tab`'s rules; add `barTables` to
+  `CONTENT_PROPERTIES` `:74-92` so a change refits: every change there owes a step-back and a refit,
+  `:554-557`, which is why Task 5a must hand over the same array while the buttons are unchanged),
+  `apps/till/src/i18n/strings.ts`
+  (`shell.table_unsent` en/es; `tab.order` per D17)
+- Test: `till-shell.test.ts`, `till-shell.device-zones.test.ts`, `till-shell.a11y.test.ts`,
+  `till-app-boot-and-counter.test.ts`, `till-app-kitchen-note.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3's `BarTable`.
+- Produces: `till-shell`'s `barTables` property and its `open-bar-table` `{ tableId }` event.
+
+Between this task and Task 5a the branch has no Order tab and no app-fed buttons, so on a handheld
+an open table is reached again only from the Floor or by Back; the PR lands whole, never between
+tasks (Closing).
+- [ ] **Step 1: Failing tests** in `till-shell.test.ts`, describe "a handheld's table buttons":
+  1. "draws Floor, then one button per table, in the order given" — `barTables` T4 (unsent), T9
+     (unsent): `[role=tab]` texts Floor, T4, T9; each button holds a `wt-icon[name=floor-unsent]`;
+     no `.tab` reads Order.
+  2. "names a button with unsent dishes 'T4 unsent', and one without by its name" — en and es
+     (`«T4 sin enviar»`); the button without ✎ has no icon and no `aria-label`.
+  3. "selects the table on screen and not Floor; selects Floor when no table is current" —
+     `current: true` on T4 → T4 `aria-selected="true"`, Floor `"false"`; none current with
+     `activeScreen: "order"` → Floor `"true"` (D13).
+  4. "emits open-bar-table with the table's id" — one event, `bubbles` and `composed`.
+  5. "a till draws no table buttons" — `formFactor: "till"` with `barTables` set.
+  6. "the strip scrolls sideways when the buttons do not fit at 360, keeping Help and More on
+     screen" — ten buttons; `.tabs` `scrollWidth > clientWidth`; "?" and ☰ inside the header.
+  In `till-shell.a11y.test.ts`: "the bar with a selected table button and an unsent one has no
+  violations", light and dark.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts -t "table buttons"`.
+- [ ] **Step 3: Implement** the shell's part of D13, D14, D17.
+- [ ] **Step 4: Update probe D's 6 shell checks and 36 app checks** as listed; ledger.
+- [ ] **Step 5: Run** Task 4a's Step 5 command, then
+  `pnpm --filter @waitron/till exec vitest run src/till-app-boot-and-counter.test.ts src/till-app-kitchen-note.test.ts`
+  → all pass. Typecheck; eslint; format check; `pnpm --filter @waitron/till exec vitest run src/i18n`.
+- [ ] **Step 6: Commit** `git commit -s -m "A797-3: a handheld's bar draws a button per table instead of the Order tab"`
+
+### Task 4d: Above phone width only the name leaves a handheld's bar
+
+**Files:**
+- Modify: `apps/till/src/widgets/till-shell.ts` (on a handheld: every present item but `operator`
+  always in ☰; the fit's leaving list is `["operator"]`, so `#release`, `#moved` and `#fit`'s
+  `most` (`:691`) work over it; the brand mark at step 0 whatever ☰ holds, `:1082`, D15;
+  `LEAVE_ORDER` and `#present` cut to what still reads them, or deleted)
+- Test: probe C's files: `till-shell.test.ts`, `till-shell.help.test.ts`,
+  `till-shell.menu-help.test.ts`
+
+- [ ] **Step 1: Failing tests** under "till-shell above phone width": (a) "keeps only Floor, the
+  table buttons, the name, Help and More on a handheld's bar, every other entry in More, at 1280
+  and 2560" (en-GB, es-ES, `full`); (b) "hides the brand first, then moves the name into More, as
+  table buttons fill the bar, and gives both back as they go" — at 1024, add `barTables` buttons
+  one at a time: the brand goes first, then the name joins ☰'s top with its clock actions; remove
+  them and both return; (c) "shows the brand mark at step 0 though More holds every entry" (D15).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts -t "above phone width"`.
+- [ ] **Step 3: Implement** D2 and D15.
+- [ ] **Step 4: Update probe C's checks** (delete the eight that state an order among several
+  leaving items; retarget the rest to the name, each keeping its behavioural point) and any earlier
+  task's test under "above phone width" that fails again for D2; ledger, one line each. A count is
+  never loosened; a deleted case is named in the ledger with "deleted with the behaviour: only the
+  name leaves".
+- [ ] **Step 5: Run** Task 4a's Step 5 command, then `src/till-app-boot-and-counter.test.ts`
+  (its tablet LOOK at 1280) → all pass. Typecheck; eslint; format check.
+- [ ] **Step 6: Commit** `git commit -s -m "A797-3: above phone width only the name leaves a handheld's bar"`
+
+### Task 5a: The till app draws the buttons and opens their tables
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` (new private `#barTables(): BarTable[]` building Task 3's
+  `local.held` from `activeTableId`, `orderParty`, `#tableDraft()`/`#partylessDraft` and
+  `#orderScreenShown()`, `takenByOther` from `#draftSync.edit` (D4); new `@state() private
+  openingTableId?: string` (D13, cleared under the `offerRequest` check, `:10625`); the shell gets
+  `.barTables=${…}` at `:19233`, **the same array object while its contents are unchanged**: the
+  app redraws on every draft change (`:11149-11152`) and a new array would make the shell step
+  back and refit each time (`till-shell.ts:554-557`), the reason `#affordanceList` is kept stable
+  (`:4093-4094`); keep the last answer and replace it only when a JSON of it differs (one shared
+  empty array on a till); `@open-bar-table` handler (D9))
+- Create: `apps/till/src/till-app-bar-tables.test.ts` (its setup copied from the top of
+  `till-app-drafts.test.ts`, `:146-427`: `party`, `table`, `till`, `stubApi`, `mountApp`,
+  `signIn`, `openMesa`; with `draftServer`, `apps/till/src/widgets/test-helpers.ts:340`)
+
+**Interfaces:**
+- Consumes: Task 3's `barTables`; Task 4c's `barTables` property and `open-bar-table`.
+- Produces: `#barTables()`, which Task 5c extends with `released`.
+
+- [ ] **Step 1: Failing tests** (phone-portrait unless named; both form factors where cheap):
+  1. "shows ✎ T4 on the Floor when the floor read names this person's unsent order there" — and
+     none for Sam's (Review focus 1: the read alone, no local draft).
+  2. "selects the open table's button, with ✎ from the first dish added and none once it is
+     removed" — open T4 (nothing unsent): one button T4, selected, no icon; add a dish → icon; remove
+     it → no icon.
+  3. "keeps ✎ T4 after Floor, and its button returns to the same draft without a re-read" — add a
+     dish at T4, tap Floor: T4's button unselected with ✎, Floor selected; tap it: the Order screen,
+     `draftStore` the same object, `getTablesState` not called again by the tap (D9).
+  4. "drops the open table's button on Floor when nothing of this person's is unsent there".
+  5. "opens another table's button as a Floor tap does, closing an open overlay" — Find a bill open,
+     tap ✎ T9: the overlay closes and T9 opens (`open-table` path: its offers are read).
+  6. "loses ✎ at once when another device takes the open bill, keeping the button selected"
+     (Review focus 2: the bill's edit state naming another editor, as `till-app-drafts.test.ts`'s
+     takeover cases drive it): this is D13's "highlighted without ✎" reached without a send.
+  6b. "keeps ✎ T4 after a failed save, on the Order screen and after Floor" (D4, I1): the draft's
+     save rejects (`draft-sync` enters recovery and locks the store); T4's button keeps ✎ while
+     selected, and after Floor too.
+  6c. "removing the last unsent dish leaves the button selected without ✎ and stays on the table"
+     (D13): add a dish, remove it: the Order screen still shows, T4 selected, no icon.
+  6d. "hands the shell the same array when a redraw changes no button" (I3): with ✎ T4 shown, add
+     a second dish; `shell.barTables` is the same object (`toBe`), and a spy on the shell's
+     `updated` sees no `barTables` change.
+  7. "selects the table being opened while it loads" — tap ✎ T9 from T4 with T9's offers held:
+     T9 selected, not T4.
+  8. "rebuilds the buttons for the next person" — Ana's ✎ T4; sign in as Sam: no T4 (Review focus
+     10).
+  9. "keeps a hidden zone's table's ✎ button" — a device zone choice without T4's zone (D3; the
+     `getDeviceZones` stub as in `till-app-device-zones.test.ts`).
+  10. "a till's bar has no table buttons" (`formFactor: "till"`).
+  11. "selects Floor on the Order screen with no table" — a reload on `/tabs/order` (Review focus 9).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-bar-tables.test.ts`.
+- [ ] **Step 3: Implement** D4 (held part), D9, D13.
+- [ ] **Step 4: Run; PASS**, then the app suites:
+  `pnpm --filter @waitron/till exec vitest run src/till-app src/state/bar-tables.test.ts src/widgets/till-shell.test.ts`
+  → all pass (none of today's checks changes; a failure is a STOP). Typecheck; eslint; format
+  check.
+- [ ] **Step 5:** ledger; `git commit -s -m "A797-3: a handheld's bar shows this person's tables with unsent dishes"`
+
+### Task 5b: Floor, after a table, opens on its zone
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` (`@state() private floorReturnZoneId?: string`, set in
+  `willUpdate` (`:4028`) when `activeTableId` changes to a table on a handheld, cleared in
+  `#onLogout` (`:18035`, beside its `till-zone` reset, `:18059`) and at a server switch
+  (`:2133-2134`); the Floor's
+  `.selectedZoneId` at `:18243-18249`, D12; `till-zone` written with the Floor tab)
+- Test: `apps/till/src/till-app-device-zones.test.ts` (its `mountHandheld`, a new describe "Floor
+  after a table")
+
+- [ ] **Step 1: Failing tests** (`room` and `garden` table zones; the first tab is `bar`):
+  1. "opens the Floor on the zone of the table just left, not the zone viewed before" — on `room`,
+     open a `garden` table through its bar button (or Find a bill), tap Floor → the Floor's active
+     tab is `garden`, and the address's `till-zone` is `garden`.
+  2. "beats a saved Opens first once a table has been opened" — saved start `room`; open a `garden`
+     table, Floor → `garden`; before any table, sign-in → `room` (slice 4 D2b unchanged).
+  3. "opens a finished table's zone" (Review focus 6) — finish the `garden` table → Floor on
+     `garden`.
+  4. "opens as before when the Floor does not show that zone" (Review focus 8) — device choice
+     `["room"]`, a `garden` table reached through Find a bill, Floor → `room`.
+  5. "forgets the zone at sign-out, for the next person and the same one" — on the Floor after a
+     `garden` table, sign out; Sam signs in → today's opening zone; sign out, Ana signs back in with
+     no table to resume → today's opening zone too.
+  6. "a till's Floor does not move when a table opens over it" (`formFactor: "till"`).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-device-zones.test.ts -t "Floor after a table"`.
+- [ ] **Step 3: Implement** D12.
+- [ ] **Step 4: Run; PASS**, then Task 5a's Step 4 command plus
+  `src/screens/till-floor-screen.refresh.test.ts src/screens/till-floor-screen.zone-tabs.test.ts`.
+- [ ] **Step 5:** typecheck; eslint; format check; ledger;
+  `git commit -s -m "A797-3: a handheld's Floor opens on the zone of the table just left"`
+
+### Task 5c: A table left for another keeps its button
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` (`#releaseDraft` `:10536-10556`: record the released bill
+  (party, table, bill, its store's line count and `takenByOther` from `sync.edit`); after the
+  callback's `#leavingDrafts.delete(sync)` guard and only while `session === this.#operatorSession`:
+  `"saved"` marks it with `#tablesRead` and, on a handheld, starts `#refreshFloor()`; `"failed"`
+  keeps it while it sits in `#unsavedDrafts`; a refusal drops it and, on a handheld, starts
+  `#refreshFloor()` (D10); drop a saved record once `#tablesApplied` passes its mark; clear all
+  with `#dropLeavingDrafts` and `#dropOthersDrafts` (`:11197-11215`) and when an unsaved draft is
+  reopened (`:11089-11091`); `requestUpdate()` on each change; `#barTables()` passes them as
+  `released`)
+- Test: `apps/till/src/till-app-bar-tables.test.ts`
+
+- [ ] **Step 1: Failing tests** (T4 and T9 seated; a save held open, as `till-app-drafts.test.ts`'s
+  `holdNextSave`, `:1096-1110`):
+  1. "keeps ✎ T4 while T4's save is out after ✎ T9 is tapped" — add a dish at T4, tap ✎ T9 (from
+     an earlier visit): ✎ T4 present at once and while the save is held.
+  2. "keeps ✎ T4 after the save answers, until a floor read started later says so" — release the
+     save: one `getTablesState` call follows; until it answers ✎ T4 stays; its answer (naming
+     Ana's draft at T4) keeps it.
+  3. "drops T4's button when its last dish was removed before leaving, once the later read agrees".
+  4. "keeps ✎ T4 while T4's save has failed" — the save rejects; ✎ T4 stays; tapping it reopens T4
+     with the kept dish.
+  5. "a till starts no extra floor read when a draft is released" (`formFactor: "till"`).
+  6. "drops T4's kept button and re-reads the floor when T4's save is refused" (D10, I2) — the
+     held save answers `draft.taken_over` with Sam's name: the record goes, one `getTablesState`
+     call follows, and its answer (Sam's draft at T4) leaves no T4 button.
+  7. "starts no floor read when the person signs out before the save answers" (D10, I2) — release
+     T4, sign out, then answer the save (saved, and in a second run refused): `getTablesState` is
+     not called after the sign-out.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-bar-tables.test.ts -t "keeps ✎ T4|drops T4|floor read"`.
+- [ ] **Step 3: Implement** D10.
+- [ ] **Step 4: Run; PASS**, then Task 5a's Step 4 command.
+- [ ] **Step 5:** typecheck; eslint; format check; ledger;
+  `git commit -s -m "A797-3: a table left for another keeps its button until the floor agrees"`
+
+### Task 6: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/table-service.md`, `apps/server/src/guide/es/table-service.md`
+  (a new section before `{#short-names}`, en `:137`, es `:141`; the short-names section's first
+  sentence; `{#device-zones}`'s path on a phone, en `:170-171`, es its twin),
+  `docs/developers/design-system.md` (the Help switch's place, `:2310-2313`, and its badge list
+  `:2320-2322`; the language and Theme paragraphs on a handheld, `:5292-5311`; "A handheld keeps the
+  adaptive bar", `:5335-5342`; the fixed-screens table and the sentence after it, `:5377-5382`),
+  `docs/backlog.md` (both A797 entries, `:120-129` and `:2774-2786`; the More-height entry
+  `:2117-2123`), `docs/backlog/till.md` (A797's entry, `:1046-1066`),
+  `docs/backlog/till.md:1779` (the A740 record's slice-4 line: "under ☰ → Zones on this device"
+  gains "in ☰'s Settings group since slice 3"), design-system.md `:5329-5330` (a till's ☰,
+  unchanged: add "on a till" so it is not read as a handheld's; `:5341`'s handheld sentence goes
+  with the paragraph Step 3 rewrites),
+  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.1, dated sentences; the
+  dated note under worked example 6, `:459-462`, whose "not under Settings" becomes untrue),
+  this plan's slice 3 outline (already says "expanded below")
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+No guide describes a handheld's bar today (ran: `grep -n "^## \|More\b\|☰\|top bar" apps/server/src/guide/en/table-service.md`
+→ only the zones section's ☰ path, `:170-171`).
+- [ ] **Step 1: Guides.** `## Get back to your tables with unsent dishes {#unsent-tables}` / `##
+  Volver a tus mesas con platos sin enviar {#unsent-tables}`, four to six sentences: on a phone or
+  tablet the bar shows **Floor**, then a button such as **✎ T4** for each table where you have
+  dishes not yet sent, by the table's short name; one button for a table however many of your
+  bills there have unsent dishes; the table you are at is highlighted, and its button goes once
+  you leave it with nothing of yours unsent; if someone else takes over your bill there, your
+  button goes; tapping **Floor** after a table opens that table's zone; everything else is in
+  **More** (☰): your name and clock actions, the screens your profile allows, **Settings** (Zones
+  on this device, Equipment, Language, Theme) and **Log out**. The short-names section's first
+  sentence names "the bar's table buttons and the Ready bar". The zones section's phone path:
+  "open **More** (☰) and choose **Zones on this device**, under **Settings**". Spanish twin with
+  «Sala», «Más», «Ajustes», «Zonas en este dispositivo», «Equipo», «Idioma», «Tema», «Salir»
+  (read each from `apps/till/src/i18n/strings.ts`'s `es` block before writing).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md.** Rewrite the handheld paragraph: the bar is Floor, a button per
+  table with this person's unsent dishes (D3, D14), then the name while it fits (above phone width;
+  the brand mark leaves first, then the name), "?" and ☰; every other entry in ☰ at every width,
+  in D6's order with a Settings group; the language chooser in that group (D5); Theme and Log out
+  in ☰, not the name's menu; Floor after a table opens its zone (D12). The Help switch on a handheld
+  sits after the name and before ☰ (D16). The fixed-screens table keeps "Floor, Order" as a
+  handheld's screens, and the sentence after it says Order has no tab on a handheld: the open
+  table's button stands for it.
+- [ ] **Step 4: Backlog.** Both A797 entries and `till.md`'s: slice 3 in review with this plan
+  linked; slices 6–7 next (or as the lane orders). The More-height entry gains one sentence: on a
+  handheld, since slice 3, Log out is last in ☰ after the Settings group (design §3.1), so with
+  every entry offered it needs a scroll at 360×640 (D6). **Open one new entry** in the till area,
+  tied to slice 10: "A handheld stays on the table after its last send, so its button shows
+  highlighted without ✎" — design §4 example 1 and Q51 (b) describe Ana staying on T9 after
+  sending everything; today a send that empties the New order returns to the Floor
+  (`till-app.ts:11754-11758`); slice 3 kept that (its D13, the driver's ruling of 2026-10-26)
+  because the order screen after a send is slice 10's. Its number from
+  `~/waitron-campaign-shared/next-item-number` (read it, use it, write the next back). Add another
+  entry only for something the LOOK finds that this slice does not fix, numbered the same way.
+- [ ] **Step 5: Design file.** Under §3.1's ☰ list, one dated sentence: "2026-10-26, slice 3:
+  Equipment keeps its name and dialog for picture 01's 'Card reader · printer' row, Language and
+  Theme keep today's controls, Log out is last and needs a scroll on a short phone, and a table
+  button opens its table as the Floor does until slice 11 chooses the bill; see the build plan's
+  slice 3, D6–D9." Under §3.1's "The bar once a table is finished" bullet, one dated sentence:
+  "2026-10-26, slice 3: a send that empties the New order still returns the handheld to the Floor,
+  so the highlighted button without ✎ shows after removing the last unsent dish, after a takeover,
+  or on a table opened with nothing unsent, not after a send; staying on the table after a send is
+  slice 10's (the build plan's slice 3, D13; backlog A<n>)." Under "On a tablet the bar has room for
+  the name as well", one dated sentence: the brand mark stays at step 0 (D15). Under worked example
+  6's dated note (`:459-462`): "2026-10-26, slice 3: the entry now sits in ☰'s Settings group,
+  under its heading."
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-3 — guides, design system and backlog for the handheld's bar"`
+
+### Task 7 (visual): LOOK at the handheld's bar
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-3-handheld-bar`; `wa-wt ls` for
+  the URLs. Enrol a browser context as a device on the Handheld profile («Móvil») from the
+  dashboard's Devices page (a dev box approves a join at once; the till still asks which device a
+  tab is). Sign in as a person with a PIN; note their name.
+- [ ] **Step 2: Look** with the workspace's Playwright Chromium (script in
+  `/Users/clintongormley/waitron-campaign-c/a797-3-scripts/`, never in the worktree, its process id
+  recorded), at **390 px** and **1024 px**, **light and dark**, **English and Spanish**:
+  - the Floor with nothing unsent: Floor, "?", ☰ (and the name at 1024);
+  - open a Dining room table, add two dishes, tap Floor: the Floor opens on Dining room, the bar
+    reads Floor · ✎ T… (the demo's short names, `apps/server/scripts/demo-seed/floor.ts`); switch
+    to Terrace, open a Terrace table, add a dish, then tap the Dining room table's button: **two
+    buttons, the open one selected**, both with ✎;
+  - the Order screen of a table with nothing unsent: its button selected without ✎;
+  - ☰ open at 390: the name group, the screens, **Settings** with its heading, Language and Theme,
+    Log out last; at 1024 the name's own menu (clock actions only);
+  - **at 360×640 in Spanish**, ☰ open: whether Log out needs a scroll (D6), recorded either way;
+  - ten tables with unsent dishes at 390 (send dishes through the till first): the strip scrolls
+    sideways and "?" and ☰ stay put (D14).
+- [ ] **Step 3: Save** the PNGs under `/Users/clintongormley/waitron-campaign-c/a797-3-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, describe them in the ledger and the PR body.
+  Expected: the buttons read in full with their ✎; the selected one reads as a selected tab; ☰
+  fits 390 px wide without sideways scrolling.
+- [ ] **Step 4: Stop** what you started: the script by its recorded process id, then
+  `wa-wt down waitron-feat-a797-3-handheld-bar`.
+
+### Closing slice 3
+
+- Focused runs per task as above. CI runs the server's and the till's package suites and coverage.
+  Read the `changes` job's outputs and both packages' coverage or merge jobs on the current head
+  before calling the PR green.
+- **The PR lands whole.** Between Task 4c and Task 5a the branch has no Order tab and no app-fed
+  table buttons (a handheld returns to an open table only from the Floor or by Back); every task is
+  green, but no task between them is a state to ship.
+- `/finish-branch` with this plan named. Review path **FULL**: per-task reviews, the
+  plan-against-spec read, and two Codex run-it reviews (the second told to set this plan's checklist
+  aside and test what it does not name).
+- PR body. **First line: "No venue reset needed."** Then: **What a person sees** (the bar on a
+  phone and a tablet; ☰'s order; Floor after a table); **Read change** (`UnsentDraft` gains
+  `ownerId` and `savedAt`; no route, no migration); **Decisions** D1–D17 in one line each;
+  **Changed test checks** (from the ledger: Task 1's twelve, Task 4a's 39, Task 4b's 22, Task 4c's
+  6 + 36, Task 4d's, grouped as the probes are, deleted cases named as deleted); **Fixture-only**
+  (Task 2's nine files); **Departures** (from the pictures: D7 Equipment's name, D8 the controls'
+  look, D14 the selected look, D15 the brand mark; from Q51 (b) and design §4 example 1: D13, a
+  send that empties the New order still returns to the Floor, so the highlighted button without ✎
+  is not shown after a send; slice 10, with Task 6's backlog entry); **LOOK**.
+- **Owner FYI** (one line each in the PR and the lane's questions file, not questions):
+  - D2: on a tablet only the name joins Floor, the table buttons, "?" and ☰; Pass, Kitchen and the
+    rest are in ☰ even where they would fit.
+  - D3: a table in a zone this device hides still gets its ✎ button.
+  - D6: Log out is last in ☰, so on a short phone with every entry it needs a scroll.
+  - D7/D8: ☰ shows "Equipment" for the card reader and printers, and today's Language and Theme
+    controls, not picture 01's value rows; those controls are already one row each, so value rows
+    would not shorten ☰ or spare the scroll to Log out.
+  - D13: after Ana sends everything at T9 the handheld still returns to the Floor, so T9's
+    highlighted button without ✎ shows only after she removes her last unsent dish, after someone
+    takes her bill, or on a table she opens with nothing unsent; staying on T9 after the send is
+    slice 10's (backlog entry from Task 6).
+  - D11: while a table is open, another device's takeover of one of your other bills shows on your
+    bar at your next visit to the Floor.
+- After merge: delete the branch local and remote and check the remote one is gone; update the
+  ledger; then the next slice.
 
 ---
 

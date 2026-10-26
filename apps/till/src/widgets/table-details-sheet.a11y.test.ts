@@ -57,7 +57,16 @@ const everything = table({
     outstanding: "47.50",
     billCount: 2,
     tableIds: ["t1"],
-    unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Luis", lineCount: 2 }],
+    unsentDrafts: [
+      {
+        billId: "bill-1",
+        billNumber: 1,
+        ownerId: "p-luis",
+        ownerName: "Luis",
+        lineCount: 2,
+        savedAt: "2026-10-26T12:00:00.000Z",
+      },
+    ],
     reminder: { groupId: "g1", dueAt: "2026-10-10T11:00:00Z" },
   },
 });

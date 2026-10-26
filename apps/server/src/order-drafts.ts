@@ -344,7 +344,9 @@ export interface SaveDraftInput {
 export interface UnsentDraft {
   billId: string;
   billNumber: number;
+  ownerId: string;
   ownerName: string;
+  savedAt: string;
   lineCount: number;
 }
 
@@ -1258,7 +1260,9 @@ export async function readUnsentDrafts(
   const rows = await tx
     .select({
       billId: orderDrafts.billId,
+      ownerId: orderDrafts.ownerId,
       ownerName: persons.displayName,
+      savedAt: orderDrafts.updatedAt,
       lineCount: sql<number>`cast(count(distinct ${orderDraftLines.id}) + count(distinct ${orderDraftRecalledLines.id}) as int)`,
     })
     .from(orderDrafts)
@@ -1266,7 +1270,7 @@ export async function readUnsentDrafts(
     .leftJoin(orderDraftRecalledLines, eq(orderDraftRecalledLines.draftId, orderDrafts.id))
     .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
     .where(and(inArray(orderDrafts.billId, billIds), eq(orderDrafts.state, "open")))
-    .groupBy(orderDrafts.billId, orderDrafts.ownerId)
+    .groupBy(orderDrafts.id)
     .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`);
   const byBill = new Map(rows.map((row) => [row.billId, row]));
   for (const [partyId, bills] of shown) {
@@ -1276,7 +1280,9 @@ export async function readUnsentDrafts(
         unsent.get(partyId)!.push({
           billId: bill.workingOrderId,
           billNumber: index + 1,
+          ownerId: draft.ownerId,
           ownerName: draft.ownerName ?? "",
+          savedAt: draft.savedAt,
           lineCount: draft.lineCount,
         });
       }

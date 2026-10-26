@@ -1071,8 +1071,10 @@ function lateSaveLiveFloor() {
             .map((one) => ({
               billId: one.billId,
               billNumber: 1,
+              ownerId: one.ownerId,
               ownerName: one.ownerName,
               lineCount: one.lines.length,
+              savedAt: "2026-10-26T12:00:00.000Z",
             })),
         },
       })),
@@ -2223,6 +2225,30 @@ describe("till-app: sending the draft", () => {
         expect(api.submitDraft).toHaveBeenCalledTimes(when === "save" ? 0 : 1);
       },
     );
+
+    it("keeps the Floor on the repair's newer floor when a floor read started before it answers last", async () => {
+      const { el, detail, store } = await raced("submit");
+      let answerOlder!: (tables: TableState[]) => void;
+      api.getTablesState!.mockImplementationOnce(
+        () => new Promise((resolve) => (answerOlder = resolve)),
+      );
+      const reads = api.getTablesState!.mock.calls.length;
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(api.getTablesState!.mock.calls.length).toBe(reads + 1);
+
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await vi.waitFor(() => expect(banner(el)?.textContent).toContain("Group 7"));
+      expect(api.getTablesState!.mock.calls.length).toBe(reads + 2);
+      const t4Revision = () =>
+        floor(el)!.tables.find((each) => each.id === "t4")?.party?.revision ?? null;
+      expect(t4Revision()).toBe(4);
+
+      answerOlder([mesa4, mesa7]);
+      await flush(el, 6);
+      expect(t4Revision()).toBe(4);
+    });
 
     it.each(["getTablesState", "listGroups", "readCurrentOrders", "listDrafts"] as const)(
       "retains the candidate without another save or send when recovery %s fails",
@@ -4876,7 +4902,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(panelOf(el).heading).toBe("Taken over by Sam");
   });
 
-  it("shows other people's drafts on a tablet's Order tab, and takes one over there", async () => {
+  it("shows other people's drafts on a tablet's Order screen, and takes one over there", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");

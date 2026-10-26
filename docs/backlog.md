@@ -124,7 +124,9 @@ come after the list above:
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
   bar and List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data)
   in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built
-  from the build plan below; slice 3 is next. A773-2 builds the pass's part, and the phone's
+  from the build plan below. Slice 3 (the handheld's bar: Floor, a ✎ button per table with this
+  person's unsent dishes, then "?" and ☰) is in review, built from the build plan's slice 3;
+  slices 6–7 are next. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1782,6 +1784,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
   the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
+- **A1120. A handheld stays on the table after its last send, so its button shows highlighted
+  without ✎** (for A797 slice 10). The design's worked example 1 (§4) and Q51 (b) have Ana stay
+  on T9 after sending everything; today a send that empties the New order returns a handheld to the
+  Floor, which slice 3 kept because what the order screen does after a send is slice 10's.
+  [Detail](backlog/till.md#a1120-a-handheld-stays-on-the-table-after-its-last-send-so-its-button-shows-highlighted-without-)
+
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797
   slice 4's finish review, a browser probe on the branch): a till in that state shows the
   empty-zones page with Settings and Retry, but a handheld's home is always the Floor
@@ -2059,12 +2067,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   113–120 ms for a second table in the same zone.
 
 - **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
-  2026-10-17).** At 320×568, with the person's name moved into More, the menu's content (625 px)
-  overflows the 552 px it is given, so Log out sits below the menu's bottom edge and nothing says
-  the menu scrolls. The look hid A681's Theme row and Log out was still below the edge, so this is
-  believed to predate A681 (not run on `main`). A681 puts the Theme row after Log out, so at 360×640
-  and 390×664 that row is the part that needs a scroll. Decide whether More should show that it
-  scrolls, or hold fewer items on a short screen.
+  2026-10-17).** On a handheld, since A797 slice 3, Log out is last in ☰, after the Settings group
+  (design §3.1), so with every entry offered it sits below the menu's bottom edge at 360×640 (759 px
+  against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and nothing says the
+  menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px). Decide whether
+  More should show that it scrolls, or hold fewer items on a short
+  screen.
 
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
   2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
@@ -2272,8 +2280,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`.
 
-- Recorded, not blocking: a handheld's Order tab is tappable with no active table; Counter has no
-  prep-queue rail.
+- Recorded, not blocking: Counter has no prep-queue rail.
 
 - **A lost counter Send reply still tells you to check whether a sale went through.**
   `#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
@@ -2656,9 +2663,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     names the order by its own label — no product path creates that state, and whether every
     existing venue database is free of it was not checked.
   - Open (found by #905's review, by reading, not reproduced): on a handheld, a waiter who taps a
-    free table to seat it, goes back to the order tab while the seating is still under way and
-    starts Move guests can have the move set the wrong table on the new party; the suggested fix
-    is to count only table opens started in the current operator session; not queued.
+    free table to seat it, goes back to the order tab (on a handheld, the table's bar button since
+    A797 slice 3) while the seating is still under way and starts Move guests can have the move
+    set the wrong table on the new party; the suggested fix is to count only table opens started
+    in the current operator session; not queued.
   - The till sends `otherPartyId: null` when its floor does not list the target table at all (a
     failed floor read empties the list); a table another party holds is then refused as out of
     date, never combined.
@@ -2715,7 +2723,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
-  the build plan; slice 3 is next:
+  the build plan. Slice 3 (the handheld's bar) is in review, built from the build plan's slice 3;
+  slices 6–7 are next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
@@ -2796,6 +2805,45 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   not, and the proposal keeps a name of four characters or fewer whole, so a seed, an API call or
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
+
+- **A1121. With many table buttons a handheld's Order screen can lose its visible way back to the
+  Floor.** Seen in A797 slice 3's LOOK, 2026-10-26: at 360 and 390 px with ten buttons the strip
+  scrolls sideways, Floor scrolls out of sight with the table buttons, and nothing hints that the
+  strip scrolls. Options to decide: keep Floor fixed at the start of the strip, a fade at the cut edge.
+  [Detail](backlog/till.md#a1121-with-many-table-buttons-a-handhelds-order-screen-can-lose-its-visible-way-back-to-the-floor)
+
+- **A1122. At 1024 px a handheld's Floor button slides sideways as table buttons appear.** Seen
+  in A797 slice 3's LOOK, 2026-10-26: the group is centred between the brand and the name, so
+  Floor sits at x 388 with no table buttons, 356 with one and 319 with two.
+  [Detail](backlog/till.md#a1122-at-1024-px-a-handhelds-floor-button-slides-sideways-as-table-buttons-appear)
+
+- **A1123. At 360×640 a handheld's ☰ popup moves up over the bar and covers ☰ itself.** Seen in
+  A797 slice 3's LOOK, 2026-10-26: to fit whole it starts at y 11. Nothing is lost, and tapping
+  outside or Escape closes it. See also "On a short phone the till's More menu is taller than the
+  room it gets", above.
+  [Detail](backlog/till.md#a1123-at-360640-a-handhelds--popup-moves-up-over-the-bar-and-covers--itself)
+
+- **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
+  tab.** Seen in A797 slice 3's LOOK, 2026-10-26: the tab reads "Terrac". I believe this predates
+  the slice (not run on main).
+  [Detail](backlog/till.md#a1124-at-360-px-a---chip-on-the-till-floors-zone-tabs-covers-the-end-of-the-terrace-tab)
+
+- **A1125. On a 1024×768 handheld the Order screen's Fire and Send all buttons are cut off at the
+  bottom.** Seen in A797 slice 3's LOOK, 2026-10-26 (`c-order-two-dishes-1024-light-en.png`,
+  `g-two-buttons-3-open-1024-light-en.png` and their dark and Spanish twins, «Marchar» /
+  «Enviar todo», in `~/waitron-campaign-c/a797-3-shots/`). Believed to predate A797 slice 3 (not
+  run on main).
+
+- **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
+  bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
+  can make. Each should reach the order screen by the table's bar button or `/tabs/order`; on a counter
+  till, where `order` resolves to Counter, drop the emit or replace it with the tap the test means
+  (table-service, parties, menu-refresh, drafts, boot-and-counter).
+
+- **A1129. A late allergy re-read or course-places repair can step the order back a revision.**
+  Read only: after their waits both set `orderParty` from their own read without checking a newer
+  one (`till-app.ts`), until the next command's `party.out_of_date` reloads; check the revision as
+  `#rememberOrderParty` does. Believed to predate A797 slice 3 (ba517141a, c9ad7a634).
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
@@ -3265,7 +3313,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **On a 390 px phone the floor map cuts table names short at every text size.** It fits twelve
   tables in squares about 30 px wide, so a name longer than three or four letters shows "Terr…"
   until the map is pinched (the map's `text-overflow: ellipsis`,
-  `packages/ui/src/components/wt-floor-map.ts`). Left open by A841 slice 10b.
+  `packages/ui/src/components/wt-floor-map.ts`). Left open by A841 slice 10b. At 360 px the labels
+  read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png` in
+  `~/waitron-campaign-c/a797-3-shots/`).
 
 ### Printers, the print agent and receipts
 
@@ -5521,6 +5571,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
   [Detail](backlog/ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
+
+- **A till late-send PIN test failed once and then passed, twice in two days, in local combined
+  runs (A1126)**: "shows a wrong PIN on the app's line when the dialog was closed while it was
+  sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
+  output, and fix at the root. [Detail](backlog/ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
 
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The

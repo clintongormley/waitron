@@ -1961,8 +1961,8 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** The app clears its offer on this event, so a screen mounted later (a handheld's Order tab coming
-   * back) does not open it again. Taken even when the line is gone, for the same reason. */
+  /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
+   * even when the line is gone, for the same reason. */
   override updated(): void {
     this.#watchAutomaticRouting();
     if (!this.#offerTaken) return;

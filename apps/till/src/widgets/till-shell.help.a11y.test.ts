@@ -108,7 +108,7 @@ describe.each(looks)(
           el.shadowRoot!.querySelector<HTMLElement & LitElement>('header [data-test="more-menu"]')!;
         await vi.waitFor(() =>
           expect(
-            more().querySelector(':scope > wt-language-chooser[layout="group"]'),
+            more().querySelector(':scope > .settings-group > wt-language-chooser[layout="group"]'),
           ).not.toBeNull(),
         );
         expect(el.shadowRoot!.querySelectorAll("wt-language-chooser")).toHaveLength(1);

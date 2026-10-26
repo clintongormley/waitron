@@ -918,13 +918,13 @@ Open:
   The owner's replacement for C80's earlier course-placement rule is retained under
   [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
 - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
-  waiter who taps a free table to seat it, goes back to the order tab while the seating is still
-  under way and starts Move guests can have the move set the wrong table on the new party; the
-  suggested fix is to count only table opens started in the current operator session; not
-  queued. The till sends `otherPartyId: null` when its floor does not list the target table at
-  all (a failed floor read empties the list); a table another party holds is then refused as out
-  of date, never combined. On a 390 px phone the bill choice's buttons wrap ("Keep separate
-  bills" on three lines).
+  waiter who taps a free table to seat it, goes back to the order tab (on a handheld, the table's
+  bar button since A797 slice 3) while the seating is still under way and starts Move guests can
+  have the move set the wrong table on the new party; the suggested fix is to count only table
+  opens started in the current operator session; not queued. The till sends `otherPartyId: null`
+  when its floor does not list the target table at all (a failed floor read empties the list); a
+  table another party holds is then refused as out of date, never combined. On a 390 px phone the
+  bill choice's buttons wrap ("Keep separate bills" on three lines).
 - **Open, from C84's review (#913):** when a void or line change gets no answer,
   `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
   own floor read failed, while the revision on screen stays where it was. A later floor read that
@@ -1040,8 +1040,9 @@ may predate that branch:
   [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), as is slice 5 (the
   Ready bar on a handheld's Floor and List/Map kept per zone on the device), landed in #2063.
   Slice 1 (table short names, data) landed in #2076; slice 2 (the dashboard's short-name field,
-  which refuses a "+") landed in #2083, both built from the same plan, and slice 3 is next. Build
-  slices (design §8), in the owner's
+  which refuses a "+") landed in #2083, both built from the same plan. Slice 3 (the handheld's bar:
+  Floor, a ✎ button per table with this person's unsent dishes, then "?" and ☰, everything else in
+  ☰) is in review, built from the plan's slice 3; slices 6–7 are next. Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
@@ -1759,24 +1760,24 @@ or payment in progress keeps its context, with the grid/default change deferred 
 The implementation choices and acceptance cases are in the
 [A740 plan](../superpowers/plans/2026-10-16-a740-zones-on-device.md).
 
-2026-10-24 (A797 slice 4): a handheld has the same choice, under ☰ → Zones on this device. It
-narrows the handheld's Floor, which keeps every chosen zone, counter zones included, and blocks
-work on a hidden zone's tables there as on a till. A handheld opens on its "Opens first" zone only
-once a choice is saved (the zones read's `saved`); its new-order start stays the profile's, from an
-unchanged `GET /api/default-service-zone/offers`. A handheld whose zones read fails at sign-in
-holds no choice and allows every zone until a later read applies one. A live narrowing held back
-by the open table's unsent dishes now says "Send or remove this table's unsent dishes to hide its
-zone." on both device kinds: that table can still send or remove them, but takes no new picks, and
-a table in a zone the device already hides does not hold the narrowing back. Leaving the table
-alone does not let the narrowing apply, because leaving keeps the table's New order on the device
-(found while building). When this device can no longer serve the table's zone (the waiting
-choice's `zones` leave it out, for example because a manager took it off the profile), the table
-cannot send or remove them either: the box refuses a party's draft writes and sends in a zone
-outside the profile (`service_zone.not_allowed`; the draft route cases in
+2026-10-24 (A797 slice 4): a handheld has the same choice, under ☰ → Zones on this device (in ☰'s
+Settings group since slice 3). It narrows the handheld's Floor, which keeps every chosen zone,
+counter zones included, and blocks work on a hidden zone's tables there as on a till. A handheld
+opens on its "Opens first" zone only once a choice is saved (the zones read's `saved`); its
+new-order start stays the profile's, from an unchanged `GET /api/default-service-zone/offers`. A
+handheld whose zones read fails at sign-in holds no choice and allows every zone until a later read
+applies one. A live narrowing held back by the open table's unsent dishes now says "Send or remove
+this table's unsent dishes to hide its zone." on both device kinds: that table can still send or
+remove them, but takes no new picks, and a table in a zone the device already hides does not hold
+the narrowing back. Leaving the table alone does not let the narrowing apply, because leaving keeps
+the table's New order on the device (found while building). When this device can no longer serve the
+table's zone (the waiting choice's `zones` leave it out, for example because a manager took it off
+the profile), the table cannot send or remove them either: the box refuses a party's draft writes
+and sends in a zone outside the profile (`service_zone.not_allowed`; the draft route cases in
 `apps/server/src/till-api.profile-zones.test.ts`). The line, and the zones dialog's refusal of a
 save at that table, say "This device can no longer serve this table's zone. Leave the table to hide
-it.", and leaving the table applies the narrowing (found by review).
-[Build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
+it.", and leaving the table applies the narrowing (found by review). [Build
+plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
 
 
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either
@@ -2716,3 +2717,46 @@ unless a bill comp also stands and the dish's discounts fall at more than one VA
 otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
 (`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
 Owner to confirm both halves.
+
+## A1120. A handheld stays on the table after its last send, so its button shows highlighted without ✎
+
+For A797 slice 10. The design's worked example 1 (§4) and Q51 (b) describe Ana sending everything at
+T9 and staying on it, its bar button highlighted without ✎ until she taps Floor. Today a send that
+empties the New order returns a handheld to the Floor (`#returnToFloor` at the end of the send in
+`apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's ruling of 2026-10-26) because
+what the order screen does after a send is slice 10's, the handheld's order screen at phone width:
+[design](../superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
+
+## A1121. With many table buttons a handheld's Order screen can lose its visible way back to the Floor.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`k-ten-floor-scrolled-390-light-en.png`,
+`k-ten-order-last-390-light-en.png`, `k-ten-order-last-390-dark-es.png`,
+`k-ten-floor-390-light-en.png` and `l-floor-360-light-en.png` in
+`~/waitron-campaign-c/a797-3-shots/`): at 360 and 390 px with ten buttons the strip scrolls
+sideways and Floor scrolls out of sight with the table buttons, and nothing hints that the strip
+scrolls; the last visible button is simply cut at its edge. D14 of the slice's plan kept today's
+scrolling strip. Options to decide: keep Floor fixed at the start of the strip, a fade at the
+cut edge.
+
+## A1122. At 1024 px a handheld's Floor button slides sideways as table buttons appear.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`a-floor-empty-1024-light-en.png`,
+`d-floor-after-dining-1024-light-en.png`, `f-floor-after-terrace-1024-light-en.png` in
+`~/waitron-campaign-c/a797-3-shots/`): the group is centred between the brand and the name, so
+Floor sits at x 388 with no table buttons, 356 with one and 319 with two.
+
+## A1123. At 360×640 a handheld's ☰ popup moves up over the bar and covers ☰ itself.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`l-menu-open-360-light-es.png`,
+`l-menu-open-360-dark-es.png`, `l-menu-open-360-light-en.png` in
+`~/waitron-campaign-c/a797-3-shots/`): to fit whole it starts at y 11. Nothing is lost, and tapping
+outside or Escape closes it. See also "On a short phone the till's More menu is taller than the room
+it gets" in [the backlog](../backlog.md).
+
+## A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace tab.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,
+`l-floor-360-dark-es.png`, `l-floor-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`):
+the tab reads "Terrac". `apps/till/src/screens/till-floor-screen.ts`, which draws the chip, is
+unchanged between `git merge-base origin/main HEAD` and slice 3's tip, so I believe this
+predates the slice (not run on main).
