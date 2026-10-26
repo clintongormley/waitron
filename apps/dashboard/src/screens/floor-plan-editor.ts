@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { SHORT_NAME_MAX, shortNameKey, shortNameLength } from "@waitron/shared";
 import {
   UndoHistory,
   UrlStateController,
@@ -43,10 +44,11 @@ import type {
 import {
   changePlacement,
   checkDraft,
-  type DraftProblem,
+  type DraftCheck,
   deleteTable,
   draftFromPlan,
   joinedTableOf,
+  refusesPlus,
   rekeyDraft,
   rekeyWith,
   restoreTable,
@@ -54,6 +56,7 @@ import {
   saveFromDraft,
   tableName,
   withLiveTables,
+  withSentShortNames,
   type DraftTable,
   type FloorPlanChange,
   type FloorPlanDraft,
@@ -102,7 +105,7 @@ interface EditorMessage {
 }
 
 /** A table field a side panel shows, so a refusal naming it can sit beside it. */
-export type FloorPlanField = "label" | "seats" | "fixed" | "shape" | "parts";
+export type FloorPlanField = "label" | "shortName" | "seats" | "fixed" | "shape" | "parts";
 
 export interface FloorPlanFieldError {
   key: string;
@@ -138,6 +141,7 @@ export interface FloorPlanPanelError {
 
 const SERVER_FIELDS: Record<string, FloorPlanField> = {
   label: "label",
+  shortName: "shortName",
   seats: "seats",
   fixed: "fixed",
   "placement.shape": "shape",
@@ -150,13 +154,55 @@ function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
 }
 
 /** The marked table keeps its mark while it fails at all, even when `checkDraft` blames another. */
-function tableProblem(draft: FloorPlanDraft, key: string): DraftProblem | null {
+function tableProblem(draft: FloorPlanDraft, key: string): DraftCheck | null {
   const table = draft.tables.find((t) => t.key === key);
   if (table === undefined) return null;
   const label = table.label.trim();
-  if (label === "") return "label_missing";
-  if (draft.tables.some((t) => t.key !== key && t.label.trim() === label)) return "label_repeated";
-  return table.parts !== null && table.parts.length < 2 ? "parts_too_few" : null;
+  if (label === "") return { key, problem: "label_missing" };
+  if (draft.tables.some((t) => t.key !== key && t.label.trim() === label))
+    return { key, problem: "label_repeated" };
+  const shortName = table.shortName.trim();
+  if (shortName === "") return { key, problem: "short_name_missing" };
+  if (shortNameLength(shortName) > SHORT_NAME_MAX) return { key, problem: "short_name_too_long" };
+  if (refusesPlus(table, shortName)) return { key, problem: "short_name_plus" };
+  const holder = draft.tables.find(
+    (t) => t.key !== key && shortNameKey(t.shortName.trim()) === shortNameKey(shortName),
+  );
+  if (holder !== undefined)
+    return { key, problem: "short_name_repeated", takenBy: tableName(holder), shortName };
+  return table.parts !== null && table.parts.length < 2 ? { key, problem: "parts_too_few" } : null;
+}
+
+const CHECK_FIELDS: Record<DraftCheck["problem"], FloorPlanField> = {
+  label_missing: "label",
+  label_repeated: "label",
+  short_name_missing: "shortName",
+  short_name_too_long: "shortName",
+  short_name_plus: "shortName",
+  short_name_repeated: "shortName",
+  parts_too_few: "parts",
+};
+
+function checkText(check: DraftCheck): string {
+  switch (check.problem) {
+    case "label_missing":
+      return t("floor_plan_editor.name_missing");
+    case "label_repeated":
+      return codeMessage("table.label_taken");
+    case "short_name_missing":
+      return t("floor_plan_editor.short_name_missing");
+    case "short_name_too_long":
+      return t("floor_plan_editor.short_name_too_long");
+    case "short_name_plus":
+      return t("floor_plan_editor.short_name_plus");
+    case "short_name_repeated":
+      return fill("floor_plan_editor.short_name_taken", {
+        takenBy: check.takenBy!,
+        shortName: check.shortName!,
+      });
+    case "parts_too_few":
+      return t("floor_plan_editor.parts_too_few");
+  }
 }
 
 const actionMessage = (text: () => string): EditorMessage => ({ text, from: "action" });
@@ -167,17 +213,24 @@ interface RefusedTable {
   reason: () => string;
 }
 
-/** The server stores labels trimmed; tables sent with a padded label take the trimmed one. */
+/** The server stores labels and short names trimmed; a table sent with either padded takes the
+ *  trimmed one, while it still holds what was sent. */
 function trimLabels(draft: FloorPlanDraft, sent: FloorPlanDraft = draft): FloorPlanDraft {
   const padded = new Map(
-    sent.tables.flatMap((t) => (t.label === t.label.trim() ? [] : [[t.key, t.label] as const])),
+    sent.tables.flatMap((t) =>
+      t.label === t.label.trim() && t.shortName === t.shortName.trim() ? [] : [[t.key, t] as const],
+    ),
   );
   if (padded.size === 0) return draft;
   return {
     ...draft,
-    tables: draft.tables.map((t) =>
-      padded.get(t.key) === t.label ? { ...t, label: t.label.trim() } : t,
-    ),
+    tables: draft.tables.map((t) => {
+      const was = padded.get(t.key);
+      if (was === undefined) return t;
+      const label = was.label === t.label ? t.label.trim() : t.label;
+      const shortName = was.shortName === t.shortName ? t.shortName.trim() : t.shortName;
+      return label === t.label && shortName === t.shortName ? t : { ...t, label, shortName };
+    }),
   };
 }
 
@@ -279,7 +332,7 @@ export class FloorPlanEditor extends LitElement {
       }
       .table-slot {
         /* Keep the list still across plain, joined and empty selections; errors scroll inside. */
-        block-size: calc(3 * var(--wt-field-height) + 4 * var(--wt-space-3));
+        block-size: calc(4 * var(--wt-field-height) + 5 * var(--wt-space-3));
         overflow-y: auto;
         flex: none;
       }
@@ -720,16 +773,11 @@ export class FloorPlanEditor extends LitElement {
     return true;
   }
 
-  #markProblem(problem: NonNullable<ReturnType<typeof checkDraft>>): void {
+  #markProblem(problem: DraftCheck): void {
     this.#setMark({
       key: problem.key,
-      field: problem.problem === "parts_too_few" ? "parts" : "label",
-      text: () =>
-        problem.problem === "label_missing"
-          ? t("floor_plan_editor.name_missing")
-          : problem.problem === "parts_too_few"
-            ? t("floor_plan_editor.parts_too_few")
-            : codeMessage("table.label_taken"),
+      field: CHECK_FIELDS[problem.problem],
+      text: () => checkText(problem),
       from: "check",
     });
   }
@@ -759,7 +807,7 @@ export class FloorPlanEditor extends LitElement {
     if (mark === null) return;
     if (mark.from === "check") {
       const own = tableProblem(next, mark.key);
-      if (own !== null) this.#markProblem({ key: mark.key, problem: own });
+      if (own !== null) this.#markProblem(own);
       else if (this.#markCheck(next)) this.#selectFlagged(this.mark!.key);
       else this.#clearMark();
       return;
@@ -771,15 +819,24 @@ export class FloorPlanEditor extends LitElement {
   }
 
   #placeRefusal(code: string, params: Record<string, unknown>, body: FloorPlanSave): void {
-    const takenBy = code === "table.label_taken" ? params.takenBy : undefined;
-    const own =
-      typeof takenBy === "string"
-        ? () => fill("floor_plan_editor.label_shown_as_short_name", { takenBy })
-        : () => codeMessage(code);
+    const { shortName, takenBy } = params;
+    const shortNameTaken =
+      code === "table.short_name_taken" &&
+      typeof shortName === "string" &&
+      typeof takenBy === "string";
+    const own = shortNameTaken
+      ? () => fill("floor_plan_editor.short_name_taken", { takenBy, shortName })
+      : () => codeMessage(code);
     const draft = this.draft!;
     let key: string | undefined;
     let serverField: string | undefined;
-    if (code === "table.label_taken" && typeof params.label === "string") {
+    if (shortNameTaken) {
+      const sentKey = body.tables.find(
+        (t) => shortNameKey(t.shortName) === shortNameKey(shortName),
+      )?.key;
+      key = draft.tables.find((t) => t.key === sentKey)?.key;
+      serverField = "shortName";
+    } else if (code === "table.label_taken" && typeof params.label === "string") {
       const label = params.label;
       key = draft.tables.find((t) => t.label.trim() === label)?.key;
       serverField = "label";
@@ -854,8 +911,8 @@ export class FloorPlanEditor extends LitElement {
     this.saving = false;
     if (request !== this.#request) return;
     const { ids } = answer;
-    const saved = rekeyDraft(sentDraft, ids);
-    const current = rekeyDraft(trimLabels(this.draft!, draft), ids);
+    const saved = rekeyDraft(withSentShortNames(sentDraft, sentDraft), ids);
+    const current = rekeyDraft(withSentShortNames(trimLabels(this.draft!, draft), sentDraft), ids);
     const rekey = rekeyWith(ids);
     this.#rekeyMarks(rekey);
     this.#places = new Map([...this.#places].map(([key, place]) => [rekey(key), place]));

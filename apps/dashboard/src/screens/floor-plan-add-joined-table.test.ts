@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { ComboboxOption, WtButton, WtFormActions, WtModal } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
@@ -25,6 +26,7 @@ const table = (key: string, label: string, seats: number | null, more: Partial<D
     id: key,
     liveTableId: null,
     label,
+    shortName: proposeShortName(label),
     seats,
     fixed: false,
     placement: null,
@@ -177,7 +179,55 @@ it("marks Name, Seats and Made of required", async () => {
 it("names every field", async () => {
   const el = await openAdd();
   const names = [...dialog(el).querySelectorAll("[name]")].map((f) => f.getAttribute("name"));
-  expect(names).toEqual(["table-name", "seats", "made-of"]);
+  expect(names).toEqual(["table-name", "short-name", "seats", "made-of"]);
+});
+
+it("marks Short name required, with its hint as placeholder", async () => {
+  const el = await openAdd();
+  const short = field(el, "short-name") as ReturnType<typeof field> & { placeholder: string };
+  expect(short.hasAttribute("required")).toBe(true);
+  expect(short.label).toBe("Short name");
+  expect(short.placeholder).toBe("Shown where space is tight");
+});
+
+it("Short name follows the name until typed", async () => {
+  const el = await openAdd();
+  await set(el, "table-name", "Long table");
+  expect(field(el, "short-name").value).toBe("LT");
+  await set(el, "short-name", "Lng");
+  await set(el, "table-name", "Long table 2");
+  expect(field(el, "short-name").value).toBe("Lng");
+});
+
+it("adds the joined table with its short name", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await set(el, "table-name", "Long table");
+  await set(el, "short-name", "LT9");
+  await set(el, "seats", "10");
+  await choose(el, ["c3", "c4"]);
+  await pressAdd(el);
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.tables.find((t) => t.key === "new:1")!.shortName).toBe("LT9");
+});
+
+it("refuses a blank, a too long and a repeated short name beside the field", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await set(el, "table-name", "Long table");
+  await set(el, "seats", "10");
+  await choose(el, ["c3", "c4"]);
+  await set(el, "short-name", "");
+  await pressAdd(el);
+  expect(field(el, "short-name").error).toBe("Enter a short name.");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  await set(el, "short-name", "ABCDEF");
+  expect(field(el, "short-name").error).toBe("Enter up to 5 characters.");
+  await set(el, "short-name", "c3");
+  expect(field(el, "short-name").error).toBe("Counter 3 already uses c3");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  await pressAdd(el);
+  expect(changes).toEqual([]);
 });
 
 it("after a change, Save with fields missing explains each field and keeps Save disabled until fixed", async () => {
@@ -255,6 +305,7 @@ it("adds Long table, 10 seats, made of Counter 3, 4 and 5, at the first free spo
       id: null,
       liveTableId: null,
       label: "Long table",
+      shortName: "LT",
       seats: 10,
       fixed: false,
       placement: { x: 11, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
@@ -375,4 +426,17 @@ it("A747 reopening after a manually edited add suggests totals again", async () 
   await el.updateComplete;
   await choose(el, ["c3", "c4"]);
   expect(field(el, "seats").value).toBe("8");
+});
+
+it("refuses a short name holding + beside the field", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await set(el, "table-name", "Long table");
+  await set(el, "seats", "10");
+  await choose(el, ["c3", "c4"]);
+  await set(el, "short-name", "A+B");
+  await pressAdd(el);
+  expect(field(el, "short-name").error).toBe("Leave out +: it marks joined tables.");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  expect(changes).toEqual([]);
 });

@@ -46,6 +46,7 @@ function plan(): FloorPlan {
         id: "m1",
         liveTableId: "l1",
         label: "T1",
+        shortName: null,
         seats: 4,
         fixed: false,
         placement,
@@ -56,6 +57,7 @@ function plan(): FloorPlan {
         id: "m2",
         liveTableId: "l2",
         label: "T2",
+        shortName: null,
         seats: 2,
         fixed: true,
         placement: null,
@@ -66,6 +68,7 @@ function plan(): FloorPlan {
         id: "m9",
         liveTableId: "l9",
         label: "T9",
+        shortName: null,
         seats: null,
         fixed: false,
         placement: null,
@@ -157,24 +160,6 @@ it("a taken name selects its table and shows the generic sentence", async () => 
   expect(button(el, "save").disabled).toBe(false);
 });
 
-it("a name another table uses as its short name says which table, in English and Spanish", async () => {
-  const shown = { code: "table.label_taken", params: { label: "P1", takenBy: "Terrace 1" } };
-  const el = await open(refusing(shown));
-  await change(el, renamed(opened(), "m2", "P1"));
-  await press(el, "save");
-  expect(canvas(el).selected).toBe("m2");
-  expect(el.fieldError).toEqual({
-    key: "m2",
-    field: "label",
-    message: "Terrace 1 already uses that as its short name. Choose another name for this table.",
-  });
-  setLocale("es-ES");
-  await el.updateComplete;
-  expect(el.fieldError?.message).toBe(
-    es["floor_plan_editor.label_shown_as_short_name"].replace("{takenBy}", "Terrace 1"),
-  );
-});
-
 it("a taken name no draft table carries shows the code's own sentence and selects nothing", async () => {
   const el = await open(refusing({ code: "table.label_taken", params: { label: "Bar 3" } }));
   await change(el, renamed(opened(), "m2", "Patio 1"));
@@ -182,6 +167,137 @@ it("a taken name no draft table carries shows the code's own sentence and select
   expect(canvas(el).selected).toBeNull();
   expect(el.fieldError).toBeNull();
   expect(message(el)).toBe("A table with that name already exists");
+});
+
+const filled = (template: string, values: Record<string, string>) =>
+  Object.entries(values).reduce(
+    (text, [name, value]) => text.replace(`{${name}}`, value),
+    template,
+  );
+const shortNameTaken = (shortName: string, takenBy: string) => ({
+  code: "table.short_name_taken",
+  params: { shortName, takenBy, field: "shortName" },
+});
+
+it("a blank short name is marked at Save and holds Save until filled", async () => {
+  const el = await open(stubApi());
+  const moved = changePlacement(opened(), "m1", { x: 5, y: 4 });
+  await change(el, patchTable(moved, "m2", { shortName: "" }));
+  await press(el, "save");
+  expect(el.fieldError).toEqual({ key: "m2", field: "shortName", message: "Enter a short name." });
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(true);
+  await change(el, patchTable(moved, "m2", { shortName: "T2" }));
+  expect(el.fieldError).toBeNull();
+  expect(button(el, "save").disabled).toBe(false);
+});
+
+it("a marked short name keeps its mark through each of its problems while an earlier table fails too", async () => {
+  const el = await open(stubApi());
+  const blankFirst = patchTable(opened(), "m1", { shortName: "" });
+  await change(el, patchTable(opened(), "m2", { shortName: "" }));
+  await press(el, "save");
+  expect(el.fieldError?.key).toBe("m2");
+  await change(el, patchTable(blankFirst, "m2", { shortName: "" }));
+  expect(el.fieldError).toEqual({ key: "m2", field: "shortName", message: "Enter a short name." });
+  await change(el, patchTable(blankFirst, "m2", { shortName: "e\u0301".repeat(6) }));
+  expect(el.fieldError?.message).toBe("Enter up to 5 characters.");
+  await change(el, patchTable(blankFirst, "m2", { shortName: "t9" }));
+  expect(el.fieldError).toEqual({ key: "m2", field: "shortName", message: "T9 already uses t9" });
+  await change(el, patchTable(blankFirst, "m2", { shortName: "W2" }));
+  expect(el.fieldError).toEqual({ key: "m1", field: "shortName", message: "Enter a short name." });
+});
+
+it("two tables sharing a short name: the later is marked with the earlier's name", async () => {
+  const el = await open(stubApi());
+  await change(el, patchTable(opened(), "m2", { shortName: "t1" }));
+  await press(el, "save");
+  expect(el.fieldError).toEqual({ key: "m2", field: "shortName", message: "T1 already uses t1" });
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(el.fieldError?.message).toBe(
+    filled(es["floor_plan_editor.short_name_taken"], { takenBy: "T1", shortName: "t1" }),
+  );
+});
+
+it("a taken short name lands under the table that sent it, naming the table holding it", async () => {
+  const saveFloorPlan = vi.fn().mockRejectedValue(shortNameTaken("t9", "Terrace 9"));
+  const el = await open(stubApi({ saveFloorPlan }));
+  await change(el, patchTable(opened(), "m9", { shortName: "t9" }));
+  await press(el, "save");
+  expect(
+    saveFloorPlan.mock.calls[0]![2].tables.find((t: { key: string }) => t.key === "m9").shortName,
+  ).toBe("t9");
+  expect(canvas(el).selected).toBe("m9");
+  expect(el.fieldError).toEqual({
+    key: "m9",
+    field: "shortName",
+    message: "Terrace 9 already uses t9",
+  });
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(false);
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(el.fieldError?.message).toBe(
+    filled(es["floor_plan_editor.short_name_taken"], { takenBy: "Terrace 9", shortName: "t9" }),
+  );
+});
+
+it("a stored table with no short name sends its proposal, and a refusal of it lands under its field", async () => {
+  const withTable3 = (): FloorPlan => ({
+    ...plan(),
+    tables: [
+      ...plan().tables,
+      {
+        id: "m3",
+        liveTableId: "l3",
+        label: "Table 3",
+        shortName: null,
+        seats: 4,
+        fixed: false,
+        placement: null,
+        partIds: [],
+        keptSize: null,
+      },
+    ],
+  });
+  const saveFloorPlan = vi.fn().mockRejectedValue(shortNameTaken("T3", "Terrace 3"));
+  const el = await open(
+    stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withTable3()), saveFloorPlan }),
+  );
+  await change(el, changePlacement(draftFromPlan(withTable3()), "m1", { x: 5, y: 4 }));
+  await press(el, "save");
+  expect(
+    saveFloorPlan.mock.calls[0]![2].tables.find((t: { key: string }) => t.key === "m3").shortName,
+  ).toBe("T3");
+  expect(canvas(el).selected).toBe("m3");
+  expect(el.fieldError).toEqual({
+    key: "m3",
+    field: "shortName",
+    message: "Terrace 3 already uses T3",
+  });
+  expect(button(el, "save").disabled).toBe(false);
+});
+
+it("a taken short name no sent table carries goes in the bottom message and selects nothing", async () => {
+  const el = await open(refusing(shortNameTaken("Q7", "Terrace 7")));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
+  await press(el, "save");
+  expect(canvas(el).selected).toBeNull();
+  expect(el.fieldError).toBeNull();
+  expect(message(el)).toBe("Terrace 7 already uses Q7");
+});
+
+it("an invalid short name the server names is marked under the field", async () => {
+  const el = await open(refusing(invalid("tables.0.shortName")));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m1");
+  expect(el.fieldError).toEqual({
+    key: "m1",
+    field: "shortName",
+    message: "Check the floor plan's tables and try again",
+  });
 });
 
 it("an invalid field selects the table that was sent at its index", async () => {
@@ -578,6 +694,7 @@ function joinedPlan(): FloorPlan {
     id,
     liveTableId: `l${id}`,
     label,
+    shortName: null,
     seats,
     fixed: false,
     placement: null,
@@ -594,6 +711,7 @@ function joinedPlan(): FloorPlan {
         id: "long",
         liveTableId: "llong",
         label: "Long table",
+        shortName: null,
         seats: 10,
         fixed: false,
         placement,
@@ -1094,6 +1212,7 @@ it("a table saved new while other edits were made comes back when its delete is 
         id: "m9",
         liveTableId: "l9",
         label: "T9",
+        shortName: null,
         seats: null,
         fixed: false,
         placement: null,
@@ -1104,6 +1223,7 @@ it("a table saved new while other edits were made comes back when its delete is 
         id: "m5",
         liveTableId: "l5",
         label: "T5",
+        shortName: null,
         seats: 2,
         fixed: false,
         placement: t5,
@@ -1250,4 +1370,32 @@ it("a server refusal of Long table's parts shows under its Made of", async () =>
   expect(tablePanel(el).tableKey).toBe("long");
   expect(panelField(el, "made-of").error).toBe("Check the floor plan's tables and try again");
   expect(panelField(el, "seats").error).toBe("");
+});
+
+it("a table named 1+2 stored with no short name shows its proposal 1+2, refused at Save until another is typed", async () => {
+  await wide();
+  const joinedName = (): FloorPlan => ({
+    ...plan(),
+    tables: plan().tables.map((t) => (t.id === "m1" ? { ...t, label: "1+2" } : t)),
+  });
+  const api = stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedName()) });
+  const el = await open(api);
+  await change(el, changePlacement(draftFromPlan(joinedName()), "m1", { x: 5, y: 4 }));
+  await select(el, "m1");
+  expect(panelField(el, "short-name").value).toBe("1+2");
+  await press(el, "save");
+  expect(api.saveFloorPlan).not.toHaveBeenCalled();
+  expect(el.fieldError).toEqual({
+    key: "m1",
+    field: "shortName",
+    message: "Leave out +: it marks joined tables.",
+  });
+  expect(panelField(el, "short-name").error).toBe("Leave out +: it marks joined tables.");
+  await typeIntoPanel(el, "short-name", "12");
+  await press(el, "save");
+  expect(
+    vi
+      .mocked(api.saveFloorPlan)
+      .mock.calls[0]![2].tables.find((t: { key: string }) => t.key === "m1")!.shortName,
+  ).toBe("12");
 });

@@ -694,6 +694,8 @@ export interface FloorPlan {
     id: string;
     liveTableId: string | null;
     label: string;
+    /** null for a table with none. */
+    shortName: string | null;
     seats: number | null;
     fixed: boolean;
     placement: PlanPlacement | null;
@@ -715,6 +717,7 @@ export interface FloorPlanSave {
     id?: string;
     key: string;
     label: string;
+    shortName: string;
     seats: number | null;
     fixed: boolean;
     placement: PlanPlacement | null;

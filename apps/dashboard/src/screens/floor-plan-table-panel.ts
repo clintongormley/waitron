@@ -15,6 +15,7 @@ import {
   MAX_SEATS,
   freeTables,
   patchTable,
+  renameTable,
   seatCount,
   sendChange,
   setParts,
@@ -238,7 +239,21 @@ export class FloorPlanTablePanel extends LitElement {
         .value=${table.label}
         .error=${this.#error("label")}
         @wt-change=${(e: CustomEvent<{ value: string }>) =>
-          this.#patch({ label: value(e) }, `label:${this.tableKey}`)}
+          sendChange(
+            this,
+            renameTable(this.draft, this.tableKey, value(e)),
+            `label:${this.tableKey}`,
+          )}
+      ></wt-input>
+      <wt-input
+        name="short-name"
+        required
+        label=${t("floor_plan_editor.short_name")}
+        placeholder=${t("floor_plan_editor.short_name_hint")}
+        .value=${table.shortName}
+        .error=${this.#error("shortName")}
+        @wt-change=${(e: CustomEvent<{ value: string }>) =>
+          this.#patch({ shortName: value(e) }, `shortName:${this.tableKey}`)}
       ></wt-input>
       <div class="pair">
         <wt-number-stepper

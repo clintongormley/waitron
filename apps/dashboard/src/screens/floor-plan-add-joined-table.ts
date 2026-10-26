@@ -11,21 +11,24 @@ import {
   type LeaveReason,
   type WtModal,
 } from "@waitron/ui";
+import { SHORT_NAME_MAX, shortNameKey, shortNameLength } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { wholeWithin } from "../widgets/form-fields.js";
 import {
   MAX_SEATS,
   addJoinedTable,
+  followName,
   freeTables,
   placeTable,
+  refusesPlus,
   seatCount,
   sendChange,
   tableName,
@@ -35,12 +38,14 @@ import {
 
 interface JoinedForm {
   name: string;
+  shortName: string;
   seats: string;
   parts: string[];
 }
 
 interface JoinedErrors {
   name: string;
+  shortName: string;
   seats: string;
   parts: string;
 }
@@ -50,6 +55,7 @@ const copyForm = (form: JoinedForm): JoinedForm => ({ ...form, parts: [...form.p
 function sameForm(a: JoinedForm, b: JoinedForm): boolean {
   return (
     a.name === b.name &&
+    a.shortName === b.shortName &&
     a.seats === b.seats &&
     a.parts.length === b.parts.length &&
     a.parts.every((key) => b.parts.includes(key))
@@ -117,7 +123,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     this.checked = false;
     this.noRoom = false;
     this.#seatsEdited = false;
-    this.form = { name: "", seats: "", parts: [] };
+    this.form = { name: "", shortName: "", seats: "", parts: [] };
   }
 
   #close(): void {
@@ -144,7 +150,11 @@ export class FloorPlanAddJoinedTable extends LitElement {
     if (this.form === null) return;
     this.noRoom = false;
     if (patch.seats !== undefined) this.#seatsEdited = true;
-    this.form = { ...this.form, ...patch };
+    const shortName =
+      patch.name !== undefined && patch.shortName === undefined
+        ? followName(this.form.shortName, this.form.name, patch.name)
+        : (patch.shortName ?? this.form.shortName);
+    this.form = { ...this.form, ...patch, shortName };
     if (patch.parts !== undefined && !this.#seatsEdited) {
       const counts = this.#parts(this.form).map(
         (key) => this.draft.tables.find((table) => table.key === key)!.seats,
@@ -181,6 +191,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
           : used.has(label)
             ? codeMessage("table.label_taken")
             : "",
+      shortName: this.#shortNameError(form.shortName.trim()),
       seats:
         wholeWithin(form.seats, 1, MAX_SEATS) === null
           ? t("floor_plan_editor.joined_seats_invalid")
@@ -189,8 +200,23 @@ export class FloorPlanAddJoinedTable extends LitElement {
     };
   }
 
+  #shortNameError(shortName: string): string {
+    if (shortName === "") return t("floor_plan_editor.short_name_missing");
+    if (shortNameLength(shortName) > SHORT_NAME_MAX)
+      return t("floor_plan_editor.short_name_too_long");
+    if (refusesPlus(undefined, shortName)) return t("floor_plan_editor.short_name_plus");
+    const holder = this.draft.tables.find(
+      (table) => shortNameKey(table.shortName.trim()) === shortNameKey(shortName),
+    );
+    return holder === undefined
+      ? ""
+      : fill("floor_plan_editor.short_name_taken", { takenBy: tableName(holder), shortName });
+  }
+
   #failing(errors: JoinedErrors): boolean {
-    return errors.name !== "" || errors.seats !== "" || errors.parts !== "";
+    return (
+      errors.name !== "" || errors.shortName !== "" || errors.seats !== "" || errors.parts !== ""
+    );
   }
 
   #add(): void {
@@ -209,6 +235,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
       this.draft,
       {
         label: form.name.trim(),
+        shortName: form.shortName.trim(),
         seats: wholeWithin(form.seats, 1, MAX_SEATS),
         parts: this.#parts(form),
       },
@@ -266,6 +293,16 @@ export class FloorPlanAddJoinedTable extends LitElement {
                 .value=${form.name}
                 .error=${shown?.name ?? ""}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#edit({ name: value(e) })}
+              ></wt-input>
+              <wt-input
+                name="short-name"
+                required
+                label=${t("floor_plan_editor.short_name")}
+                placeholder=${t("floor_plan_editor.short_name_hint")}
+                .value=${form.shortName}
+                .error=${shown?.shortName ?? ""}
+                @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                  this.#edit({ shortName: value(e) })}
               ></wt-input>
               <wt-number-stepper
                 name="seats"

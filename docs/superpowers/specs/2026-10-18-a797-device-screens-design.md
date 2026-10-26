@@ -387,6 +387,8 @@ Every table gets a **short name** beside its full name (owner, Q42 (a), ~21:12).
   ("t1" is "T1"), and enforced by the database (§5).
   (2026-10-25, slice 1: until slice 2's field, a proposal another table holds leaves the table
   with none; see §5 and the build plan's slice 1, D4.)
+  (2026-10-26, slice 2: Save stays enabled after the refusal, following the Forms rule, where
+  picture 09 draws it disabled; see the build plan's slice 2, D6.)
 - **Where it shows:** tight places show the short name — the handheld's bar buttons, the Ready bar,
   kitchen-screen cards and pass cards. The table's own header and receipts show the full name.
 - **Where it is edited:** the floor-plan editor's table panel (its Name field,

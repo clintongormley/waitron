@@ -5655,14 +5655,18 @@ table is selected, so selecting or clearing a table does not move the list. That
 empty without a selection. There is no subtitle, selection hint or colour key. Add buttons sit
 side by side where they fit and wrap otherwise.
 
-The form holds Name, then Seats, Shape and Moveable in one row of equal-height boxes. Seats is
-the narrower box. Shape shows the current Rectangle or Round icon in one button; pressing it
+The form holds Name, then Short name, then Seats, Shape and Moveable in one row of equal-height
+boxes. Short name follows Name until it is typed, and its hint is its placeholder. Seats is the
+narrower box. Shape shows the current Rectangle or Round icon in one button; pressing it
 switches to the other shape. It has a visible Shape caption and no tooltip. Moveable is on for a
 table that is not fixed. A joined table also has a required Made of picker below that row, offering
 plain tables off the plan and in no other joined table; its required Seats takes 1 to 999. The
 reserved form area scrolls when its content needs more room. Add tables uses the same Moveable
-switch, on by default. Size and turn are set on the plan. A refusal naming a field selects the
-table and shows its own sentence beside that field.
+switch, on by default. Add tables shows the short names it will give on a second preview line,
+and refuses beside Prefix one the draft already holds or one containing "+"; with custom names it
+puts a Short name beside each Name, stacked under it when the dialog's column of fields is narrower than 480 px. Size and turn are set
+on the plan. A refusal naming a field selects the table and shows its own sentence beside that
+field.
 
 The list names tables in number order under Name, Seats and Made of heads; an unset seat count
 reads “—”. A joined table's Made of names its parts in number order, shortening a shared beginning

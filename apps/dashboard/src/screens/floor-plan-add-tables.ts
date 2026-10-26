@@ -11,6 +11,7 @@ import {
   type LeaveReason,
   type WtModal,
 } from "@waitron/ui";
+import { SHORT_NAME_MAX, proposeShortName, shortNameKey, shortNameLength } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -22,7 +23,15 @@ import { fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { wholeWithin } from "../widgets/form-fields.js";
-import { MAX_SEATS, addTables, sendChange, type FloorPlanDraft } from "./floor-plan-draft.js";
+import {
+  MAX_SEATS,
+  addTables,
+  followName,
+  refusesPlus,
+  sendChange,
+  tableName,
+  type FloorPlanDraft,
+} from "./floor-plan-draft.js";
 
 const MAX_TABLES = 100;
 
@@ -33,16 +42,23 @@ interface AddForm {
   prefix: string;
   /** One per table of the last valid count, so a count typed through a blank keeps the names. */
   names: string[];
+  shortNames: string[];
   fixed: boolean;
 }
 
 interface AddErrors {
   count: string;
   seats: string;
+  prefix: string;
   names: string[];
+  shortNames: string[];
 }
 
-const copyForm = (form: AddForm): AddForm => ({ ...form, names: [...form.names] });
+const copyForm = (form: AddForm): AddForm => ({
+  ...form,
+  names: [...form.names],
+  shortNames: [...form.shortNames],
+});
 
 function sameForm(a: AddForm, b: AddForm): boolean {
   return (
@@ -52,7 +68,9 @@ function sameForm(a: AddForm, b: AddForm): boolean {
     a.prefix === b.prefix &&
     a.fixed === b.fixed &&
     a.names.length === b.names.length &&
-    a.names.every((name, i) => name === b.names[i])
+    a.names.every((name, i) => name === b.names[i]) &&
+    a.shortNames.length === b.shortNames.length &&
+    a.shortNames.every((shortName, i) => shortName === b.shortNames[i])
   );
 }
 
@@ -70,6 +88,20 @@ export class FloorPlanAddTables extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+        container-type: inline-size;
+      }
+      .name-row {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        align-items: start;
+        gap: var(--wt-space-2);
+        max-width: var(--wt-field-max-width);
+      }
+      /* Below this width the Short name column is too narrow for its Spanish label. */
+      @container (width < 480px) {
+        .name-row {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
       .preview {
         margin: 0;
@@ -127,6 +159,7 @@ export class FloorPlanAddTables extends LitElement {
       naming: "automatic",
       prefix: this.zoneName,
       names: [""],
+      shortNames: [""],
       fixed: false,
     };
   }
@@ -154,9 +187,15 @@ export class FloorPlanAddTables extends LitElement {
     const form = this.addForm;
     if (form === null) return;
     const next = { ...form, ...patch };
+    if (patch.names !== undefined && patch.shortNames === undefined) {
+      next.shortNames = patch.names.map((name, i) =>
+        followName(form.shortNames[i] ?? "", form.names[i] ?? "", name),
+      );
+    }
     const count = wholeWithin(next.count, 1, MAX_TABLES);
     if (count !== null && count !== next.names.length) {
       next.names = Array.from({ length: count }, (_, i) => next.names[i] ?? "");
+      next.shortNames = Array.from({ length: count }, (_, i) => next.shortNames[i] ?? "");
     }
     this.addForm = next;
     this.#addScope?.changed();
@@ -176,8 +215,31 @@ export class FloorPlanAddTables extends LitElement {
     const errors: AddErrors = {
       count: count === null ? t("floor_plan_editor.count_invalid") : "",
       seats: seatsValid ? "" : t("floor_plan_editor.seats_invalid"),
+      prefix: "",
       names: form.names.map(() => ""),
+      shortNames: form.names.map(() => ""),
     };
+    const holders = new Map<string, string>();
+    for (const table of this.draft.tables) {
+      const key = shortNameKey(table.shortName.trim());
+      if (key !== "" && !holders.has(key)) holders.set(key, tableName(table));
+    }
+    const taken = (shortName: string): string => {
+      const takenBy = holders.get(shortNameKey(shortName));
+      return takenBy === undefined
+        ? ""
+        : fill("floor_plan_editor.short_name_taken", { takenBy, shortName });
+    };
+    if (form.naming === "automatic" && count !== null) {
+      for (const label of this.#automatic(form, count)) {
+        const shortName = proposeShortName(label);
+        errors.prefix = refusesPlus(undefined, shortName)
+          ? t("floor_plan_editor.short_name_plus")
+          : taken(shortName);
+        if (errors.prefix !== "") break;
+        holders.set(shortNameKey(shortName), label);
+      }
+    }
     if (form.naming === "custom" && count !== null) {
       const used = this.#used();
       errors.names = form.names.map((name) => {
@@ -187,12 +249,30 @@ export class FloorPlanAddTables extends LitElement {
         used.add(label);
         return "";
       });
+      errors.shortNames = form.shortNames.map((typed, i) => {
+        const shortName = typed.trim();
+        if (shortName === "") return t("floor_plan_editor.short_name_missing");
+        if (shortNameLength(shortName) > SHORT_NAME_MAX)
+          return t("floor_plan_editor.short_name_too_long");
+        if (refusesPlus(undefined, shortName)) return t("floor_plan_editor.short_name_plus");
+        const problem = taken(shortName);
+        if (problem === "") {
+          holders.set(shortNameKey(shortName), tableName({ label: form.names[i] ?? "" }));
+        }
+        return problem;
+      });
     }
     return errors;
   }
 
   #failing(errors: AddErrors): boolean {
-    return errors.count !== "" || errors.seats !== "" || errors.names.some((e) => e !== "");
+    return (
+      errors.count !== "" ||
+      errors.seats !== "" ||
+      errors.prefix !== "" ||
+      errors.names.some((e) => e !== "") ||
+      errors.shortNames.some((e) => e !== "")
+    );
   }
 
   #add(): void {
@@ -207,29 +287,36 @@ export class FloorPlanAddTables extends LitElement {
       return;
     }
     const count = wholeWithin(form.count, 1, MAX_TABLES)!;
-    const labels =
-      form.naming === "custom"
-        ? form.names.map((name) => name.trim())
-        : this.#automatic(form, count);
     const seats = form.seats.trim() === "" ? null : wholeWithin(form.seats, 0, MAX_SEATS);
-    const draft = addTables(
-      this.draft,
-      labels.map((label) => ({ label, seats, fixed: form.fixed })),
-      this.nextKey,
-    );
+    const tables =
+      form.naming === "custom"
+        ? form.names.map((name, i) => ({
+            label: name.trim(),
+            shortName: form.shortNames[i]!.trim(),
+            seats,
+            fixed: form.fixed,
+          }))
+        : this.#automatic(form, count).map((label) => ({ label, seats, fixed: form.fixed }));
+    const draft = addTables(this.draft, tables, this.nextKey);
     sendChange(this, draft);
     this.#addScope?.commit(copyForm(form));
     this.#modal()?.closeAfter("saved");
     this.#closeAdd();
   }
 
-  #hint(form: AddForm): string {
+  #names(form: AddForm, short: boolean): string {
     const count = wholeWithin(form.count, 1, MAX_TABLES);
     if (count === null) return "";
-    const names = this.#automatic(form, count);
-    return count === 1
-      ? names[0]!
-      : fill("floor_plan_editor.name_range", { first: names[0]!, last: names.at(-1)! });
+    const automatic = this.#automatic(form, count);
+    const names = short ? automatic.map(proposeShortName) : automatic;
+    const range =
+      count === 1
+        ? names[0]!
+        : fill(short ? "floor_plan_editor.short_name_range" : "floor_plan_editor.name_range", {
+            first: names[0]!,
+            last: names.at(-1)!,
+          });
+    return short ? fill("floor_plan_editor.short_names_preview", { names: range }) : range;
   }
 
   override render() {
@@ -296,23 +383,43 @@ export class FloorPlanAddTables extends LitElement {
                         name="prefix"
                         label=${t("floor_plan_editor.prefix")}
                         .value=${form.prefix}
+                        .error=${shown?.prefix ?? ""}
                         @wt-change=${(e: CustomEvent<{ value: string }>) =>
                           this.#edit({ prefix: value(e) })}
                       ></wt-input>
-                      <p class="preview" data-preview aria-live="polite">${this.#hint(form)}</p>`
+                      <p class="preview" data-preview aria-live="polite">
+                        ${this.#names(form, false)}
+                      </p>
+                      <p class="preview" data-short-preview aria-live="polite">
+                        ${this.#names(form, true)}
+                      </p>`
                   : form.names.map(
                       (name, i) =>
-                        html`<wt-input
-                          name="table-name"
-                          required
-                          label=${fill("floor_plan_editor.name_n", { n: String(i + 1) })}
-                          .value=${name}
-                          .error=${shown?.names[i] ?? ""}
-                          @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                            this.#edit({
-                              names: form.names.map((n, j) => (j === i ? value(e) : n)),
-                            })}
-                        ></wt-input>`,
+                        html`<div class="name-row">
+                          <wt-input
+                            name="table-name"
+                            required
+                            label=${fill("floor_plan_editor.name_n", { n: String(i + 1) })}
+                            .value=${name}
+                            .error=${shown?.names[i] ?? ""}
+                            @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                              this.#edit({
+                                names: form.names.map((n, j) => (j === i ? value(e) : n)),
+                              })}
+                          ></wt-input>
+                          <wt-input
+                            name="short-name"
+                            required
+                            label=${fill("floor_plan_editor.short_name_n", { n: String(i + 1) })}
+                            placeholder=${t("floor_plan_editor.short_name_hint")}
+                            .value=${form.shortNames[i] ?? ""}
+                            .error=${shown?.shortNames[i] ?? ""}
+                            @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                              this.#edit({
+                                shortNames: form.shortNames.map((n, j) => (j === i ? value(e) : n)),
+                              })}
+                          ></wt-input>
+                        </div>`,
                     )
               }
               <wt-switch

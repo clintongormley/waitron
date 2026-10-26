@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -14,6 +15,7 @@ const table = (key: string, label: string, seats: number): DraftTable => ({
   id: key,
   liveTableId: null,
   label,
+  shortName: proposeShortName(label),
   seats,
   fixed: false,
   placement: null,
@@ -109,6 +111,22 @@ it("a typed name asks before Escape, and Keep keeps it", async () => {
   await expect.poll(async () => (await question(app)).open).toBe(false);
   expect(dialog.open).toBe(true);
   expect(field(dialog, "table-name").value).toBe("Long table");
+  expect(app.changes).toEqual([]);
+});
+
+it("a typed short name asks before Escape, and Keep keeps it", async () => {
+  const { app, panel, dialog } = await fixture();
+  const short = field(dialog, "short-name");
+  await set(panel, short, "LT");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  short.focus();
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+  await choose(app, "keep");
+  await expect.poll(async () => (await question(app)).open).toBe(false);
+  expect(dialog.open).toBe(true);
+  expect(field(dialog, "short-name").value).toBe("LT");
   expect(app.changes).toEqual([]);
 });
 

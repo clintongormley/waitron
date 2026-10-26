@@ -134,6 +134,17 @@ A cleared step comes back when the moment it starts from happens again, such as 
 being served. A step that repeats every few minutes after the last order comes back with each
 repeat: **Done** clears the one on show, and another order starts the count again.
 
+## Give a table a short name {#short-names}
+
+A phone or tablet shows a table's short name in the Ready bar, where space is tight. In the
+dashboard's **Floor plan**, each table has a **Short name** under its **Name**, filled in from the
+name: "T1" for "Terrace 1", "Win" for "Window", and a name of four characters or fewer as it is. It
+follows the name until you type your own, of up to five characters, which cannot contain "+"
+because the till uses it for tables joined together. Two tables of the venue cannot share a short
+name, whatever the capitals: if Save says "Terrace 1 already uses T1", type another, such as "Tb1".
+**Add tables** shows the short names it will give, and lets you type them when you choose custom
+names; **Add joined table** asks for one.
+
 ## See which tables have food ready {#ready-bar}
 
 When the kitchen has dishes ready, you want to know which tables to take them to without going to

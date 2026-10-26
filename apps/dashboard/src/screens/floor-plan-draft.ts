@@ -1,4 +1,10 @@
-import { createLabelComparator } from "@waitron/shared";
+import {
+  SHORT_NAME_MAX,
+  createLabelComparator,
+  proposeShortName,
+  shortNameKey,
+  shortNameLength,
+} from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
@@ -11,6 +17,7 @@ export interface DraftTable {
   id: string | null;
   liveTableId: string | null;
   label: string;
+  shortName: string;
   seats: number | null;
   fixed: boolean;
   placement: PlanPlacement | null;
@@ -18,6 +25,8 @@ export interface DraftTable {
   parts: readonly string[] | null;
   /** Read from the plan and never sent: the server works out a kept size itself. */
   keptSize: { width: number; height: number } | null;
+  /** The plan's stored short name, never sent: a "+" stored before the check is kept untouched. */
+  savedShortName?: string;
 }
 
 export interface FloorPlanDraft {
@@ -52,7 +61,9 @@ export const seatCount = (seats: number) =>
 export const tablesChosen = (count: number) =>
   fill("floor_plan_editor.tables_chosen", { count: String(count) });
 
-type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>;
+type TablePatch = Partial<
+  Pick<DraftTable, "label" | "shortName" | "seats" | "fixed" | "placement">
+>;
 
 export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
   return {
@@ -61,11 +72,13 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       id: t.id,
       liveTableId: t.liveTableId,
       label: t.label,
+      shortName: t.shortName ?? proposeShortName(t.label),
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement === null ? null : { ...t.placement },
       parts: t.partIds.length === 0 ? null : [...t.partIds],
       keptSize: t.keptSize === null ? null : { ...t.keptSize },
+      ...(t.shortName === null ? {} : { savedShortName: t.shortName }),
     })),
   };
 }
@@ -77,6 +90,7 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
       ...(t.id !== null ? { id: t.id } : {}),
       key: t.key,
       label: t.label,
+      shortName: t.shortName.trim(),
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement,
@@ -105,6 +119,17 @@ export function rekeyDraft(
   };
 }
 
+/** After a save: each table the save sent holds, as its stored short name, the one it sent. */
+export function withSentShortNames(draft: FloorPlanDraft, sent: FloorPlanDraft): FloorPlanDraft {
+  const sentNames = new Map(sent.tables.map((t) => [t.key, t.shortName.trim()]));
+  return {
+    tables: draft.tables.map((t) => {
+      const savedShortName = sentNames.get(t.key);
+      return savedShortName === undefined ? t : { ...t, savedShortName };
+    }),
+  };
+}
+
 /** Each table keyed as in `from` takes its live table from there; the same draft when none moves. */
 export function withLiveTables(draft: FloorPlanDraft, from: FloorPlanDraft): FloorPlanDraft {
   const live = new Map(from.tables.map((t) => [t.key, t.liveTableId]));
@@ -129,6 +154,7 @@ function sameTable(a: DraftTable, b: DraftTable): boolean {
     a.id !== b.id ||
     a.liveTableId !== b.liveTableId ||
     a.label !== b.label ||
+    a.shortName !== b.shortName ||
     a.seats !== b.seats ||
     a.fixed !== b.fixed ||
     !sameParts(a.parts, b.parts)
@@ -159,18 +185,61 @@ export function sameDraft(a: FloorPlanDraft, b: FloorPlanDraft): boolean {
   return true;
 }
 
-export type DraftProblem = "label_missing" | "label_repeated" | "parts_too_few";
+export type DraftProblem =
+  | "label_missing"
+  | "label_repeated"
+  | "short_name_missing"
+  | "short_name_too_long"
+  | "short_name_plus"
+  | "short_name_repeated"
+  | "parts_too_few";
 
-export function checkDraft(draft: FloorPlanDraft): { key: string; problem: DraftProblem } | null {
+/** The till joins table names with "+" (`mergeLabel`), so a new one would read as a join. */
+export function refusesPlus(
+  table: Pick<DraftTable, "savedShortName"> | undefined,
+  shortName: string,
+): boolean {
+  return shortName.includes("+") && shortName !== table?.savedShortName;
+}
+
+export interface DraftCheck {
+  key: string;
+  problem: DraftProblem;
+  /** short_name_repeated: the other table's name, and this table's short name. */
+  takenBy?: string;
+  shortName?: string;
+}
+
+export function checkDraft(draft: FloorPlanDraft): DraftCheck | null {
   const seen = new Set<string>();
+  const shortNames = new Map<string, DraftTable>();
   for (const t of draft.tables) {
     const label = t.label.trim();
     if (label === "") return { key: t.key, problem: "label_missing" };
     if (seen.has(label)) return { key: t.key, problem: "label_repeated" };
     seen.add(label);
+    const shortName = t.shortName.trim();
+    if (shortName === "") return { key: t.key, problem: "short_name_missing" };
+    if (shortNameLength(shortName) > SHORT_NAME_MAX)
+      return { key: t.key, problem: "short_name_too_long" };
+    if (refusesPlus(t, shortName)) return { key: t.key, problem: "short_name_plus" };
+    const earlier = shortNames.get(shortNameKey(shortName));
+    if (earlier !== undefined)
+      return {
+        key: t.key,
+        problem: "short_name_repeated",
+        takenBy: tableName(earlier),
+        shortName,
+      };
+    shortNames.set(shortNameKey(shortName), t);
     if (t.parts !== null && t.parts.length < 2) return { key: t.key, problem: "parts_too_few" };
   }
   return null;
+}
+
+/** The short name a rename leaves: the new name's proposal while it was the old one's. */
+export function followName(shortName: string, oldLabel: string, newLabel: string): string {
+  return shortName === proposeShortName(oldLabel) ? proposeShortName(newLabel) : shortName;
 }
 
 function mapTable(
@@ -188,6 +257,14 @@ export function patchTable(draft: FloorPlanDraft, key: string, patch: TablePatch
       ? patch
       : { ...patch, placement: { ...patch.placement } };
   return mapTable(draft, key, (t) => ({ ...t, ...copied }));
+}
+
+export function renameTable(draft: FloorPlanDraft, key: string, label: string): FloorPlanDraft {
+  return mapTable(draft, key, (t) => ({
+    ...t,
+    label,
+    shortName: followName(t.shortName, t.label, label),
+  }));
 }
 
 export function changePlacement(
@@ -277,7 +354,7 @@ export function restoreTable(
 
 export function addTables(
   draft: FloorPlanDraft,
-  tables: { label: string; seats: number | null; fixed: boolean }[],
+  tables: { label: string; shortName?: string; seats: number | null; fixed: boolean }[],
   nextKey: () => string,
 ): FloorPlanDraft {
   return {
@@ -289,6 +366,7 @@ export function addTables(
         id: null,
         liveTableId: null,
         label: t.label,
+        shortName: t.shortName ?? proposeShortName(t.label),
         seats: t.seats,
         fixed: t.fixed,
         placement: null,
@@ -301,7 +379,7 @@ export function addTables(
 
 export function addJoinedTable(
   draft: FloorPlanDraft,
-  table: { label: string; seats: number | null; parts: readonly string[] },
+  table: { label: string; shortName?: string; seats: number | null; parts: readonly string[] },
   nextKey: () => string,
 ): FloorPlanDraft {
   return {
@@ -313,6 +391,7 @@ export function addJoinedTable(
         id: null,
         liveTableId: null,
         label: table.label,
+        shortName: table.shortName ?? proposeShortName(table.label),
         seats: table.seats,
         fixed: false,
         placement: null,

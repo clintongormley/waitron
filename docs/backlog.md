@@ -123,8 +123,9 @@ come after the list above:
   Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
   bar and List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data)
-  in #2076; slice 2 (the dashboard's short-name field, and A1110's "+" question) is next, then
-  slice 3. A773-2 builds the pass's part, and the phone's order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  in #2076; slice 2 (the dashboard's short-name field, which refuses a "+") is in review, built
+  from the build plan below, and slice 3 is next. A773-2 builds the pass's part, and the phone's
+  order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
@@ -2777,7 +2778,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
-  #2076. Slice 2 (the dashboard's short-name field, and A1110's "+" question) is next, then slice 3:
+  #2076. Slice 2 (the dashboard's short-name field, which refuses a "+") is in review, built from
+  the build plan, and slice 3 is next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
@@ -2809,7 +2811,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   into view, and its "Name *" label sits under the panel's sticky heading ("W1 ⌄"), so only the
   value and the refusal under it show; scrolled by hand, the label shows
   (`r-refusal-field-390-light-en.png`). Slice 1 changed which sentence the editor shows, not where
-  it scrolls.
+  it scrolls. Slice 2's look (2026-10-26, `~/waitron-campaign-c/a797-2-shots/`) found the cause:
+  the phone sheet keeps its scroll when the refusal selects a table, and nothing brings the field
+  into view. With the sheet at its top the refused Short name shows whole under the heading;
+  scrolled down to the list before Save, the whole field, label, value and refusal, is above the
+  visible part of the sheet and only the list shows (`c2-refused-390-light-en.png`). Tapping a row
+  in the list leaves the form scrolled the same way (`a0-select-as-lands-390-light-en.png`).
 
 - **A1104. Should the till's Ready bar sort by the short name it shows?** Seen, 2026-10-25 (the
   A797 slice 1 look, `e-bar-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): the
@@ -2845,14 +2852,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
   panel leaves a large blank space between Add tables / Add joined table and the list.
 
-- **A1110. A short name with a "+" in it can read like one of today's joins on the Ready bar.**
-  Found by the A797 slice 1 review (2026-10-25): a save may give "Window" the short name "T1+T2"
-  beside "Terrace 1" (T1) and "Terrace 2" (T2); once the two terrace tables are joined today, the
-  Ready bar lists both the join and Window as "T1+T2". The entries stay separate (one per party),
-  but staff cannot tell them apart. The proposal rule keeps a name of four characters or fewer
-  whole, so a table named "1+2" is proposed "1+2". Decide in slice 2 (the dashboard's short-name
-  field) whether a short name may contain "+", or whether the bar adds the full name when two
-  entries read alike.
+- **A1112. The server, the API and a configuration file still accept a "+" in a short name.**
+  The dashboard's floor plan editor refuses a "+" in a short name it would save, unless the table
+  already had it stored (`refusesPlus`, `apps/dashboard/src/screens/floor-plan-draft.ts`; A797
+  slice 2), because the till writes tables joined for today as "T1+T2". The server's save
+  (`resolveShortNames`, `apps/server/src/table-short-names.ts`) and the configuration import do
+  not, and the proposal keeps a name of four characters or fewer whole, so a seed, an API call or
+  an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
+  of today's joins.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when

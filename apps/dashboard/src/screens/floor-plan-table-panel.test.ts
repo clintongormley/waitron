@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
@@ -5,6 +6,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-table-panel.js";
 import type { FloorPlanTablePanel } from "./floor-plan-table-panel.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import type { FloorPlan } from "../api/client.js";
 import { draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
 
@@ -31,6 +33,7 @@ const plan: FloorPlan = {
       id: "m1",
       liveTableId: "l1",
       label: "T1",
+      shortName: null,
       seats: 4,
       fixed: false,
       placement: m1Placement,
@@ -41,6 +44,7 @@ const plan: FloorPlan = {
       id: "m2",
       liveTableId: "l2",
       label: "T2",
+      shortName: null,
       seats: 2,
       fixed: true,
       placement: null,
@@ -51,6 +55,7 @@ const plan: FloorPlan = {
       id: "m9",
       liveTableId: "l9",
       label: "T9",
+      shortName: null,
       seats: null,
       fixed: false,
       placement: null,
@@ -124,13 +129,14 @@ it("shows the selected table's values", async () => {
   expect(pressedShape(el)).toEqual(["Rectangle"]);
 });
 
-it("lays out Name, then Seats beside Shape and Moveable, and nothing more", async () => {
+it("lays out Name, Short name, then Seats beside Shape and Moveable, and nothing more", async () => {
   const el = await open();
   const named = [
     ...el.shadowRoot!.querySelectorAll(".fields [name]:not(wt-icon), .fields [role=group]"),
   ];
   expect(named.map((n) => n.getAttribute("name") ?? n.getAttribute("data-field"))).toEqual([
     "table-name",
+    "short-name",
     "seats",
     "shape",
     "moveable",
@@ -184,6 +190,73 @@ it("typing a name sends one merged change", async () => {
   expect(changes).toHaveLength(2);
   expect(changes.map((c) => c.mergeKey)).toEqual(["label:m1", "label:m1"]);
   expect(tableOf(changes[1], "m1")!.label).toBe("T1ab");
+});
+
+type ShortNameField = Field & { required: boolean; placeholder: string; label: string };
+const shortNameField = (el: FloorPlanTablePanel) =>
+  field(el, "short-name") as unknown as ShortNameField | null;
+const withTable = (label: string, shortName: string): FloorPlanDraft =>
+  patchTable(opened(), "m1", { label, shortName });
+
+it("shows the table's short name under its name, required, with its hint as placeholder", async () => {
+  const el = await open({ draft: withTable("Table 1", "Tb1") });
+  const short = shortNameField(el)!;
+  expect(short.value).toBe("Tb1");
+  expect(short.required).toBe(true);
+  expect(short.placeholder).toBe("Shown where space is tight");
+  expect(short.label).toBe("Short name");
+});
+
+it("typing a short name sends one merged change", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  await set(el, "short-name", "W");
+  await set(el, "short-name", "W1");
+  expect(changes).toHaveLength(2);
+  expect(changes.map((c) => c.mergeKey)).toEqual(["shortName:m1", "shortName:m1"]);
+  expect(tableOf(changes[1], "m1")!.shortName).toBe("W1");
+  expect(tableOf(changes[1], "m1")!.label).toBe("T1");
+});
+
+it("renaming a table moves a following short name with it, and keeps a typed one", async () => {
+  const following = await open({ draft: withTable("Terrace 1", "T1") });
+  const first = listen(following);
+  await set(following, "table-name", "Terrace 2");
+  expect(tableOf(first.changes.at(-1), "m1")).toMatchObject({
+    label: "Terrace 2",
+    shortName: "T2",
+  });
+  cleanupWidgets();
+  const typed = await open({ draft: withTable("Table 1", "Tb1") });
+  const second = listen(typed);
+  await set(typed, "table-name", "Table 2");
+  expect(tableOf(second.changes.at(-1), "m1")).toMatchObject({
+    label: "Table 2",
+    shortName: "Tb1",
+  });
+});
+
+it("shows a refusal under Short name", async () => {
+  const el = await open({
+    fieldErrors: [{ field: "shortName", message: "Terrace 1 already uses T1" }],
+  });
+  expect(shortNameField(el)!.error).toBe("Terrace 1 already uses T1");
+  expect(field(el, "table-name")!.error).toBe("");
+});
+
+it("names Short name in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await open();
+  expect(shortNameField(el)!.label).toBe(es["floor_plan_editor.short_name"]);
+  expect(shortNameField(el)!.placeholder).toBe(es["floor_plan_editor.short_name_hint"]);
+});
+
+it("a short name of five characters reaches the draft whole, however many code units", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  const decomposed = "é".repeat(5);
+  await set(el, "short-name", decomposed);
+  expect(tableOf(changes.at(-1), "m1")!.shortName).toBe(decomposed);
 });
 
 it("an empty seat count sends no seats", async () => {
@@ -393,6 +466,7 @@ const joined = (): FloorPlanDraft => ({
       id: key,
       liveTableId: `l${key}`,
       label,
+      shortName: proposeShortName(label),
       seats,
       fixed: false,
       placement: null,
@@ -404,6 +478,7 @@ const joined = (): FloorPlanDraft => ({
       id: "long",
       liveTableId: "llong",
       label: "Long table",
+      shortName: "LT",
       seats: 10,
       fixed: false,
       placement: m1Placement,
@@ -415,6 +490,7 @@ const joined = (): FloorPlanDraft => ({
       id: "bar",
       liveTableId: "lbar",
       label: "Bar",
+      shortName: "Bar",
       seats: 4,
       fixed: false,
       placement: null,
@@ -458,6 +534,7 @@ it("a joined table's form shows Made of with its parts chosen, and the free tabl
   ];
   expect(named.map((n) => n.getAttribute("name") ?? n.getAttribute("data-field"))).toEqual([
     "table-name",
+    "short-name",
     "seats",
     "shape",
     "moveable",

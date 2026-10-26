@@ -18,6 +18,7 @@ const plan: FloorPlan = {
       id: "m1",
       liveTableId: "l1",
       label: "T1",
+      shortName: null,
       seats: 4,
       fixed: false,
       placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },

@@ -36,6 +36,7 @@ function terrace(revision = 3): FloorPlan {
         id: "m1",
         liveTableId: "l1",
         label: "T1",
+        shortName: null,
         seats: 4,
         fixed: false,
         placement,
@@ -46,6 +47,7 @@ function terrace(revision = 3): FloorPlan {
         id: "m2",
         liveTableId: "l2",
         label: "T2",
+        shortName: null,
         seats: 2,
         fixed: false,
         placement: null,
@@ -67,6 +69,7 @@ const bar: FloorPlan = {
       id: "b1",
       liveTableId: "l5",
       label: "B1",
+      shortName: null,
       seats: 2,
       fixed: false,
       placement,
@@ -884,6 +887,7 @@ async function setAddField(el: FloorPlanEditor, name: string, value: string): Pr
 async function addViaDialog(el: FloorPlanEditor, count: number): Promise<void> {
   await openAddTables(el);
   await setAddField(el, "table-count", String(count));
+  await setAddField(el, "prefix", "Window");
   addModal(el).querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
   await el.updateComplete;
 }
@@ -938,7 +942,8 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
     {
       id: "m5",
       liveTableId: "l5",
-      label: "Terrace 1",
+      label: "Window 1",
+      shortName: null,
       seats: 4,
       fixed: false,
       placement: null,
@@ -948,7 +953,8 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
     {
       id: "m6",
       liveTableId: "l6",
-      label: "Terrace 2",
+      label: "Window 2",
+      shortName: null,
       seats: 4,
       fixed: false,
       placement: null,
@@ -993,6 +999,7 @@ it("Add joined table from the list opens the window, and Add puts Long table str
       id,
       liveTableId: null,
       label,
+      shortName: null,
       seats,
       fixed: false,
       placement: null,
@@ -1316,6 +1323,7 @@ function counters(): FloorPlan {
     id,
     liveTableId: `l${id}`,
     label,
+    shortName: null,
     seats,
     fixed: false,
     placement: null,
@@ -1341,6 +1349,29 @@ function counters(): FloorPlan {
     ],
   };
 }
+
+it.each([
+  [1280, 800],
+  [390, 844],
+])(
+  "a joined table's form fits its reserved area without scrolling, at %i px",
+  async (width, height) => {
+    await viewport(width, height);
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+    if (width < 600) await expect.poll(() => sheet(el)).not.toBeNull();
+    await fromCanvas(el, "wt-table-select", { key: "long" });
+    if (width < 600) {
+      await expandSheet(el);
+      await expect.poll(() => sheet(el)!.expanded).toBe(true);
+    }
+    const slot = el.shadowRoot!.querySelector<HTMLElement>(".table-slot")!;
+    const panel = slot.querySelector("floor-plan-table-panel")!;
+    await panel.updateComplete;
+    await expect.poll(() => panel.shadowRoot!.querySelector("[name=made-of]")).not.toBeNull();
+    expect(slot.clientHeight).toBeGreaterThan(0);
+    expect(slot.scrollHeight).toBeLessThanOrEqual(slot.clientHeight + 1);
+  },
+);
 
 it("placing Long table over its standing parts takes them off, and one Undo puts all three back", async () => {
   const apart: FloorPlan = {

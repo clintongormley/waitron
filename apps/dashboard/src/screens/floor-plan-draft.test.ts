@@ -7,17 +7,20 @@ import {
   checkDraft,
   deleteTable,
   draftFromPlan,
+  followName,
   freeTables,
   joinedTableOf,
   madeOfText,
   patchTable,
   placeTable,
   rekeyDraft,
+  renameTable,
   restoreTable,
   sameDraft,
   saveFromDraft,
   setParts,
   withLiveTables,
+  withSentShortNames,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -34,6 +37,7 @@ const plan: FloorPlan = {
       id: "m1",
       liveTableId: "l1",
       label: "T1",
+      shortName: null,
       seats: 4,
       fixed: false,
       placement: m1Placement,
@@ -44,6 +48,7 @@ const plan: FloorPlan = {
       id: "m2",
       liveTableId: "l2",
       label: "T2",
+      shortName: null,
       seats: 2,
       fixed: true,
       placement: null,
@@ -54,6 +59,7 @@ const plan: FloorPlan = {
       id: "m9",
       liveTableId: "l9",
       label: "T9",
+      shortName: null,
       seats: null,
       fixed: false,
       placement: null,
@@ -76,6 +82,7 @@ const joinedPlan: FloorPlan = {
       id: "c3",
       liveTableId: "lc3",
       label: "Counter 3",
+      shortName: null,
       seats: 2,
       fixed: false,
       placement: null,
@@ -86,6 +93,7 @@ const joinedPlan: FloorPlan = {
       id: "c4",
       liveTableId: "lc4",
       label: "Counter 4",
+      shortName: null,
       seats: 6,
       fixed: false,
       placement: null,
@@ -96,6 +104,7 @@ const joinedPlan: FloorPlan = {
       id: "c5",
       liveTableId: "lc5",
       label: "Counter 5",
+      shortName: null,
       seats: 4,
       fixed: false,
       placement: null,
@@ -106,6 +115,7 @@ const joinedPlan: FloorPlan = {
       id: "long",
       liveTableId: "llong",
       label: "Long table",
+      shortName: null,
       seats: 10,
       fixed: false,
       placement: m1Placement,
@@ -128,6 +138,168 @@ function table(draft: FloorPlanDraft, key: string) {
   return draft.tables.find((t) => t.key === key)!;
 }
 
+function shortNamePlan(): FloorPlan {
+  const base = { seats: null, fixed: false, placement: null, partIds: [], keptSize: null };
+  return {
+    ...plan,
+    tables: [
+      { ...base, id: "a", liveTableId: "la", label: "Terrace 1", shortName: "Tb1" },
+      { ...base, id: "b", liveTableId: "lb", label: "Window", shortName: null },
+    ],
+  };
+}
+
+describe("short names", () => {
+  it("after a save, each table it sent stores the short name it sent, and a table it did not send keeps its own", () => {
+    const opened = draftFromPlan(shortNamePlan());
+    const d = {
+      tables: opened.tables.map((t) => (t.key === "b" ? { ...t, savedShortName: "A+" } : t)),
+    };
+    const sent = { tables: [{ ...table(d, "a"), shortName: " 12 " }] };
+    const r = withSentShortNames(d, sent);
+    expect(r.tables.map((t) => t.savedShortName)).toEqual(["12", "A+"]);
+  });
+
+  it("opens each table with its stored short name, or its name's proposal when it has none", () => {
+    const d = draftFromPlan(shortNamePlan());
+    expect(d.tables.map((t) => t.shortName)).toEqual(["Tb1", "Win"]);
+  });
+
+  it("sends every table's short name, trimmed", () => {
+    const d = patchTable(draftFromPlan(shortNamePlan()), "a", { shortName: " Tb1 " });
+    expect(saveFromDraft(3, d).tables.map((t) => t.shortName)).toEqual(["Tb1", "Win"]);
+  });
+
+  it("a new table takes its name's proposal unless it is given one", () => {
+    const added = addTables(
+      { tables: [] },
+      [
+        { label: "Top floor 12", seats: null, fixed: false },
+        { label: "Top floor 12", shortName: "Up12", seats: null, fixed: false },
+      ],
+      counter("new"),
+    );
+    expect(added.tables.map((t) => t.shortName)).toEqual(["TF12", "Up12"]);
+    const proposed = addJoinedTable(
+      { tables: [] },
+      { label: "Top floor 12", seats: null, parts: [] },
+      counter("new"),
+    );
+    const given = addJoinedTable(
+      { tables: [] },
+      { label: "Top floor 12", shortName: "Up12", seats: null, parts: [] },
+      counter("new"),
+    );
+    expect([proposed.tables[0]!.shortName, given.tables[0]!.shortName]).toEqual(["TF12", "Up12"]);
+  });
+  it("a short name follows its name while it is the name's proposal", () => {
+    expect(followName("T1", "Terrace 1", "Terrace 2")).toBe("T2");
+    expect(followName("Tb1", "Table 1", "Table 2")).toBe("Tb1");
+    let label = "";
+    let shortName = "";
+    for (const next of ["W", "Wi", "Win", "Wind", "Windo", "Window", "Window ", "Window 1"]) {
+      shortName = followName(shortName, label, next);
+      label = next;
+    }
+    expect(shortName).toBe("W1");
+  });
+
+  it("renameTable changes the name and a following short name in one change", () => {
+    const d = draftFromPlan({
+      ...shortNamePlan(),
+      tables: shortNamePlan().tables.map((t) => (t.id === "a" ? { ...t, shortName: "T1" } : t)),
+    });
+    const renamed = renameTable(d, "a", "Terrace 2");
+    expect(table(renamed, "a")).toMatchObject({ label: "Terrace 2", shortName: "T2" });
+    expect(table(renamed, "b")).toBe(table(d, "b"));
+    const typed = renameTable(draftFromPlan(shortNamePlan()), "a", "Terrace 2");
+    expect(table(typed, "a")).toMatchObject({ label: "Terrace 2", shortName: "Tb1" });
+  });
+
+  it("a changed short name is a changed draft", () => {
+    const d = draftFromPlan(shortNamePlan());
+    const changed = patchTable(d, "b", { shortName: "Tb1" });
+    expect(sameDraft(d, changed)).toBe(false);
+    expect(sameDraft(d, patchTable(changed, "b", { shortName: "Win" }))).toBe(true);
+  });
+
+  it.each([
+    ["blank", "", "short_name_missing"],
+    ["only spaces", "   ", "short_name_missing"],
+    ["six letters", "ABCDEF", "short_name_too_long"],
+    ["six decomposed accents", "e\u0301".repeat(6), "short_name_too_long"],
+    ["five letters", "ABCDE", null],
+    ["five decomposed accents", "e\u0301".repeat(5), null],
+  ])("checkDraft marks a short name that is %s", (_, shortName, problem) => {
+    const d = patchTable(draftFromPlan(shortNamePlan()), "b", { shortName });
+    expect(checkDraft(d)).toEqual(problem === null ? null : { key: "b", problem });
+  });
+
+  it("checkDraft marks the later of two tables sharing a short name, ignoring case", () => {
+    const d = draftFromPlan({
+      ...plan,
+      tables: [
+        { ...shortNamePlan().tables[0]!, id: "a", label: "Terrace 1", shortName: "T1" },
+        { ...shortNamePlan().tables[1]!, id: "b", label: "Table 1", shortName: "t1" },
+      ],
+    });
+    expect(checkDraft(d)).toEqual({
+      key: "b",
+      problem: "short_name_repeated",
+      takenBy: "Terrace 1",
+      shortName: "t1",
+    });
+  });
+
+  it("checkDraft reports a missing name before a missing short name, and a short name before too few parts", () => {
+    const d = draftFromPlan(shortNamePlan());
+    expect(checkDraft(patchTable(d, "b", { label: " ", shortName: "" }))).toEqual({
+      key: "b",
+      problem: "label_missing",
+    });
+    const joined = addJoinedTable(
+      d,
+      { label: "Long", shortName: "", seats: null, parts: ["a"] },
+      counter("new"),
+    );
+    expect(checkDraft(joined)).toEqual({ key: "new:1", problem: "short_name_missing" });
+    expect(checkDraft(patchTable(joined, "new:1", { shortName: "L" }))).toEqual({
+      key: "new:1",
+      problem: "parts_too_few",
+    });
+  });
+
+  it.each([
+    ["T1+T2", "short_name_plus"],
+    ["1+2", "short_name_plus"],
+    ["+", "short_name_plus"],
+    ["T12", null],
+  ])("checkDraft refuses a new or changed short name holding +: %s", (shortName, problem) => {
+    const d = addTables(
+      { tables: [] },
+      [{ label: "Terrace", shortName, seats: null, fixed: false }],
+      counter("new"),
+    );
+    expect(checkDraft(d)).toEqual(problem === null ? null : { key: "new:1", problem });
+  });
+
+  it("an untouched stored short name with + is left alone, and a changed one is not", () => {
+    const d = draftFromPlan({
+      ...plan,
+      tables: [{ ...shortNamePlan().tables[0]!, id: "a", label: "1+2", shortName: "1+2" }],
+    });
+    expect(checkDraft(d)).toBeNull();
+    const changed = patchTable(d, "a", { shortName: "1+3" });
+    expect(checkDraft(changed)).toEqual({ key: "a", problem: "short_name_plus" });
+    expect(checkDraft(patchTable(changed, "a", { shortName: "1+2" }))).toBeNull();
+  });
+
+  it("the full-width plus is not refused", () => {
+    const d = patchTable(draftFromPlan(shortNamePlan()), "b", { shortName: "T1\uFF0BT2" });
+    expect(checkDraft(d)).toBeNull();
+  });
+});
+
 describe("floor plan draft", () => {
   it("keys every master table by id", () => {
     const d = open();
@@ -137,6 +309,7 @@ describe("floor plan draft", () => {
       id: "m9",
       liveTableId: "l9",
       label: "T9",
+      shortName: "T9",
       seats: null,
       fixed: false,
       placement: null,
@@ -148,6 +321,7 @@ describe("floor plan draft", () => {
       id: "m1",
       liveTableId: "l1",
       label: "T1",
+      shortName: "T1",
       seats: 4,
       fixed: false,
       placement: m1Placement,
@@ -166,16 +340,27 @@ describe("floor plan draft", () => {
           id: "m1",
           key: "m1",
           label: "T1",
+          shortName: "T1",
           seats: 4,
           fixed: false,
           placement: m1Placement,
           partKeys: [],
         },
-        { id: "m2", key: "m2", label: "T2", seats: 2, fixed: true, placement: null, partKeys: [] },
+        {
+          id: "m2",
+          key: "m2",
+          label: "T2",
+          shortName: "T2",
+          seats: 2,
+          fixed: true,
+          placement: null,
+          partKeys: [],
+        },
         {
           id: "m9",
           key: "m9",
           label: "T9",
+          shortName: "T9",
           seats: null,
           fixed: false,
           placement: null,
@@ -193,6 +378,7 @@ describe("floor plan draft", () => {
     expect(saveFromDraft(3, d).tables[3]).toEqual({
       key: "new:1",
       label: "T5",
+      shortName: "T5",
       seats: 3,
       fixed: true,
       placement: null,
@@ -206,6 +392,7 @@ describe("floor plan draft", () => {
     expect(sent).toEqual({
       key: "new:1",
       label: "T5",
+      shortName: "T5",
       seats: 3,
       fixed: true,
       placement: null,
@@ -231,6 +418,7 @@ describe("floor plan draft", () => {
       id: "m9",
       key: "m9",
       label: "T9",
+      shortName: "T9",
       seats: null,
       fixed: false,
       placement: null,
@@ -241,6 +429,7 @@ describe("floor plan draft", () => {
       id: "m5",
       key: "m5",
       label: "T5",
+      shortName: "T5",
       seats: 3,
       fixed: false,
       placement: null,
@@ -434,6 +623,7 @@ describe("floor plan draft", () => {
         id: null,
         liveTableId: null,
         label: "T5",
+        shortName: "T5",
         seats: 3,
         fixed: false,
         placement: null,
@@ -445,6 +635,7 @@ describe("floor plan draft", () => {
         id: null,
         liveTableId: null,
         label: "T6",
+        shortName: "T6",
         seats: null,
         fixed: true,
         placement: null,
@@ -523,6 +714,7 @@ describe("floor plan draft", () => {
       id: null,
       liveTableId: null,
       label: `F${i}`,
+      shortName: `F${i}`,
       seats: null,
       fixed: false,
       placement: {
@@ -743,6 +935,7 @@ describe("floor plan draft", () => {
       id: null,
       liveTableId: null,
       label: "Long table",
+      shortName: "LT",
       seats: 10,
       fixed: false,
       placement: null,

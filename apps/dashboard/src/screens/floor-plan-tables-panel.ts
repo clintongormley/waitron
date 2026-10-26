@@ -73,6 +73,9 @@ export class FloorPlanTablesPanel extends LitElement {
         justify-content: center;
       }
       .select {
+        /* Holds its visually-hidden label, which would otherwise escape a scrolling ancestor that
+           is not positioned (the sheet's body) and lengthen the page around it. */
+        position: relative;
         grid-column: 2 / -1;
         display: grid;
         grid-template-columns: subgrid;

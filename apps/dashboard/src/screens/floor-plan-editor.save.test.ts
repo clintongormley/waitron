@@ -44,6 +44,7 @@ function plan(m1x = 2): FloorPlan {
         id: "m1",
         liveTableId: "l1",
         label: "T1",
+        shortName: null,
         seats: 4,
         fixed: false,
         placement: { ...m1Placement, x: m1x },
@@ -54,6 +55,7 @@ function plan(m1x = 2): FloorPlan {
         id: "m2",
         liveTableId: "l2",
         label: "T2",
+        shortName: null,
         seats: 2,
         fixed: true,
         placement: null,
@@ -64,6 +66,7 @@ function plan(m1x = 2): FloorPlan {
         id: "m9",
         liveTableId: "l9",
         label: "T9",
+        shortName: null,
         seats: null,
         fixed: false,
         placement: null,
@@ -146,6 +149,7 @@ const afterFirstSave: FloorPlan = {
       id: "m9",
       liveTableId: "l9",
       label: "T9",
+      shortName: null,
       seats: null,
       fixed: false,
       placement: null,
@@ -156,6 +160,7 @@ const afterFirstSave: FloorPlan = {
       id: "m5",
       liveTableId: "l5",
       label: "T5",
+      shortName: null,
       seats: 2,
       fixed: false,
       placement: t5Placement,
@@ -301,6 +306,7 @@ it("a first save's re-read gives a new table its live table", async () => {
         id: "m9",
         liveTableId: "l9",
         label: "T9",
+        shortName: null,
         seats: null,
         fixed: false,
         placement: null,
@@ -311,6 +317,7 @@ it("a first save's re-read gives a new table its live table", async () => {
         id: "m5",
         liveTableId: "l5",
         label: "T5",
+        shortName: null,
         seats: 2,
         fixed: false,
         placement: t5Placement,
@@ -352,6 +359,102 @@ it("a label sent with spaces is saved trimmed, so trimming it by hand is no chan
   });
   await fromCanvas(el, "floor-plan-change", { draft: typed });
   expectSave(el, "quiet");
+});
+
+it("a short name sent with spaces round it is kept trimmed, and Save is quiet after", async () => {
+  const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: savedIds });
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(plan())
+    .mockReturnValue(new Promise(() => {}));
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(draftFromPlan(plan()), "m2", { shortName: " W2 " }),
+  });
+  await press(el, "save");
+  const body = saveFloorPlan.mock.calls[0]![2] as ReturnType<typeof saveFromDraft>;
+  expect(body.tables.find((t) => t.key === "m2")!.shortName).toBe("W2");
+  expect(el["draft"]!.tables.find((t) => t.key === "m2")!.shortName).toBe("W2");
+  expectSave(el, "quiet");
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(draftFromPlan(plan()), "m2", { shortName: "W2" }),
+  });
+  expectSave(el, "quiet");
+});
+
+function storedPlus(): FloorPlan {
+  const stored = plan();
+  stored.tables[0]!.shortName = "1+2";
+  return stored;
+}
+
+const plusRefusal = {
+  key: "m1",
+  field: "shortName",
+  message: "Leave out +: it marks joined tables.",
+};
+
+describe.each([
+  ["has not answered", () => new Promise<FloorPlan>(() => {})],
+  ["failed", () => Promise.reject({ code: "server.internal" })],
+])("while the re-read after a save %s", (_, reread) => {
+  it("a stored + short name saved as another is refused when typed back", async () => {
+    const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: savedIds });
+    const getFloorPlan = vi.fn().mockResolvedValueOnce(storedPlus()).mockImplementation(reread);
+    const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+    await fromCanvas(el, "floor-plan-change", {
+      draft: patchTable(el["draft"]!, "m1", { shortName: "12" }),
+    });
+    await press(el, "save");
+    expectSave(el, "quiet");
+    await fromCanvas(el, "floor-plan-change", {
+      draft: patchTable(el["draft"]!, "m1", { shortName: "1+2" }),
+    });
+    await press(el, "save");
+    expect(el.fieldError).toEqual(plusRefusal);
+    expect(saveFloorPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("a stored + short name sent unchanged may still be saved again", async () => {
+    const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: savedIds });
+    const getFloorPlan = vi.fn().mockResolvedValueOnce(storedPlus()).mockImplementation(reread);
+    const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+    await move(el, "m1", 5);
+    await press(el, "save");
+    await move(el, "m1", 7);
+    await press(el, "save");
+    expect(el.fieldError).toBeNull();
+    expect(saveFloorPlan).toHaveBeenCalledTimes(2);
+    const body = saveFloorPlan.mock.calls[1]![2] as ReturnType<typeof saveFromDraft>;
+    expect(body.tables.find((t) => t.key === "m1")!.shortName).toBe("1+2");
+  });
+});
+
+it("a stored + short name typed back while the save of another is sent is refused at the next Save", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const saveFloorPlan = vi
+    .fn()
+    .mockReturnValueOnce(write.promise)
+    .mockResolvedValue({ revision: 5, ids: savedIds });
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(storedPlus())
+    .mockReturnValue(new Promise(() => {}));
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(el["draft"]!, "m1", { shortName: "12" }),
+  });
+  await press(el, "save");
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(el["draft"]!, "m1", { shortName: "1+2" }),
+  });
+  write.resolve({ revision: 4, ids: savedIds });
+  await flush(el);
+  expect(el["draft"]!.tables.find((t) => t.key === "m1")!.shortName).toBe("1+2");
+  expectSave(el, "awake");
+  await press(el, "save");
+  expect(el.fieldError).toEqual(plusRefusal);
+  expect(saveFloorPlan).toHaveBeenCalledTimes(1);
 });
 
 it("a read's failure does not replace an action's message", async () => {
@@ -789,6 +892,7 @@ it("the save body never carries a remembered place", async () => {
     id: "m1",
     key: "m1",
     label: "T1",
+    shortName: "T1",
     seats: 4,
     fixed: false,
     placement: null,
