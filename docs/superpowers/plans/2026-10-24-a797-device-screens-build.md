@@ -4630,7 +4630,9 @@ From `grep -rlnE "forgottenAfter|forgotten_after|overdueAfter|warmAfter|warm_aft
   `ADD … DEFAULT 3 NOT NULL` column on existing rows with the default; the migration-upgrade guard,
   which migrates populated databases, passed with it (ran, below), and its `CANDIDATES` needed
   nothing (a NOT NULL column with a default is not a nullable candidate). No existing migration
-  file is edited.
+  file is edited. **2026-10-26, at finish-branch:** main's #2106 took 0192 first
+  (`0192_privacy_contact.sql`), so this migration was regenerated, not hand-edited, as
+  `packages/db/drizzle/0193_station_ready_warning.sql`, with the same one `ALTER TABLE … ADD`.
 - **D2. `@waitron/shared` gains `DEFAULT_READY_WARNING_AFTER_MINUTES = 3` and
   `type StationTiming = StationThresholds & { readyWarningAfterMinutes: number }`** in `timing.ts`,
   re-exported from `index.ts`. **`StationThresholds` stays the three band limits**: it is what

@@ -395,7 +395,7 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 
 **2026-10-25 (A980 S2b):** workforce 0010 adds `attendance_operation_facts_person_idx`, `shift_swaps_requested_by_person_idx` and `shift_swaps_to_person_idx`. A squash writes the end state.
 
-**2026-10-26 (A797 slice 6):** core 0192 adds `kitchen_stations.ready_warning_after_minutes`. A squash writes the end state.
+**2026-10-26 (A797 slice 6):** core 0193 adds `kitchen_stations.ready_warning_after_minutes`. A squash writes the end state.
 
 ## Removed and superseded material
 
