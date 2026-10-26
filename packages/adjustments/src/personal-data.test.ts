@@ -481,6 +481,7 @@ describe("ADJUSTMENTS_PERSONAL_DATA", () => {
     expect(files.marta).toContain("Grilled squid");
     for (const id of [MARTA, LUIS, ANA]) expect(files.marta, id).not.toContain(id);
     for (const id of [MARTA, ANA]) expect(files.luis, id).not.toContain(id);
+    for (const id of [MARTA, LUIS]) expect(files.ana, id).not.toContain(id);
     for (const [who, text] of Object.entries(files)) {
       for (const note of notes) expect(text, `${who}: ${note}`).not.toContain(note);
     }

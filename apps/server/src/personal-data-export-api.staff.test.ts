@@ -407,7 +407,7 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
         approvedBy: ids.admin,
         note: "note for the tart",
         chargeKept: false,
-        preparationStarted: true,
+        preparationStarted: null,
       }),
     );
     const [stored] = await suite.db.select({ createdAt: adjustments.createdAt }).from(adjustments);
@@ -429,7 +429,7 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
           reason: "Long wait",
           stage: "fired",
           chargeKept: false,
-          preparationStarted: true,
+          preparationStarted: null,
           yourPart: ["requested"],
         },
       ],
