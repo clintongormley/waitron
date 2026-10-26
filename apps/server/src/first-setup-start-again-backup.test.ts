@@ -49,12 +49,14 @@ import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import * as sources from "./first-setup-backup-source.js";
 import * as backupEntry from "./first-setup-backup-entry.js";
 import * as restore from "./restore.js";
+import * as provisioning from "@waitron/provisioning";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 
 vi.mock("./first-setup-backup-source.js", { spy: true });
 vi.mock("./first-setup-backup-entry.js", { spy: true });
 vi.mock("./restore.js", { spy: true });
+vi.mock("@waitron/provisioning", { spy: true });
 
 const LEASE = 5 * 60_000;
 const client = { onBox: false };
@@ -1253,6 +1255,69 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
     { code: "ENOENT" },
   );
   expect(await opening).toMatchObject({ recoveryId: session.recoveryId });
+});
+
+it("an open started while Start again writes its note refuses it setup.recovery_in_progress before the seal, and the recovery is neither sealed nor abandoned", async () => {
+  const f = await repairFixture();
+  const { owner } = await signedIn(f.host);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const request = {
+    ...f.request,
+    observation: {
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision,
+      ownerGeneration: inspected.ownerGeneration,
+    },
+  };
+  const service = recovery(f.options);
+  const session = await service.open(request, client);
+  const selected = (await recoverySelectPastWaits(
+    clock,
+    { prepare: (proposal, onBox) => service.prepare(session.sessionId, proposal, onBox) },
+    client,
+  )) as { status: string };
+  expect(selected.status).toBe("selected");
+  await service.close(session.sessionId);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: service,
+  });
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown.recovery).toBeDefined();
+  const last = (await f.workspace.readChain()).at(-1)!;
+  const sealed = vi.spyOn(service, "sealLapsed");
+  const discarded = vi.spyOn(service, "discardInTurn");
+  let opening: Promise<unknown> | undefined;
+  const real = vi.mocked(provisioning.raiseStartAgainNote).getMockImplementation();
+  const actual = await vi.importActual<typeof provisioning>("@waitron/provisioning");
+  vi.mocked(provisioning.raiseStartAgainNote).mockImplementationOnce(async (...args) => {
+    sealed.mockClear();
+    opening ??= service.open({ ...request, recoveryId: session.recoveryId }, client).then(
+      (resumed) => resumed,
+      (error: unknown) => error,
+    );
+    return (real ?? actual.raiseStartAgainNote)(...args);
+  });
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.recovery_in_progress" });
+  expect(opening).toBeDefined();
+  await opening;
+  expect(sealed).not.toHaveBeenCalled();
+  expect(discarded).not.toHaveBeenCalled();
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+  await access(join(f.roots.stateDir, "first-setup.json"));
 });
 
 it("a recovery stopped during its settle wait, whose picks name nothing, is shown with no name, and Start again takes only the attempt's floor", async () => {
