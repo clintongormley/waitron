@@ -142,6 +142,14 @@ export { draftLineMergeKey, normaliseDraftLines } from "./draft-merge.js";
 export type { MergeableDraftLine } from "./draft-merge.js";
 export { deriveDisplayName } from "./derive-display-name.js";
 export { isValidEmail } from "./email.js";
+export {
+  PRIVACY_CONTACT_FIELDS,
+  PRIVACY_CONTACT_MAX_LENGTH,
+  privacyContactProblem,
+  privacyContactValue,
+  type PrivacyContactField,
+  type PrivacyContactProblem,
+} from "./privacy-contact.js";
 export { isValidTelephone } from "./telephone.js";
 export { isValidGuestCount, MAX_GUEST_COUNT } from "./guest-count.js";
 export { MEDIA_FILENAME } from "./media-filename.js";
