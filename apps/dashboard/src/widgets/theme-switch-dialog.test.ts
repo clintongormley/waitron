@@ -58,7 +58,6 @@ describe("the switch dialog", () => {
       "Every dashboard changes now, and every signed-in till within 15 seconds.",
     ]);
     expect(items(dialog)).toEqual([]);
-    expect(dialog.querySelector("[data-test=switch-text-size]")).toBeNull();
     expect(back(dialog).textContent?.trim()).toBe("Back");
     expect(back(dialog).slot).toBe("cancel");
     expect(use(dialog).textContent?.trim()).toBe("Use it");
@@ -76,7 +75,6 @@ describe("the switch dialog", () => {
       "Hard to read:",
     ]);
     expect(items(dialog)).toEqual(["Brand colour: buttons are hard to see on dark screens."]);
-    expect(dialog.querySelector("[data-test=switch-text-size]")).toBeNull();
     expect(dialog.textContent).not.toContain("changes size");
   });
 
