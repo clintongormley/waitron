@@ -311,8 +311,8 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
         activeScreen: "order",
         operatorName: "Ana",
         barTables: [
-          { tableId: "t4", name: "T4", unsent: true, current: false },
-          { tableId: "t9", name: "T9", unsent: false, current: true },
+          { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+          { tableId: "t9", name: "T9", unsent: false, current: true, held: false },
         ],
       },
       theme,

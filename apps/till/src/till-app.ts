@@ -11197,30 +11197,14 @@ export class TillApp extends LitElement {
   /** The handheld bar's buttons (D4, D13), the same array while they are unchanged. */
   #barTables(): BarTable[] {
     if (this.formFactor === "till") return NO_BAR_TABLES;
-    const tables = this.barFloor;
-    const opening = this.#orderScreenShown() ? this.openingTableId : undefined;
-    let held = this.#heldBill();
-    if (opening !== undefined) {
-      // The party the read lists there, not `orderParty`, which an open sets before it is done.
-      const partyId = tables.find((table) => table.id === opening)?.party?.id ?? null;
-      const same =
-        held !== null &&
-        (partyId === null
-          ? held.partyId === null && held.tableId === opening
-          : held.partyId === partyId);
-      if (!same)
-        held = {
-          partyId,
-          tableId: opening,
-          billId: null,
-          lines: 0,
-          takenByOther: false,
-          onScreen: true,
-        };
-    }
-    const next = barTables(tables, this.#sessionPersonId, {
-      held,
+    const opening = this.openingTableId;
+    const next = barTables(this.barFloor, this.#sessionPersonId, {
+      held: this.#heldBill(),
       released: this.#released.map((each) => each.bill),
+      opening:
+        opening === undefined
+          ? undefined
+          : { tableId: opening, onScreen: this.#orderScreenShown() },
     });
     const json = JSON.stringify(next);
     if (json !== this.#barTableJson) {
@@ -11247,17 +11231,10 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** D9: the held table's button returns to it as the Order tab did; any other opens its table as a
-   * Floor tap does. Both close an open overlay first. */
-  #onOpenBarTable(tableId: string): void {
-    const seated = this.barFloor.find((table) => table.id === tableId)?.party;
-    // An open party the read seats at the held table since is that button's party, not the held one.
-    const seatedSince = seated?.state === "open" && seated.id !== this.orderParty?.id;
-    if (
-      tableId === this.activeTableId &&
-      (this.openingTableId ?? tableId) === tableId &&
-      !seatedSince
-    ) {
+  /** D9: the held bill's button shows its order screen; any other opens its table as a Floor tap
+   * does. Both close an open overlay first. */
+  #onOpenBarTable({ tableId, held }: { tableId: string; held: boolean }): void {
+    if (held) {
       if (
         this.#activeTab() === this.#tableOrderTabKey() &&
         this.drill === undefined &&
@@ -19472,8 +19449,9 @@ export class TillApp extends LitElement {
                           .clockError=${this.#attendanceMessage()}
                           .affordances=${this.#affordanceList}
                           .barTables=${this.#barTables()}
-                          @open-bar-table=${(event: CustomEvent<{ tableId: string }>) =>
-                            this.#onOpenBarTable(event.detail.tableId)}
+                          @open-bar-table=${(
+                            event: CustomEvent<{ tableId: string; held: boolean }>,
+                          ) => this.#onOpenBarTable(event.detail)}
                           .kiosk=${this.deviceMode}
                           .canSwitchProfile=${this.approvedProfiles.length > 1}
                           .transferAvailable=${this.transferSnapshot !== undefined}

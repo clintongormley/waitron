@@ -86,7 +86,7 @@ describe("barTables", () => {
       table(9, party("p9", { unsentDrafts: [draft("b2", "sam")] })),
     ];
     expect(barTables(tables, "ana", none)).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
     ]);
   });
 
@@ -95,7 +95,7 @@ describe("barTables", () => {
       table(4, party("p4", { unsentDrafts: [draft("b1", "ana"), draft("b2", "ana")] })),
     ];
     expect(barTables(tables, "ana", none)).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
     ]);
   });
 
@@ -115,9 +115,9 @@ describe("barTables", () => {
         "ana",
         none,
       ),
-    ).toEqual([{ tableId: "t4", name: "T4+T5", unsent: true, current: false }]);
+    ).toEqual([{ tableId: "t4", name: "T4+T5", unsent: true, current: false, held: false }]);
     expect(barTables([table(4, joined), table(5, joined)], "ana", none)).toEqual([
-      { tableId: "t4", name: "T4+T5", unsent: true, current: false },
+      { tableId: "t4", name: "T4+T5", unsent: true, current: false, held: false },
     ]);
   });
 
@@ -136,10 +136,10 @@ describe("barTables", () => {
       released: [],
     });
     expect(barTables(tables, "ana", held(0, true))).toEqual([
-      { tableId: "t4", name: "T4", unsent: false, current: true },
+      { tableId: "t4", name: "T4", unsent: false, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", held(1, true))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: true },
+      { tableId: "t4", name: "T4", unsent: true, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", held(0, false))).toEqual([]);
   });
@@ -153,7 +153,7 @@ describe("barTables", () => {
       table(4, party("p4", { unsentDrafts: [draft("b1", "ana"), draft("b2", "ana")] })),
     ];
     expect(barTables(both, "ana", held)).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: true },
     ]);
     const one = [table(4, party("p4", { unsentDrafts: [draft("b1", "ana")] }))];
     expect(barTables(one, "ana", held)).toEqual([]);
@@ -172,7 +172,7 @@ describe("barTables", () => {
       ],
     };
     expect(barTables(tables, "ana", local)).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
     ]);
   });
 
@@ -183,10 +183,10 @@ describe("barTables", () => {
       released: [],
     });
     expect(barTables(tables, "ana", seating(0, true))).toEqual([
-      { tableId: "t3", name: "T3", unsent: false, current: true },
+      { tableId: "t3", name: "T3", unsent: false, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", seating(2, false))).toEqual([
-      { tableId: "t3", name: "T3", unsent: true, current: false },
+      { tableId: "t3", name: "T3", unsent: true, current: false, held: true },
     ]);
     expect(barTables(tables, "ana", seating(0, false))).toEqual([]);
   });
@@ -202,15 +202,15 @@ describe("barTables", () => {
       released: [],
     });
     expect(barTables(tables, "ana", opening("p4", "t4"))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: true },
+      { tableId: "t4", name: "T4", unsent: true, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", opening("p5", "t5"))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
-      { tableId: "t5", name: "T5", unsent: false, current: true },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+      { tableId: "t5", name: "T5", unsent: false, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", opening(null, "t6"))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
-      { tableId: "t6", name: "T6", unsent: false, current: true },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+      { tableId: "t6", name: "T6", unsent: false, current: true, held: true },
     ]);
   });
 
@@ -229,8 +229,8 @@ describe("barTables", () => {
       table(7, party("p7", { unsentDrafts: [draft("b7", "ana")] }), { zoneId: null }),
     ];
     expect(barTables(tables, "ana", none)).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
-      { tableId: "t7", name: "T7", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+      { tableId: "t7", name: "T7", unsent: true, current: false, held: false },
     ]);
   });
 
@@ -244,10 +244,10 @@ describe("barTables", () => {
       released: [],
     });
     expect(barTables(tables, "ana", held(false, false))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: true },
     ]);
     expect(barTables(tables, "ana", held(true, true))).toEqual([
-      { tableId: "t4", name: "T4", unsent: false, current: true },
+      { tableId: "t4", name: "T4", unsent: false, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", held(true, false))).toEqual([]);
   });
@@ -271,10 +271,10 @@ describe("barTables", () => {
       released: [bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: releasedLines })],
     });
     expect(barTables(tables, "ana", local(0, 1))).toEqual([
-      { tableId: "t4", name: "T4", unsent: false, current: true },
+      { tableId: "t4", name: "T4", unsent: false, current: true, held: true },
     ]);
     expect(barTables(tables, "ana", local(1, 0))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: true },
+      { tableId: "t4", name: "T4", unsent: true, current: true, held: true },
     ]);
   });
 
@@ -288,7 +288,7 @@ describe("barTables", () => {
     });
     expect(barTables(tables, "ana", released(1, 0))).toEqual([]);
     expect(barTables(tables, "ana", released(0, 1))).toEqual([
-      { tableId: "t4", name: "T4", unsent: true, current: false },
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
     ]);
   });
 
@@ -298,7 +298,7 @@ describe("barTables", () => {
       released: [],
     };
     expect(barTables([table(2, party("p2")), table(3, null)], "ana", seated)).toEqual([
-      { tableId: "t3", name: "T3", unsent: true, current: true },
+      { tableId: "t3", name: "T3", unsent: true, current: true, held: true },
     ]);
     expect(barTables([table(3, party("pNew", { state: "closed" }))], "ana", seated)).toEqual([]);
     expect(barTables([table(2, party("p2"))], "ana", seated)).toEqual([]);
@@ -315,7 +315,7 @@ describe("barTables", () => {
       released: [],
     };
     expect(barTables(tables, "ana", local)).toEqual([
-      { tableId: "t5", name: "T4+T5", unsent: false, current: true },
+      { tableId: "t5", name: "T4+T5", unsent: false, current: true, held: true },
     ]);
   });
 
@@ -326,12 +326,12 @@ describe("barTables", () => {
     };
     const moved = [table(4, null), table(9, party("p4"))];
     expect(barTables(moved, "ana", { held, released: [] })).toEqual([
-      { tableId: "t9", name: "T9", unsent: true, current: false },
+      { tableId: "t9", name: "T9", unsent: true, current: false, held: false },
     ]);
     const fromFree = { ...held, tableId: "t5", onScreen: true };
     expect(
       barTables([table(4, party("p4")), table(5, null)], "ana", { held: fromFree, released: [] }),
-    ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: true }]);
+    ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: true, held: false }]);
   });
 
   it("gives a held party the read does not list way to the open party the read seats at its table", () => {
@@ -342,13 +342,13 @@ describe("barTables", () => {
         held: stale,
         released: [],
       }),
-    ).toEqual([{ tableId: "t4", name: "T4+T5", unsent: true, current: true }]);
+    ).toEqual([{ tableId: "t4", name: "T4+T5", unsent: true, current: true, held: false }]);
     expect(
       barTables([table(4, seatedSince)], "ana", {
         held: { ...stale, onScreen: false },
         released: [],
       }),
-    ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: false }]);
+    ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: false, held: false }]);
   });
 
   it("gives the party seated at the held table since no ✎ for the held party's dishes", () => {
@@ -359,7 +359,60 @@ describe("barTables", () => {
     const since = [table(4, party("pNew")), table(5, party("pNew"))];
     expect(barTables(since, "ana", { held: old, released: [] })).toEqual([]);
     expect(barTables(since, "ana", { held: { ...old, onScreen: true }, released: [] })).toEqual([
-      { tableId: "t4", name: "T4+T5", unsent: false, current: true },
+      { tableId: "t4", name: "T4+T5", unsent: false, current: true, held: false },
     ]);
+  });
+
+  it("lets a table being opened on screen stand in for the held bill, until its party is the held one", () => {
+    const tables = [table(4, party("p4")), table(5, party("p5")), table(6, null)];
+    const heldAt4 = {
+      ...bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: 1 }),
+      onScreen: true,
+    };
+    const opening = (tableId: string, onScreen: boolean) => ({
+      held: { ...heldAt4, onScreen },
+      released: [],
+      opening: { tableId, onScreen },
+    });
+    expect(barTables(tables, "ana", opening("t5", true))).toEqual([
+      { tableId: "t5", name: "T5", unsent: false, current: true, held: false },
+    ]);
+    expect(barTables(tables, "ana", opening("t6", true))).toEqual([
+      { tableId: "t6", name: "T6", unsent: false, current: true, held: false },
+    ]);
+    expect(barTables(tables, "ana", opening("t4", true))).toEqual([
+      { tableId: "t4", name: "T4", unsent: true, current: true, held: true },
+    ]);
+    expect(barTables(tables, "ana", opening("t5", false))).toEqual([
+      { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+    ]);
+  });
+
+  it("sends only the held table's own button back to the held bill", () => {
+    const tables = [
+      table(4, party("p4")),
+      table(5, party("p5", { unsentDrafts: [draft("b5", "ana")] })),
+    ];
+    const held = {
+      ...bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: 1 }),
+      onScreen: false,
+    };
+    expect(
+      barTables(tables, "ana", { held, released: [] }).map((button) => [
+        button.tableId,
+        button.held,
+      ]),
+    ).toEqual([
+      ["t4", true],
+      ["t5", false],
+    ]);
+    const seating = { ...bill({ partyId: "pNew", tableId: "t3", lines: 1 }), onScreen: true };
+    expect(
+      barTables([table(3, null)], "ana", {
+        held: seating,
+        released: [],
+        opening: { tableId: "t3", onScreen: true },
+      }),
+    ).toEqual([{ tableId: "t3", name: "T3", unsent: false, current: true, held: true }]);
   });
 });

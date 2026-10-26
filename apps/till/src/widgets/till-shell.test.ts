@@ -1083,8 +1083,8 @@ function deepActive(): Element | null {
 
 describe("a handheld's table buttons", () => {
   const tables: BarTable[] = [
-    { tableId: "t4", name: "T4", unsent: true, current: false },
-    { tableId: "t9", name: "T9", unsent: true, current: false },
+    { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+    { tableId: "t9", name: "T9", unsent: true, current: false, held: false },
   ];
   const tabsOf = (el: TillShell) => [
     ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('header [role="tab"]'),
@@ -1122,8 +1122,8 @@ describe("a handheld's table buttons", () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           activeScreen: "order",
           barTables: [
-            { tableId: "t4", name: "T4", unsent: true, current: false },
-            { tableId: "t9", name: "T9", unsent: false, current: true },
+            { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
+            { tableId: "t9", name: "T9", unsent: false, current: true, held: false },
           ],
         });
         expect(buttonOf(el, "t4").getAttribute("aria-label")).toBe(label);
@@ -1164,10 +1164,30 @@ describe("a handheld's table buttons", () => {
     } finally {
       document.removeEventListener("open-bar-table", listen);
     }
-    expect(events.map((event) => event.detail)).toEqual([{ tableId: "t9" }]);
+    expect(events.map((event) => event.detail)).toEqual([{ tableId: "t9", held: false }]);
     expect(events[0]!.bubbles).toBe(true);
     expect(events[0]!.composed).toBe(true);
     expect(screens).toEqual([]);
+  });
+
+  it("says in open-bar-table whether the button goes back to the held bill", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      barTables: [{ ...tables[0]!, held: true }, tables[1]!],
+    });
+    const details: unknown[] = [];
+    const listen = (event: Event) => details.push((event as CustomEvent).detail);
+    document.addEventListener("open-bar-table", listen);
+    try {
+      await userEvent.click(buttonOf(el, "t4"));
+      await userEvent.click(buttonOf(el, "t9"));
+    } finally {
+      document.removeEventListener("open-bar-table", listen);
+    }
+    expect(details).toEqual([
+      { tableId: "t4", held: true },
+      { tableId: "t9", held: false },
+    ]);
   });
 
   it("a till draws no table buttons", async () => {
@@ -1192,6 +1212,7 @@ describe("a handheld's table buttons", () => {
           name: `T${i + 1}`,
           unsent: true,
           current: false,
+          held: false,
         })),
       });
       await frame();
@@ -1216,6 +1237,7 @@ describe("a handheld's table buttons", () => {
         name: `T${i + 1}`,
         unsent: true,
         current: `t${i + 1}` === current,
+        held: false,
       }));
     const stripOf = (el: TillShell) =>
       el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
@@ -1897,6 +1919,7 @@ describe("till-shell above phone width", () => {
       name: `T${i + 1}`,
       unsent: true,
       current: false,
+      held: false,
     }));
   /** The fewest table buttons that move `name` into More at the current width, measured on a bar
    * gaining one button at a time, because how wide the text draws differs between platforms. */

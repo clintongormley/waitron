@@ -1028,7 +1028,7 @@ export class TillShell extends LitElement {
       data-bar-table=${table.tableId}
       aria-selected=${current ? "true" : "false"}
       aria-label=${table.unsent ? t("shell.table_unsent").replace("{table}", () => table.name) : nothing}
-      @click=${() => this.#emit("open-bar-table", { tableId: table.tableId })}
+      @click=${() => this.#emit("open-bar-table", { tableId: table.tableId, held: table.held })}
     >
       ${table.unsent ? html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>` : nothing}${table.name}
     </button>`;

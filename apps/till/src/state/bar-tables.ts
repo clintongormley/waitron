@@ -6,6 +6,8 @@ export interface BarTable {
   name: string;
   unsent: boolean;
   current: boolean;
+  /** The button goes back to the held bill rather than opening its table. */
+  held: boolean;
 }
 
 /** The bill whose draft this device holds or has just released (D4): how many lines its store
@@ -34,6 +36,35 @@ function heldPartyOf(held: HeldBill | null, tables: readonly TableState[]): stri
   return there?.state === "open" ? there.id : null;
 }
 
+/** D13: while the order screen shows a table being opened, that table stands in for the held bill
+ * unless the held bill is already its party's, or the same partyless table's. */
+function shownBill(
+  held: HeldBill | null,
+  opening: BarLocal["opening"],
+  tables: readonly TableState[],
+): HeldBill | null {
+  if (opening?.onScreen !== true) return held;
+  const tableId = opening.tableId;
+  // The party the read lists there, not the held bill's, which an open sets before it is done.
+  const partyId = tables.find((table) => table.id === tableId)?.party?.id ?? null;
+  const same =
+    held !== null &&
+    (partyId === null
+      ? held.partyId === null && held.tableId === tableId
+      : held.partyId === partyId);
+  return same
+    ? held
+    : { partyId, tableId, billId: null, lines: 0, takenByOther: false, onScreen: true };
+}
+
+export interface BarLocal {
+  held: HeldBill | null;
+  /** Later records of one bill win over earlier ones. */
+  released: readonly LocalBill[];
+  /** The table being opened, and whether the order screen shows it yet. */
+  opening?: { tableId: string; onScreen: boolean };
+}
+
 /**
  * The tables a handheld's bar gives a button (D3, D4, D13): each open party where `personId` has
  * something unsent, and the held party, or a held table whose party the read does not list, while it
@@ -44,11 +75,10 @@ function heldPartyOf(held: HeldBill | null, tables: readonly TableState[]): stri
 export function barTables(
   tables: readonly TableState[],
   personId: string,
-  /** Later records of one bill win over earlier ones. */
-  local: { held: HeldBill | null; released: readonly LocalBill[] },
+  local: BarLocal,
 ): BarTable[] {
   if (personId === "") return [];
-  const held = local.held;
+  const held = shownBill(local.held, local.opening, tables);
   const heldPartyId = heldPartyOf(held, tables);
   // D13: a held party the read does not list yet still has its table on screen.
   const unlisted = held !== null && heldPartyId === null ? held : null;
@@ -65,6 +95,16 @@ export function barTables(
     }
     if (mine !== null) answers.set(mine.billId, localUnsent(mine));
     return [...answers.values()].some(Boolean);
+  };
+
+  /** D9: a button goes back to the held bill when it names the held table, no other table is being
+   * opened, and the read seats no other open party there. */
+  const goesBack = (tableId: string): boolean => {
+    const bill = local.held;
+    if (bill === null || tableId !== bill.tableId) return false;
+    if ((local.opening?.tableId ?? tableId) !== tableId) return false;
+    const seated = tables.find((table) => table.id === tableId)?.party;
+    return !(seated?.state === "open" && seated.id !== bill.partyId);
   };
 
   return groupTables<{ party: TableParty | null; here: HeldBill | null }>(tables, (table) => {
@@ -86,6 +126,6 @@ export function barTables(
       (party === null ||
         tables.some((each) => each.id === here.tableId && each.party?.id === party.id));
     const tableId = seatsHeld ? here.tableId : table.id;
-    return unsent || current ? [{ tableId, name, unsent, current }] : [];
+    return unsent || current ? [{ tableId, name, unsent, current, held: goesBack(tableId) }] : [];
   });
 }
