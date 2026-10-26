@@ -563,6 +563,44 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(bar(el)).toEqual(["Floor", "[✎ T4]"]);
   });
 
+  it("keeps ✎ T9 while T9's draft loads after its button is tapped", async () => {
+    const { el } = await mountApp();
+    await openMesa(el, "t9");
+    await tap(el, "Beer");
+    await waitForSave();
+    api.getTablesState!.mockResolvedValue([mesa4, mesa9WithAnas]);
+    await toFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]", "✎ T9"]);
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const read = api.listDrafts!.getMockImplementation() as (...args: unknown[]) => unknown;
+    api.listDrafts!.mockImplementation(async (partyId: string, ...rest: unknown[]) => {
+      if (partyId === "v9") await gate;
+      return read(partyId, ...rest);
+    });
+    barButton(el, "t9").click();
+    const shown: string[][] = [];
+    const arrays = new Set<unknown>();
+    for (let i = 0; i < 8; i++) {
+      await flush(el, 1);
+      shown.push(bar(el));
+      arrays.add(shell(el).barTables);
+    }
+    expect(api.listDrafts).toHaveBeenCalledWith("v9", expect.anything());
+    expect(shown).toEqual(shown.map(() => ["Floor", "[✎ T9]"]));
+    expect(arrays.size).toBe(1);
+
+    release();
+    await flush(el, 6);
+    expect(draft(el).lines).toHaveLength(1);
+    expect(bar(el)).toEqual(["Floor", "[✎ T9]"]);
+    expect(arrays.has(shell(el).barTables)).toBe(true);
+  });
+
   it("rebuilds the buttons for the next person", async () => {
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),

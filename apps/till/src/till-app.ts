@@ -11142,12 +11142,16 @@ export class TillApp extends LitElement {
     const sync =
       party !== null && this.#draftSync?.partyId === party.id ? this.#draftSync : undefined;
     const editorId = sync?.edit?.editorId ?? null;
+    const store = this.#tableDraft();
+    const candidate = sync?.candidate ?? null;
+    // Until its draft is read, the bill has no answer of its own and the floor read decides for it.
+    const known = store !== null || candidate !== null;
     return {
       partyId: party?.id ?? null,
       tableId,
-      billId: party === null ? null : (this.activeTabId ?? null),
+      billId: party === null || !known ? null : (this.activeTabId ?? null),
       // A failed save reloads the store from the box and keeps this device's lines as the candidate.
-      lines: (this.#tableDraft()?.lines.length ?? 0) || (sync?.candidate?.lines.length ?? 0),
+      lines: (store?.lines.length ?? 0) || (candidate?.lines.length ?? 0),
       takenByOther: editorId !== null && editorId !== sync?.personId,
       onScreen: this.#orderScreenShown(),
     };
@@ -18151,6 +18155,7 @@ export class TillApp extends LitElement {
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
     this.tableOpening = false;
+    this.openingTableId = undefined;
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
