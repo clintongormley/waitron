@@ -12,6 +12,7 @@ import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { shellEn, shellEs } from "./i18n/strings/shell.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -3054,57 +3055,18 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   });
 
   it.each([
-    [
-      "en-GB",
-      "privacyNoticeUrl",
-      "web_address",
-      "This export's privacy notice web page is not an address Waitron accepts. On the box you exported from, correct it on the Privacy card in Venue settings, export again, then load the new export.",
-    ],
-    [
-      "en-GB",
-      "privacyNoticeUrl",
-      "length",
-      "This export's privacy notice web page is longer than Waitron accepts. On the box you exported from, shorten it on the Privacy card in Venue settings, export again, then load the new export.",
-    ],
-    [
-      "en-GB",
-      "privacyEmail",
-      "email",
-      "This export's privacy email is not an address Waitron accepts. On the box you exported from, correct it on the Privacy card in Venue settings, export again, then load the new export.",
-    ],
-    [
-      "en-GB",
-      "privacyEmail",
-      "length",
-      "This export's privacy email is longer than Waitron accepts. On the box you exported from, shorten it on the Privacy card in Venue settings, export again, then load the new export.",
-    ],
-    [
-      "es-ES",
-      "privacyNoticeUrl",
-      "web_address",
-      "La página web del aviso de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígela en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
-    ],
-    [
-      "es-ES",
-      "privacyNoticeUrl",
-      "length",
-      "La página web del aviso de privacidad de esta exportación es más larga de lo que Waitron acepta. En el equipo del que exportaste, acórtala en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
-    ],
-    [
-      "es-ES",
-      "privacyEmail",
-      "email",
-      "El correo de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígelo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
-    ],
-    [
-      "es-ES",
-      "privacyEmail",
-      "length",
-      "El correo de privacidad de esta exportación es más largo de lo que Waitron acepta. En el equipo del que exportaste, acórtalo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
-    ],
+    ["en-GB", "privacyNoticeUrl", "web_address", "shell.configuration.privacy_notice_url_invalid"],
+    ["en-GB", "privacyNoticeUrl", "length", "shell.configuration.privacy_notice_url_too_long"],
+    ["en-GB", "privacyEmail", "email", "shell.configuration.privacy_email_invalid"],
+    ["en-GB", "privacyEmail", "length", "shell.configuration.privacy_email_too_long"],
+    ["en-GB", "privacyEmail", undefined, "shell.configuration.privacy_email_invalid"],
+    ["es-ES", "privacyNoticeUrl", "web_address", "shell.configuration.privacy_notice_url_invalid"],
+    ["es-ES", "privacyNoticeUrl", "length", "shell.configuration.privacy_notice_url_too_long"],
+    ["es-ES", "privacyEmail", "email", "shell.configuration.privacy_email_invalid"],
+    ["es-ES", "privacyEmail", "length", "shell.configuration.privacy_email_too_long"],
   ] as const)(
     "explains a refused privacy contact in a configuration export (%s, %s, %s)",
-    async (locale, field, reason, sentence) => {
+    async (locale, field, reason, key) => {
       try {
         const el = await mountSetupApp(
           stubApi({
@@ -3118,7 +3080,9 @@ describe("restore, configuration and fiscal-test outcomes", () => {
         setLocale(locale);
         configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
         await flush(el);
-        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+          (locale === "es-ES" ? shellEs : shellEn)[key],
+        );
         expect(readDraft(el).configurationImport).toBeUndefined();
         expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
       } finally {
