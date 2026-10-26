@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
@@ -8,7 +9,10 @@ import { ALL_MODULES } from "@waitron/composition";
 import {
   assertNoLegacyFirstSetupWorkspace,
   canonicalFirstSetupDirectory,
+  createFirstSetupBackupWorkspace,
+  emptyAbandonedBackupRecovery,
   finishStartAgainDeletion,
+  isEmptiedTombstone,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -26,6 +30,7 @@ import {
   resolveFirstSetupBackupEntry,
 } from "./first-setup-backup-entry.js";
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
+import { startFailureCode } from "./boot-failure.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -53,7 +58,7 @@ export async function resolveFirstSetupEntry(
   requestRestart?: () => void,
   log: Logger = () => {},
 ) {
-  const refused = await refusedAtStart(roots);
+  const refused = await refusedAtStart(roots, log);
   if (refused !== undefined) return refused;
   const backup = await resolveFirstSetupBackupEntry(roots);
   if (backup.kind === "repair")
@@ -82,7 +87,7 @@ export async function resolveFirstSetupEntry(
 const START_REFUSALS = ["setup.workspace_unsupported", "setup.start_again_incomplete"] as const;
 
 /** Runs before A731's entry, which would otherwise serve its repair page from a half-deleted attempt. */
-async function refusedAtStart(roots: FirstSetupRoots) {
+async function refusedAtStart(roots: FirstSetupRoots, log: Logger) {
   let canonical: FirstSetupRoots;
   try {
     canonical = {
@@ -92,6 +97,7 @@ async function refusedAtStart(roots: FirstSetupRoots) {
   } catch {
     return undefined;
   }
+  await emptyDiscardedRecovery(canonical, log);
   try {
     await assertNoLegacyFirstSetupWorkspace(canonical);
     await finishStartAgainDeletion(canonical);
@@ -102,6 +108,32 @@ async function refusedAtStart(roots: FirstSetupRoots) {
       return { kind: "refused" as const, code: refusal, roots: canonical, error };
   }
   return undefined;
+}
+
+/** Finishes a discard a power cut stopped after the abandon; a refusal is logged and the start goes on. */
+async function emptyDiscardedRecovery(roots: FirstSetupRoots, log: Logger) {
+  let target: string | undefined;
+  let path: string | undefined;
+  try {
+    const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1);
+    if (last?.phase !== "abandoned") return;
+    const id = last.target.recoveryId;
+    target = last.target.target.venueDir;
+    path = join(roots.stateDir, "first-setup-resolutions", "backup-recovery", id);
+    if (await isEmptiedTombstone(roots, id)) return;
+    await emptyAbandonedBackupRecovery(roots, id);
+  } catch (error) {
+    log("warn", "setup.recovery_cleanup_refused", {
+      reason:
+        error instanceof AppError
+          ? error.code
+          : await startFailureCode(error, [
+              roots.venueDir,
+              ...(target === undefined ? [] : [target]),
+            ]),
+      ...(path === undefined ? {} : { path }),
+    });
+  }
 }
 
 async function resolveLegacyFirstSetupEntry(

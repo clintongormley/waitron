@@ -1,5 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
-import { access, lstat, readFile, readdir, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  readFile,
+  readdir,
+  rmdir,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { dirname, join } from "node:path";
@@ -9,6 +18,7 @@ import { AppError } from "@waitron/shared";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
   emptyAbandonedBackupRecovery,
+  isEmptiedTombstone,
   raiseStartAgainNote,
   readStartAgainMarker,
   readStartAgainNote,
@@ -34,6 +44,7 @@ import * as sources from "./first-setup-backup-source.js";
 import * as backupEntry from "./first-setup-backup-entry.js";
 import * as restore from "./restore.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 
 vi.mock("./first-setup-backup-source.js", { spy: true });
 vi.mock("./first-setup-backup-entry.js", { spy: true });
@@ -1034,4 +1045,172 @@ it("a recovery stopped during its settle wait, whose picks name nothing, is show
   expect((await f.workspace.read()).at(-1)!.phase).toBe("abandoned");
   expect((await lstat(join(f.record.target.target.venueDir, "venue.lock"))).ino).toBe(lock.ino);
   expect((await readStartAgainNote(f.roots.stateDir))?.lastName ?? null).toBe(attemptOnly.lastName);
+});
+
+// The box's next start, with a service that has just been created, as after a power cut.
+async function nextStart(f: Pick<Repair, "roots" | "options">) {
+  const restarted = recovery(f.options);
+  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(restarted);
+  const lines: { event: string; fields: Record<string, unknown> | undefined }[] = [];
+  const entry = await resolveFirstSetupEntry(
+    f.roots,
+    { WAITRON_ENV: "preproduction" },
+    undefined,
+    (_level, event, fields) => lines.push({ event, fields }),
+  );
+  if (entry.kind === "resolution") await entry.dispose();
+  return { entry, restarted, lines };
+}
+
+const POWER_CUT = () => new Error("power cut");
+// A cut Start again is followed by `clock.advance(1)`: a confirmation's file is named by its
+// millisecond, and the next Start again writes another.
+
+// A recovery that failed at placement-started, its target holding a venue database.
+async function placementFailed() {
+  const f = await selectedRepair();
+  const append = f.workspace.append;
+  vi.spyOn(f.workspace, "append").mockImplementation(async (record) => {
+    const saved = await append(record);
+    if (record.phase === "placement-started") throw new AppError("setup.attempt_invalid", {});
+    return saved;
+  });
+  await expect(f.service.commit(f.session.sessionId, f.selected.input, client)).rejects.toThrow();
+  vi.mocked(f.workspace.append).mockRestore();
+  await f.service.dispose();
+  // The fixture's placement copies no database; a real one would leave one in the target.
+  await writeFile(join(f.record.target.target.venueDir, "venue.db"), "placed");
+  return { ...f, service: recovery(f.options) };
+}
+
+// Start again over a recovery, with the power cut at its discard, after the abandon.
+async function cutAfterAbandon(f: Awaited<ReturnType<typeof placementFailed>>) {
+  vi.spyOn(f.service, "discardInTurn").mockRejectedValue(POWER_CUT());
+  await expect((await startAgainOver(f, f.service)).run()).rejects.toThrow("power cut");
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  await f.service.dispose();
+  clock.advance(1);
+}
+
+it("a power cut after the confirmation and before the abandon: the next start serves the repair page with the recovery stopped, and a second Start again finishes", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const first = await startAgainOver(f, f.service);
+  // The run seals once while it finds the recovery, and again just before the abandon.
+  const seal = f.service.sealLapsed.bind(f.service);
+  let seals = 0;
+  vi.spyOn(f.service, "sealLapsed").mockImplementation(() => {
+    if (++seals === 2) throw POWER_CUT();
+    seal();
+  });
+  await expect(first.run()).rejects.toThrow("power cut");
+  expect(await confirmations(f.roots.stateDir)).toHaveLength(1);
+  await f.service.dispose();
+  clock.advance(1);
+  const { entry, restarted } = await nextStart(f);
+  expect(entry.kind).toBe("resolution");
+  expect((await f.workspace.readChain()).at(-1)!.phase).not.toBe("abandoned");
+  const second = await startAgainOver(f, restarted);
+  expect(second.shown.recovery).toBeDefined();
+  await expect(second.run()).resolves.toBeUndefined();
+  expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual(
+    expect.arrayContaining([first.shown, second.shown]),
+  );
+  expect(await confirmations(f.roots.stateDir)).toHaveLength(2);
+  expect((await lstat(join(f.record.target.target.venueDir, "venue.lock"))).ino).toBe(lock.ino);
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("a power cut after the abandon and before the emptying: the start empties the recovery before any request, and the ordinary ask's Start again deletes the attempt", async () => {
+  const f = await placementFailed();
+  await cutAfterAbandon(f);
+  const { entry, restarted } = await nextStart(f);
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
+  await expect(access(join(f.record.target.target.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(entry.kind).toBe("resolution");
+  const second = await startAgainOver(f, restarted);
+  expect(second.shown).not.toHaveProperty("recovery");
+  await expect(second.run()).resolves.toBeUndefined();
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await confirmations(f.roots.stateDir)).toHaveLength(2);
+});
+
+it("a power cut during the attempt's deletion: the start finishes it beside the emptied recovery", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const { owner, ids } = await signedIn(f.host);
+  let removed = 0;
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: f.service,
+    remove: async (path, kind) => {
+      if (removed++ === 1) throw POWER_CUT();
+      await (kind === "file" ? unlink(path) : rmdir(path));
+    },
+  });
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  expect(removed).toBe(2);
+  expect(await readStartAgainMarker(f.roots.venueDir)).not.toBeNull();
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
+  await f.service.dispose();
+  const { entry } = await nextStart(f);
+  expect(entry.kind).toBe("normal");
+  expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
+});
+
+it("an emptying refused at the start, a symlink in the recovery: the repair page is served, the refusal is logged with its reason, and nothing is deleted", async () => {
+  const f = await placementFailed();
+  const outside = join(dirname(f.roots.stateDir), "outside");
+  await writeFile(outside, "outside");
+  await symlink(outside, join(f.record.target.target.stateDir, "planted"));
+  await expect((await startAgainOver(f, f.service)).run()).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await f.service.dispose();
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  const { entry, lines } = await nextStart(f);
+  expect(entry.kind).toBe("resolution");
+  expect(lines).toContainEqual({
+    event: "setup.recovery_cleanup_refused",
+    fields: { reason: "setup.attempt_uncertain", path: expect.any(String) },
+  });
+  expect({ venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) }).toEqual(
+    before,
+  );
+});
+
+it("a second process holding the box's venue lock at the start: the recovery is not emptied, and the refusal names provisioning.database_in_use", async () => {
+  const f = await placementFailed();
+  await cutAfterAbandon(f);
+  const holder = await holdVenueElsewhere(f.roots.venueDir);
+  try {
+    const { lines } = await nextStart(f);
+    expect(lines).toContainEqual({
+      event: "setup.recovery_cleanup_refused",
+      fields: { reason: "provisioning.database_in_use", path: expect.any(String) },
+    });
+  } finally {
+    await holder.stop();
+  }
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(false);
+  await access(join(f.record.target.target.venueDir, "venue.db"));
 });
