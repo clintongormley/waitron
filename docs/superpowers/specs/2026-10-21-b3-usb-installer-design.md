@@ -1,9 +1,12 @@
 # B3 — The bootable USB installer
 
-**Status:** proposed design, revised 2026-10-21 for the owner's five answers and W60, then revised
-2026-10-26 by Lane F (B3r) for the owner's settled same-box Prepare-to-Live answer (§12) and time-zone
-clarification (§10). This revision awaits design approval through ONE question (§18); Q2 is answered.
-No build is authorised by this revision. Lane A's installer design otherwise stands.
+**Status:** APPROVED WITH CHANGES, owner 2026-10-26 ~12:15: “We don't need the configuration
+code. It's not a concern. The rest approved.” Revised by Lane F (B3r) to remove setup credentials,
+repeat the disk recovery key on every sheet, and replace the terminal unlock fallback with a
+Waitron preboot screen (§7.5). Q2 is answered. Only the preboot reachability/connection/attempt
+policy awaits ONE owner choice (§18); its external mechanics remain PROPOSED qualification
+requirements. Planning slices 1, 2, 3, 5, 6 and 8 is authorised; building is not.
+Plan: [`2026-10-26-b3-usb-installer.md`](../plans/2026-10-26-b3-usb-installer.md).
 Backlog entry: `docs/backlog.md`, "B3. The bootable USB installer". Pictures:
 [`docs/backlog/mockups/b3-usb-installer/`](../../backlog/mockups/b3-usb-installer/).
 
@@ -15,7 +18,9 @@ a full-screen browser on every box and no desktop, with the box's settings as Wa
 start on the till (§9); the disk encrypted with its key held in the box's security chip (§7), and a
 maintenance login handed out by the box itself (§11); and, during the install, the installer's own
 Wi-Fi hotspot as the fallback when there is no cable (§5.3). The watcher folded W60 in: a production box offers neither Demo nor
-Prepare, and nobody can set up a box before its owner does (§12).
+Prepare (§12). The later owner decision accepts another LAN browser claiming an unconfigured
+box first, including fresh Live pending after Prepare. W60's setup-code part is closed;
+its production-mode restriction stays.
 
 **2026-10-26 revision pointer.** The owner subsequently chose Prepare on the SAME stick-installed
 box, followed by an admin's dashboard action that saves only configuration and restarts fresh Live
@@ -71,7 +76,7 @@ wizard.
    answering at `waitron.local`, ready for its setup wizard.
 2. Every box installed from one release starts from the same disk, apart from what the installer and
    the first start write for that box (its network settings, its clock, a fresh machine identity, its
-   disk key and recovery key, its name tag, its setup code, the disk grown to fill the box, the print
+   disk key and recovery key, its name tag, the disk grown to fill the box, the print
    agent's AppArmor line, §7, §8, §12); CI builds the disk
    and installs it in a virtual machine before it is published.
 3. A stolen disk, or the box started from any other stick, shows only scrambled data (§7).
@@ -99,8 +104,8 @@ wizard.
    question is a failed install; the installer asks nothing of a box whose disk it can classify
    (§5.2).
 3. **An encrypted box locks its own venue out after a routine update.** A key that the security chip
-   refuses after an ordinary kernel update stops the restaurant at a prompt only a keyboard and the
-   printed recovery key can pass (§7.4).
+   refuses after an ordinary kernel update stops the restaurant at its recovery screen (§7.4).
+   Recovery must work on the local display and the approved preboot connection (§7.5).
 4. **It ships software without its licence notices**, as Litestream once did (CLAUDE.md §3,
    "A change adding third-party code").
 
@@ -159,15 +164,15 @@ One small file, `waitron-installer-<n>.img`, written to any stick (its size is m
 The stick does not change with every release: it fetches the newest one (§5.4). Its parts:
 
 1. **A small Debian system that boots and runs the installer.** It copies itself into memory as it
-   starts, so the stick can be taken out once it says so (§5, guard 2), and it never writes to the
-   stick except the one file in item 3.
+   starts, so the stick can be taken out once it says so (§5, guard 2). The installer writes
+   nothing to the stick; it is never a disk-key or setup-credential carrier.
 2. **Waitron's two public signing keys** (§14), against which it checks the release list and the
    disk it downloads.
 3. **A folder readable on any Windows or Mac computer**, named `WAITRON`, holding: `LEEME.html` /
    `README.html` (what this stick is, the three guards in one paragraph each, and what to do with no
    internet), a `licencias` folder with the licence notices and the written offer for source code
-   for the installer itself (§13), a checksum list, and — written by the installer at each install —
-   **the setup code of each box it installed** (§12), in `codigos-de-configuracion.txt`.
+   for the installer itself (§13), and a checksum list. No setup code is generated or stored on
+   the stick, disk or closing banner (§12.5).
 
 The release's declaración responsable (A940 §7.1) is downloaded with the release and kept on the
 box, where Help → About shows it (A940's design), rather than on a stick that may be older than the
@@ -194,9 +199,9 @@ the install has been checked:
 2. it reads the disk (guard 3, §5.2) and checks the box: one internal disk, a security chip switched
    on (§7.7) and Secure Boot switched on (§15). A box that fails a check is refused here, untouched;
    a box that already holds Waitron goes guard 3's way and writes nothing to the stick;
-3. only for a box it is going to install (or one whose reinstall a person has confirmed), it makes
-   the box's **setup code** and writes it onto the stick (§12), then says «Ya puedes quitar el USB»
-   — the one moment the stick may come out, used by guard 2, §5.6 and the card;
+3. only for a box it is going to install (or one whose reinstall a person has confirmed), it
+   confirms that the complete installer is running from memory, then says «Ya puedes quitar el USB».
+   This is the removal point used by guard 2, §5.6 and the card; no code is made or written;
 4. it finds the network (§5.3), sets the clock (§5.4), downloads the release and checks it (§5.4);
 5. only then, the 60-second wait (§5.2), the erase and the write (§5.5);
 6. the restart, once the stick is out (guard 2).
@@ -212,8 +217,9 @@ the install has been checked:
    restart, and guard 3 covers a stick put back later.
 2. **The stick comes out before the box restarts.** The installer runs from memory (§4 item 1).
    When it has finished writing and checking the disk, it restarts into the box only once the stick
-   is gone; until then it waits, saying so on the screen and the status page. A stick taken out any
-   time after «Ya puedes quitar el USB» (step 3 above) changes nothing: the install carries on and
+   is gone; until then it waits, saying so on the screen and the status page. Removal is mandatory
+   even after setting the boot order: firmware can ignore it and start the installer again (P48).
+   A stick taken out any time after «Ya puedes quitar el USB» (step 3 above) changes nothing: the install carries on and
    restarts by itself when done. A stick taken out before that just stops a start that had not
    touched the disk.
 3. **A stick that finds Waitron on the disk does nothing unless a key is pressed.** The installer
@@ -330,9 +336,8 @@ which an 8 GB box has if the disk stays under 2 GiB (§13, §16); slice 2 measur
 ### 5.5 Installing, and the restart
 
 The installer erases the disk, lays out the boot partition and the encrypted container (§6, §7),
-makes the container fill the disk, writes the ready-made filesystem into it with the box's setup
-code (§12), checks what it wrote, sets the boot order (guard 1), and then waits for the stick to be out
-(guard 2). Picture 4.
+makes the container fill the disk, writes the ready-made filesystem into it, checks what it wrote,
+sets the boot order (guard 1), and then waits for the stick to be out (guard 2). Picture 4.
 
 ### 5.6 Where the person sees progress
 
@@ -341,15 +346,15 @@ code (§12), checks what it wrote, sets the boot order (guard 1), and then waits
   `http://waitron-instalar.local` on the venue's network (published by Avahi, which Debian 13 has,
   P55) and, while its own Wi-Fi network is open, on that. It shows the step, the progress, «Ya
   puedes quitar el USB» and any reason it has stopped. It shows no setup code and offers no action
-  but the Wi-Fi form, so a stranger on the network who finds it learns only that a box is being
-  installed. **My call.**
+  but the Wi-Fi form. It exposes installation progress and stop reasons, never disk or fiscal
+  keys. **My call.**
 - **The printed card**, for a person with neither: plug in, start, take the stick out after the time
   the card states (measured in slice 2, so that it falls safely after step 3's «Ya puedes quitar el
   USB»), and open `waitron.local` from a phone or computer on the same network after the time it
   states.
 
 **After the restart**, the box's screen opens the setup wizard (§9); a box with no screen is set up
-from any device on the network, which asks for the box's setup code (§12). The installer asks
+from any device on the network without a setup code (§12). The installer asks
 nothing the wizard asks: not the name, not new-venue-or-spare (A947), not the fiscal mode.
 
 ## 6. The disk the installer writes
@@ -363,11 +368,12 @@ encrypted part of a disk; **btrfs** is a Linux filesystem that can take instant 
 | --- | --- | --- |
 | EFI system partition, 512 MiB, FAT, not encrypted | Debian's signed boot loader (§15), also at the fallback path (guard 1) | The firmware starts from it |
 | Boot partition, 1 GiB, ext4, not encrypted | The kernel and the startup image that unlocks the disk (§7.2) | The loader reads them before the disk is unlocked |
-| LUKS2 container, rest of the disk, marked as Waitron's by its partition type and name and its "subsystem" field (§5.1 guard 3) | One btrfs filesystem, in four top-level subvolumes: | Encrypted (§7) |
+| LUKS2 container, rest of the disk, marked as Waitron's by its partition type and name and its "subsystem" field (§5.1 guard 3) | One btrfs filesystem, in five top-level subvolumes: | Encrypted (§7) |
 | `@rootfs` → `/` | Debian, Docker, the browser, the box's host service | Debian's own updates (§14) roll back separately from the venue |
 | `@images` → Docker's image and container store | The Waitron images | A950 keeps the old image by its tag, not in the snapshot (`docs/backlog/box.md:76`) |
 | `@volumes` → Docker's volumes folder | `waitron_state`, `waitron_backups`, `waitron_print_agent`, `waitron_mailpit` | What A950 snapshots and puts back |
 | `@logs` → mounted at the `waitron_logs` volume's folder | `waitron.log` | A subvolume of its own, so a snapshot of `@volumes` does not contain it (P13) and a rollback of `@volumes` should leave it alone — the case `docs/backlog/box.md:78-79` asks for. What a rollback does to a subvolume mounted inside another's folder is untested: slice 1 tries it |
+| `@host-state` → `/var/lib/waitron-host` | Retained disk-key record, physical recovery identity metadata, cutover handoff/phase and host audit | New 2026-10-26 storage call for retained recovery: outside both `@rootfs` and `@volumes` snapshots/rollback. It is not a venue backup/export source. |
 
 - **The kernel and startup image sit outside the encryption** because Debian's loader must read them
   before anything is unlocked; neither holds venue data. Whether Debian's signed loader can read
@@ -441,7 +447,7 @@ settled by the experiments below and not by reading:
    sealed to is computed, not read live, at first start (§7.3). Two consequences, both required:
    - **The chip unlock runs with its own password prompt switched off** (`headless`, P42), because
      systemd's unlock tries the chip and then asks for a password in one step; the recovery-key
-     prompt (§7.5) is a separate step of Waitron's own, after the hook.
+     screen (§7.5) is a separate step of Waitron's own, after the hook.
    - **Every way out of the unlock stage extends the register**, the failure paths included, and the
      startup image offers no emergency shell: dracut offers one by default (P59), so the box's kernel
      command line carries `rd.shell=0 rd.emergency=reboot` — which register 8 records, so it cannot be
@@ -452,9 +458,10 @@ settled by the experiments below and not by reading:
    changes the box's own after install (§5.5), so it keeps ordinary sticks out in both the normal
    seal and the temporary one (§7.4). It does **not** keep out a stick made by someone who copied the
    box's partition table onto it — the table is not encrypted. Reasoning, for slice 1 to test.
-5. **The recovery-key prompt is safe only because of item 3.** The box unlocks unattended or stops
-   at a recovery-key prompt (§7.5); the prompt is the fallback the fake-disk attack uses, and item 3
-   is what leaves it nothing to collect.
+5. **The recovery screen must not permit a second TPM unseal.** The box unlocks unattended or
+   starts the preboot Waitron recovery screen (§7.5), after item 3's hook. The screen never opens
+   an emergency shell. The fake-disk controls still have to prove this; changing the interface
+   does not establish that the attack is defeated.
 
 Two Debian facts shape the build, both sourced:
 
@@ -482,7 +489,7 @@ probe would look like a pass, a control in the same run:
 - **(d)** a kernel update followed by a restart unlocks (§7.4), with registers 8 and 9 recorded
   before and after and required to differ — an "update" that changed neither tests nothing.
 - **(e)** a power cut between installing that update and the planned restart still unlocks.
-- **(f)** a deliberately broken seal stops at the recovery-key prompt, the recovery key opens it,
+- **(f)** a deliberately broken seal stops at the preboot recovery screen, the recovery key opens it,
   and the box seals itself again (§7.5).
 - **(g)** a full run of Debian's automatic updates on the built image, then a restart, unlocks
   (§7.4), with registers 8 and 9 compared before and after.
@@ -497,7 +504,7 @@ probe would look like a pass, a control in the same run:
 **The weak test seal exists only during (b) and (c)** and is removed before every other experiment,
 and every experiment that expects an unlock records **which seal opened the disk** and fails if it
 was not the real one — otherwise (a), (d), (e) and (g) would pass with the real seal broken, and (f)
-could never reach its prompt. It never ships. The CI virtual machine runs (a), (b), (d), (f), (g)
+could never reach its recovery screen. It never ships. The CI virtual machine runs (a), (b), (d), (f), (g)
 and (i) on every image change with a virtual TPM; (c), (e) and (h) run on the real box in slice 6.
 
 ### 7.3 How a box gets its key
@@ -537,7 +544,7 @@ cost, so the call can be revisited with a number.
 A new kernel, startup image or boot loader changes registers 8 and 9 (P36), and a change to the
 firmware's certificate lists changes register 7 (P43) — including Microsoft's 2026 certificate
 change, which Debian's newer loaders follow (P43). After any of these, the old seal no longer
-matches, and a box restarted without care stops at the recovery-key prompt: anti-goal 3.
+matches, and a box restarted without care stops at the preboot recovery screen: anti-goal 3.
 
 **So (my call):** anything that changes the start-up is held back from Debian's daily automatic
 updates and installed only in A950's quiet hour. The held set is defined **by effect, not by a list
@@ -567,48 +574,180 @@ recovery key present. The box runs no firmware updater (`fwupd`), so the certifi
 otherwise only by a person's hand or a firmware update — and then the recovery key opens the box
 (§7.5).
 
-### 7.5 The recovery key
+### 7.5 The recovery key and the preboot Waitron screen
 
-Picture 9. A recovery key is 256 random bits shown as 64 letters in eight groups of eight, from a 16-letter set
-chosen to be easy to type, and it is accepted wherever a password is (P40). The box creates it on its
-first start (§7.3).
+**Owner changes, 2026-10-26:** every later recovery sheet includes the disk recovery key; restore
+and spare setup include it on a separate page. When automatic unlock fails, you use a Waitron
+screen on the box's display or from another device on the LAN. There is no terminal fallback.
+These are design requirements, not implemented or qualified paths. Pictures 9 and 12 show the proposed screens.
 
-- **Where it goes: on the recovery sheet**, as the owner asked. The setup wizard already prints that
-  sheet itself: "Download, print, or both from the recovery-document step … confirm that you kept
-  the sheet before continuing" (`docs/operations/first-live-fiscal-setup.md:32-34`), and the box's
-  first start, which makes the disk key, comes before setup. So the box hands the key, once, to
-  Waitron, the sheet gains a section «Clave de recuperación del disco» with the key as text and a QR
-  code, and the box's host service deletes its own copy when the wizard's existing "kept"
-  confirmation is given. **Restore and spare probably end without a new sheet** — a restore uses the
-  sheet it already has ("find the recovery sheet whose key name matches that copy",
-  `docs/operations/hour-recovery.md:3-4`) — so on those paths the wizard prints the disk key as a page
-  of its own (the plan confirms which paths). **A later sheet does not carry the disk key** (the box
-  no longer has it), so the section says «Guarda esta hoja aunque otra la sustituya». It is never stored in the venue database: the
-  database streams to the owner's bucket once one is set up, and CLAUDE.md §3 keeps anything that
-  works as a key out of it ("Anything that works as a live login is stored as a hash"). Until it is
-  printed, the host service keeps it readable only by itself. **My call** on the handover.
-- **When it is used:** the box stops at a prompt on its screen, «Introduce la clave de
-  recuperación del disco», when the chip refuses (systemd asks for a password when the chip will not
-  answer, P42) — after a firmware or certificate change, a
-  motherboard replaced, or a seal that went wrong. The person plugs in a screen and keyboard and
-  types it, dashes included (P40); the box starts and raises an alert saying it was opened with the
-  recovery key. **It seals itself to its chip again only if** the kernel, the startup image and the
-  loader's configuration match fingerprints the box recorded inside the encrypted disk when it last
-  built them itself; otherwise it does not reseal and raises a different alert, «Han cambiado los
-  archivos de arranque». That stops the box itself trusting changed start-up files — after an
-  accident, or after someone swapped them and left. It does **not** stop a swapped startup image that
-  has been typed the recovery key: the startup image sits unencrypted and unsigned (§6; "No code
-  signing protects initrd", P58), and once it holds the key it holds the disk. The real defence is a
-  person thinking before typing it, so the prompt says first when the start-up files differ from the
-  box's last record (reasoning; the prompt can only check what it can read before the disk opens).
-  **My call.**
-- **A dead box:** the venue's data comes back from its backups onto a new box installed from the
-  stick, which starts a new fiscal chain — the owner's chosen posture (§0). The recovery key adds
-  one thing backups may not have: moved into a working box of the same model, the old disk opens
-  with it, so records it had not yet sent to AEAT can be read. Whether such a moved disk can then
-  trade as the same installation is not designed here.
-- **The sheet lost and the chip refusing:** the disk cannot be opened by anyone. The venue restores
-  its backups onto a reinstalled box, exactly as for a dead box.
+The key remains 256 random bits, displayed as 64 letters in eight groups of eight from the
+16-letter set in P40. First start creates it (§7.3). It opens one encrypted disk, not a fiscal
+chain, backup archive or account. Every disk-key section/page names the **LUKS UUID** and box
+identity, with a «Clave de recuperación del disco» section containing the key as text and a QR
+code. You confirm that you kept the first sheet/page before continuing. Restoring an old venue backup on a newly installed disk prints the NEW disk's key and
+UUID, never a key inferred from the backup or the restored venue's identity. Reinstall makes a
+new disk/key pair; same-box configuration cutover keeps the existing pair.
+
+**Proposed host storage and delivery choice (my call).** Keep
+`/var/lib/waitron-host/disk-recovery/<LUKS UUID>.json`, versioned and mode `0600`, owned by host
+root, inside the encrypted disk on the separate `@host-state` mount, outside both OS and venue rollback. Parent directories
+are root-only. Before any read/write, the service verifies that `/var/lib/waitron-host` is mounted from
+the expected disk's `@host-state`; a missing mount refuses rather than writing into the underlying
+`@rootfs` directory. The host service checks the actual opened disk's UUID against the record and
+refuses missing, mismatched, corrupt or ambiguous records. It never guesses from a venue id.
+The key never enters the venue database, backups, bucket stream, configuration export, URLs,
+audit fields or logs, and no key directory is mounted into the app container. This is a proposed
+path and permission contract, not a claim that a file or service exists today.
+
+First delivery uses a guarded, one-time **internal host-to-renderer channel**, bound to the actual
+disk and current setup attempt. The internal capability is not a code given to the person, a setup
+grant or authority to claim/preview setup. A public setup request or forgeable local-screen marker
+cannot redeem it. The recipient proves the ordinary administrator identity being created during
+that setup over the protected delivery connection; this must work **before publication** without
+requiring an already-existing admin session. For restore/spare, use the validated adoption/recovery
+authority and recipient identity established by that flow. Bind the exact verification points
+after A1042's release (§12.4), rather than assuming today's recovery document contains this key.
+If the flow cannot protect first delivery without a pre-existing admin, stop at that binding gate;
+do not expose the key publicly or invent a setup code. A failed download can retry the same
+bound delivery; “kept” retires its capability, not the host's retained disk key.
+
+Every later sheet/download or restore/spare disk-key page uses an admin's fresh reauthentication:
+password or passkey plus enrolled TOTP, as in §11. A first restore/spare delivery uses the first-
+delivery rule above when that flow has not yet established a usable admin. Audit who requested
+each first/later delivery, the disk UUID, document id, result and time outside the removed venue;
+never audit the key. Use `no-store` responses and transient renderer memory, not a PDF retained
+in the venue's recovery archive. If no disk key is available, refuse with usable retry/Stop choices;
+never present a complete sheet missing its required disk section. Existing fiscal keys and
+recovery credentials remain separate and retain their own checks.
+
+**Cost of keeping it:** a privileged compromise of the running, unlocked host can obtain the
+retained recovery key. Confirming the sheet no longer erases the host's last readable copy.
+Root-only access and encryption protect its storage boundary; they do not protect it from host
+root. Disk-key rotation after compromise is not designed here. The USB never carries the key.
+
+**Preboot requirements, before root opens.** A separate minimal Waitron UI and unlock service run
+from the unencrypted startup image, in Spanish with English one tap away, on a local display and
+on the selected network connection for a headless box. They accept a disk key only through the
+local screen or an approved encrypted remote connection, never plain HTTP. The usual trusted
+normal-server certificate remains inside the locked disk and is unavailable here. No venue
+content, main Wi-Fi password, retained disk key or general host socket belongs in that image.
+Network discovery, TLS trust/bootstrap, graphics/input, QR entry and memory cleanup below are
+**PROPOSED qualification requirements**. The source/probe limits below do not establish Linux or
+phone support. The only remaining owner choice is the complete policy below, not a second
+approval of B3 or Q2.
+
+**Recommended policy A, pending that choice:** wired LAN for remote preboot, plus the local screen;
+no preboot copy of the venue's main Wi-Fi profile and no recovery hotspot. A headless Wi-Fi-only
+box needs a cable to the router for recovery. Use a separate per-disk recovery leaf certificate, signed while the normal system is unlocked by
+the box's existing local certificate authority (CA), the root certificate devices are asked to
+trust. The normal server leaf/private key and the CA signing key stay encrypted. Only the
+recovery leaf/private key and PUBLIC CA certificate are staged under `/boot/waitron-recovery/`,
+outside files read by the boot loader; do not rebuild the measured startup image on first start
+or expose the CA signing key. This extends today's certificate helper; it is not an existing
+preboot feature. A client that already trusts that CA should need no new root trust under the
+proposed design, subject to real-client qualification. A client using an operator's custom
+normal certificate may never have trusted the box CA and follows the new-client path.
+
+Use `unlock-<installation-id>.waitron.local`, with an id independent of the venue name, on HTTPS
+port 443. The sheet prints that complete URL, the disk UUID, the PUBLIC CA SHA-256 fingerprint
+and the current recovery-leaf fingerprint. A new client first compares the downloaded CA's full
+fingerprint with the saved sheet or an already-trusted offline recovery pack, then installs it
+using the platform's trust procedure. The public HTTP help page carries only that CA and
+instructions, never a disk-key form. A fingerprint shown only by that untrusted page is not a
+check; never bypass an unexplained certificate warning. If the device cannot perform the
+fingerprint/trust step, use an already-trusting device or the local Waitron screen. This adds no
+setup code. Qualification must supply reproducible phone/desktop instructions; until then no
+phone-specific promise ships. Apple requires a separate manual TLS trust step for downloaded
+certificate profiles (P62).
+
+While root is unlocked the host renews the recovery leaf under the same CA before expiry, keeps
+the old working pair until the new pair is checked, and writes it atomically outside the measured
+image. The CA fingerprint stays the sheet's trust anchor across leaf renewal; the printed leaf
+fingerprint is informational when renewal occurs. The host must refuse a leaf that outlives the
+CA and show the actual not-after dates on the sheet. An actually expired or unreadable recovery identity requires the local Waitron screen until
+the unlocked host can renew or repair it. A headless box then needs a display and input device
+plugged in; an already-trusting client cannot make an expired leaf valid. For a CLIENT clock or
+trust problem, use another correctly dated already-trusting device or the local screen. Discovery
+failure offers the sheet's certificate-matching address fallback or the local screen. Never
+downgrade to HTTP or disable certificate checks. Qualify each cause separately, including
+no-internet recovery and client certificate-expiry behavior.
+Reinstall creates a new CA/recovery identity and sheet; a restored venue must not replace that
+physical disk's preboot trust identity. A routine same-box cutover retains it. The preboot leaf
+key is readable with physical startup-disk access and can impersonate that recovery hostname;
+it is not the encrypted CA key and cannot prove untampered startup.
+
+**Narrow source and execution receipt, 2026-10-26.** Today's private CA permits the DNS subtrees
+`waitron.local` and `localhost` (`apps/server/src/self-signed-cert.ts:31-32`), and
+`reissueServerLeaf` signs a different leaf/key under the supplied CA (same file). A synthetic Node
+TLS probe using those real helpers accepted `unlock-a1b2.waitron.local` with the supplied CA,
+refused it without CA trust, and refused `waitron-unlock-a1b2.local` with “permitted subtree
+violation”, plus an untrusted-client control. This measures four Node handshakes, not initrd,
+mDNS, Chromium/Safari, device trust installation or expiry recovery. The public CA's current
+location and encrypted leaf paths are declared in `apps/server/src/box-secrets.ts:39-51`.
+Systemd documents a custom password-agent interface (P60); NetworkManager's early-boot generator
+only writes configuration and still needs a running network instance (P61). Those interfaces do
+not demonstrate the proposed preboot service.
+
+Qualification must show collision detection and a certificate-matching private-address fallback
+with two boxes present; changing the address requires a leaf naming that address. An address
+learned from unauthenticated discovery is not proof of peer identity. Never silently reuse
+`waitron.local` or accept a similarly named peer. A public discovery page can say “disk locked” and give connection
+instructions, but accepts no key and exposes no venue data. Freeze the unlock target before
+listening: expected disk UUID plus expected layout/state. Wrong, missing or multiple matching
+disks, damaged metadata or a state requiring first-start repair offer Stop/reinstall guidance,
+not a key form or an automatic write. Public preboot metadata is not trusted evidence that the
+disk or startup is authentic.
+
+Proposed wrong-attempt policy for A: one verifier at a time across local and all remote clients.
+After each failed key, delay all clients by 2, 4, 8, 16, 32, then 60 seconds, capped at 60 seconds
+until a successful unlock or reboot. Malformed submissions cannot start concurrent verification
+or bypass the shared delay. Do not log submitted bytes. Keep key input only in process memory;
+never arguments, environment, files, swap, dumps, browser storage or access logs. Clear input and
+close listeners on success; clear on cancel/error and release buffers as soon as the open attempt
+ends. Actual memory lifetime, including browser/form retention and crash paths, needs measurement.
+A passer-by can see that recovery is waiting and cause delays by submitting wrong keys. A reboot
+resets this proposed in-memory backoff. It grants no setup, maintenance, network-change or admin
+access. Offline attacks on a stolen disk are outside this UI's rate limit.
+
+**Alternatives for the same one choice:** B keeps the same TLS identity/trust flow and global delay
+but also loads a dedicated recovery Wi-Fi profile into preboot. It must be a separate restricted
+network credential, never the venue's normal Wi-Fi password. It exposes that recovery-network
+credential with the unencrypted startup files and needs a qualified provisioning/update flow.
+C keeps the wired path and offers a temporary unlock-only hotspot, uniquely named per disk, with
+a separate connection secret kept on the disk-key sheet and in preboot. It routes nothing, changes
+no venue connection and stops after unlock/cancel. It is not the installer's open hotspot and never
+runs alongside an unlocked venue. That secret controls the recovery network only; it is not a
+setup credential. C adds radio/hotspot and headless discovery qualification. Neither alternative
+makes an unsigned startup image trustworthy. These are proposed choices, not sourced claims of
+available Linux/browser behaviour.
+
+**Worked examples (illustrative, not measurements).** A: Marta's headless box refuses automatic
+unlock after a firmware change. She connects Ethernet, opens the sheet's recovery address on her
+laptop, verifies its preboot identity by the qualified sheet trust flow, sees the matching disk
+UUID and enters its disk key over TLS. Three wrong keys impose 2, 4 and 8 seconds globally. B: at
+a wireless-only site she uses the separate recovery SSID already provisioned for preboot; its
+profile is readable to someone with the startup disk. She still verifies TLS from the sheet.
+C: without a cable she joins the box-specific recovery network using the separate sheet secret,
+verifies TLS, unlocks, and that network closes. A passer-by's wrong attempts delay her on every
+route in all three policies. Choose A unless wireless recovery justifies the additional exposed
+network credential and qualification cost.
+
+**Changed-startup warning and limits.** Show «Han cambiado los archivos de arranque» when the
+readable expected fingerprints differ, or say verification is unavailable when it is. Warn before
+key entry, in both languages, that the startup image is unsigned and cannot prove itself honest
+(P58); a modified image can hide that warning and steal a typed key. A TLS connection protects
+transport under the proposed trust flow, not the preboot program's honesty. After unlock, compare
+the kernel/startup-image/loader configuration against the last self-built fingerprints recorded
+INSIDE the encrypted disk. Reseal only if they match; otherwise raise the changed-startup alert
+and do not reseal. Record recovery-key use without key bytes. Preserve §7.2's register-extension
+hook on every exit and the fake-disk negative control; there is no shell or terminal fallback.
+
+**A dead box or a lost sheet with the chip refusing:** restore backups on a newly installed box,
+which starts a new fiscal chain (§0). A moved old disk may let you read unsent records using the
+matching old disk's key; whether it can trade as the same installation remains open (§17). The
+retained host copy cannot help before that disk is opened. A sheet from a replacement disk cannot
+unlock the old one.
 
 ### 7.6 The name tag a stick can read
 
@@ -668,8 +807,8 @@ installer would add, such as the clock service (P23; inference, not built):
   brings Waitron back after a power cut, as today.
 - **The box's host service** (`waitron-box`), **my call**: one small service on the host, outside
   Docker, that does for Waitron what a container cannot — the box's settings (§10), the maintenance
-  login (§11), the recovery key's handover (§7.5), the name tag (§7.6), handing Waitron the setup
-  code the installer left on the disk and the private same-box re-setup handoff (§12), the box's
+  login (§11), the retained disk key's guarded delivery (§7.5), the name tag (§7.6), the durable
+  same-box configuration handoff (§12), the box's
   screen (§9), the first-start failure page (§7.3), and the release check (§14), which is
   also the "small updater with access to Docker" A950 needs (`docs/backlog/box.md:93-96`). Waitron
   reaches it through a socket in a mounted folder; it accepts a fixed list of requests and nothing
@@ -720,9 +859,9 @@ it (P50). Picture 5 and picture 7.
 
 **What the screen shows:**
 
-1. **Before setup:** the setup wizard, already holding the initial setup code, so the person at
-   the box's own screen types nothing extra. After the same-box Prepare-to-Live action it receives
-   a new private setup grant instead; the original code stays exhausted (§12).
+1. **Before setup:** the setup wizard, without a setup code. After same-box Prepare-to-Live
+   cutover it opens fresh Live setup with saved configuration ready (§12). No local-screen
+   marker grants setup authority or access to the retained disk key.
 2. **After setup: the dashboard** (`/manage`), at its sign-in page. A spare box's screen (A947)
    follows the same setting, and also shows A947's switch page while the main box is silent
    (A947 §6.6, `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:905-906`).
@@ -744,7 +883,9 @@ done, the dashboard asks whether this screen should now start on the till. **My 
 shape; the owner asked for "one action, the usual manager acceptance". How the dashboard knows it is
 on the box's own screen: the box's screen service opens it with a marker the page keeps for its
 session; anyone could fake the marker, and all it does is show this card, which still needs a
-manager.
+manager holding `device.manage`. An ordinary foreign browser has no marker and sees no card;
+that browser joins through the usual «Añadir un dispositivo», number check and manager acceptance.
+The marker is display-only, never evidence for host actions or disk-key delivery.
 
 **The till's menu gains «Panel».** The till's menu (`apps/till/src/widgets/till-shell.ts:873-913`)
 has no way to the dashboard today, and the dashboard none back to the till
@@ -869,7 +1010,8 @@ system**, as the owner asked.
   (`docs/superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md:85-102`).
 - **A box whose Waitron will not start** cannot hand out the password, and so has no maintenance
   login: it is reinstalled from the stick and its backups restored — the owner's A732 answer (§0).
-  **A box with no screen** needs one plugged in, like the recovery key (§7.5).
+  **A box with no screen** needs one plugged in for console maintenance. Disk recovery instead
+  has the local and headless preboot screen paths of §7.5.
 
 The record recommended a password per box on a sealed card
 (`docs/superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md:39-41`) and warned that an
@@ -877,7 +1019,7 @@ unauthenticated recovery page "must not itself grant administrative access" (`:9
 keeps that: the password is handed out only to an authenticated admin, and the LAN recovery page
 (`apps/server/src/recovery-surface.ts:28`) offers nothing of it.
 
-## 12. Private setup, and Prepare to fresh Live on the same box (W60, B3r)
+## 12. Setup, and Prepare to fresh Live on the same box (W60, B3r)
 
 **Proposed design, revised 2026-10-26.** The owner's Q2 answer is settled, not a choice to ask again:
 "we shouldn't use the usb for this. We can run it from the box itself."
@@ -943,18 +1085,11 @@ It offers **Stop** before removal and the explicit start action. It must not pro
    being removed. The existing import staging is not itself this handoff: it writes to `stateDir`
    and wraps the passphrase with the supplied key ring
    (`packages/provisioning/src/configuration-import.ts:21-32`, `:68-85`).
-3. **Give the admin a private way back before the old login disappears.** Make a NEW setup grant;
-   never reactivate the original installer code, exhausted by Prepare setup. The initiating
-   browser receives a dedicated, private resume credential over its authenticated connection;
-   its server-side hash and operation binding survive the restart outside the old venue. Give
-   that admin a separate one-use recovery code to keep before confirming removal, so a lost
-   browser session can resume the same operation. Redeeming it rotates the resume credential
-   and issues a replacement recovery code to keep until setup is complete. The host keeps only
-   its hash. Neither grant is a general administrative login: each permits only this operation's
-   fresh Live setup and saved-config preview. A short-lived browser session can be renewed with that recovery code;
-   expiry must not make the pending operation public or require another erase. The plan specifies
-   cookie scope, rotation and expiry. Codes are rate-limited, excluded from URLs and logs, never
-   put on the old stick, an open status page or an unauthenticated recovery page.
+3. **Confirm the accepted first-claim boundary.** No setup grant, resume credential, recovery
+   code or private-preview credential is created. After removal the unconfigured box and its
+   saved-config preview are reachable by another LAN browser, including after a restart. The
+   owner explicitly accepts that someone else might claim that fresh setup first. This does not
+   waive the fresh admin proof BEFORE destructive cutover, or disclose the host's disk key.
 4. **Stop practice writes, then cut over once.** Under exclusive ownership, stop/drain the practice
    writers and background work, recheck that the admin's proof is still fresh, rebuild and
    revalidate the final snapshot if anything changed since the preview, and bind the confirmed
@@ -969,33 +1104,30 @@ It offers **Stop** before removal and the explicit start action. It must not pro
    lock ownership and reset calls are the later plan's work after A1042's release; this revision
    selects no reset/locking API and changes none today. Never implement this as deleting a state
    directory that also holds the handoff, its keys or the audit.
-5. **Restart into private first setup with Live selected and the saved configuration ready.** The
-   box's own console obtains a fresh grant through the host service's private channel to the
-   managed kiosk, not §9's forgeable screen marker or an unauthenticated loopback claim. The
-   remote admin resumes with the credential from step 3. Every setup mutation, claim and preview
-   of saved configuration checks this operation's grant; a different LAN browser cannot claim
-   the now-blank box first. An unauthenticated page reveals neither config nor code. Both routes
-   reach the same saved-config preview and ordinary fresh Live setup; neither retains the old
-   dashboard session as a new venue's admin account. The admin reviews venue/taxpayer defaults,
-   creates the Live admin, supplies the missing credentials and completes the usual Live checks
-   and recovery steps. This is new integration, not today's file-upload UI (§12.4).
-6. **Finish durably, then retire grants.** On success, retain the operation's completion receipt,
-   link it into the new venue's audit trail and revoke every setup/resume/recovery grant. Remove
-   temporary configuration copies and handoff keys only after durable completion, without
-   deleting the audit receipt. Record who requested and authorised the action, the confirmed
-   digest, each cutover phase, refusals/retries and completion, in a host-owned audit journal
-   outside the removed venue; keep a linked record in the practice audit before cutover and in
-   the Live audit afterwards. No password, TOTP, passkey response or recovery code is logged.
+5. **Restart into ordinary first setup with Live selected and the saved configuration ready.**
+   Local and remote browsers reach the same preview without a new setup/resume credential.
+   The old dashboard session is not a new venue's admin account. Review venue/taxpayer defaults,
+   create the Live admin, supply missing credentials and complete the usual Live checks and
+   recovery steps. Disk-key delivery has its separate protected channel (§7.5); the public preview
+   contains no such key. This is new integration, not today's file-upload UI (§12.4).
+6. **Finish durably.** Retain the completion receipt and link it into the new venue's audit trail.
+   Remove temporary configuration copies and handoff keys only after durable completion, without
+   deleting that receipt or the retained disk key. Record who requested and authorised cutover,
+   the confirmed digest, phases, refusals/retries and completion in a host-owned audit journal;
+   retain linked practice/Live audit records on their respective sides. Never log passwords,
+   TOTP, passkey responses, disk keys or existing recovery secrets.
 
 **An interruption retries the operation, not the erase.** Before cutover is durably committed, a
 failure leaves practice available; an admin can Stop and discard the pending handoff. Once removal
-starts, boot holds practice stopped and resumes the recorded phase with the same private grants.
-A power cut after removal but before setup leaves the saved configuration and private resume path
-available. A cut during fresh Live setup resumes that same setup attempt. Once the new venue exists,
+starts, boot holds practice stopped and resumes the recorded phase without a setup credential.
+A power cut after removal but before setup leaves the saved configuration and ordinary first setup
+available to the LAN. A cut during fresh Live setup resumes that same setup attempt. Once the new
+venue exists,
 a repeated request must never remove it; a completion receipt answers the retry. An ambiguous or
-corrupt phase stops with private retry/recovery choices and retained evidence, never a fresh LAN
-claim, a return to selling the old database or an automatic second wipe. The plan must bind these
-phases to the actual A1042 setup/reset ownership APIs and prove every boundary before building the
+corrupt phase stops with retry/Stop choices and retained evidence. It never returns to selling
+the old database or performs an automatic second wipe. Valid pending fresh Live is LAN-claimable;
+ambiguous state is refused for phase/data safety, not to reserve setup for a private browser.
+The plan must bind these phases to the actual A1042 setup/reset ownership APIs and prove every boundary before building the
 action. This is only **Prepare → fresh Live**, not a general reset or a Live-box eraser.
 
 ### 12.3 What the existing configuration copy carries today
@@ -1119,32 +1251,26 @@ venue/taxpayer/address/receipt-language and series defaults, supply Live's fisca
 complete its ordinary readiness, clock and recovery-sheet steps. Configure Live mail, backups and
 Cloud as needed; re-enrol till devices (including the box's own till), card readers and print
 agents/printers, check their profile/mapping assignments, and reactivate staff with fresh credentials.
-The OS, its network and disk encryption remain installed. Keep the existing disk recovery sheet;
-fresh Live setup cannot promise a reprint of a key already handed out and deleted from the host
-(§7.5). No practice sale or chain is a starting point for Live.
+The OS, its network and disk encryption remain installed. Fresh Live's recovery sheet includes
+the SAME disk key and UUID from the retained host record (§7.5), through protected delivery.
+No practice sale or chain is a starting point for Live.
 
-### 12.5 Nobody else claims first setup (W60)
+### 12.5 First LAN claim is accepted (W60 closed in part)
 
-The original first-setup protection remains a proposed part of B3. **Every box gets a setup code**:
-ten digits, made by the installer before «Ya puedes quitar el USB» (§5 step 3), written onto the
-stick and new disk, and handed to Waitron by the host service; the server keeps only its hash.
-Every request that changes anything while unconfigured, including the first-setup claim, A917's
-naming form, provisioning, adoption, restores, fiscal test and incomplete-adoption reset, needs the
-code. Wrong codes are counted and slowed like a PIN. The original installer code stops working
-once Prepare or Live setup completes. The same-box fresh Live handoff uses §12.2's new grant, never
-that exhausted code. Private previews there require the grant too; the plan still decides the
-code policy for other read-only previews and the dev stack/tests.
+The owner explicitly dropped the setup code on 2026-10-26 ~12:15. Generate none; write none to
+stick, disk or banner; request none for setup, naming, claim, adoption, restore or preview. Remove
+same-box setup-only grants, resume/recovery codes and private-preview restrictions introduced
+solely to stop another browser claiming fresh setup. This includes pending fresh Live after a
+restart. The accepted cost is that another person on the LAN can view the allowed configuration
+and claim an unconfigured box first. W60's production-mode restriction (§12.1) is independent and
+stays. Modes depend on authoritative deployment state, not possession of a credential.
 
-You find the initial code on the box's own screen, already supplied privately; in
-`WAITRON/codigos-de-configuracion.txt` with date/time and serial number for remote setup; or in
-`waitron.sh`'s closing banner and console for a hand-installed box. Never on an installer's status
-page, its hotspot page or the LAN recovery page. A stick put back into an existing Waitron box
-writes no new code; a failed install after code creation can leave a line that never reached a
-disk, so the newest line for that serial number is the one to use. Slice 2 must still show that
-reinserting a stick into an installed but not yet configured box does not replace its usable code.
-The original tradeoff remains: screenless first setup needs a computer or adapter to read the stick;
-a power-button press is not substituted for the private code. The later same-box handoff needs
-neither the stick nor that reader.
+Existing fiscal/recovery credentials, operation consistency/ownership checks that protect fiscal
+state, and §7.5's internal disk-delivery capability remain distinct. Trace those consumers after
+A1042's release: do not remove a fiscal safety check by treating its name as a setup code, and do
+not retain or recreate first-claim privacy under an internal-capability label. No unauthenticated
+setup/status/preview response carries the disk key. The internal capability authorises only its
+protected document render, never ordinary setup access.
 
 ## 13. Built and published for every release
 
@@ -1166,16 +1292,21 @@ new CI job:
    production-started box offers neither Demo nor Prepare, including direct-request refusals (§12).
    **The proposed same-box acceptance** then prepares the stick-installed VM, saves representative
    configuration from every participating module, records practice sales, and runs the admin action
-   without a USB attached. It must reach private fresh Live setup with saved-config preview, a new
+   without a USB attached. It must reach ordinary fresh Live setup with saved-config preview, a new
    database and no practice sale, invoice number, counter or chain. Assert the copied categories,
    stripped credentials, suspended staff, inactive printers and missing physical-device enrolments
-   of §12.3, not only menu counts. Both the real managed console and an authenticated remote
-   browser must resume after restart; an unrelated LAN browser, forged console marker, exhausted
-   original code and replay after completion must fail. Non-admin, stale reauthentication, Live
+   of §12.3, not only menu counts. The managed console, remote browser and unrelated LAN browser
+   must reach pending fresh Live after restart without setup credentials. A forged console marker
+   grants no host authority or disk key. A completed-operation replay removes nothing. Non-admin, stale reauthentication, Live
    source, missing module, version mismatch, required-language refusal and broken/unreadable handoff
    must fail before removal. Interrupt each durable phase of §12.2, including immediately after
-   removal and during Live setup; assert retriable private resume, audit continuity and no second
-   wipe of the newly created venue. Record OS/disk/encryption identity before and after. These are
+   removal and during Live setup; assert retriable phase continuation, audit continuity and no second
+   wipe of the newly created venue. Record OS/disk/encryption identity before and after. Assert no
+   generated setup codes on stick/disk/banner, no setup-only grant requirement, correct key/UUID
+   on first/later/restore/spare sheets, protected first delivery without a pre-existing admin,
+   fresh admin proof for later copies, and key absence from logs/exports/backups/bucket. Exercise
+   the approved preboot screen on local display and a headless LAN client, including shared
+   backoff, wrong-disk refusal, teardown, changed-startup warning and reseal refusal. These are
    acceptance requirements for the build, not experiments run by this docs revision.
 3. Attaches to the GitHub Release: the ready-made disk, its SHA-256, the signed release list (§14),
    the list of every Debian package and version in the disk, and the declaración responsable
@@ -1295,8 +1426,9 @@ nothing:
    spare show a banner "on its own status page and on any screen attached to it" (`:443`).
 9. **For A917:** its naming form is "an unauthenticated plain-HTTP write, acceptable for the same
    reason setup itself is: an unclaimed server can be set up by anyone on its network"
-   (`docs/superpowers/specs/2026-10-20-a917-box-local-name-design.md:596-598`); §12's setup code
-   changes that reason, and the form asks for the code.
+   (`docs/superpowers/specs/2026-10-20-a917-box-local-name-design.md:596-598`). That first-claim
+   posture remains after §12's owner change; do not add a setup code to the naming form. A917's
+   separate scheduling/approval limits remain its own.
 10. **A wireless-only box whose router changes, with no screen and no cable to hand.** §10 offers no
     hotspot after setup; such a box needs a cable or a screen for a moment. An after-setup hotspot
     that asks for a manager's sign-in first is the idea to weigh.
@@ -1326,27 +1458,32 @@ area and editable in venue details; no typed clock time is implied. Maintenance 
 Receipt: `~/waitron-campaign/archive/questions-to-2026-10-23.md:4514-4519`. The previous alternative
 of another practice machine or a USB reinstall is superseded, not an open approval question.
 
+**Approved with changes, 2026-10-26 ~12:15.** The owner said: “We don't need the configuration
+code. It's not a concern. The rest approved.” This supersedes the earlier revision's general
+approval question. No setup code or private same-box setup grant remains; LAN first claim is an
+accepted risk (§12.5). Every later recovery sheet carries the disk key, and restore/spare have
+a disk-key page (§7.5). Disk unlock is a Waitron preboot UI on local display and LAN, never a
+terminal. The proposed retained-host-copy choice costs protection against privileged running-host
+compromise; it is not key erasure after handoff. Fresh admin reauthentication before destructive
+cutover is retained.
+
 **ONE question remains**, in [`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt):
-**“B3 — approve the revised USB installer design?”**
+choose the preboot reachability, encrypted connection and global wrong-attempt policy together.
+§7.5 recommends A (wired LAN plus local display, separate preboot TLS identity verified from the
+sheet, shared 2-to-60-second delay), with B (dedicated recovery Wi-Fi) and C (temporary recovery-only
+hotspot) and a worked example each. The dated primary-source bounds and Node TLS controls
+in §7.5 define the proposal; real client/Linux qualification remains required before shipping.
+Do not reopen Q2 or ask for design/planning approval again.
 
-The revision includes Lane A's installer calls: starting the installed box after 15 seconds;
-the 60-second erase wait and refusal to erase an unclassified disk without a key; an open installer
-hotspot and no hotspot after setup; no typed clock time (§10, including its 2026-10-24 A798 pointer,
-with the time zone separate); signing out between till and dashboard; admin-only console
-maintenance; setup codes; the Secure Boot refusal and the unresolved certificate-update case.
-It now includes §12's admin-only same-box action, pre-delete validation, durable private handoff,
-audit continuity and retry boundaries. It does not approve code, close A989 or authorise a Live
-fiscal writer change.
-
-- **A (recommended) — approve.** Plan slices 1, 2, 3, 5, 6 and 8 next.
-- **B — approve with changes.** Say which.
-- **Stop here — I'll write.**
+Planning slices 1, 2, 3, 5, 6 and 8 is authorised. Only unlock-specific execution waits for the
+owner's choice; the other planning proceeds. Building needs a separate go-ahead, and this revision
+does not close A989, A1042/API binding, A940/release or actual Linux/TPM/firmware qualification gates.
 
 ## 19. Build order, one pull request each
 
 1. **The ready-made disk** — `mkosi` build of §6, §7 and §8 in CI on every change to its inputs,
    with dracut, the hook of §7.2 item 3, the first start's sealing and test restart, the recovery
-   key's creation and the name tag's format (§7.6; the host service that writes it is slice 3);
+   key's creation/root-only retained record, the conditional preboot UI (§7.5), and the name tag's format (§7.6; the host service that writes it is slice 3);
    booted in a virtual machine with a virtual TPM to `/setup-api/status` 200 and a screenshot. Runs
    §7.2's experiments (a), (b), (d), (f), (g), (i).
    Measures:
@@ -1355,7 +1492,7 @@ fiscal writer change.
    files against a hand-installed one's. Not yet published.
 2. **The installer stick** — §5 whole: the three guards, the 60-second wait and the disks it will not
    erase unattended, the Secure Boot and TPM refusals, the network and its hotspot, the download and
-   its checks, the status page, the setup code on the stick and the disk; booted end to end in CI
+   its checks, the status page, no writes to the stick and no setup credential generation; booted end to end in CI
    with Secure Boot on, including a restart with the stick left in. Measures the install time and
    the stick's size.
 3. **The box's screen, host service and network** — `cage` and Chromium (§9), the host service's
@@ -1370,13 +1507,12 @@ fiscal writer change.
    key, guard 1 and guard 3 on its firmware, the clock, §7.2's experiments (c), (e) and (h), the traps,
    a power cut with the stick put back in.
 7. **The release check** — §14's service, handed to A950.
-8. **Setup and same-box Prepare → fresh Live** (W60, B3r) — §12: the setup code on every setup
-   request, A917's naming form included; distinct production/stick mode rules; refusal wording;
-   `waitron.sh` prints the initial code; and the disk recovery-key handover (§7.5). Includes the
+8. **Setup and same-box Prepare → fresh Live** (W60, B3r) — §12: no setup code, grant or private
+   resume restriction; distinct production/stick mode rules; refusal wording; retained disk-key
+   delivery on first/every later sheet and restore/spare page (§7.5). Includes the
    admin-only, freshly reauthenticated dashboard action, complete copy/reconnect disclosure,
-   pre-delete module/import validation with A989 closed, host-owned private handoff independent
-   of removed venue secrets, fresh setup/resume/recovery grants for console and remote admin,
-   audit continuity, retriable cutover and the refusal to erase a Live venue. Carry §13's failure
+   pre-delete module/import validation with A989 closed, host-owned encrypted configuration handoff independent
+   of removed venue secrets, LAN-claimable pending fresh Live, audit continuity, retriable cutover and the refusal to erase a Live venue. Carry §13's failure
    and interruption acceptance into the plan. Bind reset/locking and setup-attempt APIs only after
    A1042's release, tracing their then-current consumers; this revision changes none. Reuse the
    ordinary fresh Live fiscal setup without changing a Live fiscal writer. If that binding would
@@ -1386,13 +1522,17 @@ fiscal writer change.
 so the first venue's box is installed from the first release tag, which waits for A940's release
 slices; encryption is in slice 1 because the owner wants it before go-live; the box's screen is the
 counter till at a one-box venue (A947 §6.6 calls the counter till "often the main box's own screen",
-`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:878`); and the setup code closes a
-way for a stranger to take a new box, puts the disk's recovery key on paper and covers the owner's
-same-box Prepare-to-Live path. Slice 8 must include the fresh-authentication check it needs even
+`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:878`); and slice 8 puts the retained disk recovery key on every required sheet and covers the owner's
+same-box Prepare-to-Live path without setup credentials. Slice 8 must include the fresh-
+authentication check it needs even
 though the maintenance-login feature itself remains in slice 4. Slices 4 and 7 follow. Slice 8
-changes setup authorisation and removes practice data, so it takes the full review. This design
+changes mode admission, disk-key delivery and removes practice data, so it takes the full review. This design
 authorises no change to Live fiscal writers; any such discovery is a separate fiscal gate.
-Approval means writing the plan next, not starting a build.
+Planning is approved, not a build. The unlock UI/transport/backoff part of slices 1/6/8 remains
+conditional on §18's sole owner choice. Other planned deliveries need not wait for that answer.
+Docker is unavailable on the author's machine until 2026-11-03 (task constraint); real Linux/VM
+and hardware evidence remains a future gate, never replaced by mocked success or publication of
+an unqualified boot image.
 
 ## 20. What this design does not settle, for the builder
 
@@ -1401,10 +1541,15 @@ Approval means writing the plan next, not starting a build.
 - How a change to register 7 itself (Microsoft's newer certificate) is taken without a person
   present (§7.4).
 - How the box's screen service tells Waitron which page to open, and how the box's screen marks
-  itself (§9). The forgeable display marker is never proof for §12's setup handoff.
-- The concrete private handoff storage, durable phase transitions and reset/locking API binding
-  after A1042's release (§12.2), including key lifetime, cookie scope/expiry and recovery-code
-  rotation. The plan must prove both console and remote resume without reopening a LAN claim.
+  itself (§9). The forgeable display marker is never proof for host actions or disk-key delivery.
+- The durable encrypted configuration handoff and reset/ownership API binding after A1042's
+  release (§12.2). The plan must prove LAN-claimable pending fresh Live and no second erase,
+  without reintroducing setup/resume credentials.
+- The exact protected first-disk-sheet integration before publication, later admin reauthentication
+  and host storage implementation (§7.5), with the correct disk UUID on restore/spare.
+- §7.5's preboot network, TLS trust/bootstrap, disk identity/state checks, memory lifetime and
+  global attempt policy, pending the one owner answer and parent primary-source qualification.
+  Main Wi-Fi credentials and the normal encrypted TLS key are unavailable to that design.
 - The host service's request list and its socket's permissions (§8).
 - How the image build reuses `waitron.sh`'s file-writing steps (§8).
 - The exact Docker version and image-store folders `@images` covers (§6).
@@ -1481,3 +1626,13 @@ by its second review, in `review-r2.md`.
 | P57 | LUKS2's label and subsystem fields are 48 bytes: `#define LUKS2_LABEL_L 48` | cryptsetup `lib/luks2/luks2.h:22,88,92`, fetched 2026-10-21 by the revision's review (`review-r1.md`, H5) |
 | P58 | "Firmware's UEFI SecureBoot protects shim, shim's key management protects grub and kernel. No code signing protects initrd." | Lennart Poettering, https://0pointer.net/blog/brave-new-trusted-boot-world.html (R13) |
 | P59 | dracut 106's emergency script: `if getargbool 1 rd.shell || getarg rd.break; then … exec sulogin` — a shell is offered unless `rd.shell=0` | dracut-ng tag 106, `modules.d/98dracut-systemd/dracut-emergency.sh`, fetched 2026-10-21 by the revision's second review (`~/waitron-campaign/b3-design/review-r2.md`, R2-M1) |
+
+### Primary-source bounds checked for the 2026-10-26 recovery revision
+
+These quotes describe interfaces and trust steps, not a qualified Waitron recovery service.
+
+| # | Source's own words | Consequence for the proposed design | Source |
+| --- | --- | --- | --- |
+| P60 | “Additional password agents may be implemented according to the systemd Password Agent Specification” | A graphical agent is an integration to build and qualify; a default terminal prompt is not the proposed UI. | [Debian 13 systemd-ask-password](https://manpages.debian.org/trixie/systemd/systemd-ask-password.1.en.html), retrieved 2026-10-26 |
+| P61 | “only writes configuration” | Early network configuration alone does not start networking; qualify the installed dracut/NetworkManager service combination. | [NetworkManager nm-initrd-generator](https://networkmanager.pages.freedesktop.org/NetworkManager/NetworkManager/nm-initrd-generator.html), retrieved 2026-10-26 |
+| P62 | “that certificate isn't automatically trusted for SSL” | The new-device iOS flow needs explicit trust installation; downloading a certificate does not demonstrate trust. | [Apple certificate-profile trust](https://support.apple.com/en-us/102390), retrieved 2026-10-26 |
