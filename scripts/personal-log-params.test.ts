@@ -7,7 +7,9 @@
  * that spreads an object can carry keys its registry type does not name (`{ ...prepared.venue }`,
  * `apps/server/src/restore-request.ts:280` and `apps/server/src/restore-stream.ts:378`: if
  * `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`, gained an `ownerEmail`, the answer and
- * the log line would carry it and this guard would stay green); and it never reads free text.
+ * the log line would carry it and this guard would stay green); it never reads free text; and it
+ * judges a named type in a registry only by its name, against `REVIEWED_TYPES`, so a person-named
+ * key added later inside a type already reviewed passes.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -17,6 +19,47 @@ import { PERSONAL_LOG_KEYS, PERSONAL_LOG_PATHS } from "../apps/server/src/log-pe
 import { blankComments, blankCommentsAndLiterals } from "../packages/shared/src/source-comments.js";
 
 const ROOT = join(import.meta.dirname, "..");
+
+const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
+  ["AllocationPreview", "a payment's allocation: a choice, money amounts and options; no person"],
+  ["Approval", "how an adjustment is approved: a kind, staff role names and a limit; no person"],
+  ["Array", "TypeScript's own; holds what its arguments name, which the guard reads"],
+  ["BillEditState", "holds editorName, which is on the list, beside ids and revision numbers"],
+  ["BucketOperation", "an enum of bucket requests: get, put, list or delete"],
+  [
+    "BusinessDayClockConflict",
+    "ids, department, zone, period, season and special-day names, times and a reason",
+  ],
+  [
+    "CancellationContext",
+    "a bill's status and stage and its components' ids, states and quantities",
+  ],
+  ["DestinationCleanup", "an enum of clean-up requests: abort_upload or delete_object"],
+  ["DestinationOperation", "an enum of archive file store requests"],
+  ["EquipmentField", "an enum of a device's equipment field names"],
+  [
+    "FacturaParams",
+    "an invoice as AEAT names it: idEmisorFactura, which is on the list, number and date",
+  ],
+  ["HomeDevice", "an enum: handheld or till"],
+  [
+    "LineaParams",
+    "inherits idEmisorFactura, on the list, from FacturaParams (packages/fiscal-verifactu/src/errors.ts:15); adds AEAT's reply codes and message",
+  ],
+  ["MemberRef", "a menu section member: a kind and a product or section id"],
+  ["MenuUse", "where a menu is used: a kind and zone and period ids"],
+  ["Operacion", "an enum of AEAT operations: Alta or Anulacion"],
+  ["OrphanRemediation", "an enum of what a reconcile sweep did with an orphaned payment"],
+  ["OvertakenEdition", "a menu edition: a version id, a number and an instant"],
+  ["ProbeFailure", "an enum of bucket probe failures"],
+  ["ProductUsingUnit", "a product's id, name and whether it is active; the name of a thing"],
+  ["Readonly", "TypeScript's own; holds what its argument names, which the guard reads"],
+  ["Record", "TypeScript's own; holds what its arguments name, which the guard reads"],
+  ["ThemeNameRefusal", "an enum: empty, too_long or reserved"],
+  ["ThemeRefusalReason", "an enum of why a theme document is refused"],
+  ["UnservedDish", "a dish's bill and line ids, its name, quantity and CancellationContext"],
+  ["VerifyFailure", "an enum of why a membership document fails verification"],
+]);
 
 const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["adjustment_reason.name_taken.name", "the name of an adjustment reason"],
@@ -68,6 +111,11 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["zone.table_in_use.tableName", "the name of a table"],
 ]);
 
+interface RegistryType {
+  file: string;
+  name: string;
+}
+
 interface RegistryKey {
   code: string;
   key: string;
@@ -80,6 +128,7 @@ const TAX_STEM = /tax|nif|nie|dni|cif|vat/i;
 const ID_ENDING = /^(.*?)(?:Id|Ids)$/;
 const REGISTRY_OPENING = /\binterface\s+ErrorParams\b[^{]*\{/g;
 const CODE_MARK = /"([a-z0-9_]+(?:\.[a-z0-9_]+)+)"\s*:/g;
+const TYPE_NAME = /\b[A-Z][\w$]*/g;
 const KEY_OR_BRACE = /([A-Za-z_$][\w$]*)\??\s*:|[{}]/g;
 
 function isJudgedKey(key: string): boolean {
@@ -115,13 +164,50 @@ function keysOfEntry(code: string, text: string): RegistryKey[] {
   return keys;
 }
 
-function registryKeys(text: string): RegistryKey[] {
+interface RegistryBody {
+  code: string;
+  literalsBlank: string;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
+function registryBodies(text: string): RegistryBody[] {
   const code = blankComments(text);
   const literalsBlank = blankCommentsAndLiterals(text);
-  const keys: RegistryKey[] = [];
-  for (const opening of code.matchAll(REGISTRY_OPENING)) {
+  return [...code.matchAll(REGISTRY_OPENING)].map((opening) => {
     const bodyStart = opening.index + opening[0].length - 1;
-    const bodyEnd = closingBrace(literalsBlank, bodyStart);
+    return { code, literalsBlank, bodyStart, bodyEnd: closingBrace(literalsBlank, bodyStart) };
+  });
+}
+
+function registryTypeNames(text: string): string[] {
+  const names = registryBodies(text).flatMap(({ literalsBlank, bodyStart, bodyEnd }) =>
+    [...literalsBlank.slice(bodyStart + 1, bodyEnd).matchAll(TYPE_NAME)].map(([name]) => name),
+  );
+  return [...new Set(names)];
+}
+
+function unreviewedTypes(
+  found: readonly RegistryType[],
+  reviewed: ReadonlyMap<string, string>,
+): string[] {
+  const unreviewed = found
+    .filter(({ name }) => !reviewed.has(name))
+    .map(({ file, name }) => `${name} (${file})`);
+  return [...new Set(unreviewed)];
+}
+
+function staleTypes(
+  found: readonly RegistryType[],
+  reviewed: ReadonlyMap<string, string>,
+): string[] {
+  const named = new Set(found.map(({ name }) => name));
+  return [...reviewed.keys()].filter((name) => !named.has(name));
+}
+
+function registryKeys(text: string): RegistryKey[] {
+  const keys: RegistryKey[] = [];
+  for (const { code, literalsBlank, bodyStart, bodyEnd } of registryBodies(text)) {
     const marks = [...code.slice(bodyStart + 1, bodyEnd).matchAll(CODE_MARK)];
     marks.forEach((mark, index) => {
       const from = bodyStart + 1 + mark.index + mark[0].length;
@@ -185,6 +271,10 @@ function registryFiles(): string[] {
 
 function registry(entries: string): string {
   return `declare module "@waitron/shared" {\n  interface ErrorParams {\n${entries}\n  }\n}\n`;
+}
+
+function typesIn(file: string, text: string): RegistryType[] {
+  return registryTypeNames(text).map((name) => ({ file, name }));
 }
 
 function refusedIn(text: string): string[] {
@@ -260,5 +350,39 @@ describe("error-code details that name a person are masked in the log", () => {
     expect(
       refusedIn(registry(`"x.c": {\n  /** guestName: a comment */\n  tableId: string;\n};`)),
     ).toEqual([]);
+  });
+});
+
+describe("named types in an error registry are reviewed", () => {
+  it("the real registries name only reviewed types, and every reviewed type is still named", () => {
+    const found = registryFiles().flatMap((file) =>
+      typesIn(file, readFileSync(join(ROOT, file), "utf8")),
+    );
+    expect(found.map(({ name }) => name)).toContain("BillEditState");
+    expect(unreviewedTypes(found, REVIEWED_TYPES)).toEqual([]);
+    expect(staleTypes(found, REVIEWED_TYPES)).toEqual([]);
+  });
+
+  it("refuses a type nobody has reviewed, naming it and its file", () => {
+    const found = typesIn("x/errors.ts", registry(`"x.v": { party: PartySummary };`));
+    expect(unreviewedTypes(found, new Map())).toEqual(["PartySummary (x/errors.ts)"]);
+  });
+
+  it("reports a reviewed type no registry names", () => {
+    const found = typesIn("x/errors.ts", registry(`"x.v": { party: PartySummary };`));
+    const reviewed = new Map([
+      ["PartySummary", "holds no person"],
+      ["GoneType", "holds no person"],
+    ]);
+    expect(unreviewedTypes(found, reviewed)).toEqual([]);
+    expect(staleTypes(found, reviewed)).toEqual(["GoneType"]);
+  });
+
+  it("reads no type name in a string literal or a comment", () => {
+    const text = registry(`"x.o": { operacion: "Alta" | "Anulacion" /* see Foo */ };`);
+    expect(unreviewedTypes(typesIn("x/errors.ts", text), new Map())).toEqual([]);
+    expect(registryTypeNames(registry(`"x.p": { party: PartySummary };`))).toEqual([
+      "PartySummary",
+    ]);
   });
 });
