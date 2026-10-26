@@ -956,9 +956,9 @@ and A419's dashboard stall separate; no shared cause is established.
 
 - **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
 
-## Local multi-file till browser stall
+## Local multi-file till browser interruption
 
-A local run on 26 October stopped producing output before any file completed, with
+A local run on 26 October produced no completed-file report before it was stopped, with
 `src/till-app.theme.test.ts`, `src/widgets/basket.adjustments.test.ts`,
 `src/till-app-parties.test.ts` and `src/till-app-counter-adjustments.test.ts` selected.
 It was stopped after five minutes, with the source tests still unchanged. The cause

@@ -5151,9 +5151,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **A local multi-file till browser run stopped reporting progress; the cause is unknown.**
+- **A local four-file till browser run ended without a completed-file report.**
   Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
-  not qualify the concurrent path. [Detail](backlog/ci.md#local-multi-file-till-browser-stall).
+  not qualify the concurrent path. [Detail](backlog/ci.md#local-multi-file-till-browser-interruption).
 
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
