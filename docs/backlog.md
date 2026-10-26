@@ -5736,24 +5736,13 @@ _Formerly parts of B9 and Track C._ Open work:
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
 - **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
-  (`packages/db/src/schema/drawer-opens.ts:50-51`), but a cash refund's opening sets it too:
-  `enqueueTenderRefundDrawer` takes a required `authorizedBy` and writes it into the row
-  (`apps/server/src/receipt-print.ts:622`, `:645-653`). Found by A980 S2c's review (#2073); the
-  lines predate that branch. Correct the comment to name every reason that sets it.
+  [Detail](backlog/architecture.md#the-authorized_by-comment-on-drawer_opens-says-only-a-manual-open-sets-it)
 
-- **Go-live day steps.** On go-live day, replace the pre-production migration rule in
-  `CLAUDE.md` with the owner's live-data policy, then delete and gitignore `docs/superpowers/`
-  and `docs/handoffs/` after the final operator-procedure sweep. These are future actions;
-  the current rule and planning files stay in place until then.
+- **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
 
-- **A query with tens of thousands of bound values crashes before it reaches the database**: drizzle's
-  session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
-  (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
-  value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
-  call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
-  size). Found by A1088's review, whose own query no longer names ids; any other query that binds
-  one value per row can still meet it.
+- **A query with tens of thousands of bound values crashes before it reaches the database**
+  [Detail](backlog/architecture.md#a-query-with-tens-of-thousands-of-bound-values-crashes-before-it-reaches-the-database)
 
 - **A760. Squash every migration set before go-live.** The watcher starts the sole job after big
   work and migration branches drain, with the full Waitron/Cloud mutation freeze and named
@@ -5799,8 +5788,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A974. Finish the remaining English names in general code.**
-  Remaining: till app and screen private names, other payment-widget suites, server till-API
+- **A974. Finish the remaining English names in general code.** Remaining: till app and screen private names, other payment-widget suites, server till-API
   tests, shared station fixtures and file names. Keep fixture text with A976 and the owner-held
   core-comment PR separate. See the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
@@ -5842,8 +5830,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   name" instead reads its frozen staff-name map. Left open by A612; remove the misleading comment.
 
 - **Loose ends left by A435's printer, reader and device delete (steps 2 to 4).**
-  `refuseDeletedPrinters` lives in `@waitron/layouts` though `@waitron/printing` holds the printer
-  functions and `printer.not_found`'s registry.
   [Detail](backlog/architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
 
 - **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).** "A device that is not
@@ -6053,8 +6039,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Check the intended retention and mutation paths before adding enforcement.
   [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
 
-- **`apps/server` route-suite test titles still say "not a 500" or that an unscreened malformed id
-  becomes an opaque 500, although ids are text columns now.** The titles name no engine; none has
+- **`apps/server` route-suite test titles still say "not a 500" or that an unscreened malformed id becomes an opaque 500, although ids are text columns now.** The titles name no engine; none has
   been probed against today's behaviour. Left open by C127 (#1036, #1042) and found again by #600
   while pruning comments.
   [Detail](backlog/architecture.md#appsserver-test-titles-still-say-an-unscreened-malformed-id-becomes-an-opaque-500-although-ids-are-text-columns-now)
@@ -6065,23 +6050,17 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `provisioning.invalid_identifier` error registry entry remains. [Detail](backlog/architecture.md#small-renames-and-dead-exports-the-sweep-found-and-could-not-make)
 
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
-  Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the root
-  `vitest.config.ts` and `eslint.config.js`; in `scripts/`, the `.sh` files and
-  `write-path-tables.json` are outside the checker and were left.
   [Detail](backlog/architecture.md#prune-the-comments-one-package-per-pull-request)
 
 - **`apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
-  condition by construction"** — found by the retroactive Codex reviews of #621–#626 and #629
-  (C3.18.12r) while pruning comments.
+  condition by construction"**
   [Detail](backlog/architecture.md#appsserverreadmemd-near-line-496-still-says-an-error-line-and-a-503-are-the-same-condition-by-construction)
 
 - **`working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course
-  definition; `fireCourse` calls `requireCourse`** — found by #622 while pruning comments.
+  definition; `fireCourse` calls `requireCourse`**
   [Detail](backlog/architecture.md#working-orderts-near-requirelivecourse-says-the-fire-verbs-use-the-same-live-course-definition-firecourse-calls-requirecourse)
 
-- **Pointers outside `docs/` that #597 made stale** — found by #597 while pruning comments. The fake
-  SumUp client leaves its one-shot switches for a lookup or a refund armed when a checkout before
-  them is refused; no test combines the two.
+- **Pointers outside `docs/` that #597 made stale**
   [Detail](backlog/architecture.md#pointers-outside-docs-that-597-made-stale)
 
 - **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
@@ -6089,27 +6068,21 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `packages/fiscal-verifactu/src/venue-fields.ts`.
   [Detail](backlog/architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
 
-- **Nothing now checks at run time that a read returns something other than a Node `Buffer`** —
-  found by #577 while pruning comments (`packages/credentials`). Nothing checks that a caller other
-  than the application cannot read or list the vault; only the encryption protects it.
+- **Nothing now checks at run time that a read returns something other than a Node `Buffer`**
   [Detail](backlog/architecture.md#nothing-now-checks-at-run-time-that-a-read-returns-something-other-than-a-node-buffer)
 
-- **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert** — found by #581 while
-  pruning comments (`packages/scheduler`). Whether to remove these two nested calls, or say why they
-  stay, is open (a code change, not made).
+- **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert**
   [Detail](backlog/architecture.md#the-nested-txtransaction-in-enqueuesuccessor-wraps-one-insert)
 
 - **`decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no
-  digit bound** — found by #579 while pruning comments (`packages/shared`).
+  digit bound**
   [Detail](backlog/architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
 
-- **Loose ends left by A394-3 (#1447).** `GET …/locations/:locationId/catalogues` and the member
-  `DELETE` answer as before for an unknown location.
+- **Loose ends left by A394-3 (#1447).**
   [Detail](backlog/architecture.md#loose-ends-left-by-a394-3-1447).
 
 - **A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** —
-  OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room.
-  (A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455.) The follow-ups and the rows:
+  OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455.) The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
   [Detail](backlog/architecture.md#a394-5-a394-6-a394-8-to-a394-17-and-a394-20-to-a394-22--refusal-statuses-by-one-rule)
 
@@ -6119,9 +6092,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
 
 - **Three shapes the read connection does not cover** — OPEN (stated 2026-09-23, task N3, PR #493).
-  A transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told
-  about — Drizzle's own migrator opens one that way — so a read concurrent with it still lands on
-  the writer.
   [Detail](backlog/architecture.md#three-shapes-the-read-connection-does-not-cover)
 
 - **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN.
@@ -6138,10 +6108,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   review each remaining raw connection separately before deciding whether a shared store API fits.
   [Detail](backlog/architecture.md#raw-engine-imports-in-appsserversrcrecovery-lockts-and-appsserverscriptscloud-backup-fixturets)
 
-- **Files that still spell the store's file names themselves** — left by #757, which exported them
-  from `@waitron/store`. #757's checks do not cover `migrations.lock`, Litestream's
-  `.venue.db-litestream/` folder, or the restore's `venue.db.incoming` file and
-  `.venue.db-replaced-*` folder.
+- **Files that still spell the store's file names themselves**
   [Detail](backlog/architecture.md#files-that-still-spell-the-stores-file-names-themselves)
 
 - **Two leftovers of the restrict/trigger refusal split (#731).** `isRefusal` with
@@ -6167,8 +6134,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
   transaction while another is still running.
 
-- **Loose ends left by the tenant-column removal (#378, 2026-09-16).** These index and key names
-  still read `tenant`, and the columns they name are gone.
+- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
   [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16).
 
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
@@ -6179,9 +6145,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
   constant (the theme colour is literal in three places).
 
-- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** Each
-  site needs checking against the path it actually takes, then rewording. Left open by SQLite slice
-  1 (#490 and the preparation tasks).
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.**
   [Detail](backlog/architecture.md#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)
 
 - **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test

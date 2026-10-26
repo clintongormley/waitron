@@ -342,8 +342,7 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## `apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree
 
-- **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree.** #460
-  declared `@waitron/print-agent-app` as a test-only dependency of `apps/server` (for
+#460 declared `@waitron/print-agent-app` as a test-only dependency of `apps/server` (for
   `apps/server/src/print-agent-e2e.test.ts`) and exported `./tcp-probe.js`. Moving `tcp-probe.ts`
   alone into `packages/print-agent` was consciously not taken: it belongs to a cohort of six
   device-discovery modules in the app (`ipp-probe.ts`, `bluetooth.ts`, `usb.ts`,
@@ -398,16 +397,14 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## `DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1
 
-- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** The field
-  reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off
+The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off
   `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
   rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
   a pass that exercised the certificate and skipped.
 
 ## Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce
 
-- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** On
-  `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run the query '<sql>'`),
+On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run the query '<sql>'`),
   while `db.all`, `db.get`, `db.execute` and an awaited query builder reject with the engine's own
   error (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against
   the path it actually takes, then rewording. The candidates are what
@@ -589,7 +586,7 @@ reset and operator gates; this entry does not start that job.
 
 ## A760. Squash every migration set before go-live
 
-- **A760. Squash every migration set before go-live.** The [operator procedure](../operations/a760-migration-squash.md)
+The [operator procedure](../operations/a760-migration-squash.md)
   and [inventory](../operations/a760-migration-squash-inventory.md) are approved
   (owner, 2026-10-16), including fiscal SQL/meta and the named history-harness changes.
   The watcher starts the sole job after big work and migration branches drain, with the full
@@ -599,8 +596,7 @@ reset and operator gates; this entry does not start that job.
 
 ## Station deletion's draft-location filter needs a discriminating test
 
-- **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
-  second run-it review, deleting the `working_orders` location `exists` clause in
+In A435 step 5's second run-it review, deleting the `working_orders` location `exists` clause in
   `apps/server/src/station-delete.ts` left all 47 station-delete and management-delete cases
   passing. Add a second-location draft case that fails without the clause, or establish by running
   the real writers that it is redundant before removing it. Its necessity remains unverified.
@@ -684,6 +680,24 @@ reset and operator gates; this entry does not start that job.
     is the nearest sibling) and rename it in one change, checking the prefix matchers
     `docs/developers/conventions-data.md` lists.
     [Detail](architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
+
+## The `authorized_by` comment on `drawer_opens` says only a manual open sets it
+
+**The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
+  (`packages/db/src/schema/drawer-opens.ts:50-51`), but a cash refund's opening sets it too:
+  `enqueueTenderRefundDrawer` takes a required `authorizedBy` and writes it into the row
+  (`apps/server/src/receipt-print.ts:622`, `:645-653`). Found by A980 S2c's review (#2073); the
+  lines predate that branch. Correct the comment to name every reason that sets it.
+
+## A query with tens of thousands of bound values crashes before it reaches the database
+
+**A query with tens of thousands of bound values crashes before it reaches the database**: drizzle's
+  session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
+  (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
+  value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
+  call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
+  size). Found by A1088's review, whose own query no longer names ids; any other query that binds
+  one value per row can still meet it.
 
 ## Decisions and deliberate limits
 
