@@ -9,7 +9,11 @@ import { AppError, isUuid } from "@waitron/shared";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
-import { insideBackupRepairTarget } from "./first-setup-backup-workspace.js";
+import {
+  createFirstSetupBackupWorkspace,
+  insideBackupRepairTarget,
+} from "./first-setup-backup-workspace.js";
+import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -17,6 +21,8 @@ export const START_AGAIN_MARKER_LIMIT = 1024 * 1024;
 const MARKER_LIMIT = START_AGAIN_MARKER_LIMIT;
 const HASH = /^[a-f0-9]{64}$/;
 const RECORDS = "first-setup-resolutions";
+const BACKUP = "backup-recovery";
+const POINTER = "current.json";
 const LEGACY = [
   "first-setup-workspaces",
   "first-setup-selection.json",
@@ -52,6 +58,8 @@ const REFUSED = {
 
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
+/** `discarding`: the id of the backup recovery this Start again is about to discard. */
+type Options = { discarding?: string };
 export interface StartAgainFingerprint {
   size: number;
   sha256: string;
@@ -210,8 +218,47 @@ async function entries(path: string): Promise<{ name: string; folder: boolean }[
   return result;
 }
 
+/**
+ * Whether the state folder's backup recovery folder may stay: its pointer names either an
+ * abandoned journal, with every recovery folder an emptied tombstone, or the recovery being
+ * discarded, with every other recovery folder an emptied tombstone. The journal is read by its
+ * chain only, since the attempt it was taken against may have changed since.
+ */
+async function backupRecoveryKept(roots: Roots, { discarding }: Options): Promise<boolean> {
+  try {
+    const found = (await entries(join(roots.stateDir, RECORDS, BACKUP)))!;
+    const ids = found.filter((entry) => entry.name !== POINTER);
+    const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1)!;
+    const named = last.target.recoveryId;
+    if (discarding === undefined ? last.phase !== "abandoned" : named !== discarding) return false;
+    for (const { name } of ids)
+      if (!(name === discarding || (await isEmptiedTombstone(roots, name)))) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** With `discarding`, the venue folder may hold the pointer of the recovery being discarded. */
+async function venuePointerOnly(roots: Roots, { discarding }: Options): Promise<boolean> {
+  if (discarding === undefined) return false;
+  try {
+    const records = (await entries(join(roots.venueDir, RECORDS)))!;
+    const backup = (await entries(join(roots.venueDir, RECORDS, BACKUP)))!;
+    return (
+      records.length === 1 &&
+      records[0]!.name === BACKUP &&
+      backup.length === 1 &&
+      backup[0]!.name === POINTER &&
+      !backup[0]!.folder
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Every item of D3's deletion list present on disk, in its deletion order. */
-async function itemsOnDisk(roots: Roots): Promise<Item[]> {
+async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]> {
   const items: Item[] = [];
   const file = async (root: Root, name: string) => {
     const path = join(root === "venue" ? roots.venueDir : roots.stateDir, name);
@@ -243,7 +290,12 @@ async function itemsOnDisk(roots: Roots): Promise<Item[]> {
   await file("state", "module-operation-public.json");
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
+    let kept = false;
     for (const record of records) {
+      if (record.folder && record.name === BACKUP && (await backupRecoveryKept(roots, options))) {
+        kept = true;
+        continue;
+      }
       if (!record.folder || !isUuid(record.name))
         throw incomplete(`layout unexpected: ${RECORDS}/${record.name}`);
       const relative = `${RECORDS}/${record.name}`;
@@ -256,7 +308,7 @@ async function itemsOnDisk(roots: Roots): Promise<Item[]> {
       await filesIn(relative, true);
       items.push({ kind: "folder", path: join(roots.stateDir, relative) });
     }
-    items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
+    if (!kept) items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
   }
   await file("venue", "first-setup-claim.json");
   await file("state", "first-setup.json");
@@ -290,9 +342,10 @@ async function removeAndSync(path: string, kind: "file" | "folder"): Promise<voi
 export async function startAgainMarkerFor(
   roots: Roots,
   attempt: { attemptId: string; frozenDigest: string },
+  options: Options = {},
 ): Promise<StartAgainMarker> {
   const canonical = await canonicalRoots(roots);
-  const items = await itemsOnDisk(canonical);
+  const items = await itemsOnDisk(canonical, options);
   const files: StartAgainMarkedFile[] = [];
   for (const item of items)
     if (item.kind === "file")
@@ -348,7 +401,10 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
 }
 
 /** D3's refusals that the folders alone can answer; returns the canonical folders. */
-export async function assertStartAgainAllowedOnDisk(roots: Roots): Promise<Roots> {
+export async function assertStartAgainAllowedOnDisk(
+  roots: Roots,
+  options: Options = {},
+): Promise<Roots> {
   const notReady = (reason: string) => new AppError("setup.not_ready", {}, { reason });
   const canonical = await canonicalRoots(roots);
   const rootOf = (root: Root) => (root === "venue" ? canonical.venueDir : canonical.stateDir);
@@ -373,11 +429,14 @@ export async function assertStartAgainAllowedOnDisk(roots: Roots): Promise<Roots
     throw notReady("folder in a backup recovery target");
   for (const root of ["state", "venue"] as const)
     for (const name of REFUSED[root])
-      if (await exists(join(rootOf(root), name)))
+      if (
+        (await exists(join(rootOf(root), name))) &&
+        !(root === "venue" && name === RECORDS && (await venuePointerOnly(canonical, options)))
+      )
         throw notReady(`refused artifact: ${root}/${name}`);
   await assertNoStartAgainDeletion(canonical.venueDir);
   try {
-    await itemsOnDisk(canonical);
+    await itemsOnDisk(canonical, options);
   } catch (error) {
     if (error instanceof AppError) throw notReady(error.reason ?? error.code);
     throw notReady(`check failed: ${codeOf(error)} ${pathOf(error) ?? ""}`);
