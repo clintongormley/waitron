@@ -96,13 +96,31 @@ beforeEach(async () => {
       backend.clockOut(tx, event(personId, to, offset, where)),
     );
   };
-  // At the other location only: Marta earlier than her first day here, the lone person at all.
-  await shift(martaId, "2025-12-15T09:00:00.000Z", "2025-12-15T17:00:00.000Z", 60, otherLocationId);
-  await shift(loneId, "2026-01-04T09:00:00.000Z", "2026-01-04T17:00:00.000Z", 60, otherLocationId);
-  await shift(martaId, "2026-01-02T00:30:00.000Z", "2026-01-02T06:00:00.000Z", -120);
-  await shift(colleagueId, "2026-01-03T10:07:00.000Z", "2026-01-03T18:43:00.000Z", 60);
-  await shift(martaId, "2026-02-10T09:00:00.000Z", "2026-02-10T17:00:00.000Z", 60);
-  await shift(martaId, "2026-03-20T09:00:00.000Z", "2026-03-20T17:00:00.000Z", 60);
+  // The files print each entry's recording time, so it must never spell a colleague probe below.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-04-01T12:00:00Z") });
+  try {
+    // At the other location only: Marta earlier than her first day here, the lone person at all.
+    await shift(
+      martaId,
+      "2025-12-15T09:00:00.000Z",
+      "2025-12-15T17:00:00.000Z",
+      60,
+      otherLocationId,
+    );
+    await shift(
+      loneId,
+      "2026-01-04T09:00:00.000Z",
+      "2026-01-04T17:00:00.000Z",
+      60,
+      otherLocationId,
+    );
+    await shift(martaId, "2026-01-02T00:30:00.000Z", "2026-01-02T06:00:00.000Z", -120);
+    await shift(colleagueId, "2026-01-03T10:07:00.000Z", "2026-01-03T18:43:00.000Z", 60);
+    await shift(martaId, "2026-02-10T09:00:00.000Z", "2026-02-10T17:00:00.000Z", 60);
+    await shift(martaId, "2026-03-20T09:00:00.000Z", "2026-03-20T17:00:00.000Z", 60);
+  } finally {
+    vi.useRealTimers();
+  }
   cookie = await withTransaction(
     suite.db,
     async (tx) =>
