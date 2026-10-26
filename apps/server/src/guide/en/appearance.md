@@ -127,6 +127,8 @@ departments with no receipt logo of their own: in the black dots of an 80 mm rec
 [On receipts and invoices](appearance.md#logo-receipts). When the logo would print no dots at all,
 as a white logo on a see-through background does, "This logo prints blank on receipts." shows
 underneath the picture: pick a darker picture, or give the departments a receipt logo of their own.
+If the picture cannot be shown, "Could not show how this logo prints." appears instead, with **Try
+again**.
 
 The preview shows the logo in the strip at the top of each version, followed by the venue's legal
 name: the main logo on the light version, and on the dark version the version for dark screens, or
