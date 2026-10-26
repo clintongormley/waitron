@@ -74,18 +74,22 @@ export class InvoiceCustomerDialog extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
 
-  #reset(): void {
+  #clearOutcome(): void {
     this.#generation++;
     this.#download++;
-    this.#scope?.dispose();
-    this.#scope = undefined;
-    this.#leave = undefined;
-    this.taxId = "";
     this.searching = false;
     this.downloading = false;
     this.found = null;
     this.fieldRefusal = "";
     this.refusal = null;
+  }
+
+  #reset(): void {
+    this.#clearOutcome();
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.taxId = "";
     this.attempted = false;
   }
 
@@ -101,14 +105,8 @@ export class InvoiceCustomerDialog extends LitElement {
       snapshot: (value) => ({ ...value }),
       equal: (a, b) => a.taxId === b.taxId,
       restore: (value) => {
-        this.#generation++;
-        this.#download++;
+        this.#clearOutcome();
         this.taxId = value.taxId;
-        this.searching = false;
-        this.downloading = false;
-        this.found = null;
-        this.fieldRefusal = "";
-        this.refusal = null;
       },
     });
     this.#scope = scope;
@@ -124,14 +122,8 @@ export class InvoiceCustomerDialog extends LitElement {
 
   #edit(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.#generation++;
-    this.#download++;
+    this.#clearOutcome();
     this.taxId = event.detail.value;
-    this.searching = false;
-    this.downloading = false;
-    this.found = null;
-    this.fieldRefusal = "";
-    this.refusal = null;
     this.#scope?.changed();
   }
 
