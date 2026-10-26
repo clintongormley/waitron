@@ -533,9 +533,9 @@ until A977).
   The separate core-comment [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
-  naming sites remain in till app and screen suites and payment widget suites,
-  the server's till API tests and shared station fixtures. String-selected product keys stay with their
-  fixture text under A976, as do the service-period menu keys.
+  naming sites remain in till app and screen suites, the payment widget's idle-choice,
+  Enter-key, weighed-dish and main suites, the server's till API tests and shared station fixtures.
+  String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
   Developer/demo script names remain A975's. Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
   treats an inherited property such as `constructor` as a language entry. A974's review lookup
