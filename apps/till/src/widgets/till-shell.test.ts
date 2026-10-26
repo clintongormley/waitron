@@ -1280,6 +1280,23 @@ describe("a handheld's table buttons", () => {
       });
     });
 
+    it("again when the strip narrows under the selected table", async () => {
+      setLocale("en-GB");
+      await atViewport(1280, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "tablet-landscape",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t10"),
+        });
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        await page.viewport(390, 844);
+        await frame();
+        expect(stripOf(el).scrollWidth).toBeGreaterThan(stripOf(el).clientWidth);
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+      });
+    });
+
     it("waits through a bar with no header, and reveals the table once the header is drawn", async () => {
       setLocale("en-GB");
       await atViewport(390, async () => {

@@ -458,6 +458,9 @@ export class TillShell extends LitElement {
     this.#phoneWidth = undefined;
     this.#observer?.disconnect();
     this.#observer = undefined;
+    this.#stripObserver?.disconnect();
+    this.#stripObserver = undefined;
+    this.#watchedStrip = undefined;
     this.#run += 1;
     this.#stopLogoRetry();
   }
@@ -476,6 +479,8 @@ export class TillShell extends LitElement {
   #fittedLocale?: string;
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
+  #stripObserver?: ResizeObserver;
+  #watchedStrip?: Element;
   #watchedPopup?: Element;
   #shownName = false;
   #heldName?: boolean;
@@ -593,12 +598,27 @@ export class TillShell extends LitElement {
       });
       this.#observer.observe(this);
     }
+    this.#observeStrip();
     const popup = this.#popup();
     if (popup !== this.#watchedPopup) {
       this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
       popup?.addEventListener("toggle", this.#onPopupToggle);
       this.#watchedPopup = popup;
     }
+  }
+
+  /** A strip that changes width can leave the selected table's button outside it, so its reveal
+   * runs again then; a redraw at the same width leaves a person's own scroll alone. */
+  #observeStrip(): void {
+    const strip = this.renderRoot.querySelector(".head .tabs") ?? undefined;
+    if (strip === this.#watchedStrip) return;
+    this.#stripObserver ??= new ResizeObserver(() => {
+      this.#revealedTable = undefined;
+      void this.#revealSelectedTable();
+    });
+    if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
+    if (strip) this.#stripObserver.observe(strip);
+    this.#watchedStrip = strip;
   }
 
   #popup(): Element | undefined {
