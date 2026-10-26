@@ -5,7 +5,10 @@ import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.j
 import { isCanonicalInstant } from "./first-setup-start-again-confirmation.js";
 import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainEntry, StartAgainUnit } from "./first-setup-start-again-leftovers.js";
-import { START_AGAIN_CHOICES_DIR } from "./first-setup-start-again-names.js";
+import {
+  START_AGAIN_CHOICES_DIR,
+  START_AGAIN_SET_ASIDE_DIR,
+} from "./first-setup-start-again-names.js";
 import "./errors.js";
 
 export { START_AGAIN_CHOICES_DIR };
@@ -33,7 +36,7 @@ export interface StartAgainChoiceRecord {
 const CHOICE_LIMIT = 8 * 1024 * 1024;
 const HASH = /^[a-f0-9]{64}$/;
 const DIGITS = /^\d+$/;
-const NAME = /^(\d+)-([0-9a-f-]{36})\.json$/;
+const NAME = /^(\d+)-([0-9a-f-]{36})\.json$/i;
 
 class Damaged extends Error {}
 const damaged = (): never => {
@@ -47,8 +50,13 @@ const exactKeys = (value: unknown, keys: readonly string[]): value is Record<str
   keys.every((key) => Object.hasOwn(value, key));
 const text = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
 const hash = (value: unknown): value is string => typeof value === "string" && HASH.test(value);
-const strings = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((item) => text(item));
+const segment = (name: string) =>
+  name !== "" && name !== "." && name !== ".." && !name.includes("\0");
+/** A "/"-separated path that stays inside the folder it is relative to. */
+const relative = (value: unknown): value is string =>
+  typeof value === "string" && value.split("/").every(segment);
+const setAsidePath = (value: unknown) =>
+  relative(value) && value.startsWith(`${START_AGAIN_SET_ASIDE_DIR}/`);
 const digitsOrNull = (value: unknown) =>
   value === null || (typeof value === "string" && DIGITS.test(value));
 const incomplete = (reason: string) => new AppError("setup.start_again_incomplete", {}, { reason });
@@ -56,7 +64,7 @@ const incomplete = (reason: string) => new AppError("setup.start_again_incomplet
 function entry(value: unknown): StartAgainEntry {
   if (
     !exactKeys(value, ["path", "type", "ino", "size", "mtimeNs"]) ||
-    !text(value.path) ||
+    !relative(value.path) ||
     (value.type !== "file" && value.type !== "folder") ||
     typeof value.ino !== "string" ||
     !DIGITS.test(value.ino) ||
@@ -77,9 +85,10 @@ function unit(value: unknown): StartAgainUnit {
   if (
     !exactKeys(value, ["root", "path", "why", "pieces", "entries"]) ||
     (value.root !== "venue" && value.root !== "state") ||
-    !text(value.path) ||
+    !relative(value.path) ||
     (value.why !== "not-created" && value.why !== "changed") ||
-    !strings(value.pieces) ||
+    !Array.isArray(value.pieces) ||
+    !value.pieces.every(relative) ||
     !Array.isArray(value.entries)
   )
     return damaged();
@@ -115,6 +124,7 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
     !isCanonicalInstant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
+    attemptId !== attemptId.toLowerCase() ||
     !hash(frozenDigest) ||
     !hash(markerSha256) ||
     (choice !== "keep" && choice !== "move") ||
@@ -131,9 +141,10 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
     (keep
       ? setAside !== null || noteFloorMs !== null
       : !exactKeys(setAside, ["state", "venue"]) ||
-        !text(setAside.state) ||
-        !text(setAside.venue) ||
-        (noteFloorMs !== null && !Number.isSafeInteger(noteFloorMs)))
+        !setAsidePath(setAside.state) ||
+        !setAsidePath(setAside.venue) ||
+        (noteFloorMs !== null &&
+          (!Number.isSafeInteger(noteFloorMs) || (noteFloorMs as number) < 0)))
   )
     return damaged();
   return {
@@ -160,22 +171,31 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
   };
 }
 
-const stemOf = (record: Pick<StartAgainChoiceRecord, "at" | "attemptId">) =>
-  `${Date.parse(record.at)}-${record.attemptId}.json`;
+/** A choice's name, its record's file name without `.json`; the set-aside folders are named by it too. */
+export const startAgainChoiceStem = (record: Pick<StartAgainChoiceRecord, "at" | "attemptId">) =>
+  `${Date.parse(record.at)}-${record.attemptId.toLowerCase()}`;
 
-/** Each choice is a new file; an existing one is never replaced. This module exports no delete. */
+/**
+ * Each choice is a new file; an existing one is never replaced. This module exports no delete. The
+ * attempt id is stored lower-cased, as a marker may spell it in either case. Returns the stem.
+ */
 export async function writeStartAgainChoice(
   stateDir: string,
   record: Omit<StartAgainChoiceRecord, "version">,
 ): Promise<string> {
   let value: StartAgainChoiceRecord;
   try {
-    value = parseChoice({ version: 1, ...record });
+    const { attemptId } = record as { attemptId: unknown };
+    value = parseChoice({
+      version: 1,
+      ...record,
+      attemptId: typeof attemptId === "string" ? attemptId.toLowerCase() : attemptId,
+    });
   } catch {
     throw new AppError("setup.attempt_invalid", {});
   }
-  const name = stemOf(value);
-  const path = join(stateDir, START_AGAIN_CHOICES_DIR, name);
+  const stem = startAgainChoiceStem(value);
+  const path = join(stateDir, START_AGAIN_CHOICES_DIR, `${stem}.json`);
   const existing = await lstat(path).then(
     () => true,
     (error: unknown) => {
@@ -185,7 +205,7 @@ export async function writeStartAgainChoice(
   );
   if (existing) throw new AppError("setup.attempt_conflict", {});
   await writeDurableHostJson(path, value, CHOICE_LIMIT);
-  return name;
+  return stem;
 }
 
 /**
@@ -204,9 +224,10 @@ export async function readStartAgainChoices(
     if (object(error) && error.code === "ENOENT") return [];
     throw incomplete("choice records unreadable");
   }
+  const attemptId = marker.attemptId.toLowerCase();
   const mine = names
     .map((name) => ({ name, match: NAME.exec(name) }))
-    .filter(({ match }) => match !== null && match[2] === marker.attemptId)
+    .filter(({ match }) => match !== null && match[2]!.toLowerCase() === attemptId)
     .map(({ name, match }) => ({ name, ms: Number(match![1]) }))
     .sort((a, b) => a.ms - b.ms);
   const records: StartAgainChoiceRecord[] = [];
@@ -214,7 +235,7 @@ export async function readStartAgainChoices(
     let record: StartAgainChoiceRecord;
     try {
       record = parseChoice(await readDurableHostJson(join(folder, name), CHOICE_LIMIT));
-      if (stemOf(record) !== name) damaged();
+      if (`${startAgainChoiceStem(record)}.json` !== name) damaged();
     } catch {
       throw incomplete(`choice record damaged: ${name}`);
     }

@@ -68,27 +68,41 @@ async function readCounter(
   path: string,
   attemptId: string,
   now: number,
-): Promise<{ failures: number; lastFailureAt: number | null; waitUntil: number | null }> {
+): Promise<{
+  failures: number;
+  lastFailureAt: number | null;
+  waitUntil: number | null;
+  /** A stored time was ahead of the clock and was read as an earlier one. */
+  capped: boolean;
+}> {
   let stored: Counter | null;
   try {
     const value = await readDurableHostJson(path, COUNTER_LIMIT);
-    if (value === null) return { failures: 0, lastFailureAt: null, waitUntil: null };
+    if (value === null) return { failures: 0, lastFailureAt: null, waitUntil: null, capped: false };
     stored = parseCounter(value);
   } catch {
     stored = null;
   }
   // Damaged: the free tries spent, no wait yet.
   if (stored === null)
-    return { failures: START_AGAIN_FREE_GUESSES, lastFailureAt: now, waitUntil: null };
-  if (stored.attemptId !== attemptId) return { failures: 0, lastFailureAt: null, waitUntil: null };
+    return {
+      failures: START_AGAIN_FREE_GUESSES,
+      lastFailureAt: now,
+      waitUntil: null,
+      capped: false,
+    };
+  if (stored.attemptId !== attemptId)
+    return { failures: 0, lastFailureAt: null, waitUntil: null, capped: false };
+  const lastFailureAt = stored.lastFailureAt === null ? null : Date.parse(stored.lastFailureAt);
+  const waitUntil = stored.waitUntil === null ? null : Date.parse(stored.waitUntil);
+  const ceiling = now + START_AGAIN_MAX_WAIT_MS;
   return {
     failures: stored.failures,
-    lastFailureAt:
-      stored.lastFailureAt === null ? null : Math.min(Date.parse(stored.lastFailureAt), now),
-    waitUntil:
-      stored.waitUntil === null
-        ? null
-        : Math.min(Date.parse(stored.waitUntil), now + START_AGAIN_MAX_WAIT_MS),
+    lastFailureAt: lastFailureAt === null ? null : Math.min(lastFailureAt, now),
+    waitUntil: waitUntil === null ? null : Math.min(waitUntil, ceiling),
+    capped:
+      (lastFailureAt !== null && lastFailureAt > now) ||
+      (waitUntil !== null && waitUntil > ceiling),
   };
 }
 
@@ -121,8 +135,10 @@ export async function beginStartAgainGuess(
     const at = now.getTime();
     const read = await readCounter(path, attemptId, at);
     if (read.waitUntil !== null && read.waitUntil > at) {
-      // Store the capped times, so the next try's clock reads the wait this refusal named.
-      await write(read.failures, read.lastFailureAt, read.waitUntil);
+      // Store the capped times, so the next try's clock reads the wait this refusal named. The try
+      // is refused either way, so a failed write still answers with the wait.
+      if (read.capped)
+        await write(read.failures, read.lastFailureAt, read.waitUntil).catch(() => undefined);
       throw new AppError("password.throttled", {
         retryAfterSeconds: Math.ceil((read.waitUntil - at) / 1000),
       });

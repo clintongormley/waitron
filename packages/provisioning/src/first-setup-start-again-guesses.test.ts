@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -242,4 +242,49 @@ it("after a success, the next wrong guess counts from 0", async () => {
   )("success");
   expect(await wrong(stateDir, attemptId, at(MINUTE))).toBeNull();
   expect(await counter(stateDir)).toMatchObject({ failures: 1, waitUntil: null });
+});
+
+it("a refused try with nothing to cap writes nothing", async () => {
+  const stateDir = await scratch();
+  const attemptId = randomUUID();
+  for (let index = 0; index < 6; index++) await wrong(stateDir, attemptId, at(0));
+  const path = join(stateDir, START_AGAIN_GUESSES_FILE);
+  const before = { text: await readFile(path, "utf8"), info: await stat(path) };
+  expect(await wrong(stateDir, attemptId, at(1000))).toBe(59);
+  const info = await stat(path);
+  expect(await readFile(path, "utf8")).toBe(before.text);
+  expect([info.ino, info.mtimeMs]).toEqual([before.info.ino, before.info.mtimeMs]);
+});
+
+it("a capped refusal whose write fails still refuses password.throttled with the wait", async () => {
+  const stateDir = await scratch();
+  const attemptId = randomUUID();
+  const yearAhead = at(365 * 24 * 60 * MINUTE).toISOString();
+  await writeFile(
+    join(stateDir, START_AGAIN_GUESSES_FILE),
+    JSON.stringify({
+      version: 1,
+      attemptId,
+      failures: 12,
+      lastFailureAt: yearAhead,
+      waitUntil: yearAhead,
+    }),
+  );
+  vi.resetModules();
+  vi.doMock("./durable-host-json.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("./durable-host-json.js")>()),
+    writeDurableHostJson: vi.fn(async () => {
+      throw new Error("disk full");
+    }),
+  }));
+  try {
+    const failing = await import("./first-setup-start-again-guesses.js");
+    await expect(failing.beginStartAgainGuess(stateDir, attemptId, at(0))).rejects.toMatchObject({
+      code: "password.throttled",
+      params: { retryAfterSeconds: 15 * 60 },
+    });
+  } finally {
+    vi.doUnmock("./durable-host-json.js");
+    vi.resetModules();
+  }
 });

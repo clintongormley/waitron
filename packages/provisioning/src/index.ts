@@ -199,6 +199,7 @@ export { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 export {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,
+  startAgainChoiceStem,
   readStartAgainChoices,
   writeStartAgainChoice,
   type StartAgainChoiceRecord,

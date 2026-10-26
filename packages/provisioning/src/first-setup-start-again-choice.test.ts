@@ -8,6 +8,7 @@ import {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,
   readStartAgainChoices,
+  startAgainChoiceStem,
   writeStartAgainChoice,
   type StartAgainChoiceRecord,
 } from "./first-setup-start-again-choice.js";
@@ -67,16 +68,17 @@ it("a record is written once, with every field, and a second write of the same s
   const stateDir = await scratch();
   const record = choice();
   const stem = await writeStartAgainChoice(stateDir, record);
-  expect(stem).toBe(`${Date.parse(record.at)}-${record.attemptId}.json`);
-  expect(JSON.parse(await readFile(join(stateDir, START_AGAIN_CHOICES_DIR, stem), "utf8"))).toEqual(
-    { version: 1, ...record },
-  );
+  expect(stem).toBe(`${Date.parse(record.at)}-${record.attemptId}`);
+  expect(startAgainChoiceStem(record)).toBe(stem);
+  expect(
+    JSON.parse(await readFile(join(stateDir, START_AGAIN_CHOICES_DIR, `${stem}.json`), "utf8")),
+  ).toEqual({ version: 1, ...record });
   await expect(writeStartAgainChoice(stateDir, keep(record))).rejects.toMatchObject({
     code: "setup.attempt_conflict",
   });
-  expect(JSON.parse(await readFile(join(stateDir, START_AGAIN_CHOICES_DIR, stem), "utf8"))).toEqual(
-    { version: 1, ...record },
-  );
+  expect(
+    JSON.parse(await readFile(join(stateDir, START_AGAIN_CHOICES_DIR, `${stem}.json`), "utf8")),
+  ).toEqual({ version: 1, ...record });
 });
 
 it("a record that does not hold its shape is not written", async () => {
@@ -265,5 +267,81 @@ it("a unit or an entry that does not hold its shape is not written", async () =>
     stateDir,
     choice({ listed: { digest: HASH_C, units: [{ ...unit!, entries: [folder as never] }] } }),
   );
-  expect(stem).toMatch(/\.json$/);
+  expect(stem).not.toMatch(/\.json$/);
+});
+
+it("a record written with an upper-case attempt id is stored lower-cased and seen by assertStartAgainNotKept", async () => {
+  const { roots, attemptId, frozenDigest } = await startAgainAttempt(await scratch());
+  const upper = attemptId.toUpperCase();
+  const stem = await writeStartAgainChoice(
+    roots.stateDir,
+    keep({ attemptId: upper, frozenDigest }),
+  );
+  expect(stem).toBe(startAgainChoiceStem({ at: keep().at, attemptId }));
+  expect(
+    JSON.parse(
+      await readFile(join(roots.stateDir, START_AGAIN_CHOICES_DIR, `${stem}.json`), "utf8"),
+    ),
+  ).toMatchObject({ attemptId });
+  for (const id of [attemptId, upper])
+    expect(
+      await readStartAgainChoices(roots.stateDir, { attemptId: id, frozenDigest }),
+      id,
+    ).toHaveLength(1);
+  await expect(assertStartAgainNotKept(roots)).rejects.toMatchObject({
+    code: "setup.start_again_kept",
+  });
+});
+
+it("a record on disk spelling its attempt id in upper case, in its name or inside it, refuses as damaged", async () => {
+  const stateDir = await scratch();
+  const attemptId = randomUUID();
+  const record = { version: 1, ...keep({ attemptId }) };
+  const ms = Date.parse(record.at);
+  for (const [name, body] of [
+    [`${ms}-${attemptId.toUpperCase()}.json`, record],
+    [`${ms}-${attemptId}.json`, { ...record, attemptId: attemptId.toUpperCase() }],
+  ] as const) {
+    const folder = join(stateDir, START_AGAIN_CHOICES_DIR);
+    await rm(folder, { recursive: true, force: true });
+    await mkdir(folder);
+    await writeFile(join(folder, name), JSON.stringify(body));
+    await expect(
+      readStartAgainChoices(stateDir, { attemptId, frozenDigest: HASH_A }),
+      name,
+    ).rejects.toMatchObject({
+      code: "setup.start_again_incomplete",
+      reason: `choice record damaged: ${name}`,
+    });
+  }
+});
+
+it("paths in a record stay inside their folders, and the note floor is not negative", async () => {
+  const stateDir = await scratch();
+  const [unit] = choice().listed.units;
+  const [entry] = unit!.entries;
+  const bad: Partial<Omit<StartAgainChoiceRecord, "version">>[] = [
+    { setAside: { state: "../../etc", venue: "first-setup-set-aside/1" } },
+    { setAside: { state: "first-setup-set-aside/1", venue: "/abs" } },
+    { setAside: { state: "first-setup-set-aside/../x", venue: "first-setup-set-aside/1" } },
+    { setAside: { state: "first-setup-set-aside", venue: "first-setup-set-aside/1" } },
+    { setAside: { state: "first-setup-set-aside/1", venue: "elsewhere/1" } },
+    { noteFloorMs: -5 },
+    ...[
+      { ...unit!, path: "../x" },
+      { ...unit!, path: "/abs" },
+      { ...unit!, path: "a/./b" },
+      { ...unit!, pieces: ["/abs"] },
+      { ...unit!, pieces: ["a/../../b"] },
+      { ...unit!, entries: [{ ...entry!, path: "../x" }] },
+    ].map((bent) => ({ listed: { digest: HASH_C, units: [bent] } })),
+  ];
+  for (const overrides of bad)
+    await expect(
+      writeStartAgainChoice(stateDir, choice(overrides)),
+      JSON.stringify(overrides),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  await expect(writeStartAgainChoice(stateDir, choice({ noteFloorMs: 0 }))).resolves.toBeTypeOf(
+    "string",
+  );
 });
