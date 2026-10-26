@@ -120,6 +120,8 @@ interface InvoiceRead {
     requestedAt: string;
     status: (typeof invoiceDeliveries.$inferSelect)["status"];
     sentAt: string | null;
+    reportedOutcome: (typeof invoiceDeliveries.$inferSelect)["reportedOutcome"];
+    reportedAt: string | null;
   }[];
 }
 
@@ -164,6 +166,8 @@ export async function buildInvoiceCustomerFiles(
               createdAt: invoiceDeliveries.createdAt,
               status: invoiceDeliveries.status,
               completedAt: invoiceDeliveries.completedAt,
+              reportedOutcome: invoiceDeliveries.reportedOutcome,
+              reportedAt: invoiceDeliveries.reportedAt,
             })
             .from(invoiceDeliveries)
             .where(
@@ -180,6 +184,9 @@ export async function buildInvoiceCustomerFiles(
               requestedAt: row.createdAt,
               status: row.status,
               sentAt: row.completedAt,
+              // Can say "sent" where `status` does not: a late report on an attempt a newer one replaced.
+              reportedOutcome: row.reportedOutcome,
+              reportedAt: row.reportedAt,
             })),
           };
         }),

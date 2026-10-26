@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, type Database } from "@waitron/db";
+import { invoiceDeliveries, withTransaction, type Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { jsonFile } from "@waitron/module";
 import { eq } from "drizzle-orm";
@@ -11,6 +12,12 @@ import {
   findInvoiceCustomerSales,
   type InvoiceCustomerFilesDeps,
 } from "./invoice-customer-data.js";
+import {
+  claimInvoiceDelivery,
+  expireInvoiceDeliveryClaims,
+  reportInvoiceEmailDelivery,
+  reserveInvoiceDelivery,
+} from "./invoice-delivery.js";
 import type { Logger } from "./logger.js";
 import {
   expectedJordiFile,
@@ -103,6 +110,54 @@ describe("buildInvoiceCustomerFiles", () => {
   it("writes the tax number it is given as invoices.json's own, without normalising it again", async () => {
     const built = await buildInvoiceCustomerFiles(deps(), "ES12345678Z", await jordi());
     expect((JSON.parse(invoicesText(built.files)) as { taxId: string }).taxId).toBe("ES12345678Z");
+  });
+
+  it("keeps a late report that an email went, beside the attempt's own state", async () => {
+    // The company's invoice, so Jordi's exact file in the other cases is untouched.
+    const { p1 } = fixture.sales;
+    const claimedAt = new Date(Date.now() + 60_000);
+    const expiredAt = new Date(claimedAt.getTime() + 120_000);
+    const reportedAt = new Date(expiredAt.getTime() + 1_000);
+    const request = (recipient: string) => ({
+      requestKey: randomUUID(),
+      personId: fixture.venue.adminId,
+      medium: "email" as const,
+      recipient,
+    });
+    const late = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, p1, request("late@example.test")),
+    );
+    const claim = await withTransaction(suite.db, (tx) =>
+      claimInvoiceDelivery(tx, late.id, "files-test", claimedAt),
+    );
+    await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, expiredAt));
+    await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, p1, request("newer@example.test")),
+    );
+    const outcome = await withTransaction(suite.db, (tx) =>
+      reportInvoiceEmailDelivery(tx, claim!, { status: "sent" }, reportedAt),
+    );
+    expect(outcome.historical).toBe(true);
+    const [stored] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.id, late.id));
+
+    const sales = await suite.db.withWriteLock(() =>
+      findInvoiceCustomerSales(suite.db, "B76543214"),
+    );
+    const built = await buildInvoiceCustomerFiles(deps(), "B76543214", sales);
+    const file = JSON.parse(invoicesText(built.files)) as {
+      invoices: { emails: { to: string }[] }[];
+    };
+    expect(file.invoices[0]!.emails.find((email) => email.to === "late@example.test")).toEqual({
+      to: "late@example.test",
+      requestedAt: stored!.createdAt,
+      status: "unknown",
+      sentAt: null,
+      reportedOutcome: "sent",
+      reportedAt: reportedAt.toISOString(),
+    });
   });
 
   it("names nothing of the other customers' or of staff in invoices.json", async () => {
