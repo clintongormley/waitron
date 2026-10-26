@@ -1,6 +1,9 @@
 # A980 slice S3: find an invoice customer by tax number, and download what the box holds about them
 
-**Status: plan, 2026-10-26. Not yet reviewed. Nothing was built when this was written.** Design:
+**Status: plan, 2026-10-26, round 1 of review folded. Nothing was built when this was written.**
+The review, the claim check and the runner's rulings are in
+`/Users/clintongormley/waitron-campaign-b/a980-s3-plan-review/` (`round1-review.md`,
+`round1-claims.md`, `round1-rulings.md`). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §2.2 (the
 customer rows c1 and c2, and "Customer data that exists today"), §4.2 (the worked example "invoice
 customer": Jordi Puig, NIF 12345678Z), §4.3(b), §5.3 row S3 (its tests: "sole-trader fixture;
@@ -71,16 +74,15 @@ and `packages/fiscal-verifactu/src/inmutabilidad.test.ts` must pass **unedited**
 
 Left for later, on purpose (each becomes a backlog point in Task 12):
 
-- **A tax number staged on a bill that was never issued.** `working_orders` holds the customer the
-  till staged for a full invoice (`recipient_tax_id` and its siblings,
-  `packages/db/src/schema/orders.ts:99-102`) before the sale exists; once the sale is issued the same
-  values are on the sale, which the search reads. A bill abandoned after a customer was staged keeps
-  them and is not searched (not measured how often that happens).
+- **What the box keeps with a tax number outside issued sales** (decision 19): the customer staged
+  on a bill (`working_orders.recipient_tax_id` and its siblings,
+  `packages/db/src/schema/orders.ts:99-102`), on every invoiced bill and on bills never issued; the
+  staged email choice (`working_orders.invoice_delivery`, `orders.ts:104`); and the raw printer
+  bytes of a printed full invoice (`print_jobs.payload`, design §2.2 c3). The README says the copy
+  does not hold them.
 - **A foreign customer's tax number** (decision 4): none can be stored today; when AEAT's question
   on foreign recipients is answered (asesor Q17(a)), the search's rule is revisited.
 - **An index** on the customer's tax number, only if Task 3 or a box asks for one (decision 7).
-- **Raw printer bytes** of a printed full invoice (`print_jobs.payload`, design §2.2 c3) are not in
-  the download, as the overview's S3 note does not list them.
 
 ## Decisions this plan makes that the design does not
 
@@ -125,13 +127,15 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 
 3. **The normaliser: one function, both sides.** `normaliseInvoiceTaxId(value)` in
    `apps/server/src/invoice-customer-tax-id.ts`: remove every whitespace character (JavaScript's
-   Unicode-aware `\s`, so a tab and a no-break space go too), every hyphen and every full stop;
-   upper-case; then remove one leading `ES`. The typed value and every stored value go through the
-   same function, so the two sides cannot disagree.
+   Unicode-aware `\s`, so a tab and a no-break space go too), every full stop, every hyphen, the
+   hyphen and dash look-alikes U+2010 to U+2015 (a non-breaking hyphen and an en dash among them)
+   and the zero-width characters U+200B to U+200D and U+FEFF, which a number pasted from a PDF or a
+   word processor can carry; upper-case; then remove one leading `ES`. The typed value and every
+   stored value go through the same function, so the two sides cannot disagree.
    - **How stored values are written today.** Every product path to a full invoice validates the
      tax number with Spain's checker whatever the country, then refuses any country but Spain:
-     `checkedInvoiceRecipient` (`apps/server/src/invoice-selection.ts:35-84`; the checker at `:47`,
-     the refusal at `:73-77`, the stored form `taxId.normalized` at `:80`), called when the till
+     `checkedInvoiceRecipient` (`apps/server/src/invoice-selection.ts:35-85`; the checker at `:47`,
+     the refusal at `:74-78`, the stored form `taxId.normalized` at `:80`), called when the till
      stages the customer (`apps/server/src/working-order.ts:1555-1556`, `:4213-4214`) and again when
      the sale is filed (`invoice-selection.ts:128-146`); `recordSale` runs the country pack's checker
      once more (`packages/core/src/counterparty.ts:13-31`, called at
@@ -153,17 +157,24 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    - **Exact match only.** No prefix, suffix or partial match: `12345678` does not find
      `12345678Z`.
    - **The typed value is refused** with 400 `management.request_invalid` `{ field: "taxId" }`
-     when it is missing, longer than 64 characters, or does not normalise to 1 to 20 letters A–Z and
-     digits. The 20 leaves room for longer foreign numbers if they ever arrive. The value itself is
-     never put in an error's params or a log line: the error boundary writes params into the log
-     (`packages/server-kit/src/error-boundary.ts:42-45`); the registry forbids a secret there
-     (`apps/server/src/errors.ts:16-19`), and the Verifactu backend restates the rule for an
-     operator's own values (`packages/fiscal-verifactu/src/backend.ts:711-713`).
+     when it is missing or longer than 64 characters; when, after the characters above are removed
+     and **before** upper-casing, it holds anything but the letters A–Z (either case) and digits
+     (checked before upper-casing because `ſ`, a long s, upper-cases to `S` and `ı`, a dotless i, to
+     `I`, so a later check would let them through as ASCII letters); or when it does not normalise
+     to 1 to 20 letters and digits. The 20 leaves room for longer foreign numbers if they ever arrive.
+     The value itself is never put in an error's params or a log line: the error boundary writes
+     params into the log (`packages/server-kit/src/error-boundary.ts:42-45`); the registry forbids a
+     secret there (`apps/server/src/errors.ts:16-19`), and the Verifactu backend restates the rule
+     for an operator's own values (`packages/fiscal-verifactu/src/backend.ts:711-713`).
    - **No checksum check.** A mistyped number simply finds nothing; the zero-match line says what to
      check.
+   - **The dashboard's copy.** The dashboard cannot import server code and this slice changes no
+     package, so the client check (decision 16) is a second copy in
+     `apps/dashboard/src/widgets/invoice-tax-id.ts`, whose test runs Task 1's accept and refuse
+     tables verbatim, so the two copies cannot drift without a test failing.
 
 4. **A foreign tax number, or an `IDOtro`.** None can be stored today: the till's path refuses a
-   non-Spanish customer (`invoice-selection.ts:73-77`), and so does the Verifactu record builder,
+   non-Spanish customer (`invoice-selection.ts:74-78`), and so does the Verifactu record builder,
    because which `IDOtro` type a non-resident takes is open with the adviser
    (`packages/fiscal-verifactu/src/backend.ts:703-716`; `IDOtro` is AEAT's form for a non-Spanish
    identifier). A corrective invoice of a full invoice is refused too
@@ -177,73 +188,113 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 5. **What the search reads: issued sales only, every node.** It reads `sales` rows whose
    `counterparty_tax_id` is set, at any node (a customer's data is everything the box holds, and a
    mirror's sales carry the origin's node id). Not the staged copy on `working_orders`, not
-   `print_jobs`, and not the fiscal module's tables directly: the shared server code may not import
-   the regime (`scripts/module-seams.test.ts:10-31`), so the filed record is reached only through
-   the backend's own `filedReceiptFor` (decision 11).
+   `print_jobs` (decision 19), and not the fiscal module's tables directly: the shared server code
+   may not import the regime (`scripts/module-seams.test.ts:10-31`), so the filed record is reached
+   only through the backend's own `filedReceiptFor` (decision 11).
 
-6. **The reads and their turns.** Each turn is `db.withWriteLock` with no `withTransaction` around
-   it, as `sendPersonalData` does and says why (`personal-data-export-api.ts:67-71`: the change-log
-   drain is a write a full disk refuses); turns are awaited one after another, never `Promise.all`.
+6. **The reads, their turns, and a turn of the event loop after each.** Each lock turn is
+   `db.withWriteLock` with no `withTransaction` around it, as `sendPersonalData` does and says why
+   (`personal-data-export-api.ts:67-69`: the change-log drain is a write a full disk refuses);
+   turns are awaited one after another, never `Promise.all`.
    - **The search's one statement.** `select id, counterparty_tax_id from sales where
-     counterparty_tax_id is not null`, through `db.all(sql…)` so drizzle builds no objects for
-     columns it does not need, **with no `ORDER BY`**; the rows are filtered in JavaScript with
-     decision 3's function. Then, in the same turn, the matched ids' own columns by primary key, at
-     most 500 ids a statement (S2c's `SALE_LOOKUP_CHUNK`), joined to `invoice_series` for the code:
-     id, series code, invoice number, `issued_at`, the four `counterparty_*` columns, `total`; sorted
-     in JavaScript by `issued_at`, then id.
-   - **Why no `ORDER BY` in the scan.** A probe (below) found that ordering the scanning statement
-     by `issued_at` made SQLite walk `sales_tenant_issued_idx` and fetch every row by its position,
-     171.1 ms against 121.2 ms without it, at the same size.
+     counterparty_tax_id is not null`, through `db.all(sql…)`, which skips drizzle's row mapping (not
+     measured; a projected `db.select` would also read only the two columns), **with no `ORDER BY`**;
+     the rows are filtered in JavaScript with decision 3's function. Then, in the same turn, the
+     matched ids' own columns by primary key, at most 500 ids a statement (S2c's
+     `SALE_LOOKUP_CHUNK`, `apps/server/src/personal-data-actions.ts:28`), joined to
+     `invoice_series` for the code: id, series code, invoice number, `issued_at`, the four
+     `counterparty_*` columns, `total`; sorted in JavaScript by `issued_at`, then id.
+   - **Why no `ORDER BY` in the scan.** Ordering the scanning statement by `issued_at` makes SQLite
+     walk `sales_tenant_issued_idx` and fetch every row by its position (the probe's plan: `SCAN s
+     USING INDEX sales_tenant_issued_idx | USE TEMP B-TREE FOR LAST TERM OF ORDER BY`), slower in
+     both runs below (171.1 against 121.2 ms in the planner's, 94.5 against 79.8 ms in the claim
+     check's).
    - **The search route** runs the caller's check and the search in one turn.
    - **The download** takes: the **first turn** (the caller's check, the query check, the node's
      place and time zone, the tenant, the search); then **one invoice turn per matched invoice**, in
      order, each reading that invoice's document with the existing reader
      (`readInvoiceDocument`, `apps/server/src/invoice-document.ts:32-161`), whether the backend holds
-     a filed record of it (`backend.filedReceiptFor`, `packages/fiscal/src/backend.ts:423`) and its
-     email deliveries (`invoice_deliveries` where `sale_id` is the invoice and `medium = 'email'`,
-     ordered by `created_at`, then id; both unique indexes on that table start with `sale_id`,
-     `packages/db/src/schema/invoice-deliveries.ts:108-109`); then the PDFs are rendered **outside
-     any turn** (the renderer is CPU work, `apps/server/src/invoice-pdf.ts:7-29`); then the
-     **re-check**, one turn, the caller's check again, before the ZIP is sent.
+     a filed record of it (`backend.filedReceiptFor(db, brandSaleId(saleId))`,
+     `packages/fiscal/src/backend.ts:423`, which takes a branded id) and its email deliveries
+     (`invoice_deliveries` where `sale_id` is the invoice and `medium = 'email'`, ordered by
+     `created_at`, then id; three of the table's four unique indexes start with `sale_id`,
+     `packages/db/src/schema/invoice-deliveries.ts:108-112`, the fourth is on `print_job_id`); then
+     the PDFs are rendered **outside any lock turn** (the renderer is CPU work,
+     `apps/server/src/invoice-pdf.ts:7-29`); then the **re-check**, one turn, the caller's check
+     again, before the ZIP is sent.
+   - **A real turn of the event loop after every lock turn and every render.** A lock turn, the
+     invoice reader and the renderer wait on no I/O: `withWriteLock` is a promise chain
+     (`packages/store/src/write-queue.ts:44-47`), the reads are synchronous `node:sqlite` calls, and
+     the renderer ends on a stream's `end` (`invoice-pdf.ts:7-17`). Awaited one after another they
+     never let the loop reach its timer or I/O phase, so a till's request waits for the whole
+     download, and the venue watchdog, which kills the server after `WATCHDOG_KILL_MS = 120_000`
+     with no timer turn (`packages/store/src/venue-liveness.ts:19-23`), would see one block for a
+     big enough customer. The review's model ran 300 such turns and 300 real `pdfkit` renders for
+     690 ms with zero ticks of a 10 ms interval, and 72 ticks with a `setImmediate` after each
+     (`/Users/clintongormley/waitron-campaign-b/a980-s3-plan-review/probe/loop.mjs`, round 1
+     review, C1). Default: `await nextTurn()` (`setImmediate` from `node:timers/promises`, imported
+     under that name as `apps/server/src/working-order.ts:89` does and used at `:4644`) after the
+     first turn, after every invoice turn, after every render, and before the re-check. The longest
+     block a sale can wait behind is then one lock turn or one render, not the download; Task 4a
+     pins it with a case that fails without the yields, and Task 3 measures it. No cap on the
+     number of invoices: with the yields the count lengthens the request, not any one block. Task 3
+     reports the per-invoice cost and the ZIP's size, and the pull request states, from them, the
+     invoice count at which the request would pass 60 seconds and the ZIP 100 MB (all of it is held
+     in memory until sent).
    - **Consistency.** An email recorded between the first turn and an invoice's turn may appear:
      harmless, it happened before the copy was sent (S2c decision 4's reasoning). No invoice can
      disappear between turns: `sales` refuses deletes (`classification.ts:17`).
    - **A probe run for this plan**, raw `node:sqlite` with Node v26.11.1 on this Mac (Apple M5 Pro):
-     every core migration from this worktree, then 1,000,000 sales with every column filled, one in
-     twenty naming one of 40,000 customers (50,000 rows), the searched customer on 62 of them; the
-     same again with one in five (200,000 rows, the customer on 250). Medians of 12 runs, all plans
-     `SCAN sales`:
+     every core migration from this worktree, then 1,000,000 sales with 21 of the 24 columns filled
+     (`corrects_sale_id`, `authorized_by` and `operation_date` left null), one in twenty naming one
+     of 39,950 other customers or the searched one (50,000 rows, the searched customer on 62); the
+     same again with one in five (200,000 rows, the customer on 250). Each figure is the 7th of 12
+     sorted runs (the claim check's rerun: the mean of the 6th and 7th); every plan is `SCAN sales`
+     except the `ORDER BY` arm's. The two runs differ by 25–40% in absolute terms (most likely other
+     work on the machine during the first); the order of the arms and their ratios to exact
+     equality agree:
 
-     | The stored side compared | 50,000 named | 200,000 named |
-     | --- | --- | --- |
-     | normalised in JavaScript (this plan) | 97.2 ms | 192.5 ms |
-     | `replace(upper(…), ' ', '')` in SQL | 84.4 ms | 120.8 ms |
-     | five `replace`s and the `ES` strip in SQL | 121.2 ms | 264.6 ms |
-     | the same, with `ORDER BY issued_at, id` | 171.1 ms | 309.4 ms |
-     | exact equality, no normalising | 80.0 ms | 86.6 ms |
+     | The stored side compared | 1 in 20, planner | 1 in 20, rerun | 1 in 5, planner | 1 in 5, rerun |
+     | --- | --- | --- | --- | --- |
+     | normalised in JavaScript, whitespace only and NFKC (`q.mjs`) | 97.2 ms | 68.1 ms | 192.5 ms | 125.7 ms |
+     | normalised in JavaScript, decision 3's rule (the rerun's `q3`) | — | 69.5 ms | — | 122.1 ms |
+     | `replace(upper(…), ' ', '')` in SQL | 84.4 ms | 58.2 ms | 120.8 ms | 74.8 ms |
+     | five `replace`s and the `ES` strip in SQL | 121.2 ms | 79.8 ms | 264.6 ms | 168.7 ms |
+     | the same, with `ORDER BY issued_at, id` | 171.1 ms | 94.5 ms | 309.4 ms | 194.8 ms |
+     | exact equality, no normalising | 80.0 ms | 54.6 ms | 86.6 ms | 57.4 ms |
 
      Scripts and the commands are in `/Users/clintongormley/waitron-campaign-b/a980-s3-plan-probe/`
-     (`real.mjs` migrates, `load.mjs <db> 1000000 20` loads, `q.mjs` and `q2.mjs` time). These are
-     lower bounds: no drizzle, no caller's check, a warm page cache. Normalising in JavaScript beat
-     doing the same in SQL; the scan itself is most of the cost.
+     (`commands.txt`; `real.mjs` migrates, `load.mjs <db> 1000000 20` loads, `q.mjs`, `q2.mjs` and
+     `q3-order-by.mjs` time; the rerun is the claim check's, `round1-claims.md` beside the review).
+     These are lower bounds: no drizzle, no caller's check, a warm page cache. Normalising in
+     JavaScript beat doing the same in SQL; the scan itself is most of the cost. The probe stores
+     every number already normalised, so it says nothing about the normaliser's correctness; that is
+     Task 2's raw-stored case.
 
 7. **The timing and its stop rules** (Task 3, before any route or screen). The fixture: 1,000,000
    sales, about six years of a venue ringing 450 sales a day, the size S2c timed its turns at
    (S2c Task 3). Nobody has measured what share of a restaurant's sales are full invoices; one in
    twenty (50,000) is taken as a generous share for a busy venue, and one in five (200,000) as a
    stress case to show how the cost grows. The searched customer, a business that takes an invoice
-   every week for six years, is on 300 invoices, each issued through the real filing code with
-   three lines, half of them emailed. Default, on this Mac, median of at least 12 runs:
+   every week for six years, is on 300 invoices, each issued through the real filing code, most with
+   three lines and one in ten with thirty, half of them emailed; the venue's receipt logo is the
+   largest the logo store accepts, every dot set (Task 3). Default, on this Mac, median of at least
+   12 runs:
    - **The search turn** (caller's check, normalising, the scan, the matched rows' columns) over
      **250 ms** at one in twenty: **stop**.
    - **The download's first turn** over **250 ms** at one in twenty: **stop**.
    - **An invoice turn** over **50 ms** median, or any single one over **250 ms**: **stop**. The
-     customer's 300 turns run one after another with sales served between them; the 250 ms is S2b's
-     and S2c's bar for any one turn (S2c decision 4).
-   - **The longest time the event loop was blocked** during the whole download
-     (`perf_hooks.monitorEventLoopDelay`'s `max`) over **250 ms**: **stop**. The PDF renderer lays a
-     page out synchronously, on the thread that serves sales (`invoice-pdf.ts:18-29`; the backlog's
-     measure-on-a-box point records a 2.6 s working-time PDF on that thread).
+     250 ms is S2b's and S2c's bar for any one turn (S2c decision 4). Sales are served between the
+     turns only because of decision 6's `nextTurn()` after each.
+   - **The longest stall of the event loop** during the whole download over **250 ms**: **stop**.
+     It is measured as the longest gap between ticks of a 10 ms real `setInterval` running across
+     the download, not by reading `monitorEventLoopDelay`'s `max` straight after it: that histogram
+     samples on its own timer, so a run that never yielded reads 12 ms there and 693 ms only once a
+     timer turn has run (the review's model, round 1, I1). The control is the same download with the
+     yields removed, which must show a stall about as long as the whole download. The PDF renderer
+     lays a page out synchronously, on the thread that serves sales (`invoice-pdf.ts:18-29`; the
+     backlog's measure-on-a-box point records a 2.6 s working-time PDF on that thread), so one
+     render is the longest block the yields leave.
    - **The one-in-five arm** is recorded and reported in the pull request, with no stop: it is a
      stress figure, not a busy venue's history. If it is over 250 ms, that goes in the PR's FYI for
      the owner.
@@ -251,7 +302,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      the coordinator. The options to put to them: an index on the stored tax number as its own
      migration slice (every writer already stores one spelling, decision 3, so a plain equality
      index could serve it), or comparing the stored side exactly, without normalising it (80.0 and
-     86.6 ms in the probe).
+     86.6 ms in the planner's probe, 54.6 and 57.4 ms in the rerun).
    - Every figure goes in the pull request and in the backlog's "measure on a box" point.
 
 8. **What the ZIP holds.**
@@ -292,9 +343,13 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    - **The PDFs are named as the existing route names them**: the series code with anything outside
      `A-Za-z0-9_.-` replaced by `_`, a hyphen, the number, `.pdf`
      (`apps/server/src/orders-invoice-pdf.ts:29`). That expression moves into an exported
-     `invoicePdfFileName(code, number)` in the same file, used by both (Task 4). Two series codes
-     that differ only in a replaced character could give one name; the build throws rather than
-     overwrite (Task 4 pins it).
+     `invoicePdfFileName(code, number)` in the same file, used by both (Task 4b). Two invoices can
+     give one name: series codes are unique per node only (`packages/db/src/schema/series.ts:37`)
+     and the search reads every node, and two codes that differ only in a replaced character give one
+     name too. `zipArchive` would silently keep only the last (`download-archive.ts:54` assigns
+     `entries[file.name]`), and a refusal would fail that customer's download every time. Default:
+     the second and later invoices with one name get `-2`, `-3`, … before `.pdf`, in issue order,
+     and each `pdf` in `invoices.json` names its real entry (Task 4b pins it).
    - No row, no ZIP: a download with no matching invoice is refused (decision 13).
 
 9. **The PDFs come from the existing reader and renderer, not the existing route.** The route,
@@ -305,10 +360,18 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    and `renderInvoicePdf` (`orders-api.ts:376`), with `duplicate: true` as the route sets
    (`orders-invoice-pdf.ts:26`). So there is no second renderer and the PDF is the one the route
    gives. **If any invoice's document or PDF cannot be produced**, the whole download fails and
-   nothing is sent, as any part that throws fails S2c's download: the part logs
-   `invoice_customer.pdf_failed` at `error` with the sale id only (a sale id is not personal data)
-   and rethrows; the boundary answers 500 `server.internal` (`error-boundary.ts:47-49`). Default:
-   no partial copy, because an admin would hand it over without knowing an invoice was missing.
+   nothing is sent, as any part that throws fails S2c's download. The boundary answers 500
+   `server.internal` only for an error that is not an `AppError` (`error-boundary.ts:47-49`); an
+   `AppError` is answered at its mapped status, 400 by default (`:41-46`), and `readInvoiceDocument`
+   throws `AppError`s itself (`invoice-document.ts:44`, `:47`), so rethrowing would answer 400 with
+   an unrelated `invoice_delivery.*` code. Default: the invoice turn and the render are wrapped; on
+   any failure the part logs `invoice_customer.pdf_failed` at `error` with the sale id only (a sale
+   id is not personal data) and throws a plain `Error` with the original as its `cause`, so the
+   answer is the opaque 500 `server.internal` (Task 4b and Task 6b pin it with a reader that throws
+   an `AppError`). A full disk still answers 507 `storage.disk_full`: the boundary looks for it in
+   the cause chain first ("A full disk in the cause chain (`diskFullIn`)", `error-boundary.ts:16`,
+   `:34-39`), so the wrap keeps it; Task 4b pins that too. No partial copy,
+   because an admin would hand it over without knowing an invoice was missing.
    `readInvoiceDocument` throws on a sale with no customer (`invoice-document.ts:46-47`, which the
    search cannot return) or no taxpayer (`:87`), both faults.
 
@@ -317,7 +380,8 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
       `personalDataReadme` (`:21-53`), sharing `fill` (`:17-19`) and the shared lines of
       `PERSONAL_DATA_README_WORDS` (title, prepared, the headings, `machineReadable`, `backup`,
       `decides`, `rights`, `ask`, `notice`, `unnamedVenue`;
-      `apps/server/src/i18n/personal-data-readme.ts:137-151`, `:264-280`). The staff README's text
+      `apps/server/src/i18n/personal-data-readme.ts:31-33` and `:137-151` in English, `:154-156` and
+      `:264-280` in Spanish). The staff README's text
       and its tests are not touched: its `origin` sentence speaks of staff entering "your details"
       (`:139-140`), which is not how a customer's data arrived.
     - Its own words go in a new `INVOICE_CUSTOMER_README_WORDS` record in the same file, English
@@ -339,8 +403,11 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
     (`ls packages | grep fiscal` on 2026-10-26: `fiscal`, `fiscal-none`, `fiscal-verifactu`).
     Verifactu's record names the customer by name and NIF only, never the address
     (`backend.ts:709-721`, `NombreRazon` and `NIF`).
-    - Default: each invoice's `taxRecord` is `filedReceiptFor(db, saleId) !== undefined`, read in
-      its invoice turn; the README's line is written only when at least one invoice has it: "For each
+    - Default: each invoice's `taxRecord` is `filedReceiptFor(db, brandSaleId(saleId)) !==
+      undefined`, read in its invoice turn. `readInvoiceDocument` already calls it once
+      (`invoice-document.ts:85`) and does not return the answer; the second read is accepted rather
+      than change the shared reader, because it is one indexed statement (`registros_sale_idx`,
+      `packages/fiscal-verifactu/src/schema/registros.ts:125`) and Task 3 times the turn with it; the README's line is written only when at least one invoice has it: "For each
       invoice marked "taxRecord": true in invoices.json, the box keeps a tax record that it sends to
       the tax authority (in Spain, the Agencia Tributaria); that record holds your name and tax
       number, not your address." A commented decision at the site says what the flag rests on and
@@ -381,6 +448,13 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
     - Both use `withPersonalDataErrors` (`:35-45`), which gains `"invoice_customer.not_found": 404`;
       a missing entry would answer 400, the boundary's default (`error-boundary.ts:42`).
     - The re-check repeats step 1 only; an admin demoted while the PDFs render gets 403 and no file.
+    - **The tax number travels in a GET query string.** The box itself does not log it (the request
+      log records the matched route pattern, never the path or query,
+      `apps/server/src/request-id.ts:27-33`; the review found no request-URL logging in
+      `apps/server/src` or `packages/server-kit/src`), and a `fetch` URL does not enter the
+      browser's history; a proxy in front of the dashboard (remote access) could log it. That is
+      accepted as the cost of using GETs, the only verb the read-only gate passes on a mirror
+      (`read-only-gate.ts:17`, `:34`).
 
 14. **Mounted from `boot.ts`, beside the Orders routes; on a mirror it answers.** The download needs
     the fiscal backend and the till's configuration for `readInvoiceDocument`, which
@@ -451,7 +525,31 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 18. **The owner's 2026-10-26 decision on void reasons** is recorded in Task 12: keep each
     adjustment's reason in `adjustments.json` as the venue named it. The open "Owner question: a void
     reason that names someone" (`docs/backlog/data-protection.md:149-155`) is deleted and the answer
-    moves under that file's "Decisions and deliberate limits".
+    moves under that file's "Decisions and deliberate limits". Receipt:
+    `/Users/clintongormley/waitron-campaign-b/questions.md:4377` ("OWNER ANSWER (2026-10-26 ~02:12
+    CET, relayed by the watcher) — A980 S2d void reason: KEEP the reason in adjustments.json").
+
+19. **What the box keeps with the tax number outside issued sales is not in this download.** The
+    staged customer on a bill (`working_orders.recipient_tax_id` and its siblings,
+    `packages/db/src/schema/orders.ts:99-102`), on every invoiced bill and on bills never issued; the
+    staged email choice on a bill (`working_orders.invoice_delivery`, `orders.ts:104`); and the raw
+    printer bytes of a printed full invoice (`print_jobs.payload`, `packages/db/src/schema/print-jobs.ts:50`;
+    design §2.2 c3). Default: not in this slice's download; the README says so in plain words
+    (Task 5's `notFound`), and a backlog point records them. **Open decision for the owner** (FYI,
+    built with this default). Worked example: staff typed Jordi's details on a bill on 3 March and
+    the customer then paid with a simplified receipt instead; that bill still holds his name, NIF
+    and address, and his download does not show it; the README tells him the venue holds such
+    details and to ask for them.
+
+20. **An invoice carrying the number goes in, whatever name is on it.** The box keys the copy by tax
+    number, and the name printed on an invoice is part of that invoice. Design §4.2 says the copy
+    must not harm others' rights (R11, paragraph 4). Default: every invoice that carries the
+    number is in the download, and the dialog shows each row's name before the admin downloads
+    (decision 2). **Open decision for the owner** (FYI, built with this default). Worked example:
+    staff typed Jordi's NIF, 12345678Z, on an invoice for Maria Puig, his sister, at her address;
+    Jordi's ZIP then holds Maria's name and address. The alternative, letting the admin untick rows
+    and sending sale ids that the server checks again against the tax number, would be a later
+    slice.
 
 ## Open decisions for the owner (FYI, built with the default)
 
@@ -463,6 +561,10 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
   Worked example: the owner opens the mirror on the office laptop and, signed in as the mirror's
   admin, finds Jordi by tax number and downloads his invoices.
 - **The one-in-five timing figure** (decision 7), if it is over 250 ms.
+- **What the box keeps with the tax number outside issued sales** (decision 19): not in the
+  download. With its worked example.
+- **An invoice with someone else's name on the customer's number** (decision 20): included. With
+  its worked example.
 
 ## Global constraints
 
@@ -473,7 +575,8 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
   fixtures are names (Jordi Puig); addresses and company names are English ("12 Harbour Road, 46023
   Valencia", "Puig Electrical Ltd").
 - **Nothing is written.** No `withTransaction`; every read in `db.withWriteLock` turns, awaited one
-  after another. At the end of the slice `git diff --name-only main -- packages/` prints nothing:
+  after another. At the end of the slice `git diff --name-only main...HEAD -- packages/` (the
+  branch's own changes, whatever `main` has gained since) prints nothing:
   no package changes, so `packages/fiscal-verifactu`'s golden huella test and `inmutabilidad.test.ts`
   run unedited and pass.
 - **No tax number, name or email in an error's params or a log line.** The only new log line carries
@@ -493,7 +596,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
   `apps/server/src/guide-content.test.ts:156-163` (the Users page's section ids gain
   `invoice-customer-data` after `person-data`). No other existing assertion is expected to change.
   `apps/server/src/orders-invoice-pdf.test.ts` passes unedited after the file-name function moves
-  (Task 4 runs it).
+  (Task 4b runs it).
 - **Coverage**: `@waitron/server` and `@waitron/dashboard` hold 98/98/98/95. No exclude or ignore
   comment. Neither is mutation-tested (`ls packages/*/stryker.config.json`: `db`, `fiscal`,
   `shared`, `ui-core`, `ui`).
@@ -511,15 +614,21 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 ## Review focus
 
 - **Whose data**: only invoices whose stored tax number normalises to the typed one; the ZIP names
-  no other customer and no staff member; Task 4's "only his" and Task 6b's worked example.
+  no other customer and no staff member; Tasks 4a's and 4b's "only his" and Task 6b's worked
+  example.
 - **The normaliser** (decision 3): one function on both sides; the `E` entity and raw-stored cases;
   exact match only; the refusal never echoes the value.
 - **The permission** (decision 13): checked before the query, on both routes, again in the re-check;
   a manager, a supervisor and a staff member refused; Task 6a's proofs by deletion.
-- **The turns and the timing** (decisions 6 and 7): no `ORDER BY` in the scan; one turn per invoice;
-  PDFs rendered outside any turn; Task 3's numbers and stop rules.
+- **The turns, the yields and the timing** (decisions 6 and 7): no `ORDER BY` in the scan; one
+  turn per invoice; PDFs rendered outside any turn; `nextTurn()` after every turn and render, and
+  Task 4a's case that fails without it; the stall measured by interval ticks with a no-yield
+  control; Task 3's numbers and stop rules; the full-disk case (Task 7).
+- **What is left out, and others' names** (decisions 19 and 20): the README's `notFound` says what
+  the copy does not hold; an invoice with another person's name on the number goes in.
 - **The PDFs** (decision 9): the existing reader and renderer, no download row written, whole
-  download fails if one cannot be made.
+  download fails as an opaque 500 if one cannot be made (an `AppError` wrapped), file names
+  disambiguated (decision 8).
 - **The tax-record sentence** (decision 11): per invoice, regime-neutral flag, "sends" while a record
   may still wait.
 - **Nothing recorded** (decision 12), and the README's language (decision 10): both FYI to the owner.
@@ -527,7 +636,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 - **Every README and guide sentence against its source** (Task 5's and Task 10's tables).
 - **Codex run-it seat**: two reviews, the second told to set this plan aside.
 
-## The fixture used by Tasks 2, 4 and 6
+## The fixture used by Tasks 2, 4a, 4b and 6
 
 A venue from `provisionOrderVenue` (`apps/server/src/testing/order-venue.ts:45`) with every set
 migrated (`migrationOptionsFor(manifestSets(), null)`), and its full series, found as
@@ -538,7 +647,8 @@ deliveries are inserted into `invoice_deliveries` with the columns the email pat
 (`medium: "email"`, `designation: "original"`, a `requestKey`, a `generation` counting from 1, a
 staff `personId`, `recipient`, `status`, `createdAt`, and `completedAt` only for `sent`). The
 venue's clock is advanced between sales so each `issued_at` is distinct and in table order (the
-chain refuses a record dated before the latest, home CLAUDE.md §4).
+chain refuses a record dated more than a minute before the latest, `clock.behind_chain`, home
+CLAUDE.md §4 and §5).
 
 | Row | Invoice | Name | Tax number written | Address | Total | Emails |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -562,31 +672,45 @@ Files: `apps/server/src/invoice-customer-tax-id.ts` (new), `apps/server/src/invo
 Interface:
 
 ```ts
-/** One spelling for a tax number: no whitespace, hyphens or full stops, upper-case, one leading
- * "ES" removed. Used on the typed and the stored side alike. */
+/** One spelling for a tax number: no whitespace, full stops, hyphens, hyphen look-alikes or
+ * zero-width characters, upper-case, one leading "ES" removed. Used on the typed and the stored
+ * side alike. */
 export function normaliseInvoiceTaxId(value: string): string;
 /** The query's `taxId`, normalised; refuses `management.request_invalid` `{ field: "taxId" }`. */
 export function requiredInvoiceTaxId(raw: string | undefined): string;
 ```
 
-1. Tests first, table-driven with `it.each`:
-   - each of `es 12345678z`, `ES12345678Z`, `12345678 Z`, `12.345.678-Z`, `\t12345678z `,
-     `Es12345678z` normalises to `12345678Z`;
-   - `E12345674` and `ESE12345674` and `es e1234567-4` normalise to `E12345674`; `X1234567L` and
-     `esx1234567l` to `X1234567L`; `B76543214` stays;
-   - `ESES12345678Z` normalises to `ES12345678Z` (one prefix only), and `12345678` stays `12345678`
-     (nothing added);
-   - `requiredInvoiceTaxId` refuses, each with `{ field: "taxId" }` and nothing else in its params:
-     `undefined`, `""`, `"   "`, `"ES"`, a 65-character string, `"12345678Ñ"`, `"1234/5678Z"`, and a
-     21-character alphanumeric value; it accepts a 20-character one.
+1. Tests first, table-driven with `it.each` over two tables, an accept table and a refuse table,
+   which Task 8 copies verbatim into the dashboard's test (an app cannot import another app's test
+   file):
+   - **Accept** (typed → result): `es 12345678z`, `ES12345678Z`, `12345678 Z`, `12.345.678-Z`,
+     `\t12345678z ` (a tab and a trailing no-break space), `12345678 Z` (a no-break space
+     inside), `Es12345678z`, `12345678‑Z` (a non-breaking hyphen), `12345678–Z` (an en
+     dash), `12345678z​` (a zero-width space) → `12345678Z`; `E12345674`, `ESE12345674`,
+     `es e1234567-4` → `E12345674`; `X1234567L`, `esx1234567l` → `X1234567L`; `B76543214` →
+     `B76543214`; `ESES12345678Z` → `ES12345678Z` (one prefix only); `12345678` → `12345678`
+     (nothing added); twenty `A`s → twenty `A`s.
+   - **Refuse**, each with params exactly `{ field: "taxId" }`: `undefined`, `""`, `"   "`, `"ES"`, a
+     65-character string, `"12345678Ñ"`, `"1234/5678Z"`, twenty-one `A`s, `"eſ12345678z"` (a long
+     s, which upper-cases to `S`), `"ı234"` (a dotless i, which upper-cases to `I`).
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-tax-id.test.ts`; watch it
    fail (no module).
 2. Write the two functions (the file imports `./errors.js`, as every throwing file does,
    `apps/server/src/errors.ts:20-21`).
-3. Omission controls, each run and reverted, the failing case recorded for the pull request: strip
-   only spaces (`/ /g`) → the tab and no-break-space row fails; strip `^E?S?` instead of `^ES` → the
-   `E12345674` row fails; strip `ES` everywhere → `ESE12345674` fails; put the raw value in the
-   refusal's params → the params assertion fails.
+3. Omission controls, each run and reverted, the failing rows recorded for the pull request. Each was
+   run against decision 3's rule by
+   `node /Users/clintongormley/waitron-campaign-b/a980-s3-plan-probe/task1-controls.mjs` on
+   2026-10-26 (the rule and each mutation over the two tables above; output saved beside it as
+   `task1-controls.out`); the decision 3 rule itself failed no row:
+   - strip only spaces (`/ /g`) → fails `12.345.678-Z`, `\t12345678z `, `12345678 Z`, the
+     non-breaking hyphen, en dash and zero-width rows, and `es e1234567-4`;
+   - strip `^E?S?` instead of `^ES` → fails `E12345674`;
+   - strip `ES` everywhere → fails `ESES12345678Z` (the `ESE12345674` row still passes under it);
+   - drop the look-alike hyphens and zero-width characters → fails the non-breaking hyphen, en dash
+     and zero-width rows;
+   - check letters and digits after upper-casing → fails the refusals of `eſ12345678z` and
+     `ı234`;
+   - put the raw value in the refusal's params → fails every refusal row that has a value.
 4. Run `pnpm --filter @waitron/server typecheck`.
 
 ## Task 2 — the search read
@@ -615,13 +739,15 @@ export async function findInvoiceCustomerSales(
    - **The company, the NIE and the `E` entity** are each found alone by their own number.
    - **No partial match**: `12345678` and `2345678Z` find nothing.
    - **The stored side is normalised too**: in a case with its own sale, insert one `sales` row
-     directly (copy every column of j1's row, a new id and invoice number, `counterparty_tax_id`
-     `es 87654321x`; `sales` refuses updates and deletes, not inserts); `87654321X` finds it.
+     directly (copy every column of j1's row with a new id, a new invoice number, `working_order_id`
+     null, since `sales_working_order_id_key` is unique, `packages/db/src/schema/sales.ts:141`, and
+     `counterparty_tax_id` `es 87654321x`; `sales` refuses updates and deletes, not inserts);
+     `87654321X` finds it.
    - **The simplified sale** is never returned, and a search for a number nobody holds returns `[]`.
    - **The statement**: copy `planningEveryStatement` from
      `packages/workforce/src/personal-data.test.ts:1076-1120` and record the search's statements:
      the first's text holds no `order by`, and the matched-row statements take at most 500 ids each
-     (a case with the chunk lowered through an optional `{ chunk }` argument, as S2c's
+     (a case with the chunk lowered through the optional `{ chunk }` argument, as S2c's
      `actionsPersonalData(db, { chunk })` does, and 3 matches → two statements).
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data.search.test.ts`;
    watch it fail.
@@ -641,46 +767,78 @@ status --short` shows nothing of it). Results and the loader's text go to
    the system's temporary folder, `packages/db/src/testing/venue-db.ts:160`), a per-test timeout
    above the load:
    - `provisionOrderVenue`, an admin with a management session;
-   - **the customer's 300 invoices** through `recordSale`, as the fixture above does, three lines
-     each, half of them with one sent email and one in ten with a failed email first, the clock
-     advanced between sales;
-   - **the bulk**: 1,000,000 `sales` rows with every column filled, cloned from one of the venue's
-     own simplified sales (new id, a raw-inserted series row of the venue's node so invoice numbers
-     cannot collide, `issued_at` spread over six years); one in twenty names one of 40,000 other
-     customers, each a valid NIF built as `validateSpanishNif` accepts. Insert in batches of 500 rows
-     through `db.insert(sales).values(…)`, many batches to a `withWriteLock` turn; foreign keys may be
-     switched off for the load with `pragma foreign_keys = off` outside any turn and back on after
-     (S2c Task 3's note). Record the load time. If the load passes about ten minutes, halve the bulk
-     and say how the figures were scaled.
+   - **the venue's receipt logo at the largest size the logo store accepts**, every dot set: as wide
+     as `safeWidthDots` gives for the paper (`packages/printing/src/layout.ts:18`) and
+     `LOGO_MAX_HEIGHT_DOTS` (160) high (`packages/printing/src/dither.ts:2`; the store checks both,
+     `packages/layouts/src/receipt-store.ts:86`), so the renderer draws one rectangle per dot,
+     `invoice-pdf.ts:31-40`, its slowest case;
+   - **the customer's 300 invoices** through `recordSale`, as the fixture above does: three lines
+     each, except one in ten with thirty lines; half with one sent email and one in ten with a failed
+     email first; the clock advanced between sales;
+   - **the bulk**: 1,000,000 `sales` rows, every column filled the way the checks allow (the
+     probe's loader left `corrects_sale_id`, `authorized_by` and `operation_date` null; fill
+     `operation_date` and `authorized_by` here), cloned from one of the venue's own simplified sales
+     with a new id, `working_order_id` null (it is unique, `sales.ts:141`), a raw-inserted series row
+     of the venue's node so invoice numbers cannot collide (`sales.ts:119`), and `issued_at` spread
+     over six years; one in twenty names one of 40,000 other customers, each a valid NIF built as
+     `validateSpanishNif` accepts;
+   - **the tables an invoice turn reads, filled so an unindexed read would show**: for the bulk's
+     named sales, one email delivery in `invoice_deliveries` for every second one and a receipt
+     delivery for every fifth; three `sale_lines` rows per bulk sale; and one `registros_facturacion`
+     `alta` row per bulk sale if its triggers allow a raw insert with foreign keys off (if a trigger
+     refuses, load as many records as the real `recordSale` path writes in ten minutes, and say how
+     many). Record each table's row count.
+   - **Load with a timer turn between batches.** The venue watchdog kills the worker after
+     `WATCHDOG_KILL_MS = 120_000` with no timer turn (`packages/store/src/venue-liveness.ts:19-23`),
+     and `useVenueDb` yields one only after each test (home CLAUDE.md §4), so the loader awaits
+     `new Promise((resolve) => setTimeout(resolve, 0))` after every `withWriteLock` turn of the load
+     and after every tenth `recordSale`. Insert in batches of 500 rows through
+     `db.insert(<table>).values(…)`, a few batches to a turn; foreign keys may be switched off for the
+     load with `pragma foreign_keys = off` outside any turn and back on after (S2c Task 3's note).
+     Expected: the probe's raw `node:sqlite` loader put 1,000,000 sales in 26 s (the planner's run)
+     and 10.4 s (the claim check's); through drizzle, with the other tables, expect several minutes
+     (not measured). Record the load time; if it passes about fifteen minutes, halve the bulk and say
+     how the figures were scaled.
    - Then, in a second folder or by loading more, **the one-in-five arm**: 200,000 named rows.
    Copy the probe's loader (`/Users/clintongormley/waitron-campaign-b/a980-s3-plan-probe/load.mjs`)
    for the row shape.
-2. **Before running, write down what each failure prints**: the medians over decision 7's bars.
+2. **Before running, write down what each failure prints**: each median over decision 7's bars; and
+   for the stall, a longest gap between interval ticks about as long as the whole download, which is
+   what the control in step 6 must print.
 3. **The search turn**, at least 12 runs: inside `db.withWriteLock`, `authorizeManager` (`touch:
    false`) then `findInvoiceCustomerSales(db, "12345678Z")`; median and range; `explain query plan`
    of the scan (expected `SCAN sales`).
-4. **The first turn**: the same, plus `venuePlace` and `readTenant`, composed as Task 6b will run
-   them (both are in `personal-data-export-api.ts:49-57` and `@waitron/db`; export `venuePlace` in
-   the throwaway's place by copying it if Task 6a has not exported it yet).
+4. **The first turn**: the same, plus `venuePlace` and `readTenant`, composed as Task 6a will run
+   them (`personal-data-export-api.ts:49-57` and `@waitron/db`; copy `venuePlace` into the throwaway
+   if Task 6a has not exported it yet).
 5. **The invoice turns**, for the 300 invoices: each inside its own `db.withWriteLock`,
-   `readInvoiceDocument(venue.backend, db, venue.cfg, saleId)`, `venue.backend.filedReceiptFor(db,
-   saleId)` and the email read; median, range and slowest. If `readInvoiceDocument` throws "write
-   lock: a body asked for the lock it is already holding" (`packages/store/src/write-queue.ts:41-43`),
-   stop and report: something inside it takes the lock.
-6. **The PDFs**: render each outside any turn with `renderInvoicePdf({ ...document, duplicate: true
-   })`; median and slowest render, total bytes; and over the whole sequence of steps 4 to 6 for one
-   download, `monitorEventLoopDelay({ resolution: 10 })`'s `max`, with the whole download's wall time.
-   Say whether the venue's documents carry a logo (the renderer draws a logo dot by dot,
-   `invoice-pdf.ts:31-40`).
+   `readInvoiceDocument(venue.backend, db, venue.cfg, saleId)`,
+   `venue.backend.filedReceiptFor(db, brandSaleId(saleId))` and the email read; median, range and
+   slowest, separately for three-line and thirty-line invoices. Record `explain query plan` for
+   every statement of one invoice turn with `planningEveryStatement` (Task 2's copy) and list any
+   line starting `SCAN`. If `readInvoiceDocument` throws "write lock: a body asked for the lock it is
+   already holding" (`packages/store/src/write-queue.ts:41-43`), stop and report: something inside
+   it takes the lock.
+6. **The PDFs and the stall**: render each outside any turn with `renderInvoicePdf({ ...document,
+   duplicate: true })`; median and slowest render, with the logo and, in a second pass with the logo
+   cleared, without; total bytes. Run the whole download's sequence (first turn, invoice turns,
+   renders, re-check, `zipArchive`) with Task 4a's `nextTurn()` after each turn and render, and a
+   10 ms real `setInterval` recording the longest gap between its ticks; that gap is the stall. The
+   control: the same sequence with the yields removed must show a gap about as long as the
+   sequence; if it does not, the measurement is broken, so say so and do not report a stall
+   figure. If `monitorEventLoopDelay` is also read, read it only after awaiting one
+   `setTimeout(resolve, 20)` (decision 7). Record the whole download's wall time, the `zipArchive`
+   call's own time, and, from the per-invoice cost and bytes, the invoice counts at which the
+   request would pass 60 s and the ZIP 100 MB.
 7. **The one-in-five arm**: steps 3 and 4 again.
 8. **Stop rules** (decision 7): any bar crossed at one in twenty → stop, commit nothing further,
    report every figure to the coordinator with decision 7's options. Otherwise the figures go in the
    pull request and Task 12's backlog line.
 
-## Task 4 — the download's files: invoices.json and the PDFs
+## Task 4a — invoices.json: the invoice turns, the emails, the tax-record flag, and the yields
 
 Files: `apps/server/src/invoice-customer-data.ts`, `apps/server/src/invoice-customer-data.files.test.ts`
-(new), `apps/server/src/orders-invoice-pdf.ts` (`invoicePdfFileName`).
+(new).
 
 Interface:
 
@@ -688,50 +846,81 @@ Interface:
 export const INVOICE_CUSTOMER_FILE = "invoices.json";
 export interface InvoiceCustomerFilesDeps {
   db: Database; backend: FiscalBackend; till: TillConfig; log: Logger;
-  /** Defaults to `renderInvoicePdf`; a test passes a stub. */
+  /** Default `renderInvoicePdf`; a test passes a stub. */
   render?: (document: ReceiptDocumentInput) => Promise<Uint8Array>;
+  /** Default `readInvoiceDocument`; a test passes one that throws. */
+  readDocument?: typeof readInvoiceDocument;
 }
-/** Decision 6's invoice turns, then the PDFs outside any turn. Throws when any invoice cannot be
- * made, after logging `invoice_customer.pdf_failed` with its sale id. */
+/** Decision 6's invoice turns, then the PDFs outside any turn, with `nextTurn()` after each.
+ * Throws a plain `Error` (cause attached) when any invoice cannot be made, after logging
+ * `invoice_customer.pdf_failed` with its sale id. */
 export async function buildInvoiceCustomerFiles(
   deps: InvoiceCustomerFilesDeps, taxId: string, sales: readonly InvoiceCustomerSale[],
 ): Promise<{ files: PersonalDataFile[]; anyTaxRecord: boolean; anyEmail: boolean }>;
 ```
+
+In this task the PDFs come from a `render` stub returning a fixed small byte string per invoice;
+Task 4b covers the real renderer.
 
 1. Tests first (the fixture above):
    - **Jordi's `invoices.json`, exactly** (`toEqual` the parsed object, and its text equal to
      `jsonFile("invoices.json", expected).content`, so key order is checked): decision 8's shape;
      j2's emails in order, the failed one with `sentAt` null; `pdf` `"invoices/<code>-<n>.pdf"`
      for each; `taxRecord` as `venue.backend.filedReceiptFor` answers for each (read in the test).
-   - **The PDFs**: three files at those paths, each starting `%PDF-`; read one with `pdfjs-dist` as
-     `orders-invoice-pdf.test.ts:3` does and find Jordi's address and j2's total in its text.
-   - **Only his**: no file's text (the PDFs' extracted text included) contains `Puig Electrical`,
-     `B76543214`, `X1234567L`, `E12345674`, `310.07`, `office@puig-electrical.example.test` or
-     `board@mainstreet.example.test`; and no staff `personId` from the deliveries. Positive control:
+     In this case j1 also has a receipt delivery, which must not appear.
+   - **Only his, in `invoices.json`**: its text contains none of `Puig Electrical`, `B76543214`,
+     `X1234567L`, `E12345674`, `310.07`, `office@puig-electrical.example.test`,
+     `board@mainstreet.example.test`, nor any staff `personId` from the deliveries. Positive control:
      `invoices@jordi.example.test` is found.
    - **The tax-record flag both ways**: with a backend wrapper whose `filedReceiptFor` answers
      `undefined` for j1 only, j1's `taxRecord` is false and the others true; with one answering
      `undefined` for all, `anyTaxRecord` is false.
-   - **A PDF that cannot be made**: with a `till` that makes `readInvoiceDocument` throw for j2 (or a
-     renderer stub through an optional `render` dependency, defaulting to `renderInvoicePdf`), the
-     call rejects, and the log received `invoice_customer.pdf_failed` with `{ saleId: j2 }` and
-     nothing else.
-   - **Two invoices with one file name**: two series whose codes differ only in `/` and `_` (`F/A`
-     and `F_A`), one invoice each with the same number → the call rejects rather than build one
-     file twice.
    - **Turns**: a `db` wrapper counting `withWriteLock` calls sees one per invoice, and none is open
-     while `render` runs (the stub asserts the lock is free by calling `withWriteLock` itself and
-     resolving).
+     while `render` runs (the stub calls `withWriteLock` itself and resolves, which it could not do
+     inside a turn: the lock is not re-entrant, `write-queue.ts:41-43`).
+   - **A turn of the event loop between invoices** (decision 6): start a 10 ms real `setInterval`
+     counting `ticks`; give `render` a stub that busy-waits 5 ms; record `ticks` at the start of each
+     invoice turn (through the `db` wrapper); require the recorded values to increase strictly
+     across the three turns. Without the yields the interval never fires during the build and every
+     recorded value is the same.
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data.files.test.ts`; watch
+   it fail.
+2. Write the reads, the turns and the yields (`import { setImmediate as nextTurn } from
+   "node:timers/promises"`, as `working-order.ts:89`).
+3. Omission controls, each run and reverted: read the deliveries without `medium = 'email'` → the
+   exact file fails on j1's receipt delivery; render inside the turn → the turns case fails; delete
+   the `nextTurn()` calls → the event-loop case fails with every recorded value equal.
+4. Run `pnpm --filter @waitron/server typecheck`. From the root: `pnpm exec vitest run
+   scripts/module-seams.test.ts` (no regime import).
+
+## Task 4b — the PDFs: the real renderer, their names, and a failure
+
+Files: `apps/server/src/invoice-customer-data.ts`, `apps/server/src/invoice-customer-data.pdfs.test.ts`
+(new), `apps/server/src/orders-invoice-pdf.ts` (`invoicePdfFileName`).
+
+1. Tests first (the fixture above, the real renderer):
+   - **The PDFs**: three files at `invoices.json`'s paths, each starting `%PDF-`; read one with
+     `pdfjs-dist` as `orders-invoice-pdf.test.ts:3` does and find Jordi's address and j2's total in
+     its text, and the copy marking.
+   - **Only his, in the PDFs**: the extracted text of every PDF contains none of the strings Task 4a
+     names.
+   - **Two invoices with one file name** (decision 8): two series whose codes differ only in `/` and
+     `_` (`F/A` and `F_A`), one invoice each with the same number for Jordi → two distinct entries,
+     the later-issued one ending `-2.pdf`, and each `pdf` in `invoices.json` naming its own entry.
+   - **An invoice that cannot be made** (decision 9): with a `readDocument` that throws an `AppError`
+     (`invoice_delivery.not_found`) for j2, the call rejects with an error that is not an `AppError`
+     and whose `cause` is the original; the log received exactly one `invoice_customer.pdf_failed`
+     with `{ saleId: <j2> }`; the same with a `render` that throws for j2. With a `readDocument` that
+     throws a full-disk error, `diskFullIn` (`@waitron/shared`) still finds it in the rejection.
+   Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data.pdfs.test.ts`; watch
    it fail.
 2. Write it; move the file-name expression into `invoicePdfFileName` and use it in
    `readInvoiceForDownload` too.
-3. Omission controls, each run and reverted: read the deliveries without `medium = 'email'` → (give
-   j1 a receipt delivery in this case) the exact file fails; render inside the turn → the turns case
-   fails; catch and skip a failed PDF → the failure case fails.
+3. Omission controls, each run and reverted: rethrow the original error unwrapped → the failure case
+   fails (it is an `AppError`); catch and skip a failed PDF → the failure case fails; drop the `-2`
+   suffix → the two-names case fails.
 4. Run `pnpm --filter @waitron/server exec vitest run src/orders-invoice-pdf.test.ts` unedited, and
-   `pnpm --filter @waitron/server typecheck`. From the root: `pnpm exec vitest run
-   scripts/module-seams.test.ts` (no regime import).
+   `pnpm --filter @waitron/server typecheck`.
 
 ## Task 5 — the README's words
 
@@ -761,7 +950,7 @@ Layout: title and prepared (shared, the customer's name); `filesHeading`; `- inv
 | `holds` | `the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and each email address it was sent to, with when the email was asked for, whether it went and when.` | `las facturas completas que el local emitió a tu NIF: de cada una, su número, cuándo se emitió, el nombre, el NIF, el país y la dirección que lleva, su total, la copia en PDF de esta descarga, si el servidor Waitron del local guarda un registro fiscal de ella, y cada dirección de correo a la que se envió, con cuándo se pidió el envío, si salió y cuándo.` |
 | `use` | `Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.` | `Se guarda porque una factura debe identificar a su destinatario y el local debe conservar una copia de cada factura que emite.` |
 | `pdfs` | `a copy of each of those invoices as a PDF, marked as a copy.` | `una copia en PDF de cada una de esas facturas, marcada como copia.` |
-| `notFound` | `This copy holds what the box keeps with your tax number. Anything else the venue holds about you, such as a booking, is not found by tax number: ask the venue.` | `Esta copia contiene lo que el servidor Waitron del local guarda con tu NIF. Cualquier otro dato tuyo que tenga el local, como una reserva, no se encuentra por el NIF: pregunta al local.` |
+| `notFound` | `This copy holds your full invoices and the emails that sent them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking, is not found by tax number.` | `Esta copia contiene tus facturas completas y los correos con que se enviaron. El servidor Waitron del local también guarda los datos que el personal escribió para una factura en la propia cuenta y en los registros de impresión; pídeselos al local. Cualquier otro dato tuyo que tenga el local, como una reserva, no se encuentra por el NIF.` |
 | `origin` | `Staff at the venue entered your name, tax number and address when you asked for a full invoice; the rest was recorded as each invoice was issued and sent.` | `El personal del local introdujo tu nombre, tu NIF y tu dirección cuando pediste una factura completa; el resto se registró al emitir y enviar cada factura.` |
 | `taxRecord` | `For each invoice marked "taxRecord": true in invoices.json, the box keeps a tax record that it sends to the tax authority (in Spain, the Agencia Tributaria); that record holds your name and tax number, not your address.` | `De cada factura marcada con "taxRecord": true en invoices.json, el servidor Waitron del local guarda un registro fiscal que envía a la administración tributaria (en España, la Agencia Tributaria); ese registro contiene tu nombre y tu NIF, no tu dirección.` |
 | `email` | `Invoices emailed to you are sent through the email service the venue set up.` | `Las facturas que se te enviaron por correo salen a través del servicio de correo que configuró el local.` |
@@ -776,6 +965,8 @@ sentence, not the row, where they disagree; a sentence with no row is not shippe
 | holds: each field | decision 8's shape |
 | use | design §10, R39 (RD 1619/2012 art. 6.1(c)) and R40 (art. 19.1(b)) |
 | pdfs: "marked as a copy" | `duplicate: true`, decision 9 |
+| notFound: "your full invoices and the emails that sent them" | decision 8's shape; the search reads `sales` alone (decision 5) |
+| notFound: "on the bill itself and in printer records" | the places left out (decision 19): `working_orders.recipient_tax_id` and its siblings (`packages/db/src/schema/orders.ts:99-102`) and `working_orders.invoice_delivery` (`orders.ts:104`), on every bill a customer was staged on, invoiced or not; `print_jobs.payload`, the raw printer bytes of a printed full invoice (`packages/db/src/schema/print-jobs.ts:50`; design §2.2 c3; "nothing deletes a print job today", `docs/backlog/printers.md:228` as the design cites) |
 | notFound: "such as a booking" | `bookings` has no tax-number column (`packages/bookings/src/schema/bookings.ts:41-53`, read by the implementer) |
 | origin | the till stages the customer (`working-order.ts:4199-4250`); the sale and its deliveries are written as it is issued and sent |
 | taxRecord | decision 11 |
@@ -818,6 +1009,7 @@ export interface InvoiceCustomerDataDeps {
   db: Database; backend: FiscalBackend; till: TillConfig; nodeId: string;
   venueLocale: string; privacyNoticeUrl?: string; now?: () => Date;
   render?: InvoiceCustomerFilesDeps["render"];
+  readDocument?: InvoiceCustomerFilesDeps["readDocument"];
 }
 export function mountInvoiceCustomerDataApi(app: Hono, deps: InvoiceCustomerDataDeps, log: Logger): void;
 ```
@@ -841,14 +1033,23 @@ export function mountInvoiceCustomerDataApi(app: Hono, deps: InvoiceCustomerData
    - **Nothing written**: copy S2c's case (`personal-data-export-api.staff.test.ts:340-356`): a
      search and a download leave `total_changes()`, the admin's `lastSeenAt` and a waiting
      `change_log` row unchanged, and `invoice_pdf_downloads` empty.
+   - **The README's language**: with `venueLocale` `es-ES` the README's first line is the Spanish
+     title; with `en-GB`, English; with an admin whose own saved locale differs, the README still
+     follows the venue.
+   - **The re-check**: an admin demoted to manager while the PDFs render (through the `render`
+     dependency, as S2c's `duringBuild`, `personal-data-export-api.staff.test.ts:58-69`) gets 403 and
+     no `Content-Disposition`; an admin disabled meanwhile gets 403 `person.suspended`; an ended
+     session 401.
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data-api.test.ts`; watch
    it fail.
 2. Write both routes in full: the search, and the download's first turn, `buildInvoiceCustomerFiles`,
    the re-check, the README and the ZIP through `zipArchive` and `archiveFileName`
-   (`download-archive.ts:36-57`). Task 6b adds the download's end-to-end cases.
+   (`download-archive.ts:36-57`), with `nextTurn()` after the first turn and before the re-check
+   (decision 6). Task 6b adds the download's end-to-end cases.
 3. Proof by deletion, each run and reverted: check the query before the permission → the
    permission-before-query case fails; drop `touch: false` → the last-seen assertion fails; take
-   `invoice_customer.not_found` out of the boundary map → the 404 case gets 400.
+   `invoice_customer.not_found` out of the boundary map → the 404 case gets 400; remove the
+   re-check → the demotion case sends a file; use the admin's locale → the language case fails.
 4. Run `pnpm --filter @waitron/server typecheck`; from the root `pnpm exec vitest run
    scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/english-only.test.ts
    scripts/module-seams.test.ts`. (`errors-reachable` walks `packages/` only and `alert-codes`
@@ -863,27 +1064,24 @@ Files: `apps/server/src/invoice-customer-data-api.ts`,
    - **Jordi's ZIP**: an admin downloads `?taxId=ES 12345678 z` (encoded): 200,
      `application/zip`, `Content-Disposition` naming `jordi-puig-electrician-<venue date>.zip`;
      the entries are exactly `README.txt`, `invoices.json` and the three PDFs; `invoices.json`
-     equals Task 4's expected object; `README.txt` equals `invoiceCustomerReadme` for the venue's
+     equals Task 4a's expected object; `README.txt` equals `invoiceCustomerReadme` for the venue's
      language, Jordi Puig Electrician, the venue's date, both flags as the fixture gives.
-   - **The language**: with `venueLocale` `es-ES` the README's first line is the Spanish title; with
-     `en-GB`, English; with an admin whose own saved locale differs, the README still follows the
-     venue.
    - **The design's three spellings and the company**: `es 12345678z`, `ES12345678Z` and
      `12345678 Z` each give a ZIP with the same `invoices.json`; `es b76543214` gives p1's.
-   - **The re-check**: an admin demoted to manager while the PDFs render (through the `render`
-     dependency of Task 4, as S2c's `duringBuild`, `personal-data-export-api.staff.test.ts:58-69`)
-     gets 403 and no `Content-Disposition`; an admin disabled meanwhile gets 403
-     `person.suspended`; an ended session 401.
-   - **A PDF that cannot be made**: 500 `server.internal`, no file.
+   - **An invoice that cannot be made** (decision 9): with a `readDocument` that throws the
+     `AppError` `invoice_delivery.not_found` for j2, the answer is 500 `{ error: { code:
+     "server.internal" } }`, not 400, and no file.
    - **No secret, no staff**: the ZIP's text holds no staff member's id or name from the fixture's
      deliveries or sales, and not the admin's session token hash.
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data-api.export.test.ts`.
-   The cases should pass at once if Tasks 4 to 6a are right; the proof is step 3. A case that
-   fails is a defect to fix in this task, said in the pull request.
+   These cases are written after the code they test (6a built the download), so they may pass at
+   once; that is not evidence. **Run each omission control in step 3 before claiming its case**,
+   and say in the pull request that 6b's cases were not seen failing first. A case that fails is a
+   defect to fix in this task, said in the pull request.
 2. (No new code unless a case fails.)
-3. Omission controls, each run and reverted: remove the re-check → the demotion case sends a file;
-   use the admin's locale → the language case fails; use the oldest invoice's name → the file name
-   fails.
+3. Omission controls, each run and reverted: use the oldest invoice's name → the file name fails;
+   rethrow the reader's error unwrapped → the failure case answers 400; normalise only the typed
+   side and store j1 raw as `es 12345678z` in that case → the spellings case loses j1.
 4. Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data-api.test.ts
    src/invoice-customer-data-api.export.test.ts src/personal-data-export-api.staff.test.ts
    src/personal-data-export-api.test.ts`, and `pnpm --filter @waitron/server typecheck`.
@@ -891,7 +1089,8 @@ Files: `apps/server/src/invoice-customer-data-api.ts`,
 ## Task 7 — mounted in a real start, and on a mirror
 
 Files: `apps/server/src/boot.ts` (one call after `mountOrdersApi`, `:2114-2124`),
-`apps/server/src/boot.personal-data-export.test.ts`, `apps/server/src/boot.mirror.test.ts`.
+`apps/server/src/boot.personal-data-export.test.ts`, `apps/server/src/boot.mirror.test.ts`,
+`apps/server/src/start-full-disk.e2e.test.ts`.
 
 1. Tests first:
    - In `boot.personal-data-export.test.ts`'s real start (`:29-119`): the admin's cookie gets 200
@@ -900,11 +1099,27 @@ Files: `apps/server/src/boot.ts` (one call after `mountOrdersApi`, `:2114-2124`)
      ZIP itself is Task 6b's.)
    - In `boot.mirror.test.ts`, in the mirror boot S2c's Task 8b used: the ambient viewer's cookie
      gets 200 from the search (decision 14's default, pinned).
+   - **On a full disk** (the routes take decision 6's write-lock exception, so they are pinned as
+     S2c's are): in `start-full-disk.e2e.test.ts`, beside S2c's three cases (`:477`, `:507`,
+     `:534`), copying `:507`'s "an admin's personal-data download of another person answers on a
+     full disk with a change waiting, and writes nothing": "an admin's invoice-customer search and
+     download answer on a full disk with a change waiting, and write nothing". Mount
+     `mountInvoiceCustomerDataApi` as the file mounts S2c's routes (`:74-76` import them); issue one
+     full invoice for a customer the way the file's drawer case seeds its sale (`:534`), through
+     `recordSale` with a counterparty if the file's venue can; fill the disk; the search answers
+     200 with that invoice, the download 200 with a ZIP holding `invoices.json`, the admin's
+     `lastSeenAt` and the waiting `change_log` row are unchanged. If the file's venue cannot issue a
+     full invoice, the case asserts the search's 200 `[]` and the download's 404 on the full disk
+     instead, and the pull request says so. On macOS the file makes its own small disk with
+     `hdiutil` (home CLAUDE.md §4).
    Run `pnpm --filter @waitron/server exec vitest run src/boot.personal-data-export.test.ts
-   src/boot.mirror.test.ts`; watch them fail.
+   src/boot.mirror.test.ts` and `pnpm --filter @waitron/server exec vitest run
+   src/start-full-disk.e2e.test.ts -t "invoice-customer"`; watch them fail.
 2. Add the mount.
 3. Omission controls, each run and reverted: change the search's path in the mount → both new cases
-   fail with 404; skip the mount when the node is a mirror → the mirror case fails.
+   fail with 404; skip the mount when the node is a mirror → the mirror case fails; wrap the
+   download's first turn in `withTransaction` instead of `withWriteLock` → the full-disk case fails
+   (the drain is refused).
 4. Run `pnpm --filter @waitron/server typecheck`. Before committing, check no open pull request
    changes `boot.ts` (`gh pr list --state open --json number,files`); if one does, say so in the PR.
 
@@ -912,7 +1127,8 @@ Files: `apps/server/src/boot.ts` (one call after `mountOrdersApi`, `:2114-2124`)
 
 Files: `apps/dashboard/src/api/client.ts`, `apps/dashboard/src/i18n/strings.ts`,
 `apps/dashboard/src/i18n/codes.ts`, `apps/dashboard/src/widgets/count-text.ts` (the count key),
-`apps/dashboard/src/widgets/invoice-customer-dialog.ts` (new),
+`apps/dashboard/src/widgets/invoice-tax-id.ts` (new), `apps/dashboard/src/widgets/invoice-tax-id.test.ts`
+(new), `apps/dashboard/src/widgets/invoice-customer-dialog.ts` (new),
 `apps/dashboard/src/widgets/invoice-customer-dialog.test.ts` (new),
 `apps/dashboard/src/widgets/invoice-customer-dialog.a11y.test.ts` (new).
 
@@ -931,6 +1147,10 @@ downloadInvoiceCustomerData(taxId: string): Promise<DownloadedFile>;
 
 1. Tests first (browser; mount the dialog with a stub `api`, as `staff-screen.personal-data.test.ts:55-100`
    stubs `downloadPersonalData`):
+   - **The dashboard's copy of the rule** (decision 3): `invoice-tax-id.test.ts` runs Task 1's accept
+     and refuse tables verbatim (copied, with a comment naming
+     `apps/server/src/invoice-customer-tax-id.test.ts` as their source) against the dashboard's
+     `invoiceTaxIdProblem(value)` (null when the server would accept it) and its normaliser.
    - **Find** is disabled and quiet with the field empty, primary with text; an invalid value
      (`12/34`) shows the field's message and `form.fix_fields` and keeps it disabled.
    - Typing `es 12345678z` and pressing **Find** calls `findInvoiceCustomer` once with that text.
@@ -948,19 +1168,18 @@ downloadInvoiceCustomerData(taxId: string): Promise<DownloadedFile>;
 2. Write the client methods, strings (English and Spanish, decision 2's and 16's words), the code's
    messages and the dialog's search half.
 3. Omission controls, each run and reverted: leave **Find** enabled when empty → its case fails;
-   keep the old results after an edit → the clearing case fails.
+   keep the old results after an edit → the clearing case fails; drop the look-alike hyphens from the
+   dashboard's copy → its en-dash row fails.
 4. Run `pnpm --filter @waitron/dashboard typecheck`; from the root `pnpm exec vitest run
    scripts/native-form-fields.test.ts scripts/help-tooltip-mode.test.ts
    scripts/pinned-actions-column.test.ts scripts/style-token-names.test.ts
    scripts/primary-coloured-text.test.ts`.
 
-## Task 9 — the dialog's download and refusals, its draft, the Orders button and the app
+## Task 9a — the dialog's download, its refusals, and its draft
 
 Files: `apps/dashboard/src/widgets/invoice-customer-dialog.ts`,
 `apps/dashboard/src/widgets/invoice-customer-dialog.test.ts`,
-`apps/dashboard/src/widgets/invoice-customer-dialog.unsaved.test.ts` (new),
-`apps/dashboard/src/screens/orders-screen.ts`, `apps/dashboard/src/screens/orders-screen.test.ts`,
-`apps/dashboard/src/dashboard-app.ts` (`:2547-2551`), `apps/dashboard/src/dashboard-app.test.ts`.
+`apps/dashboard/src/widgets/invoice-customer-dialog.unsaved.test.ts` (new).
 
 1. Tests first:
    - **Download**: pressing it calls `downloadInvoiceCustomerData` with the search's `taxId`
@@ -976,6 +1195,20 @@ Files: `apps/dashboard/src/widgets/invoice-customer-dialog.ts`,
    - **Unsaved** (`invoice-customer-dialog.unsaved.test.ts`, following
      `attendance-export-dialog.unsaved.test.ts:1-60`): a typed, unsearched number asks before
      closing; after a search, closing asks nothing; after a download, nothing.
+   Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/invoice-customer-dialog.test.ts
+   src/widgets/invoice-customer-dialog.unsaved.test.ts`; watch the new cases fail.
+2. Write the download half and the draft scope.
+3. Omission controls, each run and reverted: send the field's text instead of the answered `taxId`
+   → the download case fails; skip the commit after an answered search → the "after a search" case
+   asks.
+4. Run `pnpm --filter @waitron/dashboard typecheck` and the root guards of Task 8 step 4.
+
+## Task 9b — the Orders button and the app
+
+Files: `apps/dashboard/src/screens/orders-screen.ts`, `apps/dashboard/src/screens/orders-screen.test.ts`,
+`apps/dashboard/src/dashboard-app.ts` (`:2547-2551`), `apps/dashboard/src/dashboard-app.test.ts`.
+
+1. Tests first:
    - **Orders**: with `canExportPersonalData` false the button is absent; with true it is present
      and opens the dialog.
    - **The app** (beside S2c's cases in `dashboard-app.test.ts`): `it.each([false, true])` the
@@ -983,14 +1216,12 @@ Files: `apps/dashboard/src/widgets/invoice-customer-dialog.ts`,
      permissions (the `true` row without `report.export`, the `false` row with it, so a binding to
      the wrong permission fails both); an `admin-sign-in` from the Orders screen calls `api.logout`
      once.
-   Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/invoice-customer-dialog.test.ts
-   src/widgets/invoice-customer-dialog.unsaved.test.ts src/screens/orders-screen.test.ts` and
+   Run `pnpm --filter @waitron/dashboard exec vitest run src/screens/orders-screen.test.ts` and
    `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "Orders"`; watch the
    new cases fail.
-2. Write the download half, the draft scope, the button and the app's binding.
-3. Omission controls, each run and reverted: send the field's text instead of the answered `taxId`
-   → the download case fails; bind the property to `report.export` → both app rows fail; drop the
-   app's `admin-sign-in` listener → the logout case fails.
+2. Write the button and the app's binding.
+3. Omission controls, each run and reverted: bind the property to `report.export` → both app rows
+   fail; drop the app's `admin-sign-in` listener → the logout case fails.
 4. Run `pnpm --filter @waitron/dashboard typecheck` and the root guards of Task 8 step 4.
 
 ## Task 10 — the guide
@@ -1074,7 +1305,8 @@ and `/Users/clintongormley/waitron-campaign-b/a980-s3-shots/`, named
 
 Files: `docs/backlog/data-protection.md`, `docs/backlog.md` (the A980 entry, only if stale),
 `docs/superpowers/plans/2026-10-24-a980-data-protection-build.md`,
-`docs/superpowers/specs/2026-10-22-a980-data-protection-design.md` (§4.2).
+`docs/superpowers/specs/2026-10-22-a980-data-protection-design.md` (§4.2),
+`docs/developers/conventions-data.md` (the write-lock exceptions paragraph).
 
 1. Grep the siblings first: `grep -rn "S3\b\|invoice customer\|tax number\|NIF" docs/backlog.md
    docs/backlog/data-protection.md docs/superpowers/plans/2026-10-2*-a980-*.md
@@ -1085,12 +1317,14 @@ Files: `docs/backlog/data-protection.md`, `docs/backlog.md` (the A980 entry, onl
    adjustment's reason in `adjustments.json` as the venue named it on the Voids and comps page, even
    though a reason's name can name someone (the question's example: a reason "Ana's mistake" appears
    in the copies of the person who used it and the person who approved it). The free-text note stays
-   out (S2d decision 8)."
+   out (S2d decision 8). Relayed by the watcher, `questions.md:4377` in lane B's campaign folder."
 3. In `data-protection.md`, replace the S3 bullet (`:210`) with what was built: the search and the
    download, their paths, the permission, the dialog on **Orders**, the ZIP's three kinds of file,
-   the README's language, nothing recorded; then new short points: the staged customer on a bill
-   never issued; foreign customers and Q17(a); the index, if Task 3 or a box asks for one; and the
-   two owner FYIs (decisions 10 and 12) until answered. The "Measure … on a box" point gains Task
+   the README's language, nothing recorded; then new short points: **what the box keeps with a tax
+   number outside issued sales** (decision 19: `working_orders.recipient_*` and `invoice_delivery`
+   on bills, invoiced or never issued, and `print_jobs.payload`), not in the download; foreign
+   customers and Q17(a); the index, if Task 3 or a box asks for one; and the four owner FYIs
+   (decisions 10, 12, 19 and 20) until answered. The "Measure … on a box" point gains Task
    3's figures. `docs/backlog.md`'s A980 entry is edited only if a sentence in it became false.
 4. In the overview's status paragraph, after the S2d sentence, a dated pointer: "2026-10-2x: S3 is
    built ([its plan](2026-10-26-a980-s3-invoice-customer-download.md)): an admin finds an invoice
@@ -1103,7 +1337,16 @@ Files: `docs/backlog/data-protection.md`, `docs/backlog.md` (the A980 entry, onl
    customer by tax number_; the export's line about the Tax Agency is written per invoice, only
    for invoices the box keeps a tax record of, and says that record holds the name and NIF, not the
    address (the S3 plan's decisions 1, 8 and 11)."
-6. `pnpm exec prettier --file-info <file>` on each changed doc: `docs/` is ignored, so each prints
+6. In `docs/developers/conventions-data.md`, after the S2c paragraph on the personal-data downloads
+   (`:2621-2633`), a paragraph in its form: "Since A980 S3, an admin's invoice-customer search and
+   download (`GET /management-api/invoice-customers/personal-data` and its `/export`, in
+   `apps/server/src/invoice-customer-data-api.ts`) read in `withWriteLock` turns with no drain, one
+   per invoice, with a turn of the event loop after each, and resolve the session with `touch:
+   false`, so they answer on a full disk with a change waiting. The case is "an admin's
+   invoice-customer search and download answer on a full disk with a change waiting, and write
+   nothing" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one
+   `withTransaction` per route." Adjust the case's name to what Task 7 committed.
+7. `pnpm exec prettier --file-info <file>` on each changed doc: `docs/` is ignored, so each prints
    `"ignored": true`.
 
 ## Root guards to run before `/finish-branch`
@@ -1111,5 +1354,5 @@ Files: `docs/backlog/data-protection.md`, `docs/backlog.md` (the A980 entry, onl
 From the repository root, once all tasks are in:
 `pnpm exec vitest run scripts/english-only.test.ts scripts/module-seams.test.ts scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/native-form-fields.test.ts scripts/help-tooltip-mode.test.ts scripts/pinned-actions-column.test.ts scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts scripts/guide-links.test.ts scripts/coverage-thresholds.test.ts`,
 and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`. Read each
-count. `git diff --name-only main -- packages/` prints nothing. No new package and no new
+count. `git diff --name-only main...HEAD -- packages/` prints nothing. No new package and no new
 dependency, so the shard lists should not move.
