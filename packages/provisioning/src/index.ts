@@ -158,7 +158,7 @@ export * from "./artifact-cipher.js";
 export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
-export { boxFolders } from "./box-folders.js";
+export { boxFolders, readStartAgainFloors } from "./box-folders.js";
 export {
   START_AGAIN_NOTE_FILE,
   raiseStartAgainNote,

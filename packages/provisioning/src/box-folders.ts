@@ -5,6 +5,7 @@ import {
   insideBackupRepairTarget,
   resolveFirstSetupBackupWorkspace,
 } from "./first-setup-backup-workspace.js";
+import { readStartAgainNote, startAgainFloorSources } from "./first-setup-start-again-note.js";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -19,4 +20,10 @@ export async function boxFolders(roots: FirstSetupRoots): Promise<FirstSetupRoot
   )
     throw new AppError("setup.attempt_uncertain", {});
   return folders;
+}
+
+export async function readStartAgainFloors(
+  roots: FirstSetupRoots,
+): Promise<ReturnType<typeof startAgainFloorSources>> {
+  return startAgainFloorSources(await readStartAgainNote((await boxFolders(roots)).stateDir));
 }
