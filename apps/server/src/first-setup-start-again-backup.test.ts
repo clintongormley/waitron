@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { access, lstat, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { access, lstat, readFile, readdir, symlink, unlink, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { dirname, join } from "node:path";
@@ -7,9 +7,12 @@ import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import {
+  START_AGAIN_CONFIRMATIONS_DIR,
   emptyAbandonedBackupRecovery,
+  raiseStartAgainNote,
   readStartAgainMarker,
   readStartAgainNote,
+  type StartAgainSummary,
 } from "@waitron/provisioning";
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { clock } from "../test/hour-recovery-host.js";
@@ -71,7 +74,10 @@ async function tree(dir: string, prefix = ""): Promise<Record<string, string>> {
   return result;
 }
 
-async function confirmedStartAgain(f: Awaited<ReturnType<typeof selectedRepair>>) {
+async function confirmedStartAgain(
+  f: Pick<Awaited<ReturnType<typeof selectedRepair>>, "host" | "roots">,
+  backupRecovery: Service,
+) {
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const recovered = await f.host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
@@ -92,14 +98,17 @@ async function confirmedStartAgain(f: Awaited<ReturnType<typeof selectedRepair>>
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host });
+  const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host, backupRecovery });
   const shown = await actions.startAgainSummary({ ...ids, owner });
-  return () =>
-    actions.startAgainFirstSetup({
-      ...ids,
-      owner,
-      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
-    });
+  return {
+    shown,
+    run: () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      }),
+  };
 }
 
 async function expectNothingWritten(
@@ -116,21 +125,55 @@ async function expectNothingWritten(
   expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 }
 
-it("a backup recovery prepared and given up refuses Start again, and nothing is written or deleted", async () => {
+// A discarded recovery's folder keeps its records and its target's lock files, nothing else.
+const KEPT =
+  /^(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))$/;
+
+async function confirmations(stateDir: string) {
+  const folder = join(stateDir, START_AGAIN_CONFIRMATIONS_DIR);
+  return Promise.all(
+    (await readdir(folder)).map(
+      async (name) => JSON.parse(await readFile(join(folder, name), "utf8")) as { shown: unknown },
+    ),
+  );
+}
+
+async function expectDiscarded(
+  f: Pick<Repair, "roots" | "record" | "session" | "workspace">,
+  expected: { lastName: string; shown: StartAgainSummary; lock: { ino: number } },
+) {
+  expect((await f.workspace.read()).at(-1)).toMatchObject({
+    phase: "abandoned",
+    target: { recoveryId: f.session.recoveryId },
+  });
+  expect((await lstat(join(f.record.target.target.venueDir, "venue.lock"))).ino).toBe(
+    expected.lock.ino,
+  );
+  const left = Object.keys(await tree(dirname(dirname(f.record.target.target.stateDir))));
+  expect(left.some((name) => /^\d{6}\.json$/.test(name))).toBe(true);
+  expect(left.filter((name) => !KEPT.test(name))).toEqual([]);
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
+  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(expected.lastName);
+  expect(expected.shown.recovery).toBeDefined();
+  expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
+    expected.shown,
+  ]);
+}
+
+it("a backup recovery prepared and given up is discarded by Start again: the note holds its name, its lock stays", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
-  const startAgain = await confirmedStartAgain(f);
-  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-  const journal = Object.keys(before.state).filter((name) =>
-    name.startsWith("first-setup-resolutions/backup-recovery/"),
-  );
-  expect(journal.some((name) => name.endsWith("/target/venue/venue.lock"))).toBe(true);
-  expect(before.state["first-setup.json"]).toBeDefined();
-  await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expectNothingWritten(f, before);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const startAgain = await confirmedStartAgain(f, f.service);
+  expect(startAgain.shown.lastName).not.toBe(f.selected.identity);
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
 });
 
-it("a recovery at placement-started refuses Start again, and nothing is deleted", async () => {
+it("a recovery that failed at placement-started is discarded by Start again at once", async () => {
   const f = await selectedRepair();
   const append = f.workspace.append;
   vi.spyOn(f.workspace, "append").mockImplementation(async (record) => {
@@ -144,10 +187,13 @@ it("a recovery at placement-started refuses Start again, and nothing is deleted"
   vi.mocked(f.workspace.append).mockRestore();
   await f.service.dispose();
   expect((await f.workspace.read()).at(-1)!.phase).toBe("placement-started");
-  const startAgain = await confirmedStartAgain(f);
-  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-  await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expectNothingWritten(f, before);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const startAgain = await confirmedStartAgain(f, recovery(f.options));
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expect(access(join(f.record.target.target.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });
 
 type Service = Awaited<ReturnType<typeof selectedRepair>>["service"];
@@ -510,7 +556,6 @@ const PICKS_NAMING_NOTHING = (binding: unknown) =>
 
 it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
   ["named nothing", "cannot be read", null, () => "unreadable"],
-  ["named nothing", "name nothing", null, PICKS_NAMING_NOTHING],
   [
     // A valid minute name, one minute after the time the input says it was chosen.
     "recorded a name its own time disagrees with",
@@ -798,4 +843,195 @@ it("the box's repair app fences its writes and names a stopped recovery in its s
   );
   expect(summary.status, await summary.clone().text()).toBe(200);
   expect(await summary.json()).toMatchObject({ recovery: { lastName: f.selected.identity } });
+});
+
+// B's confirmed Start again over a stopped recovery, through the actions the repair app mounts.
+async function startAgainOver(
+  f: Pick<Repair, "host" | "roots">,
+  backupRecovery: Service,
+  recovered?: Response,
+) {
+  const { owner, ids } = await signedIn(f.host, recovered);
+  const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host, backupRecovery });
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  return {
+    shown,
+    owner,
+    ids,
+    actions,
+    run: (confirmed: StartAgainSummary = shown) =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown: confirmed },
+      }),
+  };
+}
+
+it("once A's lease lapsed, B's password step rewrites the attempt and B's Start again discards A", async () => {
+  const f = await selectedRepair();
+  const { app } = repairApp(f);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const attempt = await readFile(join(f.roots.stateDir, "first-setup.json"));
+  clock.advance(LEASE + 1);
+  const recovered = await passwordStep(app, f.host);
+  expect(recovered.status, await recovered.clone().text()).toBe(200);
+  expect(await readFile(join(f.roots.stateDir, "first-setup.json"))).not.toEqual(attempt);
+  const startAgain = await startAgainOver(f, f.service, recovered);
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+});
+
+it("A's late step after B's Start again is refused setup.recovery_discarded, in the same process and after a restart", async () => {
+  const f = await selectedRepair();
+  clock.advance(LEASE + 1);
+  const startAgain = await startAgainOver(f, f.service);
+  await startAgain.run();
+  const abandoned = (await f.workspace.read()).at(-1)!;
+  expect(abandoned.phase).toBe("abandoned");
+  const discarded = {
+    code: "setup.recovery_discarded",
+    params: { discardedAt: abandoned.recordedAt },
+  };
+  // A renewal reads no journal, so only what Start again told the service can answer it.
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(expect.objectContaining(discarded));
+  await expect(
+    f.service.commit(f.session.sessionId, f.selected.input, client),
+  ).rejects.toMatchObject(discarded);
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  await expect(
+    restarted.commit(f.session.sessionId, f.selected.input, client),
+  ).rejects.toMatchObject(discarded);
+});
+
+it("a stopped recovery beside trading.env: Start again refuses setup.not_ready, and nothing changes", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  await writeFile(join(f.roots.stateDir, "trading.env"), "WAITRON_ENV=production\n");
+  const startAgain = await startAgainOver(f, f.service);
+  const last = (await f.workspace.readChain()).at(-1)!;
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(startAgain.run()).rejects.toMatchObject({ code: "setup.not_ready" });
+  await expectNothingWritten(f, before);
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+});
+
+it("a summary read before the recovery stopped, naming no recovery, refuses Start again setup.attempt_conflict, and nothing is written", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const startAgain = await startAgainOver(f, f.service);
+  const { recovery: shownRecovery, ...earlier } = startAgain.shown;
+  expect(shownRecovery).toBeDefined();
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(startAgain.run(earlier)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectNothingWritten(f, before);
+});
+
+it("an abandoned journal whose emptying was refused is finished by the next Start again, with the same note and no second confirmation", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const planted = join(f.record.target.target.stateDir, "planted");
+  await symlink("/nonexistent", planted);
+  const first = await startAgainOver(f, f.service);
+  await expect(first.run()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  await access(join(f.roots.stateDir, "first-setup.json"));
+  const note = await readFile(join(f.roots.stateDir, "first-setup-start-again.json"));
+  const noteFile = await lstat(join(f.roots.stateDir, "first-setup-start-again.json"));
+  await unlink(planted);
+  const second = await startAgainOver(f, f.service);
+  expect(second.shown).not.toHaveProperty("recovery");
+  await expect(second.run()).resolves.toBeUndefined();
+  expect(await readFile(join(f.roots.stateDir, "first-setup-start-again.json"))).toEqual(note);
+  expect((await lstat(join(f.roots.stateDir, "first-setup-start-again.json"))).ino).toBe(
+    noteFile.ino,
+  );
+  await expectDiscarded(f, { lastName: f.selected.identity, shown: first.shown, lock });
+});
+
+it("after Start again discards a recovery, the backup entry answers absent and the box answers fresh setup", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  await (await startAgainOver(f, f.service)).run();
+  expect(await backupEntry.resolveFirstSetupBackupEntry(f.roots)).toEqual({ kind: "absent" });
+  const entry = await resolveFirstSetupEntry(f.roots, { WAITRON_ENV: "preproduction" });
+  expect(entry.kind).toBe("normal");
+});
+
+it("Start again never lowers a note that already holds a later name than the recovery's", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const later = laterInput(f.selected.input, 60);
+  const raised = await raiseStartAgainNote(f.roots.stateDir, {
+    floorMs: Date.parse((later.input as { allocation: { issuedAt: string } }).allocation.issuedAt),
+    lastName: later.identity,
+    module: f.record.binding.module,
+  });
+  await (await startAgainOver(f, f.service)).run();
+  expect(await readStartAgainNote(f.roots.stateDir)).toEqual(raised);
+});
+
+it("an open started while Start again runs its checks refuses it setup.recovery_in_progress before the recovery is sealed or discarded", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const { owner, ids } = await signedIn(f.host);
+  let opening: Promise<unknown> | undefined;
+  const capture = f.host.resolution.captureFirstSetupOriginals;
+  const resolution = {
+    ...f.host.resolution,
+    captureFirstSetupOriginals: () => {
+      // The open counts as running from its call, before it reaches the turn Start again holds.
+      opening ??= f.service.open(f.request, client).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      return capture();
+    },
+  };
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: { ...f.host, resolution },
+    backupRecovery: f.service,
+  });
+  const shown = await createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: f.service,
+  }).startAgainSummary({ ...ids, owner });
+  const last = (await f.workspace.readChain()).at(-1)!;
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.recovery_in_progress" });
+  expect(opening).toBeDefined();
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+  await access(join(f.roots.stateDir, "first-setup.json"));
+  await opening;
+});
+
+it("a recovery stopped during its settle wait, whose picks name nothing, is shown with no name, and Start again takes only the attempt's floor", async () => {
+  const f = await preparedRepair();
+  expect(f.record).toMatchObject({ phase: "prepared", input: null });
+  await f.service.close(f.session.sessionId);
+  await writeFile(
+    join(f.record.target.target.stateDir, "module-preparation-state.json"),
+    PICKS_NAMING_NOTHING(f.record.binding),
+  );
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const startAgain = await startAgainOver(f, f.service);
+  const attemptOnly = await createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+  }).startAgainSummary({ ...startAgain.ids, owner: startAgain.owner });
+  expect(startAgain.shown.recovery).toMatchObject({ lastName: null });
+  expect(startAgain.shown.lastName).toBe(attemptOnly.lastName);
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("abandoned");
+  expect((await lstat(join(f.record.target.target.venueDir, "venue.lock"))).ino).toBe(lock.ino);
+  expect((await readStartAgainNote(f.roots.stateDir))?.lastName ?? null).toBe(attemptOnly.lastName);
 });

@@ -1,11 +1,11 @@
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
-import { lstat } from "node:fs/promises";
-import { join } from "node:path";
 import {
   assertNoLegacyFirstSetupWorkspace,
   createFirstSetupBackupWorkspace,
+  emptyAbandonedBackupRecovery,
   firstSetupModuleContext,
+  isEmptiedTombstone,
   raiseStartAgainNote,
   readModulePreparationHistory,
   readFirstSetupRecoveryDeliverySnapshot,
@@ -142,6 +142,10 @@ type BackupRecovery = Pick<
   "liveness" | "runningInMemory" | "sealLapsed" | "discardInTurn"
 >;
 const STOPPED_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
+type Floor = { floorMs: number; lastName: string; module: string };
+type FoundRecovery =
+  | { kind: "stopped"; id: string; floor: Floor | null; shown: StartAgainRecoveryShown }
+  | { kind: "unemptied"; id: string };
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
     host: Pick<FirstFiscalHost, "resolution" | "owner" | "store" | "coordinator"> & {
@@ -161,17 +165,21 @@ export function createFirstSetupResolutionActions(
 ) {
   const { host } = options;
   const roots = { stateDir: options.stateDir, venueDir: options.venueDir };
-  /** A running recovery refuses; a lapsed one is sealed first; a stopped one is what the summary names. */
-  const stoppedRecovery = async (): Promise<StartAgainRecoveryShown | undefined> => {
+  const inProgress = (activity: { startedAt: string; lastActiveAt: string }) =>
+    new AppError("setup.recovery_in_progress", {
+      startedAt: activity.startedAt,
+      lastActiveAt: activity.lastActiveAt,
+    });
+  /**
+   * A running recovery refuses; a lapsed one is sealed first; a stopped one is what the summary
+   * names. An abandoned one whose folder was not emptied is named only for Start again to finish.
+   */
+  const stoppedRecovery = async (): Promise<FoundRecovery | undefined> => {
     const backup = options.backupRecovery;
     if (backup === undefined) return undefined;
     if (!backup.runningInMemory()) backup.sealLapsed();
     const activity = await backup.liveness();
-    if (activity?.state === "running")
-      throw new AppError("setup.recovery_in_progress", {
-        startedAt: activity.startedAt,
-        lastActiveAt: activity.lastActiveAt,
-      });
+    if (activity?.state === "running") throw inProgress(activity);
     // `liveness()` reads a journal it cannot read as no recovery, so the chain is read here too.
     let records: BackupRepairRecord[];
     try {
@@ -180,7 +188,13 @@ export function createFirstSetupResolutionActions(
       return unavailable();
     }
     const last = records.at(-1);
-    if (activity === null) return undefined;
+    if (activity === null) {
+      if (last?.phase !== "abandoned") return undefined;
+      const id = last.target.recoveryId;
+      return (await isEmptiedTombstone(roots, id).catch(() => false))
+        ? undefined
+        : { kind: "unemptied", id };
+    }
     if (!STOPPED_PHASES.includes(activity.phase) || last?.target.recoveryId !== activity.recoveryId)
       unavailable();
     const module = last.binding.module;
@@ -189,7 +203,6 @@ export function createFirstSetupResolutionActions(
         ? undefined
         : initialSetupFor(host.modules, module)?.startAgainFloor;
     if (seat === undefined) unavailable();
-    const picksPath = join(last.target.target.stateDir, "module-preparation-state.json");
     const recoveryInputs = records.map((record) => record.input);
     const floor = (preparations: readonly unknown[]) => {
       try {
@@ -201,30 +214,35 @@ export function createFirstSetupResolutionActions(
     // One call over both sources, so a later name in the journal wins over an older pick. The
     // module names nothing for an input it cannot read, so a refusal comes from the picks, which
     // are then left out.
-    const picks = await readModulePreparationHistory(last.target.target, module).catch(() => []);
-    const named = floor(picks);
-    const lastName = (named === undefined ? floor([]) : named)?.lastName ?? null;
+    const picks = await readModulePreparationHistory(last.target.target, module).catch(
+      () => undefined,
+    );
+    const named = picks === undefined ? undefined : floor(picks);
+    const found = named === undefined ? floor([]) : named;
     // A chosen name is written to the copy's picks before the journal records its input, and reaches
     // the page or a commit only after that record (`prepare` and `commit` in
-    // first-setup-backup-recovery.ts), so with neither, no name was taken.
+    // first-setup-backup-recovery.ts), so with neither, no name was taken. Picks that cannot be
+    // read could hold one.
     if (
-      lastName === null &&
-      !(
-        recoveryInputs.every((input) => input === null) &&
-        (await lstat(picksPath).then(
-          () => false,
-          (error: NodeJS.ErrnoException) => error.code === "ENOENT",
-        ))
-      )
+      (found ?? null) === null &&
+      !(recoveryInputs.every((input) => input === null) && named !== undefined)
     )
       unavailable();
     return {
-      startedAt: activity.startedAt,
-      lastActiveAt: activity.lastActiveAt,
-      lastActiveSource: activity.lastActiveSource,
-      lastName,
-      failed: activity.failed,
-      cloud: activity.cloud,
+      kind: "stopped",
+      id: activity.recoveryId,
+      floor:
+        found === undefined || found === null
+          ? null
+          : { floorMs: found.floorMs, lastName: found.lastName, module },
+      shown: {
+        startedAt: activity.startedAt,
+        lastActiveAt: activity.lastActiveAt,
+        lastActiveSource: activity.lastActiveSource,
+        lastName: found?.lastName ?? null,
+        failed: activity.failed,
+        cloud: activity.cloud,
+      },
     };
   };
   const assertRecoveredOwner = async (
@@ -268,7 +286,8 @@ export function createFirstSetupResolutionActions(
         host.coordinator.run(async () => {
           exactKeys(request, ["inspectionId", "revision", "ownerGeneration", "owner"]);
           await assertNoLegacyFirstSetupWorkspace(options);
-          const recovery = await stoppedRecovery();
+          const found = await stoppedRecovery();
+          const recovery = found?.kind === "stopped" ? found.shown : undefined;
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           if (inspection.database !== "missing") unavailable();
@@ -300,7 +319,9 @@ export function createFirstSetupResolutionActions(
             "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
-          const recovery = await stoppedRecovery();
+          const found = await stoppedRecovery();
+          const recovery = found?.kind === "stopped" ? found.shown : undefined;
+          const discarding = found === undefined ? {} : { discarding: found.id };
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           const retained = await host.store.readForRepair();
@@ -351,16 +372,22 @@ export function createFirstSetupResolutionActions(
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();
-          const box = await assertStartAgainAllowedOnDisk(roots);
-          const marker = await startAgainMarkerFor(box, {
-            attemptId: state.frozen.attemptId,
-            frozenDigest: firstSetupFrozenDigest(state),
-          }).catch((error: unknown) => {
-            throw error instanceof AppError && error.code === "setup.start_again_incomplete"
-              ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
-              : error;
-          });
-          if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT)) unavailable();
+          const box = await assertStartAgainAllowedOnDisk(roots, discarding);
+          const markerFor = async (markerOptions: { discarding?: string }) => {
+            const marker = await startAgainMarkerFor(
+              box,
+              { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
+              markerOptions,
+            ).catch((error: unknown) => {
+              throw error instanceof AppError && error.code === "setup.start_again_incomplete"
+                ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
+                : error;
+            });
+            if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT))
+              unavailable();
+            return marker;
+          };
+          let marker = await markerFor(discarding);
           if (recoveryRecordDamaged && request.owner === undefined)
             throw new AppError("setup.start_again_password_required", {});
           if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
@@ -370,7 +397,16 @@ export function createFirstSetupResolutionActions(
             snapshot.originals,
             host.modules,
           );
-          const floor = gathered.floor;
+          let floor = gathered.floor;
+          if (
+            found?.kind === "stopped" &&
+            found.floor !== null &&
+            (floor === null || found.floor.floorMs > floor.floorMs)
+          )
+            floor = found.floor;
+          // An unemptied journal's confirmation record and note were written by the Start again
+          // that abandoned it.
+          const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
           if (missing) {
             const shown = summaryOf(state, gathered, recovery);
@@ -380,16 +416,33 @@ export function createFirstSetupResolutionActions(
             )
               conflict();
             const { displayName, email } = state.frozen.request.admin;
-            await writeStartAgainConfirmation(box.stateDir, {
-              at: new Date().toISOString(),
-              attemptId: state.frozen.attemptId,
-              database: "missing",
-              administrator: { displayName, email },
-              ownerGeneration: state.ownerGeneration,
-              shown,
-            });
+            if (!finishing)
+              await writeStartAgainConfirmation(box.stateDir, {
+                at: new Date().toISOString(),
+                attemptId: state.frozen.attemptId,
+                database: "missing",
+                administrator: { displayName, email },
+                ownerGeneration: state.ownerGeneration,
+                shown,
+              });
           }
-          if (floor !== null) await raiseStartAgainNote(box.stateDir, floor);
+          if (floor !== null && !finishing) await raiseStartAgainNote(box.stateDir, floor);
+          if (found !== undefined) {
+            const backup = options.backupRecovery!;
+            // No await between this check and the seal: an open that began during the checks
+            // above would otherwise be sealed while it runs.
+            if (backup.runningInMemory()) {
+              const activity = await backup.liveness();
+              if (activity === null) unavailable();
+              throw inProgress(activity);
+            }
+            backup.sealLapsed();
+            const { recordedAt } = await createFirstSetupBackupWorkspace(box).abandon(found.id);
+            await backup.discardInTurn(found.id, recordedAt);
+            await emptyAbandonedBackupRecovery(box, found.id);
+            await assertStartAgainAllowedOnDisk(box);
+            marker = await markerFor({});
+          }
           await writeStartAgainMarker(box, marker);
           try {
             await deleteMarkedAttempt(box, marker, options.remove);
