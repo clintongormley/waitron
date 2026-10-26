@@ -1,12 +1,14 @@
 # A980 slice S10: no person's name or email in the log the recovery page shows
 
-**Status: plan, 2026-10-26, round 1 of review folded. Nothing was built when this was written.**
-Written by lane B with nobody watching; every choice below was made conservatively and is listed
-under "Open decisions for the owner" so it can be reversed. Round 1's review, claim check and
+**Status: plan, 2026-10-26, rounds 1 and 3 of review folded. Nothing was built when this was
+written.** Written by lane B with nobody watching; every choice below was made conservatively and is
+listed under "Open decisions for the owner" so it can be reversed. The reviews, claim check and
 rulings are in `/Users/clintongormley/waitron-campaign-b/a980-s10-plan-review/` (`round1-review.md`,
-`round1-claims.md`, `round1-rulings.md`, with the scripts and outputs they cite); every ruling is
-folded below. Folding them added two tasks and split one, so the tasks are now 1 to 7: old Task 2
-is now Tasks 3 and 4, old Task 3 is now Tasks 5 and 6, old Task 4 is now Task 7, and Task 2 is new.
+`round1-claims.md`, `round1-rulings.md`, `round3-review.md`, `round3-rulings.md`, and `round3/`,
+with the scripts and outputs they cite); every ruling is folded below. Folding round 1 added two
+tasks and split one: old Task 2 is now Tasks 3 and 4, old Task 3 is now Tasks 5 and 6, old Task 4
+is now Task 7, and Task 2 is new. Folding round 3 split Task 6 into Task 6a (named types) and
+Task 6b (log calls' fields), so the tasks are 1 to 5, 6a, 6b and 7.
 Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §2.3 (rows d5
 and d6), §4.8 (the "log file masks URL passwords" row, marked **unverified (S10)**), §5.3 row S10 ("a
@@ -103,8 +105,9 @@ control: that the page's tail does show a line from the action (so an empty tail
 (`apps/server/src/attendance-email.ts:14`, wired at `boot.ts:1858`), not the text sender case H
 drove. It calls the same `sendSmtpMessage` and hands only `outcome.reason` to `onFailure`
 (`attendance-email.ts:30-47`), and boot logs its loop's failures as `codeOf(error)`
-(`boot.ts:1859`), so I believe it does not leak; that is a reading, not a run. Task 4 case 9 runs
-it.
+(`boot.ts:1859`), so I believe it does not leak; that is a reading, not a run. Boot builds it as
+`createAttendanceEmailSender()` with no `onFailure` (`boot.ts:1858`), so in production the sender hands
+a refusal's reason to nobody and returns only the status. Task 4 case 9 runs it as boot builds it.
 
 Why E–H do not leak, read at the code after the run: `sendSmtpMessage` turns any failure into a
 status and a code (`apps/server/src/smtp-send.ts:23-32`, `classifySmtpFailure`,
@@ -113,7 +116,7 @@ status and a code (`apps/server/src/smtp-send.ts:23-32`, `classifySmtpFailure`,
 and says why (`apps/server/src/management-api.ts:197-204`). Existing tests already pin the
 outcome shapes exactly: `apps/server/src/smtp-send.test.ts:99`
 (`toEqual({ status: "rejected", reason: "email.test_refused" })`) and the refused cases at
-`apps/server/src/invoice-email.test.ts:301-304` (the `it.each` is `:304`, its `toEqual` `:301`).
+`apps/server/src/invoice-email.test.ts:304-314` (the `it.each` is `:304`, its `toEqual` `:314`).
 
 **What else carries a person in its details** (the registries read as text with
 `registry-keys.mjs` over the 31 files that declare `ErrorParams`, one of them a test fake, then each
@@ -129,9 +132,9 @@ named type opened by hand; round 1's claim check dumped all 356 keys, `all-keys.
 | `table.label_taken`, the shape a till sends for a table's name for today | `label` (renamed `todayName` by decision 10) | a guest, when staff type a booking's surname as a table's or group's name for today | `apps/server/src/floor-today-name.ts:86`, reached only through the till (`mountFloorTodayApi` is mounted only at `apps/server/src/till-api.ts:1361`; `till-api.ts:561` maps the code to 409) | no: the till reads only the code and `field` (`apps/till/src/screens/till-floor-screen.ts:2042-2049`). The dashboard reads `label` (`apps/dashboard/src/screens/floor-plan-editor.ts:839-842`), but only from the floor-plan save's throws (`apps/server/src/floor-plan.ts:409`, `:434`), which keep `label` |
 | `purchase.duplicate` | `supplierTaxId` | a supplier, who may be a sole trader | `packages/purchasing/src/operations.ts:224`, `:321` (registry `packages/purchasing/src/errors.ts:14`) | no: the message is fixed (`apps/dashboard/src/i18n/codes.ts:968-971`) and the form keeps its own typed value |
 | `clock.behind_chain_restarted` | `person` | an administrator | recorded as an incident only, never thrown (`packages/fiscal-verifactu/src/errors.ts:378-389`) | no: the alert and its email use `confirmedBy` (`apps/dashboard/src/i18n/alert-messages.ts:148-151`, `apps/server/src/box-alert-email.ts:60-70`) |
-| `restore.stream_venue_unconfirmed` | `legalName`, `taxId` | the venue itself (a sole trader's own name and tax number) | `apps/server/src/restore-request.ts:280`, `apps/server/src/restore-stream.ts:378`; logged by the setup routes' boundary (`apps/server/src/setup-api.ts:357`, `:364`, read, not run) | **yes**: the setup wizard shows the venue to confirm (`apps/setup/src/setup-app.ts:1684-1685`); the restore command prints both on its own terminal so the installer can type the tax number back (`apps/server/src/restore-command.ts:410-413`) |
+| `restore.stream_venue_unconfirmed` | `legalName`, `taxId` | the venue itself (a sole trader's own name and tax number) | `apps/server/src/restore-request.ts:280`, `apps/server/src/restore-stream.ts:378`; logged by the setup routes' boundary (`apps/server/src/setup-api.ts:357`, `:364`) and by the first-backup setup routes' boundary, which also maps the code to 409 (`apps/server/src/setup-first-backup-api.ts:37`); both read, not run | **yes**: the setup wizard shows the venue to confirm (`apps/setup/src/setup-app.ts:1684-1685`); the restore command prints both on its own terminal so the installer can type the tax number back (`apps/server/src/restore-command.ts:410-413`) |
 | `payment.provider_merchant_ambiguous` | `merchants[].name` | a SumUp merchant account, whose name may be a sole trader's own | `packages/payments-sumup/src/card-provider.ts:180-182` (registry `packages/payments-sumup/src/errors.ts:10`) | **yes**: the SumUp connect form lists them as a picker (`ambiguousMerchants`, `packages/payments-sumup/src/dashboard/client.ts:101-104`, read at `packages/payments-sumup/src/dashboard/sumup-connect-form.ts:209`) |
-| `fiscal.reconcile_no_trace`, `fiscal.reconcile_drift_errores`, `fiscal.reconcile_drift_anulada` | `idEmisorFactura` (`FacturaParams`, `packages/fiscal-verifactu/src/errors.ts:8-12`) | the venue's own tax number | raised as incidents (`packages/fiscal-verifactu/src/reconcile.ts:176`, `:200`), whose recording logs codes only (`packages/core/src/incidents.ts:41-49`) | no: never an answer |
+| `fiscal.reconcile_no_trace`, `fiscal.reconcile_drift_errores`, `fiscal.reconcile_drift_anulada`; nested in `fiscal.estado_desconocido` (`identidadEnviada`, a `FacturaParams`, and `lineaRespuesta`, a `LineaParams`, which extends `FacturaParams`) and `fiscal.respuesta_descuadrada` (`lineasRespuesta[]`, `LineaParams`) (`packages/fiscal-verifactu/src/errors.ts:159-171`, `:182-186`) | `idEmisorFactura` (`FacturaParams`, `packages/fiscal-verifactu/src/errors.ts:8-12`) | the venue's own tax number | raised as incidents (`packages/fiscal-verifactu/src/reconcile.ts:176`, `:200`; the two nested codes at `packages/fiscal-verifactu/src/drain.ts:1405` and `:1571`, through `raiseIncident`, `:1616-1632`, which calls `recordIncident` and logs nothing), whose recording logs codes only (`packages/core/src/incidents.ts:41-49`) | no: never an answer |
 
 Other logging was read for the same thing and carries no person: `String(error)` of payment and
 alert failures (`boot.ts:488-590`, `apps/server/src/dish-not-sent-alert.ts:46-51`), which wrap
@@ -197,7 +200,8 @@ note 5).
    name and stays (decision 4). The list is flat across every code, which is why a person's detail
    must be named for whose it is (decision 13).
 3. **The answer keeps every detail.** Removing the details from the codes was considered. Of the
-   person-naming details in the table, six are read by no screen, but that is true only of the
+   person-naming details in the table, seven are read by no screen (`email`, `displayName`,
+   `holderPersonName`, `todayName`, `supplierTaxId`, `person` and `idEmisorFactura`), but that is true only of the
    detail that names a person: `device.equipment_held`'s answer is read by a screen
    (`holderDeviceName`, `devices-screen.ts:165-166`), and `clock.behind_chain_restarted` is never an
    answer at all. It is rejected because `draft.taken_over`'s names, the setup wizard's venue and the
@@ -236,16 +240,18 @@ note 5).
    rotation. No venue is live, and until one is, the root `CLAUDE.md` §3 rules out data-migration
    code.
 9. **The guard judges detail names in registry text and in log calls' literal fields, and refuses
-   unreviewed named types** (Tasks 5 and 6). A key ending in `Id` or `Ids` (matched with its capital)
-   is skipped as an id, **unless the rest of the key names a tax number** (matches
+   unreviewed named types** (Tasks 5, 6a and 6b). A key ending in `Id` or `Ids` (matched with its
+   capital) is skipped as an id, **unless the rest of the key names a tax number** (matches
    `/tax|nif|nie|dni|cif|vat/i`), so `customerTaxId` is judged. Every other key matching a widened
-   person-shaped word list (Task 5) must be on `PERSONAL_LOG_KEYS`, be a child of a listed path whose
-   parent the code also carries, or be in the guard's harmless map with a one-line reason; an entry
-   in a harmless map that no longer exists fails too. Every capitalised type name inside a registry
-   must be in a `REVIEWED_TYPES` map with a one-line verdict. What it still cannot see is said in its
-   header and at the `CLAUDE.md` rule: a key added later inside a type already reviewed, a field
-   whose name says nothing about a person (`{ to: email }`), a spread or a variable passed as a log
-   call's fields, free text, and the watchdog's own line (decision 12).
+   person-shaped word list (Task 5) must be on `PERSONAL_LOG_KEYS`, be a child written inside the
+   braces of a listed path's parent member, or be in the guard's harmless map with a one-line reason;
+   an entry in a harmless map that no longer exists fails too. Every capitalised type name inside a
+   registry must be in a `REVIEWED_TYPES` map with a one-line verdict. What it still cannot see is
+   said in its header and at the `CLAUDE.md` rule: a key added later inside a type already reviewed,
+   a field whose name says nothing about a person (`{ to: email }`), a throw site that spreads an
+   object and so can carry keys its registry type does not name (`{ ...prepared.venue }`,
+   `restore-request.ts:280`, `restore-stream.ts:378`), a spread or a variable passed as a log call's
+   fields, free text, and the watchdog's own line (decision 12).
 10. **A till's name for today travels as `todayName`, which the mask lists.**
     `floor-today-name.ts:86` throws `table.label_taken { label: name, field: "name" }` with the name a
     till typed, which is normally a booking's surname, and the till's routes log every detail
@@ -257,9 +263,11 @@ note 5).
     nothing else reads it, the key is renamed rather than `label` being masked on that code; every
     other `label` stays visible (decision 4). `todayName` is already the till's own name for the
     field (`apps/till/src/widgets/today-name-dialog.ts:177`). The registry type becomes two shapes,
-    `{ label: string; takenBy?: string } | { todayName: string; field: "name" }`
-    (`apps/server/src/errors.ts:384-391`). This changes one answer's key; no venue is live, and the
-    root `CLAUDE.md` §3 allows renames until one is.
+    `{ label: string; takenBy?: string; field?: never } | { todayName: string; field: "name" }`
+    (`apps/server/src/errors.ts:384-391`). The `field?: never` is what refuses the old leaking shape
+    `{ label: name, field: "name" }`: without it the union accepts that shape (round 3 review, run 1,
+    `tsc` 7.0.2 with `--strict`). This changes one answer's key; no venue is live, and the root
+    `CLAUDE.md` §3 allows renames until one is.
 11. **The profile route logs the email sender's code, not its message.** `me-api.ts:186-189` logs
     `error.message`; it becomes
     `errorCode: error instanceof AccountEmailFailure ? error.problem : codeOf(error)`, as the
@@ -359,7 +367,8 @@ note 5).
 - **The controls**: every "absent" assertion paired with a "present" one.
 - **The guard's limits** (decision 9), stated in its header and at the `CLAUDE.md` rule.
 - **Cost on the sale path**: `createLogger` now runs a replacer on every line; Task 1's measurement
-  through the real file sink, against its 5% bar.
+  through the real file sink and the replacer's own share, against the 5% bar both must exceed to
+  miss it.
 - **Codex run-it seat**: two reviews, the second told to set this plan aside.
 
 ## Task 1 — the mask in the logger and the failed-start report
@@ -386,7 +395,9 @@ note 5).
 6. The path rule: `{ merchants: [{ code: "MC1", name: "Jordi Puig Ferrer" }, { code: "MC2", name:
    null }] }` writes `[{ code: "MC1", name: "***" }, { code: "MC2", name: null }]`; in the same line
    a top-level `name: "Patio"` is kept, and a `merchants` value that is not an array is kept as it
-   is.
+   is. A second line, `{ merchants: [{ code: "MC1", name: "Jordi Puig Ferrer", email:
+   "jordi.puig@example.test" }] }`, writes `[{ code: "MC1", name: "***", email: "***" }]`: the key
+   list still applies inside the copied elements.
 7. `node-entry.test.ts`: a start that fails with `new AppError("person.email_taken", { email:
    "marta.soler@example.test" })` reports `params: {"email":"***"}` and not the address. The existing
    `migrations.incomplete` case at `:741` passes unedited (diagnostic details still shown).
@@ -396,8 +407,10 @@ note 5).
 `maskPersonalData(key: string, value: unknown): unknown`, returning `"***"` when the key is on the
 list and the value is neither `null` nor `undefined`; for a key in `PERSONAL_LOG_PATHS` whose value
 is an array, a copy whose object elements have each listed child's non-null value replaced by
-`"***"`; else the value. No comment beyond one line naming what the list is for and pointing at the
-guard.
+`"***"`; else the value. `JSON.stringify` walks into the copy the replacer returns, so the key list
+is still applied to every key inside the copied elements; build the copy so that stays true (a
+shallow copy of each element, not one serialised or parsed on the side). No comment beyond one line
+naming what the list is for and pointing at the guard.
 
 **Run:** `pnpm --filter @waitron/server exec vitest run src/logger.test.ts src/node-entry.test.ts
 src/log-file.test.ts src/recovery-surface.test.ts` (read the `Tests` count). Then check that no
@@ -429,14 +442,23 @@ file in `apps/server/src`, deleted before the commit (its copy and output saved 
 `/Users/clintongormley/waitron-campaign-b/a980-s10-measure/`), writes 20,000 lines of the
 boundary's shape (`{ workingOrderId, requestId, productIds, errorCode }`, as round 1's `bench.mjs`)
 through `createLogger` over `createRotatingFileSink` into a temporary folder with the default
-10 MB × 5 settings, with and without the replacer, three runs each; put the medians and the added
-percentage in the pull request. Round 1's review measured about +0.4 µs on roughly 34 µs per line
-(about 1%) with a plain `appendFileSync`, not the real sink. **If the bar is missed**, build the
-fallback in this task: write the line with plain `JSON.stringify` first, and re-write it with the
-replacer only when a regular expression finds a listed key or path parent followed by `":` (round 1
-measured about 0.61 µs against 0.85 µs for the replacer on every line); add a case that a line with no
-listed key is byte-identical to plain `JSON.stringify`, re-run cases 1–7 unchanged, and measure
-again.
+10 MB × 5 settings, with and without the replacer, in **at least 7 interleaved rounds** (alternating
+which variant goes first in each round), compared by **median**. Measure a second number too: the
+replacer's own cost, `JSON.stringify` of the same line with the replacer minus without, per line, as
+a share of the real sink's per-line time; this one does not drown in disk noise. Put both sets of
+numbers in the pull request. **The bar is missed only if both measures exceed 5%.** Expectation:
+round 3's review ran a prototype of the mask through the real sink this way, 7 interleaved rounds,
+on a Mac (a Mac measurement, not CI's), and got a median of 32.90 µs per line with the
+mask against 33.21 µs without, about −1%, while one variant's own runs spread about 8%
+(`/Users/clintongormley/waitron-campaign-b/a980-s10-plan-review/round3/bench-output.txt`). Round 1's
+review measured about +0.4 µs on roughly 34 µs per line with a plain `appendFileSync`, not the real
+sink. **If the bar is missed**, build the fallback in this task: write the line with plain
+`JSON.stringify` first, and re-write it with the replacer only when a regular expression finds a
+listed key or path parent followed by `":` (round 1 measured about 0.61 µs against 0.85 µs for the
+replacer on every line); add a case that a line with no listed key is byte-identical to plain
+`JSON.stringify`, re-run cases 1–7 unchanged, and measure again the same way. **If the fallback still
+misses, keep the fallback**, put both runs' numbers in the pull request, and carry on with Task 2:
+do not iterate further.
 
 ## Task 2 — two call sites stop handing a person's details to the log
 
@@ -457,9 +479,19 @@ again.
    `new AccountEmailFailure("email.send_refused", "email.test_refused", false)` expecting
    `errorCode: "email.send_refused"`, and for an `AppError` expecting its code. Again the change is
    the behaviour being changed (decision 11, round 1 ruling M4); say so in the commit.
+3. A compile-time case in `apps/server/src/errors.test.ts`, beside "constructs table.label_taken
+   with the name and the table showing it as its short name" (`:32`): `new AppError(
+   "table.label_taken", { todayName: "Soler", field: "name" })` and `{ label: "T1", takenBy:
+   "Terrace 1" }` both construct, and `// @ts-expect-error the old shape that logged a guest's
+   name` above `new AppError("table.label_taken", { label: "Soler", field: "name" })`. The directive
+   is the assertion: the typecheck (`pnpm --filter @waitron/server typecheck`) reports an unused
+   `@ts-expect-error` when the type accepts the old shape again, as the `order-groups.test.ts:3424`
+   case says of its own; Vitest does not typecheck. Watch it fail by declaring the type without
+   `field?: never` first.
 
 **Code:** `floor-today-name.ts:86` throws `{ todayName: name, field: "name" }`. The registry type at
-`errors.ts:391` becomes `{ label: string; takenBy?: string } | { todayName: string; field: "name" }`,
+`errors.ts:391` becomes
+`{ label: string; takenBy?: string; field?: never } | { todayName: string; field: "name" }`,
 and its comment (`:384-390`) says which shape a floor-plan save sends and which a till's name for
 today sends. `floor-plan.ts:409` and `:434` are unchanged, and so is the dashboard's reader
 (`floor-plan-editor.ts:839-842`). `me-api.ts:186-189` logs
@@ -473,11 +505,13 @@ they match the server; they assert only `code` and `field`, which do not change.
 src/floor-today-api.test.ts src/errors.test.ts src/floor-plan.test.ts src/me-api.test.ts`, then
 (after the memory check) `pnpm --filter @waitron/till exec vitest run
 src/screens/till-floor-screen.rename.test.ts`; read each `Tests` count. Then
+`pnpm --filter @waitron/server typecheck` for test 3. Then
 `git grep -n -E 'label_taken' -- apps packages` and confirm every remaining `label` for this code is
 the floor-plan save's.
 
 **Omission controls:** put `label: name` back at `floor-today-name.ts:86` and watch test 1's cases
-fail; put `error.message` back in `me-api.ts` and watch test 2's rows fail. Restore both.
+fail; put `error.message` back in `me-api.ts` and watch test 2's rows fail; drop `field?: never` from
+the type and watch the typecheck report test 3's unused `@ts-expect-error`. Restore all three.
 
 ## Task 3 — the probe as tests: real routes, the real file, stdout, the real page
 
@@ -512,14 +546,26 @@ Task 1's commit, or watch them fail with Task 1's replacer removed):
    In the other direction, on the same page: `Bar del Port`, `MC1` and, from a floor-plan
    `table.label_taken { label: "Patio 1" }` thrown the same way, `Patio 1` are shown, so names of
    things stay visible (decision 4).
+5b. The live leak end to end: the real today-name route, `POST /api/tables/:id/today/name`, through
+   `mountTillApi` (its third argument the same logger), set up as `floor-today-api.test.ts:76-112`
+   sets it up: a venue from `setupPartyVenue`, then a till session from `seedSessionDevice`, a staff
+   person and `loginWithPin`, sent as the `SESSION_COOKIE` cookie. Two tables from `plannedZone`;
+   name the first "Soler" for today, then the second, one after the other, each body through
+   `withRevision` (the requests `floor-today-api.test.ts:955-956` send at once): the second answers
+   409 and its body `toEqual`s `{ error: { code: "table.label_taken", params: { todayName:
+   "Soler", field: "name" } } }`, and the page, the file's line and the captured stdout line hold
+   `table.label_taken` and `***` and not `Soler`. Its venue setup differs from cases 1–5's, so if it
+   cannot share their database it goes in a second file,
+   `apps/server/src/recovery-page-today-name.test.ts`, with its own `useVenueDb`.
 6. The control for the page itself: the same state with `logDir` pointing at an empty folder shows
    none of the codes, so the assertions above read the log tail (as
    `recovery-surface.test.ts:139-144` does).
 
-**Run:** `pnpm --filter @waitron/server exec vitest run src/recovery-page-personal-data.test.ts`.
+**Run:** `pnpm --filter @waitron/server exec vitest run src/recovery-page-personal-data.test.ts`
+(and the second file, if 5b needed one).
 
-**Omission control:** remove Task 1's replacer locally: cases 1–5 fail (page, file and stdout); 6
-still passes. Restore.
+**Omission control:** remove Task 1's replacer locally: cases 1–5 and 5b fail (page, file and
+stdout); 6 still passes. Restore.
 
 ## Task 4 — the probe as tests: the email servers
 
@@ -536,12 +582,14 @@ the relay's own reply and the page's code):
    same relay rejects with a message holding the address (probe case J).
 8. The clerk's own email change to Jordi's address, verification refused at `RCPT`: the page holds
    `&quot;errorCode&quot;:&quot;email.send_refused&quot;` (Task 2's key) and not the address.
-9. The attendance sender, `createAttendanceEmailSender({ onFailure })`, against the same relay
-   refusing at `RCPT` and at `DATA`: it returns `"rejected"`, `onFailure`'s arguments `toEqual`
-   `["email.test_refused"]` (what case H saw for the text sender, which calls the same
-   `sendSmtpMessage`), and neither the return nor any argument holds the address. If the sender
-   answers differently, the test records what it does and the pull request corrects this plan's
-   "Not probed" paragraph.
+9. The attendance sender built as `boot.ts:1858` builds it, `createAttendanceEmailSender()` with no
+   `onFailure`, against the same relay refusing at `RCPT` and at `DATA`: it returns `"rejected"`, and
+   the return holds no address. A second variant passes `onFailure`, which production does not:
+   its arguments `toEqual` `["email.test_refused"]` (what case H saw for the text sender, which calls
+   the same `sendSmtpMessage`) and hold no address. The sender logs nothing itself
+   (`attendance-email.ts:14-50`), and boot logs only `codeOf(error)` of what the worker throws
+   (`boot.ts:1859`). If the sender answers differently, the test records what it does and the pull
+   request corrects this plan's "Not probed" paragraph.
 
 **Run:** `pnpm --filter @waitron/server exec vitest run src/recovery-page-personal-data.test.ts`.
 
@@ -556,8 +604,14 @@ watch 7's and 9's controls fail. Restore.
 **What it does:** finds every `.ts` file under `packages/*/src` and `apps/*/src`, skipping
 `node_modules`, `testing` folders and `*.test.ts`, whose text holds `interface ErrorParams`
 (`packages/shared/src/errors.ts` included); blanks comments with `blankComments`
-(`packages/shared/src/source-comments.ts:254`); splits the `ErrorParams` body at each `"code":`; and
-collects each key written as `name:` or `name?:` in that code's text, nested ones included.
+(`packages/shared/src/source-comments.ts:254`); takes each `ErrorParams` body, which **ends at the
+interface's matching closing brace**, not at the end of the file; splits that body at each
+`"code":`; and collects each key written as `name:` or `name?:` in that code's text, nested ones
+included. (Round 1's `all-keys.mjs` ran each last code's text to the end of the file, which is why
+`all-keys.txt` gives `tab.already_open` keys such as `guestCount` and `openedBy`: they come from
+function bodies after the interface in `packages/bookings/src/testing/fake-core.ts`, whose entry is
+`{ tableId: string }` at `:27`. A guard that split the same way would wrongly refuse keys outside
+`ErrorParams` in any registry file with code after the interface.)
 
 - **Ids.** A key ending `Id` or `Ids` (with that capital) is skipped, unless the key without that
   ending matches `/tax|nif|nie|dni|cif|vat/i`; then it is judged like any other. Of the 81 such keys
@@ -567,19 +621,22 @@ collects each key written as `name:` or `name?:` in that code's text, nested one
   `/email|mail|name|nombre|surname|apellido|phone|tel|mobile|tax|nif|nie|dni|cif|vat|emisor|recipient|destinatario|person|guest|owner|holder|editor|contact|address|label|who|user|staff|operator|waiter|customer|client/i`,
   or ending `By` (with that capital), is judged. (`waiter` and `apellido` come from round 1's review
   list; the ruling's list did not name them, and they match no key today.)
-- **Judged keys** must be on `PERSONAL_LOG_KEYS`; or be a child of a `PERSONAL_LOG_PATHS` entry
-  whose parent key the same code's text also carries (`payment.provider_merchant_ambiguous.name`
-  through `merchants`); or be a `code.key` pair in the test's `NOT_PERSONAL` map, whose value is a
+- **Judged keys** must be on `PERSONAL_LOG_KEYS`; or be a child of a `PERSONAL_LOG_PATHS` entry,
+  written inside the braces of that parent key's own member (`payment.provider_merchant_ambiguous.name`
+  inside `merchants: { code: string; name: string }[]`, `packages/payments-sumup/src/errors.ts:10`;
+  a `name` elsewhere in a code that also carries `merchants` is judged like any other); or be a `code.key` pair in the test's `NOT_PERSONAL` map, whose value is a
   one-line reason ("the name of a station", "a Bluetooth address", "an enum of who confirmed:
   authority, devices or admin"). Both imported from `../apps/server/src/log-personal-data.js`, as
   `scripts/guide-links.test.ts:14` imports from that app.
 - **What the map will hold.** The planner's run of the widened list over `all-keys.txt` on
   2026-10-26 judged, besides the listed keys: `address`, `departmentName`, `holderDeviceName`,
   `label`, `locationName`, `name` (22 codes), `orderLabel`, `periodName`, `shortName`, `tableName`,
-  `zoneName`, `takenBy` (2 codes, a table's name), `confirmedBy` and `soldBy` (enums), `guestCount`
-  (a number), and three matches of a word inside another (`activatesAt` for `vat`, `byteLength` for
-  `tel`, `filename` for `name`). The guard's own output is the authority: the implementer runs it,
-  reads each pair it lists, and fills the map, one reason each.
+  `zoneName`, `takenBy` (2 codes, a table's name), `confirmedBy` and `soldBy` (enums), and three
+  matches of a word inside another (`activatesAt` for `vat`, `byteLength` for
+  `tel`, `filename` for `name`). (`guestCount` and `openedBy` in `all-keys.txt` are the scan
+  artefact above, outside any `ErrorParams` body, and a `testing` folder besides.) The guard's own
+  output is the authority: the implementer runs it, reads each pair it lists, and fills the map, one
+  reason each.
 
 **Tests first:**
 
@@ -593,25 +650,41 @@ collects each key written as `name:` or `name?:` in that code's text, nested one
 5. The cases it must still accept: `"x.y": { personId: string }` (an id), `"x.z": { email: string }`
    (on the list), and `"x.m": { merchants: { code: string; name: string }[] }` (the path rule).
 6. A `NOT_PERSONAL` pair whose code or key no longer exists fails.
+7. The body ends at its closing brace (must not refuse): a synthetic registry file holding
+   `interface ErrorParams { "x.k": { tableId: string } }` followed, after the interface's closing
+   brace, by `function f(guestName: string) { return { ownerEmail: guestName }; }` passes, and
+   neither `guestName` nor `ownerEmail` is reported.
+8. The path rule is bounded by its parent's braces: `"x.n": { merchants: { code: string }[];
+   name: string }` is refused, naming `x.n.name`.
+
+**Header**, written in this task, "weaker than its name": it reads text; judges a key by a word
+list, so a key whose name says nothing about a person passes; judges only keys written in a
+registry's text, so a throw site that spreads an object can carry keys its registry type does not
+name (`{ ...prepared.venue }`, `apps/server/src/restore-request.ts:280` and
+`apps/server/src/restore-stream.ts:378`: if `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`,
+gained an `ownerEmail`, the answer and the log line would carry it and the guard would stay green);
+and never reads free text. Tasks 6a and 6b extend it.
 
 **Run:** `pnpm exec vitest run scripts/personal-log-params.test.ts`.
 
 **Proof by deletion:** remove `email` from `PERSONAL_LOG_KEYS` and watch case 1 fail naming
 `person.email_taken.email`; remove the `merchants` path and watch case 1 fail naming
 `payment.provider_merchant_ambiguous.name`; remove the tax-stem exception and watch case 3 fail;
-remove a `NOT_PERSONAL` entry and watch it fail naming that pair. Restore.
+remove a `NOT_PERSONAL` entry and watch it fail naming that pair; make the body run to the end of
+the file and watch case 7 fail naming `guestName`; drop the braces bound on the path rule and watch
+case 8 fail. Restore.
 
-## Task 6 — the root guard: named types and log calls' fields
+## Task 6a — the root guard: named types
 
 **Files:** add to `scripts/personal-log-params.test.ts` (after Task 5).
 
-**Named types.** The guard also collects every capitalised type name inside each `ErrorParams` body,
-after blanking comments and the contents of string literals (or a literal such as `"Alta"` would be
-read as a type). Each must be in a `REVIEWED_TYPES` map with a one-line verdict
-(`BillEditState: "holds editorName, which is on the list"`; `Record: "TypeScript's own; holds what its
-arguments name, which the guard reads"`); a type nobody has reviewed fails, naming it and its file,
-and an entry no registry uses any more fails too. The planner's scan on 2026-10-26 (a node one-liner
-over the registry files round 1 listed in `registries.txt`) found 26 names, three of them
+**What it does.** The guard also collects every capitalised type name inside each `ErrorParams` body
+(bounded as in Task 5), after blanking comments and the contents of string literals (or a literal
+such as `"Alta"` would be read as a type). Each must be in a `REVIEWED_TYPES` map with a one-line
+verdict (`BillEditState: "holds editorName, which is on the list"`; `Record: "TypeScript's own; holds
+what its arguments name, which the guard reads"`); a type nobody has reviewed fails, naming it and
+its file, and an entry no registry uses any more fails too. The planner's scan on 2026-10-26 (a node
+one-liner over the registry files round 1 listed in `registries.txt`) found 26 names, three of them
 TypeScript's own (`Array`, `Readonly`, `Record`): `AllocationPreview`, `Approval`, `BillEditState`,
 `BucketOperation`, `BusinessDayClockConflict`, `CancellationContext`, `DestinationCleanup`,
 `DestinationOperation`, `EquipmentField`, `FacturaParams`, `HomeDevice`, `LineaParams`, `MemberRef`,
@@ -619,45 +692,64 @@ TypeScript's own (`Array`, `Readonly`, `Record`): `AllocationPreview`, `Approval
 `ThemeNameRefusal`, `ThemeRefusalReason`, `UnservedDish`, `VerifyFailure`. Round 1's review counted
 25 across 8 files with its own scan; the guard's output is the authority. Round 1 opened every one
 and found a person only in `BillEditState` (`editorName`); `FacturaParams` holds `idEmisorFactura`,
-now on the list. The implementer opens each again to write its verdict.
+now on the list. `LineaParams`'s verdict says that it inherits `idEmisorFactura` from
+`FacturaParams` (`packages/fiscal-verifactu/src/errors.ts:15`):
+the guard judges a type by its name only, so the verdict is the one place this is recorded. The
+implementer opens each type again to write its verdict.
 
-**Log calls' fields.** The guard also finds every call in the same tree (every non-test `.ts` under
-`packages/*/src` and `apps/*/src`, not only registries) whose first argument is a level literal
-(`"debug"`, `"info"`, `"warn"` or `"error"`), written `name(`, `a.b(` or `name?.(`, as round 1's
-`logcalls.pl` does (it found 250 such calls, and the review a further 11 written `log?.(`). When the
-third argument is an object literal, it collects every key in it, `key:` and shorthand `key`, at any
-depth, and judges each with Task 5's id rule and word list. A judged key must be on
-`PERSONAL_LOG_KEYS` or in a `HARMLESS_LOG_FIELDS` map keyed `event.key` (the event literal; for an
-event that is not a literal, the file's path and the key), with a one-line reason; an entry no call
-uses any more fails. The planner's run of the widened list over `logcalls.tsv` on 2026-10-26 judged
-`owner` (`staff_notice.*` lines in `apps/server/src/staff-notices.ts:91`, `:98`, `:150` and
-`apps/server/src/box-health.ts:352`: the id of a notice's source, such as `"fiscal-outbox"`),
-`hostname` (`apps/server/src/discovery-api.ts:147`, `apps/server/src/mdns.ts:77`), `holderKind`
-(`apps/server/src/node-entry.ts:614`, `:618`) and `name` (`restore.recovery_key_selected`,
+**Tests first:**
+
+1. The real registries pass.
+2. A synthetic registry `"x.v": { party: PartySummary }` is refused, naming `PartySummary`.
+3. A `REVIEWED_TYPES` entry no registry uses fails.
+4. The case it must still accept, the blanking: `"x.o": { operacion: "Alta" | "Anulacion" /* see
+   Foo */ }` passes with no `REVIEWED_TYPES` entry for `Alta`, `Anulacion` or `Foo`.
+
+**Header**, extending Task 5's: it judges a named type only by its name, so a person-named key
+added later inside a type already in `REVIEWED_TYPES` passes.
+
+**Run:** `pnpm exec vitest run scripts/personal-log-params.test.ts`.
+
+**Proof by deletion:** remove `BillEditState` from `REVIEWED_TYPES` and watch case 1 fail naming it;
+stop blanking string literals and watch case 4 fail naming `Alta`. Restore.
+
+## Task 6b — the root guard: log calls' fields
+
+**Files:** add to `scripts/personal-log-params.test.ts` (after Task 6a). From the earlier tasks it
+uses only Task 5's word list and id rule.
+
+**What it does.** The guard also reads every `.ts` file under `packages/*/src` and `apps/*/src`,
+not only registries, skipping `node_modules`, `*.test.ts` and `testing` folders as Task 5 does, and
+finds every call whose first argument is a level literal (`"debug"`, `"info"`, `"warn"` or
+`"error"`), written `name(`, `a.b(` or `name?.(`, as round 1's `logcalls.pl` does (it found 250
+such calls, and the review a further 11 written `log?.(`). When the third argument is an object
+literal, it collects every key in it, `key:` and shorthand `key`, at any depth, and judges each with Task 5's id rule and word list. A judged key
+must be on `PERSONAL_LOG_KEYS` or in a `HARMLESS_LOG_FIELDS` map keyed `event.key` (the event
+literal; for an event that is not a literal, the file's path and the key), with a one-line reason;
+an entry no call uses any more fails. The planner's run of the widened list over `logcalls.tsv` on
+2026-10-26 judged `owner` (`staff_notice.*` lines in `apps/server/src/staff-notices.ts:91`, `:98`,
+`:150` and `apps/server/src/box-health.ts:352`: the id of a notice's source, such as
+`"fiscal-outbox"`), `hostname` (`apps/server/src/discovery-api.ts:147`, `apps/server/src/mdns.ts:77`),
+`holderKind` (`apps/server/src/node-entry.ts:614`, `:618`) and `name` (`restore.recovery_key_selected`,
 `apps/server/src/restore.ts:325`, a recovery key's name). That run missed the `log?.(` calls, so the
 guard's output is the authority.
 
 **Tests first:**
 
-1. The real tree passes (registries and log calls).
-2. A synthetic registry `"x.v": { party: PartySummary }` is refused, naming `PartySummary`.
-3. A `REVIEWED_TYPES` entry no registry uses fails.
-4. Synthetic log calls `log("warn", "x.sent", { guestName })` and
+1. The real tree's log calls pass.
+2. Synthetic log calls `log("warn", "x.sent", { guestName })` and
    `log?.("info", "x.mailed", { meta: { recipientEmail: e } })` are refused, naming each.
-5. The calls it must still accept: `log("info", "x", { personId })` and `log("info", "x", { email })`.
-6. A `HARMLESS_LOG_FIELDS` entry no call uses fails.
+3. The calls it must still accept: `log("info", "x", { personId })` and `log("info", "x", { email })`.
+4. A `HARMLESS_LOG_FIELDS` entry no call uses fails.
 
-**Header**, "weaker than its name": it reads text; judges a key by a word list, so a field whose name
-says nothing about a person passes (`log("info", "invite.sent", { to: email })`, round 1's example);
-judges a named type only by its name, so a person-named key added later inside a type already in
-`REVIEWED_TYPES` passes; sees no spread or variable passed as a log call's fields; never reads free
-text; and does not see `packages/store/src/venue-liveness.ts:174-179`, which writes `waitron.log`
-without a `Logger` (decision 12).
+**Header**, extending Task 6a's: it sees no spread or variable passed as a log call's fields, and
+does not see `packages/store/src/venue-liveness.ts:174-179`, which writes `waitron.log` without a
+`Logger` (decision 12).
 
 **Run:** `pnpm exec vitest run scripts/personal-log-params.test.ts`.
 
-**Proof by deletion:** remove `BillEditState` from `REVIEWED_TYPES` and watch case 1 fail naming it;
-remove the `staff_notice.duplicate_key.owner` entry and watch case 1 fail naming it. Restore.
+**Proof by deletion:** remove the `staff_notice.duplicate_key.owner` entry and watch case 1 fail
+naming it; stop matching the `name?.(` form and watch case 2 fail naming `recipientEmail`. Restore.
 
 ## Task 7 — words: the rule, the page's description, the design, the backlog
 
@@ -669,7 +761,8 @@ Each sentence below is a claim; check it against the code as built, not against 
    line; the answer keeps it. Name it for whose it is (`guestName`, `customerTaxId`), never a bare
    `name` or `taxId`: the list is flat across every code. Guard: `scripts/personal-log-params.test.ts`,
    weaker than its name: reads text, judges keys by a word list, judges a named type only by its
-   name, sees no spread, free text or the watchdog's own line. The full limits go in
+   name, sees no spread at a throw site or in a log call, no free text and not the watchdog's own
+   line. The full limits go in
    `docs/developers/conventions-ui.md` (item 3).
 2. **Root `CLAUDE.md`, §3, the recovery page line** ("its log tail shows the failed start's own
    lines through `redactSecrets` and HTML-escaped"): the tail is the file's last lines, whichever
@@ -680,7 +773,8 @@ Each sentence below is a claim; check it against the code as built, not against 
    paragraph `:1140-1145`)**: the same correction; a sentence that the tail's `AppError` details
    have the listed names masked, with the receipt (this plan's probe and Task 3); that the dashboard's
    Diagnostics log view shows `***` the same way, because it reads the same files; and the known
-   limits, the watchdog's line (decision 12) and the guard's list from Task 6's header among them.
+   limits, the watchdog's line (decision 12) and the guard's list from the header Tasks 5, 6a and
+   6b write among them.
 4. **`deploy/README.md:192-194` and `:201-203`**: a person's name, email or tax number in an error's
    details shows as `***` in **the server's own log lines**, on the page and in
    `docker compose logs`. The command-line tools still print an error's details on their terminal:
@@ -696,6 +790,9 @@ Each sentence below is a claim; check it against the code as built, not against 
    `table.label_taken` registry comment is Task 2's.)
 6. **The design**, a dated pointer rather than a rewrite: §2.3 rows d5 and d6, §4.8's "unverified
    (S10)" row, and the "Not verified" paragraph at the end: what the probe found and what S10 masks.
+   Row d6's pointer says exactly what is masked in the container's output: only the server's own
+   log lines; `console.warn` lines, the watchdog's line on standard error and the command-line tools'
+   output are not, as item 4 says for the README.
    Row d5 also gets a dated correction: the log is kept as six files, the current one and five
    rotated, not "five files" (`log-file.ts:42-53`; round 1 claim check F1).
 7. **The build plan**: a 2026-10-26 status sentence for S10, linking this plan; note that S10 does
