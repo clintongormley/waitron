@@ -48,7 +48,7 @@ import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   menuItemId: "menu-item-cafe",
   catalogueId: "menu-table",
@@ -63,8 +63,8 @@ const cafe: TillProduct = {
   courseId: "postres",
 };
 
-const jamon: TillProduct = {
-  ...cafe,
+const ham: TillProduct = {
+  ...coffee,
   id: "jamon",
   menuItemId: "menu-item-jamon",
   name: "Jamón",
@@ -73,7 +73,7 @@ const jamon: TillProduct = {
   unitPrice: "20.00",
 };
 
-const products: TillProduct[] = [cafe, jamon];
+const products: TillProduct[] = [coffee, ham];
 
 const courses = [
   { id: "entrantes", name: "Entrantes", displayOrder: 0, heldUntilFired: true },
@@ -401,13 +401,13 @@ describe("till-table-order-screen", () => {
   });
 
   it("offers Filter without a published diet so allergen exclusions stay reachable", async () => {
-    const { el } = await mount(); // cafe only — no diet
+    const { el } = await mount();
     expect(el.shadowRoot!.querySelector("till-diet-filter")).not.toBeNull();
   });
 
   it("shows the diet filter and narrows the round grid to the picked lens", async () => {
     const veganDish: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "vegan",
       menuItemId: "menu-item-vegan",
       name: "Ensalada",
@@ -415,7 +415,7 @@ describe("till-table-order-screen", () => {
       diet: { vegan: "yes", vegetarian: "yes", contains: [] },
     };
     const meatDish: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "meat",
       menuItemId: "menu-item-meat",
       name: "Chuleta",
@@ -481,7 +481,7 @@ describe("till-table-order-screen", () => {
   });
 
   it("sends a zone offer by menu-item identity", async () => {
-    const offer = { ...cafe, menuItemId: "offer-cafe", productId: cafe.id };
+    const offer = { ...coffee, menuItemId: "offer-cafe", productId: coffee.id };
     const { el } = await mount({ products: [offer] });
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
@@ -765,7 +765,9 @@ describe("till-table-order-screen", () => {
         heldUntilFired: true,
       };
       const draftStore = new WorkingOrderStore();
-      draftStore.loadFrom("draft", [{ product: cafe, quantity: "1", courseId: course.id, course }]);
+      draftStore.loadFrom("draft", [
+        { product: coffee, quantity: "1", courseId: course.id, course },
+      ]);
       const { el } = await mount({ courses: activeCourses, draftStore });
       const picker = (await coursePicker(el, 0))!;
       await picker.updateComplete;
@@ -935,7 +937,7 @@ describe("till-table-order-screen", () => {
     const { el } = await mount();
     // Seed the round store with a line carrying a pick (through the UI the picker produces these);
     // only the list, the product and the count reach the wire — never the display name or price.
-    grid(el).store.addProduct(cafe, "1", {
+    grid(el).store.addProduct(coffee, "1", {
       extras: [
         {
           listId: "list-milk",
@@ -959,7 +961,7 @@ describe("till-table-order-screen", () => {
 
   it("carries each pick's own per-dish count, and groups two lists separately", async () => {
     const { el } = await mount();
-    grid(el).store.addProduct(cafe, "1", {
+    grid(el).store.addProduct(coffee, "1", {
       extras: [
         {
           listId: "list-extras",
@@ -1038,8 +1040,8 @@ describe("till-table-order-screen", () => {
   });
 
   describe("a round of two courses", () => {
-    const pan: TillProduct = {
-      ...cafe,
+    const breadProduct: TillProduct = {
+      ...coffee,
       id: "pan",
       menuItemId: "menu-item-pan",
       courseId: "entrantes",
@@ -1047,13 +1049,13 @@ describe("till-table-order-screen", () => {
 
     async function ringTwoCourses(el: TillTableOrderScreen): Promise<void> {
       // Rung dessert first, so a grouping that follows the ringing order rather than the courses fails.
-      grid(el).store.addProduct(cafe, "1");
-      grid(el).store.addProduct(pan, "2");
+      grid(el).store.addProduct(coffee, "1");
+      grid(el).store.addProduct(breadProduct, "2");
       await el.updateComplete;
     }
 
     it("Send all holds one group per course, in the venue's order", async () => {
-      const { el } = await mount({ courses, products: [cafe, pan] });
+      const { el } = await mount({ courses, products: [coffee, breadProduct] });
       await ringTwoCourses(el);
       const sent = await submitDraft(el, "send-all");
       expect(sent!.detail.lines).toEqual([
@@ -1067,7 +1069,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("Fire all now fires both courses as one group, in the venue's order", async () => {
-      const { el } = await mount({ courses, products: [cafe, pan] });
+      const { el } = await mount({ courses, products: [coffee, breadProduct] });
       await ringTwoCourses(el);
       const sent = await submitDraft(el, "fire-all");
       expect(sent!.detail.lines).toEqual([
@@ -1078,7 +1080,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("groups a line by the course the waiter picked over its product's", async () => {
-      const { el } = await mount({ courses, products: [cafe, pan] });
+      const { el } = await mount({ courses, products: [coffee, breadProduct] });
       await ringTwoCourses(el);
       const picker = (await coursePicker(el, 0))!;
       await chooseOption(picker, "entrantes");
@@ -1096,7 +1098,7 @@ describe("till-table-order-screen", () => {
       { id: "starters", name: "Starters", displayOrder: 1, heldUntilFired: true },
     ];
     const dish = (id: string, name: string, courseId: string | null): TillProduct => ({
-      ...cafe,
+      ...coffee,
       id,
       menuItemId: `offer-${id}`,
       name,
@@ -1104,10 +1106,10 @@ describe("till-table-order-screen", () => {
       courseId,
     });
     const beer = dish("beer", "Beer", "drinks");
-    const croquetas = dish("croquetas", "Croquetas", "starters");
+    const croquettes = dish("croquetas", "Croquetas", "starters");
     const steak = dish("steak", "Steak", "mains");
     const bread = dish("bread", "Bread", null);
-    const menu = [beer, croquetas, steak, bread];
+    const menu = [beer, croquettes, steak, bread];
 
     function heldGroup(id: string, position: number, summary: string): OrderGroup {
       return {
@@ -1147,7 +1149,7 @@ describe("till-table-order-screen", () => {
 
     it("shows Fire now before new held groups, with no redundant course headings", async () => {
       const { el } = await mount({ courses: serviceCourses, products: menu });
-      await ring(el, [steak, "1"], [beer, "1"], [bread, "1"], [croquetas, "1"]);
+      await ring(el, [steak, "1"], [beer, "1"], [bread, "1"], [croquettes, "1"]);
       expect(sectionNames(el)).toEqual([
         { heading: null, lines: ["Bread ×1"] },
         { heading: null, lines: ["Beer ×1"] },
@@ -1186,7 +1188,7 @@ describe("till-table-order-screen", () => {
 
       it("keeps Send all and enables Fire for the two checked lines, with native pressed states", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu });
-        await ring(el, [beer, "2"], [croquetas, "1"], [steak, "1"]);
+        await ring(el, [beer, "2"], [croquettes, "1"], [steak, "1"]);
         await toggle(el, "Beer");
         await toggle(el, "Steak");
         const pressed = (name: string) => {
@@ -1209,7 +1211,7 @@ describe("till-table-order-screen", () => {
 
       it("sends each arranged held group directly, and fires only the selected rows", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu });
-        await ring(el, [beer, "2"], [croquetas, "1"], [steak, "1"]);
+        await ring(el, [beer, "2"], [croquettes, "1"], [steak, "1"]);
         expect((await submitDraft(el, "send-all"))!.detail.groups).toEqual([
           { release: "hold", lineIndexes: [0] },
           { release: "hold", lineIndexes: [1] },
@@ -1242,8 +1244,8 @@ describe("till-table-order-screen", () => {
       });
 
       it("fires a weighed line without changing its fractional quantity", async () => {
-        const { el } = await mount({ courses: serviceCourses, products: [...menu, jamon] });
-        await ring(el, [jamon, "0.250"], [beer, "2"]);
+        const { el } = await mount({ courses: serviceCourses, products: [...menu, ham] });
+        await ring(el, [ham, "0.250"], [beer, "2"]);
         const sent = (await submitDraft(el, "fire-all"))!;
         expect(sent.detail.lines).toEqual([
           { menuItemId: "menu-item-jamon", quantity: "0.250" },
@@ -1278,7 +1280,7 @@ describe("till-table-order-screen", () => {
 
       it("dispatches the exact visible line objects and groups with no confirmation step", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu });
-        await ring(el, [steak, "1"], [beer, "2"], [croquetas, "1"]);
+        await ring(el, [steak, "1"], [beer, "2"], [croquettes, "1"]);
         const all = (await submitDraft(el, "send-all"))!;
         expect(all.detail.lines).toEqual([
           { menuItemId: "offer-beer", quantity: "2" },
@@ -1362,7 +1364,7 @@ describe("till-table-order-screen", () => {
 
       it("places an earlier course in Fire now and sends directly without a destination question", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
-        await ring(el, [croquetas, "2"]);
+        await ring(el, [croquettes, "2"]);
         expect(el.shadowRoot!.querySelector("[data-destination]")).toBeNull();
         expect(actionKinds(el)).toEqual(["fire-selected", "send-all"]);
         expect(grid(el).store.lines[0]!.place).toEqual({ kind: "fire" });
@@ -1377,7 +1379,7 @@ describe("till-table-order-screen", () => {
           products: menu,
           groups: [held[2]!, held[0]!, { ...held[1]!, displayNumber: 8 }],
         });
-        await ring(el, [croquetas, "1"]);
+        await ring(el, [croquettes, "1"]);
         expect(moveDialog(el).open).toBe(false);
         await openMove(el, "Croquetas");
         expect(heldChoices(el)).toEqual([
@@ -1388,7 +1390,7 @@ describe("till-table-order-screen", () => {
 
       it("saves the selected held destination on the line and sends its per-group join", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
-        await ring(el, [croquetas, "2"]);
+        await ring(el, [croquettes, "2"]);
         await openMove(el, "Croquetas");
         await move(el, "join:g-desserts");
         expect(grid(el).store.lines[0]!.place).toEqual({ kind: "join", groupId: "g-desserts" });
@@ -1407,7 +1409,7 @@ describe("till-table-order-screen", () => {
           products: menu,
           groups: [{ ...held[1]!, courseIds: ["starters"] }],
         });
-        await ring(el, [croquetas, "1"]);
+        await ring(el, [croquettes, "1"]);
         await openMove(el, "Croquetas");
         await move(el, "join:g-mains");
         expect(
@@ -1423,7 +1425,7 @@ describe("till-table-order-screen", () => {
 
       it("uses the same stable number in Move to and the joined group heading", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
-        await ring(el, [croquetas, "1"]);
+        await ring(el, [croquettes, "1"]);
         await openMove(el, "Croquetas");
         expect(heldChoices(el)[0]).toEqual({ id: "join:g-mains", text: "Joins Group 2" });
         await move(el, "join:g-mains");
@@ -1440,7 +1442,7 @@ describe("till-table-order-screen", () => {
 
       it("Move to New group changes only the selection and keeps other rows' destinations", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
-        await ring(el, [croquetas, "1"], [steak, "1"]);
+        await ring(el, [croquettes, "1"], [steak, "1"]);
         await openMove(el, "Steak");
         await move(el, "new");
         expect(grid(el).store.lines.map((line) => line.place)).toEqual([
@@ -1462,7 +1464,7 @@ describe("till-table-order-screen", () => {
       it("keeps all Move to targets and actions inside a phone-width screen", async () => {
         const { el, host } = await mount({ courses: serviceCourses, products: menu, groups: held });
         host.style.width = "390px";
-        await ring(el, [croquetas, "1"]);
+        await ring(el, [croquettes, "1"]);
         await openReview(el);
         await openMove(el, "Croquetas");
         const edge = el.getBoundingClientRect().right;
@@ -1475,7 +1477,7 @@ describe("till-table-order-screen", () => {
 
       it("gives draft rows, Move to, Fire and Send all, destinations and Back 44 px tap targets", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
-        await ring(el, [croquetas, "1"], [steak, "1"]);
+        await ring(el, [croquettes, "1"], [steak, "1"]);
         await openReview(el);
         const controls = el.shadowRoot!.querySelectorAll(
           "[data-draft-select], [data-draft-move], [data-draft-action]",
@@ -1494,7 +1496,7 @@ describe("till-table-order-screen", () => {
           products: menu,
           groups: [firedGroup("g-drinks", 1, "1 × Beer")],
         });
-        await ring(el, [croquetas, "1"]);
+        await ring(el, [croquettes, "1"]);
         await openMove(el, "Croquetas");
         expect(
           [...moveDialog(el).querySelectorAll("[data-draft-move-to]")].map((option) =>
@@ -1521,7 +1523,7 @@ describe("till-table-order-screen", () => {
         expect(grid(el).store.lines.map((line) => line.place)).toEqual([places[1]]);
         grid(el).store.removeLines(grid(el).store.lines);
         await el.updateComplete;
-        await ring(el, [croquetas, "1"]);
+        await ring(el, [croquettes, "1"]);
         expect(actionKinds(el)).toEqual(["fire-selected", "send-all"]);
         expect((await submitDraft(el, "send-all"))!.detail.groups).toEqual([
           { release: "fire", lineIndexes: [0] },
@@ -1608,11 +1610,11 @@ describe("till-table-order-screen", () => {
     const fired = { sentAt: at, firedAt: at };
     const beer = dishLine("l-beer", 1, "Beer", "1.000", "g1", fired);
     const salad = dishLine("l-salad", 2, "Salad", "1.000", "g2", fired);
-    const croquetas = dishLine("l-croq", 3, "Croquetas", "1.000", "g3");
+    const croquettes = dishLine("l-croq", 3, "Croquetas", "1.000", "g3");
     const steak = dishLine("l-steak", 4, "Steak", "2.000", "g4");
     const fish = dishLine("l-fish", 5, "Fish", "1.000", "g4");
     const flan = dishLine("l-flan", 6, "Flan", "1.000", "g5");
-    const tabLines = [beer, salad, croquetas, steak, fish, flan];
+    const tabLines = [beer, salad, croquettes, steak, fish, flan];
     // Listed out of position order; g4 also holds a Wine on another bill of the party.
     const groups = [
       group(
@@ -2402,7 +2404,7 @@ describe("till-table-order-screen", () => {
     const draft = grid(mounted.el).store;
     draft.appendLines([
       {
-        product: cafe,
+        product: coffee,
         quantity: heldLine.quantity,
         courseId: heldLine.courseId!,
         draftLineId: "recalled-cafe",
@@ -2937,7 +2939,7 @@ describe("till-table-order-screen", () => {
       const draft = grid(el).store;
       draft.appendLines([
         {
-          product: cafe,
+          product: coffee,
           quantity: "1.000",
           courseId: "postres",
           draftLineId: "recalled-cafe",
@@ -3012,7 +3014,7 @@ describe("till-table-order-screen", () => {
     const sent = "2026-08-20T09:59:00.000Z";
     // Three different texts for the three names, so a surface reading the wrong one fails.
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       menuItemId: "menu-item-burger",
       name: "Burger",
@@ -3935,7 +3937,7 @@ describe("till-table-order-screen", () => {
 
   describe("direct Send stays with the bill and store on screen", () => {
     async function ringCafe(el: TillTableOrderScreen): Promise<void> {
-      grid(el).store.addProduct(cafe, "1");
+      grid(el).store.addProduct(coffee, "1");
       await el.updateComplete;
     }
     async function assertOwnSend(el: TillTableOrderScreen, own: WorkingOrderStore): Promise<void> {
@@ -6291,7 +6293,7 @@ describe("till-table-order-screen", () => {
   // resolves against the full product set (a tab may span menus). The app owns the selection.
   describe("multi-menu round grid", () => {
     const bocadillo: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "bocadillo",
       menuItemId: "menu-item-bocadillo",
       name: "Bocadillo",
@@ -6300,8 +6302,8 @@ describe("till-table-order-screen", () => {
       catalogueId: "cat-food",
       catalogueName: "Comida",
     };
-    const cerveza: TillProduct = {
-      ...cafe,
+    const beerProduct: TillProduct = {
+      ...coffee,
       id: "cerveza",
       menuItemId: "menu-item-cerveza",
       name: "Cerveza",
@@ -6311,8 +6313,8 @@ describe("till-table-order-screen", () => {
       catalogueName: "Bebidas",
     };
     const foodMenu = servedMenu("cat-food", "Comida", true, [bocadillo]);
-    const drinksMenu = servedMenu("cat-drinks", "Bebidas", false, [cerveza]);
-    const bothMenus = { menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] };
+    const drinksMenu = servedMenu("cat-drinks", "Bebidas", false, [beerProduct]);
+    const bothMenus = { menus: [foodMenu, drinksMenu], products: [bocadillo, beerProduct] };
 
     const gridNames = (el: TillTableOrderScreen) =>
       [...grid(el).shadowRoot!.querySelectorAll(".name")].map((n) => n.textContent);
@@ -6344,7 +6346,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       await grid(el).updateComplete;
       expect(grid(el).menu).toBe(drinksBar);
-      expect(grid(el).products).toEqual([cerveza]);
+      expect(grid(el).products).toEqual([beerProduct]);
       const shortcuts = grid(el).shadowRoot!.querySelectorAll(
         '[data-region="shortcuts"] wt-button .name',
       );
@@ -6357,7 +6359,7 @@ describe("till-table-order-screen", () => {
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
       };
       const meatDrink: TillProduct = {
-        ...cerveza,
+        ...beerProduct,
         diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
       };
       const { el } = await mount({
@@ -6399,33 +6401,36 @@ describe("till-table-order-screen", () => {
 
     it("hands the browser the selected menu's products before the diet lens as well as after", async () => {
       const veganCerveza: TillProduct = {
-        ...cerveza,
+        ...beerProduct,
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
       };
-      const croqueta: TillProduct = {
-        ...cerveza,
+      const croquetteProduct: TillProduct = {
+        ...beerProduct,
         id: "croqueta",
         menuItemId: "menu-item-croqueta",
         name: "Croqueta",
         diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
       };
       const { el } = await mount({
-        menus: [foodMenu, servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croqueta])],
-        products: [bocadillo, veganCerveza, croqueta],
+        menus: [
+          foodMenu,
+          servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croquetteProduct]),
+        ],
+        products: [bocadillo, veganCerveza, croquetteProduct],
         selectedMenuId: "cat-drinks",
         selectedFilters: { diets: ["vegan"], exclude: {} },
       });
       await grid(el).updateComplete;
       expect(grid(el).products).toEqual([veganCerveza]);
-      expect(grid(el).unfilteredProducts).toEqual([veganCerveza, croqueta]);
+      expect(grid(el).unfilteredProducts).toEqual([veganCerveza, croquetteProduct]);
     });
 
     it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {
-      const cervezaLine: TabLine = { ...pendingLine, lineNo: 3, productId: "cerveza" };
+      const beerLine: TabLine = { ...pendingLine, lineNo: 3, productId: "cerveza" };
       const { el } = await mount({
         ...bothMenus,
         selectedMenuId: "cat-food",
-        lines: [cervezaLine],
+        lines: [beerLine],
       });
       expect(gridNames(el)).toEqual(["Bocadillo"]); // grid stays on the selected menu
       expect(
@@ -6472,19 +6477,22 @@ describe("till-table-order-screen", () => {
 
       it("leaves a product the diet lens rejects out of another menu's group", async () => {
         const veganCerveza: TillProduct = {
-          ...cerveza,
+          ...beerProduct,
           diet: { vegan: "yes", vegetarian: "yes", contains: [] },
         };
-        const croqueta: TillProduct = {
-          ...cerveza,
+        const croquetteProduct: TillProduct = {
+          ...beerProduct,
           id: "croqueta",
           menuItemId: "menu-item-croqueta",
           name: "Croqueta",
           diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
         };
         const { el } = await mount({
-          menus: [foodMenu, servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croqueta])],
-          products: [bocadillo, veganCerveza, croqueta],
+          menus: [
+            foodMenu,
+            servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croquetteProduct]),
+          ],
+          products: [bocadillo, veganCerveza, croquetteProduct],
           selectedMenuId: "cat-food",
         });
         await search(el, "c");
@@ -6504,7 +6512,7 @@ describe("till-table-order-screen", () => {
 it("shows a retained table line's recorded name and modifier answer after live names change", async () => {
   const { el } = await mount({
     products: [
-      { ...cafe, name: "Nuevo nombre", customerName: { es: "Nuevo nombre para el cliente" } },
+      { ...coffee, name: "Nuevo nombre", customerName: { es: "Nuevo nombre para el cliente" } },
     ],
     lines: [
       {
@@ -6654,7 +6662,7 @@ describe("closed department ordering", () => {
     try {
       setLocale("en-GB");
       const draft = new WorkingOrderStore();
-      draft.addProduct(cafe, "2");
+      draft.addProduct(coffee, "2");
       const { el } = await mount({
         draftStore: draft,
         lines: [pendingLine],
@@ -6695,7 +6703,7 @@ describe("closed department ordering", () => {
 
   it("does not claim the department is closed while its offers are unread", async () => {
     const draft = new WorkingOrderStore();
-    draft.addProduct(cafe, "2");
+    draft.addProduct(coffee, "2");
     const { el } = await mount({ draftStore: draft, service: null, departmentName: "Restaurant" });
     expect(el.shadowRoot!.querySelector("[data-service-closed]")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
@@ -6704,7 +6712,7 @@ describe("closed department ordering", () => {
 
   it("keeps saved and draft lines while removing the menu and all add tiles", async () => {
     const draft = new WorkingOrderStore();
-    draft.addProduct(cafe, "2");
+    draft.addProduct(coffee, "2");
     const { el } = await mount({
       draftStore: draft,
       lines: [pendingLine],
@@ -6733,7 +6741,7 @@ describe("A668 nutrition after table-order names", () => {
   it("shows nutrition in the last-added draft summary and the draft review row", async () => {
     const draft = new WorkingOrderStore();
     const dish: TillProduct = {
-      ...cafe,
+      ...coffee,
       allergens: { milk: {} },
       dietaryDeclarations: ["no_meat"],
     };
