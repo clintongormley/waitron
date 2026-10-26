@@ -443,6 +443,12 @@ their data** in the person's row menu on **Users** (the S2c plan's decisions 3, 
 2026-10-26: S2d adds `adjustments.json`: the voids, comps and discounts the person made giving a
 reason, or approved (the S2d plan's decisions 2 and 4).
 
+2026-10-26: S3 builds _Orders → Find a customer by tax number_. Instead of one line for every
+invoice, the export marks each invoice with whether the box keeps a tax record of it
+(`taxRecord` in `invoices.json`), and the README's line about the Tax Agency, written only when at
+least one invoice is marked, says that record holds the name and NIF, not the address (the S3
+plan's decisions 1, 8 and 11).
+
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
 Article 20 copy. Waitron keeps no list of requests (O7); the venue notes the request and its

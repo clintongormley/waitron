@@ -30,7 +30,13 @@ comps and discounts the person made giving a reason, or approved, from the adjus
 part), read in the snapshot turn through two new indexes, adjustments migration 0009
 (`0009_personal_data_person_indexes`), with no table rebuilt. Core's
 `line_service_cancellations.actor_id` is not read: every value of it is also an adjustment's
-requester (S2d decision 3). Design:
+requester (S2d decision 3). 2026-10-26: S3 is built
+([its plan](2026-10-26-a980-s3-invoice-customer-download.md)): an admin finds an invoice customer
+by tax number on **Orders**, ignoring an ES prefix, letter case, spaces, dots and hyphens, and
+downloads a ZIP of their full invoices as PDF copies, with an `invoices.json` giving the name, tax
+number and address on each, every attempt to email each one (to which address, when, and whether
+it went), and whether the box keeps a tax record of it, read in write-lock turns with no index and
+no migration. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in

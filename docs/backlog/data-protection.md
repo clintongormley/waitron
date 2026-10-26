@@ -119,24 +119,22 @@ by the answers):
   and Marta's copy shows the approved swap with no time. The alternative is to add the two shifts
   the swap names as `fromShift` and `toShift`, which shows Marta the times of a shift that is Ana's.
   Include them, yes or no?
-- **Owner question: a void reason that names someone.** `adjustments.json` carries each
-  adjustment's reason as the venue named it on the Voids and comps page. The free-text note is
-  left out because it can name someone else, but nothing stops a reason's own name from doing the
-  same. Example: a venue adds the Void reason "Ana's mistake"; Marta voids a line with it and Luis
-  approves, so both their copies say "Ana's mistake". S2d's finish review made such a reason
-  through the real reason and cancel code and found its words in the requester's download. The
-  alternative is to leave the reason out of the file. Keep the reason, yes or no?
 - **The working-time record of a box with more than one location** — only this node's location is
   exported (S2b decision 6). Today provisioning refuses a second, different location.
-- **Measure the working-time, actions and adjustments parts on a box.** The PDF renders on the
-  thread that serves sales, which is why the box's figure matters. Measure the working-time read
-  and PDF on a box.
+- **Measure the working-time, actions and adjustments parts, and the invoice customer's download,
+  on a box.** The PDF renders on the thread that serves sales, which is why the box's figure
+  matters. Measure the working-time read and PDF on a box.
   The actions part (S2c) reads in write-lock turns of its own while the files are built, after the
   turn that reads the other parts. The two row turns scan their whole tables, because none of the
   person columns they select on has an index, so they grow with the venue's whole history, not
   only the person's (S2c decision 4). Repeat the turns and the file's size on a box.
   The adjustments part (S2d) reads in the first turn. Measure that read and the whole first turn
   on a box.
+  The invoice customer's search and download (S3) read in a search turn, a first turn and one turn
+  per invoice; S3 decision 7 sets 250 ms stop rules for those turns and for the longest stall of
+  the event loop across a download, on the developer's Mac. Repeat them, the ZIP's size and the
+  whole download's time on a box. If a box's search turn crosses 250 ms, an index on the stored
+  tax number would be a migration slice of its own (S3 decision 7).
 - **Reduce the first snapshot turn's cost for a person heavy in two histories.** The
   [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md#decisions-this-plan-makes-that-the-spec-does-not),
   decision 13, sets a 250 ms median stop rule for its Mac fixture with heavy working-time and
@@ -160,7 +158,71 @@ by the answers):
   `modulesNamed` and `MeApiDeps.now`.
   The admin's download of another person (S2c) is mounted by the same function,
   `mountPersonalDataExportApi`, so the move takes both routes.
-- **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.
+- **S3** — an admin finds an invoice customer by tax number and downloads what the box holds
+  about them. Built ([its plan](../superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)):
+  on **Orders**, whoever holds `personal_data.export` sees **Find a customer by tax number**,
+  which opens a dialog that lists the full invoices naming the typed number (invoice, issue date,
+  name on the invoice, total) and offers **Download their data**. The search
+  (`GET /management-api/invoice-customers/personal-data?taxId=…`) and the download
+  (`GET /management-api/invoice-customers/personal-data/export?taxId=…`), both in
+  `apps/server/src/invoice-customer-data-api.ts`, require that permission, and refuse on a mirror
+  (the S3 decision under _Decisions and deliberate limits_). They read issued sales
+  at every node, and ignore letter case, spaces, dots, hyphens and one leading `ES`; a seven-digit
+  DNI matches with or without its leading zero (`apps/server/src/invoice-customer-tax-id.ts`). The
+  ZIP holds `README.txt`; `invoices.json`, giving for each invoice its number, issue time, the
+  name, tax number, country and address on it, its total, its PDF's name, whether the box keeps a
+  tax record of it, and every attempt to email it, whatever came of it
+  (`apps/server/src/invoice-customer-data.ts`); and a PDF copy of each invoice in `invoices/`,
+  from the same reader and renderer as the Orders page's PDF. The README is in the venue's
+  language, because a customer has no saved language. Neither route records anything: no download
+  row is written and the admin's last-seen time is left alone. No box issues a full invoice today,
+  so the search finds nothing on every box until full invoices are switched on (S3 decision 21).
+  What is left of S3 is in the points below.
+- **What the box keeps with a tax number outside issued sales is not in the invoice customer's
+  download** (S3 decision 19): the customer typed for a full invoice on a bill
+  (`working_orders.recipient_tax_id`, `recipient_legal_name`, `recipient_address` and
+  `recipient_country_code`), with the email address staged for it (`working_orders.invoice_delivery`),
+  kept while the bill's choice is a full invoice, whether or not one was issued from it; and the
+  printer bytes of a printed full invoice (`print_jobs.payload`). Switching a bill back to a
+  simplified invoice clears the staged customer (`setOrderInvoiceChoice`,
+  `apps/server/src/working-order.ts`). While full invoices are off, a bill is the only place an
+  invoice customer's tax number can be (S3 decision 21): `setOrderInvoiceChoice` stages a
+  full-invoice choice with a customer without asking whether full invoices are on, and paying such
+  a bill is refused (`refuseUnavailableFullInvoice`, the same file). The README says the
+  box keeps such details and to ask the venue for them. Waits for the owner's answer below.
+- **A supplier found by tax number is not in the invoice customer's download.** A purchase invoice
+  from a supplier who is a sole trader carries that person's name and tax number
+  (`purchase_invoices.supplier_tax_id`, `packages/db/src/schema/purchase-invoices.ts`; design
+  §2.2), and the S3 search reads only issued sales. The README tells the customer that anything
+  else the venue holds, such as an invoice they sent the venue, is not in the copy and to ask the
+  venue for it. Next action: decide whether a supplier's request gets a download of its own.
+- **A foreign invoice customer's tax number** (S3 decision 4). None can be stored today: staging a
+  customer whose country is not Spain is refused `fiscal.foreign_recipient_unsupported`
+  (`apps/server/src/invoice-selection.ts`), as is the Verifactu record that would name them
+  (`buildDestinatarios`, `packages/fiscal-verifactu/src/backend.ts`), because which `IDOtro` type a
+  non-resident takes is open with the adviser
+  ([Q17(a)](../compliance/asesor-questions.md#q17-f3-canje--recipient-identity-series-and-cross-sif-substitution-added-2026-08-26)).
+  The search's rule removes only a leading `ES`, so a foreign number would be matched with its own
+  country prefix kept. Next action: revisit the rule when Q17(a) is answered.
+- **Owner questions on S3's defaults**, each built with the default until answered (the S3 plan's
+  "Open decisions for the owner"):
+  - **The README's language** (decision 10): the venue's, not the language of the customer's newest
+    invoice (`sales.locale`). Example: a Spanish venue invoices a visiting English sole trader in
+    English; his README is in Spanish.
+  - **No record of who downloaded a customer's copy** (decision 12): an order's detail lists who
+    downloaded its invoice PDF from **Orders**, and a copy given out through S3 does not show
+    there. Example: the admin downloads Jordi's ZIP; the next day a manager opens bill F/2 on
+    **Orders** and sees no PDF download.
+  - **Details kept outside issued sales** (decision 19): not in the download (the point above).
+    Example, once full invoices are on: staff type Jordi's details on a bill and issue his full
+    invoice; his download holds the invoice, not the bill's own copy of his name, tax number and
+    address, and the README tells him the venue keeps such details.
+  - **An invoice with someone else's name on the customer's number** (decision 20): every invoice
+    carrying the number is in the download, and the dialog shows each row's name first. Example:
+    staff typed Jordi's NIF, 12345678Z, on an invoice for Maria Puig at her address; Jordi's ZIP
+    holds Maria's name and address.
+  - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
+    they are switched on.
 - **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
   checklist.
 - **S10** — check that logged errors carry no names or email addresses; mask them if they do.
@@ -203,3 +265,15 @@ by the answers):
   the line (an `order_group_events` row names the person only when the removal empties a held
   group, and that column is not in the download yet). See the
   [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 4 and 14.
+- **A980 S2d follow-up, 2026-10-26:** the owner chose to keep each adjustment's reason in
+  `adjustments.json` as the venue named it on the Voids and comps page, even though a reason's
+  name can name someone (the question's example: a reason "Ana's mistake" appears in the copies of
+  the person who used it and the person who approved it). The free-text note stays out (S2d
+  decision 8). Relayed by the watcher, `questions.md:4377` in lane B's campaign folder.
+- **A980 S3, 2026-10-26:** the invoice customer's search and download refuse on a mirror
+  (403 `node.read_only`), unlike S2c's admin download of a person, because a mirror signs in as an
+  administrator everyone who reaches it and a lookup by a typed tax number is wider than one
+  person's download (the [S3 plan](../superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)'s
+  decision 14). The owner then decided that a mirror is to serve no dashboard at all, so this
+  refusal is the permanent answer, not a wait for A1111, which is withdrawn. Relayed by the
+  watcher, `questions.md:4400` in lane B's campaign folder.
