@@ -187,9 +187,18 @@ export function createFirstSetupResolutionActions(
         ? undefined
         : initialSetupFor(host.modules, module)?.startAgainFloor;
     if (seat === undefined) unavailable();
-    const lastName = await readModulePreparationHistory(last.target.target, module)
-      .then((preparations) => seat({ attempts: [], preparations, publicEvidence: [] })?.lastName)
-      .catch(() => undefined);
+    const named = (input: Partial<Parameters<typeof seat>[0]>) => {
+      try {
+        return seat({ attempts: [], preparations: [], publicEvidence: [], ...input })?.lastName;
+      } catch {
+        return undefined;
+      }
+    };
+    const lastName =
+      (await readModulePreparationHistory(last.target.target, module).then(
+        (preparations) => named({ preparations }),
+        () => undefined,
+      )) ?? named({ recoveryInputs: records.map((record) => record.input) });
     if (lastName === undefined) unavailable();
     return {
       startedAt: activity.startedAt,

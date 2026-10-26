@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { access, lstat, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, lstat, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { dirname, join } from "node:path";
@@ -15,6 +15,7 @@ import { clock } from "../test/hour-recovery-host.js";
 import {
   barrier,
   fixture,
+  preparedRepair,
   recovery,
   selectedRepair,
 } from "../test/first-setup-backup-recovery-fixture.js";
@@ -101,7 +102,7 @@ async function confirmedStartAgain(f: Awaited<ReturnType<typeof selectedRepair>>
 }
 
 async function expectNothingWritten(
-  f: Awaited<ReturnType<typeof selectedRepair>>,
+  f: { roots: Roots },
   before: { venue: Record<string, string>; state: Record<string, string> },
 ) {
   expect({ venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) }).toEqual(
@@ -387,6 +388,140 @@ it("a recovery that failed at placement-started is named as failed at once", asy
     lastName: f.selected.identity,
     failed: true,
     cloud: false,
+  });
+});
+
+type Repair = Awaited<ReturnType<typeof preparedRepair>>;
+// The kept picks in the recovery's own copy, which the summary reads first.
+async function removeTargetPicks(f: Pick<Repair, "record">) {
+  await unlink(join(f.record.target.target.stateDir, "module-preparation-state.json")).catch(
+    (error: unknown) => {
+      if ((error as { code?: string }).code !== "ENOENT") throw error;
+    },
+  );
+}
+
+it("a stopped recovery whose own copy holds no picks is named from its journal's input", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  expect(f.record.input).toEqual(f.selected.input);
+  await access(join(f.record.target.target.stateDir, "module-preparation-state.json"));
+  await removeTargetPicks(f);
+  const { owner, ids } = await signedIn(f.host);
+  const { actions } = repairApp(f);
+  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toMatchObject({
+    lastName: f.selected.identity,
+  });
+});
+
+it.each([
+  ["cannot be read", () => "unreadable"],
+  [
+    "hold an entry its module cannot read",
+    (binding: unknown) =>
+      JSON.stringify({
+        version: 1,
+        revisions: [{ binding, value: { version: 1, entries: [{}] } }],
+      }),
+  ],
+])(
+  "a stopped recovery whose own copy's picks %s is named from its journal's input",
+  async (_name, picksOf) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    await writeFile(
+      join(f.record.target.target.stateDir, "module-preparation-state.json"),
+      picksOf(f.record.binding),
+    );
+    const { owner, ids } = await signedIn(f.host);
+    const { actions } = repairApp(f);
+    expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toMatchObject({
+      lastName: f.selected.identity,
+    });
+  },
+);
+
+it.each([
+  ["named nothing", null],
+  [
+    // A valid minute name, one minute after the time the input says it was chosen.
+    "recorded a name its own time disagrees with",
+    {
+      allocation: {
+        version: 1,
+        allocationId: "hour/restore",
+        taxpayerNif: "89890001K",
+        softwareId: "W1",
+        environment: "preproduction",
+        installationIdentity: "0CNQV",
+        series: [{ code: "A-0CNQV", purpose: "standard" }],
+        source: "hour",
+        reservationEvidence: null,
+        issuedAt: "2026-10-16T12:42:00.000Z",
+      },
+      approval: {
+        version: 1,
+        eventId: "restore",
+        sourceId: "archive",
+        targetNodeId: "node",
+        operatorId: { kind: "recovery-key", nodeId: "node", eventId: "restore" },
+        oldMachineAbsent: false,
+        oldMachineOffline: true,
+        noParallelRecovery: true,
+        confirmedAt: "2026-10-16T12:42:00.000Z",
+        incidentEvidence: "hour/restore",
+      },
+    },
+  ],
+])(
+  "a stopped recovery whose copy holds no picks and whose journal %s refuses the summary setup.not_ready, and nothing is written",
+  async (_name, input) => {
+    const f = await preparedRepair();
+    expect(f.record).toMatchObject({ phase: "prepared", input: null });
+    await f.service.close(f.session.sessionId);
+    if (input !== null) {
+      const { version, sequence, previousRecordDigest, recordedAt, ...last } = f.record;
+      void version;
+      void sequence;
+      void previousRecordDigest;
+      void recordedAt;
+      await f.workspace.append({ ...last, input });
+    }
+    expect((await f.workspace.read()).at(-1)).toMatchObject({ phase: "prepared", input });
+    await removeTargetPicks(f);
+    expect((await f.service.liveness())?.state).toBe("stopped");
+    const { owner, ids } = await signedIn(f.host);
+    const { actions } = repairApp(f);
+    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+    await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    await expectNothingWritten(f, before);
+  },
+);
+
+it("a stopped recovery whose module has no start-again seat refuses the summary setup.not_ready", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const { owner, ids } = await signedIn(f.host);
+  const modules = f.host.modules.map((module) =>
+    module.name === f.record.binding.module
+      ? {
+          ...module,
+          provisioning: {
+            ...module.provisioning,
+            initialSetup: { ...module.provisioning!.initialSetup!, startAgainFloor: undefined },
+          },
+        }
+      : module,
+  );
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: { ...f.host, modules },
+    backupRecovery: f.service,
+  });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
   });
 });
 

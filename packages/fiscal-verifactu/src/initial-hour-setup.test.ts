@@ -1131,3 +1131,80 @@ it("a paper register's numbered positions are not minute names", () => {
     seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [{ history, known }] }),
   ).toBeNull();
 });
+const recoveryInput = (issuedAt: string, identity: string) => ({
+  allocation: {
+    ...input.allocation,
+    allocationId: "hour/restore",
+    installationIdentity: identity,
+    series: context.bases.map(({ code, purpose }) => ({ code: `${code}-${identity}`, purpose })),
+    issuedAt,
+  },
+  approval: {
+    ...input.approval,
+    eventId: "restore",
+    sourceId: "archive",
+    operatorId: { kind: "recovery-key", nodeId: "node", eventId: "restore" },
+    oldMachineAbsent: false,
+    oldMachineOffline: true,
+    confirmedAt: issuedAt,
+    incidentEvidence: "hour/restore",
+  },
+});
+it("a backup recovery's recorded input names its minute", () => {
+  const seat = configured().seat;
+  const recorded = recoveryInput("2026-10-16T12:42:00.000Z", "0CNQT");
+  expect(
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      recoveryInputs: [recorded],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+  expect(
+    seat.startAgainFloor!({
+      attempts: [{ context: fixture(), input: undefined }],
+      preparations: [],
+      publicEvidence: [],
+      recoveryInputs: [recoveryInput("2026-10-16T11:39:00.000Z", "0CNNV")],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00.000Z"), lastName: "0CNNW" });
+});
+it("a recorded input the module cannot read names nothing, and a readable one beside it still names", () => {
+  const seat = configured().seat;
+  const valid = recoveryInput("2026-10-16T12:42:00.000Z", "0CNQT");
+  const malformed: unknown[] = [
+    null,
+    "0CNQT",
+    {},
+    { allocation: valid.allocation },
+    { ...valid, extra: true },
+    { ...valid, allocation: { ...valid.allocation, installationIdentity: "0CNQV" } },
+    { ...valid, allocation: { ...valid.allocation, installationIdentity: "nope" } },
+    { ...valid, allocation: { ...valid.allocation, source: "cloud" } },
+    { ...valid, allocation: { ...valid.allocation, reservationEvidence: {} } },
+    { ...valid, allocation: { ...valid.allocation, issuedAt: "2026-10-16T12:42:00Z" } },
+    { ...valid, allocation: { ...valid.allocation, issuedAt: "2025-12-31T23:59:00.000Z" } },
+    { ...valid, allocation: { ...valid.allocation, extra: true } },
+    { ...valid, approval: { ...valid.approval, operatorId: 7 } },
+    { ...valid, approval: null },
+  ];
+  for (const recorded of malformed) {
+    expect(
+      seat.startAgainFloor!({
+        attempts: [],
+        preparations: [],
+        publicEvidence: [],
+        recoveryInputs: [recorded],
+      }),
+    ).toBeNull();
+  }
+  expect(
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      recoveryInputs: [...malformed, valid],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+});

@@ -15,6 +15,7 @@ import {
   isMinuteIdentity,
 } from "./hour-identity.js";
 import { readInitialCloudConfirmation } from "./initial-cloud-setup.js";
+import { hourInputIdentity } from "./allocation-envelope.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import { publicHourSelectionHistory } from "./hour-selection.js";
 import "./errors.js";
@@ -138,7 +139,7 @@ function isNamelessEvidence(evidence: unknown): boolean {
 export function hourStartAgainFloor(
   retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
 ): NonNullable<InitialSetupContribution["startAgainFloor"]> {
-  return ({ attempts, preparations, publicEvidence }) => {
+  return ({ attempts, preparations, publicEvidence, recoveryInputs = [] }) => {
     let minutes: number[];
     try {
       minutes = [
@@ -159,6 +160,10 @@ export function hourStartAgainFloor(
           return retained.positions
             .filter(({ namespace }) => (JSON.parse(namespace) as unknown[]).at(-1) === "hour")
             .map(({ position }) => position);
+        }),
+        ...recoveryInputs.flatMap((input) => {
+          const identity = hourInputIdentity(input);
+          return identity === null ? [] : [decodeMinuteIdentity(identity)];
         }),
       ];
     } catch {

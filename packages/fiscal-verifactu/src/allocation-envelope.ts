@@ -359,6 +359,25 @@ export async function withHourAdmission<T>(
   }
 }
 
+/** The minute an hour input names: only for admission's shape, no reservation evidence, and a name
+ * that is the minute it was issued in; null otherwise. */
+export function hourInputIdentity(input: unknown): string | null {
+  if (
+    !record(input) ||
+    !exact(input, ["allocation", "approval"]) ||
+    !allocationShape(input.allocation) ||
+    input.allocation.reservationEvidence !== null ||
+    !approvalShape(input.approval)
+  )
+    return null;
+  try {
+    const identity = encodeMinuteIdentity(Date.parse(input.allocation.issuedAt));
+    return identity === input.allocation.installationIdentity ? identity : null;
+  } catch {
+    return null;
+  }
+}
+
 // Scope, authentication and outside facts must come from the host, never submitted module state.
 export function validateAllocationEnvelope(
   input: unknown,

@@ -81,6 +81,8 @@ export interface InitialSetupContribution {
     }[];
     readonly preparations: readonly unknown[];
     readonly publicEvidence: readonly unknown[];
+    /** A backup recovery journal's recorded inputs, passed untouched; one the module cannot read names nothing. */
+    readonly recoveryInputs?: readonly unknown[];
   }): { readonly floorMs: number; readonly lastName: string } | null;
 
   assignmentPositions?(

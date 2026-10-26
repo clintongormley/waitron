@@ -103,7 +103,7 @@ export async function fixture(readableAttempt = false) {
   return { ...f, host, workspace, options, request };
 }
 
-export async function selectedRepair() {
+async function repairFixture() {
   const f = await fixture(true);
   const entries = unpackArchive(decryptArtifact(f.request.source.artifact, f.restore.recoveryKey));
   entries.push({
@@ -115,6 +115,20 @@ export async function selectedRepair() {
   f.request.source.artifact = Uint8Array.from(
     encryptArtifact(packArchive(entries), f.restore.recoveryKey),
   );
+  return f;
+}
+
+/** A recovery whose journal holds a `prepared` record and no chosen name. */
+export async function preparedRepair() {
+  const f = await repairFixture();
+  const service = recovery(f.options);
+  const session = await service.open(f.request, { onBox: false });
+  await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
+  return { ...f, service, session, record: (await f.workspace.read()).at(-1)! };
+}
+
+export async function selectedRepair() {
+  const f = await repairFixture();
   const service = recovery(f.options);
   const session = await service.open(f.request, { onBox: false });
   const selected = (await recoverySelectPastWaits(
