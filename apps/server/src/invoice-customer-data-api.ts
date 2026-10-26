@@ -116,13 +116,6 @@ export function mountInvoiceCustomerDataApi(
         first.taxId,
         first.sales,
       );
-      await nextTurn();
-      // Building outlives the first turn, so authority is checked again before any bytes go.
-      await deps.db.withWriteLock(async () => {
-        const again = await authorize(token);
-        if (again.authorizedBy !== first.authorizedBy)
-          throw new Error("invoice customer authorisation named a different person after building");
-      });
       const readme = invoiceCustomerReadme({
         // A customer has no saved language, so the venue's (decision 10).
         language: toLanguage(resolveActiveLocale(null, deps.venueLocale)),
@@ -137,6 +130,13 @@ export function mountInvoiceCustomerDataApi(
         [{ name: "README.txt", content: readme }, ...built.files],
         at,
       );
+      // Building and zipping outlive the first turn, so authority is checked again once the ZIP
+      // is whole, and nothing yields between that check and the answer.
+      await deps.db.withWriteLock(async () => {
+        const again = await authorize(token);
+        if (again.authorizedBy !== first.authorizedBy)
+          throw new Error("invoice customer authorisation named a different person after building");
+      });
       c.header("Content-Type", "application/zip");
       c.header(
         "Content-Disposition",

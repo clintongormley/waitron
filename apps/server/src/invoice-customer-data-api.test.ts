@@ -27,6 +27,22 @@ import {
   type InvoiceCustomerVenue,
 } from "./testing/invoice-customer-fixture.js";
 
+/** Run beside the next `zipArchiveInTurns`, which finishes only once it has. */
+const duringZip = vi.hoisted(() => ({ run: undefined as (() => Promise<unknown>) | undefined }));
+vi.mock("./download-archive.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./download-archive.js")>();
+  return {
+    ...real,
+    zipArchiveInTurns: async (...args: Parameters<typeof real.zipArchiveInTurns>) => {
+      const beside = duringZip.run?.();
+      duringZip.run = undefined;
+      const bytes = await real.zipArchiveInTurns(...args);
+      await beside;
+      return bytes;
+    },
+  };
+});
+
 let fixture: InvoiceCustomerVenue;
 const suite = useVenueDb({
   resetPerTest: false,
@@ -363,5 +379,11 @@ describe("the invoice customer download", () => {
       401,
       sessionRequired,
     );
+  });
+
+  it("checks again once the ZIP is built, and sends nothing once the session ended while zipping", async () => {
+    const admin = await ownAdmin();
+    duringZip.run = () => withTransaction(suite.db, (tx) => endManagementSession(tx, admin.token));
+    await refused(await ask(withTaxId(DOWNLOAD, "12345678Z"), admin.cookie), 401, sessionRequired);
   });
 });
