@@ -159,8 +159,10 @@ under `docs/backlog/`.
   resolve every HTTP or unclassified failure.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
-- **A1089: reconciliation support wording needs a verified caller and remedy.** First establish where the reconciliation alerts can reach an owner; then give an evidence/decision route without promising an unimplemented periodic sweep.
-  [Audit](backlog/self-service-refusals.md#fiscal-reconcile).
+- **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The
+  scoped caller search found only library tests; the server loop schedules payment reconciliation.
+  Specify the fiscal caller, authority and cadence before adding recovery choices or promising a
+  periodic check. [Audit and remaining work](backlog/self-service-refusals.md#fiscal-reconcile).
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).

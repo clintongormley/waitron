@@ -825,7 +825,33 @@ The effective-key diagnosis and correction workflow remains open.
 
 ### fiscal-reconcile
 
-**Reconciliation support wording needs a verified caller and remedy.** First establish where the reconciliation alerts can reach an owner; then give an evidence/decision route without promising an unimplemented periodic sweep.
+**Reconciliation alerts need a production caller and an evidence/decision route.** Do not
+promise a periodic fiscal check or offer another submission until that caller and its recovery
+choices are specified and exercised.
+
+**2026-10-26 caller audit**, against `bc6b9da96639cf055ec8dde15b88d442136b6343`:
+
+| Boundary | Source finding |
+| --- | --- |
+| Fiscal producer | `packages/fiscal-verifactu/src/reconcile.ts:118` exports the library function. A TypeScript/JavaScript reference search under `apps/`, `packages/`, `scripts/`, `bench/` and `deploy/` found its direct imports in `reconcile.test.ts`, `reconcile.period.test.ts` and `acks.test.ts`, all in that package. No production caller was found in that search. |
+| Running server loop | `apps/server/src/boot.ts:1678` constructs `StripeReconciler`; `:2815` schedules that payment duty. The same file's imported `reconcile` comes from `@waitron/module` (`:89`), for module selection. Neither is the fiscal library function. |
+| Module boundary | `packages/fiscal-verifactu/src/slot.ts:50` supplies the fiscal contribution, including submission through `drain`; `packages/fiscal-verifactu/src/index.ts` does not re-export the fiscal reconciliation function. The package's `./src/*` export still permits a direct source import, so this is a scoped caller search, not proof that invocation is impossible. |
+| Incident visibility | `packages/fiscal-verifactu/src/alerts.ts:12` claims `fiscal.` incidents for `fiscal.view`. `apps/server/src/alerts.ts:115` reads already-recorded incidents, and `apps/server/src/alerts-api.ts:126` exposes that read. This path can present a recorded finding; it does not run the fiscal audit. |
+| Available action | The fiscal incident claim has no target screen. `apps/dashboard/src/widgets/alert-format.ts:38` therefore supplies no Go to target. Mark handled calls the incident acknowledgement route (`apps/server/src/alerts-api.ts:129`); it is not a reconciliation or resubmission action. |
+
+Existing library tests exercise the first missing-record reset, the later no-trace incident and
+cancellation drift against a fake AEAT service. Existing server tests exercise incident visibility,
+permissions and acknowledgement, plus the payment-duty adapter. These are separate checks, not an
+end-to-end fiscal reconciliation journey or a live AEAT qualification. The earlier inventory's
+screen labels describe where a recorded incident can be displayed; they do not establish a
+running fiscal sweep.
+
+**Still open:** specify the fiscal audit's caller, authority and cadence, then provide evidence
+inspection and an applicable decision for a persistent mismatch, with any needed sign-in there.
+Keep its support wording in scope for that change. Adding a caller would activate existing writes
+to submission state and acknowledgements; it needs the fiscal review and landing rules, rather
+than being treated as a wording repair. The caller search is source inspection, not a runtime
+reachability proof.
 
 ### payments
 
