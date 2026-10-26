@@ -20,7 +20,6 @@ import { type KitchenCard, type MergedQueueGroup, kitchenCards } from "../state/
 import type {
   KitchenNotice,
   KitchenNoticeKind,
-  QueueGroup,
   StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
@@ -58,11 +57,6 @@ interface CourseSection {
   items: StationQueueItem[];
 }
 
-interface GroupSection {
-  group: QueueGroup | null;
-  items: StationQueueItem[];
-}
-
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 
 /** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
@@ -75,12 +69,10 @@ function afterPeriodWords(period: string): string {
 }
 
 /**
- * One station's ticket items, shown as a board (a column per kitchen state, a card per sent group) or
- * a ticket rail (a card per order). A pure view: the container owns {@link groups} and turns the events
- * this emits into API calls.
+ * One station's ticket items, shown as a board: a column per kitchen state, a card per sent group. A
+ * pure view: the container owns {@link groups} and turns the events this emits into API calls.
  *
- * A board card is aged by its oldest fired dish, a rail card by its order's oldest line, each against
- * its own station's thresholds. The age accent is a left
+ * A card is aged by its oldest fired dish, against its own station's thresholds. The age accent is a left
  * border, never a text background, so its colour cannot fail contrast; a `forgotten` border flashes
  * unless reduced motion is asked for, and the header's overdue count is the signal that is not colour.
  */
@@ -132,14 +124,6 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text-muted);
         text-transform: uppercase;
-      }
-
-      /* RAIL — a card per order, wrapping across rows. */
-      .rail {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
-        align-items: flex-start;
       }
 
       .ticket {
@@ -257,7 +241,7 @@ export class TillStationQueue extends LitElement {
         align-self: stretch;
       }
 
-      /* The dish row: qty× name (left) and, on the rail, its state (right). */
+      /* The dish row: qty× name. */
       .line-main {
         display: flex;
         align-items: center;
@@ -378,10 +362,6 @@ export class TillStationQueue extends LitElement {
 
       .line-move {
         overflow-wrap: anywhere;
-      }
-
-      .line-move,
-      .line-state {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -393,7 +373,7 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* Age accents on the rail card's left edge — a data-driven colour, never behind text (a11y).
+      /* Age accents on the card's left edge — a data-driven colour, never behind text (a11y).
          Three escalating bands (KDS order-timing alerts, design §7.1): warm (amber-ish primary),
          overdue (red), forgotten (red + a repeating flash, .flash below). 'fresh' gets no override —
          it keeps the base .ticket border colour. */
@@ -483,11 +463,6 @@ export class TillStationQueue extends LitElement {
       .print-problem {
         align-self: flex-start;
         margin: 0;
-      }
-
-      .print-problems {
-        display: block;
-        margin: 0 0 var(--wt-space-2);
       }
 
       .whole-ticket {
@@ -611,6 +586,7 @@ export class TillStationQueue extends LitElement {
   @property({ attribute: false }) groups: MergedQueueGroup[] = [];
   /** Unacknowledged corrections for this station, oldest first as the server sends them. */
   @property({ attribute: false }) notices: KitchenNotice[] = [];
+  /** Unread: the board is the only drawing. */
   @property() view: "kanban" | "rail" = "kanban";
   /** The station these items are AT; a bump without one (its own or its group's) sends nothing. */
   @property() stationId?: string;
@@ -618,7 +594,6 @@ export class TillStationQueue extends LitElement {
   @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
   /** For an enrolled device display: collection needs a session, so its button is hidden. */
   @property({ type: Boolean }) advanceOnly = false;
-  /** Rail-only, like collect: kanban columns cut across orders, so a per-order action has no home there. */
   @property({ type: Boolean }) showReprint = false;
   @property({ type: Boolean }) canMove = false;
   /** Injectable clock for age colouring. Set in tests for deterministic bands. */
@@ -704,24 +679,6 @@ export class TillStationQueue extends LitElement {
     return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
   }
 
-  /** A party's bill sections by the group each dish was sent in; lines with no group come first. */
-  #groupSections(group: StationQueueGroup): GroupSection[] {
-    const byGroup = new Map<string | null, GroupSection>();
-    for (const item of group.items) {
-      const sent = item.group ?? null;
-      const key = sent === null ? null : sent.id;
-      let section = byGroup.get(key);
-      if (section === undefined) {
-        section = { group: sent, items: [] };
-        byGroup.set(key, section);
-      }
-      section.items.push(item);
-    }
-    const position = (section: GroupSection) =>
-      section.group === null ? Number.NEGATIVE_INFINITY : section.group.position;
-    return [...byGroup.values()].sort((a, b) => position(a) - position(b));
-  }
-
   /** Never a fresh `Date.now()` call, so every render in one tick sees the identical `now`. */
   #clockNow(): number {
     return this.now ?? this.#clock.now;
@@ -762,9 +719,7 @@ export class TillStationQueue extends LitElement {
     if (this.groups.length === 0) {
       return html`<p class="empty">${t("station.empty")}</p>`;
     }
-    return html`${this.#header()}${
-      this.view === "rail" ? this.#rail() : html`${this.#printProblems()}${this.#board()}`
-    }`;
+    return html`${this.#header()}${this.#board()}`;
   }
 
   #notices(): TemplateResult | typeof nothing {
@@ -853,46 +808,10 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  #rail(): TemplateResult {
-    return html`<div class="rail">
-      ${this.groups.map((group) => {
-        const band = this.#band(group);
-        return html`<article
-          class="ticket ${this.#accentClasses(band)}"
-          data-order=${group.orderNumber}
-        >
-          <div class="ticket-head">
-            <span class="number">${orderNumber(group.orderNumber, group.formerNumbers)}</span>
-            ${kitchenAllergyMarker(group.items.some((item) => item.allergy !== null))}
-            ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
-            <span class="age"
-              >${this.#elapsedMinutes(Date.parse(group.queuedAt))} ${t("station.min")}</span
-            >
-          </div>
-          ${group.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(group) : nothing}
-          ${this.#kitchenNote(group)}
-          ${
-            group.printProblem
-              ? html`<p class="print-problem" data-print-problem>${t("station.print_problem")}</p>`
-              : nothing
-          }
-          ${
-            group.party === undefined
-              ? this.#courseSections(group.items).map((section) =>
-                  this.#courseSection(section, (item) => this.#line(group, item)),
-                )
-              : this.#groupSections(group).map((section) => this.#groupSection(group, section))
-          }
-          ${this.#elsewhere(group)} ${this.#collectAction(group)} ${this.#reprintAction(group)}
-        </article>`;
-      })}
-    </div>`;
-  }
-
-  #elsewhere(group: StationQueueGroup): TemplateResult | typeof nothing {
+  #elsewhere(group: StationQueueGroup, tag: string): TemplateResult | typeof nothing {
     if (!group.elsewhere?.length) return nothing;
     return html`<section class="elsewhere" data-elsewhere=${group.orderId}>
-      <h3 class="elsewhere-head">${t("station.elsewhere")}</h3>
+      <h3 class="elsewhere-head">${t("station.elsewhere")}${tag}</h3>
       <ul class="elsewhere-lines">
         ${group.elsewhere.map(
           (item) =>
@@ -936,43 +855,9 @@ export class TillStationQueue extends LitElement {
     });
   }
 
-  #groupSection(group: StationQueueGroup, section: GroupSection): TemplateResult {
-    const sent = section.group;
-    const name = sent === null ? "" : groupName(sent);
-    return html`<div class="course" data-group-section=${sent?.id ?? "none"}>
-      ${
-        sent === null
-          ? nothing
-          : html`<div class="course-head">
-              ${name}${
-                sent.state === "held"
-                  ? html` ·
-                      <span class="held-note" data-group-held>${t("station.group_held")}</span>`
-                  : nothing
-              }
-            </div>`
-      }
-      <ul class="lines">
-        ${this.#sectionLines(section.items, (item) => this.#line(group, item))}
-      </ul>
-    </div>`;
-  }
-
-  /** Kanban columns cut across orders, so the orders whose tickets have not printed are named above them. */
-  #printProblems(): TemplateResult | typeof nothing {
-    const troubled = this.groups.filter((group) => group.printProblem);
-    if (troubled.length === 0) return nothing;
-    const orders = troubled
-      .map((group) => `#${group.orderNumber}${group.label ? ` · ${group.label}` : ""}`)
-      .join(", ");
-    return html`<p class="print-problem print-problems" data-print-problems>
-      ${t("station.print_problem")}: ${orders}
-    </p>`;
-  }
-
   /** Collect is offered on settled orders only; a sent, unpaid counter order is handed over from the
    * counter's waiting list instead. */
-  #collectAction(group: StationQueueGroup): TemplateResult | typeof nothing {
+  #collectAction(group: StationQueueGroup, tag: string): TemplateResult | typeof nothing {
     if (this.advanceOnly) return nothing;
     if (group.status !== "settled") return nothing;
     return html`<button
@@ -981,13 +866,13 @@ export class TillStationQueue extends LitElement {
       aria-label=${`${t("station.collect")} #${group.orderNumber}`}
       @click=${() => this.#collect(group)}
     >
-      ${t("station.collect")}
+      ${t("station.collect")}${tag}
     </button>`;
   }
 
-  /** Its accessible name is the slotted "Reprint" text; the order context comes from the card heading,
-   * so no `aria-label` is added. */
-  #reprintAction(group: StationQueueGroup): TemplateResult | typeof nothing {
+  /** Its accessible name is the slotted text: on a one-bill card the heading gives the bill, so no
+   * `aria-label` is added. */
+  #reprintAction(group: StationQueueGroup, tag: string): TemplateResult | typeof nothing {
     if (!this.showReprint) return nothing;
     return html`<wt-button
       class="reprint"
@@ -995,7 +880,7 @@ export class TillStationQueue extends LitElement {
       variant="secondary"
       @click=${() => this.#reprint(group)}
     >
-      ${t("station.reprint")}
+      ${t("station.reprint")}${tag}
     </wt-button>`;
   }
 
@@ -1023,6 +908,9 @@ export class TillStationQueue extends LitElement {
         : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
     const labels = [...new Set(card.orders.map((order) => order.label).filter((label) => !!label))];
     const row = (item: StationQueueItem) => this.#renderLine(card.orderOf.get(item.id)!, item);
+    // On a card merging bills, each bill's facts and actions name their bill (D11).
+    const tag = (order: StationQueueGroup) =>
+      card.orders.length === 1 ? "" : ` #${order.orderNumber}`;
     return html`<article
       class="ticket ${accent}"
       data-card=${card.key}
@@ -1051,7 +939,8 @@ export class TillStationQueue extends LitElement {
         }
       </div>
       ${card.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(first) : nothing}
-      ${card.orders.map((order) => this.#kitchenNote(order))}
+      ${card.orders.map((order) => this.#kitchenNote(order, tag(order)))}
+      ${card.orders.map((order) => this.#printProblem(order, tag(order)))}
       ${
         group === null
           ? this.#courseSections(card.items).map((section) => this.#courseSection(section, row))
@@ -1059,14 +948,23 @@ export class TillStationQueue extends LitElement {
               ${this.#sectionLines(card.items, row)}
             </ul>`
       }
+      ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
+      ${card.orders.map((order) => this.#collectAction(order, tag(order)))}
+      ${card.orders.map((order) => this.#reprintAction(order, tag(order)))}
     </article>`;
   }
 
-  #kitchenNote(group: StationQueueGroup): TemplateResult | typeof nothing {
+  #kitchenNote(group: StationQueueGroup, tag: string): TemplateResult | typeof nothing {
     return group.kitchenNote
       ? html`<p class="kitchen-note" data-kitchen-note>
-          ${t("kitchen_note.heading")}: ${group.kitchenNote}
+          ${t("kitchen_note.heading")}${tag}: ${group.kitchenNote}
         </p>`
+      : nothing;
+  }
+
+  #printProblem(group: StationQueueGroup, tag: string): TemplateResult | typeof nothing {
+    return group.printProblem
+      ? html`<p class="print-problem" data-print-problem>${t("station.print_problem")}${tag}</p>`
       : nothing;
   }
 
@@ -1079,22 +977,11 @@ export class TillStationQueue extends LitElement {
     return item.firedAt !== null && NEXT[item.state] !== undefined;
   }
 
-  #line(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
-    const state = html`<span class="line-state"
-      >${t(`station.state.${item.state}` as const)}</span
-    >`;
-    return this.#renderLine(group, item, state);
-  }
-
-  #renderLine(
-    group: MergedQueueGroup,
-    item: StationQueueItem,
-    secondary: TemplateResult | typeof nothing = nothing,
-  ): TemplateResult {
+  #renderLine(group: MergedQueueGroup, item: StationQueueItem): TemplateResult {
     const station =
       group.stationId === undefined ? undefined : this.stationNames?.get(group.stationId);
     const main = html`<span class="line-main">
-        <span class="line-name">${this.#dish(item)}</span>${secondary} </span
+        <span class="line-name">${this.#dish(item)}</span> </span
       >${
         station === undefined
           ? nothing

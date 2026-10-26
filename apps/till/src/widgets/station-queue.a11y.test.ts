@@ -571,15 +571,6 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("the kanban printing-problem strip has no violations", async () => {
-    const { host } = await mountWidget<TillStationQueue>(
-      "till-station-queue",
-      { groups: partyGroups, stationId: "st-1", view: "kanban" },
-      theme,
-    );
-    await expectNoA11yViolations(host);
-  });
-
   it("the notices strip, one of each kind, above the kanban board has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

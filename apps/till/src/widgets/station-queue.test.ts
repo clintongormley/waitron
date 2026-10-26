@@ -149,14 +149,15 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
   });
 
-  it("kanban omits the other-stations section", async () => {
+  it("board: the bill's card shows its other stations' dishes", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [withElsewhere],
-      view: "kanban",
       stationId: "st-1",
     });
-    expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Burger");
+    const section = el.shadowRoot!.querySelector('[data-card] [data-elsewhere="wo-1"]')!;
+    expect(section.querySelector('[data-elsewhere-item="other-burger"]')!.textContent).toContain(
+      "2× Burger",
+    );
   });
 
   it("rail translates the other-stations heading and held state into Spanish", async () => {
@@ -309,14 +310,15 @@ describe("till-station-queue", () => {
     expect(text("ti-g")).toContain("200 g× Almendras");
   });
 
-  it("kanban: each cell shows its quantity × dish name alongside the order number", async () => {
+  it("board: each dish shows its quantity × dish name, and its card's heading the order number", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       stationId: "st-1",
     });
     const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]')!;
     expect(cell.textContent).toContain("2× Paella");
-    expect(cell.textContent).toContain("5");
+    const number = cell.closest("[data-card]")!.querySelector(".ticket-head .number")!;
+    expect(number.textContent!.trim()).toBe("#5");
   });
 
   describe("the numbers an order's dishes were sent to the kitchen under", () => {
@@ -956,12 +958,13 @@ describe("till-station-queue", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("kanban: no per-order collect button (the handover is a rail-card, counter-side action)", async () => {
+  it("board: a settled bill's card shows its collect button; a placed bill's card does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups, // groupB is settled, but kanban cells cut across orders — no per-order card to host it
+      groups,
       stationId: "st-1",
     });
-    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="6"] [data-collect="wo-2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="5"] [data-collect]')).toBeNull();
   });
 
   it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route, §3d)", async () => {
@@ -995,13 +998,14 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('[data-reprint="wo-2"]')).not.toBeNull();
   });
 
-  it("kanban: no per-order reprint button even with showReprint (it is a rail-card action)", async () => {
+  it("board: showReprint puts a reprint button on each bill's card", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups, // kanban cells cut across orders — no per-order card to host a reprint
+      groups,
       stationId: "st-1",
       showReprint: true,
     });
-    expect(el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="5"] [data-reprint="wo-1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="6"] [data-reprint="wo-2"]')).not.toBeNull();
   });
 
   it("rail: tapping the reprint button emits reprint-order { orderId }, composed and bubbling", async () => {
@@ -1892,8 +1896,8 @@ const partyOrder: StationQueueGroup = {
 };
 
 describe("till-station-queue — a seated party's groups", () => {
-  const sections = (el: TillStationQueue) => [
-    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-section]"),
+  const cards = (el: TillStationQueue) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]"),
   ];
 
   it("keeps permanent heading numbers when firing positions change", async () => {
@@ -1917,43 +1921,41 @@ describe("till-station-queue — a seated party's groups", () => {
           })),
         },
       ],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
-    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-4", "g-2", "g-3"]);
-    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+    expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-4", "g-3", "g-2"]);
+    expect(cards(el)[1]!.querySelector(".ticket-head")!.textContent).toContain(
       `${t("table.group_n").replace("{n}", "4")} · Terrace 7`,
     );
     expect(el.shadowRoot!.querySelector('[data-fire-group="g-4"]')).toBeNull();
   });
 
-  it("rail: sections a party's card by group position, the lines with no group first, and no course headers", async () => {
+  it("draws a party's bill as one card per sent group, the dishes with no group first, and no course headers", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
     });
-    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-2", "g-3", "g-4"]);
-    expect(sections(el)[0]!.querySelector(".course-head")).toBeNull();
-    expect(sections(el)[0]!.querySelector('[data-item="it-moved"]')).not.toBeNull();
-    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+    expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-3", "g-4", "g-2"]);
+    const [moved, held, , fired] = cards(el);
+    expect(moved!.querySelector(".group-name")).toBeNull();
+    expect(moved!.querySelector('[data-item="it-moved"]')).not.toBeNull();
+    expect(fired!.querySelector(".ticket-head")!.textContent).toContain(
       t("table.group_n").replace("{n}", "2"),
     );
     expect(
-      [...sections(el)[2]!.querySelectorAll<HTMLElement>("[data-item]")].map((i) => i.dataset.item),
+      [...held!.querySelectorAll<HTMLElement>("[data-item]")].map((i) => i.dataset.item),
     ).toEqual(["it-steak", "it-fish"]);
-    expect(el.shadowRoot!.querySelector("[data-course]")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".course-head")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain("Principales");
   });
 
-  it("rail: a held group says it is held, not released, and its lines are greyed and not bump targets", async () => {
+  it("a held group's card says it is held, not released, and its lines are greyed and not bump targets", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
     });
-    const [, fired, held] = sections(el);
+    const [, held, , fired] = cards(el);
     expect(held!.querySelector("[data-group-held]")!.textContent).toContain(
       t("station.group_held"),
     );
@@ -2067,36 +2069,6 @@ describe("till-station-queue — printing problems", () => {
     });
     expect(device.el.shadowRoot!.querySelector("[data-print-problem]")).not.toBeNull();
     expect(device.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
-  });
-
-  it("kanban: names each order whose ticket has not printed above the columns", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [troubled, groupB],
-      stationId: "st-1",
-    });
-    const strip = el.shadowRoot!.querySelector("[data-print-problems]")!;
-    expect(strip.textContent).toContain(t("station.print_problem"));
-    expect(strip.textContent).toContain("#5 · Mesa 4");
-    expect(strip.textContent).not.toContain("#6");
-  });
-
-  it("kanban: an order with no label is named by its number alone", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [{ ...groupB, printProblem: true }],
-      stationId: "st-1",
-    });
-    const strip = el.shadowRoot!.querySelector("[data-print-problems]")!;
-    expect(strip.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      `${t("station.print_problem")}: #6`,
-    );
-  });
-
-  it("kanban: no strip while every ticket printed", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      stationId: "st-1",
-    });
-    expect(el.shadowRoot!.querySelector("[data-print-problems]")).toBeNull();
   });
 });
 
@@ -2799,11 +2771,15 @@ describe("till-station-queue — a dish sent after its period", () => {
             party: { id: "v-4", revision: 1 },
           },
         ],
-        view: "rail",
         stationId: "st-1",
       })
     ).el;
-    expect(rows(el)).toEqual([
+    const cardRows = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")].map((card) =>
+      [...card.querySelectorAll<HTMLElement>("[data-after-period], [data-item]")].map(
+        (row) => row.dataset.item ?? row.textContent!.trim(),
+      ),
+    );
+    expect(cardRows).toEqual([
       ["After Lunch — agreed", "tortilla"],
       ["After Lunch — agreed", "entrecot"],
     ]);
@@ -3006,6 +2982,120 @@ describe("the board's cards", () => {
     expect(mixed!.classList.contains("held")).toBe(false);
     expect(getComputedStyle(mixed!).borderTopStyle).toBe("solid");
     expect(flat(mixed!.querySelector(".ticket-head .age")!)).toBe(`7 ${t("station.min")}`);
+  });
+
+  const elsewhereDish = {
+    id: "other-burger",
+    name: "Burger",
+    quantity: "1.000",
+    unitName: null,
+    unitPrecision: null,
+    soldInEach: true,
+    stationName: "Grill",
+    state: "preparing" as const,
+    held: false,
+  };
+  const troubledBill = (
+    orderId: string,
+    orderNumber: number,
+    items: StationQueueItem[],
+  ): StationQueueGroup => ({
+    ...bill(orderId, orderNumber, items),
+    status: "settled",
+    kitchenNote: `No salt on ${orderNumber}`,
+    printProblem: true,
+    elsewhere: [{ ...elsewhereDish, id: `other-${orderNumber}` }],
+  });
+
+  it("shows the bill's note, printing problem, other stations' dishes, Collect and Reprint on each of its cards", async () => {
+    const twoGroups = [
+      troubledBill("wo-1", 12, [
+        dish("first", "2026-08-17T10:00:00.000Z", { group: sent("g-1", 1) }),
+        dish("second", "2026-08-17T10:20:00.000Z", { group: sent("g-2", 2) }),
+      ]),
+    ];
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: twoGroups,
+      stationId: "st-1",
+      showReprint: true,
+    });
+    const cards = cardsIn(el.shadowRoot!);
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-1", "g-2"]);
+    const collected = vi.fn();
+    const reprinted = vi.fn();
+    el.addEventListener("mark-collected", (e) => collected((e as CustomEvent).detail));
+    el.addEventListener("reprint-order", (e) => reprinted((e as CustomEvent).detail));
+    for (const card of cards) {
+      expect(flat(card.querySelector("[data-kitchen-note]")!)).toBe(
+        `${t("kitchen_note.heading")}: No salt on 12`,
+      );
+      expect(flat(card.querySelector("[data-print-problem]")!)).toBe(t("station.print_problem"));
+      const elsewhere = card.querySelector('[data-elsewhere="wo-1"]')!;
+      expect(flat(elsewhere.querySelector("h3")!)).toBe(t("station.elsewhere"));
+      expect(flat(elsewhere.querySelector('[data-elsewhere-item="other-12"]')!)).toContain(
+        "1× Burger",
+      );
+      expect(flat(card.querySelector('[data-collect="wo-1"]')!)).toBe(t("station.collect"));
+      const reprint = card.querySelector<HTMLElement>('[data-reprint="wo-1"]')!;
+      expect(flat(reprint)).toBe(t("station.reprint"));
+      card.querySelector<HTMLElement>('[data-collect="wo-1"]')!.click();
+      reprint.click();
+    }
+    expect(collected.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-1" }]]);
+    expect(reprinted.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-1" }]]);
+    expect(el.shadowRoot!.querySelector("[data-print-problems]")).toBeNull();
+
+    const device = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: twoGroups,
+      stationId: "st-1",
+      advanceOnly: true,
+    });
+    expect(cardsIn(device.el.shadowRoot!)).toHaveLength(2);
+    expect(device.el.shadowRoot!.querySelectorAll("[data-print-problem]")).toHaveLength(2);
+    expect(device.el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+    expect(device.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+  });
+
+  it("on a group's card spanning two bills, names each bill's note, printing problem and Reprint", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        troubledBill("wo-1", 12, [
+          dish("bill-1-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+        troubledBill("wo-2", 13, [
+          dish("bill-2-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+      ],
+      stationId: "st-1",
+      showReprint: true,
+    });
+    const [card, ...others] = cardsIn(el.shadowRoot!);
+    expect(others).toHaveLength(0);
+    expect([...card!.querySelectorAll("[data-kitchen-note]")].map(flat)).toEqual([
+      `${t("kitchen_note.heading")} #12: No salt on 12`,
+      `${t("kitchen_note.heading")} #13: No salt on 13`,
+    ]);
+    expect([...card!.querySelectorAll("[data-print-problem]")].map(flat)).toEqual([
+      `${t("station.print_problem")} #12`,
+      `${t("station.print_problem")} #13`,
+    ]);
+    expect([...card!.querySelectorAll("[data-elsewhere] h3")].map(flat)).toEqual([
+      `${t("station.elsewhere")} #12`,
+      `${t("station.elsewhere")} #13`,
+    ]);
+    expect([...card!.querySelectorAll("[data-collect]")].map(flat)).toEqual([
+      `${t("station.collect")} #12`,
+      `${t("station.collect")} #13`,
+    ]);
+    const reprints = [...card!.querySelectorAll<HTMLElement>("[data-reprint]")];
+    expect(reprints.map(flat)).toEqual([
+      `${t("station.reprint")} #12`,
+      `${t("station.reprint")} #13`,
+    ]);
+    const reprinted = vi.fn();
+    el.addEventListener("reprint-order", (e) => reprinted((e as CustomEvent).detail));
+    for (const reprint of reprints) reprint.click();
+    expect(reprinted.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-2" }]]);
   });
 
   it("keeps a long dish name whole inside its card at 1024 px", async () => {
