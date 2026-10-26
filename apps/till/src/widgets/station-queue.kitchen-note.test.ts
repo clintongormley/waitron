@@ -6,12 +6,13 @@ import { es } from "../i18n/strings.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
+const queuedAt = new Date().toISOString();
 const group = {
   orderId: "order-a",
   orderNumber: 7,
   label: "Table 4",
   status: "placed",
-  queuedAt: new Date().toISOString(),
+  queuedAt,
   kitchenNote: "Train at 14:30 <keep together>",
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   bumpMode: "line",
@@ -25,6 +26,7 @@ const group = {
       quantity: "1.000",
       course: null,
       firedAt: new Date().toISOString(),
+      queuedAt,
       note: "No onions",
     },
   ],

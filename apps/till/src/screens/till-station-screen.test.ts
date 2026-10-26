@@ -70,6 +70,7 @@ const kitchenQueue: StationQueueGroup[] = [
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -95,6 +96,7 @@ const barQueue: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:05:00.000Z",
+        queuedAt: "2026-08-17T10:05:00.000Z",
       },
     ],
   },
@@ -1042,6 +1044,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             // A HELD later course — normally fireable under `fire_control = 'kitchen'`.
             course: { id: "co-h", name: "Principales", displayOrder: 2 },
             firedAt: null,
+            queuedAt: "2026-08-17T10:00:00.000Z",
           },
         ],
       },
@@ -1190,6 +1193,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             quantity: "1.000",
             course: null,
             firedAt: "2026-08-17T10:00:00.000Z",
+            queuedAt: "2026-08-17T10:00:00.000Z",
           },
           {
             allergy: null,
@@ -1200,6 +1204,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             quantity: "1.000",
             course: null,
             firedAt: "2026-08-17T10:00:00.000Z",
+            queuedAt: "2026-08-17T10:00:00.000Z",
           },
         ],
       },
@@ -1316,6 +1321,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
           quantity: "1.000",
           course: null,
           firedAt,
+          queuedAt: firedAt,
         },
         {
           allergy: null,
@@ -1326,6 +1332,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
           quantity: "1.000",
           course: null,
           firedAt: null,
+          queuedAt: firedAt,
         },
         {
           allergy: null,
@@ -1336,6 +1343,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
           quantity: "1.000",
           course: null,
           firedAt,
+          queuedAt: firedAt,
         },
       ],
     },

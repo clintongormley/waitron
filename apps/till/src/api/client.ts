@@ -1567,6 +1567,8 @@ export interface StationQueueItem {
   /** `null` while the item's course is HELD — not advanceable (`ticket.item_held`); a timestamp once
    *  fired. */
   firedAt: string | null;
+  /** When this dish joined the queue: set at fire, and again when a release re-routes it. */
+  queuedAt: string;
   /** The NON-FISCAL kitchen note as frozen at fire, so a later edit never changes what the cook sees. */
   note?: string | null;
 }
@@ -1642,8 +1644,8 @@ export interface StationQueue {
 }
 
 /**
- * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
- * group's ordering key and the age-colouring anchor.
+ * One order's lines at a station. `queuedAt` is that of the order's oldest line at this station; the
+ * merged screen's ordering key.
  */
 export interface StationQueueGroup {
   kitchenNote: string | null;

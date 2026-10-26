@@ -36,6 +36,7 @@ const groupA: StationQueueGroup = {
       quantity: "2.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -46,6 +47,7 @@ const groupA: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
@@ -69,6 +71,7 @@ const groupB: StationQueueGroup = {
       quantity: "3.000",
       course: null,
       firedAt: "2026-08-17T10:05:00.000Z",
+      queuedAt: "2026-08-17T10:05:00.000Z",
     },
   ],
 };
@@ -442,6 +445,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
         },
       ],
     };
@@ -472,6 +476,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           modifiers: [
             { descriptions: { "es-ES": "Grande" } },
             { descriptions: { "es-ES": "Leche avena" } },
@@ -574,6 +579,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           note: "sin sal",
         },
       ],
@@ -658,6 +664,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: { milk: {} }, pending: false },
         },
       ],
@@ -682,6 +689,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: {}, pending: true },
         },
       ],
@@ -775,6 +783,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] },
         },
       ],
@@ -1193,6 +1202,7 @@ const coursedOrder: StationQueueGroup = {
       // Principales — HELD (fired_at null), display_order 2: must render LAST despite being listed first.
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1204,6 +1214,7 @@ const coursedOrder: StationQueueGroup = {
       // Entrantes — FIRED, display_order 1: renders after the null course, before Principales.
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1215,6 +1226,7 @@ const coursedOrder: StationQueueGroup = {
       // The null course must render FIRST, and carries no header.
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
@@ -1850,6 +1862,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1861,6 +1874,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1871,6 +1885,7 @@ const partyOrder: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1882,6 +1897,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-dessert", name: "Postres", displayOrder: 3 },
       group: { id: "g-4", position: 4, displayNumber: 4, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1893,6 +1909,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
@@ -2472,6 +2489,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -2482,6 +2500,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: { id: "co-main", name: "Principales", displayOrder: 2 },
         firedAt: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -2492,6 +2511,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -2502,6 +2522,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       // An extra prepared at its own station is its own queue item, named "for" its dish
       // (apps/server/src/split-off-extras.queue.test.ts); the till moves dishes only.
@@ -2514,6 +2535,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
       },
     ],
@@ -2610,6 +2632,7 @@ describe("till-station-queue — where Move sits", () => {
     quantity: "1.000",
     course: null,
     firedAt: "2026-08-17T10:00:00.000Z",
+    queuedAt: "2026-08-17T10:00:00.000Z",
   });
   const order: StationQueueGroup = {
     kitchenNote: null,

@@ -3354,6 +3354,7 @@ describe("TillApi", () => {
                   quantity: "2.000",
                   course: null,
                   firedAt: "2026-08-17T10:00:00.000Z",
+                  queuedAt: "2026-08-17T10:00:00.000Z",
                 },
               ],
             },

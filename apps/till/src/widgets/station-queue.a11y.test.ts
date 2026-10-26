@@ -45,6 +45,7 @@ const groups: StationQueueGroup[] = [
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -56,6 +57,7 @@ const groups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -67,6 +69,7 @@ const groups: StationQueueGroup[] = [
         quantity: "3.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -89,6 +92,7 @@ const groups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:05:00.000Z",
+        queuedAt: "2026-08-17T10:05:00.000Z",
       },
     ],
   },
@@ -116,6 +120,7 @@ const coursedGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -126,6 +131,7 @@ const coursedGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -137,6 +143,7 @@ const coursedGroups: StationQueueGroup[] = [
         // HELD — greyed and non-advanceable.
         course: { id: "co-main", name: "Principales", displayOrder: 2 },
         firedAt: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -162,6 +169,7 @@ const modifierGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         modifiers: [
           { descriptions: { "es-ES": "Grande" } },
           { descriptions: { "es-ES": "Leche avena" } },
@@ -191,6 +199,7 @@ const customisationGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         note: "sin sal",
       },
     ],
@@ -217,6 +226,7 @@ const allergenGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServed: { allergens: { milk: {} }, pending: false },
       },
       {
@@ -228,6 +238,7 @@ const allergenGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServed: { allergens: {}, pending: true },
       },
     ],
@@ -254,6 +265,7 @@ const dietGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [], halal: "yes" },
       },
       {
@@ -265,6 +277,7 @@ const dietGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
       },
       {
@@ -276,6 +289,7 @@ const dietGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
       },
     ],
@@ -354,6 +368,7 @@ const partyGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -365,6 +380,7 @@ const partyGroups: StationQueueGroup[] = [
         course: null,
         group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -376,6 +392,7 @@ const partyGroups: StationQueueGroup[] = [
         course: null,
         group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
         firedAt: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },

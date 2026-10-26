@@ -56,6 +56,7 @@ const groups: StationQueueGroup[] = [
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -66,6 +67,7 @@ const groups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -76,6 +78,7 @@ const groups: StationQueueGroup[] = [
         quantity: "3.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -99,6 +102,7 @@ const groups: StationQueueGroup[] = [
         // A HELD later course (fired_at null) — greyed + non-advanceable, and the kitchen-fire target.
         course: { id: "co-2", name: "Postres", displayOrder: 2 },
         firedAt: null,
+        queuedAt: "2026-08-17T10:05:00.000Z",
       },
     ],
   },

@@ -52,6 +52,7 @@ export function allergyQueue(): StationQueueGroup {
         quantity: "1.000",
         course: null,
         firedAt: allergyTime,
+        queuedAt: allergyTime,
         note: "Dish's own note",
       },
       {
@@ -63,6 +64,7 @@ export function allergyQueue(): StationQueueGroup {
         quantity: "2.000",
         course: null,
         firedAt: allergyTime,
+        queuedAt: allergyTime,
       },
     ],
   };
