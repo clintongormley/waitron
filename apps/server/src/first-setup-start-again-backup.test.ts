@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   access,
+  chmod,
   lstat,
+  mkdir,
   readFile,
   readdir,
   realpath,
@@ -1256,6 +1258,31 @@ it("a power cut during the attempt's deletion: the start finishes it beside the 
   expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
 });
 
+it("a file in the discarded recovery that cannot be deleted: Start again's refusal keeps the file system's errno in its log reason", async () => {
+  const f = await placementFailed();
+  const stuck = join(f.record.target.target.stateDir, "stuck");
+  await mkdir(stuck);
+  await writeFile(join(stuck, "leftover"), "leftover");
+  await chmod(stuck, 0o500);
+  try {
+    const { run } = await startAgainOver(f, f.service);
+    const error = await run().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "setup.start_again_incomplete" });
+    const path = join(
+      f.roots.stateDir,
+      "first-setup-resolutions",
+      "backup-recovery",
+      f.session.recoveryId,
+    );
+    expect((error as AppError).reason).toBe(
+      `emptying failed: unknown EACCES ${await realpath(path)}`,
+    );
+    await access(join(stuck, "leftover"));
+  } finally {
+    await chmod(stuck, 0o700);
+  }
+});
+
 it("an emptying refused at the start, a symlink in the recovery: the repair page is served, the refusal is logged with its reason, and nothing is deleted", async () => {
   const f = await placementFailed();
   const outside = join(dirname(f.roots.stateDir), "outside");
@@ -1357,12 +1384,9 @@ it("a disk that fills after the abandon, before the target's lock: Start again a
   expect(lines).toContainEqual({
     event: "setup.start_again_incomplete",
     fields: expect.objectContaining({
-      logReason: expect.stringMatching(/^emptying failed: \S+ /),
+      logReason: `emptying failed: provisioning.database_unreachable ERR_SQLITE_ERROR ${await realpath(path)}`,
     }),
   });
-  const logReason = lines.find(({ event }) => event === "setup.start_again_incomplete")!.fields!
-    .logReason as string;
-  expect(logReason.endsWith(` ${await realpath(path)}`)).toBe(true);
   await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(1));
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
   expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);

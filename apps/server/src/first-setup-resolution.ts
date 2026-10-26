@@ -34,6 +34,7 @@ import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import type { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
 import { startFailureCode } from "./boot-failure.js";
+import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
 
@@ -459,10 +460,11 @@ export function createFirstSetupResolutionActions(
                   found.id,
                 );
                 const code = await startFailureCode(error, [box.venueDir, box.stateDir]);
+                const reason = ["emptying failed:", code, errnoOf(error), path];
                 throw new AppError(
                   "setup.start_again_incomplete",
                   {},
-                  { reason: `emptying failed: ${code} ${path}` },
+                  { reason: reason.filter((part) => part !== undefined).join(" ") },
                 );
               },
             );

@@ -961,7 +961,7 @@ export function mountFirstSetupResolutionApi(
               : { owner: firstFiscalOwner(c) }),
           });
         } catch (error) {
-          // The next start finishes what Start again left, or serves the recovery page.
+          // The next start tries to finish what Start again left.
           if (error instanceof AppError && error.code === "setup.start_again_incomplete")
             setTimeout(() => options.requestRestart?.(), 0);
           throw error;
