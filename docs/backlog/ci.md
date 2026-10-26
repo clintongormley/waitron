@@ -336,6 +336,14 @@ failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
 
 ## Decisions and deliberate limits
 
+- **The floor suites' fixed till-API clock keeps the system clock's time-zone offset (A1117,
+  #2100).** `{ ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) }` changes only the
+  instant, so on the review machine it reported an offset of 60 minutes where Madrid on 10 October
+  is 120. The floor code these suites reach reads the instant only, and none of them writes a fiscal
+  record through the API; `floor-today-mark-moved` and `floor-catch-up` built their clocks the same
+  way before. If one of these suites starts recording a sale through the API, give its clock the
+  offset of its fixed instant.
+
 - **Upgrade-test work budget follows the migration count (A489, 2026-10-11) and counts the walk's
   own processor time (A751, 2026-10-16).** The captured 110.242-second walk exceeded the old fixed
   deadline near its final step. Keep the workload budget and remeasure it when a new reset changes
