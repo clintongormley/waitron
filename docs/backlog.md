@@ -129,8 +129,8 @@ come after the list above:
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
   the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md). Slice 7
   (the Ready bar's warning: once a ready dish has waited its station's Ready warning time the bar
-  turns amber, pulses slowly, shows the minutes and puts those tables first) is in flight on
-  `feat/a797-7-ready-bar-warning`, from the build plan's slice 7; slice 8 (the kitchen screen's group cards) is next, taking
+  turns amber, pulses slowly, shows the minutes and puts those tables first) landed in #2113,
+  from the build plan's slice 7; slice 8 (the kitchen screen's group cards) is next, taking
   turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
@@ -2656,8 +2656,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the build plan's slice 6; slice 7 (the Ready bar's warning) is in flight on
-  `feat/a797-7-ready-bar-warning`, and slice 8 (the kitchen screen's group cards) is next:
+  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, and slice 8 (the kitchen screen's group cards) is next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate

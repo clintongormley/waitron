@@ -1046,7 +1046,7 @@ may predate that branch:
   time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from the plan's
   slice 6. Slice 7 (the Ready bar's warning: once a ready dish has waited its station's Ready
   warning time the bar turns amber, pulses slowly, shows the minutes and puts those tables first)
-  is in flight on `feat/a797-7-ready-bar-warning`, from the plan's slice 7; slice 8 (the kitchen screen's group cards) is
+  landed in #2113, from the plan's slice 7; slice 8 (the kitchen screen's group cards) is
   next, taking turns with lane G's A773-2 on the station screen (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
