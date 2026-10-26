@@ -57,6 +57,19 @@ obtiene con **Copia de tus datos**, con su `README.txt` en el idioma que eligió
 no eligió ninguno, en el idioma del local. Los gerentes no ven esta acción. Waitron no guarda una
 lista de estas solicitudes, así que anota la solicitud y tu respuesta en los registros del local.
 
+## Descargar los datos de un cliente de factura {#invoice-customer-data}
+
+Cuando un cliente pregunta qué datos suyos tiene el local, un administrador puede buscar sus
+facturas completas por el NIF y descargarlas. En **Pedidos**, pulsa **Buscar un cliente por NIF**,
+escribe el número y pulsa **Buscar**. Las mayúsculas, los espacios, los puntos, los guiones y un ES
+al principio no cambian nada. La ventana muestra todas las facturas completas que llevan ese NIF;
+pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada factura, un archivo
+`invoices.json` con el nombre, el NIF y la dirección de cada una y todas las direcciones de correo
+a las que la caja la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
+gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
+Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
+registros del local.
+
 ## Eliminar un rol de personal {#delete-staff-role}
 
 En la lista de roles de personal, elige **Eliminar** en el menú del rol. La ventana muestra
