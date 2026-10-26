@@ -203,6 +203,7 @@ it.each([
   ["getReceiptLanguage", [], "locations"],
   ["getVenueDefaults", [], "locations"],
   ["getVenueDefaults", [], "catalogue_settings"],
+  ["getVenuePrivacy", [], "tenants"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_tables"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_table_parts"],
@@ -775,6 +776,11 @@ it("subscribes the venue defaults to the location and the catalogue settings alo
     { type: "locations" },
     { type: "catalogue_settings" },
   ]);
+});
+
+it("subscribes the venue's privacy contact to the taxpayer row alone", () => {
+  const api = new DashboardApi("", async () => new Response("{}"));
+  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([{ type: "tenants" }]);
 });
 
 it.each([
