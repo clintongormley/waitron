@@ -166,6 +166,19 @@ it("Save sends only the changed field, closes the form and shows the answer", as
   ]);
 });
 
+it("Save sends a changed field as the draft holds it, surrounding spaces included", async () => {
+  const r = rig(STORED);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyNoticeUrl", "  https://example.com/new  ");
+  expect(input(el, "privacyNoticeUrl")!.value).toBe("  https://example.com/new  ");
+  await save(el);
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(r.api.putVenuePrivacy.mock.calls).toEqual([
+    [{ privacyNoticeUrl: "  https://example.com/new  " }],
+  ]);
+});
+
 it("emptying a field sends an empty string and shows Not set", async () => {
   const r = rig(STORED);
   const el = await mount(r.api);
@@ -306,8 +319,8 @@ it("Enter in a field saves", async () => {
 });
 
 it.each([
-  ["privacyNoticeUrl", "https://cafeter\u00eda.es/privacidad"],
-  ["privacyEmail", "privacidad@cafeter\u00eda.es"],
+  ["privacyNoticeUrl", "https://caf\u00e9.example.com/privacy"],
+  ["privacyEmail", "privacy@caf\u00e9.example.com"],
 ])(
   "an accented domain typed into %s reaches the draft and the request unchanged",
   async (name, value) => {
