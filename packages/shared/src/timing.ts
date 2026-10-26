@@ -14,6 +14,10 @@ export const DEFAULT_STATION_THRESHOLDS: Readonly<StationThresholds> = {
   forgottenAfterMinutes: 15,
 };
 
+export const DEFAULT_READY_WARNING_AFTER_MINUTES = 3;
+
+export type StationTiming = StationThresholds & { readyWarningAfterMinutes: number };
+
 export const BAND_RANK: Record<TimingBand, number> = {
   fresh: 0,
   warm: 1,

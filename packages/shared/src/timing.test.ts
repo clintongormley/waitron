@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BAND_RANK, DEFAULT_STATION_THRESHOLDS, classifyBand, worstBand } from "./timing.js";
+import {
+  BAND_RANK,
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
+  DEFAULT_STATION_THRESHOLDS,
+  classifyBand,
+  worstBand,
+} from "./timing.js";
 
 const T = { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
 const at = (min: number) => classifyBand(0, min * 60_000, T);
@@ -31,4 +37,8 @@ it("DEFAULT_STATION_THRESHOLDS is 5, 10 and 15", () => {
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
   });
+});
+
+it("DEFAULT_READY_WARNING_AFTER_MINUTES is 3", () => {
+  expect(DEFAULT_READY_WARNING_AFTER_MINUTES).toBe(3);
 });

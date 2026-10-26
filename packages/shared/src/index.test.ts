@@ -7,6 +7,7 @@ import {
   blankCommentsAndLiterals,
   BAND_RANK,
   BUILD_HEADER,
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
   classifyBand,
   compareDecimal,
   conjunctionList,
@@ -83,6 +84,7 @@ import {
 } from "./index.js";
 import * as shared from "./index.js";
 import * as tableShortName from "./table-short-name.js";
+import * as timing from "./timing.js";
 
 describe("package public surface (./index.js)", () => {
   it("re-exports the build header name", () => {
@@ -233,6 +235,11 @@ describe("package public surface (./index.js)", () => {
     expect(classifyBand(0, 5 * 60_000, t)).toBe("warm");
     expect(worstBand(["fresh", "overdue", "warm"])).toBe("overdue");
     expect(BAND_RANK.forgotten).toBe(3);
+  });
+
+  it("re-exports the default ready warning time", () => {
+    expect(DEFAULT_READY_WARNING_AFTER_MINUTES).toBe(timing.DEFAULT_READY_WARNING_AFTER_MINUTES);
+    expect(DEFAULT_READY_WARNING_AFTER_MINUTES).toBe(3);
   });
 
   it("re-exports the comment scanner", () => {
