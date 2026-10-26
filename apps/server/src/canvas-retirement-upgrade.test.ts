@@ -397,6 +397,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
       "_station_bump_mode",
       "_station_changes_after_sending",
       "_table_short_names",
+      "_privacy_contact",
     ]),
   );
   let before: Record<string, unknown[]>;
@@ -533,6 +534,11 @@ it("records the no-holder admission-rule loss and retains every other surviving 
         Object.entries(row as Record<string, unknown>).filter(([key]) => key !== "canvas_id"),
       ),
     );
+    retained.tenants = before!.tenants!.map((row) => ({
+      ...(row as Record<string, unknown>),
+      privacy_notice_url: null,
+      privacy_email: null,
+    }));
     expect(actual).toEqual(retained);
     expect(after.venue.all(sql`pragma foreign_key_check`)).toEqual([]);
     expect(after.venue.all(sql`pragma integrity_check`)).toEqual([{ integrity_check: "ok" }]);

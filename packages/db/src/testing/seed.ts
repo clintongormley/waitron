@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, LocationId, NodeId } from "@waitron/shared";
 import type { Database } from "../client.js";
@@ -5,7 +6,6 @@ import { deviceFormFactorEnum, deviceProfiles } from "../schema/device-profiles.
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
-import { tenants } from "../schema/tenants.js";
 
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
@@ -25,10 +25,11 @@ export function freshNif(): string {
  * scope a query by.
  */
 export async function seedTenant(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Test SL" })
-    .onConflictDoNothing({ target: tenants.id });
+  // Plain SQL: upgrade tests seed a database migrated only to an earlier point, where today's
+  // columns do not exist yet.
+  await db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+    values (1, 'ES', ${freshNif()}, 'Test SL', ${new Date().toISOString()})
+    on conflict (id) do nothing`);
 }
 
 /** Seeds one node at `location` and returns its id. */
