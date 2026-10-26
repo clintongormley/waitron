@@ -5310,11 +5310,13 @@ handheld, Theme and Log out are both in More, never in the name's menu: Theme la
 group, and Log out last of all. Measured 2026-10-17 in A681's re-look of the till's person menu: as
 three rows before Log out, the group pushed Log out below the visible More menu at 360×640, 360×740,
 320×740 and 390×664. Measured 2026-10-17 in the real-browser look for A681: with the chooser on the
-bar, at 360 px the tab strip got 148 px of the 178 px its tabs needed, and "Sala" showed as "Sa". A
-theme pick applies at once and never asks about unsaved work, unlike a language pick on the till.
-The dashboard banner's dark lockup follows the choice (its `<source>`'s `media` is `all` for Dark,
-`not all` for Light, and `(prefers-color-scheme: dark)` for Follow device), and the printable node
-recovery page takes the screen's resolved `color-scheme` rather than `light dark`.
+bar, at 360 px the tab strip got 148 px of the 178 px its tabs needed, and "Sala" showed as "Sa".
+(Both measured before A797 slice 3, which puts Theme before Log out in the Settings group and
+accepts the scroll on a short phone, and moves the chooser off a handheld's bar: build plan slice 3,
+D5–D6.) A theme pick applies at once and never asks about unsaved work, unlike a language pick on
+the till. The dashboard banner's dark lockup follows the choice (its `<source>`'s `media` is `all`
+for Dark, `not all` for Light, and `(prefers-color-scheme: dark)` for Follow device), and the
+printable node recovery page takes the screen's resolved `color-scheme` rather than `light dark`.
 
 A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally
 scrollable strip, subject to the device and person's permissions. Parked, Waiting and Transfers

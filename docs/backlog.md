@@ -2073,7 +2073,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-17).** At 320×568, with the person's name moved into More, the menu's content (625 px)
   overflows the 552 px it is given, so Log out sits below the menu's bottom edge and nothing says
   the menu scrolls. The look hid A681's Theme row and Log out was still below the edge, so this is
-  believed to predate A681 (not run on `main`). A681 puts the Theme row after Log out, so at 360×640
+  believed to predate A681 (not run on `main`). A681 put the Theme row after Log out, so at 360×640
   and 390×664 that row is the part that needs a scroll. On a handheld, since A797 slice 3, Log out
   is last in ☰, after the Settings group (design §3.1), so with every entry offered it needs a
   scroll at 360×640 (the build plan's slice 3, D6). Decide whether More should show that it
@@ -2285,8 +2285,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`.
 
-- Recorded, not blocking: a handheld's Order tab is tappable with no active table; Counter has no
-  prep-queue rail.
+- Recorded, not blocking: Counter has no prep-queue rail.
 
 - **A lost counter Send reply still tells you to check whether a sale went through.**
   `#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
@@ -2669,9 +2668,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     names the order by its own label — no product path creates that state, and whether every
     existing venue database is free of it was not checked.
   - Open (found by #905's review, by reading, not reproduced): on a handheld, a waiter who taps a
-    free table to seat it, goes back to the order tab while the seating is still under way and
-    starts Move guests can have the move set the wrong table on the new party; the suggested fix
-    is to count only table opens started in the current operator session; not queued.
+    free table to seat it, goes back to the order tab (on a handheld, the table's bar button since
+    A797 slice 3) while the seating is still under way and starts Move guests can have the move
+    set the wrong table on the new party; the suggested fix is to count only table opens started
+    in the current operator session; not queued.
   - The till sends `otherPartyId: null` when its floor does not list the target table at all (a
     failed floor read empties the list); a table another party holds is then refused as out of
     date, never combined.

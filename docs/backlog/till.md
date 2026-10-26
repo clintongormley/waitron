@@ -918,13 +918,13 @@ Open:
   The owner's replacement for C80's earlier course-placement rule is retained under
   [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
 - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
-  waiter who taps a free table to seat it, goes back to the order tab while the seating is still
-  under way and starts Move guests can have the move set the wrong table on the new party; the
-  suggested fix is to count only table opens started in the current operator session; not
-  queued. The till sends `otherPartyId: null` when its floor does not list the target table at
-  all (a failed floor read empties the list); a table another party holds is then refused as out
-  of date, never combined. On a 390 px phone the bill choice's buttons wrap ("Keep separate
-  bills" on three lines).
+  waiter who taps a free table to seat it, goes back to the order tab (on a handheld, the table's
+  bar button since A797 slice 3) while the seating is still under way and starts Move guests can
+  have the move set the wrong table on the new party; the suggested fix is to count only table
+  opens started in the current operator session; not queued. The till sends `otherPartyId: null`
+  when its floor does not list the target table at all (a failed floor read empties the list); a
+  table another party holds is then refused as out of date, never combined. On a 390 px phone the
+  bill choice's buttons wrap ("Keep separate bills" on three lines).
 - **Open, from C84's review (#913):** when a void or line change gets no answer,
   `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
   own floor read failed, while the revision on screen stays where it was. A later floor read that
