@@ -1081,7 +1081,7 @@ in A129; the receipts are in the profile's header.
 
 **The recovery page**
 
-## The unauthenticated recovery page: curated title and action, and the failed start's own lines
+## The unauthenticated recovery page: curated title and action, the failed start's report and the log's last lines
 
 The title and action are fixed strings chosen by the error code, in English and Spanish, and never
 suggest wiping anything. Below them the page shows why the last start failed and the tail of
@@ -1143,6 +1143,84 @@ password in a URL. So the convention that params never carry a secret (stated in
 `apps/server/src/errors.ts`) is what keeps a page anyone on the venue's LAN can open safe; a new code
 carrying a credential in its params, or a logged message carrying one in any other form, puts it on
 that page. Built in #310 and extended in #695; `apps/server/src/recovery-surface.ts`.
+
+**The tail is not only the failed start's lines** (A980 S10). It is the last 200 lines of the
+current `waitron.log`, whichever process wrote them (`readLog`, `apps/server/src/recovery-surface.ts`).
+Both the page and the server find the folder with `resolveLogDir`, so a refusal the running server
+logged on Monday is still on the page after a start fails on Tuesday, until 200 newer lines or a
+rotation push it out. That is kept on purpose, because those lines explain a stop the running server
+saw, such as the trading watch's append-only refusal.
+
+**People's names, emails and tax numbers in the tail are partly masked.** Every line the server's
+logger writes (`createLogger`, `apps/server/src/logger.ts`) is serialised by `stringifyMasked`
+(`apps/server/src/log-personal-data.ts`), which applies `maskPersonalData` only to a line holding a
+key on `PERSONAL_LOG_KEYS` or `merchants` (or one plain JSON cannot serialise). `maskPersonalData`
+masks the value of any key on `PERSONAL_LOG_KEYS`, at any depth, and each `name` inside an array
+under `merchants`, keeping the first and last character of each piece around a fixed `***` (owner
+decision 2026-10-26, the S10 plan's decision 14): an email keeps them for the part before the `@`
+and for the domain name, with the ending after the last dot (`m***r@e***e.test`); a name keeps them
+for each word (`J***i P***g F***r`); a tax number keeps them for the whole value (`1***Z`). A piece
+of three characters or fewer, and any value that is not a string, is `***` alone. A `null` or
+absent value stays as it is, so "no person" still reads differently from "a person". The failed
+start's report masks the same names in an `AppError`'s params (`paramsLine`,
+`apps/server/src/node-entry.ts`). So a refused invitation's line reads
+`{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`, while the answer to the request still
+carries the address to the person who typed it. The mask runs before the logger splits a line
+between the container's output and the file, so `docker compose logs` shows the same masked values.
+So does the dashboard's Diagnostics log view, because it reads the same files (`createLogReader`,
+`apps/server/src/boot.ts`).
+
+The receipt: before the change, the probe in the
+[S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md) found that each refusal it drove
+that names a person wrote the name or email into stdout, the file and the page, and that an email
+server's refusal did not, because Waitron reduces it to a code first. Its cases are now tests:
+`apps/server/src/recovery-page-personal-data.test.ts` drives the real staff, profile and till routes
+and the real error boundary into the real file, the captured stdout and the real page, each with a
+control that the same tail shows the event's code and the masked value; it pins the invitation, profile and
+attendance email paths as logging no address, with the relay's own reply shown holding it.
+`apps/server/src/logger.test.ts` and the failed-start case in `apps/server/src/node-entry.test.ts`
+pin the mask itself.
+
+What stays visible, on purpose (the S10 plan's decisions 4 to 7 and 10):
+
+- **The names of things**, even when staff type a person's name into one: a saved table's label, a
+  device's name, a location's name, an order's label. The one exception is a table's name for today,
+  normally a booking's surname, which travels as `todayName` and is masked.
+- **The venue's own legal name and tax number are masked**, because for a sole trader they are a
+  person's name and DNI-based number. This is why `taxId` is a bare name on the list: it is the
+  venue's. A new detail that names a person is named for whose it is (`guestName`,
+  `customerTaxId`), because the list is flat across every code and a bare `name` cannot be masked
+  without masking every thing's name.
+- **Free text is not searched.** The mask goes by key, never by anything shaped like an email
+  address, which would also hide the user half of a URL that `redactSecrets` leaves visible.
+- **Lines written before a box had the mask** stay until rotation pushes them out.
+
+What the mask does not reach (decision 12): the frozen-process watchdog
+(`packages/store/src/venue-liveness.ts`) writes its `venue.holder_frozen` line to standard error and
+to `waitron.log` without a logger; its fields are ids, times and a stack of function names and
+positions, which is a reading of the code, not a run. `console.warn` diagnostics reach only the
+container's output. The command-line tools print an error's details on their own terminal.
+
+The guard `scripts/personal-log-params.test.ts` fails when an error registry or a log call gains a
+detail whose name looks like a person's and is neither on the list nor named harmless with a reason,
+when a registry names a type nobody has reviewed, or when a registry entry cannot be read. It is
+weaker than its name, and its header is the authority for these limits:
+
+- it reads text, and judges a key by a word list, so a key whose name says nothing about a person
+  (`{ to: email }`) passes;
+- it judges only keys written in a registry's text, so a throw site that spreads an object can carry
+  keys its registry type does not name (`{ ...prepared.venue }` in
+  `apps/server/src/restore-request.ts` and `apps/server/src/restore-stream.ts`);
+- it reads no quoted or computed key, in a registry entry or a log call's fields;
+- an entry `code.key` in its `NOT_PERSONAL` map approves that key at every depth of its code, not
+  only where it was reviewed;
+- it judges a named type only by its name, so a person-named key added later inside a type already
+  reviewed passes, and it reads only capitalised type names, so a lowercase type reference is never
+  checked;
+- of a log call it reads only an object literal written as the third argument with a literal level,
+  so it skips a call whose level is computed (`apps/server/src/health.ts`, `apps/server/src/pass.ts`)
+  and sees no spread or variable passed as the fields;
+- it never reads free text, and does not see the watchdog's line.
 
 ## Printed documents take the printer's own layout settings
 

@@ -36,7 +36,15 @@ by tax number on **Orders**, ignoring an ES prefix, letter case, spaces, dots an
 downloads a ZIP of their full invoices as PDF copies, with an `invoices.json` giving the name, tax
 number and address on each, every attempt to email each one (to which address, when, and whether
 it went), and whether the box keeps a tax record of it, read in write-lock turns with no index and
-no migration. Design:
+no migration. 2026-10-26: S10 is built
+([its plan](2026-10-26-a980-s10-log-personal-data.md)): the probe found people's names and emails in
+logged error details, so every line the server's logger writes, and the failed start's report, now
+shows `***` for a detail named on `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`), and
+a root guard refuses a person-looking detail that is neither listed nor named harmless. Later the
+same day, by the owner's answer, the mask became partial: each word, each tax number, and an
+email's part before the `@` and its domain name keep their first and last character around `***` (the S10 plan's decision 14).
+S10 does
+not touch `packages/identity/src/staff.ts`, which the build order below expected it might. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in

@@ -15,7 +15,9 @@ import type { UnservedDish } from "./finish-party-service.js";
  *
  * No code's params may carry a secret: the shared error boundary
  * (`packages/server-kit/src/error-boundary.ts`) writes them into the response and the log, and the
- * unauthenticated recovery page shows the log's tail.
+ * unauthenticated recovery page shows the log's tail. A param holding a person's name, email or tax
+ * number uses a name on `PERSONAL_LOG_KEYS` (`./log-personal-data.ts`), which the log masks, named
+ * for whose it is (`guestName`, never a bare `name`).
  *
  * Reachability: every file that throws one of these imports "./errors.js" directly, and this
  * package has no public barrel — it is an application, not a library.
@@ -382,13 +384,14 @@ declare module "@waitron/shared" {
     "working_order.already_collected": { workingOrderId: string };
     // `table.not_found` is declared in @waitron/db's errors.ts.
     /**
-     * The name is already in use in this venue: a table's saved label, or, sent with
-     * `field: "name"` from a till, also a table's or group's name for today. `label` is the name
-     * asked for. With `takenBy`, a floor-plan save added or renamed a table that is left with no
-     * short name, and another zone's table, named by `takenBy`, shows that name as its own short
-     * name.
+     * The name is already in use in this venue. A floor-plan save sends `label`, the saved label
+     * asked for; with `takenBy`, the saved table is left with no short name and another zone's
+     * table, named by `takenBy`, shows that name as its own short name. A till's name for today
+     * sends `todayName`, the name asked for, with `field: "name"`; it is masked in the log because
+     * it is normally a booking's surname, and `field?: never` keeps it from travelling as `label`.
      */
-    "table.label_taken": { label: string; field?: "name"; takenBy?: string };
+    "table.label_taken":
+      { label: string; takenBy?: string; field?: never } | { todayName: string; field: "name" };
     /** A floor-plan save sent a short name another table holds; `takenBy` is that table's full name. */
     "table.short_name_taken": { shortName: string; takenBy: string; field: "shortName" };
     "table.inactive": { tableId: string };

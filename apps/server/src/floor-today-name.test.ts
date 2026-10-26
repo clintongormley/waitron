@@ -274,7 +274,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.bar!, label))).toEqual({
       code: "table.label_taken",
-      params: { label, field: "name" },
+      params: { todayName: label, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -286,7 +286,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.bar!, label))).toEqual({
       code: "table.label_taken",
-      params: { label, field: "name" },
+      params: { todayName: label, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -299,7 +299,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.bar!, label))).toEqual({
       code: "table.label_taken",
-      params: { label, field: "name" },
+      params: { todayName: label, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -312,7 +312,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.bar!, name))).toEqual({
       code: "table.label_taken",
-      params: { label: name, field: "name" },
+      params: { todayName: name, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -327,7 +327,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.bar!, name))).toEqual({
       code: "table.label_taken",
-      params: { label: name, field: "name" },
+      params: { todayName: name, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -340,7 +340,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.c4!, label))).toEqual({
       code: "table.label_taken",
-      params: { label, field: "name" },
+      params: { todayName: label, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -354,7 +354,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.c4!, name))).toEqual({
       code: "table.label_taken",
-      params: { label: name, field: "name" },
+      params: { todayName: name, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });
@@ -373,7 +373,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
       expect(await refused(rename(table.bar!, asked))).toEqual({
         code: "table.label_taken",
-        params: { label: asked, field: "name" },
+        params: { todayName: asked, field: "name" },
       });
       expect(await everything()).toEqual(before);
       await rename(table.long!, null);
@@ -389,7 +389,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
 
     expect(await refused(rename(table.long!, name))).toEqual({
       code: "table.label_taken",
-      params: { label: name, field: "name" },
+      params: { todayName: name, field: "name" },
     });
     expect(await everything()).toEqual(before);
   });

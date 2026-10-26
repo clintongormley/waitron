@@ -213,6 +213,22 @@ _2026-10-25: A1088 added `incidents.acknowledged_note` (core migration 0190), fr
 writes when marking a `clock.records_misdated` alert handled, or adds afterwards; the Incidents row
 predates it._
 
+_2026-10-26: S10 ([its plan](../plans/2026-10-26-a980-s10-log-personal-data.md)). Row d5's "five files" is wrong: the log is kept as six files,
+the current `waitron.log` and five rotated copies (`apps/server/src/log-file.ts:42-53` removes `.5`,
+moves the rest up one and renames the current file to `.1`). The probe found that each refusal it
+drove that names a person wrote the name or email into `waitron.log` and onto the recovery page, and that an
+email server's refusal did not, because Waitron reduces it to a code first. S10 masks them: every
+line the server's logger writes, and the failed start's report, shows `***` for a detail named on
+`PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`), at any depth, and for each
+`merchants[].name`; the names of things stay visible, except a table's name for today. For row d6,
+the container's output is masked only in the server's own log lines and the failed start's report:
+`console.warn` lines, the frozen-process watchdog's line on standard error and the command-line tools' output are not._
+
+_2026-10-26, later: by the owner's answer the S10 mask is partial: each word, each tax number, and an
+email's part before the `@` and its domain name keep their first and last character around `***`,
+so
+`marta.soler@example.test` logs as `m***r@e***e.test` (the S10 plan's decision 14)._
+
 ### 2.4 Copies and routes off the box
 
 | Route | What goes | Who receives it | Protection today | Ref |
@@ -588,6 +604,11 @@ Article 32 asks for measures "apropiadas … al riesgo" which include, "en su ca
 | LAN traffic over the box's own TLS (`apps/server/src/landing-app.ts:8`) | no record of who read personal data |
 | log file masks URL passwords | the recovery page shows log lines without sign-in; whether an email-server refusal or an error naming a person reaches them is **unverified** (S10) |
 
+_2026-10-26: the S10 row is now verified ([S10 plan](../plans/2026-10-26-a980-s10-log-personal-data.md)): an error naming a person did reach
+the page, and an email-server refusal did not. S10 masks a person's name, email and tax number in
+every line the server's logger writes; `apps/server/src/recovery-page-personal-data.test.ts` pins
+both, the attendance email sender included._
+
 ### 4.9 Staff monitoring
 
 Waitron records the staff member on every void, refund, drawer opening and order change, and the
@@ -841,3 +862,7 @@ corrigenda were not checked. The English column renders the OJ English text.
 when missing-clock emails are sent (§4.9); whether any logged error carries a name or email into
 `waitron.log` (S10); whether old objects actually leave a provider's bucket (A664 G4). The
 deactivation probe (§5.2 item 1) was re-run for revision 2 on 2026-10-24.
+
+_2026-10-26: the `waitron.log` question is answered by S10's probe ([its plan](../plans/2026-10-26-a980-s10-log-personal-data.md)): a person's
+name or email in an error's details did reach the log and the recovery page, and S10 now masks
+them; an email server's refusal did not._

@@ -1,5 +1,5 @@
 import { createServer, type AddressInfo } from "node:net";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -60,6 +60,55 @@ async function smtpReceiver(port: number) {
   };
 }
 
+async function prepareBox(
+  scratch: string,
+  venue: Awaited<ReturnType<typeof setupVenue>>,
+  port: number,
+): Promise<{ env: Record<string, string>; cookie: string }> {
+  const migrationsRoot = join(scratch, "migrations");
+  for (const [index, set] of manifestSets().entries())
+    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+      recursive: true,
+    });
+  await writeFile(
+    join(scratch, "modules.json"),
+    JSON.stringify({ modules: { "fiscal-none": false } }),
+  );
+  const env = {
+    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    WAITRON_STATE_DIR: scratch,
+    WAITRON_LOG_DIR: join(scratch, "logs"),
+    WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+    WAITRON_MANAGEMENT_ORIGIN: ORIGIN,
+    WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
+    WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
+    WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    WAITRON_ENV: "preproduction",
+    WAITRON_BACKUP_DIR: join(scratch, "backup-destination"),
+    WAITRON_BACKUP_RECOVERY_KEY: "venue-preview-recovery-key",
+    WAITRON_BACKUP_INTERVAL_MS: "86400000",
+  };
+  beforeServerStarts();
+  const [admin] = await suite.db
+    .insert(persons)
+    .values({
+      displayName: "Email Clock Admin",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      email: "clock-admin@example.test",
+      role: "admin",
+      locale: "en-GB",
+    })
+    .returning({ id: persons.id });
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { personId: admin!.id }),
+  );
+  return { env, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+}
+
 describe("a running venue's account email clock", () => {
   it.each(["invitation", "password_reset", "profile"] as const)(
     "formats %s email with the committed zone without restarting",
@@ -73,48 +122,7 @@ describe("a running venue's account email clock", () => {
       let server: StartedServer | undefined;
       try {
         scratch = await mkdtemp(join(tmpdir(), "waitron-venue-email-"));
-        const migrationsRoot = join(scratch, "migrations");
-        for (const [index, set] of manifestSets().entries())
-          await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-            recursive: true,
-          });
-        await writeFile(
-          join(scratch, "modules.json"),
-          JSON.stringify({ modules: { "fiscal-none": false } }),
-        );
-        const env = {
-          WAITRON_HTTP_LANDING_PORT: "0",
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-          WAITRON_CREDENTIALS_KEY_VERSION: "1",
-          WAITRON_STATE_DIR: scratch,
-          WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
-          WAITRON_MANAGEMENT_ORIGIN: ORIGIN,
-          WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
-
-          WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "preproduction",
-          WAITRON_BACKUP_DIR: join(scratch, "backup-destination"),
-          WAITRON_BACKUP_RECOVERY_KEY: "venue-preview-recovery-key",
-          WAITRON_BACKUP_INTERVAL_MS: "86400000",
-        };
-        beforeServerStarts();
-        const [admin] = await suite.db
-          .insert(persons)
-          .values({
-            displayName: "Email Clock Admin",
-            pinHash: hashPin("1234"),
-            passwordHash: hashPassword(PASSWORD),
-            email: "clock-admin@example.test",
-            role: "admin",
-            locale: "en-GB",
-          })
-          .returning({ id: persons.id });
-        const session = await withTransaction(suite.db, (tx) =>
-          startManagementSession(tx, { personId: admin!.id }),
-        );
-        const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+        const { env, cookie } = await prepareBox(scratch, venue, port!);
         await withTransaction(suite.db, (tx) =>
           putCredential(tx, loadKeyRing(env), {
             purpose: "email.smtp",
@@ -263,4 +271,48 @@ describe("a running venue's account email clock", () => {
       }
     },
   );
+});
+
+describe("a box with no email server", () => {
+  it("logs the profile route's failed send as email.unconfigured", async () => {
+    const venue = await setupVenue(suite.db);
+    const [port] = await freePorts(1);
+    const scratch = await mkdtemp(join(tmpdir(), "waitron-venue-email-"));
+    let server: StartedServer | undefined;
+    try {
+      const { env, cookie } = await prepareBox(scratch, venue, port!);
+      const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+      server = await startServer({ ...env, WAITRON_VENUE_DIR: dirname(database) }, env);
+      await vi.waitFor(async () => {
+        expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+      });
+      const response = await fetch(`http://127.0.0.1:${port}/management-api/session/me/profile`, {
+        method: "PUT",
+        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({
+          displayName: "Email Clock Admin",
+          firstNames: "Email",
+          lastNames: "Admin",
+          telephone: null,
+          email: "changed-admin@example.test",
+          locale: "en-GB",
+          currentPassword: PASSWORD,
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ emailVerificationSent: false });
+      await vi.waitFor(async () => {
+        const failures = (await readFile(join(env.WAITRON_LOG_DIR!, "waitron.log"), "utf8"))
+          .split("\n")
+          .filter((line) => line.includes('"event":"account_email.send_failed"'))
+          .map((line) => JSON.parse(line) as Record<string, unknown>);
+        expect(failures.map(({ purpose, errorCode }) => ({ purpose, errorCode }))).toEqual([
+          { purpose: "email_change", errorCode: "email.unconfigured" },
+        ]);
+      });
+    } finally {
+      if (server !== undefined) await server.close();
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
 });

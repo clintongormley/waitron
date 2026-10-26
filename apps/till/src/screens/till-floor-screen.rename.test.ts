@@ -284,7 +284,7 @@ describe("till-floor-screen: Rename", () => {
     api.nameToday.mockRejectedValueOnce({
       code: "table.label_taken",
       status: 409,
-      label: "Window",
+      todayName: "Window",
       field: "name",
     });
     const el = await mount(bar(), api);
@@ -526,7 +526,7 @@ describe("till-floor-screen: Rename", () => {
     api.nameToday.mockRejectedValueOnce({
       code: "table.label_taken",
       status: 409,
-      label: "Window",
+      todayName: "Window",
       field: "name",
     });
     const el = await mount(bar(), api);
@@ -657,7 +657,7 @@ describe("till-floor-screen: Rename", () => {
     api.nameToday.mockRejectedValueOnce({
       code: "table.label_taken",
       status: 409,
-      label: "Window",
+      todayName: "Window",
       field: "name",
     });
     const el = await mount(bar(), api);
@@ -720,7 +720,7 @@ describe("till-floor-screen: Rename", () => {
     el.tables = group({ c3: { name: "Corner" } });
     await settle(el);
 
-    answer.refuse({ code: "table.label_taken", status: 409, label: "Window", field: "name" });
+    answer.refuse({ code: "table.label_taken", status: 409, todayName: "Window", field: "name" });
     await settle(el);
     await opened.updateComplete;
 
@@ -764,7 +764,7 @@ describe("till-floor-screen: Rename", () => {
     el.tables = barJoined();
     await settle(el);
 
-    answer.refuse({ code: "table.label_taken", status: 409, label: "Window", field: "name" });
+    answer.refuse({ code: "table.label_taken", status: 409, todayName: "Window", field: "name" });
     await settle(el);
 
     expect(windowOf(el)).toBeNull();
@@ -782,7 +782,7 @@ describe("till-floor-screen: Rename", () => {
     await settle(el);
 
     // Both land before the screen redraws.
-    answer.refuse({ code: "table.label_taken", status: 409, label: "Window", field: "name" });
+    answer.refuse({ code: "table.label_taken", status: 409, todayName: "Window", field: "name" });
     el.tables = barJoined();
     await settle(el);
     await opened.updateComplete;

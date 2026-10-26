@@ -1,0 +1,860 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type AddressInfo, type Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Hono } from "hono";
+import nodemailer from "nodemailer";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  hashPassword,
+  hashPin,
+  loginWithPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
+import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
+import "@waitron/payments-sumup";
+import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import "./errors.js";
+import { createAccountEmailSender, type AccountEmailSender } from "./account-email.js";
+import { createAttendanceEmailSender } from "./attendance-email.js";
+import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
+import { createLogger, type Logger, type LogLevel } from "./logger.js";
+import { createRotatingFileSink, tee } from "./log-file.js";
+import { mountManagementApi } from "./management-api.js";
+import { mountMeApi } from "./me-api.js";
+import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
+import { FRESH, afterFailure } from "./recovery-state.js";
+import { recoveryApp } from "./recovery-surface.js";
+import { mountTillApi } from "./till-api.js";
+import { SESSION_COOKIE } from "./till-session.js";
+import { inTx, setupPartyVenue } from "./testing/party-venue.js";
+import { plannedZone, withRevision } from "./testing/floor-today-venue.js";
+import { seedSessionDevice } from "./testing/session-device.js";
+
+const MARTA_EMAIL = "marta.soler@example.test";
+const MARTA_NAME = "Marta Soler";
+const VENUE_LEGAL_NAME = "Jordi Puig Ferrer";
+const VENUE_TAX_ID = "12345678Z";
+const LOCATION_NAME = "Bar del Port";
+const TODAY_NAME = "Soler";
+const JORDI_EMAIL = "jordi.puig@example.test";
+const JORDI_NAME = "Jordi Puig";
+
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 120_000,
+});
+
+const state = afterFailure(FRESH, "module.config_invalid", new Date());
+
+const tempDirs: string[] = [];
+async function tempDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+interface Rig {
+  log: Logger;
+  stdout: string[];
+  logDir: string;
+  page: () => Promise<string>;
+  file: () => Promise<string>;
+}
+
+async function rig(): Promise<Rig> {
+  const logDir = await tempDir("recovery-page-personal-data-");
+  const stdout: string[] = [];
+  // As boot.ts builds the process logger, with stdout captured instead of written.
+  const log = createLogger(
+    tee(
+      (line) => stdout.push(line),
+      createRotatingFileSink({ dir: logDir, maxBytes: 10_000_000, maxFiles: 5 }),
+    ),
+    () => new Date(),
+  );
+  return {
+    log,
+    stdout,
+    logDir,
+    page: async () => (await recoveryApp({ state, logDir, onRetry: vi.fn() }).request("/")).text(),
+    file: async () => readFile(join(logDir, "waitron.log"), "utf8"),
+  };
+}
+
+function lineFor(text: string, event: string): unknown {
+  const lines = text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as { event?: unknown });
+  const found = lines.filter((line) => line.event === event);
+  expect(found).toHaveLength(1);
+  return found[0];
+}
+
+/**
+ * The event's line, on stdout and in the file, carries exactly `fields`; the page shows the code
+ * and each masked key, so an empty tail cannot pass the "not on the page" checks.
+ */
+async function expectLogged(
+  r: Rig,
+  event: string,
+  fields: Record<string, unknown>,
+  hidden: string[],
+  level: LogLevel = "warn",
+): Promise<void> {
+  const stdout = r.stdout.join("");
+  const file = await r.file();
+  const page = await r.page();
+  const expected = { ...fields, at: expect.any(String), level, event };
+  expect(lineFor(stdout, event)).toEqual(expected);
+  expect(lineFor(file, event)).toEqual(expected);
+  expect(page).toContain(event);
+  for (const [key, value] of Object.entries(fields)) {
+    if (PERSONAL_LOG_KEYS.has(key)) {
+      expect(page).toContain(`&quot;${key}&quot;:&quot;${String(value)}&quot;`);
+    }
+  }
+  for (const secret of hidden) {
+    expect(stdout).not.toContain(secret);
+    expect(file).not.toContain(secret);
+    expect(page).not.toContain(secret);
+  }
+}
+
+let nif = 0;
+let venueCfg: Parameters<typeof mountManagementApi>[1]["venueCfg"];
+
+async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
+  nif += 1;
+  const venue = await applyHistoricalTestVenue(
+    planVenue(
+      {
+        country: "ES",
+        taxId: `${String(71_000_000 + nif).padStart(8, "0")}K`,
+        legalName: "Recovery Deli SL",
+        location: {
+          name: "Main room",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Owner",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+          email: "owner@example.test",
+        },
+      },
+      ALL_MODULES,
+    ),
+    { db: suite.db, modules: ALL_MODULES },
+  );
+  venueCfg = {
+    nodeId: brandNodeId(venue.nodeId),
+    locationId: brandLocationId(venue.locationId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  return withTransaction(suite.db, async (tx) => {
+    const [admin] = await tx.select({ id: persons.id }).from(persons).limit(1);
+    await tx.insert(persons).values({
+      displayName: MARTA_NAME,
+      email: MARTA_EMAIL,
+      pinHash: hashPin("1111"),
+      passwordHash: hashPassword("martaPass123"),
+      role: "staff",
+    });
+    const [clerk] = await tx
+      .insert(persons)
+      .values({
+        displayName: "Clerk",
+        email: "clerk@example.test",
+        pinHash: hashPin("2222"),
+        passwordHash: hashPassword("clerkPass123"),
+        role: "staff",
+      })
+      .returning({ id: persons.id });
+    return { adminId: admin!.id, clerkId: clerk!.id };
+  });
+}
+
+async function cookieFor(personId: string): Promise<string> {
+  const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  return `${MANAGEMENT_COOKIE}=${session.token}`;
+}
+
+function management(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
+  const app = new Hono();
+  mountManagementApi(
+    app,
+    {
+      db: suite.db,
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
+      venueCfg,
+      secureCookies: false,
+      rpId: "localhost",
+      origin: "http://localhost",
+      sendAccountEmail,
+      credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
+    },
+    log,
+  );
+  return app;
+}
+
+function me(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
+  const app = new Hono();
+  mountMeApi(
+    app,
+    {
+      db: suite.db,
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
+      venueLocale: "en-GB",
+      modules: ["core"],
+      credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
+      sendAccountEmail,
+    },
+    log,
+  );
+  return app;
+}
+
+async function send(
+  app: Hono,
+  method: string,
+  path: string,
+  cookie: string,
+  body: unknown,
+): Promise<{ status: number; body: unknown }> {
+  const res = await app.request(path, {
+    method,
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+interface Relay {
+  url: string;
+  recipients: string[];
+  close: () => Promise<void>;
+}
+
+/** An SMTP relay that refuses the recipient at `RCPT` or the message after `DATA`, echoing the address in its reply. */
+async function refusingRelay(at: "rcpt" | "data"): Promise<Relay> {
+  const recipients: string[] = [];
+  const server = createServer((socket: Socket) => {
+    socket.setEncoding("utf8");
+    socket.write("220 relay ESMTP\r\n");
+    let buffer = "";
+    let inData = false;
+    let rcpt = "";
+    socket.on("data", (chunk: string) => {
+      buffer += chunk;
+      for (let end = buffer.indexOf("\r\n"); end !== -1; end = buffer.indexOf("\r\n")) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        if (inData) {
+          if (line === ".") {
+            inData = false;
+            socket.write(`550 5.7.1 <${rcpt}>: message refused for ${rcpt}\r\n`);
+          }
+          continue;
+        }
+        if (line.startsWith("EHLO") || line.startsWith("HELO")) socket.write("250 relay\r\n");
+        else if (line.startsWith("RCPT")) {
+          rcpt = /<([^>]*)>/.exec(line)?.[1] ?? "?";
+          recipients.push(rcpt);
+          socket.write(
+            at === "rcpt"
+              ? `550 5.1.1 <${rcpt}>: Recipient address rejected: User unknown\r\n`
+              : "250 ok\r\n",
+          );
+        } else if (line === "DATA") {
+          inData = true;
+          socket.write("354 go\r\n");
+        } else if (line === "QUIT") socket.end("221 bye\r\n");
+        else socket.write("250 ok\r\n");
+      }
+    });
+    socket.on("error", () => {});
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    url: `smtp://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    recipients,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+/** What nodemailer itself hands over when this relay refuses Jordi: the control that the reply carries his address. */
+async function relayRefusal(relay: Relay): Promise<string> {
+  const transport = nodemailer.createTransport({ url: relay.url });
+  try {
+    await transport.sendMail({
+      from: "venue@example.test",
+      to: JORDI_EMAIL,
+      subject: "s",
+      text: "t",
+    });
+  } catch (error) {
+    return (error as Error).message;
+  } finally {
+    transport.close();
+  }
+  throw new Error("the relay accepted the message");
+}
+
+const EMAIL_TAKEN = {
+  status: 409,
+  body: { error: { code: "person.email_taken", params: { email: MARTA_EMAIL } } },
+};
+const NAME_TAKEN = {
+  status: 409,
+  body: { error: { code: "person.display_name_taken", params: { displayName: MARTA_NAME } } },
+};
+
+describe("the recovery page, the log file and stdout carry no person's details", () => {
+  it("masks the email a new staff member was refused for", async () => {
+    const { adminId } = await setupVenue();
+    const r = await rig();
+
+    const answer = await send(
+      management(r.log),
+      "POST",
+      "/management-api/staff",
+      await cookieFor(adminId),
+      {
+        displayName: "Someone Else",
+        firstNames: "Someone",
+        lastNames: "Else",
+        telephone: null,
+        role: "staff",
+        email: MARTA_EMAIL,
+      },
+    );
+
+    expect(answer).toEqual(EMAIL_TAKEN);
+    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [MARTA_EMAIL]);
+  });
+
+  it("masks the display name a new staff member was refused for", async () => {
+    const { adminId } = await setupVenue();
+    const r = await rig();
+
+    const answer = await send(
+      management(r.log),
+      "POST",
+      "/management-api/staff",
+      await cookieFor(adminId),
+      {
+        displayName: MARTA_NAME,
+        firstNames: "Marta",
+        lastNames: "Soler",
+        telephone: null,
+        role: "staff",
+        email: "another@example.test",
+      },
+    );
+
+    expect(answer).toEqual(NAME_TAKEN);
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
+      MARTA_NAME,
+    ]);
+  });
+
+  it("masks both when an administrator gives a staff member another person's email, then name", async () => {
+    const { adminId, clerkId } = await setupVenue();
+    const r = await rig();
+    const cookie = await cookieFor(adminId);
+    const edit = (change: { email: string; displayName: string }) =>
+      send(management(r.log), "PUT", `/management-api/staff/${clerkId}`, cookie, {
+        firstNames: "Clerk",
+        lastNames: "Person",
+        telephone: null,
+        role: "staff",
+        status: "active",
+        ...change,
+      });
+
+    expect(await edit({ email: MARTA_EMAIL, displayName: "Clerk" })).toEqual(EMAIL_TAKEN);
+    expect(await edit({ email: "clerk@example.test", displayName: MARTA_NAME })).toEqual(
+      NAME_TAKEN,
+    );
+    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [
+      MARTA_EMAIL,
+      MARTA_NAME,
+    ]);
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
+      MARTA_EMAIL,
+      MARTA_NAME,
+    ]);
+  });
+
+  it("masks both when a person takes another person's name, then email, on their own profile", async () => {
+    const { clerkId } = await setupVenue();
+    const r = await rig();
+    const cookie = await cookieFor(clerkId);
+    const profile = (change: { email: string; displayName: string }) =>
+      send(me(r.log), "PUT", "/management-api/session/me/profile", cookie, {
+        firstNames: "Clerk",
+        lastNames: "Person",
+        telephone: null,
+        locale: "en-GB",
+        currentPassword: "clerkPass123",
+        ...change,
+      });
+
+    expect(await profile({ displayName: MARTA_NAME, email: "clerk@example.test" })).toEqual(
+      NAME_TAKEN,
+    );
+    expect(await profile({ displayName: "Clerk", email: MARTA_EMAIL })).toEqual(EMAIL_TAKEN);
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
+      MARTA_EMAIL,
+      MARTA_NAME,
+    ]);
+    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [
+      MARTA_EMAIL,
+      MARTA_NAME,
+    ]);
+  });
+
+  it("masks people's names at any depth through the error boundary, and keeps things' names", async () => {
+    const r = await rig();
+    const run = createErrorBoundary(
+      {
+        "draft.taken_over": 409,
+        "device.equipment_held": 409,
+        "table.label_taken": 409,
+        "restore.stream_venue_unconfirmed": 409,
+        "payment.provider_merchant_ambiguous": 409,
+      },
+      "recovery_test.failed",
+    );
+    // Built afresh per request and compared with literals, so a mask that wrote into the thrown
+    // params in place would show in the answers.
+    const throws: [string, () => AppError, string, Record<string, unknown>][] = [
+      [
+        "owner",
+        () =>
+          new AppError("draft.taken_over", { draftId: "d1", ownerId: "p1", ownerName: MARTA_NAME }),
+        "draft.taken_over",
+        { draftId: "d1", ownerId: "p1", ownerName: "Marta Soler" },
+      ],
+      [
+        "editor",
+        () =>
+          new AppError("draft.taken_over", {
+            billId: "b1",
+            draftId: null,
+            ownerId: "p2",
+            ownerName: null,
+            edit: {
+              billId: "b1",
+              editorId: "p2",
+              editorName: MARTA_NAME,
+              editorVersion: 3,
+              draftId: null,
+              draftRevision: null,
+            },
+          }),
+        "draft.taken_over",
+        {
+          billId: "b1",
+          draftId: null,
+          ownerId: "p2",
+          ownerName: null,
+          edit: {
+            billId: "b1",
+            editorId: "p2",
+            editorName: "Marta Soler",
+            editorVersion: 3,
+            draftId: null,
+            draftRevision: null,
+          },
+        },
+      ],
+      [
+        "holder",
+        () =>
+          new AppError("device.equipment_held", {
+            field: "receiptPrinterId",
+            holderDeviceId: "dev1",
+            holderDeviceName: "Bar till",
+            holderPersonName: MARTA_NAME,
+          }),
+        "device.equipment_held",
+        {
+          field: "receiptPrinterId",
+          holderDeviceId: "dev1",
+          holderDeviceName: "Bar till",
+          holderPersonName: "Marta Soler",
+        },
+      ],
+      [
+        "today",
+        () => new AppError("table.label_taken", { todayName: TODAY_NAME, field: "name" }),
+        "table.label_taken",
+        { todayName: "Soler", field: "name" },
+      ],
+      [
+        "plan",
+        () => new AppError("table.label_taken", { label: "Patio 1" }),
+        "table.label_taken",
+        { label: "Patio 1" },
+      ],
+      [
+        "venue",
+        () =>
+          new AppError("restore.stream_venue_unconfirmed", {
+            legalName: VENUE_LEGAL_NAME,
+            taxId: VENUE_TAX_ID,
+            locationName: LOCATION_NAME,
+          }),
+        "restore.stream_venue_unconfirmed",
+        { legalName: "Jordi Puig Ferrer", taxId: "12345678Z", locationName: "Bar del Port" },
+      ],
+      [
+        "merchants",
+        () =>
+          new AppError("payment.provider_merchant_ambiguous", {
+            merchants: [
+              { code: "MC1", name: VENUE_LEGAL_NAME },
+              { code: "MC2", name: MARTA_NAME },
+            ],
+          }),
+        "payment.provider_merchant_ambiguous",
+        {
+          merchants: [
+            { code: "MC1", name: "Jordi Puig Ferrer" },
+            { code: "MC2", name: "Marta Soler" },
+          ],
+        },
+      ],
+    ];
+    const api = new Hono();
+    for (const [path, error] of throws) {
+      api.get(`/${path}`, (c) =>
+        run(c, r.log, () => {
+          throw error();
+        }),
+      );
+    }
+
+    for (const [path, , code, params] of throws) {
+      const res = await api.request(`/${path}`);
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 409,
+        body: { error: { code, params } },
+      });
+    }
+
+    const stdout = r.stdout.join("").split("\n").filter(Boolean);
+    const file = (await r.file()).split("\n").filter(Boolean);
+    const expected = [
+      { draftId: "d1", ownerId: "p1", ownerName: "M***a S***r", event: "draft.taken_over" },
+      {
+        billId: "b1",
+        draftId: null,
+        ownerId: "p2",
+        ownerName: null,
+        edit: {
+          billId: "b1",
+          editorId: "p2",
+          editorName: "M***a S***r",
+          editorVersion: 3,
+          draftId: null,
+          draftRevision: null,
+        },
+        event: "draft.taken_over",
+      },
+      {
+        field: "receiptPrinterId",
+        holderDeviceId: "dev1",
+        holderDeviceName: "Bar till",
+        holderPersonName: "M***a S***r",
+        event: "device.equipment_held",
+      },
+      { todayName: "S***r", field: "name", event: "table.label_taken" },
+      { label: "Patio 1", event: "table.label_taken" },
+      {
+        legalName: "J***i P***g F***r",
+        taxId: "1***Z",
+        locationName: LOCATION_NAME,
+        event: "restore.stream_venue_unconfirmed",
+      },
+      {
+        merchants: [
+          { code: "MC1", name: "J***i P***g F***r" },
+          { code: "MC2", name: "M***a S***r" },
+        ],
+        event: "payment.provider_merchant_ambiguous",
+      },
+    ].map((line) => ({ ...line, at: expect.any(String), level: "warn" }));
+    expect(stdout.map((line) => JSON.parse(line) as unknown)).toEqual(expected);
+    expect(file.map((line) => JSON.parse(line) as unknown)).toEqual(expected);
+
+    const page = await r.page();
+    for (const code of [
+      "draft.taken_over",
+      "device.equipment_held",
+      "table.label_taken",
+      "restore.stream_venue_unconfirmed",
+      "payment.provider_merchant_ambiguous",
+    ]) {
+      expect(page).toContain(code);
+    }
+    for (const [key, masked] of [
+      ["ownerName", "M***a S***r"],
+      ["editorName", "M***a S***r"],
+      ["holderPersonName", "M***a S***r"],
+      ["todayName", "S***r"],
+      ["legalName", "J***i P***g F***r"],
+      ["taxId", "1***Z"],
+    ]) {
+      expect(page).toContain(`&quot;${key}&quot;:&quot;${masked}&quot;`);
+    }
+    expect(page).toContain(
+      "&quot;code&quot;:&quot;MC2&quot;,&quot;name&quot;:&quot;M***a S***r&quot;",
+    );
+    for (const visible of [LOCATION_NAME, "MC1", "Patio 1", "Bar till"]) {
+      expect(page).toContain(visible);
+    }
+    for (const hidden of [MARTA_NAME, VENUE_LEGAL_NAME, VENUE_TAX_ID, TODAY_NAME]) {
+      expect(r.stdout.join("")).not.toContain(hidden);
+      expect(file.join("\n")).not.toContain(hidden);
+      expect(page).not.toContain(hidden);
+    }
+  });
+
+  it("masks a table's name for today refused on the till's real route", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const r = await rig();
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: v.db,
+        backend: v.backend,
+        clock: v.clock,
+        cfg: v.cfg,
+        tableRemovals: enabledTableRemovals(ALL_MODULES),
+        secureCookies: false,
+        venueLocale: v.cfg.locale,
+      },
+      r.log,
+    );
+    const deviceId = await seedSessionDevice(v.db, v.cfg);
+    const session = await inTx(v, async (tx) => {
+      const [person] = await tx
+        .insert(persons)
+        .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+        .returning({ id: persons.id });
+      return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
+    });
+    const cookie = `${SESSION_COOKIE}=${session.token}`;
+    const first = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const second = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const name = async (tableId: string) =>
+      send(
+        app,
+        "POST",
+        `/api/tables/${tableId}/today/name`,
+        cookie,
+        await withRevision(v, tableId, { name: TODAY_NAME }),
+      );
+
+    expect((await name(first.table.a!)).status).toBe(200);
+    expect(await name(second.table.a!)).toEqual({
+      status: 409,
+      body: {
+        error: { code: "table.label_taken", params: { todayName: TODAY_NAME, field: "name" } },
+      },
+    });
+    await expectLogged(r, "table.label_taken", { todayName: "S***r", field: "name" }, [TODAY_NAME]);
+  });
+
+  it("reads the codes above from the log tail, not some other part of the page", async () => {
+    const { adminId } = await setupVenue();
+    const r = await rig();
+    await send(management(r.log), "POST", "/management-api/staff", await cookieFor(adminId), {
+      displayName: MARTA_NAME,
+      firstNames: "Marta",
+      lastNames: "Soler",
+      telephone: null,
+      role: "staff",
+      email: "another@example.test",
+    });
+    const run = createErrorBoundary({}, "recovery_test.failed");
+    const api = new Hono();
+    api.get("/", (c) =>
+      run(c, r.log, () => {
+        throw new AppError("table.label_taken", { todayName: TODAY_NAME, field: "name" });
+      }),
+    );
+    await api.request("/");
+    const empty = await tempDir("recovery-page-personal-data-empty-");
+
+    const withLog = await r.page();
+    const withoutLog = await (
+      await recoveryApp({ state, logDir: empty, onRetry: vi.fn() }).request("/")
+    ).text();
+
+    for (const code of ["person.display_name_taken", "table.label_taken"]) {
+      expect(withLog).toContain(code);
+    }
+    for (const code of [
+      "person.email_taken",
+      "person.display_name_taken",
+      "draft.taken_over",
+      "device.equipment_held",
+      "table.label_taken",
+      "restore.stream_venue_unconfirmed",
+      "payment.provider_merchant_ambiguous",
+    ]) {
+      expect(withoutLog).not.toContain(code);
+    }
+    expect(withoutLog).not.toContain("***");
+  });
+
+  for (const at of ["rcpt", "data"] as const) {
+    it(`logs no address or name when the relay refuses an invitation at ${at.toUpperCase()}`, async () => {
+      const { adminId } = await setupVenue();
+      const r = await rig();
+      const relay = await refusingRelay(at);
+      try {
+        const sender = createAccountEmailSender({
+          url: relay.url,
+          from: "venue@example.test",
+          timeZone: "Europe/Madrid",
+        });
+
+        const answer = await send(
+          management(r.log, sender),
+          "POST",
+          "/management-api/staff",
+          await cookieFor(adminId),
+          {
+            displayName: JORDI_NAME,
+            firstNames: "Jordi",
+            lastNames: "Puig",
+            telephone: null,
+            role: "staff",
+            email: JORDI_EMAIL,
+          },
+        );
+
+        expect(answer).toEqual({
+          status: 201,
+          body: { id: expect.any(String), invitationSent: false },
+        });
+        const personId = (answer.body as { id: string }).id;
+        expect(relay.recipients).toEqual([JORDI_EMAIL]);
+        expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+        await expectLogged(
+          r,
+          "account_email.send_failed",
+          { purpose: "invitation", personId },
+          [JORDI_EMAIL, JORDI_NAME],
+          "error",
+        );
+      } finally {
+        await relay.close();
+      }
+    });
+  }
+
+  it("logs the sender's code, not the relay's reply, when a person's new email is refused", async () => {
+    const { clerkId } = await setupVenue();
+    const r = await rig();
+    const relay = await refusingRelay("rcpt");
+    try {
+      const sender = createAccountEmailSender({
+        url: relay.url,
+        from: "venue@example.test",
+        timeZone: "Europe/Madrid",
+      });
+
+      const answer = await send(
+        me(r.log, sender),
+        "PUT",
+        "/management-api/session/me/profile",
+        await cookieFor(clerkId),
+        {
+          displayName: "Clerk",
+          firstNames: "Clerk",
+          lastNames: "Person",
+          telephone: null,
+          locale: "en-GB",
+          currentPassword: "clerkPass123",
+          email: JORDI_EMAIL,
+        },
+      );
+
+      expect(answer).toEqual({ status: 200, body: { emailVerificationSent: false } });
+      expect(relay.recipients).toEqual([JORDI_EMAIL]);
+      expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+      await expectLogged(
+        r,
+        "account_email.send_failed",
+        { purpose: "email_change", errorCode: "email.send_refused" },
+        [JORDI_EMAIL],
+        "error",
+      );
+      expect(await r.page()).toContain("&quot;errorCode&quot;:&quot;email.send_refused&quot;");
+    } finally {
+      await relay.close();
+    }
+  });
+
+  for (const at of ["rcpt", "data"] as const) {
+    it(`gives the attendance worker no address when the relay refuses at ${at.toUpperCase()}`, async () => {
+      const relay = await refusingRelay(at);
+      try {
+        const message = {
+          smtp: { url: relay.url, from: "venue@example.test" },
+          recipient: JORDI_EMAIL,
+          locale: "en" as const,
+          businessDay: "2026-10-25",
+          locationName: LOCATION_NAME,
+          missingKinds: ["in" as const],
+        };
+        // As boot.ts builds it: no onFailure.
+        const outcome = await createAttendanceEmailSender()(message);
+        const reasons: unknown[][] = [];
+        const reported = await createAttendanceEmailSender({
+          onFailure: (...args) => reasons.push(args),
+        })(message);
+
+        expect(outcome).toBe("rejected");
+        expect(reported).toBe("rejected");
+        expect(reasons).toEqual([["email.test_refused"]]);
+        expect(relay.recipients).toEqual([JORDI_EMAIL, JORDI_EMAIL]);
+        expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+      } finally {
+        await relay.close();
+      }
+    });
+  }
+});

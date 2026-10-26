@@ -65,6 +65,9 @@ server-log access. The older slice descriptions and decisions below retain their
     the error, the Waitron version and log lines with personal details masked. Anything a person
     typed travels only in a report a manager has read and chosen to send. See the
     [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md), §5.3.
+    The log's own mask (A980 S10, `apps/server/src/log-personal-data.ts`) covers only listed
+    detail names, so a report's masking must not rely on it for free text such as an error's
+    message.
   - **Automatic reports as well as the manual button.** A crash that reaches the recovery page, an
     unexpected server error, and a frozen process stopped by its watchdog (A18d writes one JSON
     report file per event on a persistent volume, outside the venue database) each become a
@@ -105,7 +108,8 @@ the report and sends it later, and the sender sees which.
 
 **A1048. Opt-in automatic error reports to Waitron Cloud (owner, 2026-10-24: "Should be opt
 in").** Setup asks plainly, unticked; settings can change it. A report holds only the error's
-code and source, the version, counts and masked log lines (A980 O9), is signed with the box's
+code and source, the version, counts and masked log lines (A980 O9; the log's own mask covers only listed detail names, not
+free text), is signed with the box's
 Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
 by version to catch a bad release (design section 10).
 

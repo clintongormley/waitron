@@ -26,11 +26,11 @@ import {
   rosterVersions,
   type ShiftSwapStatus,
 } from "@waitron/workforce";
-import { SUPPORTED_LOCALES } from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import { IDLE_TIMEOUT_MS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountMeApi, type MeApiDeps } from "./me-api.js";
-import type { AccountEmail } from "./account-email.js";
+import { AccountEmailFailure, type AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { wrongTotpCode } from "./testing/authenticator.js";
 import "./errors.js";
@@ -1251,8 +1251,14 @@ describe("mountMeApi — own credentials and second factor", () => {
   });
 
   it.each([
-    ["an Error", new Error("mail relay down"), "mail relay down"],
-    ["a bare string", "mail relay refused", "mail relay refused"],
+    ["an Error", new Error("mail relay down"), "unknown"],
+    ["a bare string", "mail relay refused", "unknown"],
+    [
+      "an AccountEmailFailure",
+      new AccountEmailFailure("email.send_refused", "email.test_refused", false),
+      "email.send_refused",
+    ],
+    ["an AppError", new AppError("account_action.invalid", {}), "account_action.invalid"],
   ])(
     "saves the profile but reports no verification email sent when sending throws %s",
     async (_label, thrown, logged) => {
@@ -1285,7 +1291,7 @@ describe("mountMeApi — own credentials and second factor", () => {
       expect(lines).toContainEqual([
         "error",
         "account_email.send_failed",
-        { purpose: "email_change", error: logged },
+        { purpose: "email_change", errorCode: logged },
       ]);
     },
   );

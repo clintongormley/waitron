@@ -210,7 +210,7 @@ import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
-import { createAccountEmailSender } from "./account-email.js";
+import { AccountEmailFailure, createAccountEmailSender } from "./account-email.js";
 import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
@@ -939,7 +939,8 @@ async function bootServer(
   // the recovery page serves that file's tail to anyone on the venue's LAN with no login. The STDOUT
   // half is left whole: it is the installer's channel, reachable only with a shell on the box, and
   // masking it would erase the difference between a wrong password and none at all. Pinned by
-  // `recovery-surface.test.ts` → "the caught error's own words on the page".
+  // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
+  // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   let backupRepairOnly = false;
   const normalLogSink = tee(stdoutSink, fileSink);
   const log = createLogger(
@@ -2018,7 +2019,8 @@ async function bootServer(
           resolveAccountEmail(),
           readVenueTimeZone(db, { locationId: till.locationId }),
         ]);
-        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        if (delivery.mode === "unconfigured")
+          throw new AccountEmailFailure("email.unconfigured", undefined, false);
         await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
       },
     },
@@ -2178,7 +2180,8 @@ async function bootServer(
           resolveAccountEmail(),
           readVenueTimeZone(db, { locationId: till.locationId }),
         ]);
-        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        if (delivery.mode === "unconfigured")
+          throw new AccountEmailFailure("email.unconfigured", undefined, false);
         await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
       },
     },

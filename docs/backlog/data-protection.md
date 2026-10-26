@@ -204,7 +204,6 @@ by the answers):
     they are switched on.
 - **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
   checklist.
-- **S10** — check that logged errors carry no names or email addresses; mask them if they do.
 - **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
   environment setting a box cannot set. Adds a migration.
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
@@ -254,3 +253,23 @@ by the answers):
   decision 14). The owner then decided that a mirror is to serve no dashboard at all, so this
   refusal is the permanent answer, not a wait for A1111, which is withdrawn. Relayed by the
   watcher, `questions.md:4400` in lane B's campaign folder.
+- **A980 S10, 2026-10-26:** what the log masks and what it leaves, each built with the default
+  and open for the owner to reverse (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
+  owner note 5). Masked in every line the server's logger writes, on `docker logs` as
+  well as in `waitron.log` and on the recovery page: a person's name, email or tax number under a
+  listed detail name. Masked partly, by the owner's decision of 2026-10-26 (the plan's decision 14, which
+  also lists the choices made where the answer left a point open):
+  each word, each tax number, and an email's part before the `@` and its domain name keep only
+  their first and last character around `***`, so a refused invitation logs
+  `{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`. The
+  venue's own legal name and tax number are masked too, because for a sole trader they are a
+  person's: Jordi Puig Ferrer's refused restore logs
+  `{"legalName":"J***i P***g F***r","taxId":"1***Z","locationName":"Bar del Port",…}`, while the setup wizard and the
+  restore command still show them. A table's name for today, normally a booking's surname, travels
+  as `todayName` and is masked: `{"todayName":"S***r","field":"name",…}`. Left visible: the names of
+  things, even when they name someone (a floor-plan table named "García" still logs
+  `{"label":"García",…}`, and so do a device named "Marta's phone" and a location named after its
+  owner); email-shaped text inside a message, because the mask goes by key, not by pattern; the
+  answer to the request, which keeps every detail; and the frozen-process watchdog's own line,
+  which writes no person's details today. The recovery page's tail still shows lines the last
+  running server wrote, not only the failed start's, because they explain a stop that server saw.

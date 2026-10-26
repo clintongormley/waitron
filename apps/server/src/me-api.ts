@@ -37,7 +37,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import {
@@ -50,7 +50,7 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
-import type { AccountEmailSender } from "./account-email.js";
+import { AccountEmailFailure, type AccountEmailSender } from "./account-email.js";
 import { modulesNamed } from "./modules.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
@@ -185,7 +185,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         } catch (error) {
           log("error", "account_email.send_failed", {
             purpose: issued.purpose,
-            error: error instanceof Error ? error.message : String(error),
+            errorCode: error instanceof AccountEmailFailure ? error.problem : codeOf(error),
           });
         }
       }

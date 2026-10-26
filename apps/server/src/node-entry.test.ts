@@ -758,6 +758,25 @@ describe("runEntry", () => {
     expect(reported).toContain("15");
   });
 
+  it("masks a person's details in an AppError's params", async () => {
+    const reportFailure = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          reportFailure,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(
+              new AppError("person.email_taken", { email: "marta.soler@example.test" }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain('params: {"email":"m***r@e***e.test"}');
+    expect(reported).not.toContain("marta.soler@example.test");
+  });
+
   // Without the fallback the JSON throw would replace the boot's own error. `as never` because the
   // registry's typed params cannot express a cycle.
   it("still reports a failure whose params will not serialise", async () => {
