@@ -1122,6 +1122,12 @@ not the design's «borrado», because the page's never-wipe check (`NEVER_WIPE_E
 however the page was reached, because a start whose failure is classified `storage.disk_full`
 deletes the same leftovers, whatever the free space, before it records the failure.
 
+A start `runEntry` refuses before it begins (`setup.workspace_unsupported`,
+`setup.start_again_incomplete`) is not counted either: its status line reads "Level: recovery.
+This start was refused before it began, and was not counted." («Nivel: recovery. Este arranque se
+rechazó antes de empezar y no se ha contado.»), and it writes `server.boot_started` and then
+`server.boot_failed` with its code to `waitron.log`.
+
 Every recovery page `runEntry` serves, the one served at once and the ordinary one, shows the free
 space just below the status line: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
 disco del equipo: 1,2 MB.»). It is read again on every `GET /`, from the lower of the state and

@@ -45,10 +45,11 @@ coordinate with the other venues and follow any wait before selecting the series
 Opening a backup pauses ordinary setup even if its key is refused. Retry recovery on this page,
 or restart the box to return to ordinary setup. Going back or refreshing the page does not resume it.
 
-If the page closes or the box restarts, enter the proof again. Reopen the same source when only
-preparation was saved. **Finish saved recovery** proves the retained committed target before
-completing the same event; it does not choose a new name. Do not erase a retained operation to
-make another source fit. The bilingual [backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md)
+Keep the recovery page open until the recovery finishes. The recovery stops if the box restarts,
+if 15 minutes pass without a recovery step, or within five minutes of leaving the page or closing
+its tab. If it had saved progress, the repair page then shows it as stopped and does not offer
+**Recover from backup** beside it; **Start again** deletes it. Do not erase a retained operation
+by hand to make another source fit. The bilingual [backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md)
 walks through the controls. It is served with the other guides during normal operation; the
 repair-only listener does not link to or serve those guides.
 

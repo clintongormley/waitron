@@ -94,15 +94,17 @@ y esperas; no hay ningún código de instalación que escribir. Elige **Recupera
 elegido las nuevas series.
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si una comprobación
-lo impide, resuelve la causa e inténtalo de nuevo. No borres el intento conservado ni edites sus
-registros de recuperación.
+lo impide, resuelve la causa e inténtalo de nuevo. No borres a mano los archivos del intento
+conservado ni edites sus registros de recuperación.
 
 ## Continúa después de una interrupción {#resume}
 
-Al salir de la página o reiniciar el equipo se pierde la identificación del navegador. Vuelve a
-introducir la clave para continuar. Si la preparación se detuvo antes de colocar los datos, vuelve
-a abrir el mismo origen. Cuando aparezca **Finalizar recuperación guardada**, úsala para identificarte
-ante el destino conservado y completar esa misma recuperación. Conserva el evento y la selección guardados.
+Mientras la página de recuperación siga abierta, continúa donde lo dejaste. La recuperación se
+detiene si el equipo se reinicia o si pasan 15 minutos sin ningún paso de recuperación, aunque la
+página siga abierta. Salir de la página o cerrar su pestaña también la detiene, en menos de cinco
+minutos. Si la recuperación ya había guardado progreso, la página de reparación la muestra entonces
+como detenida y no ofrece **Recuperar desde una copia** junto a ella; **Empezar de nuevo** la borra,
+como se explica más arriba. Si no, vuelve a abrir la copia.
 Si la recuperación ya está guardada, reconecta con el equipo en lugar de volver a identificarte o colocarla.
 
 Cambiar el origen o el entorno vacía los controles autenticados de la página. No borra la operación

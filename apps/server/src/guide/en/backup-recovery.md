@@ -88,14 +88,16 @@ the recovery conditions and choose **Compare clocks**. Follow the clock and wait
 there is no installation code to type. Choose **Recover** once the new series is selected.
 
 A key that opens the backup does not bypass the history and clock checks. If a check refuses,
-resolve its cause and try again. Do not delete the retained attempt or edit its recovery records.
+resolve its cause and try again. Do not delete the retained attempt's files by hand or edit its
+recovery records.
 
 ## Continue after an interruption {#resume}
 
-Leaving the page or restarting the box discards the browser's proof. Re-enter the key before
-continuing. If preparation stopped before placement, reopen the same source. When **Finish saved
-recovery** is available, use it to prove access to the retained target and complete that exact
-recovery. It keeps the saved event and selected input.
+While the recovery page stays open, continue where you left off. The recovery stops if the box
+restarts, or if 15 minutes pass without a recovery step, even with the page open. Leaving the page
+or closing its tab also stops it, within five minutes. If the recovery had saved progress, the
+repair page then shows it as stopped and does not offer **Recover from backup** beside it; **Start
+again** deletes it, as described above. Otherwise, open the backup again.
 If recovery is already saved, reconnect to the box rather than proving or placing it again.
 
 Changing the source or environment clears the page's authenticated controls. It does not delete
