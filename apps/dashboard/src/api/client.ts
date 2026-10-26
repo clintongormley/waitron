@@ -2244,7 +2244,6 @@ export interface ThemeList {
   readonly inUse: string | null;
 }
 
-/** How a theme's logo prints on a receipt. */
 export interface ThemeLogoPrint {
   /** The paper's printable dots across. */
   readonly paperDots: number;

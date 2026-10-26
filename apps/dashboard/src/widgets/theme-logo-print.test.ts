@@ -166,6 +166,55 @@ it("an answer for an image no longer held is dropped", async () => {
   expect(getThemeLogoPrint.mock.calls).toEqual([[a], [b]]);
 });
 
+it("a refusal for an image no longer held is dropped", async () => {
+  const a = libraryName();
+  const b = libraryName();
+  let refuseA!: (reason: Error) => void;
+  getThemeLogoPrint
+    .mockReturnValueOnce(new Promise((_, reject) => (refuseA = reject)))
+    .mockResolvedValueOnce(BLACK);
+  const el = await mount(a);
+  el.image = b;
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+  refuseA(new Error("offline"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(q(el, '[data-test="logo-print-failed"]')).toBeNull();
+  expect(q(el, '[data-test="logo-print"] img')).not.toBeNull();
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [b]]);
+});
+
+it("changing the image ends the old image's watch", async () => {
+  const a = libraryName();
+  const b = libraryName();
+  network.mockImplementation(async () =>
+    reply({ [a]: presentation("a1"), [b]: presentation("b1") }),
+  );
+  getThemeLogoPrint.mockResolvedValue(BLACK);
+  const el = await mount(a);
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  el.image = b;
+  await vi.waitFor(() =>
+    expect(network.mock.calls.some(([url]) => decodeURIComponent(String(url)).includes(b))).toBe(
+      true,
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [b]]);
+
+  network.mockImplementation(async () =>
+    reply({ [a]: presentation("a2"), [b]: presentation("b1") }),
+  );
+  const before = network.mock.calls.length;
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(network.mock.calls.length).toBeGreaterThan(before));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const asked = decodeURIComponent(String(network.mock.calls.at(-1)![0]));
+  expect(asked).toContain(b);
+  expect(asked).not.toContain(a);
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [b]]);
+});
+
 it("asks again when the image changes under the same name", async () => {
   const a = libraryName();
   network.mockImplementation(async () => reply({ [a]: presentation("1") }));

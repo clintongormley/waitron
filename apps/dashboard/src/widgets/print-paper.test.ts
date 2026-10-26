@@ -159,3 +159,32 @@ it("draws a raster black on white", async () => {
     ...Array(4).fill(black),
   ]);
 });
+
+it("reads each raster row from its own stride of bytes", async () => {
+  const image = new Image();
+  image.src = rasterUrl({ widthDots: 16, heightDots: 2, data: "8A8PAA==" });
+  await image.decode();
+  expect([image.naturalWidth, image.naturalHeight]).toEqual([16, 2]);
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 2;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, 16, 2);
+  const shades = Array.from({ length: 32 }, (_, i) => [
+    data[i * 4],
+    data[i * 4 + 1],
+    data[i * 4 + 2],
+    data[i * 4 + 3],
+  ]);
+  const black = [0, 0, 0, 255];
+  const white = [255, 255, 255, 255];
+  expect(shades).toEqual([
+    ...Array(4).fill(black),
+    ...Array(8).fill(white),
+    ...Array(4).fill(black),
+    ...Array(4).fill(white),
+    ...Array(4).fill(black),
+    ...Array(8).fill(white),
+  ]);
+});
