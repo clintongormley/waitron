@@ -4208,7 +4208,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 
-- **A1137. The dashboard overview calls an Overdue order «Atrasado»; the station fields and the
+- **A1138. The dashboard overview calls an Overdue order «Atrasado»; the station fields and the
   till's signal say «Con retraso».** The overview's `overview.band_overdue`, `overview.overdue_count`
   and `overview.overdue_none` (`apps/dashboard/src/i18n/strings.ts`) and the till's
   `station.overdue_count` (`apps/till/src/i18n/strings.ts`) say «atrasado(s)». Decide which word wins.
