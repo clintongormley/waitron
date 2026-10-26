@@ -123,14 +123,15 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
 /**
  * D4 step 1, before the record: the set-aside folders, then a rename probe from each source root
  * the units use into its destination. A failure removes the empty folders this call made; `EXDEV`
- * refuses `setup.start_again_set_aside_unavailable`, anything else is thrown as it came.
+ * refuses `setup.start_again_set_aside_unavailable`, anything else is thrown as it came. Returns
+ * the folders it made, deepest first.
  */
 export async function prepareSetAside(
   roots: Roots,
   units: readonly StartAgainUnit[],
   destinations: Destinations,
   io: SetAsideIo = defaultIo,
-): Promise<void> {
+): Promise<string[]> {
   const folders = setAsideFolderPaths(roots, destinations);
   const used = (["state", "venue"] as const).filter((root) =>
     units.some((unit) => unit.root === root),
@@ -178,6 +179,7 @@ export async function prepareSetAside(
       );
     throw error;
   }
+  return made.reverse();
 }
 
 async function syncFolder(path: string): Promise<void> {

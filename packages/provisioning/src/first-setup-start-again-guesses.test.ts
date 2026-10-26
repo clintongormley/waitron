@@ -234,6 +234,31 @@ it("another attempt's counter starts at 0", async () => {
   });
 });
 
+it("a counter written under the attempt id's upper-case spelling is the lower-case spelling's counter", async () => {
+  const stateDir = await scratch();
+  const attemptId = randomUUID();
+  await writeFile(
+    join(stateDir, START_AGAIN_GUESSES_FILE),
+    JSON.stringify({
+      version: 1,
+      attemptId: attemptId.toUpperCase(),
+      failures: 6,
+      lastFailureAt: at(0).toISOString(),
+      waitUntil: at(MINUTE).toISOString(),
+    }),
+  );
+  expect(await wrong(stateDir, attemptId, at(1000))).toBe(59);
+  expect(await wrong(stateDir, attemptId.toUpperCase(), at(1000))).toBe(59);
+});
+
+it("a try under the upper-case spelling counts on the lower-case spelling's counter", async () => {
+  const stateDir = await scratch();
+  const attemptId = randomUUID();
+  for (let index = 0; index < 6; index++)
+    await beginStartAgainGuess(stateDir, attemptId.toUpperCase(), at(0));
+  expect(await wrong(stateDir, attemptId, at(1000))).toBe(59);
+});
+
 it("after a success, the next wrong guess counts from 0", async () => {
   const stateDir = await scratch();
   const attemptId = randomUUID();

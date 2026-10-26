@@ -962,9 +962,10 @@ it.each([false, true])(
 );
 it("a set-aside folder is not one of the box's originals", async () => {
   const f = await fixture();
-  const folders = [f.anchor.stateDir, f.anchor.venueDir].map((root) =>
-    join(root, START_AGAIN_SET_ASIDE_DIR, "1761472800000-attempt", "state"),
-  );
+  const folders = [
+    join(f.anchor.stateDir, START_AGAIN_SET_ASIDE_DIR, "1761472800000-attempt", "state"),
+    join(f.anchor.venueDir, START_AGAIN_SET_ASIDE_DIR, "1761472800000-attempt"),
+  ];
   for (const folder of folders) {
     await mkdir(folder, { recursive: true });
     await writeFile(join(folder, "node.db"), "moved bytes");

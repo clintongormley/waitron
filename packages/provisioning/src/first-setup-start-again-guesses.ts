@@ -91,7 +91,7 @@ async function readCounter(
       waitUntil: null,
       capped: false,
     };
-  if (stored.attemptId !== attemptId)
+  if (stored.attemptId.toLowerCase() !== attemptId)
     return { failures: 0, lastFailureAt: null, waitUntil: null, capped: false };
   const lastFailureAt = stored.lastFailureAt === null ? null : Date.parse(stored.lastFailureAt);
   const waitUntil = stored.waitUntil === null ? null : Date.parse(stored.waitUntil);
@@ -115,9 +115,11 @@ const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOStrin
  */
 export async function beginStartAgainGuess(
   stateDir: string,
-  attemptId: string,
+  givenAttemptId: string,
   now: Date,
 ): Promise<(outcome: "success" | "invalid") => Promise<void>> {
+  // Folded as the choice records fold it: the marker may spell the id in upper case.
+  const attemptId = givenAttemptId.toLowerCase();
   const path = join(stateDir, START_AGAIN_GUESSES_FILE);
   const write = (failures: number, lastFailureAt: number | null, waitUntil: number | null) =>
     writeDurableHostJson(

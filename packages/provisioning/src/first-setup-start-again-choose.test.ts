@@ -1,7 +1,18 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import * as fs from "node:fs/promises";
-import { lstat, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  rmdir,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -23,6 +34,7 @@ import {
   writeStartAgainConfirmation,
 } from "./first-setup-start-again-confirmation.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
+import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import type { SetAsideIo } from "./first-setup-start-again-set-aside.js";
 
@@ -445,7 +457,7 @@ it("two tries sent at once are counted one after the other", async () => {
 });
 
 const PROBE = ".first-setup-set-aside-probe-";
-const realIo: SetAsideIo = { lstat: fs.lstat, mkdir: fs.mkdir, rmdir: fs.rmdir, rename: fs.rename };
+const realIo: SetAsideIo = { lstat, mkdir, rmdir, rename };
 const errno = (code: string) => Object.assign(new Error(code), { code });
 const choose = (
   f: StartAgainAttempt & { listed: string },
@@ -532,7 +544,7 @@ it("Move writes the record before the first rename, and raises the note to the m
           records: await readdir(join(f.roots.stateDir, START_AGAIN_CHOICES_DIR)),
           note: await readStartAgainNote(f.roots.stateDir),
         });
-      await fs.rename(from, to);
+      await rename(from, to);
     },
   };
 
@@ -594,7 +606,7 @@ it("another mount point: the probe refuses setup.start_again_set_aside_unavailab
     ...realIo,
     rename: async (from, to) => {
       if (from.includes(PROBE)) throw errno("EXDEV");
-      await fs.rename(from, to);
+      await rename(from, to);
     },
   };
   await expect(choose(f, "move", { io })).rejects.toMatchObject({
@@ -618,7 +630,7 @@ it("a record that cannot be written refuses setup.attempt_invalid and moves noth
     ...realIo,
     rename: async (from, to) => {
       if (!from.includes(PROBE)) renamed.push(from);
-      await fs.rename(from, to);
+      await rename(from, to);
     },
   };
 
@@ -630,6 +642,22 @@ it("a record that cannot be written refuses setup.attempt_invalid and moves noth
   expect([still.ino, still.size, still.mtimeNs]).toEqual([source.ino, source.size, source.mtimeNs]);
   expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
   await expect(lstat(join(f.roots.venueDir, "first-setup-deleting.json"))).resolves.toBeDefined();
+});
+
+it("a record that cannot be written after the set-aside folders were made removes those empty folders and changes nothing else", async () => {
+  const f = await found();
+  const before = await folders(f.roots);
+  const elsewhere = await scratch();
+  const choicesLink = join(f.roots.stateDir, START_AGAIN_CHOICES_DIR);
+  await symlink(elsewhere, choicesLink);
+
+  await expect(choose(f, "move")).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+
+  await unlink(choicesLink);
+  await absent(join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR));
+  await absent(join(f.roots.venueDir, START_AGAIN_SET_ASIDE_DIR));
+  expect(await readdir(elsewhere)).toEqual([]);
+  expect(await folders(f.roots)).toEqual(before);
 });
 
 it("no log call and no thrown error carries the administrator's name or email", async () => {
@@ -675,7 +703,7 @@ it("no log call and no thrown error carries the administrator's name or email", 
         ...(error as object),
         message: (error as Error).message,
         stack: (error as Error).stack,
-        // Not enumerable, and the one detail the server logs.
+        // Not enumerable.
         reason: (error as { reason?: string }).reason,
         cause: String((error as Error).cause),
       })),

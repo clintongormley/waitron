@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { verifyPassword } from "@waitron/identity";
@@ -40,7 +40,7 @@ async function assertNotKept(stateDir: string, survey: Choice): Promise<void> {
 /** The setup record the survey just accepted; the survey under the lock proves it unchanged. */
 async function setupRecord(roots: Roots, survey: Choice): Promise<FirstSetupState> {
   try {
-    const bytes = await readFile(join(roots.stateDir, "first-setup.json"), "utf8");
+    const bytes = await fs.readFile(join(roots.stateDir, "first-setup.json"), "utf8");
     const state = parseState(JSON.parse(bytes), roots.venueDir, roots.stateDir);
     if (state.frozen.attemptId === survey.attemptId && state.frozenDigest === survey.frozenDigest)
       return state;
@@ -108,14 +108,21 @@ export async function chooseStartAgainLeftovers(input: {
       }
       const stem = startAgainChoiceStem(record);
       const setAside = await setAsideDestinations(roots, stem, input.io);
-      await prepareSetAside(roots, locked.units, setAside, input.io);
+      const made = await prepareSetAside(roots, locked.units, setAside, input.io);
       const move = {
         ...record,
         choice: "move",
         setAside,
         noteFloorMs: locked.noteFloorMs,
       } as const;
-      await writeStartAgainChoice(roots.stateDir, move);
+      try {
+        await writeStartAgainChoice(roots.stateDir, move);
+      } catch (error) {
+        // Nothing is moved yet, so these are still empty; rmdir refuses one that is not.
+        const rmdir = input.io?.rmdir ?? fs.rmdir;
+        for (const folder of made) await rmdir(folder).catch(() => undefined);
+        throw error;
+      }
       await moveStartAgainUnits(roots, { version: 1, ...move }, input.io);
       await finishStartAgainDeletion(roots);
       return { choice: "move", setAside };
