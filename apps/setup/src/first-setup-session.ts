@@ -658,6 +658,7 @@ export class FirstSetupSession {
   async #presentDatabaseSnapshot(
     owner: FirstSetupOwner,
     current: () => void,
+    refuse: () => never = () => failure("setup.attempt_conflict"),
   ): Promise<FirstSetupResolutionSnapshot> {
     const inspection = await this.#api.inspectFirstSetupResolution();
     current();
@@ -670,7 +671,7 @@ export class FirstSetupSession {
       inspection.revision !== owner.revision ||
       inspection.ownerGeneration !== owner.ownerGeneration
     )
-      failure("setup.attempt_conflict");
+      refuse();
     return {
       inspectionId: inspection.inspectionId,
       revision: owner.revision,
@@ -681,14 +682,20 @@ export class FirstSetupSession {
     if (this.recoveryRequired) failure("setup.owner_required");
     return this.#owner(false);
   }
-  /** With the database present, answered only while a stopped backup recovery is there to discard. */
+  /**
+   * With the database present, answered only while a stopped backup recovery is there to discard.
+   * What this tab sees that does not fit is thrown with no code: the page cannot read the details.
+   */
   stoppedRecoverySummary(): Promise<StartAgainSummary> {
+    const unreadable = (): never => {
+      throw new Error("The stopped recovery's summary could not be read.");
+    };
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
-      const snapshot = await this.#presentDatabaseSnapshot(owner, current);
+      const snapshot = await this.#presentDatabaseSnapshot(owner, current, unreadable);
       const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
       current();
-      if (summary.recovery === undefined) failure("setup.attempt_conflict");
+      if (summary.recovery === undefined) unreadable();
       return summary;
     });
   }

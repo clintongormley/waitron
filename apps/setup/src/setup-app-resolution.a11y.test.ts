@@ -215,7 +215,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const step of ["stopped", "password", "confirmation"] as const)
+      for (const step of ["stopped", "password", "confirmation", "unread"] as const)
         it(`${locale} ${theme} ${width} stopped recovery ${step}: accessible Start again with the database present`, async () => {
           const previous = [innerWidth, innerHeight];
           try {
@@ -240,7 +240,23 @@ for (const locale of ["en-GB", "es-ES"] as const)
                     artifacts: [],
                   });
                 if (path.endsWith("/backup/activity"))
-                  return Response.json({ activity: { state: "stopped", startedAt, lastActiveAt } });
+                  return Response.json({
+                    activity: {
+                      state: "stopped",
+                      startedAt,
+                      lastActiveAt,
+                      lastActiveSource: "saved-step",
+                      phase: "prepared",
+                      recoveryId: "r1",
+                      failed: false,
+                      cloud: true,
+                    },
+                  });
+                if (path.endsWith("/start-again/summary") && step === "unread")
+                  return Response.json(
+                    { error: { code: "setup.not_ready", params: {} } },
+                    { status: 409 },
+                  );
                 if (path.endsWith("/start-again/summary"))
                   return Response.json({
                     reached: "claimed",
@@ -279,15 +295,18 @@ for (const locale of ["en-GB", "es-ES"] as const)
               );
               await expect.poll(() => find("damaged-record-password")).not.toBeNull();
             }
-            if (step === "confirmation") {
+            if (step === "confirmation" || step === "unread") {
               const field = find<HTMLElement>("resume-password")!;
               await userEvent.fill(field.shadowRoot!.querySelector("input")!, "original password");
               await userEvent.click(
                 find<WtButton>("damaged-record-continue")!.shadowRoot!.querySelector("button")!,
               );
+            }
+            if (step === "confirmation") {
               await expect.poll(() => find("recovery-record-damaged")).not.toBeNull();
               await userEvent.click(find<HTMLInputElement>("retire-confirmed")!);
             }
+            if (step === "unread") await expect.poll(() => find("check-again")).not.toBeNull();
             await el.updateComplete;
             await expectNoA11yViolations(host);
             expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);

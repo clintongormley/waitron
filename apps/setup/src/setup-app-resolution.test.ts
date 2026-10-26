@@ -1165,28 +1165,71 @@ const stoppedAt = {
   startedAt: new Date(2026, 9, 25, 14, 35).toISOString(),
   lastActiveAt: new Date(2026, 9, 25, 14, 41).toISOString(),
 };
+/** The server's shape for a stopped recovery's activity. */
+const stoppedActivity = (overrides: Record<string, unknown> = {}) => ({
+  state: "stopped",
+  ...stoppedAt,
+  lastActiveSource: "memory",
+  phase: "prepared",
+  recoveryId: "r1",
+  failed: false,
+  cloud: false,
+  ...overrides,
+});
+/** Read after the password, so it is later than the activity read when the page loaded. */
+const summaryLastActiveAt = new Date(2026, 9, 25, 14, 47).toISOString();
 const stoppedSummary = (damaged: boolean) => ({
   reached: "claimed",
   lastName: null,
   ...(damaged ? { recoveryRecordDamaged: true } : {}),
   recovery: {
-    ...stoppedAt,
+    startedAt: stoppedAt.startedAt,
+    lastActiveAt: summaryLastActiveAt,
     lastActiveSource: "memory",
     lastName: "ABCDE",
     failed: false,
     cloud: false,
   },
 });
-async function stoppedPresent(options: { damaged?: boolean; running?: boolean } = {}) {
+async function stoppedPresent(
+  options: {
+    damaged?: boolean;
+    running?: boolean;
+    /** The activity answered by each read, counted from 0. */
+    activity?: (read: number) => unknown;
+    /** The summary's answer for each read, counted from 0; the summary itself when undefined. */
+    summary?: (read: number) => Response | undefined;
+    /** A Start again without the owner header is refused as the server does for a stopped recovery. */
+    passwordRequired?: boolean;
+  } = {},
+) {
   let generation = 1;
+  let activityReads = 0;
+  let summaryReads = 0;
   const fixture = await mount({
-    intercept(path, body) {
+    intercept(path, body, headers) {
       if (path.endsWith("/backup/activity"))
         return Response.json({
-          activity: { state: options.running ? "running" : "stopped", ...stoppedAt },
+          activity: options.activity
+            ? options.activity(activityReads++)
+            : options.running
+              ? { state: "running", ...stoppedAt }
+              : stoppedActivity(),
         });
       if (path.endsWith("/start-again/summary"))
-        return Response.json(stoppedSummary(options.damaged === true));
+        return (
+          options.summary?.(summaryReads++) ??
+          Response.json(stoppedSummary(options.damaged === true))
+        );
+      if (
+        options.passwordRequired &&
+        path.endsWith("/resolution/start-again") &&
+        !headers.has(ownerHeader)
+      )
+        return Response.json(
+          { error: { code: "setup.start_again_password_required", params: {} } },
+          { status: 403 },
+        );
       if (path.endsWith("/resolution/recover")) {
         if ((body as { password: string }).password !== venue.admin.password)
           return Response.json(
@@ -1215,6 +1258,14 @@ async function stoppedPresent(options: { damaged?: boolean; running?: boolean } 
 }
 const stoppedLines = (app: SetupApp) =>
   [...q(app, "recovery-stopped").querySelectorAll("p")].map((p) => p.textContent!.trim());
+const click = (app: SetupApp, name: string) =>
+  userEvent.click(q<WtButton>(app, name).shadowRoot!.querySelector("button")!);
+async function passwordAccepted(app: SetupApp) {
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  await password(app);
+  await click(app, "damaged-record-continue");
+}
 
 it("with the database present and a stopped recovery: the stopped line, then the password, then the confirmation; nothing is sent before the tick and Confirm", async () => {
   const t = initialOwnerStrings.en;
@@ -1234,7 +1285,11 @@ it("with the database present and a stopped recovery: the stopped line, then the
   );
   await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
   expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
-  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"));
+  // The confirmation is drawn from the summary read after the password, not the earlier activity.
+  expect(stoppedLines(app)).toEqual([
+    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
+    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:47"),
+  ]);
   expect(q(app, "cancel-start-again")).not.toBeNull();
   expect(q<WtButton>(app, "confirm-start-again").disabled).toBe(true);
   sentNothing();
@@ -1298,4 +1353,233 @@ it("with the database present, while a recovery runs, no Start again, password o
   ])
     expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
   expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
+});
+
+it("with the database present, Recover from backup is not offered beside a stopped recovery", async () => {
+  const { app } = await stoppedPresent();
+  expect(q(app, "recovery-stopped")).not.toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=recover-backup]")).toBeNull();
+  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+});
+
+it("with the database present and no recovery, Recover from backup is still offered", async () => {
+  const { app } = await stoppedPresent({ activity: () => null });
+  expect(app.shadowRoot!.querySelector("[data-test=recovery-stopped]")).toBeNull();
+  expect(q(app, "recover-backup")).not.toBeNull();
+});
+
+it.each([
+  {
+    activity: { lastActiveSource: "saved-step" },
+    lines: (t: (typeof initialOwnerStrings)["en"]) => [
+      t.recoveryLastSaved.replace("{at}", "25 Oct 2026, 14:41"),
+    ],
+  },
+  {
+    activity: { cloud: true },
+    lines: (t: (typeof initialOwnerStrings)["en"]) => [
+      t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:41"),
+      t.recoveryStoppedCloud,
+    ],
+  },
+])(
+  "with the database present, the stopped line before the password follows the activity's $activity",
+  async ({ activity, lines }) => {
+    const t = initialOwnerStrings.en;
+    const { app } = await stoppedPresent({ activity: () => stoppedActivity(activity) });
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-stopped]"))
+      .not.toBeNull();
+    expect(stoppedLines(app)).toEqual([
+      t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
+      ...lines(t),
+    ]);
+  },
+);
+
+it("with the database present, a recovery that stopped after the page loaded is drawn from the reads after the password: no damaged warning, and no damaged flag sent", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await stoppedPresent({
+    activity: (read) => (read === 0 ? null : stoppedActivity()),
+    passwordRequired: true,
+  });
+  expect(app.shadowRoot!.querySelector("[data-test=recovery-stopped]")).toBeNull();
+  await click(app, "start-again");
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
+  expect(stoppedLines(app)).toEqual([
+    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
+    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:47"),
+  ]);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
+  expect(startAgainRequests(requests)[1]!.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    confirmRecoveryDiscard: { shown: stoppedSummary(false) },
+  });
+});
+
+it("with the database present, a stopped recovery that runs again by the time the password is accepted is drawn as running, signed out, and nothing is sent", async () => {
+  const { app, requests } = await stoppedPresent({
+    activity: (read) => (read === 0 ? stoppedActivity() : { state: "running", ...stoppedAt }),
+  });
+  await passwordAccepted(app);
+  await expect
+    .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
+    .not.toBeNull();
+  for (const name of [
+    "confirm-start-again",
+    "damaged-record-password",
+    "start-again",
+    "abandon-attempt",
+  ])
+    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
+  expect(requests.some((r) => r.path.endsWith("/start-again/summary"))).toBe(false);
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+const refusal = (code: string, status: number) =>
+  Response.json({ error: { code, params: {} } }, { status });
+it.each([
+  {
+    name: "a refusal the page has no words for",
+    locale: "en-GB",
+    answer: () => refusal("setup.not_ready", 409),
+    shown: () => initialOwnerStrings.en.recoveryDetailsUnread,
+  },
+  {
+    name: "a refusal the page has no words for, in Spanish",
+    locale: "es-ES",
+    answer: () => refusal("setup.not_ready", 409),
+    shown: () => initialOwnerStrings.es.recoveryDetailsUnread,
+  },
+  {
+    name: "a summary that names no recovery",
+    locale: "en-GB",
+    answer: () => Response.json({ reached: "claimed", lastName: null }),
+    shown: () => initialOwnerStrings.en.recoveryDetailsUnread,
+  },
+  {
+    name: "a refusal the page has words for",
+    locale: "en-GB",
+    answer: () => refusal("setup.recovery_in_progress", 409),
+    shown: () => shellEn["shell.first_setup.recovery_in_progress"],
+  },
+])(
+  "with the database present, a summary read after the password that fails with $name says so, and Check again reads it again",
+  async ({ locale, answer, shown }) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const shell = shellText(locale);
+    const { app, requests } = await stoppedPresent({
+      summary: (read) => (read === 0 ? answer() : undefined),
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    await passwordAccepted(app);
+    await expect.poll(() => formErrors(app)).toEqual([shown()]);
+    const text = app.shadowRoot!.textContent!;
+    for (const wrong of [t.error, shell["shell.first_setup.attempt_conflict"]])
+      expect(text).not.toContain(wrong);
+    expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+    expect(app.shadowRoot!.querySelector("[data-test=abandon-attempt]")).toBeNull();
+    expect(q(app, "recovery-stopped")).not.toBeNull();
+    expect(q(app, "check-again").textContent).toContain(t.checkAgain);
+    const activityReads = requests.filter((r) => r.path.endsWith("/backup/activity")).length;
+    await click(app, "check-again");
+    await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+    expect(requests.filter((r) => r.path.endsWith("/backup/activity")).length).toBe(
+      activityReads + 1,
+    );
+    expect(requests.filter((r) => r.path.endsWith("/start-again/summary"))).toHaveLength(2);
+    expect(formErrors(app)).toEqual([""]);
+    expect(startAgainRequests(requests)).toEqual([]);
+  },
+);
+
+it("with the database present, Cancel after a failed summary read returns to the stopped recovery, signed out", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await stoppedPresent({
+    summary: (read) => (read === 0 ? refusal("setup.not_ready", 409) : undefined),
+  });
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "check-again")).not.toBeNull();
+  await click(app, "cancel-damaged-record");
+  await expect
+    .poll(() => app.shadowRoot!.querySelector<WtButton>("[data-test=start-again]")?.disabled)
+    .toBe(false);
+  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"));
+  expect(q(app, "resume")).not.toBeNull();
+  for (const name of ["abandon-attempt", "check-again", "recover-backup", "confirm-start-again"])
+    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(formErrors(app)).toEqual([""]);
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
+
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  const recovers = requests.filter((r) => r.path.endsWith("/resolution/recover"));
+  expect(recovers).toHaveLength(2);
+  expect(recovers[1]!.body).toMatchObject({ revision: 2, ownerGeneration: 2 });
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+it("with the database present, Start again after Cancel at a stopped recovery's confirmation reads the activity and the summary again before drawing it", async () => {
+  const t = initialOwnerStrings.en;
+  const later = new Date(2026, 9, 25, 14, 52).toISOString();
+  const { app, requests } = await stoppedPresent({
+    summary: (read) =>
+      read === 0
+        ? undefined
+        : Response.json({
+            ...stoppedSummary(false),
+            recovery: { ...stoppedSummary(false).recovery, lastActiveAt: later },
+          }),
+  });
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  await click(app, "cancel-start-again");
+  await expect
+    .poll(() => app.shadowRoot!.querySelector("[data-test=confirm-start-again]"))
+    .toBeNull();
+  const activityReads = requests.filter((r) => r.path.endsWith("/backup/activity")).length;
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(requests.filter((r) => r.path.endsWith("/backup/activity")).length).toBe(
+    activityReads + 1,
+  );
+  expect(stoppedLines(app)).toEqual([
+    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
+    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:52"),
+  ]);
+  expect(requests.filter((r) => r.path.endsWith("/resolution/recover"))).toHaveLength(1);
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+it("with the database present, a stopped recovery gone by the time the password is accepted: back to the repair page, signed out, with no damaged warning and nothing sent", async () => {
+  const { app, requests } = await stoppedPresent({
+    activity: (read) => (read === 0 ? stoppedActivity() : null),
+  });
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "recover-backup")).not.toBeNull();
+  for (const name of [
+    "recovery-stopped",
+    "recovery-record-damaged",
+    "confirm-start-again",
+    "damaged-record-password",
+    "abandon-attempt",
+  ])
+    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
+  expect(requests.some((r) => r.path.endsWith("/start-again/summary"))).toBe(false);
+  expect(startAgainRequests(requests)).toEqual([]);
 });
