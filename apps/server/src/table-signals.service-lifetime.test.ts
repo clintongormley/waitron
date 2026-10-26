@@ -142,7 +142,7 @@ async function fixture({
 async function expectedSignals(
   count: number,
   state: "ready" | "preparing",
-  oldestReadyAt: string,
+  oldestReadyAt: string | null = null,
   extras = false,
 ) {
   if (count === 0) return [];
@@ -192,7 +192,7 @@ describe("A773 no dispatch state — remaining kitchen signals", () => {
     { name: "finished", cancelled: 1000, served: 2000, count: 0 },
   ])("warns of waiting only for $name preparing food", async ({ count, ...options }) => {
     const order = await fixture({ ...options, state: "preparing" });
-    const expected = await expectedSignals(count, "preparing", order.at);
+    const expected = await expectedSignals(count, "preparing");
 
     expect(await signalsOf(order)).toEqual({ bill: expected, table: expected });
   });

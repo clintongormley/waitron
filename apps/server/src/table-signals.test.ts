@@ -1020,8 +1020,14 @@ describe("the floor's attention signals", () => {
 describe("each station's oldest ready time", () => {
   const at = (minute: string) => `2026-10-26T20:${minute}:00.000Z`;
 
-  /** Mesa 2 with two caña lines (`quantities`) and a burger, all made ready and stamped. */
-  async function readyTable(quantities: readonly [string, string]) {
+  /**
+   * Mesa 2 with a caña line per quantity, stamped in turn with `minutes`, and a burger stamped
+   * 20:03, all made ready.
+   */
+  async function readyTable(
+    quantities: readonly string[],
+    minutes: readonly string[] = ["04", "01"],
+  ) {
     const v = await setupPartyVenue(suite.db);
     const bar = await inTx(v, async (tx) => {
       const { id } = await createStation(tx, v.cfg, {
@@ -1036,16 +1042,16 @@ describe("each station's oldest ready time", () => {
     const seated = await seat(v, mesa2);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, seated.tabId, [
-        { menuItemId: v.item("Caña"), quantity: quantities[0] },
-        { menuItemId: v.item("Caña"), quantity: quantities[1] },
+        ...quantities.map((quantity) => ({ menuItemId: v.item("Caña"), quantity })),
         { menuItemId: v.item("Burger"), quantity: "1" },
       ]),
     );
     await makeReady(v, seated.tabId, "Caña");
     await makeReady(v, seated.tabId, "Burger");
-    await setReadyAt(v, seated.tabId, 1, at("04"));
-    await setReadyAt(v, seated.tabId, 2, at("01"));
-    await setReadyAt(v, seated.tabId, 3, at("03"));
+    for (const [index, minute] of minutes.entries()) {
+      await setReadyAt(v, seated.tabId, index + 1, at(minute));
+    }
+    await setReadyAt(v, seated.tabId, quantities.length + 1, at("03"));
     return { v, bar, kitchen, mesa2, ...seated };
   }
 
@@ -1074,6 +1080,22 @@ describe("each station's oldest ready time", () => {
       },
     ]);
   });
+
+  it.each([
+    ["first", ["01", "04", "05"]],
+    ["between", ["04", "01", "05"]],
+    ["last", ["04", "05", "01"]],
+  ])(
+    "the oldest ready time is the earliest stamp when its line comes %s",
+    async (_place, minutes) => {
+      const { v, bar, mesa2 } = await readyTable(["1", "1", "1"], minutes);
+      const barEntry = (await floorRow(v, mesa2)).signals
+        .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
+        .find((entry) => entry.stationId === bar);
+
+      expect(barEntry).toMatchObject({ count: 3, oldestReadyAt: at("01") });
+    },
+  );
 
   it("serving the oldest ready dish moves the oldest ready time to the next", async () => {
     const { v, bar, mesa2, partyId, tabId } = await readyTable(["2", "1"]);
@@ -1121,7 +1143,7 @@ describe("each station's oldest ready time", () => {
     ]);
   });
 
-  it("the counter tab's ready signal carries the same two facts", async () => {
+  it("a table bill's ready signal read through readBillSignals carries the same two facts", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     const { tabId } = await seat(v, await v.table("Mesa 2"));
