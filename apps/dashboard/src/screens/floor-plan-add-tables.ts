@@ -88,12 +88,21 @@ export class FloorPlanAddTables extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+        container-type: inline-size;
       }
       .name-row {
         display: grid;
         grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
         align-items: start;
         gap: var(--wt-space-2);
+        max-width: var(--wt-field-max-width);
+      }
+      /* A literal because a container query cannot read a token: below it, the Short name
+         column is too narrow for «Nombre corto 100 *». */
+      @container (width < 480px) {
+        .name-row {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
       .preview {
         margin: 0;
@@ -304,7 +313,10 @@ export class FloorPlanAddTables extends LitElement {
     const range =
       count === 1
         ? names[0]!
-        : fill("floor_plan_editor.name_range", { first: names[0]!, last: names.at(-1)! });
+        : fill(short ? "floor_plan_editor.short_name_range" : "floor_plan_editor.name_range", {
+            first: names[0]!,
+            last: names.at(-1)!,
+          });
     return short ? fill("floor_plan_editor.short_names_preview", { names: range }) : range;
   }
 

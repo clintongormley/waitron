@@ -1,5 +1,6 @@
 import { proposeShortName } from "@waitron/shared";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished } from "vitest";
+import { page } from "vitest/browser";
 import type { WtButton, WtFormActions, WtModal } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -363,11 +364,19 @@ it("the preview gives the short names the tables will get", async () => {
   expect(shortPreview(el)).toBe("Short names: T11 to T15");
   setLocale("es-ES");
   await el.updateComplete;
-  const range = es["floor_plan_editor.name_range"]
+  expect(preview(el)).toBe(
+    es["floor_plan_editor.name_range"]
+      .replace("{first}", "Terrace 11")
+      .replace("{last}", "Terrace 15"),
+  );
+  const range = es["floor_plan_editor.short_name_range"]
     .replace("{first}", "T11")
     .replace("{last}", "T15");
   expect(shortPreview(el)).toBe(
     es["floor_plan_editor.short_names_preview"].replace("{names}", range),
+  );
+  expect(shortPreview(el)).not.toContain(
+    es["floor_plan_editor.name_range"].replace("{first}", "T11").replace("{last}", "T15"),
   );
 });
 
@@ -465,3 +474,56 @@ it("automatic short names holding + are refused beside Prefix", async () => {
   expect(addField(el, "prefix").error).toBe("Leave out +: it marks joined tables.");
   expect(changes).toEqual([]);
 });
+
+async function atViewport(width: number, height: number): Promise<void> {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(width, height);
+  onTestFinished(() => page.viewport(...before));
+}
+
+const box = (el: Element) => el.getBoundingClientRect();
+const labelText = (field: Element) =>
+  field.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+
+it("a narrow dialog stacks each Short name under its Name, its label shown whole", async () => {
+  await atViewport(390, 844);
+  setLocale("es-ES");
+  const el = await openAdd();
+  await setNames(
+    el,
+    Array.from({ length: 10 }, (_, i) => `Patio ${i + 1}`),
+  );
+  const names = nameFields(el);
+  const shorts = shortNameFields(el);
+  expect(shorts.at(-1)!.label).toBe(es["floor_plan_editor.short_name_n"].replace("{n}", "10"));
+  for (const [i, short] of shorts.entries()) {
+    expect(box(short).top).toBeGreaterThanOrEqual(box(names[i]!).bottom);
+    const text = labelText(short);
+    expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+  }
+});
+
+it("a wide dialog keeps each Short name beside its Name", async () => {
+  await atViewport(1280, 860);
+  const el = await openAdd();
+  await setNames(el, ["Patio 1", "Patio 2"]);
+  const names = nameFields(el);
+  for (const [i, short] of shortNameFields(el).entries()) {
+    expect(box(short).top).toBe(box(names[i]!).top);
+    expect(box(short).left).toBeGreaterThan(box(names[i]!).right);
+  }
+});
+
+for (const [width, height] of [
+  [1280, 860],
+  [390, 844],
+] as const) {
+  it(`at ${width} px a Name and Short name row ends where the dialog's other fields end`, async () => {
+    await atViewport(width, height);
+    const el = await openAdd();
+    await setNames(el, ["Patio 1", "Patio 2"]);
+    const end = box(addField(el, "naming")).right;
+    expect(box(addField(el, "table-count")).right).toBeCloseTo(end, 0);
+    for (const short of shortNameFields(el)) expect(box(short).right).toBeCloseTo(end, 0);
+  });
+}
