@@ -1160,3 +1160,142 @@ it("with the database present, a tab that signed in before reads the activity on
   expect(requests.filter((r) => r.body !== undefined)).toEqual([]);
   expect(requests.some((r) => r.path.endsWith("/first-setup/resume"))).toBe(false);
 });
+
+const stoppedAt = {
+  startedAt: new Date(2026, 9, 25, 14, 35).toISOString(),
+  lastActiveAt: new Date(2026, 9, 25, 14, 41).toISOString(),
+};
+const stoppedSummary = (damaged: boolean) => ({
+  reached: "claimed",
+  lastName: null,
+  ...(damaged ? { recoveryRecordDamaged: true } : {}),
+  recovery: {
+    ...stoppedAt,
+    lastActiveSource: "memory",
+    lastName: "ABCDE",
+    failed: false,
+    cloud: false,
+  },
+});
+async function stoppedPresent(options: { damaged?: boolean; running?: boolean } = {}) {
+  let generation = 1;
+  const fixture = await mount({
+    intercept(path, body) {
+      if (path.endsWith("/backup/activity"))
+        return Response.json({
+          activity: { state: options.running ? "running" : "stopped", ...stoppedAt },
+        });
+      if (path.endsWith("/start-again/summary"))
+        return Response.json(stoppedSummary(options.damaged === true));
+      if (path.endsWith("/resolution/recover")) {
+        if ((body as { password: string }).password !== venue.admin.password)
+          return Response.json(
+            { error: { code: "setup.owner_required", params: {} } },
+            { status: 403 },
+          );
+        generation += 1;
+        return Response.json({
+          state: { ...initial, revision: generation, ownerGeneration: generation },
+          capability: "B".repeat(43),
+          ownerGeneration: generation,
+        });
+      }
+      if (path.endsWith("/resolution"))
+        return Response.json({ ...inspection, revision: generation, ownerGeneration: generation });
+    },
+  });
+  await expect
+    .poll(() =>
+      fixture.app.shadowRoot!.querySelector(
+        options.running ? "[data-test=recovery-running]" : "[data-test=start-again]",
+      ),
+    )
+    .not.toBeNull();
+  return fixture;
+}
+const stoppedLines = (app: SetupApp) =>
+  [...q(app, "recovery-stopped").querySelectorAll("p")].map((p) => p.textContent!.trim());
+
+it("with the database present and a stopped recovery: the stopped line, then the password, then the confirmation; nothing is sent before the tick and Confirm", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await stoppedPresent();
+  const sentNothing = () => expect(startAgainRequests(requests)).toEqual([]);
+  expect(stoppedLines(app)).toEqual([
+    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
+    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:41"),
+  ]);
+  await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  expect(q(app, "confirm-start-again")).toBeNull();
+  sentNothing();
+  await password(app);
+  await userEvent.click(
+    q<WtButton>(app, "damaged-record-continue").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
+  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"));
+  expect(q(app, "cancel-start-again")).not.toBeNull();
+  expect(q<WtButton>(app, "confirm-start-again").disabled).toBe(true);
+  sentNothing();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  sentNothing();
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+  const sent = startAgainRequests(requests)[0]!;
+  expect(sent.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    confirmRecoveryDiscard: { shown: stoppedSummary(false) },
+  });
+  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
+  await expect.poll(() => app.shadowRoot!.textContent).toContain(t.restarting);
+});
+
+it("with the database present, a damaged record and a stopped recovery: both lines are drawn before Confirm, and the request carries both keys", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await stoppedPresent({ damaged: true });
+  await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  await password(app);
+  await userEvent.click(
+    q<WtButton>(app, "damaged-record-continue").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  const damaged = q(app, "recovery-record-damaged");
+  expect(damaged.textContent).toBe(t.recoveryRecordDamaged);
+  expect(
+    damaged.compareDocumentPosition(q(app, "recovery-stopped")) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(startAgainRequests(requests)).toEqual([]);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+  expect(startAgainRequests(requests)[0]!.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    confirmRecoveryDiscard: { shown: stoppedSummary(true) },
+    recoveryRecordDamagedShown: true,
+  });
+});
+
+it("with the database present, while a recovery runs, no Start again, password or confirmation is offered and nothing is sent", async () => {
+  const { app, requests } = await stoppedPresent({ running: true });
+  for (const name of [
+    "start-again",
+    "resume-password",
+    "damaged-record-password",
+    "confirm-start-again",
+    "recovery-stopped",
+  ])
+    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
+});

@@ -655,29 +655,57 @@ export class FirstSetupSession {
       }
     });
   }
-  retireDamagedRecord() {
+  async #presentDatabaseSnapshot(
+    owner: FirstSetupOwner,
+    current: () => void,
+  ): Promise<FirstSetupResolutionSnapshot> {
+    const inspection = await this.#api.inspectFirstSetupResolution();
+    current();
+    if (
+      inspection.pair !== "valid" ||
+      inspection.database === "missing" ||
+      inspection.emptyDatabase !== true ||
+      inspection.password !== "checkable" ||
+      !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
+      inspection.revision !== owner.revision ||
+      inspection.ownerGeneration !== owner.ownerGeneration
+    )
+      failure("setup.attempt_conflict");
+    return {
+      inspectionId: inspection.inspectionId,
+      revision: owner.revision,
+      ownerGeneration: owner.ownerGeneration,
+    };
+  }
+  #presentDatabaseOwner(): FirstSetupOwner {
+    if (this.recoveryRequired) failure("setup.owner_required");
+    return this.#owner(false);
+  }
+  /** With the database present, answered only while a stopped backup recovery is there to discard. */
+  stoppedRecoverySummary(): Promise<StartAgainSummary> {
     return this.#run(async (current) => {
-      if (this.recoveryRequired) failure("setup.owner_required");
-      const owner = this.#owner(false);
+      const owner = this.#presentDatabaseOwner();
+      const snapshot = await this.#presentDatabaseSnapshot(owner, current);
+      const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
+      current();
+      if (summary.recovery === undefined) failure("setup.attempt_conflict");
+      return summary;
+    });
+  }
+  retireDamagedRecord(stoppedRecovery?: StartAgainSummary) {
+    return this.#run(async (current) => {
+      const owner = this.#presentDatabaseOwner();
       try {
-        const inspection = await this.#api.inspectFirstSetupResolution();
-        current();
-        if (
-          inspection.pair !== "valid" ||
-          inspection.database === "missing" ||
-          inspection.emptyDatabase !== true ||
-          inspection.password !== "checkable" ||
-          !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
-          inspection.revision !== owner.revision ||
-          inspection.ownerGeneration !== owner.ownerGeneration
-        )
-          failure("setup.attempt_conflict");
-        const snapshot = {
-          inspectionId: inspection.inspectionId,
-          revision: owner.revision,
-          ownerGeneration: owner.ownerGeneration,
-        };
-        const result = await this.#api.startAgainFirstSetup(snapshot, owner, undefined, true);
+        const snapshot = await this.#presentDatabaseSnapshot(owner, current);
+        const result = await this.#api.startAgainFirstSetup(
+          snapshot,
+          owner,
+          undefined,
+          stoppedRecovery === undefined || stoppedRecovery.recoveryRecordDamaged === true
+            ? true
+            : undefined,
+          stoppedRecovery === undefined ? undefined : { shown: stoppedRecovery },
+        );
         current();
         if (result.restarting !== true) failure("setup.attempt_conflict");
         return result;

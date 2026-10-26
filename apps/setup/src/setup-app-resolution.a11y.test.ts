@@ -212,3 +212,92 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await page.viewport(previous[0]!, previous[1]!);
           }
         });
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280])
+      for (const step of ["stopped", "password", "confirmation"] as const)
+        it(`${locale} ${theme} ${width} stopped recovery ${step}: accessible Start again with the database present`, async () => {
+          const previous = [innerWidth, innerHeight];
+          try {
+            await page.viewport(width, 1200);
+            let recovered = false;
+            const startedAt = new Date(2026, 9, 25, 14, 35).toISOString();
+            const lastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
+            const { api, requests } = wizardApi({
+              claimed: true,
+              intercept(path) {
+                if (path.endsWith("/resolution"))
+                  return Response.json({
+                    version: 2,
+                    inspectionId: "a".repeat(64),
+                    pair: "valid",
+                    database: "no-venue-rows",
+                    emptyDatabase: true,
+                    password: "checkable",
+                    revision: recovered ? 2 : 1,
+                    ownerGeneration: recovered ? 2 : 1,
+                    repairEligible: false,
+                    artifacts: [],
+                  });
+                if (path.endsWith("/backup/activity"))
+                  return Response.json({ activity: { state: "stopped", startedAt, lastActiveAt } });
+                if (path.endsWith("/start-again/summary"))
+                  return Response.json({
+                    reached: "claimed",
+                    lastName: null,
+                    recoveryRecordDamaged: true,
+                    recovery: {
+                      startedAt,
+                      lastActiveAt,
+                      lastActiveSource: "saved-step",
+                      lastName: "ABCDE",
+                      failed: false,
+                      cloud: true,
+                    },
+                  });
+                if (path.endsWith("/resolution/recover")) {
+                  recovered = true;
+                  return Response.json({
+                    state: { ...initial, revision: 2, ownerGeneration: 2 },
+                    capability: "B".repeat(43),
+                    ownerGeneration: 2,
+                  });
+                }
+              },
+            });
+            const { el, host } = await mountWidget<SetupApp>(
+              "setup-app",
+              { api, browserLanguages: [locale] },
+              theme,
+            );
+            const find = <T extends Element>(name: string) =>
+              el.shadowRoot!.querySelector<T>(`[data-test=${name}]`);
+            await expect.poll(() => find("recovery-stopped")).not.toBeNull();
+            if (step !== "stopped") {
+              await userEvent.click(
+                find<WtButton>("start-again")!.shadowRoot!.querySelector("button")!,
+              );
+              await expect.poll(() => find("damaged-record-password")).not.toBeNull();
+            }
+            if (step === "confirmation") {
+              const field = find<HTMLElement>("resume-password")!;
+              await userEvent.fill(field.shadowRoot!.querySelector("input")!, "original password");
+              await userEvent.click(
+                find<WtButton>("damaged-record-continue")!.shadowRoot!.querySelector("button")!,
+              );
+              await expect.poll(() => find("recovery-record-damaged")).not.toBeNull();
+              await userEvent.click(find<HTMLInputElement>("retire-confirmed")!);
+            }
+            await el.updateComplete;
+            await expectNoA11yViolations(host);
+            expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+            expect(
+              el
+                .shadowRoot!.querySelector("[data-test=screen-first-owner]")!
+                .getBoundingClientRect().right,
+            ).toBeLessThanOrEqual(width);
+            expect(requests.filter((request) => request.path.endsWith("/start-again"))).toEqual([]);
+          } finally {
+            await page.viewport(previous[0]!, previous[1]!);
+          }
+        });

@@ -1050,6 +1050,8 @@ export class SetupApp extends LitElement {
   @state() private firstMissingSummary?: StartAgainSummary;
   /** With the database present, a damaged recovery-key record: the password step, then the warning. */
   @state() private firstDamagedRecord?: "password" | "confirm";
+  /** With the database present, the summary of a stopped backup recovery read after the password. */
+  @state() private firstStoppedSummary?: StartAgainSummary;
   @state() private firstBackupPhase?: BackupRepairStatus["phase"];
   /** Read before anything is offered on this page, so nothing is offered while a recovery runs elsewhere. */
   @state() private firstActivity?: BackupRepairActivity | null;
@@ -1319,6 +1321,7 @@ export class SetupApp extends LitElement {
     const session = this.#firstSession;
     this.#firstSession = undefined;
     this.firstDamagedRecord = undefined;
+    this.firstStoppedSummary = undefined;
     await session?.forgetOwner();
   }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
@@ -1353,7 +1356,7 @@ export class SetupApp extends LitElement {
     try {
       if (missing) await this.#firstSession!.retireMissingDatabase(shown!);
       else if (this.firstDamagedRecord === "confirm")
-        await this.#firstSession!.retireDamagedRecord();
+        await this.#firstSession!.retireDamagedRecord(this.firstStoppedSummary);
       else await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
       if (!current()) return;
       this.firstDamagedRecord = undefined;
@@ -1384,6 +1387,7 @@ export class SetupApp extends LitElement {
           this.firstRestartConfirm = false;
           this.firstRetireConfirmed = false;
           this.firstDamagedRecord = "password";
+          this.firstStoppedSummary = undefined;
           this.firstOwnerError = this.#describeFirstError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
           if (current() && inspection) this.firstInspection = inspection;
@@ -1412,6 +1416,11 @@ export class SetupApp extends LitElement {
       // The owner path of Start again needs a fresh recovery, whatever the attempt's status.
       await session.recover(this.#firstResolutionSnapshot(), password);
       if (!current()) return;
+      this.firstStoppedSummary = undefined;
+      if (this.#stoppedHere()) {
+        this.firstStoppedSummary = await session.stoppedRecoverySummary();
+        if (!current()) return;
+      }
       this.#acceptFirstIdentity();
       this.firstDamagedRecord = "confirm";
       this.firstRetireConfirmed = false;
@@ -1424,6 +1433,7 @@ export class SetupApp extends LitElement {
   }
   async #cancelDamagedRecord(): Promise<void> {
     this.firstDamagedRecord = undefined;
+    this.firstStoppedSummary = undefined;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
     this.firstPasswordAttempted = false;
@@ -1435,8 +1445,18 @@ export class SetupApp extends LitElement {
       await this.#signOutFirstSession();
   }
   #showsDamagedRecord(missing: boolean, ask: StartAgainSummary | undefined): boolean {
+    if (missing) return ask?.recoveryRecordDamaged === true;
+    const stopped = this.firstStoppedSummary;
     return (
-      (missing && ask?.recoveryRecordDamaged === true) || this.firstDamagedRecord === "confirm"
+      this.firstDamagedRecord === "confirm" &&
+      (stopped === undefined || stopped.recoveryRecordDamaged === true)
+    );
+  }
+  #stoppedHere(): boolean {
+    return (
+      this.firstInspection !== undefined &&
+      this.firstInspection.database !== "missing" &&
+      this.firstActivity?.state === "stopped"
     );
   }
   async #reconnectFirstSetup(): Promise<void> {
@@ -1453,6 +1473,7 @@ export class SetupApp extends LitElement {
       this.firstRestarting = false;
       this.firstMissingSummary = undefined;
       this.firstDamagedRecord = undefined;
+      this.firstStoppedSummary = undefined;
       this.firstBackupPhase = undefined;
       this.firstRecoveryUnsettled = false;
       this.#stopActivityWatch();
@@ -2297,6 +2318,8 @@ export class SetupApp extends LitElement {
     const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
     const offersNothing = running !== undefined || this.firstActivityUnreadable;
     const stopped = ask?.recovery;
+    const stoppedHere =
+      !missing && this.firstActivity?.state === "stopped" ? this.firstActivity : undefined;
     const offersStartAgain = !recoveryStarted || stopped !== undefined;
     const lastActive = (at: string, source?: "memory" | "saved-step") =>
       (source === "saved-step" ? t.recoveryLastSaved : t.recoveryLastActive).replace(
@@ -2334,10 +2357,23 @@ export class SetupApp extends LitElement {
       variant="secondary"
       ?disabled=${this.firstOwnerBusy || !canRestart}
       @click=${() => {
-        this.firstRestartConfirm = true;
+        // Discarding a stopped recovery needs the password before its summary can be read.
+        if (stoppedHere && damaged === undefined) this.firstDamagedRecord = "password";
+        else this.firstRestartConfirm = true;
       }}
       >${t.startAgain}</wt-button
     >`;
+    const stoppedBlock = (recovery: {
+      startedAt: string;
+      lastActiveAt: string;
+      lastActiveSource?: "memory" | "saved-step";
+      cloud?: boolean;
+    }) =>
+      html`<div data-test="recovery-stopped">
+        <p>${t.recoveryStopped.replace("{started}", shownAt(recovery.startedAt))}</p>
+        <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
+        ${recovery.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
+      </div>`;
     const passwordField = html`<wt-input
       data-test="resume-password"
       name="setup-resume-password"
@@ -2366,6 +2402,11 @@ export class SetupApp extends LitElement {
       ? html`${
             this.#showsDamagedRecord(missing, ask)
               ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
+              : nothing
+          }
+          ${
+            !missing && this.firstStoppedSummary?.recovery
+              ? stoppedBlock(this.firstStoppedSummary.recovery)
               : nothing
           }
           <p>${t.startAgainHelp}</p>
@@ -2488,13 +2529,7 @@ export class SetupApp extends LitElement {
                   </ul>
                   ${
                     stopped
-                      ? html`<div data-test="recovery-stopped">
-                          <p>
-                            ${t.recoveryStopped.replace("{started}", shownAt(stopped.startedAt))}
-                          </p>
-                          <p>${lastActive(stopped.lastActiveAt, stopped.lastActiveSource)}</p>
-                          ${stopped.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
-                        </div>`
+                      ? stoppedBlock(stopped)
                       : html`${
                             this.firstBackupPhase === "uncertain"
                               ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
@@ -2506,7 +2541,7 @@ export class SetupApp extends LitElement {
                     ${stopped ? nothing : recoverBackup}${offersStartAgain ? startAgain : nothing}
                   </div>
                   ${offersStartAgain ? startAgainConfirm : nothing}`
-              : html`${startAgain}
+              : html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${startAgain}
                 ${!canRestart && !authenticatedMissing ? html`<p>${t.startUnavailable}</p>` : nothing}
                 ${startAgainConfirm} ${recoverBackup}
                 ${
