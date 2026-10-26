@@ -48,15 +48,14 @@ const suite = useVenueDb({
 interface Venue {
   cfg: OriginConfig;
   catalogueId: string;
-  cafe: string;
-  tostada: string;
-  agua: string;
-  azucar: string;
+  coffee: string;
+  toast: string;
+  water: string;
+  sugar: string;
   extrasListId: string;
-  stations: { cocina: string; barra: string; pase: string };
+  stations: { kitchen: string; counter: string; pass: string };
 }
 
-// Three products: café has a product cell, tostada a category cell, and agua uses the default.
 async function seedVenue(db: Database): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
@@ -65,7 +64,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
     .returning({ id: locations.id });
   const locationId = brandLocationId(loc!.id);
-  const cocina = await seedKitchenStation(db, { locationId });
+  const kitchen = await seedKitchenStation(db, { locationId });
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db, locationId)),
@@ -76,27 +75,27 @@ async function seedVenue(db: Database): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   return withTransaction(db, async (tx) => {
-    const carta = await createCatalogue(tx, { name: "Carta" });
-    await assignCatalogueToLocation(tx, locationId, carta.id);
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const comida = await createCategory(tx, { name: "Comida" });
+    const menu = await createCatalogue(tx, { name: "Carta" });
+    await assignCatalogueToLocation(tx, locationId, menu.id);
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const food = await createCategory(tx, { name: "Comida" });
     const product = (name: string, unitPrice: string, categoryId: string | null) =>
       createProduct(tx, {
-        catalogueId: carta.id,
+        catalogueId: menu.id,
         categoryId,
         name,
         pricingUnit: "each",
         unitPrice,
         vatClass: "general",
       });
-    const cafe = await product("Café", "1.50", bebidas.id);
-    const tostada = await product("Tostada", "2.00", comida.id);
-    const agua = await product("Agua", "1.20", null);
-    const azucar = await product("Azúcar", "0.10", null);
-    const barra = await createStation(tx, cfg, { name: "Barra" });
-    const pase = await createStation(tx, cfg, { name: "Pase" });
-    await routeProductTo(tx, cfg, cafe.id, barra.id);
-    await routeCategoryTo(tx, cfg, comida.id, pase.id);
+    const coffee = await product("Café", "1.50", drinks.id);
+    const toast = await product("Tostada", "2.00", food.id);
+    const water = await product("Agua", "1.20", null);
+    const sugar = await product("Azúcar", "0.10", null);
+    const counter = await createStation(tx, cfg, { name: "Barra" });
+    const pass = await createStation(tx, cfg, { name: "Pase" });
+    await routeProductTo(tx, cfg, coffee.id, counter.id);
+    await routeCategoryTo(tx, cfg, food.id, pass.id);
     const list = await createExtraList(
       tx,
       {
@@ -106,20 +105,20 @@ async function seedVenue(db: Database): Promise<Venue> {
         minPicks: 0,
         maxPicks: null,
         active: true,
-        items: [{ productId: azucar.id, maxQuantity: 1, preselected: false, price: "0.20" }],
+        items: [{ productId: sugar.id, maxQuantity: 1, preselected: false, price: "0.20" }],
       },
       "es",
     );
-    await writeProductModifiers(tx, cafe.id, [{ kind: "extras", id: list.id }]);
+    await writeProductModifiers(tx, coffee.id, [{ kind: "extras", id: list.id }]);
     return {
       cfg,
-      catalogueId: carta.id,
-      cafe: cafe.id,
-      tostada: tostada.id,
-      agua: agua.id,
-      azucar: azucar.id,
+      catalogueId: menu.id,
+      coffee: coffee.id,
+      toast: toast.id,
+      water: water.id,
+      sugar: sugar.id,
       extrasListId: list.id,
-      stations: { cocina, barra: barra.id, pase: pase.id },
+      stations: { kitchen, counter: counter.id, pass: pass.id },
     };
   });
 }
@@ -163,7 +162,7 @@ describe("offerProducts", () => {
       const offers = await offerProducts(tx, venue.cfg);
       await addProductToMenu(tx, {
         menuId: venue.catalogueId,
-        productId: venue.cafe,
+        productId: venue.coffee,
         grossPrice: "2.50",
       });
       await publishWorkingMenu(tx, venue.catalogueId);
@@ -230,7 +229,7 @@ describe("offerProducts", () => {
       await parkOrder({ db: suite.db }, venue.cfg, {
         id,
         zoneId: offers.zoneId,
-        lines: offers.toOfferLines([{ productId: venue.cafe, quantity: "1" }]),
+        lines: offers.toOfferLines([{ productId: venue.coffee, quantity: "1" }]),
       });
       const context = await withTransaction(suite.db, (tx) =>
         getOrderServiceContext(tx, venue.cfg, id),
@@ -263,7 +262,7 @@ describe("offerProducts", () => {
       await parkOrder({ db: suite.db }, venue.cfg, {
         id,
         zoneId: offers.zoneId,
-        lines: offers.toOfferLines([{ productId: venue.cafe, quantity: "1" }]),
+        lines: offers.toOfferLines([{ productId: venue.coffee, quantity: "1" }]),
       });
       const context = await withTransaction(suite.db, (tx) =>
         getOrderServiceContext(tx, venue.cfg, id),
@@ -279,11 +278,10 @@ describe("offerProducts", () => {
   it("offers each product at the product's own price, even beside a menu that reprices it", async () => {
     const venue = await seedVenue(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
-    // A menu the suite already has, offering the café dearer in the same zone.
     await withTransaction(suite.db, async (tx) => {
       await addProductToMenu(tx, {
         menuId: venue.catalogueId,
-        productId: venue.cafe,
+        productId: venue.coffee,
         grossPrice: "2.50",
       });
       await offerMenuThroughZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
@@ -294,13 +292,13 @@ describe("offerProducts", () => {
       id,
       zoneId: offers.zoneId,
       lines: offers.toOfferLines([
-        { productId: venue.cafe, quantity: "1" },
-        { productId: venue.agua, quantity: "2" },
+        { productId: venue.coffee, quantity: "1" },
+        { productId: venue.water, quantity: "2" },
       ]),
     });
     expect(await soldLines(suite.db, id)).toEqual([
-      { productId: venue.cafe, unitPriceGross: 150 },
-      { productId: venue.agua, unitPriceGross: 120 },
+      { productId: venue.coffee, unitPriceGross: 150 },
+      { productId: venue.water, unitPriceGross: 120 },
     ]);
   });
 
@@ -313,17 +311,17 @@ describe("offerProducts", () => {
       zoneId: offers.zoneId,
       lines: offers.toOfferLines([
         {
-          productId: venue.cafe,
+          productId: venue.coffee,
           quantity: "1",
           extras: [
-            { listId: venue.extrasListId, picks: [{ productId: venue.azucar, quantity: 1 }] },
+            { listId: venue.extrasListId, picks: [{ productId: venue.sugar, quantity: 1 }] },
           ],
         },
       ]),
     });
     expect(await soldLines(suite.db, id)).toEqual([
-      { productId: venue.cafe, unitPriceGross: 150 },
-      { productId: venue.azucar, unitPriceGross: 20 },
+      { productId: venue.coffee, unitPriceGross: 150 },
+      { productId: venue.sugar, unitPriceGross: 20 },
     ]);
   });
 
@@ -365,7 +363,7 @@ describe("offerProducts", () => {
         venue.cfg,
         tabId,
         offers.toOfferLines(
-          [venue.cafe, venue.tostada, venue.agua].map((productId) => ({
+          [venue.coffee, venue.toast, venue.water].map((productId) => ({
             productId,
             quantity: "1",
           })),
@@ -380,9 +378,9 @@ describe("offerProducts", () => {
       .where(eq(ticketItems.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
     expect(fired).toEqual([
-      { productId: venue.cafe, stationId: venue.stations.barra },
-      { productId: venue.tostada, stationId: venue.stations.pase },
-      { productId: venue.agua, stationId: venue.stations.cocina },
+      { productId: venue.coffee, stationId: venue.stations.counter },
+      { productId: venue.toast, stationId: venue.stations.pass },
+      { productId: venue.water, stationId: venue.stations.kitchen },
     ]);
   });
 
@@ -391,7 +389,7 @@ describe("offerProducts", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         await tx.execute(
-          sql`update kitchen_stations set active = 0 where id = ${venue.stations.cocina}`,
+          sql`update kitchen_stations set active = 0 where id = ${venue.stations.kitchen}`,
         );
         const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
         const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
@@ -400,7 +398,7 @@ describe("offerProducts", () => {
           tx,
           venue.cfg,
           tabId,
-          offers.toOfferLines([{ productId: venue.agua, quantity: "1" }]),
+          offers.toOfferLines([{ productId: venue.water, quantity: "1" }]),
         );
       }),
     ).rejects.toMatchObject({ code: "station.no_default" });
@@ -414,9 +412,9 @@ describe("offerProducts", () => {
     expect(await counts(suite.db)).toEqual(before);
     expect(again.zoneId).toBe(first.zoneId);
     expect(again.menuId).toBe(first.menuId);
-    expect(again.offerFor(venue.cafe)).toBe(first.offerFor(venue.cafe));
+    expect(again.offerFor(venue.coffee)).toBe(first.offerFor(venue.coffee));
 
-    const pan = await withTransaction(suite.db, (tx) =>
+    const bread = await withTransaction(suite.db, (tx) =>
       createProduct(tx, {
         catalogueId: venue.catalogueId,
         categoryId: null,
@@ -431,16 +429,16 @@ describe("offerProducts", () => {
     await parkOrder({ db: suite.db }, venue.cfg, {
       id,
       zoneId: third.zoneId,
-      lines: third.toOfferLines([{ productId: pan.id, quantity: "1" }]),
+      lines: third.toOfferLines([{ productId: bread.id, quantity: "1" }]),
     });
-    expect(await soldLines(suite.db, id)).toEqual([{ productId: pan.id, unitPriceGross: 80 }]);
+    expect(await soldLines(suite.db, id)).toEqual([{ productId: bread.id, unitPriceGross: 80 }]);
   });
 
   it("takes an extras list off the offer once the product stops carrying it", async () => {
     const venue = await seedVenue(suite.db);
     await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     expect((await counts(suite.db)).extras).toBe(1);
-    await withTransaction(suite.db, (tx) => writeProductModifiers(tx, venue.cafe, []));
+    await withTransaction(suite.db, (tx) => writeProductModifiers(tx, venue.coffee, []));
     await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     expect((await counts(suite.db)).extras).toBe(0);
   });
@@ -448,11 +446,11 @@ describe("offerProducts", () => {
   it("names the product when asked for one it does not offer", async () => {
     const venue = await seedVenue(suite.db);
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, venue.cfg, { productIds: [venue.cafe] }),
+      offerProducts(tx, venue.cfg, { productIds: [venue.coffee] }),
     );
-    expect(() => offers.offerFor(venue.agua)).toThrow(venue.agua);
-    expect(() => offers.toOfferLines([{ productId: venue.agua, quantity: "1" }])).toThrow(
-      venue.agua,
+    expect(() => offers.offerFor(venue.water)).toThrow(venue.water);
+    expect(() => offers.toOfferLines([{ productId: venue.water, quantity: "1" }])).toThrow(
+      venue.water,
     );
   });
 });
