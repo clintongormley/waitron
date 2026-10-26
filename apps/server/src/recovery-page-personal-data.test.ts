@@ -1,10 +1,10 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import nodemailer from "nodemailer";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -23,7 +23,7 @@ import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 import { createAccountEmailSender, type AccountEmailSender } from "./account-email.js";
 import { createAttendanceEmailSender } from "./attendance-email.js";
-import { createLogger, type Logger } from "./logger.js";
+import { createLogger, type Logger, type LogLevel } from "./logger.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -52,6 +52,16 @@ const suite = useVenueDb({
 
 const state = afterFailure(FRESH, "module.config_invalid", new Date());
 
+const tempDirs: string[] = [];
+async function tempDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
 interface Rig {
   log: Logger;
   stdout: string[];
@@ -61,7 +71,7 @@ interface Rig {
 }
 
 async function rig(): Promise<Rig> {
-  const logDir = await mkdtemp(join(tmpdir(), "recovery-page-personal-data-"));
+  const logDir = await tempDir("recovery-page-personal-data-");
   const stdout: string[] = [];
   // As boot.ts builds the process logger, with stdout captured instead of written.
   const log = createLogger(
@@ -99,11 +109,12 @@ async function expectLogged(
   event: string,
   fields: Record<string, unknown>,
   hidden: string[],
+  level: LogLevel = "warn",
 ): Promise<void> {
   const stdout = r.stdout.join("");
   const file = await r.file();
   const page = await r.page();
-  const expected = { ...fields, at: expect.any(String), level: "warn", event };
+  const expected = { ...fields, at: expect.any(String), level, event };
   expect(lineFor(stdout, event)).toEqual(expected);
   expect(lineFor(file, event)).toEqual(expected);
   expect(page).toContain(event);
@@ -668,24 +679,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         error: { code: "table.label_taken", params: { todayName: TODAY_NAME, field: "name" } },
       },
     });
-
-    const stdout = r.stdout.join("");
-    const file = await r.file();
-    const page = await r.page();
-    const logged = {
-      todayName: "***",
-      field: "name",
-      at: expect.any(String),
-      level: "warn",
-      event: "table.label_taken",
-    };
-    expect(lineFor(stdout, "table.label_taken")).toEqual(logged);
-    expect(lineFor(file, "table.label_taken")).toEqual(logged);
-    expect(page).toContain("table.label_taken");
-    expect(page).toContain("&quot;todayName&quot;:&quot;***&quot;");
-    expect(stdout).not.toContain(TODAY_NAME);
-    expect(file).not.toContain(TODAY_NAME);
-    expect(page).not.toContain(TODAY_NAME);
+    await expectLogged(r, "table.label_taken", { todayName: "***", field: "name" }, [TODAY_NAME]);
   });
 
   it("reads the codes above from the log tail, not some other part of the page", async () => {
@@ -707,7 +701,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
       }),
     );
     await api.request("/");
-    const empty = await mkdtemp(join(tmpdir(), "recovery-page-personal-data-empty-"));
+    const empty = await tempDir("recovery-page-personal-data-empty-");
 
     const withLog = await r.page();
     const withoutLog = await (
@@ -765,24 +759,13 @@ describe("the recovery page, the log file and stdout carry no person's details",
         const personId = (answer.body as { id: string }).id;
         expect(relay.recipients).toEqual([JORDI_EMAIL]);
         expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
-        const stdout = r.stdout.join("");
-        const file = await r.file();
-        const page = await r.page();
-        const logged = {
-          purpose: "invitation",
-          personId,
-          at: expect.any(String),
-          level: "error",
-          event: "account_email.send_failed",
-        };
-        expect(lineFor(stdout, "account_email.send_failed")).toEqual(logged);
-        expect(lineFor(file, "account_email.send_failed")).toEqual(logged);
-        expect(page).toContain("account_email.send_failed");
-        for (const hidden of [JORDI_EMAIL, JORDI_NAME]) {
-          expect(stdout).not.toContain(hidden);
-          expect(file).not.toContain(hidden);
-          expect(page).not.toContain(hidden);
-        }
+        await expectLogged(
+          r,
+          "account_email.send_failed",
+          { purpose: "invitation", personId },
+          [JORDI_EMAIL, JORDI_NAME],
+          "error",
+        );
       } finally {
         await relay.close();
       }
@@ -819,22 +802,14 @@ describe("the recovery page, the log file and stdout carry no person's details",
       expect(answer).toEqual({ status: 200, body: { emailVerificationSent: false } });
       expect(relay.recipients).toEqual([JORDI_EMAIL]);
       expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
-      const stdout = r.stdout.join("");
-      const file = await r.file();
-      const page = await r.page();
-      const logged = {
-        purpose: "email_change",
-        errorCode: "email.send_refused",
-        at: expect.any(String),
-        level: "error",
-        event: "account_email.send_failed",
-      };
-      expect(lineFor(stdout, "account_email.send_failed")).toEqual(logged);
-      expect(lineFor(file, "account_email.send_failed")).toEqual(logged);
-      expect(page).toContain("&quot;errorCode&quot;:&quot;email.send_refused&quot;");
-      expect(stdout).not.toContain(JORDI_EMAIL);
-      expect(file).not.toContain(JORDI_EMAIL);
-      expect(page).not.toContain(JORDI_EMAIL);
+      await expectLogged(
+        r,
+        "account_email.send_failed",
+        { purpose: "email_change", errorCode: "email.send_refused" },
+        [JORDI_EMAIL],
+        "error",
+      );
+      expect(await r.page()).toContain("&quot;errorCode&quot;:&quot;email.send_refused&quot;");
     } finally {
       await relay.close();
     }
