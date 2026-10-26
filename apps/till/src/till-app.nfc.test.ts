@@ -19,7 +19,7 @@ import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import { mountWidget } from "./widgets/test-helpers.js";
 import {
   balanceOf,
-  BARRA,
+  BARRA as BAR_PRINTER,
   billOf,
   inDialog,
   money,
@@ -27,7 +27,7 @@ import {
   press,
   equipmentItem,
   flush,
-  LECTOR_2,
+  LECTOR_2 as SECOND_READER,
   openTable,
   resetBillPayDrafts,
   roleOf,
@@ -800,11 +800,11 @@ describe("NFC throughout the till", () => {
 });
 
 describe("the pay sheet's NFC button", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const THIRD_READER = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
   const equipment: DeviceEquipment = {
     roles: [
-      roleOf("receipt", BARRA, [BARRA]),
-      roleOf("card_terminal", LECTOR_2, [LECTOR_2, LECTOR_3]),
+      roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+      roleOf("card_terminal", SECOND_READER, [SECOND_READER, THIRD_READER]),
     ],
   };
 
@@ -883,10 +883,10 @@ describe("the pay sheet's NFC button", () => {
       .fn()
       .mockImplementationOnce(() => new Promise<BillPaymentResult>((done) => (answer = done)))
       .mockImplementation(() => new Promise<BillPaymentResult>(() => {}));
-    const withLector3: DeviceEquipment = {
+    const withThirdReader: DeviceEquipment = {
       roles: [
-        roleOf("receipt", BARRA, [BARRA]),
-        roleOf("card_terminal", LECTOR_3, [LECTOR_2, LECTOR_3]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+        roleOf("card_terminal", THIRD_READER, [SECOND_READER, THIRD_READER]),
       ],
     };
     const { el, api } = await phoneApp({
@@ -899,7 +899,7 @@ describe("the pay sheet's NFC button", () => {
         charged: "120.00",
       }),
       takeBillPayment,
-      setDeviceEquipment: vi.fn().mockResolvedValue(withLector3),
+      setDeviceEquipment: vi.fn().mockResolvedValue(withThirdReader),
     });
     await press(el, 'input[name="method"][value="card"]');
     await press(el, "[data-pay-continue]");

@@ -36,7 +36,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   pricingUnit: "each",
@@ -210,7 +210,7 @@ function zoneOffers(
 }
 
 const counterOffers = zoneOffers(
-  { menus: [{ id: "cat-default", name: "Carta", isDefault: true }], products: [cafe] },
+  { menus: [{ id: "cat-default", name: "Carta", isDefault: true }], products: [coffee] },
   "cat-default",
 );
 
@@ -222,8 +222,8 @@ const diningOffers = zoneOffers(
   {
     menus: diningMenus,
     products: [
-      { ...cafe, id: "sopa", name: "Sopa", catalogueId: "menu-lunch" },
-      { ...cafe, id: "cordero", name: "Cordero", catalogueId: "menu-dinner" },
+      { ...coffee, id: "sopa", name: "Sopa", catalogueId: "menu-lunch" },
+      { ...coffee, id: "cordero", name: "Cordero", catalogueId: "menu-dinner" },
     ],
   },
   "menu-dinner",
@@ -306,9 +306,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
 /** The server's side of the party's drafts, fresh for each test. */
 let drafts: DraftServer;
 
-/** Rings a café into the open table's draft, and gives the `submit-draft` a confirmed Fire all now
- * sends for it. */
-async function ringCafe(el: TillApp, screen: TillTableOrderScreen) {
+async function ringCoffee(el: TillApp, screen: TillTableOrderScreen) {
   const store = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
   store.addProduct(
     {
@@ -430,7 +428,7 @@ describe("till-app table ordering: the table's menus", () => {
       submitDraft,
     });
     const screen = await toTableOrder(el);
-    emit(screen, "submit-draft", await ringCafe(el, screen));
+    emit(screen, "submit-draft", await ringCoffee(el, screen));
     await flush(el);
     expect(submitDraft).toHaveBeenCalledOnce();
     expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
@@ -1182,7 +1180,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       });
       const screen = await toTableOrder(el);
 
-      emit(screen, type, type === "submit-draft" ? await ringCafe(el, screen) : detail);
+      emit(screen, type, type === "submit-draft" ? await ringCoffee(el, screen) : detail);
       await flush(el);
 
       expect(banner(el)!.textContent).toContain(
@@ -1307,7 +1305,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
         submitDraft: vi.fn().mockRejectedValue({ code: "menu_period.ended", status: 409 }),
       });
       const screen = await toTableOrder(el);
-      const draft = await ringCafe(el, screen);
+      const draft = await ringCoffee(el, screen);
       setLocale(locale);
 
       emit(screen, "submit-draft", draft);
@@ -1430,7 +1428,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.lines).toEqual([tabLine]);
 
-    emit(screen, "submit-draft", await ringCafe(el, screen));
+    emit(screen, "submit-draft", await ringCoffee(el, screen));
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledOnce();
@@ -1447,7 +1445,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         menus: diningMenus,
         products: [
           {
-            ...cafe,
+            ...coffee,
             id: "burger",
             menuItemId: "menu-item-burger",
             name: "Burger",
@@ -3075,8 +3073,8 @@ describe("till-app table ordering: a menu published while a table is open", () =
       await flush(el);
 
       expect(menuState.mock.calls.map((call) => call[0])).toEqual(["zone-counter", floorZone.id]);
-      const cordero = tableOrder(el)!.products.find((product) => product.id === "cordero")!;
-      expect(cordero.available).toBe(false);
+      const lamb = tableOrder(el)!.products.find((product) => product.id === "cordero")!;
+      expect(lamb.available).toBe(false);
       expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
