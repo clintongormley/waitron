@@ -673,3 +673,217 @@ describe("till-app: a till's bar", () => {
     expect(shell(el).barTables).toEqual([]);
   });
 });
+
+type SaveAnswer = "saved" | "failed" | { code: string; ownerName?: string };
+
+/** Holds the next draft save until the returned function answers it as saved, failed or refused. */
+function holdNextSave(): (answer?: SaveAnswer) => void {
+  let release!: (answer: SaveAnswer) => void;
+  const held = new Promise<SaveAnswer>((resolve) => (release = resolve));
+  server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+    const sentBy = server.personId;
+    const answer = await held;
+    if (answer === "failed") throw new TypeError("Failed to fetch");
+    if (answer !== "saved") throw answer;
+    const now = server.personId;
+    server.personId = sentBy;
+    const saved = server.save(partyId, save);
+    server.personId = now;
+    return server.snapshot(saved);
+  });
+  return (answer = "saved") => release(answer);
+}
+
+/** Holds the next floor read until the returned function lets it answer `tables`. */
+function holdNextTablesRead(tables: TableState[]): () => void {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  api.getTablesState!.mockImplementationOnce(async () => {
+    await held;
+    return tables;
+  });
+  return release;
+}
+
+describe("till-app: a table left for another keeps its button", () => {
+  /** Ana at T4 with Beer added, T9 on the bar from an earlier visit, and T4's save held open. */
+  async function leaveT4ForT9(formFactor: FormFactor = phone, overrides = {}) {
+    const { el } = await mountApp(
+      { getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]), ...overrides },
+      formFactor,
+    );
+    await openMesa(el);
+    const answer = holdNextSave();
+    await tap(el, "Beer");
+    return { el, answer };
+  }
+
+  async function openT9(el: TillApp): Promise<void> {
+    barButton(el, "t9").click();
+    await flush(el, 1);
+  }
+
+  it("keeps ✎ T4 while T4's save is out after ✎ T9 is tapped", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    expect(bar(el)).toEqual(["Floor", "[✎ T4]", "✎ T9"]);
+    await openT9(el);
+    expect(bar(el)).toContain("✎ T4");
+    await flush(el, 6);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(tableOrder(el)?.party?.id).toBe("v9");
+    expect(selected(el)).toEqual(["T9"]);
+    expect(bar(el)).toContain("✎ T4");
+    answer();
+    await flush(el, 6);
+  });
+
+  it("keeps ✎ T4 after the save answers, until a floor read started later says so", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    await openT9(el);
+    await flush(el, 6);
+    const reads = api.getTablesState!.mock.calls.length;
+    const answerRead = holdNextTablesRead([mesa4With("p1"), mesa9WithAnas]);
+    answer();
+    await flush(el, 6);
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(bar(el)).toContain("✎ T4");
+    answerRead();
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+
+    // From here the floor read decides for T4.
+    api.getTablesState!.mockResolvedValue([mesa4, mesa9WithAnas]);
+    await toFloor(el);
+    expect(bar(el)).not.toContain("✎ T4");
+  });
+
+  it("drops T4's button at once when its last dish was removed before leaving, and the later read keeps it gone", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await waitForSave();
+    api.getTablesState!.mockResolvedValue([mesa4With("p1"), mesa9WithAnas]);
+    await toFloor(el);
+    barButton(el, "t4").click();
+    await flush(el);
+    expect(bar(el)).toEqual(["Floor", "[✎ T4]", "✎ T9"]);
+
+    const answer = holdNextSave();
+    draft(el).removeLine(0);
+    await flush(el, 1);
+    await openT9(el);
+    expect(bar(el).some((tab) => tab.includes("T4"))).toBe(false);
+    api.getTablesState!.mockResolvedValue([mesa4, mesa9WithAnas]);
+    const reads = api.getTablesState!.mock.calls.length;
+    answer();
+    await flush(el, 6);
+    expect(api.getTablesState!.mock.calls.length).toBeGreaterThan(reads);
+    expect(bar(el).some((tab) => tab.includes("T4"))).toBe(false);
+  });
+
+  it("keeps ✎ T4 while T4's save has failed", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    await openT9(el);
+    await flush(el, 6);
+    answer("failed");
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(bar(el)).toContain("[✎ T4]");
+  });
+
+  it("a till starts no extra floor read when a draft is released", async () => {
+    const { el, answer } = await leaveT4ForT9("till");
+    // A till's Floor waits for the save before it reads, so T9 is opened from T4's screen.
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el, 6);
+    expect(tableOrder(el)?.party?.id).toBe("v9");
+    const reads = api.getTablesState!.mock.calls.length;
+    answer();
+    await flush(el, 6);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads);
+  });
+
+  it("drops T4's kept button and re-reads the floor when T4's save is refused", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    await openT9(el);
+    await flush(el, 6);
+    const reads = api.getTablesState!.mock.calls.length;
+    const answerRead = holdNextTablesRead([mesa4With("p2"), mesa9WithAnas]);
+    answer({ code: "draft.taken_over", ownerName: "Sam" });
+    await flush(el, 6);
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(bar(el).some((tab) => tab.includes("T4"))).toBe(false);
+    answerRead();
+    await flush(el, 6);
+    expect(bar(el).some((tab) => tab.includes("T4"))).toBe(false);
+  });
+
+  it.each<[string, SaveAnswer]>([
+    ["saved", "saved"],
+    ["refused", { code: "draft.taken_over", ownerName: "Sam" }],
+  ])(
+    "starts no floor read when the person signs out before the save answers (%s)",
+    async (_, saved) => {
+      const { el, answer } = await leaveT4ForT9();
+      await openT9(el);
+      await flush(el, 6);
+      emit(shell(el), "logout");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      const reads = api.getTablesState!.mock.calls.length;
+      answer(saved);
+      await flush(el, 6);
+      expect(api.getTablesState).toHaveBeenCalledTimes(reads);
+
+      await signIn(el);
+      await toFloor(el);
+      expect(bar(el)).toEqual(["[Floor]"]);
+    },
+  );
+
+  it("keeps ✎ T4 when T4's save had already failed before leaving", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]),
+      saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await waitForSave();
+    await flush(el);
+    expect(draft(el).lines).toHaveLength(0);
+    expect(tableOrder(el)!.retainedDraft?.lines).toHaveLength(1);
+    await openT9(el);
+    expect(bar(el)).toContain("✎ T4");
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+  });
+
+  it("keeps ✎ T4 when a floor read after its save fails", async () => {
+    const { el, answer } = await leaveT4ForT9(phone, {
+      getTablesState: vi.fn().mockResolvedValue([mesa4, table("t5", "T5", null), mesa9WithAnas]),
+      seatTable: vi.fn().mockResolvedValue({ tabId: "wo-5", partyId: "v5", revision: 1 }),
+    });
+    await openT9(el);
+    await flush(el, 6);
+    api.getTablesState!.mockRejectedValue(new TypeError("Failed to fetch"));
+    answer();
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+
+    // Seating re-reads the floor through `#reloadTables`, which applies a failed read as no tables.
+    await toFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t5", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    expect(api.seatTable).toHaveBeenCalledOnce();
+    expect(api.getTablesState!.mock.settledResults.at(-1)?.type).toBe("rejected");
+    expect(bar(el)).toContain("✎ T4");
+  });
+});

@@ -124,6 +124,7 @@ import {
   pause,
   resendUnanswered,
   type DraftRefused,
+  type DraftSaveOutcome,
   type RetainedDraftCandidate,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
@@ -304,7 +305,7 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { barTables, type BarTable } from "./state/bar-tables.js";
+import { barTables, type BarTable, type LocalBill } from "./state/bar-tables.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
 import type {
   AdjustmentAsk,
@@ -429,6 +430,24 @@ type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
 
 /** A till draws no table buttons; one shared list, so the shell never sees a new one. */
 const NO_BAR_TABLES: BarTable[] = [];
+
+interface ReleasedBill {
+  sync: DraftSync;
+  bill: LocalBill;
+  savedBefore?: number;
+}
+
+/** A released draft's bill for the bar (D4, D10), its table filled in by the caller. A failed save
+ * reloads the store from the box and keeps this device's lines as the candidate. */
+function releasedBill(sync: DraftSync): Omit<LocalBill, "tableId"> {
+  const editorId = sync.edit?.editorId ?? null;
+  return {
+    partyId: sync.partyId,
+    billId: sync.billId,
+    lines: sync.store.lines.length || (sync.candidate?.lines.length ?? 0),
+    takenByOther: editorId !== null && editorId !== sync.personId,
+  };
+}
 
 type RefreshList = "held" | "station" | "waiting";
 
@@ -2645,6 +2664,10 @@ export class TillApp extends LitElement {
    * party opens for the person who made it; a sign-out sends that person's and drops the rest; a
    * sign-in by someone else and a server switch drop them. */
   #unsavedDrafts = new Map<string, DraftSync>();
+  /** D10: bills left for another table, in release order, each keeping its answer for the bar until
+   * a floor read started after its save answered (`savedBefore`) has been applied, or while its
+   * failed save sits in {@link #unsavedDrafts}. */
+  #released: ReleasedBill[] = [];
   readonly #draftCandidates = new Map<string, RetainedDraftCandidate>();
   @state() private resolvingDraftCandidate: DraftSync | null = null;
   #billDraftTimer?: ReturnType<typeof setTimeout>;
@@ -10533,6 +10556,7 @@ export class TillApp extends LitElement {
     if (read.number <= this.#tablesApplied) return;
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
+    if (answered) this.#forgetReleased((each) => (each.savedBefore ?? read.number) < read.number);
     const json = JSON.stringify(tables);
     if (json === this.#tablesJson) {
       if (answered) this.barFloor = this.tables;
@@ -10584,12 +10608,16 @@ export class TillApp extends LitElement {
       return;
     }
     const session = this.#operatorSession;
+    const tableId = this.activeTableId;
+    if (tableId !== undefined)
+      this.#released.push({ sync, bill: { ...releasedBill(sync), tableId } });
     this.#leavingDrafts.set(
       sync,
       sync.flush().then((saved) => {
         if (!this.#leavingDrafts.delete(sync)) return;
         if (saved === "failed" && session === this.#operatorSession)
           this.#unsavedDrafts.set(sync.partyId, sync);
+        if (session === this.#operatorSession) this.#settleReleased(sync, saved);
         sync.drop();
         if (session !== this.#operatorSession || saved === "saved") return;
         if (saved === "failed") {
@@ -10597,6 +10625,23 @@ export class TillApp extends LitElement {
         } else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
       }),
     );
+  }
+
+  /** D10: a saved bill waits for a floor read started after now, a failed one stays while it is
+   * unsaved, and a refused one goes. */
+  #settleReleased(sync: DraftSync, saved: DraftSaveOutcome): void {
+    const record = this.#released.find((each) => each.sync === sync);
+    if (record === undefined || saved === "failed") return;
+    if (saved === "saved") record.savedBefore = this.#tablesRead;
+    else this.#forgetReleased((each) => each === record);
+    if (this.formFactor !== "till") void this.#refreshFloor();
+  }
+
+  #forgetReleased(gone: (record: ReleasedBill) => boolean): void {
+    const kept = this.#released.filter((each) => !gone(each));
+    if (kept.length === this.#released.length) return;
+    this.#released = kept;
+    this.requestUpdate();
   }
 
   /** Settles once every left draft on `partyId` has had its save answered. */
@@ -11151,7 +11196,10 @@ export class TillApp extends LitElement {
           onScreen: true,
         };
     }
-    const next = barTables(tables, this.#sessionPersonId, { held, released: [] });
+    const next = barTables(tables, this.#sessionPersonId, {
+      held,
+      released: this.#released.map((each) => each.bill),
+    });
     const json = JSON.stringify(next);
     if (json !== this.#barTableJson) {
       this.#barTableJson = json;
@@ -11214,6 +11262,7 @@ export class TillApp extends LitElement {
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
     kept?.drop();
+    if (kept !== undefined) this.#forgetReleased((each) => each.sync === kept);
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
@@ -11321,6 +11370,7 @@ export class TillApp extends LitElement {
 
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
+    this.#forgetReleased((each) => each.sync.personId !== personId);
     for (const sync of [...this.#leavingDrafts.keys()])
       if (sync.personId !== personId) {
         sync.drop();
@@ -11338,6 +11388,7 @@ export class TillApp extends LitElement {
       sync.drop();
     this.#leavingDrafts.clear();
     this.#unsavedDrafts.clear();
+    this.#forgetReleased(() => true);
   }
 
   #scheduleBillDraftRefresh(): void {
@@ -18199,6 +18250,7 @@ export class TillApp extends LitElement {
     const sync = this.#draftSync;
     const unsaved = [...this.#unsavedDrafts.values()];
     this.#unsavedDrafts.clear();
+    this.#forgetReleased(() => true);
     const own = unsaved.filter((each) => each.personId === this.#sessionPersonId);
     for (const each of unsaved) if (!own.includes(each)) each.drop();
     const leaving = [...this.#leavingDrafts.keys(), ...own];
