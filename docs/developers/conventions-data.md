@@ -3022,8 +3022,9 @@ open the folder with `exclusive: false`, so they take no lock and write no holde
 dies leaves its file behind; the next holder overwrites it.
 
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
-when the lock cannot be taken.** Whatever the free space, a start — except one that finds a backup
-recovery's journal at its repair stage or unreadable (`runEntry`, `apps/server/src/node-entry.ts`) —
+when the lock cannot be taken.** Whatever the free space, a start through the box's entry point
+(`runEntry`, `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this
+clean-up) — except one that finds a backup recovery's journal at its repair stage or unreadable —
 deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
 `lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
 The same section deletes `<state>/restore-staging/staged-recovery` whole. That is where the setup

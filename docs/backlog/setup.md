@@ -446,8 +446,10 @@ Left open by A1042. What the box does today:
   `packages/provisioning/src/first-setup-backup-discard.ts`). Taking a lock writes a file, so on
   a full disk it is refused (`errcode` 14), and the discarded recovery's restored database stays on
   disk.
-- **At the start:** below the free-space floor, the start deletes rotated logs numbered 2 or higher
-  and crash reports older than 7 days (`apps/server/src/start-space.ts`, `freeSpaceAtStart`).
+- **At the start:** below the free-space floor, a start through the box's entry point deletes
+  rotated logs numbered 2 or higher and crash reports older than 7 days
+  (`apps/server/src/start-space.ts`, `freeSpaceAtStart`, called from `runEntry` in
+  `apps/server/src/node-entry.ts`).
   - If that frees a little room, the locks are taken and the discarded recovery is emptied.
     Measured by A1042's U7d on a 32 MB HFS+ test volume filled to 0 bytes free: freeing 1 MiB (one
     rotated log, or a filler file) was enough, and emptying a 4 MiB restored database left
