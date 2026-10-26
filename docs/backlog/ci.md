@@ -5,24 +5,24 @@ their full text.
 
 ## A backlog detail link still names the old five-handler heading
 
-- **A backlog detail link still names the old five-handler heading.** The till entry’s
-  `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
-  no longer matches “Three till handlers still leave a failed list refresh unhandled”.
-  Retarget the link during the till backlog cleanup; keep the open handlers entry.
+The till entry’s
+`backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
+no longer matches “Three till handlers still leave a failed list refresh unhandled”.
+Retarget the link during the till backlog cleanup; keep the open handlers entry.
 
 ## Retain failure screenshots for long browser test names
 
-- **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
-  in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
-  fixture checks. Bound the generated screenshot filename and keep the complete test name in
-  its metadata; verify with a deliberately failing case whose generated name is long.
+A failed waiting-list refresh case
+in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
+fixture checks. Bound the generated screenshot filename and keep the complete test name in
+its metadata; verify with a deliberately failing case whose generated name is long.
 
 ## CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488)
 
-- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).** codeql.yml
-  saves no overlay-base database, which the default setup's runs did, so its own durations may
-  differ. Next: after a week of nightly runs, read their job durations and set the limit from them
-  (docs/developers/ci-and-gates.md, "Every job has a time limit").
+codeql.yml
+saves no overlay-base database, which the default setup's runs did, so its own durations may
+differ. Next: after a week of nightly runs, read their job durations and set the limit from them
+(docs/developers/ci-and-gates.md, "Every job has a time limit").
 
 ## Both image jobs still run `docker/setup-buildx-action`
 
@@ -47,10 +47,10 @@ their full text.
 
 ## Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id
 
-- **Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id.** The column
-  is `text NOT NULL` with no foreign key or CHECK, and `recordWorkingLineContexts`
-  (`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
-  or record why a sale can never carry one. Left open by A810 (#1886).
+The column
+is `text NOT NULL` with no foreign key or CHECK, and `recordWorkingLineContexts`
+(`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
+or record why a sale can never carry one. Left open by A810 (#1886).
 
 ## The hint's cover stops at the migration run, and provisioning runs after it
 
@@ -82,26 +82,26 @@ their full text.
 
 ## The test-shape half of #339's lesson is unwritten
 
-- **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
-  person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
-  other half — a matrix that varies two things separately and never crosses them proves less than
-  it looks — wants its own line. Left open by content languages and the image library (#339).
+#339 passed review and CI and the first
+person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
+other half — a matrix that varies two things separately and never crosses them proves less than
+it looks — wants its own line. Left open by content languages and the image library (#339).
 
 ## The other sharded packages still use Vitest's file-count split.
 
-- **The other sharded packages still use Vitest's file-count split.** Fiscal-verifactu, till, dashboard,
-  venue-service, db and provisioning do not pack their shards by measured duration as the server
-  does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
-  shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
-  the fix at the cause.
-  [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+Fiscal-verifactu, till, dashboard,
+venue-service, db and provisioning do not pack their shards by measured duration as the server
+does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
+shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
+the fix at the cause.
+[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## Nothing checks, on every CI run, that each server test file ran in exactly one shard.
 
-- **Nothing checks, on every CI run, that each server test file ran in exactly one shard.** The
-  guard checks the packing over a walk of the tree, and A938's pull request (#1930) recorded both
-  attempts of one run: 878 `[file-progress] end` lines each, no path repeated. A standing check, for example in `test-server-merge` comparing the shards' `end`
-  lines with the file list, is open. Left open by A938. [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+The
+guard checks the packing over a walk of the tree, and A938's pull request (#1930) recorded both
+attempts of one run: 878 `[file-progress] end` lines each, no path repeated. A standing check, for example in `test-server-merge` comparing the shards' `end`
+lines with the file list, is open. Left open by A938. [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## The first fiscal-hour end-to-end file exceeds the job budget
 
@@ -242,13 +242,12 @@ above concerns the release-to-bind interval, including single draws.
 
 ## `apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control
 
-- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
-  The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
-  used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
-  it — and #378 removed every foreign key to that table, so nothing now says what
-  would break if the guard went. The test's own comment says this plainly and claims nothing more.
-  **Next action:** find a failure the empty database still causes without the guard, and name it;
-  if there is none, say so in the comment and stop calling the case a guard test.
+The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
+used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
+it — and #378 removed every foreign key to that table, so nothing now says what
+would break if the guard went. The test's own comment says this plainly and claims nothing more.
+**Next action:** find a failure the empty database still causes without the guard, and name it;
+if there is none, say so in the comment and stop calling the case a guard test.
 
 ## Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
 
@@ -708,11 +707,11 @@ fixture command path changed between those probes.
 
 ## The UI showcase overflows a phone and inherits black text in its dark panel
 
-- **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
-  390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
-  A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
-  Give the showcase a responsive layout and a foreground colour on each theme root, then open
-  both themes at 390 px and 1280 px. Keep the price-format examples and demo interactions.
+At a
+390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
+A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
+Give the showcase a responsive layout and a foreground colour on each theme root, then open
+both themes at 390 px and 1280 px. Keep the price-format examples and demo interactions.
 
 
 ## Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)
@@ -726,41 +725,40 @@ fixture command path changed between those probes.
 
 ## Profile provisioning's busiest shard after the A679 split
 
-- **Profile provisioning's busiest shard after the A679 split.** All six shards and merged
-  coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
-  Find the slow files or setup cost before changing its distribution; keep every check and
-  coverage threshold. This exceeds the approximate four-minute target without reproducing
-  the former shared light-job timeout.
+All six shards and merged
+coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
+Find the slow files or setup cost before changing its distribution; keep every check and
+coverage threshold. This exceeds the approximate four-minute target without reproducing
+the former shared light-job timeout.
 
 
 ## Investigate two full-run till browser failures seen during A669 validation
 
-- **Investigate two full-run till browser failures seen during A669 validation.** On
-  2026-10-20, `pnpm --filter @waitron/till test:coverage` reached a missing `Filters 1`
-  control in `till-find-bill-screen.a11y.test.ts:89`; its failure capture showed three active
-  filters. After rebasing onto A582 help, Playwright could not
-  click the split control in `till-app-drafts.test.ts:8160`: the button detached during
-  scrolling. Retain both captures and reproduce
-  the saved-view and detached-control paths before changing code or tests; neither cause
-  is established, and a passing retry is not a repair. Lane G retains the logs and captures
-  under `resume-a669-land-20261020-090825`.
+On
+2026-10-20, `pnpm --filter @waitron/till test:coverage` reached a missing `Filters 1`
+control in `till-find-bill-screen.a11y.test.ts:89`; its failure capture showed three active
+filters. After rebasing onto A582 help, Playwright could not
+click the split control in `till-app-drafts.test.ts:8160`: the button detached during
+scrolling. Retain both captures and reproduce
+the saved-view and detached-control paths before changing code or tests; neither cause
+is established, and a passing retry is not a repair. Lane G retains the logs and captures
+under `resume-a669-land-20261020-090825`.
 
 
 ## Decide whether browser tests stop replacing modules (A943 follow-up)
 
-- **Decide whether browser tests stop replacing modules (A943 follow-up).** A spy mock of
-  the till's pricing module failed once in CI with its cause not found, and #1934 replaced it
-  with a function the store takes. Its convention reviewer proposed a CLAUDE.md rule against
-  module mocks in browser tests; #1934 did not add one, because one failure with no known
-  cause is thin ground for a house rule. The owner decides.
+A spy mock of
+the till's pricing module failed once in CI with its cause not found, and #1934 replaced it
+with a function the store takes. Its convention reviewer proposed a CLAUDE.md rule against
+module mocks in browser tests; #1934 did not add one, because one failure with no known
+cause is thin ground for a house rule. The owner decides.
 
 
 ## Check the older capture suites' viewport cleanup (A669-5 review)
 
-- **Check the older capture suites' viewport cleanup (A669-5 review).**
-  `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
-  incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
-  their cleanup; preserve their current behavioral assertions.
+`apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
+incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
+their cleanup; preserve their current behavioral assertions.
 
 
 ## A902. Say in the testing guide that Vite also prints browser console output under an AI agent
@@ -778,21 +776,20 @@ fixture command path changed between those probes.
 
 ## A late move or second finger can overtake the gesture hold timer
 
-- **A late move or second finger can overtake the gesture hold timer.** A delayed move is
-  treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
-  reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
-  to those paths with their own tests; native-device reproduction remains unverified.
-  [Detail](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+A delayed move is
+treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
+reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
+to those paths with their own tests; native-device reproduction remains unverified.
+[Detail](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 
 ## A891: retain input and timer timing if the missing product-information window recurs
 
-- **A891: retain input and timer timing if the missing product-information window recurs.**
-  A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
-  held release before its overdue timer. Main run `39180066136` retained no such trace, so its
-  exact cause remains unverified. On recurrence, keep pointer timestamps, hold-callback timing,
-  selection count and the screenshot before retrying.
-  [Reproduction](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
+held release before its overdue timer. Main run `39180066136` retained no such trace, so its
+exact cause remains unverified. On recurrence, keep pointer timestamps, hold-callback timing,
+selection count and the screenshot before retrying.
+[Reproduction](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 
 ## `apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard
@@ -806,32 +803,32 @@ fixture command path changed between those probes.
 
 ## Other server test files still hash fixed PINs and passwords on every test
 
-- **Other server test files still hash fixed PINs and passwords on every test.** A801 moved the
-  shared fixtures under `apps/server/src/testing/` and the set-up of five heavy test files onto
-  `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`); other
-  test files and helpers still call `hashPin`/`hashPassword` directly (`rg -l
-  'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'`), among them the
-  `attendance-*` suites, left alone while lane G's A773-1 was editing them, and the two venue
-  helpers under `apps/server/scripts/` (`testing/venue.ts`, `demo-seed/testing/provision-venue.ts`).
-  Move the set-up ones over; leave any test that is about hashing. Left open by A801.
+A801 moved the
+shared fixtures under `apps/server/src/testing/` and the set-up of five heavy test files onto
+`fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`); other
+test files and helpers still call `hashPin`/`hashPassword` directly (`rg -l
+'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'`), among them the
+`attendance-*` suites, left alone while lane G's A773-1 was editing them, and the two venue
+helpers under `apps/server/scripts/` (`testing/venue.ts`, `demo-seed/testing/provision-venue.ts`).
+Move the set-up ones over; leave any test that is about hashing. Left open by A801.
 
 
 ## Tests copy the dashboard shell's link handler instead of calling it
 
-- **Tests copy the dashboard shell's link handler instead of calling it.** `#onAppLink`
-  (`apps/dashboard/src/dashboard-app.ts`) has hand-made copies in tests, one of them
-  `packages/venue-service/src/testing/shell-link-capture.ts` (A719); a change to the real handler
-  is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
-  use. Left open by A719 (#1838).
+`#onAppLink`
+(`apps/dashboard/src/dashboard-app.ts`) has hand-made copies in tests, one of them
+`packages/venue-service/src/testing/shell-link-capture.ts` (A719); a change to the real handler
+is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
+use. Left open by A719 (#1838).
 
 
 ## A999 residual: retain the other allergy-move failure if it recurs
 
-- **A999 residual: retain the other allergy-move failure if it recurs.** The original loaded
-  run reported two failing cases without their names or assertion output. The 2026-10-22
-  reproduction identified the corrected-guest case, where a parent render restored a cleared
-  refusal. Capture the exact case and output on any further recurrence before attributing it
-  to the same mechanism. [Receipt](../developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
+The original loaded
+run reported two failing cases without their names or assertion output. The 2026-10-22
+reproduction identified the corrected-guest case, where a parent render restored a cleared
+refusal. Capture the exact case and output on any further recurrence before attributing it
+to the same mechanism. [Receipt](../developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
 
 
 ## `scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or `scripts/migration-upgrade.test.ts`
@@ -921,12 +918,12 @@ fixture command path changed between those probes.
 
 ## The relocated independent department preview needs a load investigation
 
-- **The relocated independent department preview needs a load investigation.** The retired
-  `receipts-screen.defaults.test.ts` case failed once during A463 and was not reproduced.
-  A493 moves this behavior into the department receipt editor's language-independent preview cases
-  (`apps/dashboard/src/screens/department-receipt-editor.preview.test.ts`).
-  Reproduce that flow under load before assigning a cause; its retirement does not establish
-  that the original failure is fixed.
+The retired
+`receipts-screen.defaults.test.ts` case failed once during A463 and was not reproduced.
+A493 moves this behavior into the department receipt editor's language-independent preview cases
+(`apps/dashboard/src/screens/department-receipt-editor.preview.test.ts`).
+Reproduce that flow under load before assigning a cause; its retirement does not establish
+that the original failure is fixed.
 
 
 ## drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it
@@ -954,7 +951,7 @@ and A419's dashboard stall separate; no shared cause is established.
 
 ## A1089 merge read-back: server coverage upload timed out
 
-- **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
+Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
 
 ## Local multi-file till browser interruption
 
