@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 8,
+  version: 9,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -74,6 +74,7 @@ const bundle: ConfigurationBundle = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
+  privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1" }] },
   reconnect: ["printers"],
@@ -175,8 +176,10 @@ describe("staged configuration import", () => {
       },
     ],
     ["A756 pre-station-changes export without it", { version: 7 }],
+    ["A980 pre-privacy-contact export with the key", { version: 8 }],
+    ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
     ["old version", { version: 1 }],
-    ["future version", { version: 9 }],
+    ["future version", { version: 10 }],
     [
       "retired drawer value",
       {

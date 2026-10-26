@@ -48,7 +48,7 @@ async function scratch(run: (tx: Transaction) => Promise<void>) {
 it.each([
   { value: null, field: "artifact" },
   { value: [], field: "artifact" },
-  { value: { version: 9 }, field: "version" },
+  { value: { version: 10 }, field: "version" },
   { value: { ...configurationBundle(), createdAt: "bad-date" }, field: "artifact" },
   { value: { ...configurationBundle(), modules: { module: -1 } }, field: "artifact" },
   { value: { ...configurationBundle(), reconnect: [3] }, field: "artifact" },
@@ -70,6 +70,25 @@ it.each([
     field: "artifact",
   },
   { value: { ...configurationBundle(), tables: [] }, field: "artifact" },
+  {
+    value: Object.fromEntries(
+      Object.entries(configurationBundle()).filter(([key]) => key !== "privacyContact"),
+    ),
+    field: "artifact",
+  },
+  { value: { ...configurationBundle(), privacyContact: "x" }, field: "artifact" },
+  { value: { ...configurationBundle(), privacyContact: [] }, field: "artifact" },
+  {
+    value: { ...configurationBundle(), privacyContact: { privacyNoticeUrl: null } },
+    field: "artifact",
+  },
+  {
+    value: {
+      ...configurationBundle(),
+      privacyContact: { privacyNoticeUrl: 5, privacyEmail: null },
+    },
+    field: "artifact",
+  },
 ])("refuses malformed encrypted configuration: $field ($value)", ({ value, field }) => {
   const artifact = encryptArtifact(
     packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
