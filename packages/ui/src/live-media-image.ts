@@ -153,6 +153,15 @@ export function invalidateMediaImages(): void {
   schedule();
 }
 
+export function watchMediaImage(
+  reference: string,
+  shape: Shape,
+  listener: (address: string | undefined) => void,
+): () => void {
+  if (!MEDIA_FILENAME.test(reference)) return () => {};
+  return subscribe(reference, () => listener(entries.get(reference)!.value?.[shape]));
+}
+
 class LiveMediaImage extends AsyncDirective {
   private reference: string | undefined;
   private shape: Shape = "square";
