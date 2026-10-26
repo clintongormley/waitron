@@ -244,48 +244,6 @@ the special-day painter cuts only a zone's paint on that date and skips a zone w
 paint the request sends (`assertDatedClosuresInHours`, `zone-closure-hours.ts`). So a season
 closure can lie outside that date's department hours. Found by reading the code, not run.
 
-## A723's plan defaults sent to the owner as an FYI
-
-Left open by A723 (#1849).
-
-A723's plan made these choices by default and sent them to the owner to overrule if wanted
-([plan](../superpowers/plans/2026-10-18-a723-painters-standard-week.md), "Decisions this plan
-makes"):
-
-- Decision 1: the zone-closure hours check runs at the routes and the import, not in the writers.
-- Decision 3: the server checks only the zone closures a request writes; a department-only change
-  leaves stored closures as they are.
-- Decision 6: the Opening hours screen closes a painter after a clean save; paint made during the
-  save keeps it open, unsaved.
-- Decision 7: a zone's day on which its department is closed shows "<department> closed all day"
-  behind the zone's paint, which stays drawn on top.
-
-A762's plan, Decision 3 (#1850), superseded Decision 9 (the special-day editor kept the day's name as its
-heading): the editor is now titled "<name>: special day, <dates>".
-
-## A762's plan defaults sent to the owner as an FYI
-
-Left open by A762, #1850.
-
-A762's plan made these choices by default and sent them to the owner to overrule if wanted
-([plan](../superpowers/plans/2026-10-18-a762-painter-colour-bands.md), "Decisions this plan
-makes"):
-
-- Decision 1: the band is a strip, not a tinted bar: `--wt-space-2` tall, the bar's full width,
-  rounded ends, above the bar, `aria-hidden`, in the season's line colour. Nothing but colour sits
-  on it, so it needs only 3:1 against the painter's background, which `season-tint.test.ts` holds.
-- Decision 2: a special day's colour is the Calendar's special-day purple
-  (`SPECIAL_DAY_LINE`, `--wt-color-palette-purple`); special days store no colour.
-- Decision 3: both special-day painters, Opening hours' too, are titled "<name>: special day,
-  <dates>"; "<name>: special day" with no dates; "New special day" before a new day has a name.
-  It supersedes A723's Decision 9.
-- Decision 8: the Staffing month draws a special day's dates as one purple run over the season's
-  line, joined across the gaps within a week and broken at a week's end; two special days on
-  neighbouring dates are two runs.
-- Decision 10: the special-day editor's Delete comes after Cancel with the danger look, and Save
-  stands apart. This extends the owner's 2026-10-16 rule for a form's bottom row
-  (`[Cancel] [Delete] … [Save]`, design-system.md → Forms) to a painter's top bar.
-
 ## A purple season looks like a special day
 
 Left open by A762, #1850.
@@ -334,7 +292,6 @@ code, not run again here.
   is painted in; `conflictCount` counts distinct ranges. The dialog shows each row as its own line
   and adds what was counted beyond the list to the count (`#conflictLines`,
   `apps/dashboard/src/screens/business-day-start-editor.ts`), with no "and N more" line.
-  The A506-3 loose end about the dialog repeating the server's counting rule is the same seam.
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
   Reported by A788's implementers, not reproduced since.
@@ -393,15 +350,13 @@ department as "Unallocated" rather than guessing a split.
 
 ## Cosmetic points from A722 Part 3's look, #1834:
 
-**Cosmetic points from A722 Part 3's look, #1834:** the Spanish phone Month breaks "Sin
+The Spanish phone Month breaks "Sin
 pedidos" mid-word (`.no-orders` in `opening-hours-month.ts` still allows a break anywhere; a
 day's name breaks only between its words since A784); at 320 px a 45-letter station name scrolls
 Show's open list sideways (the page does not widen); a station's Month has no key naming which
 bar is which department (hover shows it; the All departments Month has none either).
 
 ## Loose ends left by A577 (#1702).
-
-**Loose ends left by A577 (#1702).**
 
 - The Opening hours Year page does not show the warning that two special days share a date; only
   the Departments screen's readiness list does.
@@ -412,8 +367,6 @@ bar is which department (hover shows it; the All departments Month has none eith
   from rows written another way.
 
 ## Loose ends left by A720.
-
-**Loose ends left by A720.**
 
 - Look at a picked, focused today in the Month. `--wt-focus-offset` and
   `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
@@ -439,8 +392,6 @@ bar is which department (hover shows it; the All departments Month has none eith
 
 ## Loose ends left by A755 (#1809).
 
-**Loose ends left by A755 (#1809).**
-
 - The Venue card says nothing about a time zone locked by a past business-day change. The server
   gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
   `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
@@ -456,14 +407,14 @@ bar is which department (hover shows it; the All departments Month has none eith
 
 ## A per-field department policy repair changes the trading-name default.
 
-**A per-field department policy repair changes the trading-name default.** With no policy row,
+With no policy row,
 readers show the trading name off; PATCH of `orderStart` inserts a row with it on. Left open by A493's review;
 align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
 authenticated route case first. The combined department editor preserves the off fallback.
 
 ## At 390 px the Seasons window's month picker runs off the right edge.
 
-**At 390 px the Seasons window's month picker runs off the right edge.** Seen on the demo venue
+Seen on the demo venue
 on 2026-10-18 by A783's look: each row's month select, and the required star on "Starts on", fall
 past the right edge (`seasons-window-{light,dark}-390[-es].png` in
 `~/waitron-campaign-b/a783-shots/`; `packages/venue-service/src/dashboard/seasons-window.ts`).
@@ -488,16 +439,12 @@ A721's LOOK, 2026-10-18 (#1843). Left open by A721.
 
 ## Loose ends left by A506-4 (#1597).
 
-**Loose ends left by A506-4 (#1597).**
-
 - A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
 - `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
   (`packages/venue-service/src/menu-timetable.ts`; read in the code, not run).
 - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
   at a skipped 02:30 are refused, while the joined range is accepted.
-- The special-day-then-season rule is written out in several places, and special-day paint is
-  read by separately written queries; each could collapse to one place.
-  [Detail](#the-special-day-then-season-rule-is-written-out-in-several-places)
+- [The special-day-then-season rule is written out in several places](#the-special-day-then-season-rule-is-written-out-in-several-places).
 - `business-day-schedule.ts` copies the changeover lookup of
   `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
   every day; a lookup exported from `shared` that validates once would remove the copy.
@@ -521,21 +468,20 @@ review.
 
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
 
-- **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
-  kitchen agreed for.** A routing cell's line for Lunch does not apply to a Lunch dish confirmed
-  after Lunch: it goes where the running period's line, or the cell's every-period target, sends it.
-  A table's mojito on Almuerzo, with Cocktails routed Lunch → Downstairs bar and otherwise Upstairs
-  bar, confirmed at 14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`,
-  "makes a table's cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs
-  bar"). Routing it by the ended period is a module-contract change across the fire, hold and
-  release paths: the router resolves one period per department per resolver (`routingAt`,
-  `packages/venue-service/src/routing-store.ts`, filling `periods` from `runningPeriod`);
-  `MakerResolver.makers` and `extraMakers` answer by product, not by line
-  (`packages/module/src/module.ts`), so one fire holding a tortilla confirmed late and one picked
-  now could not be routed apart; the resolver is asked for extras made at their own station, by
-  `fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
-  (`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
-  its id. Left open by A789 slice 3, #2051 (plan D33).
+A routing cell's line for Lunch does not apply to a Lunch dish confirmed
+after Lunch: it goes where the running period's line, or the cell's every-period target, sends it.
+A table's mojito on Almuerzo, with Cocktails routed Lunch → Downstairs bar and otherwise Upstairs
+bar, confirmed at 14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`,
+"makes a table's cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs
+bar"). Routing it by the ended period is a module-contract change across the fire, hold and
+release paths: the router resolves one period per department per resolver (`routingAt`,
+`packages/venue-service/src/routing-store.ts`, filling `periods` from `runningPeriod`);
+`MakerResolver.makers` and `extraMakers` answer by product, not by line
+(`packages/module/src/module.ts`), so one fire holding a tortilla confirmed late and one picked
+now could not be routed apart; the resolver is asked for extras made at their own station, by
+`fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
+(`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
+its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Decisions and deliberate limits
 
@@ -849,15 +795,56 @@ review.
   triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
   (listed among the smaller notes from the public holidays reviews, above).
 
+### A723's plan defaults sent to the owner as an FYI
+
+Left open by A723 (#1849).
+
+A723's plan made these choices by default and sent them to the owner to overrule if wanted
+([plan](../superpowers/plans/2026-10-18-a723-painters-standard-week.md), "Decisions this plan
+makes"):
+
+- Decision 1: the zone-closure hours check runs at the routes and the import, not in the writers.
+- Decision 3: the server checks only the zone closures a request writes; a department-only change
+  leaves stored closures as they are.
+- Decision 6: the Opening hours screen closes a painter after a clean save; paint made during the
+  save keeps it open, unsaved.
+- Decision 7: a zone's day on which its department is closed shows "<department> closed all day"
+  behind the zone's paint, which stays drawn on top.
+
+A762's plan, Decision 3 (#1850), superseded Decision 9 (the special-day editor kept the day's name as its
+heading): the editor is now titled "<name>: special day, <dates>".
+
+### A762's plan defaults sent to the owner as an FYI
+
+Left open by A762, #1850.
+
+A762's plan made these choices by default and sent them to the owner to overrule if wanted
+([plan](../superpowers/plans/2026-10-18-a762-painter-colour-bands.md), "Decisions this plan
+makes"):
+
+- Decision 1: the band is a strip, not a tinted bar: `--wt-space-2` tall, the bar's full width,
+  rounded ends, above the bar, `aria-hidden`, in the season's line colour. Nothing but colour sits
+  on it, so it needs only 3:1 against the painter's background, which `season-tint.test.ts` holds.
+- Decision 2: a special day's colour is the Calendar's special-day purple
+  (`SPECIAL_DAY_LINE`, `--wt-color-palette-purple`); special days store no colour.
+- Decision 3: both special-day painters, Opening hours' too, are titled "<name>: special day,
+  <dates>"; "<name>: special day" with no dates; "New special day" before a new day has a name.
+  It supersedes A723's Decision 9.
+- Decision 8: the Staffing month draws a special day's dates as one purple run over the season's
+  line, joined across the gaps within a week and broken at a week's end; two special days on
+  neighbouring dates are two runs.
+- Decision 10: the special-day editor's Delete comes after Cancel with the danger look, and Save
+  stands apart. This extends the owner's 2026-10-16 rule for a form's bottom row
+  (`[Cancel] [Delete] … [Save]`, design-system.md → Forms) to a painter's top bar.
+
 ## A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave the zone's Keep open dialog stuck
 
-- **A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave
-  the zone's Keep open dialog stuck.** The PIN dialog hides itself for good, but `till-keep-open`
-  ignores its cancel while busy (`apps/till/src/widgets/keep-open.ts`); a wrong or throttled PIN
-  then keeps the dialog's people set, so the Keep open dialog stays on screen as busy, with every
-  button disabled and Escape and close refused (`beforeClose`, `keep-open-dialog.ts`), under a PIN
-  dialog nobody can see. Moving to another zone clears it. A789 slice 4 fixed the same shape for the
-  late-send PIN only. Read in the code, not run. Left open by A789 slice 4.
+The PIN dialog hides itself for good, but `till-keep-open`
+ignores its cancel while busy (`apps/till/src/widgets/keep-open.ts`); a wrong or throttled PIN
+then keeps the dialog's people set, so the Keep open dialog stays on screen as busy, with every
+button disabled and Escape and close refused (`beforeClose`, `keep-open-dialog.ts`), under a PIN
+dialog nobody can see. Moving to another zone clears it. A789 slice 4 fixed the same shape for the
+late-send PIN only. Read in the code, not run. Left open by A789 slice 4.
 
 ## A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table without signing out
 

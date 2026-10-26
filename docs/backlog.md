@@ -1210,10 +1210,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
 
 - **A723's plan defaults sent to the owner as an FYI**
-  [Detail](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
+  [Decisions](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
 
 - **A762's plan defaults sent to the owner as an FYI**
-  [Detail](backlog/service-periods.md#a762s-plan-defaults-sent-to-the-owner-as-an-fyi)
+  [Decisions](backlog/service-periods.md#a762s-plan-defaults-sent-to-the-owner-as-an-fyi)
 
 - **A purple season looks like a special day**
   [Detail](backlog/service-periods.md#a-purple-season-looks-like-a-special-day)
