@@ -6490,8 +6490,11 @@ as today until Task 3a-ii, so every rail check stays green here.
 - [ ] **Step 1: Failing tests** (and the changed "marks under each of a seated party's sent
   groups", "board: labels a marked dish's cell…", "board: words the mark in Spanish", D12):
   1. "names the group's course in its heading when its dishes share one" — the heading holds
-     "Group 2" and "Principales", the fixture's own course name (`station-queue.test.ts:1850`;
-     course names are the venue's content, never a translated string).
+     "Group 2" and the case's own English course name, "Mains" (course names are the venue's
+     content, never a translated string). General code is English only (CLAUDE.md §3): the
+     existing fixture's "Principales" (`station-queue.test.ts:1850`) is an old leak this slice
+     does not spread — a new case builds its own course name in English, and the old leak is
+     noted for A913 in lane C's questions file, not fixed here.
   2. "puts course heads inside a card whose dishes span two courses, null course first".
   3. "a dish ahead of its card's column says its state; one at the column says none" — Review
      focus 2: the Preparing dish reads "Preparing", the Waiting one has no `.line-state`.
