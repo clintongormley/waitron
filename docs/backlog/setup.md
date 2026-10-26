@@ -456,14 +456,17 @@ Left open by A1042. What the box does today:
     `reason: "storage.disk_full"` and the start serves the full-disk page. That page tells the
     person to ask whoever installed the box to free some space, against the 2026-10-25 rule never to
     send the person to somebody else. It also says "The box has deleted what it could make again",
-    which is untrue while the discarded database is still there (`apps/server/src/recovery-surface.ts`,
-    `storage.disk_full`).
+    which is untrue while the discarded database is still there
+    (`apps/server/src/recovery-surface.ts`, `storage.disk_full`).
 - **At Start again, with the disk already full:** Start again and its summary answer
   `500 server.internal` at the turn's own lock, before any step (measured by the A1042 plan's
   fourth-revision check, through the repair host's own lock and the real error boundary). The page
-  draws "Reconnect to check the saved result. Do not repeat activation." Every recovery step runs
-  in the same turn (`apps/server/src/first-setup-backup-recovery.ts`, `turn`); I believe each answers
-  the same way (read, not run), and that Start again did the same before A1042 (read, not run).
+  draws "Reconnect to check the saved result. Do not repeat activation." for Start again's refusal;
+  with the venue database present, a summary read refused this way draws "This box could not read
+  the details of the recovery from backup. Check again." instead (`apps/setup/src/setup-app.ts`,
+  `#presentReadsFailed`; read, not run). Every recovery step runs in the same turn
+  (`apps/server/src/first-setup-backup-recovery.ts`, `turn`); I believe each answers the same way
+  (read, not run), and that Start again did the same before A1042 (read, not run).
 - **A recovery not yet discarded that fills the disk** (a restore that runs out of room part-way)
   gets no clean-up at the start: the start resolves the repair page and skips the space clean-up
   (`apps/server/src/node-entry.ts`, `backupEntry.kind === "repair"`, from #2043). The person meets
@@ -473,19 +476,22 @@ Left open by A1042. What the box does today:
   restarting, wait until it answers." The box restarts by itself, and the next start tries the
   emptying again; on a disk still full, that start serves the full-disk page above.
 
-Follow-up: A1117, as the owner chose on 2026-10-26 ("A1042 full disk: A"): on a full disk the box
+Follow-up: A1127, as the owner chose on 2026-10-26 ("A1042 full disk: A"): on a full disk the box
 frees a discarded recovery's copy and keeps the folder-lock rule, and the repair and full-disk pages
 stop sending the person elsewhere.
 
 ## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
 
-Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers "Start again has not finished. Reload this page to see
-what is left to do. If the box is restarting, wait until it answers." and restarts the box. The
-next start logs `setup.recovery_cleanup_refused`, leaves the files, and brings the repair page back,
-so the person can only press Start again again. Run by A1042's U7d review with the restored
-database made undeletable (`chflags uchg`), through the real route and the next start: each press
-restarted the box once, each start restarted it zero times, and nothing kept was deleted. Follow-up: A1098, the choice to
-keep or move aside files the box did not create.
+Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers
+"Start again has not finished. Reload this page to see what is left to do. If the box is
+restarting, wait until it answers." and restarts the box. The next start logs
+`setup.recovery_cleanup_refused`, leaves the files, and brings the repair page back, so the person
+can only press Start again again. Run by A1042's U7d review with the restored database made
+undeletable (`chflags uchg`), through the real route and the next start: each press restarted the
+box once, each start restarted it zero times, and nothing kept was deleted.
+
+Follow-up: A1098 covers files the box did not create (the choice to keep them or move them aside).
+A file the box created, such as this restored database, stays a manual loop.
 
 ## A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery waits
 
@@ -543,7 +549,10 @@ the start (`setup.workspace_unsupported`), and the page asks for Waitron to be r
 **DECIDED (owner, 2026-10-25 14:35): an unfinished backup recovery is disposable.** Start again
 discards it once it has stopped, keeping its lock files (the `abandoned` tombstone: the recovery's
 journal records and its restored copy's lock files stay, and the rest is deleted;
-`packages/provisioning/src/first-setup-backup-discard.ts`). A1042.
+`packages/provisioning/src/first-setup-backup-discard.ts`). With the venue database missing, it does
+so after the setup password and the missing-database confirmation; with it present, after the setup
+password and the discard confirmation, and only for an empty, never-activated attempt
+(`startAgainFirstSetup`, `apps/server/src/first-setup-resolution.ts`). A1042.
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack

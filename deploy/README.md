@@ -361,8 +361,8 @@ Both forms wipe every volume in the table above. Plain `reset` keeps three thing
   never issues a production series name at or before it, so keeping it stops a reset box from
   reusing that name.
 - `first-setup-start-again-confirmations/`, one small record for each Start again that someone
-  confirmed while the venue database was missing: who confirmed, when, and what the repair page
-  showed them.
+  confirmed while the venue database was missing, or that discarded a stopped backup recovery: who
+  confirmed, when, and what the repair page showed them.
 
 `reset --all` removes the whole `state` volume, those three included, so the box mints a brand-new
 certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:

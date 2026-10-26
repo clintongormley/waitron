@@ -19,16 +19,26 @@ contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
 Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
 Mientras hay una recuperación desde una copia en curso en otro dispositivo, la página de reparación
-lo indica, con cuándo empezó y cuándo tuvo actividad por última vez, y no ofrece nada más hasta que
-se detenga, para que dos dispositivos nunca cambien esta configuración a la vez. Una recuperación
-cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco minutos
-siguientes a su última actividad. La página lo vuelve a comprobar sola.
+lo indica, con cuándo empezó y cuándo tuvo actividad por última vez. Hasta que se detenga, la página
+solo ofrece **Reconectar** y **Configurar conexión segura**, y lo vuelve a comprobar sola. Una
+recuperación cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco
+minutos siguientes a su última actividad. Esos cinco minutos terminan antes si la recuperación falla
+o el equipo se reinicia.
 
 Si una recuperación desde una copia empezó y no terminó, la página de reparación lo indica, y
-**Empezar de nuevo** la borra. Si esa recuperación usaba una copia de Cloud, su aprobación en
-Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no
-puede aprobar otra recuperación para el local de este equipo. Un dispositivo que todavía tenga
-abierta la recuperación borrada indica que se descartó.
+**Empezar de nuevo** la borra junto con la configuración interrumpida. Junto a ella, la página no
+ofrece **Recuperar desde una copia**. Si la página dice que falta la base de datos de configuración,
+muestra la recuperación detenida después de que introduzcas la contraseña de administrador que
+elegiste al configurar, y Empezar de nuevo la borra cuando marcas «No se envió nada a la AEAT ni se
+vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, la página muestra **Empezar de nuevo**
+junto a la recuperación detenida, disponible solo si el equipo puede comprobar que la base de datos
+de la configuración está vacía. Empezar de nuevo pide entonces la contraseña de administrador,
+vuelve a mostrar la recuperación y la borra cuando marcas «Borrar el intento anterior y empezar de
+nuevo.» y vuelves a elegir **Empezar de nuevo**.
+
+Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
+de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
+el local de este equipo.
 
 Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
 equipo se está reiniciando, espera a que responda.

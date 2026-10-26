@@ -54,7 +54,8 @@ over HTTPS only: it deletes the interrupted attempt, keeps a small note of the l
 name it chose, if any (`first-setup-start-again.json` in the state folder), and ends the process so
 its supervisor starts it again.
 With the venue database missing, it also needs the setup password and a confirmation that nothing
-was filed or sold. To finish over HTTPS, recover ownership, retrieve the staged publication
+was filed or sold. With the venue database present, discarding a stopped backup recovery also needs
+the setup password and a confirmation of the recovery's details the page showed. To finish over HTTPS, recover ownership, retrieve the staged publication
 reference, confirm the current document and submit the unchanged publication inputs.
 
 Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will

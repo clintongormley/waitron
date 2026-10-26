@@ -96,24 +96,39 @@ cannot be read." above it; you can still choose **Cancel**.
 When the venue database is missing, the box cannot check whether the attempt filed anything to
 AEAT or made a sale. After the setup password step, the repair page says so, lists what the
 attempt's own record says it reached — the invoice series name it chose, if any, and whether it
-started or finished activation — and offers **Recover from backup** beside **Start again**. Start
-again then asks you to tick "Nothing was filed to AEAT and nothing was sold."; before it deletes
-anything, the box records who confirmed, when, and what the page showed. If the attempt's
-recovery-key record is damaged, the page also says "This setup's recovery-key record is damaged
-and cannot be read." above what Start again deletes, and you can still choose **Cancel**.
+started or finished activation — and offers **Recover from backup** beside **Start again**, unless
+a backup recovery has stopped (below). Start again then asks you to tick "Nothing was filed to AEAT
+and nothing was sold."; before it deletes anything, the box records who confirmed, when, and what
+the page showed. If the attempt's recovery-key record is damaged, the page also says "This setup's
+recovery-key record is damaged and cannot be read." above what Start again deletes, and you can
+still choose **Cancel**.
 
 While a backup recovery is running on another device, the repair page says so, with when it
-started and when it was last active, and offers nothing until it stops. It counts as running while
-one of its steps is in progress and for five minutes after its last activity. Once a backup
-recovery has started, Start again is offered only after it has stopped: the page then says the
-recovery started and did not finish and that Start again deletes it, and offers no **Recover from
-backup** beside it. For a Waitron Cloud copy it adds that the approval in Waitron Cloud closes by
-itself within an hour of when it was given, and that until then Cloud cannot approve a new
-recovery for this box's venue. Start again keeps the discarded recovery's journal records and its
-lock files, and deletes the rest. If a file cannot be deleted, or the disk fills first, the page says "Start again has not
-finished. Reload this page to see what is left to do. If the box is restarting, wait until it
-answers.", the box restarts, and the next start tries the deletion again. A recovery whose records cannot be read is reported as such, and
-Start again is not offered beside it.
+started and when it was last active, and offers only **Reconnect** and **Set up secure
+connection** until it stops. It counts as running while one of its steps is in progress and for
+five minutes after its last activity. The five minutes end early if the recovery fails, and the
+box keeps them in memory only, so a restart ends them too (`runningInMemory` in
+`apps/server/src/first-setup-backup-recovery.ts`).
+
+Once a backup recovery has stopped, the repair page says it started and did not finish and that
+Start again deletes it, and offers no **Recover from backup** beside it. With the venue database
+missing, the page shows this after the setup password step, and Start again deletes the recovery
+with the attempt after the missing-database confirmation above. With the venue database present,
+the page shows the stopped recovery beside **Start again**, which is still limited to a positively
+empty, never-activated attempt. Start again then asks for the setup password, reads the
+recovery's details again, shows them, and deletes the recovery with the attempt once you tick
+"Delete the old attempt and start again." On both paths the box writes a confirmation record
+(`first-setup-start-again-confirmations/`, with `database` set to `missing` or `present`) before it
+deletes anything. For a Waitron Cloud copy the page adds that the approval in Waitron Cloud closes
+by itself within an hour of when it was given, and that until then Cloud cannot approve a new
+recovery for this box's venue.
+
+Start again keeps the discarded recovery's journal records and its lock files, and deletes the
+rest. If a file cannot be deleted, or the disk fills part-way through, the page says "Start again
+has not finished. Reload this page to see what is left to do. If the box is restarting, wait until
+it answers.", the box restarts, and the next start tries the deletion again. With the venue
+database missing, a recovery whose records cannot be read is reported as such, and Start again is
+not offered beside it.
 
 For an authenticated archive, bucket or supported Cloud copy, choose **Recover from backup**
 and follow the [repair recovery procedure](hour-recovery.md#recover-while-first-setup-is-blocked).

@@ -2967,15 +2967,21 @@ printed:
   journal, and then trying from another process printed `acquired` both times: the new file is a
   different lock, taken beside the holder. `apps/server/src/db-wipe.ts` records the same for
   `migrations.lock`.
-- The state folder can hold discarded backup-recovery tombstones
-  (`first-setup-resolutions/backup-recovery/<id>/`); emptying one keeps the lock files of its
-  restored copy, which are never removed (`packages/provisioning/src/first-setup-backup-discard.ts`).
 - A `venue.lock` that is a DIRECTORY is refused by the constructor with errcode 14, `unable to open
   database file`, which the lock passes on as it came rather than reporting it as in use.
 
 **That is macOS, and the box runs Linux.** The store suite's "does not stay locked after the holder
 is killed" case (`packages/store/src/venue-lock.test.ts`) runs in CI on `ubuntu-latest`; that run is
 the Linux reading, not this paragraph.
+
+**A discarded backup recovery keeps its lock files.** The state folder can hold discarded
+backup-recovery tombstones (`first-setup-resolutions/backup-recovery/<id>/`). Emptying one, by
+Start again or by its retry at the next start, keeps the journal records and the lock files of its
+restored copy (`KEPT_IN_TARGET` in `packages/provisioning/src/first-setup-backup-discard.ts`), and
+Start again's deletion of the attempt leaves the folder in place
+(`packages/provisioning/src/first-setup-start-again-deletion.ts`, `backupRecoveryKept`). A plain
+`sudo bash waitron.sh reset` stops the box and deletes them with the rest of the state folder
+(`wipe_box` in `deploy/waitron.sh`).
 
 **Why the migrator's lock cannot serve.** It is held only while migrations run and then released, and
 it WAITS (up to two minutes, `LOCK_WAIT_MS`) for another migrator, where a second server has to be
