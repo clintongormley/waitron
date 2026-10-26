@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import {
@@ -1086,4 +1087,118 @@ it("two move records: the latest is resumed, into its own folder", async () => {
   await expect(
     lstat(join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env")),
   ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+/** A WAL-mode venue.db closed cleanly, so no -wal or -shm is beside it. */
+async function cleanWalDatabase(path: string) {
+  const db = new DatabaseSync(path);
+  try {
+    db.exec("pragma journal_mode = wal; create table t (n integer)");
+  } finally {
+    db.close();
+  }
+}
+
+/** Another process commits rows and exits without closing: the rows stay in a new -wal. */
+function writeAndExitWithoutClosing(path: string) {
+  const script = [
+    'const { DatabaseSync } = require("node:sqlite");',
+    "const db = new DatabaseSync(process.argv[1]);",
+    'db.exec("pragma wal_autocheckpoint = 0");',
+    'const insert = db.prepare("insert into t (n) values (?)");',
+    "for (let n = 0; n < 50; n++) insert.run(n);",
+    "process.exit(0);",
+  ].join("\n");
+  execFileSync(process.execPath, ["-e", script, path], { stdio: "ignore" });
+}
+
+const mainFileOf = async (path: string) => {
+  const info = await lstat(path, { bigint: true });
+  return [info.ino, info.size, info.mtimeNs];
+};
+
+it("a -wal that appears beside a recorded database after the record: the Move refuses naming it and leaves the database at its source", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const database = join(roots.venueDir, "venue.db");
+  await cleanWalDatabase(database);
+  const record = await prepared(roots, attempt.administratorId);
+  expect(record.listed.units.map((unit) => unit.pieces)).toEqual([["venue.db"]]);
+  const before = await mainFileOf(database);
+  writeAndExitWithoutClosing(database);
+  // Control: the main file looks exactly as recorded; only the new -wal holds the rows.
+  expect(await mainFileOf(database)).toEqual(before);
+  expect((await lstat(`${database}-wal`)).size).toBeGreaterThan(0);
+
+  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: unrecorded venue/venue.db-wal",
+  });
+  for (const suffix of ["", "-wal", "-shm"])
+    expect((await lstat(`${database}${suffix}`)).isFile()).toBe(true);
+  expect(await readdir(setAsideFolderPaths(roots, record.setAside!).venue)).toEqual([]);
+});
+
+it("a -wal that appears beside a recorded database after a cut: the resume stops and leaves the database at its source", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const database = join(roots.venueDir, "venue.db");
+  await cleanWalDatabase(database);
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+  const before = await mainFileOf(database);
+  writeAndExitWithoutClosing(database);
+  expect(await mainFileOf(database)).toEqual(before);
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+
+  for (const suffix of ["", "-wal", "-shm"])
+    expect((await lstat(`${database}${suffix}`)).isFile()).toBe(true);
+  expect(await readdir(setAsideFolderPaths(roots, record.setAside!).venue)).toEqual([]);
+});
+
+it("a rename that fails at the resume with later pieces still to move refuses naming it, and the later pieces stay at their source", async () => {
+  const base = await scratch();
+  const attempt = await startAgainAttempt(base);
+  const { roots } = attempt;
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  await writeFile(join(roots.venueDir, "venue.db-wal"), "found pages");
+  await writeFile(join(roots.venueDir, "venue.db-shm"), "found index");
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      if (from === join(roots.venueDir, "venue.db-wal")) throw errno("EXDEV");
+      await fs.rename(from, to);
+    },
+  };
+
+  await expect(resumeStartAgainSetAside(roots, io)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: EXDEV venue/venue.db-wal",
+  });
+  expect(await readFile(join(roots.venueDir, "venue.db-shm"), "utf8")).toBe("found index");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+  expect(await readdir(setAsideFolderPaths(roots, record.setAside!).venue)).toEqual([]);
+});
+
+it("a side file beside a database that cannot be looked at refuses naming it, and the database stays", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const record = await prepared(roots, attempt.administratorId);
+  const io: SetAsideIo = {
+    ...realIo,
+    lstat: (async (path: string, options?: unknown) => {
+      if (path === join(roots.venueDir, "venue.db-shm")) throw errno("EACCES");
+      return fs.lstat(path, options as never);
+    }) as typeof fs.lstat,
+  };
+
+  await expect(moveStartAgainUnits(roots, record, io)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: EACCES venue/venue.db-shm",
+  });
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 });

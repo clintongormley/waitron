@@ -261,6 +261,33 @@ async function movePiece(
   }
 }
 
+const DATABASES = new Set(["venue.db", "node.db"]);
+const SIDE_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
+
+/**
+ * Before a database's main file, its last piece, moves: a side file still at its source. The
+ * recorded side pieces have moved by then, so one present was not recorded, and would stay behind
+ * holding committed rows (D2). Its name, or null.
+ */
+async function unrecordedSideFile(
+  roots: Roots,
+  unit: StartAgainUnit,
+  piece: string,
+  io: SetAsideIo,
+): Promise<string | null> {
+  if (unit.root !== "venue" || piece !== unit.path || !DATABASES.has(piece)) return null;
+  for (const suffix of SIDE_SUFFIXES) {
+    const side = `${piece}${suffix}`;
+    try {
+      await io.lstat(join(roots.venueDir, side));
+      return side;
+    } catch (error) {
+      if (codeOf(error) !== "ENOENT") throw failed(codeOf(error), `venue/${side}`);
+    }
+  }
+  return null;
+}
+
 /**
  * D4 steps 3 and 4: raises the note to the record's floor, then renames each unit's pieces, in
  * survey order and each unit's move order, into the record's folders. Never overwrites: a present
@@ -276,7 +303,11 @@ export async function moveStartAgainUnits(
   await raiseNoteToRecord(roots.stateDir, record);
   const folders = await makeDestinationFolders(roots, { ...record, setAside: record.setAside }, io);
   for (const unit of record.listed.units)
-    for (const piece of unit.pieces) await movePiece(roots, folders, unit, piece, io);
+    for (const piece of unit.pieces) {
+      const side = await unrecordedSideFile(roots, unit, piece, io);
+      if (side !== null) throw failed("unrecorded", `venue/${side}`);
+      await movePiece(roots, folders, unit, piece, io);
+    }
 }
 
 type Seen = {
@@ -363,9 +394,10 @@ export async function resumeStartAgainSetAside(
         } catch (error) {
           throw failed(codeOf(error), `${unit.root}/${piece}`);
         }
-        if (destination === null && JSON.stringify(source) === expected)
+        if (destination === null && JSON.stringify(source) === expected) {
+          if ((await unrecordedSideFile(canonical, unit, piece, io)) !== null) return "stopped";
           await movePiece(canonical, folders, unit, piece, io);
-        else if (source === null && JSON.stringify(destination) === expected) continue;
+        } else if (source === null && JSON.stringify(destination) === expected) continue;
         else return "stopped";
       }
     return "resumed";
