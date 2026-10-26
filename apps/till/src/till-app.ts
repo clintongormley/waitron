@@ -3481,8 +3481,11 @@ export class TillApp extends LitElement {
   }
 
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
+    const from = this.activeTabKey;
     this.activeTabKey = this.#resolveScreen(key ?? null);
-    const returnZone = this.activeTabKey === "floor" ? this.#floorReturnZone() : undefined;
+    // Only a move onto the Floor from another tab: on the Floor, the address holds the zone shown.
+    const returnZone =
+      this.activeTabKey === "floor" && from !== "floor" ? this.#floorReturnZone() : undefined;
     if (key !== undefined)
       this.#writeUrl(
         {
@@ -4124,8 +4127,8 @@ export class TillApp extends LitElement {
       this.activeTableId !== undefined &&
       this.formFactor !== "till"
     ) {
-      const zoneId = this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId;
-      if (zoneId) this.floorReturnZoneId = zoneId;
+      this.floorReturnZoneId =
+        this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId ?? undefined;
     }
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();

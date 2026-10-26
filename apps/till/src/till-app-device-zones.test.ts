@@ -1706,6 +1706,67 @@ describe("a handheld's zones", () => {
       expect(await activeTab(el)).toBe("room");
     });
 
+    it.each([false, true])(
+      "a zone tab tapped after the return keeps its zone, on screen and in the address (saved %s)",
+      async (saved) => {
+        const { el } = await mountTables(selection(all, "room", saved));
+        await openFromBar(el, "table-garden");
+        await tapFloor(el);
+        expect(await activeTab(el)).toBe("garden");
+        await showZone(el, "room");
+        await el.updateComplete;
+        expect(await activeTab(el)).toBe("room");
+        expect(location.pathname).toBe("/tabs/floor/zone/room");
+      },
+    );
+
+    it("Back and Forward between two Floor zones after a table keep each entry's zone", async () => {
+      const { el } = await mountTables(selection(all, "room"));
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+      await showZone(el, "room");
+      const moved = () =>
+        new Promise<void>((done) =>
+          window.addEventListener("popstate", () => done(), { once: true }),
+        );
+      const back = moved();
+      history.back();
+      await back;
+      await vi.waitFor(() => expect(activeTab(el)).resolves.toBe("garden"));
+      expect(location.pathname).toBe("/tabs/floor/zone/garden");
+      const forward = moved();
+      history.forward();
+      await forward;
+      await vi.waitFor(() => expect(activeTab(el)).resolves.toBe("room"));
+      expect(location.pathname).toBe("/tabs/floor/zone/room");
+    });
+
+    it("Back from the table onto the Floor opens the table's zone, and the address names it", async () => {
+      const { el } = await mountTables(selection(all, "room"));
+      await showZone(el, "room");
+      await openFromBar(el, "table-garden");
+      const back = new Promise<void>((done) =>
+        window.addEventListener("popstate", () => done(), { once: true }),
+      );
+      history.back();
+      await back;
+      await vi.waitFor(() => expect(orderScreen(el)).toBeNull());
+      expect(await activeTab(el)).toBe("garden");
+      expect(location.pathname).toBe("/tabs/floor/zone/garden");
+    });
+
+    it("tapping Floor again while on the Floor keeps the zone tapped", async () => {
+      const { el } = await mountTables(selection(all, "room"));
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      await showZone(el, "room");
+      await tapFloor(el);
+      await el.updateComplete;
+      expect(await activeTab(el)).toBe("room");
+      expect(location.pathname).toBe("/tabs/floor/zone/room");
+    });
+
     it("opens on the table's zone when the zone choice could not be read", async () => {
       const { el } = await mountTables(selection(all, "room"), "phone-portrait", {
         getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -1716,7 +1777,7 @@ describe("a handheld's zones", () => {
       expect(await activeTab(el)).toBe("garden");
     });
 
-    it("keeps the zone before when the table opened has none", async () => {
+    it("opens as before after a table with no zone", async () => {
       const { el, api } = await mountTables(selection(all, "room"));
       api.getTablesState.mockResolvedValue([
         { ...tableIn("table-room", "room"), zoneId: null },
@@ -1736,7 +1797,7 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(orderScreen(el)).not.toBeNull());
       await el.updateComplete;
       await tapFloor(el);
-      expect(await activeTab(el)).toBe("garden");
+      expect(await activeTab(el)).toBe("room");
     });
 
     it("forgets the zone when the till switches server", async () => {
