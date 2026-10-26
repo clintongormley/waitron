@@ -1030,4 +1030,26 @@ describe("till-app: a table left for another keeps its button", () => {
     expect(api.getTablesState!.mock.settledResults.at(-1)?.type).toBe("rejected");
     expect(bar(el)).toContain("✎ T4");
   });
+
+  it("opens T4's saved dishes from its kept button after a floor read failed", async () => {
+    const { el, answer } = await leaveT4ForT9(phone, {
+      getTablesState: vi.fn().mockResolvedValue([mesa4, table("t5", "T5", null), mesa9WithAnas]),
+      seatTable: vi.fn().mockResolvedValue({ tabId: "wo-5", partyId: "v5", revision: 1 }),
+    });
+    await openT9(el);
+    await flush(el, 6);
+    api.getTablesState!.mockRejectedValue(new TypeError("Failed to fetch"));
+    answer();
+    await flush(el, 6);
+    await toFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t5", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    expect(api.getTablesState!.mock.settledResults.at(-1)?.type).toBe("rejected");
+    expect(bar(el)).toContain("✎ T4");
+
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(draft(el).lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
 });

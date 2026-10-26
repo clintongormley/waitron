@@ -10657,12 +10657,19 @@ export class TillApp extends LitElement {
     showAtOnce = true,
   ): Promise<void> {
     if (!this.#inShell() || left()) return;
-    const { tableId, seated, guestCount, withTableIds } = (
+    const {
+      tableId,
+      seated,
+      guestCount,
+      withTableIds,
+      fromBar = false,
+    } = (
       event as CustomEvent<{
         tableId: string;
         seated: boolean;
         guestCount?: number | null;
         withTableIds?: string[];
+        fromBar?: boolean;
       }>
     ).detail;
     const unassigned =
@@ -10696,7 +10703,7 @@ export class TillApp extends LitElement {
       const leaving = this.#draftSync;
       if (
         leaving !== undefined &&
-        leaving.partyId !== this.tables.find((row) => row.id === tableId)?.party?.id
+        leaving.partyId !== this.#openingFloor(fromBar).find((row) => row.id === tableId)?.party?.id
       )
         this.#releaseDraft(leaving);
       else if (this.#draftReady) await this.#flushDraft();
@@ -10709,6 +10716,7 @@ export class TillApp extends LitElement {
         abandoned,
         carried,
         showAtOnce,
+        fromBar,
       );
     } finally {
       unlock?.();
@@ -10718,6 +10726,12 @@ export class TillApp extends LitElement {
         this.openingTableId = undefined;
       }
     }
+  }
+
+  /** A bar button opens from the floor the bar is drawn from: a failed reload empties `tables` but
+   * not `barFloor`. */
+  #openingFloor(fromBar: boolean): readonly TableState[] {
+    return fromBar ? this.barFloor : this.tables;
   }
 
   /** `guestCount` is `undefined` to resume a seated table, and a count or null to seat a free one,
@@ -10730,10 +10744,11 @@ export class TillApp extends LitElement {
     left: () => boolean = () => false,
     carried?: { note: string | null; lines: OrderLine[]; carrier: string },
     shownEarly = false,
+    fromBar = false,
   ): Promise<void> {
     try {
       const session = this.#operatorSession;
-      const table = this.tables.find((candidate) => candidate.id === tableId);
+      const table = this.#openingFloor(fromBar).find((candidate) => candidate.id === tableId);
       const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
       const held =
         heldZone === undefined ? undefined : this.#zoneCatalogues.get(heldZone)?.catalogue;
@@ -11247,7 +11262,7 @@ export class TillApp extends LitElement {
     this.#requestLeave(() => {
       if (this.drill !== undefined) this.#popDrill();
       return this.#onOpenTable(
-        new CustomEvent("open-table", { detail: { tableId, seated: true } }),
+        new CustomEvent("open-table", { detail: { tableId, seated: true, fromBar: true } }),
       );
     });
   }
