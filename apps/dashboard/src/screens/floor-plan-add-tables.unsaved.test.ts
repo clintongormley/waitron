@@ -113,6 +113,24 @@ it("typed custom names ask before Escape, and Keep keeps them", async () => {
   expect(app.changes).toEqual([]);
 });
 
+it("a typed short name asks before Escape, and Keep keeps it", async () => {
+  const { app, panel, dialog } = await fixture();
+  await set(panel, field(dialog, "naming"), "custom");
+  await set(panel, field(dialog, "short-name"), "Pt1");
+  await set(panel, field(dialog, "naming"), "automatic");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  field(dialog, "prefix").focus();
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+  await choose(app, "keep");
+  await expect.poll(async () => (await question(app)).open).toBe(false);
+  expect(dialog.open).toBe(true);
+  await set(panel, field(dialog, "naming"), "custom");
+  expect(field(dialog, "short-name").value).toBe("Pt1");
+  expect(app.changes).toEqual([]);
+});
+
 it("a changed count asks before Cancel, and Discard closes without adding", async () => {
   const { app, panel, dialog } = await fixture();
   await set(panel, field(dialog, "table-count"), "3");

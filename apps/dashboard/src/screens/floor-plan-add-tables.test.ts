@@ -6,6 +6,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-add-tables.js";
 import type { FloorPlanAddTables } from "./floor-plan-add-tables.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import type { DraftTable, FloorPlanDraft } from "./floor-plan-draft.js";
 
 let originalLocale = currentLocale();
@@ -91,6 +92,20 @@ async function openAdd(props: Partial<FloorPlanAddTables> = {}) {
 /** The names preview as a sighted person sees it: its text, drawn with a box. */
 function preview(el: FloorPlanAddTables): string {
   const line = addDialog(el).querySelector<HTMLElement>("[data-preview]")!;
+  const box = line.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.height).toBeGreaterThan(0);
+  return line.textContent!.trim();
+}
+
+const shortNameFields = (el: FloorPlanAddTables) => [
+  ...addDialog(el).querySelectorAll<
+    HTMLElement & { value: string; label: string; error: string; placeholder: string }
+  >("[name=short-name]"),
+];
+
+function shortPreview(el: FloorPlanAddTables): string {
+  const line = addDialog(el).querySelector<HTMLElement>("[data-short-preview]")!;
   const box = line.getBoundingClientRect();
   expect(box.width).toBeGreaterThan(0);
   expect(box.height).toBeGreaterThan(0);
@@ -338,4 +353,94 @@ it("the preview shows a prefix holding $& as typed", async () => {
   await set(el, addField(el, "prefix"), "A$&B");
   await set(el, addField(el, "table-count"), "3");
   expect(preview(el)).toBe("A$&B 1 to A$&B 3");
+});
+
+it("the preview gives the short names the tables will get", async () => {
+  const el = await openAdd();
+  expect(shortPreview(el)).toBe("Short names: T11");
+  await set(el, addField(el, "table-count"), "5");
+  expect(preview(el)).toBe("Terrace 11 to Terrace 15");
+  expect(shortPreview(el)).toBe("Short names: T11 to T15");
+  setLocale("es-ES");
+  await el.updateComplete;
+  const range = es["floor_plan_editor.name_range"]
+    .replace("{first}", "T11")
+    .replace("{last}", "T15");
+  expect(shortPreview(el)).toBe(
+    es["floor_plan_editor.short_names_preview"].replace("{names}", range),
+  );
+});
+
+it("automatic short names the draft already holds are refused beside Prefix", async () => {
+  const holding: FloorPlanDraft = {
+    tables: [...draft.tables, { ...table("p", "Patio"), shortName: "T11" }],
+  };
+  const el = await openAdd({ draft: holding });
+  const { changes } = listen(el);
+  expect(preview(el)).toBe("Terrace 11");
+  await pressAdd(el);
+  expect(addField(el, "prefix").error).toBe("Patio already uses T11");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  expect(addAction(el, "add-confirm").disabled).toBe(true);
+  expect(changes).toEqual([]);
+  expect(addDialog(el).open).toBe(true);
+  await set(el, addField(el, "prefix"), "Window");
+  expect(addField(el, "prefix").error).toBe("");
+  expect(formError(el)).toBe("");
+  await pressAdd(el);
+  expect(
+    changes[0]!.tables.slice(holding.tables.length).map((t) => [t.label, t.shortName]),
+  ).toEqual([["Window 1", "W1"]]);
+});
+
+it("custom naming shows a short name beside each name, following it until typed", async () => {
+  const el = await openAdd();
+  await set(el, addField(el, "table-count"), "3");
+  await set(el, addField(el, "naming"), "custom");
+  const shorts = shortNameFields(el);
+  expect(shorts.map((f) => f.label)).toEqual(["Short name 1", "Short name 2", "Short name 3"]);
+  expect(shorts.every((f) => f.hasAttribute("required"))).toBe(true);
+  expect(shorts.map((f) => f.placeholder)).toEqual(Array(3).fill("Shown where space is tight"));
+  await set(el, nameFields(el)[0]!, "Patio 1");
+  expect(shortNameFields(el)[0]!.value).toBe("P1");
+  await set(el, shortNameFields(el)[0]!, "Pt1");
+  await set(el, nameFields(el)[0]!, "Patio 9");
+  expect(shortNameFields(el)[0]!.value).toBe("Pt1");
+});
+
+it("adds the custom short names as typed, trimmed", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await setNames(el, ["Patio 1", "Patio 2"]);
+  await set(el, shortNameFields(el)[0]!, " Pt1 ");
+  await pressAdd(el);
+  expect(added(changes).map((t) => [t.label, t.shortName])).toEqual([
+    ["Patio 1", "Pt1"],
+    ["Patio 2", "P2"],
+  ]);
+});
+
+it("a custom short name blank, too long, used by the draft or twice in the batch is refused beside its field", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await setNames(el, ["Patio 1"]);
+  await set(el, shortNameFields(el)[0]!, "");
+  await pressAdd(el);
+  expect(shortNameFields(el)[0]!.error).toBe("Enter a short name.");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  await set(el, shortNameFields(el)[0]!, "ABCDEF");
+  expect(shortNameFields(el)[0]!.error).toBe("Enter up to 5 characters.");
+  await set(el, shortNameFields(el)[0]!, "t1");
+  expect(shortNameFields(el)[0]!.error).toBe("Terrace 1 already uses t1");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  await setNames(el, ["Bar 1", "Bar 2"]);
+  await set(el, shortNameFields(el)[0]!, "X1");
+  await set(el, shortNameFields(el)[1]!, "X1");
+  expect(shortNameFields(el).map((f) => f.error)).toEqual(["", "Bar 1 already uses X1"]);
+  await set(el, nameFields(el)[0]!, "");
+  expect(shortNameFields(el).map((f) => f.error)).toEqual(["", "Unnamed already uses X1"]);
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  await pressAdd(el);
+  expect(changes).toEqual([]);
+  expect(addDialog(el).open).toBe(true);
 });
