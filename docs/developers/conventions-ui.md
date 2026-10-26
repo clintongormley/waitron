@@ -1128,8 +1128,10 @@ This start was refused before it began, and was not counted." («Nivel: recovery
 rechazó antes de empezar y no se ha contado.»), and it writes `server.boot_started` and then
 `server.boot_failed` with its code to `waitron.log`.
 
-Every recovery page `runEntry` serves, the one served at once and the ordinary one, shows the free
-space just below the status line: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
+Two of the recovery pages `runEntry` serves, the one served at once and the ordinary one, show the
+free space just below the status line; the page for a start refused before it began shows none and
+never mentions the disk (A1042 plan, Task 5b; `expectRefusedPage` in
+`apps/server/src/first-setup-resolution.boot.test.ts`). The line reads: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
 disco del equipo: 1,2 MB.»). It is read again on every `GET /`, from the lower of the state and
 venue folders, in decimal megabytes with at most one decimal, formatted for the page's language,
 and reads "unknown" («desconocido») when the filesystem cannot say; each such read logs
