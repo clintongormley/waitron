@@ -848,3 +848,13 @@ review.
   gap. The address-change warning names only the new city, though a province change also
   triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
   (listed among the smaller notes from the public holidays reviews, above).
+
+## A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave the zone's Keep open dialog stuck
+
+- **A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave
+  the zone's Keep open dialog stuck.** The PIN dialog hides itself for good, but `till-keep-open`
+  ignores its cancel while busy (`apps/till/src/widgets/keep-open.ts`); a wrong or throttled PIN
+  then keeps the dialog's people set, so the Keep open dialog stays on screen as busy, with every
+  button disabled and Escape and close refused (`beforeClose`, `keep-open-dialog.ts`), under a PIN
+  dialog nobody can see. Moving to another zone clears it. A789 slice 4 fixed the same shape for the
+  late-send PIN only. Read in the code, not run. Left open by A789 slice 4.

@@ -1377,12 +1377,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   prints and shows unmarked. Left open by A789 slice 3, #2051 (plan D25).
 
 - **A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave
-  the zone's Keep open dialog stuck.** The PIN dialog hides itself for good, but `till-keep-open`
-  ignores its cancel while busy (`apps/till/src/widgets/keep-open.ts`); a wrong or throttled PIN
-  then keeps the dialog's people set, so the Keep open dialog stays on screen as busy, with every
-  button disabled and Escape and close refused (`beforeClose`, `keep-open-dialog.ts`), under a PIN
-  dialog nobody can see. Moving to another zone clears it. A789 slice 4 fixed the same shape for the
-  late-send PIN only. Read in the code, not run. Left open by A789 slice 4.
+  the zone's Keep open dialog stuck.**
+  Read in the code, not run. Left open by A789 slice 4.
+  [Detail](backlog/service-periods.md#a1090-the-zone-keep-opens-managers-pin-dialog-closed-while-its-pin-is-checked-can-leave-the-zones-keep-open-dialog-stuck)
 
 - **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
   without signing out**, and a send's refusal can open the window after the waiter has left the
