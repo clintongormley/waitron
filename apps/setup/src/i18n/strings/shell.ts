@@ -7,7 +7,7 @@ export const shellEn = {
     "This assignment may have been used. Resume the saved attempt; do not assign it again.",
   "shell.first_setup.attempt_invalid": "The saved setup cannot be read. Contact support.",
   "shell.first_setup.start_again_incomplete":
-    "Start again has not finished. Restart the box, then try again.",
+    "Start again has not finished. Choose Start again to finish it.",
   "shell.first_setup.workspace_unsupported":
     "This box holds a setup from an older version of Waitron that this version cannot use. Reinstall Waitron on this box to start fresh.",
   "shell.first_setup.recovery_in_progress":
@@ -155,7 +155,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.first_setup.attempt_invalid":
     "No se puede leer la configuración guardada. Contacta con soporte.",
   "shell.first_setup.start_again_incomplete":
-    "«Empezar de nuevo» aún no ha terminado. Reinicia el equipo y vuelve a intentarlo.",
+    "«Empezar de nuevo» aún no ha terminado. Elige «Empezar de nuevo» para terminarlo.",
   "shell.first_setup.workspace_unsupported":
     "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar. Reinstala Waitron en este equipo para empezar de cero.",
   "shell.first_setup.recovery_in_progress":

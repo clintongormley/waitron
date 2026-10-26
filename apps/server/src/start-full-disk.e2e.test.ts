@@ -25,6 +25,7 @@ import {
   drawerOpens,
   invoiceSeries,
   locations,
+  lockVenueDatabase,
   nodes,
   openVenueDatabase,
   sales,
@@ -43,6 +44,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createFirstSetupBackupWorkspace, isEmptiedTombstone } from "@waitron/provisioning";
 import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
@@ -75,7 +77,7 @@ import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { OPERATOR_TEXT, escapeHtml } from "./recovery-surface.js";
 import {
   createStaffNoticeLog,
   readStaffNoticesInTurns,
@@ -646,6 +648,51 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   });
 });
 
+const DISCARDED_ID = "f063ea32-8c34-4b43-8ffc-5a319ec8c895";
+
+/** A backup recovery Start again abandoned and did not empty, its target holding a 4 MiB database. */
+async function discardedRecovery(stateDir: string) {
+  const anchor = { stateDir, venueDir: join(stateDir, "venue") };
+  const base = join(stateDir, "first-setup-resolutions", "backup-recovery", DISCARDED_ID);
+  const target = {
+    recoveryId: DISCARDED_ID,
+    anchor,
+    source: anchor,
+    target: { venueDir: join(base, "target", "venue"), stateDir: join(base, "target", "state") },
+    generation: 1,
+  };
+  const workspace = createFirstSetupBackupWorkspace(anchor);
+  const input = {
+    target,
+    observation: {
+      inspectionId: "a".repeat(64),
+      revision: null,
+      ownerGeneration: null,
+      originalsDigest: await workspace.inspect(DISCARDED_ID),
+    },
+    sourceId: "b".repeat(64),
+    activationSourceId: "c".repeat(64),
+    binding: {
+      module: "synthetic",
+      action: "restore",
+      eventId: "4cc6a357-e31c-4c2e-9b40-023c9963bec8",
+      sourceId: "c".repeat(64),
+      targetNodeId: "47d5be37-2011-4afc-bdc8-46b5cb238deb",
+    },
+    input: null,
+    retainedEvidenceDigest: "d".repeat(64),
+    phase: "prepared" as const,
+  };
+  await workspace.append(input);
+  await workspace.append({ ...input, input: { accepted: true }, phase: "placement-started" });
+  (await lockVenueDatabase(target.target.venueDir)).release();
+  const database = join(target.target.venueDir, "venue.db");
+  writeFileSync(database, Buffer.alloc(4 * 1024 * 1024, 68));
+  await workspace.abandon(DISCARDED_ID);
+  expect(await isEmptiedTombstone(anchor, DISCARDED_ID)).toBe(false);
+  return { anchor, database, path: base };
+}
+
 describe("a start on a real full disk", () => {
   it("a start whose leftovers free enough counts itself and boots", async (ctx) => {
     const small = needDisk(ctx);
@@ -680,6 +727,67 @@ describe("a start on a real full disk", () => {
     // The setup start counted one, and its stayed-up clear is a stub that never fires.
     expect((await readRecoveryState(stateDir)).failures).toBe(2);
     expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);
+  });
+
+  it("a discarded recovery on a full disk with nothing to delete: the emptying is refused as a full disk, its database stays, and the full-disk page is served; once 1 MiB is freed the next start empties it and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "discarded-full");
+    const discarded = await discardedRecovery(stateDir);
+    const spare = join(stateDir, "spare");
+    writeFileSync(spare, Buffer.alloc(1024 * 1024, 69));
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const full = entryDeps(stateDir);
+    await runEntry(full);
+    expect(vi.mocked(full.log).mock.calls).toContainEqual([
+      "warn",
+      "setup.recovery_cleanup_refused",
+      { reason: "storage.disk_full", path: discarded.path },
+    ]);
+    expect(statSync(discarded.database).size).toBe(4 * 1024 * 1024);
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(false);
+    expect(full.startServer).not.toHaveBeenCalled();
+    expect(vi.mocked(full.log).mock.calls.map(([, event]) => event)).toContain(
+      "recovery.serving_disk_full",
+    );
+    expect(full.serveRecovery).toHaveBeenCalledTimes(1);
+    const app = vi.mocked(full.serveRecovery).mock.calls[0]![0];
+    const page = await (await app.request("/")).text();
+    expect(page).toContain(TITLE);
+    expect(page).toContain(escapeHtml(OPERATOR_TEXT["storage.disk_full"]!["en-GB"].action));
+
+    rmSync(spare);
+    const room = entryDeps(stateDir);
+    await runEntry(room);
+    expect(vi.mocked(room.log).mock.calls.map(([, event]) => event)).not.toContain(
+      "setup.recovery_cleanup_refused",
+    );
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(true);
+    expect(() => statSync(discarded.database)).toThrow();
+    expect(room.serveRecovery).not.toHaveBeenCalled();
+    expect(room.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a discarded recovery on a full disk with a rotated log: the start deletes the log, then empties the recovery and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "discarded-log");
+    const discarded = await discardedRecovery(stateDir);
+    const rotated = join(stateDir, "logs", "waitron.log.2");
+    writeFileSync(rotated, Buffer.alloc(1024 * 1024, 70));
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(() => statSync(rotated)).toThrow();
+    expect(vi.mocked(d.log).mock.calls.map(([, event]) => event)).not.toContain(
+      "setup.recovery_cleanup_refused",
+    );
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(true);
+    expect(() => statSync(discarded.database)).toThrow();
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    expect(d.startServer).toHaveBeenCalledTimes(1);
   });
 
   it("a start whose staged recovery copies fill the disk frees them and boots", async (ctx) => {

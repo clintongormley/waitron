@@ -1,4 +1,5 @@
 import { AppError } from "@waitron/shared";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   assertNoLegacyFirstSetupWorkspace,
@@ -32,6 +33,7 @@ import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import type { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
+import { startFailureCode } from "./boot-failure.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
 
@@ -156,6 +158,8 @@ export function createFirstSetupResolutionActions(
     remove?: (path: string, kind: "file" | "folder") => Promise<void>;
     /** Tests only: the deletion marker's size limit. */
     markerLimit?: number;
+    /** Tests only: replaces the venue lock taken while a discarded recovery is emptied. */
+    lock?: Parameters<typeof emptyAbandonedBackupRecovery>[2];
     /**
      * The box's backup recovery. Without it, a journal that is not abandoned is refused by Start
      * again's disk check, and the summary does not look at it.
@@ -445,7 +449,23 @@ export function createFirstSetupResolutionActions(
             backup!.sealLapsed();
             const { recordedAt } = await createFirstSetupBackupWorkspace(box).abandon(found.id);
             await backup!.discardInTurn(found.id, recordedAt);
-            await emptyAbandonedBackupRecovery(box, found.id);
+            await emptyAbandonedBackupRecovery(box, found.id, options.lock).catch(
+              async (error: unknown) => {
+                if (error instanceof AppError) throw error;
+                const path = join(
+                  box.stateDir,
+                  "first-setup-resolutions",
+                  "backup-recovery",
+                  found.id,
+                );
+                const code = await startFailureCode(error, [box.venueDir, box.stateDir]);
+                throw new AppError(
+                  "setup.start_again_incomplete",
+                  {},
+                  { reason: `emptying failed: ${code} ${path}` },
+                );
+              },
+            );
             await assertStartAgainAllowedOnDisk(box);
             marker = await markerFor({});
           }

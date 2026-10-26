@@ -941,7 +941,7 @@ export function mountFirstSetupResolutionApi(
               : { owner: firstFiscalOwner(c) }),
           });
         } catch (error) {
-          // A marker is on disk: the next start finishes the deletion or serves the recovery page.
+          // The next start finishes what Start again left, or serves the recovery page.
           if (error instanceof AppError && error.code === "setup.start_again_incomplete")
             setTimeout(() => options.requestRestart?.(), 0);
           throw error;

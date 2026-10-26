@@ -4,6 +4,7 @@ import {
   lstat,
   readFile,
   readdir,
+  realpath,
   rmdir,
   symlink,
   unlink,
@@ -15,6 +16,7 @@ import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import { lockVenueDatabase } from "@waitron/db";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
   emptyAbandonedBackupRecovery,
@@ -1290,4 +1292,102 @@ it("a second process holding the box's venue lock at the start: the recovery is 
   }
   expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(false);
   await access(join(f.record.target.target.venueDir, "venue.db"));
+});
+
+it("a disk that fills after the abandon, before the target's lock: Start again answers 409 setup.start_again_incomplete and restarts the box, whose start empties the recovery, and a second Start again deletes the attempt", async () => {
+  const f = await placementFailed();
+  const targetVenue = await realpath(f.record.target.target.venueDir);
+  const locked: string[] = [];
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: f.service,
+    lock: async (dir) => {
+      locked.push(dir);
+      if (dir === targetVenue)
+        throw Object.assign(new Error("unable to open database file"), {
+          code: "ERR_SQLITE_ERROR",
+          errcode: 14,
+        });
+      return lockVenueDatabase(dir);
+    },
+  });
+  const restarts = vi.fn();
+  const lines: { event: string; fields: Record<string, unknown> | undefined }[] = [];
+  const app = new Hono();
+  mountFirstSetupResolutionApi(
+    app,
+    f.host,
+    (_level, event, fields) => lines.push({ event, fields }),
+    { startAgain: actions.startAgainFirstSetup, requestRestart: restarts },
+  );
+  const { owner, ids } = await signedIn(f.host);
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown.recovery).toBeDefined();
+  const response = await app.request(
+    "https://box.test/setup-api/first-setup/resolution/start-again",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Waitron-Setup-Owner": owner.capability,
+        "X-Waitron-Setup-Attempt": owner.attemptId,
+        "X-Waitron-Setup-Revision": String(owner.revision),
+        "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
+      },
+      body: JSON.stringify({
+        ...ids,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      }),
+    },
+    tls(),
+  );
+  expect(response.status, await response.clone().text()).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.start_again_incomplete", params: {} },
+  });
+  expect(locked).toHaveLength(2);
+  expect(locked[1]).toBe(targetVenue);
+  const path = join(
+    f.roots.stateDir,
+    "first-setup-resolutions",
+    "backup-recovery",
+    f.session.recoveryId,
+  );
+  expect(lines).toContainEqual({
+    event: "setup.start_again_incomplete",
+    fields: expect.objectContaining({
+      logReason: expect.stringMatching(/^emptying failed: \S+ /),
+    }),
+  });
+  const logReason = lines.find(({ event }) => event === "setup.start_again_incomplete")!.fields!
+    .logReason as string;
+  expect(logReason.endsWith(` ${await realpath(path)}`)).toBe(true);
+  await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(1));
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
+  expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([shown]);
+  await access(join(f.record.target.target.venueDir, "venue.db"));
+  await access(join(f.roots.stateDir, "first-setup.json"));
+  const note = await readFile(join(f.roots.stateDir, "first-setup-start-again.json"));
+  const noteFile = await lstat(join(f.roots.stateDir, "first-setup-start-again.json"));
+  await f.service.dispose();
+  clock.advance(1);
+
+  const { entry, restarted } = await nextStart(f);
+  expect(entry.kind).toBe("resolution");
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
+  await expect(access(join(f.record.target.target.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  const second = await startAgainOver(f, restarted);
+  expect(second.shown).not.toHaveProperty("recovery");
+  await expect(second.run()).resolves.toBeUndefined();
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readFile(join(f.roots.stateDir, "first-setup-start-again.json"))).toEqual(note);
+  expect((await lstat(join(f.roots.stateDir, "first-setup-start-again.json"))).ino).toBe(
+    noteFile.ino,
+  );
 });
