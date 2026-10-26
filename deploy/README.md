@@ -345,7 +345,7 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the start-again note
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the start-again files
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
@@ -412,7 +412,7 @@ It is the way to put a branch on a test box whose database that branch cannot us
 
 ```bash
 sudo bash waitron.sh --reset install <branch-or-ref>
-sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate and the start-again note
+sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate and the start-again files
 ```
 
 The full form is `waitron.sh --reset [--all] [--yes] [--force-production] install [ref]`. The script
