@@ -605,6 +605,26 @@ export class TillStationScreen extends LitElement {
     );
   }
 
+  async #onAdvanceDishes(event: Event): Promise<void> {
+    event.stopPropagation();
+    const { itemIds, stationId, to } = (
+      event as CustomEvent<{
+        itemIds: readonly string[];
+        stationId: string;
+        to: Exclude<TicketState, "queued">;
+      }>
+    ).detail;
+    // In turn, never Promise.all: the dishes move in the order the cook sees, and the first refusal
+    // stops the rest.
+    await this.#advance(async () => {
+      for (const itemId of itemIds) {
+        await (this.deviceMode
+          ? this.api.deviceAdvance(itemId, to)
+          : this.api.advanceTicketItem(itemId, stationId, to));
+      }
+    });
+  }
+
   async #onAdvanceTicket(event: Event): Promise<void> {
     event.stopPropagation();
     const { orderId, stationId, to } = (
@@ -979,6 +999,7 @@ export class TillStationScreen extends LitElement {
         class="screen"
         aria-label=${t("station.title")}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
+        @advance-dishes=${(event: Event) => void this.#onAdvanceDishes(event)}
         @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}

@@ -5027,3 +5027,153 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     expect(moveError(el)!.textContent!.trim()).toBe("Something went wrong, try again");
   });
 });
+
+describe("moving the dishes a card names", () => {
+  const ids = ["ti-1", "ti-2", "ti-3"];
+
+  const deviceStation = {
+    id: "st-dev",
+    name: "Kitchen",
+    available: true as const,
+    today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
+    printersDown: [],
+    queue: kitchenQueue,
+    notices: [],
+  };
+
+  function deviceApi(overrides: Record<string, unknown> = {}): TillApi {
+    return {
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [deviceStation] }),
+      deviceAdvance: vi.fn().mockResolvedValue(undefined),
+      listStations: vi.fn().mockResolvedValue(stations),
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValue({ printersDown: [], items: kitchenQueue, notices: [] }),
+      advanceTicketItem: vi.fn().mockResolvedValue(undefined),
+      advanceTicket: vi.fn().mockResolvedValue(undefined),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    } as unknown as TillApi;
+  }
+
+  const move = (el: TillStationScreen, stationId: string) =>
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("advance-dishes", {
+        detail: { itemIds: ids, stationId, to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+
+  const alerts = (el: TillStationScreen) =>
+    [...el.shadowRoot!.querySelectorAll('[role="alert"]')]
+      .map((node) => node.textContent!.trim())
+      .filter(Boolean);
+
+  it("on a till, advances each named dish in turn, then reloads the queue", async () => {
+    let releaseFirst!: () => void;
+    const advanceTicketItem = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (releaseFirst = resolve)))
+      .mockResolvedValue(undefined);
+    const api = stubApi({ advanceTicketItem });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    move(el, "st-1");
+    await flush(el);
+    expect(advanceTicketItem).toHaveBeenCalledTimes(1);
+    expect(advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-1", "preparing");
+    expect(api.getStationQueue).toHaveBeenCalledTimes(1);
+    releaseFirst();
+    await flush(el);
+    expect(advanceTicketItem.mock.calls).toEqual([
+      ["ti-1", "st-1", "preparing"],
+      ["ti-2", "st-1", "preparing"],
+      ["ti-3", "st-1", "preparing"],
+    ]);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("on a kitchen display, through deviceAdvance, then reloads the display", async () => {
+    const api = deviceApi();
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+    });
+    await flush(el);
+    move(el, "st-dev");
+    await flush(el);
+    expect(vi.mocked(api.deviceAdvance).mock.calls).toEqual([
+      ["ti-1", "preparing"],
+      ["ti-2", "preparing"],
+      ["ti-3", "preparing"],
+    ]);
+    expect(api.advanceTicketItem).not.toHaveBeenCalled();
+    expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops at the first refusal and still reloads, with no line", async () => {
+    const advanceTicketItem = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce({ code: "ticket.invalid_transition" })
+      .mockResolvedValue(undefined);
+    const api = stubApi({ advanceTicketItem });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    move(el, "st-1");
+    await flush(el);
+    expect(advanceTicketItem).toHaveBeenCalledTimes(2);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+    expect(alerts(el)).toEqual([]);
+  });
+
+  it("a refusal on a full disk says so", async () => {
+    const api = stubApi({
+      advanceTicketItem: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    move(el, "st-1");
+    await flush(el);
+    expect(alerts(el)).toEqual([codeMessage("storage.disk_full")]);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("a kitchen display whose screen was taken asks to switch", async () => {
+    const switched = vi.fn();
+    document.addEventListener("kitchen-screen-changed", switched);
+    try {
+      const api = deviceApi({
+        deviceAdvance: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+      });
+      await flush(el);
+      move(el, "st-dev");
+      await flush(el);
+      expect(switched).toHaveBeenCalledTimes(1);
+      expect((switched.mock.calls[0]![0] as CustomEvent<{ from: string }>).detail.from).toBe(
+        "station",
+      );
+      expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
+      expect(api.getDeviceStationScreen).toHaveBeenCalledOnce();
+    } finally {
+      document.removeEventListener("kitchen-screen-changed", switched);
+    }
+  });
+
+  it("the event stops at the screen", async () => {
+    const api = stubApi();
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    const escaped = vi.fn();
+    host.addEventListener("advance-dishes", escaped);
+    move(el, "st-1");
+    await flush(el);
+    expect(api.advanceTicketItem).toHaveBeenCalledTimes(3);
+    expect(escaped).not.toHaveBeenCalled();
+  });
+});
