@@ -133,43 +133,42 @@ Three parts:
 
 ## Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check
 
-- **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.**
-  `conventions-data.md` holds the full list — among them a
-  readiness runner and the dev, demo and Cloud fixture scripts under `apps/server/scripts`, two of
-  the Cloud fixture scripts migrating through `restore.ts` rather than calling `applyMigrations`
-  themselves, which a grep for that name alone does not find.
+`conventions-data.md` holds the full list — among them a
+readiness runner and the dev, demo and Cloud fixture scripts under `apps/server/scripts`, two of
+the Cloud fixture scripts migrating through `restore.ts` rather than calling `applyMigrations`
+themselves, which a grep for that name alone does not find.
 
 ## What `waitron.sh install`'s self-refresh (C83, #890) left open
 
-- **What `waitron.sh install`'s self-refresh (C83, #890) left open:** installing a ref whose script
-  predates the refresh puts back a copy that does not update itself (`deploy/README.md` says to
-  download it again); a copy another user owns in `/tmp` is not updated under `sudo`, because
-  systemd's `fs.protected_regular` setting stops root writing the fetched script into the temp file
-  beside it (install reports a failed fetch; the README says to download to the home folder
-  instead); nothing checks a fetched script before running it beyond what the fetch of `compose.yml`
-  already trusts — the same GitHub URL over HTTPS. No case in `scripts/waitron-sh.test.mjs` covers a
-  script not run from a file, a link `readlink -f` cannot follow, a folder the script cannot enter,
-  or a box with neither curl nor wget.
+Installing a ref whose script
+predates the refresh puts back a copy that does not update itself (`deploy/README.md` says to
+download it again); a copy another user owns in `/tmp` is not updated under `sudo`, because
+systemd's `fs.protected_regular` setting stops root writing the fetched script into the temp file
+beside it (install reports a failed fetch; the README says to download to the home folder
+instead); nothing checks a fetched script before running it beyond what the fetch of `compose.yml`
+already trusts — the same GitHub URL over HTTPS. No case in `scripts/waitron-sh.test.mjs` covers a
+script not run from a file, a link `readlink -f` cannot follow, a folder the script cannot enter,
+or a box with neither curl nor wget.
 
 ## What `waitron.sh --reset install` (#1122) left open
 
-- **What `waitron.sh --reset install` (#1122) left open:** a build or pull that fails still leaves
-  the box's files changed, as a plain `install` always has. `fetch_box_files` replaces `compose.yml`
-  before any image work, and an install of `main` removes the image lines from `.env` before its
-  pull, so after a failure the box's files name the new ref while its running containers are the
-  old ones. Nothing has been taken down or wiped at that point, and the error asks for a re-run;
-  making it leave the files untouched means fetching into a temporary folder and moving the files
-  into place only once the images are in. Raised by the run-it review and not taken because it
-  restructures `install`.
+A build or pull that fails still leaves
+the box's files changed, as a plain `install` always has. `fetch_box_files` replaces `compose.yml`
+before any image work, and an install of `main` removes the image lines from `.env` before its
+pull, so after a failure the box's files name the new ref while its running containers are the
+old ones. Nothing has been taken down or wiped at that point, and the error asks for a re-run;
+making it leave the files untouched means fetching into a temporary folder and moving the files
+into place only once the images are in. Raised by the run-it review and not taken because it
+restructures `install`.
 
 ## What showing the failed start's reason (#695) left
 
-- **What showing the failed start's reason (#695) left:** a failed migration's report names the SET
-  (`migrations.apply_failed`, `{ set }`), not the migration file, though the refused statement shows
-  in the detail; the start-up's own log writer ignores `WAITRON_LOG_MAX_BYTES`/`WAITRON_LOG_MAX_FILES`
-  (it only appends, so they do not apply); the two restore errors' text quotes the "Why the last start
-  failed" heading with nothing tying the quote to the heading; and no staged restore has been run
-  through the real migrator to see it end in `migrations.apply_failed`.
+A failed migration's report names the SET
+(`migrations.apply_failed`, `{ set }`), not the migration file, though the refused statement shows
+in the detail; the start-up's own log writer ignores `WAITRON_LOG_MAX_BYTES`/`WAITRON_LOG_MAX_FILES`
+(it only appends, so they do not apply); the two restore errors' text quotes the "Why the last start
+failed" heading with nothing tying the quote to the heading; and no staged restore has been run
+through the real migrator to see it end in `migrations.apply_failed`.
 
 ## The recovery page's never-wipe test misses Spanish subjunctive forms
 
@@ -191,12 +190,12 @@ owner approves the removal.
 
 ## The recovery page's secret bound is a convention, not a guard
 
-- **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on
-  every log line — the connection-string shape and nothing else. A secret in any other shape still
-  reaches the unauthenticated page two ways — through the log tail, and through the failed start's
-  full detail under "Why the last start failed" (stacks with file paths, the message of each cause
-  down to five levels, an `AppError`'s params) — bounded only by the convention that an `AppError`'s params
-  carry none.
+#310 masks URL credentials on
+every log line — the connection-string shape and nothing else. A secret in any other shape still
+reaches the unauthenticated page two ways — through the log tail, and through the failed start's
+full detail under "Why the last start failed" (stacks with file paths, the message of each cause
+down to five levels, an `AppError`'s params) — bounded only by the convention that an `AppError`'s params
+carry none.
 
 ## Resetting a box without a terminal
 
@@ -360,7 +359,7 @@ Open:
 
 ## The bucket client's limits (A44, #676) — what is still open
 
-**The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
+`createS3ObjectStore` gives a
 request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
 `packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
 body then stalls is not bounded by that limit, only by its caller cancelling the call
@@ -466,8 +465,7 @@ no insecure bypass is approved.
 
 ## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN
 
-**The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review,
-2026-10-22) — OPEN.** While a box is in setup mode, `POST /setup-api/email-test` without the setup
+While a box is in setup mode, `POST /setup-api/email-test` without the setup
 owner's header (`apps/server/src/setup-first-fiscal-api.ts:182-184`) reaches a route that checks no
 sign-in, takes the recipient from the request's `venue.admin.email` and connects to whatever host and
 port the request names (`apps/server/src/setup-email-api.ts:25-38`). Anyone who can reach such a box
@@ -481,112 +479,105 @@ A987's design does not change the route
 
 ## Loose ends left by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
 
-- **Loose ends left by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).**
-  - `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process
-    after 120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on
-    NVMe; box storage has not been measured.
-  - A copy with no `tenants` row reads an empty tax id, which neither the command line nor the
-    setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code
-    names that case.
-  - An interrupted bucket rebuild, archive check or archive download leaves its scratch folder —
-    a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
-    `restore-staging`) — under the state folder; the next run makes a new one and does not remove
-    it. Also left open by A538-5. The same holds for the `archive-validate-` folders (a decrypted
-    `venue.db`) and `restore-admission-` folders made directly in `restore-staging`
-    (`apps/server/src/restore.ts`) when the process is killed partway, the setup wizard's preview
-    included; neither boot nor the start's clean-up removes them, and the restore command uses the
-    same names from another process. Found by reading (A1038's review), not run.
-  - A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start
-    (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other
-    way (the dev stack) does not.
-  - Open question: the first start's pointer read and the bucket rebuild's calls (the command
-    line's `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15
-    seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-    `backup.stream_request_failed`). The code does not say why they differ.
+- `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process
+  after 120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on
+  NVMe; box storage has not been measured.
+- A copy with no `tenants` row reads an empty tax id, which neither the command line nor the
+  setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code
+  names that case.
+- An interrupted bucket rebuild, archive check or archive download leaves its scratch folder —
+  a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
+  `restore-staging`) — under the state folder; the next run makes a new one and does not remove
+  it. Also left open by A538-5. The same holds for the `archive-validate-` folders (a decrypted
+  `venue.db`) and `restore-admission-` folders made directly in `restore-staging`
+  (`apps/server/src/restore.ts`) when the process is killed partway, the setup wizard's preview
+  included; neither boot nor the start's clean-up removes them, and the restore command uses the
+  same names from another process. Found by reading (A1038's review), not run.
+- A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start
+  (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other
+  way (the dev stack) does not.
+- Open question: the first start's pointer read and the bucket rebuild's calls (the command
+  line's `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15
+  seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
+  `backup.stream_request_failed`). The code does not say why they differ.
 
 ## Loose ends left by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).
 
-- **Loose ends left by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).**
-  - From #608: the recovery level is read before `recovery.lock`, so the pre-boot count another
-    start writes can still push a server restarting at that moment onto the recovery page.
-  - From #573's review, the owner's call: only an unwrapped `provisioning.database_in_use` is
-    recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path
-    wraps them today).
-  - From #608, no behaviour change decided: the watchdog appends its line to `waitron.log` without
-    creating the log folder, so on a machine with no such folder that line is lost; only a store's
-    `close()` waits for the watchdog thread to end, not a bare `release()`.
-  - From #566's review: the migrator's lock and the venue lock use one technique in two copies,
-    and the test helper that holds the lock from another process is copied into several test
-    files.
+- From #608: the recovery level is read before `recovery.lock`, so the pre-boot count another
+  start writes can still push a server restarting at that moment onto the recovery page.
+- From #573's review, the owner's call: only an unwrapped `provisioning.database_in_use` is
+  recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path
+  wraps them today).
+- From #608, no behaviour change decided: the watchdog appends its line to `waitron.log` without
+  creating the log folder, so on a machine with no such folder that line is lost; only a store's
+  `close()` waits for the watchdog thread to end, not a bare `release()`.
+- From #566's review: the migrator's lock and the venue lock use one technique in two copies,
+  and the test helper that holds the lock from another process is copied into several test
+  files.
 
 ## Loose ends left by the Amazon S3 rehearsal's cleanup and send check (A641, #1704).
 
-- **Loose ends left by the Amazon S3 rehearsal's cleanup and send check (A641, #1704).**
-  - The rehearsal does not track the Litestream processes a restore starts
-    (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
-    running.
-  - When teardown fails to delete the bucket and then fails to write the ownership marker again,
-    the cleanup command refuses (`ownership-unproven`); the runbook says to delete it by hand.
-  - A keeper that cannot reach Amazon S3 when it cleans up after a killed run gives no cleanup
-    command: it reports a bucket the journal says the run owned as of unknown ownership and
-    deletes nothing (`apps/server/src/testing/aws-rehearsal-keeper.ts`).
-  - A journal the keeper refuses leaves the run's scratch folder, so a box's `secrets.env` and
-    `recovery-kit.txt` stay on disk until a person deletes them (`readJournalAt`). The refusal is
-    by design; the folder it leaves is the open part.
-  - A process whose start time could not be read when the rehearsal tracked it is neither stopped
-    by the keeper nor listed as left behind — only a log note says so (the `startTime === null`
-    branch). Decide whether it should be listed as left behind.
-  - The send check's `record` mode is used by no run (`aws-send-gate.ts`): delete it, or document
-    how it refreshes the scenarios' request lists.
-  - The keeper and the cleanup command each read the ownership marker with their own rules
-    (`aws-rehearsal-keeper.ts`, `cleanupFromReceipt` in `aws-rehearsal.ts`); share one reader.
-  - The list of tests that need versitygw is kept in three places in `.github/workflows/ci.yml`,
-    so each new such test edits all three; derive them from one list.
+- The rehearsal does not track the Litestream processes a restore starts
+  (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
+  running.
+- When teardown fails to delete the bucket and then fails to write the ownership marker again,
+  the cleanup command refuses (`ownership-unproven`); the runbook says to delete it by hand.
+- A keeper that cannot reach Amazon S3 when it cleans up after a killed run gives no cleanup
+  command: it reports a bucket the journal says the run owned as of unknown ownership and
+  deletes nothing (`apps/server/src/testing/aws-rehearsal-keeper.ts`).
+- A journal the keeper refuses leaves the run's scratch folder, so a box's `secrets.env` and
+  `recovery-kit.txt` stay on disk until a person deletes them (`readJournalAt`). The refusal is
+  by design; the folder it leaves is the open part.
+- A process whose start time could not be read when the rehearsal tracked it is neither stopped
+  by the keeper nor listed as left behind — only a log note says so (the `startTime === null`
+  branch). Decide whether it should be listed as left behind.
+- The send check's `record` mode is used by no run (`aws-send-gate.ts`): delete it, or document
+  how it refreshes the scenarios' request lists.
+- The keeper and the cleanup command each read the ownership marker with their own rules
+  (`aws-rehearsal-keeper.ts`, `cleanupFromReceipt` in `aws-rehearsal.ts`); share one reader.
+- The list of tests that need versitygw is kept in three places in `.github/workflows/ci.yml`,
+  so each new such test edits all three; derive them from one list.
 
 ## A backup destination that fails to build leaves archives reported as on.
 
-- **A backup destination that fails to build leaves archives reported as on.** In
-  `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
-  before `buildBackupBackend` runs for each destination, so a throw there leaves `current().enabled`
-  true with no sweep running. Reported by A538-4's second Codex review; the driver read the order
-  but did not reproduce the throw. Build the backends before adopting the handle, or undo on failure.
+In
+`BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
+before `buildBackupBackend` runs for each destination, so a throw there leaves `current().enabled`
+true with no sweep running. Reported by A538-4's second Codex review; the driver read the order
+but did not reproduce the throw. Build the backends before adopting the handle, or undo on failure.
 
 ## The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.
 
-- **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
-  `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
-  `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
-  `credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
-  error and no form, although the bucket copy's Save would replace the record. Treat all four the
-  way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
-  by its review.
+`GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
+`server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
+`credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
+error and no form, although the bucket copy's Save would replace the record. Treat all four the
+way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
+by its review.
 
 ## Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.
 
-- **Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.**
-  `apps/dashboard/src/i18n/alert-messages.ts` gives `backup.staging_space_low` and
-  `recovery.state_incomplete` their own sentence on the `backup.run_stopped` alert; a renamed code
-  would quietly fall back to "Contact support.". The printer word list has such a check
-  (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
+`apps/dashboard/src/i18n/alert-messages.ts` gives `backup.staging_space_low` and
+`recovery.state_incomplete` their own sentence on the `backup.run_stopped` alert; a renamed code
+would quietly fall back to "Contact support.". The printer word list has such a check
+(`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
 
 ## No test covers the supervisor ignoring results from a backup run a reload replaced.
 
-- **No test covers the supervisor ignoring results from a backup run a reload replaced.**
-  `backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
-  controller is aborted; removing both checks left the supervisor suites green in A538-3's review,
-  because a reload starts a fresh record only after the old run has finished. The checks matter for
-  a status read that began before the reload, or one made after `stop()`; a test needs one of those
-  shapes. Left open by A538-3.
+`backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
+controller is aborted; removing both checks left the supervisor suites green in A538-3's review,
+because a reload starts a fresh record only after the old run has finished. The checks matter for
+a status read that began before the reload, or one made after `stop()`; a test needs one of those
+shapes. Left open by A538-3.
 
 ## Backup destination failures log no elapsed time or operation phase.
 
-- **Backup destination failures log no elapsed time or operation phase.**
-  `runOnce` in `apps/server/src/backup-sweep.ts` reports the destination, error code and errno,
-  so a timed-out upload cannot be distinguished from time spent waiting on local filesystem work
-  by those fields. Add non-sensitive phase and elapsed-time diagnostics when investigating real
-  destination timeouts. A1035 reproduced the main test's folder timeout under controlled load;
-  the original CI delay remains unmeasured.
-  [Test timing guidance](../developers/testing-guide.md#a-deadline-test-must-separate-timer-ordering-from-filesystem-speed).
+`runOnce` in `apps/server/src/backup-sweep.ts` reports the destination, error code and errno,
+so a timed-out upload cannot be distinguished from time spent waiting on local filesystem work
+by those fields. Add non-sensitive phase and elapsed-time diagnostics when investigating real
+destination timeouts. A1035 reproduced the main test's folder timeout under controlled load;
+the original CI delay remains unmeasured.
+[Test timing guidance](../developers/testing-guide.md#a-deadline-test-must-separate-timer-ordering-from-filesystem-speed).
 
 ## Authenticated server-certificate recovery
 
@@ -603,112 +594,103 @@ entry below. These workflows remain open after the A1089 public-page rework.
 
 ## Public TLS repair refuses linked layouts.
 
-- **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
-  but a damaged linked folder or managed file cannot be repaired through the public guide.
-  Decide whether to support links contained within the state folder while retaining archive,
-  exclusion and path-containment checks; cover the restored-layout startup and repair path.
-  The public page offers retry, read-only Check again and Stop (A1089); support for repairing
-  linked layouts remains open. Found by A733's whole-branch review; see the server README's
-  secure-connection section.
+Healthy linked `tls/` folders still serve HTTPS,
+but a damaged linked folder or managed file cannot be repaired through the public guide.
+Decide whether to support links contained within the state folder while retaining archive,
+exclusion and path-containment checks; cover the restored-layout startup and repair path.
+The public page offers retry, read-only Check again and Stop (A1089); support for repairing
+linked layouts remains open. Found by A733's whole-branch review; see the server README's
+secure-connection section.
 
 ## On a full disk, a box whose kept certificates cannot be used shows the connection set-up page, with no word of the full disk.
 
-- **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
-  with no word of the full disk.** The connection-bootstrap branch (`needsConnectionBootstrap`,
-  `apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
-  decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
-  folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
-  should that page also say the disk is full and show the free space?
+The connection-bootstrap branch (`needsConnectionBootstrap`,
+`apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
+decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
+folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
+should that page also say the disk is full and show the free space?
 
 ## Guide replacement address settings after a cold restore.
 
-- **Guide replacement address settings after a cold restore.** Replace manual configuration of
-  the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
-  match the replacement's address. Local certificate repair and authenticated restore entry already
-  have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
-  loose ends below. Coordinate naming with A917 and failover addressing with A947.
-  [Tested steps and remaining limits](../developers/cold-restore-surfaces.md).
+Replace manual configuration of
+the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
+match the replacement's address. Local certificate repair and authenticated restore entry already
+have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
+loose ends below. Coordinate naming with A917 and failover addressing with A947.
+[Tested steps and remaining limits](../developers/cold-restore-surfaces.md).
 
 ## Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive destination).
 
-- **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
-  destination).**
-  - The status watcher does not retry its own failed mint (the mint is a POST, never passive
-    session activity), so the screen then offers no key until it is reopened.
-  - The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab
-    or admin) lands after it fetched the key.
+- The status watcher does not retry its own failed mint (the mint is a POST, never passive
+  session activity), so the screen then offers no key until it is reopened.
+- The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab
+  or admin) lands after it fetched the key.
 
 ## Loose ends left by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
 
-- **Loose ends left by SQLite slice 2 Task 5 (#569, `@waitron/stream`).**
-  - Which real providers other than Amazon S3 lack S3's multi-object delete, and what each
-    answers, is not established; Amazon S3 answered batches of 1,000 and 5 keys with 200 and no
-    per-key errors on 2026-10-14 ([receipts](../receipts/a538/README.md), A538-10). A provider that
-    refuses it with a status other than 501 fails the day's prune (`stream.prune_failed`).
-    `probeBucket` deletes one object at a time, so it cannot reveal such a provider; having it
-    delete its test object through `deleteMany` would.
-  - Amazon S3 is the only real provider's bucket the package has run against (the 2026-10-14
-    rehearsal, [receipts](../receipts/a538/README.md), A538-10); the unit tests drive the real S3
-    client over a scripted network, and the loop test drives it against versitygw.
-  - Every synchronous `deriveKey` caller still blocks the event loop while it derives.
-    [Detail](../backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives)
+- Which real providers other than Amazon S3 lack S3's multi-object delete, and what each
+  answers, is not established; Amazon S3 answered batches of 1,000 and 5 keys with 200 and no
+  per-key errors on 2026-10-14 ([receipts](../receipts/a538/README.md), A538-10). A provider that
+  refuses it with a status other than 501 fails the day's prune (`stream.prune_failed`).
+  `probeBucket` deletes one object at a time, so it cannot reveal such a provider; having it
+  delete its test object through `deleteMany` would.
+- Amazon S3 is the only real provider's bucket the package has run against (the 2026-10-14
+  rehearsal, [receipts](../receipts/a538/README.md), A538-10); the unit tests drive the real S3
+  client over a scripted network, and the loop test drives it against versitygw.
+- Every synchronous `deriveKey` caller still blocks the event loop while it derives.
+  [Detail](../backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives)
 
 ## Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).
 
-- **Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).**
-  - A pointer write from a process that has since died, landing after the restart, can still make
-    the box refuse itself, because a restarted process starts with an empty record. In both cases
-    the owner's alert (`backup.stream_refused`) still says another box is writing.
-    [Detail](../backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
-  - The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
-    large database Litestream may not finish its last upload (it is still told to stop and does
-    not outlive the server).
-  - `pnpm setup:litestream` skips the download when the installed binary already reports the
-    pinned version, so the checksum protects fresh downloads only.
+- A pointer write from a process that has since died, landing after the restart, can still make
+  the box refuse itself, because a restarted process starts with an empty record. In both cases
+  the owner's alert (`backup.stream_refused`) still says another box is writing.
+  [Detail](../backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
+- The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
+  large database Litestream may not finish its last upload (it is still told to stop and does
+  not outlive the server).
+- `pnpm setup:litestream` skips the download when the installed binary already reports the
+  pinned version, so the checksum protects fresh downloads only.
 
 ## Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
 
-- **Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).**
-  - A commit that changes no row but writes to the side file, such as a schema change or a pragma
-    such as `user_version`, is not reported, so the lag can read low.
-  - An update that writes the same value, straight after a schema-only commit, is still reported,
-    although it adds nothing for the bucket (a test pins it).
-  - The check that the side file changed was measured on the Mac's filesystem only, not the box's
-    Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
-  - A sale whose write transaction began before the supervisor first subscribed after boot is not
-    counted, so the lag reads low for it.
-  - Whether Litestream uploads anything while the side file is unchanged is not measured.
+- A commit that changes no row but writes to the side file, such as a schema change or a pragma
+  such as `user_version`, is not reported, so the lag can read low.
+- An update that writes the same value, straight after a schema-only commit, is still reported,
+  although it adds nothing for the bucket (a test pins it).
+- The check that the side file changed was measured on the Mac's filesystem only, not the box's
+  Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
+- A sale whose write transaction began before the supervisor first subscribed after boot is not
+  counted, so the lag reads low for it.
+- Whether Litestream uploads anything while the side file is unchanged is not measured.
 
 ## Loose ends left by A549.
 
-- **Loose ends left by A549.**
-  - While the bucket is away, Litestream's local level-0 folder grows with nothing measuring or
-    limiting it (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the
-    stream pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the
-    owner's Mac. A venue's real rate and the box's disk were not measured.
-  - Whether the side file grows, and the pause fires, in a real network outage was not run. A549
-    stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
-    errors and drops its read transaction to retry (`db.go` v0.5.17, `init`).
+- While the bucket is away, Litestream's local level-0 folder grows with nothing measuring or
+  limiting it (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the
+  stream pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the
+  owner's Mac. A venue's real rate and the box's disk were not measured.
+- Whether the side file grows, and the pause fires, in a real network outage was not run. A549
+  stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
+  errors and drops its read transaction to retry (`db.go` v0.5.17, `init`).
 
 ## Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
 
-- **Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error
-  reports).**
-  - The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
-    502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
-    code also covers a bad value in the recovery kit, where 400 is right.
-  - A batch delete's `backup.stream_request_failed` still carries the file's name as the bucket
-    listed it in `key` (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`); that the
-    prune logger drops it is a review seat's reading and one run, not a guard.
-  - The status and `errorName` on the stream's log lines other than the pause check's 403 were
-    shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
-    errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with
-    `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
-    [Detail](../backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
+- The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
+  502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
+  code also covers a bad value in the recovery kit, where 400 is right.
+- A batch delete's `backup.stream_request_failed` still carries the file's name as the bucket
+  listed it in `key` (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`); that the
+  prune logger drops it is a review seat's reading and one run, not a guard.
+- The status and `errorName` on the stream's log lines other than the pause check's 403 were
+  shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
+  errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with
+  `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
+  [Detail](../backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
 
 ## Transactions opened outside the write queue at the same time get a wrong error message.
 
-**Transactions opened outside the write queue at the same time get a wrong error message.** When
+When
 two callers open a `db.transaction` outside the queue concurrently (unsupported: they share one
 writer connection), one caller's commit ends the shared transaction, and the other is told "the
 engine ended the transaction this savepoint was in", though the engine did not. Later writes are
@@ -726,7 +708,7 @@ box that is still trading.
 
 ## The Backups screen's bucket fields copy the bucket copy panel's.
 
-**The Backups screen's bucket fields copy the bucket copy panel's.** The field table, the
+The field table, the
 required checks and the reveal button exist in both `apps/dashboard/src/screens/backup-screen.ts`
 (`CUSTOM_FIELDS`) and `stream-settings-panel.ts` (`FIELDS`), and `normalisePrefix` in
 `backup-destination-model.ts` copies the stream package's (`packages/stream/src/names.ts`). Share
@@ -734,8 +716,7 @@ them. Left open by A538-6.
 
 ## The refund guide does not say that recording a separate-terminal refund is refused during a full-disk stop.
 
-**The refund guide does not say that recording a separate-terminal refund is refused during a
-full-disk stop.** `apps/server/src/guide/en/table-service.md` `{#separate-terminal}` (and its
+`apps/server/src/guide/en/table-service.md` `{#separate-terminal}` (and its
 Spanish twin, both new from A803) tells staff to refund on the separate terminal and then record it
 in Waitron; while the stop holds, that recording is refused after the money has gone back. One
 sentence in each language, as the kitchen-service guide already has. Raised by #1950's rebase
@@ -743,7 +724,6 @@ review, 2026-10-22.
 
 ## Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.
 
-**Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.**
 Wire Cloud to the boot-free `backup-verification.js` bundle and its generated owner inventory,
 with worker threads denied (A1004 provides the copy-only lock scope), then negotiate recovery v2
 before enabling the qualified caller. Preserve the separate fiscal
@@ -760,7 +740,7 @@ must distinguish verifier non-activation from the ordinary restore's authorised 
 
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
-**A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
+DESIGNED
 2026-10-20 (revised after review rounds 1–3) and its three questions answered (where the name is
 set, the certificate authority, the old name during a rename;
 [design](../superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
@@ -773,7 +753,7 @@ old name only points at the new one for 14 days. Five slices; no migration.
 
 ## B3. The bootable USB installer
 
-**B3. The bootable USB installer** — APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
+APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”
 [Design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md),
 [plan](../superpowers/plans/2026-10-26-b3-usb-installer.md),
@@ -846,7 +826,7 @@ large release assets and the A940/A947/A798 coordination. Nothing built.
 
 ## A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).
 
-**A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).** Cloud's
+Cloud's
 approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 10) holds a version when a new error spreads
 after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent in Waitron),
 so the updater must read the hold before offering or applying the version, and offer the fix
@@ -949,8 +929,7 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
 
 ## Migrating a box drops the change-feed triggers one statement at a time, outside a transaction
 
-**Migrating a box drops the change-feed triggers one statement at a time, outside a
-transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
+`removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
 `applyMigrations`) drops each `waitron_change_*` trigger on its own. A751's probe on the full
 schema: 561 drops took 85–180 ms that way and 43–48 ms inside one transaction; A736 measured
 53–56 ms against 23–25 ms. Boot migrates at every start (`apps/server/src/boot.ts`), and the
@@ -959,7 +938,7 @@ removal is about a quarter of the upgrade walk's processor profile. A product ch
 
 ## The Amazon S3 delete and archive rehearsal's open edges (A538-9)
 
-**The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
+Left open by #1668, in
 `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
 `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`:
 (1) the archive round trip proves download and decryption from the pack alone
@@ -972,7 +951,7 @@ step-name checks compare against hand-written lists, so a step added later is no
 
 ## The Amazon S3 pause rehearsal's open edges (A538-8)
 
-**The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
+Left open by #1658, in
 `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
 `aws-stream-pause.aws-rehearsal.test.ts`: (1) the scenario's
 `beforeRestart` hook is called only by the AWS file, so no local test fails if the call goes (the
@@ -982,7 +961,7 @@ logged 403 is what ties the refusal to the pause check.
 
 ## The Amazon S3 rehearsal runner's open edges (A538-7)
 
-**The Amazon S3 rehearsal runner's open edges (A538-7).** Left open by #1648, all in
+Left open by #1648, all in
 `apps/server/src/testing/aws-rehearsal.ts` and its runbook `docs/developers/aws-backup-rehearsal.md`:
 (1) after the 60-second settle wait, teardown can still race a scenario stuck in a call that takes
 no stop signal (a restore); (2) running the cleanup command again overwrites the previous cleanup
@@ -1002,7 +981,7 @@ refused under field `destination`, a name the request no longer has; the dashboa
 
 ## A recovery kit can carry a recovery key its own restore refuses
 
-**A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
+`parseRecoveryKit`
 (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
 the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
 restore calls it damaged; the archive recovery pack accepts such keys. Predates A538-5 (kit.ts
@@ -1011,7 +990,6 @@ space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.
 
 ## A restore that fails while writing the secrets has already replaced the venue database
 
-**A restore that fails while writing the secrets has already replaced the venue database.**
 `placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
 hooks before `restoreSecrets`, so a full disk or a write error there leaves the archive's
 database with the old box's secrets. Measured in A538-5's review with a throwaway case that made
@@ -1402,7 +1380,7 @@ Left open by A1088.
 
 ## A device's or an administrator's time is self-reported.
 
-**A device's or an administrator's time is self-reported.** Whatever their browser sends counts:
+Whatever their browser sends counts:
   a scripted request can send any time, and "nobody types a time" is true of the screen only. In
   slice 9 that can lift a stop, never set the clock. What limits it: devices must be enrolled and
   come from two different network addresses; an administrator must be signed in and, outside
@@ -1422,7 +1400,7 @@ Left open by A1088.
 
 ## AEAT's time outranks the devices.
 
-**AEAT's time outranks the devices.** AEAT agreeing with the box restarts payments even if two
+AEAT agreeing with the box restarts payments even if two
   devices disagree (the bell still shows their `clock.disagrees`); AEAT disagreeing blocks the
   devices and an administrator for the rest of the stop, even after a step of the clock that leaves
   the stop on, since in slice 9 the box cannot set its clock. The disagreement is kept in memory,
@@ -1431,8 +1409,7 @@ Left open by A1088.
 
 ## `clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the go-live migration squash (A760).
 
-**`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
-  go-live migration squash (A760).** Slice 9 kept the shipped append-only table rather than
+Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and
   `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). First
   move its latest-record query-plan case (`clock-stop-restarts.test.ts`, "reads the latest record
@@ -1441,7 +1418,7 @@ Left open by A1088.
 
 ## The bell's printer check reads every print job.
 
-**The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
+`EXPLAIN QUERY PLAN` shows `SCAN
   print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
   status condition did not change the plan; why SQLite scans is not established. The bell pays it
   on every read; the till's printer notices share one read per ten seconds. Left open by A798-B
@@ -1449,7 +1426,7 @@ Left open by A1088.
 
 ## The email about a clock set before 28 October 2024 rarely leaves the box.
 
-**The email about a clock set before 28 October 2024 rarely leaves the box.** With a date that
+With a date that
   early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`, slice 10 plan P8),
   so the email waits until the clock is fixed, when there is nothing left to say. A plain relay or
   the practice box's local capture does receive it. For the owner to know. Left open by A798-B
@@ -1457,8 +1434,7 @@ Left open by A1088.
 
 ## The till's card-charged sentence for the clock says "press Pay", which does not fit a bill's card.
 
-**The till's card-charged sentence for the clock says "press Pay", which does not fit a bill's
-  card.** For a card taken from a bill's payment options (Whole bill, Pay items, Contribute, Split
+For a card taken from a bill's payment options (Whole bill, Pay items, Contribute, Split
   equally), Pay answers `order.payment_in_flight` until the box records the pending payment itself
   (probed during the build: a second card contribution on the charged bill was refused 409 and
   charged nothing). A bill variant of the sentence is open. Left open by A798-B slice 8 (#2012).
@@ -1475,7 +1451,7 @@ Left open by A1088.
 
 ## 'Equipo' names two things in the Spanish dashboard.
 
-**'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
+The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
   `apps/dashboard/src/i18n/strings.ts`); since A798-B slice 7 the Box status page is «Estado del
   equipo» too (`nav.box_status`). The owner's picture 3 shows the first two. Not yet put to the
@@ -1483,7 +1459,7 @@ Left open by A1088.
 
 ## An alert source that writes would take the whole bell read down on a full disk.
 
-**An alert source that writes would take the whole bell read down on a full disk.** The bell's
+The bell's
   full-disk retry reads every source that runs in the request's transaction in one `withWriteLock`
   turn with no drain, the arrangement M2 measured failing for notice sources
   ([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write));
@@ -1493,8 +1469,7 @@ Left open by A1088.
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 
-**A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
-  it can still sell.** Design revision 7 (2026-10-24); every owner question answered except one the slice 9b outline
+Design revision 7 (2026-10-24); every owner question answered except one the slice 9b outline
   keeps for when 9b is planned. The remaining build follows the design's §8 slices:
   [plan](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
