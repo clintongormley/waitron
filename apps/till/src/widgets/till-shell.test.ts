@@ -1280,6 +1280,48 @@ describe("a handheld's table buttons", () => {
       });
     });
 
+    it("again when buttons are added before the selected table", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t4").slice(3),
+        });
+        await frame();
+        await vi.waitFor(() => expectInStrip(el, "t4"));
+        const width = stripOf(el).clientWidth;
+        expect(stripOf(el).scrollWidth).toBeGreaterThan(width);
+        el.barTables = tenTables("t4");
+        await el.updateComplete;
+        await frame();
+        expect(stripOf(el).clientWidth).toBe(width);
+        await vi.waitFor(() => expectInStrip(el, "t4"));
+      });
+    });
+
+    it("looks for no button on a redraw that changes no button while the bar is not drawn", async () => {
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          kiosk: true,
+          barTables: tenTables("t10"),
+        });
+        await frame();
+        const lookups = vi.spyOn(el.shadowRoot!, "querySelector");
+        el.operatorName = "Sam";
+        await el.updateComplete;
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await frame();
+        const asked = lookups.mock.calls.map(([selector]) => selector);
+        expect(asked.filter((selector) => selector.startsWith("[data-bar-table"))).toEqual([]);
+      });
+    });
+
     it("again when the strip narrows under the selected table", async () => {
       setLocale("en-GB");
       await atViewport(1280, async () => {

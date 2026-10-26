@@ -474,7 +474,7 @@ export class TillShell extends LitElement {
   // Compared in `updated`, not taken from the controller's `onChange`: a host coming back to the
   // page redraws a changed logo with no `onChange`.
   #drawnLogo?: string;
-  #revealedTable?: string;
+  #revealedBar?: string;
   #fittedWidth = 0;
   #fittedLocale?: string;
   #logoRetry?: ReturnType<typeof setTimeout>;
@@ -529,25 +529,25 @@ export class TillShell extends LitElement {
       void this.#fit();
     }
     this.#retryHiddenLogo();
-    void this.#revealSelectedTable();
+    if (changed.has("barTables")) void this.#revealSelectedTable();
   }
 
-  /** Scrolls the strip, never the page, to show a newly selected table's button, once the bar's
-   * own elements have drawn and so given the strip its width. */
+  /** Scrolls the strip, never the page, to show the selected table's button whenever the buttons
+   * change, once the bar's own elements have drawn and so given the strip its width. */
   async #revealSelectedTable(): Promise<void> {
+    const bar = JSON.stringify(this.barTables);
+    if (bar === this.#revealedBar) return;
+    this.#revealedBar = bar;
     const tableId = this.barTables.find((table) => table.current)?.tableId;
-    if (tableId === this.#revealedTable) return;
-    if (tableId === undefined) {
-      this.#revealedTable = undefined;
-      return;
-    }
+    if (tableId === undefined) return;
     await this.#settled();
-    // No button while the bar is not drawn (a kiosk, a kitchen screen) or once the table has gone.
+    if (bar !== this.#revealedBar) return;
+    // No button while the bar is not drawn (a kiosk, a kitchen screen); the strip's observer
+    // reveals it once the strip is drawn.
     const button = this.renderRoot.querySelector<HTMLElement>(
       `[data-bar-table="${CSS.escape(tableId)}"]`,
     );
     if (!button) return;
-    this.#revealedTable = tableId;
     const strip = button.parentElement!;
     const box = button.getBoundingClientRect();
     const view = strip.getBoundingClientRect();
@@ -613,7 +613,7 @@ export class TillShell extends LitElement {
     const strip = this.renderRoot.querySelector(".head .tabs") ?? undefined;
     if (strip === this.#watchedStrip) return;
     this.#stripObserver ??= new ResizeObserver(() => {
-      this.#revealedTable = undefined;
+      this.#revealedBar = undefined;
       void this.#revealSelectedTable();
     });
     if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
