@@ -31,8 +31,6 @@ import { applyTokens, startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/
 import { FIXTURE_ANSWER, FIXTURE_LIGHT_BG, bg } from "@waitron/ui/test/venue-theme-fixture.js";
 import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 
-// Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
-
 const unit = {
   id: "unit-each",
   staffName: "Staff unit",
@@ -194,14 +192,14 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
   };
 }
 
-const mesa4 = table("t4", "4", party());
-const mesa7 = table(
+const table4 = table("t4", "4", party());
+const table7 = table(
   "t7",
   "7",
   party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
 );
 
-const mesa9 = {
+const table9 = {
   ...table("t9", "9", party({ id: "v9", mainBillId: "wo-9", tableIds: ["t9"] })),
   zoneId: "z2",
 };
@@ -265,7 +263,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+    getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
     listZones: vi
       .fn()
       .mockResolvedValue([
@@ -340,7 +338,7 @@ async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promis
   await flush(el);
 }
 
-async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
+async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
   await flush(el);
   await signIn(el);
   emit(shell(el), "screen-select", { screen: "floor" });
@@ -416,7 +414,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValueOnce(noCourses).mockResolvedValue(moved),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     expect(tableOrder(el)!.courses).toEqual([]);
     const reads = api.getTill.mock.calls.length;
@@ -429,7 +427,7 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("the same revision reads nothing", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const reads = api.getTill.mock.calls.length;
     const checks = api.menuState.mock.calls.length;
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s1"));
@@ -446,7 +444,7 @@ describe("A768 the till follows the venue's setup revision", () => {
         .mockRejectedValueOnce(new TypeError("Failed to fetch"))
         .mockResolvedValue(moved),
     });
-    await openMesa(el);
+    await openTable(el);
     const reads = api.getTill.mock.calls.length;
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
     await poll(el);
@@ -488,7 +486,7 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("a settings read that answers after a server switch applies nothing", async () => {
     const { el, switchServer } = await mountWithRouter();
-    await openMesa(el);
+    await openTable(el);
     let answerLate!: (value: unknown) => void;
     api.getTill.mockImplementationOnce(() => new Promise((resolve) => (answerLate = resolve)));
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
@@ -520,7 +518,7 @@ describe("A768 the till follows the venue's setup revision", () => {
       switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: "pr-bar" }),
       getTill: vi.fn().mockResolvedValueOnce(noCourses).mockResolvedValue(moved),
     });
-    await openMesa(el);
+    await openTable(el);
     shell(el).shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!.click();
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
@@ -569,7 +567,7 @@ describe("A768 the till follows the venue's setup revision", () => {
       ...profileApi,
       getTill: vi.fn().mockResolvedValue(noCourses),
     });
-    await openMesa(el);
+    await openTable(el);
     const stale = held<unknown>();
     api.getTill.mockImplementationOnce(() => stale.promise);
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
@@ -588,7 +586,7 @@ describe("A768 the till follows the venue's setup revision", () => {
       ...profileApi,
       getTill: vi.fn().mockResolvedValue(noCourses),
     });
-    await openMesa(el);
+    await openTable(el);
     const stale = held<unknown>();
     api.getTill.mockImplementationOnce(() => stale.promise);
     api.getTill.mockResolvedValue(switched);
@@ -604,7 +602,7 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("a change of the device's zones applies the venue's new settings", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(noCourses) });
-    await openMesa(el);
+    await openTable(el);
     api.getTill.mockResolvedValue(switched);
     api.getDeviceZones.mockResolvedValue({
       ...deviceZonesFixture(undefined, ["z1"]),
@@ -616,7 +614,7 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("a settings read sent before a change of the device's zones does not undo its settings", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(noCourses) });
-    await openMesa(el);
+    await openTable(el);
     const stale = held<unknown>();
     api.getTill.mockImplementationOnce(() => stale.promise);
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
@@ -635,12 +633,12 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("a settings read left out across a server switch does not stop the next one", async () => {
     const { el, switchServer } = await mountWithRouter();
-    await openMesa(el);
+    await openTable(el);
     api.getTill.mockImplementationOnce(() => new Promise(() => undefined));
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
     await poll(el);
     await switchServer();
-    await openMesa(el);
+    await openTable(el);
     const reads = api.getTill.mock.calls.length;
     api.getTill.mockResolvedValue(moved);
     await poll(el);
@@ -649,7 +647,7 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("a settings read from before a server switch applies nothing while the new start read is out", async () => {
     const { el, switchServer } = await mountWithRouter();
-    await openMesa(el);
+    await openTable(el);
     const late = held<unknown>();
     const start = held<unknown>();
     api.getTill.mockImplementationOnce(() => late.promise);
@@ -670,7 +668,7 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   it("a draft line keeps a course a refresh deleted, and still shows its name", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const form = await openDraftLine(tableOrder(el)!, 0);
     await chooseOption(form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!, "mains");
@@ -803,7 +801,7 @@ describe("A841 the till follows the theme in use", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValueOnce(first).mockResolvedValue(next),
     });
-    await openMesa(el);
+    await openTable(el);
     expect(themeFetch).toHaveBeenCalledTimes(1);
     return el;
   }

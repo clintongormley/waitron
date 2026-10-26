@@ -26,9 +26,6 @@ import type {
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { ServerRouter } from "./api/server-router.js";
 
-// T4 holds party v1 on bill wo-4 and T9 party v9 on bill wo-9, both in zone z1, whose Lunch menu
-// offers Beer, Steak and Flan. Ana is p1, Sam p2.
-
 const unit = {
   staffName: "Staff unit",
   staffAbbreviation: "su",
@@ -183,16 +180,16 @@ function unsent(billId: string, ownerId: string): UnsentDraft {
   };
 }
 
-const mesa4 = table("t4", "T4", party());
-const mesa9 = table(
+const table4 = table("t4", "T4", party());
+const table9 = table(
   "t9",
   "T9",
   party({ id: "v9", revision: 9, displayName: "T9", mainBillId: "wo-9", tableIds: ["t9"] }),
 );
 /** The floor read with a New order of `ownerId`'s saved on T4's bill. */
-const mesa4With = (ownerId: string) =>
+const table4With = (ownerId: string) =>
   table("t4", "T4", party({ unsentDrafts: [unsent("wo-4", ownerId)] }));
-const mesa9WithAnas = table(
+const table9WithAnas = table(
   "t9",
   "T9",
   party({
@@ -266,7 +263,7 @@ function stubApi(formFactor: FormFactor, overrides: Record<string, unknown> = {}
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9]),
+    getTablesState: vi.fn().mockResolvedValue([table4, table9]),
     listZones: vi.fn().mockResolvedValue([
       { id: "z1", name: "Comedor", displayOrder: 0, active: true, serviceMode: "table_tab" },
       { id: "z2", name: "Terraza", displayOrder: 1, active: true, serviceMode: "table_tab" },
@@ -360,7 +357,7 @@ async function toFloor(el: TillApp): Promise<void> {
   await flush(el);
 }
 
-async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
+async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
   await flush(el);
   await signIn(el);
   await toFloor(el);
@@ -390,7 +387,7 @@ afterEach(async () => {
 describe("till-app: a handheld's bar buttons for this person's tables", () => {
   it("shows ✎ T4 on the Floor when the floor read names this person's unsent order there", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table9]),
     });
     await flush(el);
     await signIn(el);
@@ -406,7 +403,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("shows no button for another person's unsent order", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4With("p2"), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4With("p2"), table9]),
     });
     await flush(el);
     await signIn(el);
@@ -416,7 +413,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("selects the open table's button, with ✎ from the first dish added and none once it is removed", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     expect(bar(el)).toEqual(["Floor", "[T4]"]);
     await tap(el, "Beer");
     expect(bar(el)).toEqual(["Floor", "[✎ T4]"]);
@@ -428,7 +425,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("keeps ✎ T4 after Floor, and its button returns to the same draft without a re-read", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const store = draft(el);
     await toFloor(el);
@@ -445,7 +442,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("drops the open table's button on Floor when nothing of this person's is unsent there", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     expect(bar(el)).toEqual(["Floor", "[T4]"]);
     await toFloor(el);
     expect(bar(el)).toEqual(["[Floor]"]);
@@ -453,7 +450,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("opens another table's button as a Floor tap does, closing an open overlay", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table9WithAnas]),
     });
     await flush(el);
     await signIn(el);
@@ -475,7 +472,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("loses ✎ at once when another device takes the open bill, keeping the button selected", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await waitForSave();
     const anas = structuredClone(server.drafts[0]!);
@@ -497,7 +494,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await waitForSave();
     await flush(el);
@@ -513,7 +510,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("hands the shell the same array when a redraw changes no button", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const shown = shell(el).barTables;
     expect(shown).toHaveLength(1);
@@ -532,7 +529,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa4With("p1"), table("t9", "T9", mesa9WithAnas.party, "z2")]),
+        .mockResolvedValue([table4With("p1"), table("t9", "T9", table9WithAnas.party, "z2")]),
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1", "z2"])),
       listZoneOffers: vi.fn(async (zoneId: string) =>
         zoneId === "z2"
@@ -540,7 +537,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
           : { ...catalogue("v1"), context: { ...catalogue("v1").context, zoneId } },
       ),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     expect(bar(el)).toEqual(["Floor", "[✎ T4]", "✎ T9"]);
 
@@ -559,14 +556,14 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa4With("p1"), table("t9", "T9", mesa9WithAnas.party, "z2")]),
+        .mockResolvedValue([table4With("p1"), table("t9", "T9", table9WithAnas.party, "z2")]),
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1", "z2"])),
       listZoneOffers: vi.fn(async (zoneId: string) => {
         if (zoneId === "z2") throw new TypeError("Failed to fetch");
         return { ...catalogue("v1"), context: { ...catalogue("v1").context, zoneId } };
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     barButton(el, "t9").click();
@@ -584,7 +581,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("does nothing when the open table's own button is tapped", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const store = draft(el);
     const reads = api.getTablesState!.mock.calls.length;
@@ -599,10 +596,10 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("keeps ✎ T9 while T9's draft loads after its button is tapped", async () => {
     const { el } = await mountApp();
-    await openMesa(el, "t9");
+    await openTable(el, "t9");
     await tap(el, "Beer");
     await waitForSave();
-    api.getTablesState!.mockResolvedValue([mesa4, mesa9WithAnas]);
+    api.getTablesState!.mockResolvedValue([table4, table9WithAnas]);
     await toFloor(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -637,7 +634,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("rebuilds the buttons for the next person", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table9]),
     });
     await flush(el);
     await signIn(el);
@@ -653,7 +650,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
   it("keeps a hidden zone's table's ✎ button", async () => {
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z2"])),
-      getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), table("t5", "T5", null, "z2")]),
+      getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table("t5", "T5", null, "z2")]),
     });
     await flush(el);
     await signIn(el);
@@ -663,7 +660,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("keeps ✎ T9 when a later floor read fails", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, table("t5", "T5", null), mesa9WithAnas]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table("t5", "T5", null), table9WithAnas]),
       seatTable: vi.fn().mockResolvedValue({ tabId: "wo-5", partyId: "v5", revision: 1 }),
     });
     await flush(el);
@@ -682,7 +679,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("names a party another device moved by its new table, and its button opens that table", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const moved = party({
       tableIds: ["t9"],
@@ -703,7 +700,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("shows ✎ T4 for a party seated at T4 since the held one left it", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const since = party({
       id: "v-new",
       mainBillId: "wo-new",
@@ -717,7 +714,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("opens the party seated at T4 since the held one left it from ✎ T4", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const since = party({
       id: "v-new",
       mainBillId: "wo-new",
@@ -735,7 +732,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("gives a party seated at T4 since no ✎ for the dishes Ana added to the party that left", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     expect(bar(el)).toEqual(["Floor", "[✎ T4]"]);
     const since = party({ id: "v-new", mainBillId: "wo-new", unsentDrafts: [] });
@@ -747,7 +744,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("selects Floor on the Order screen with no table", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table9]),
     });
     await flush(el);
     await signIn(el);
@@ -761,7 +758,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
   it("opens the Floor screen when Floor is tapped on the Order screen with no table", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table9]),
     });
     await flush(el);
     await signIn(el);
@@ -782,10 +779,10 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 describe("till-app: a till's bar", () => {
   it("has no table buttons", async () => {
     const { el } = await mountApp(
-      { getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9WithAnas]) },
+      { getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table9WithAnas]) },
       "till",
     );
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     expect(shell(el).shadowRoot!.querySelectorAll("[data-bar-table]")).toHaveLength(0);
     expect(shell(el).barTables).toEqual([]);
@@ -827,10 +824,10 @@ describe("till-app: a table left for another keeps its button", () => {
   /** Ana at T4 with Beer added, T9 on the bar from an earlier visit, and T4's save held open. */
   async function leaveT4ForT9(formFactor: FormFactor = phone, overrides = {}) {
     const { el } = await mountApp(
-      { getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]), ...overrides },
+      { getTablesState: vi.fn().mockResolvedValue([table4, table9WithAnas]), ...overrides },
       formFactor,
     );
-    await openMesa(el);
+    await openTable(el);
     const answer = holdNextSave();
     await tap(el, "Beer");
     return { el, answer };
@@ -860,7 +857,7 @@ describe("till-app: a table left for another keeps its button", () => {
     await openT9(el);
     await flush(el, 6);
     const reads = api.getTablesState!.mock.calls.length;
-    const answerRead = holdNextTablesRead([mesa4With("p1"), mesa9WithAnas]);
+    const answerRead = holdNextTablesRead([table4With("p1"), table9WithAnas]);
     answer();
     await flush(el, 6);
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
@@ -870,19 +867,19 @@ describe("till-app: a table left for another keeps its button", () => {
     expect(bar(el)).toContain("✎ T4");
 
     // From here the floor read decides for T4.
-    api.getTablesState!.mockResolvedValue([mesa4, mesa9WithAnas]);
+    api.getTablesState!.mockResolvedValue([table4, table9WithAnas]);
     await toFloor(el);
     expect(bar(el)).not.toContain("✎ T4");
   });
 
   it("drops T4's button at once when its last dish was removed before leaving, and the later read keeps it gone", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table9WithAnas]),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await waitForSave();
-    api.getTablesState!.mockResolvedValue([mesa4With("p1"), mesa9WithAnas]);
+    api.getTablesState!.mockResolvedValue([table4With("p1"), table9WithAnas]);
     await toFloor(el);
     barButton(el, "t4").click();
     await flush(el);
@@ -893,7 +890,7 @@ describe("till-app: a table left for another keeps its button", () => {
     await flush(el, 1);
     await openT9(el);
     expect(bar(el).some((tab) => tab.includes("T4"))).toBe(false);
-    api.getTablesState!.mockResolvedValue([mesa4, mesa9WithAnas]);
+    api.getTablesState!.mockResolvedValue([table4, table9WithAnas]);
     const reads = api.getTablesState!.mock.calls.length;
     answer();
     await flush(el, 6);
@@ -934,7 +931,7 @@ describe("till-app: a table left for another keeps its button", () => {
     await openT9(el);
     await flush(el, 6);
     const reads = api.getTablesState!.mock.calls.length;
-    const answerRead = holdNextTablesRead([mesa4With("p2"), mesa9WithAnas]);
+    const answerRead = holdNextTablesRead([table4With("p2"), table9WithAnas]);
     answer({ code: "draft.taken_over", ownerName: "Sam" });
     await flush(el, 6);
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
@@ -969,10 +966,10 @@ describe("till-app: a table left for another keeps its button", () => {
 
   it("keeps ✎ T4 when T4's save had already failed before leaving", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table9WithAnas]),
       saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await waitForSave();
     await flush(el);
@@ -1032,12 +1029,12 @@ describe("till-app: a table left for another keeps its button", () => {
       }) as unknown as typeof fetch,
       storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
     });
-    api = stubApi(phone, { getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]) });
+    api = stubApi(phone, { getTablesState: vi.fn().mockResolvedValue([table4, table9WithAnas]) });
     const { el } = await mountWidget<TillApp>("till-app", {
       api: api as unknown as TillApi,
       router,
     });
-    await openMesa(el);
+    await openTable(el);
     const answer = holdNextSave();
     await tap(el, "Beer");
     await failT4Save(el, answer);
@@ -1056,8 +1053,8 @@ describe("till-app: a table left for another keeps its button", () => {
     const { el, answer } = await leaveT4ForT9();
     await openT9(el);
     await flush(el, 6);
-    const answerBefore = holdNextTablesRead([mesa4, mesa9WithAnas]);
-    const answerAfter = holdNextTablesRead([mesa4, mesa9WithAnas]);
+    const answerBefore = holdNextTablesRead([table4, table9WithAnas]);
+    const answerAfter = holdNextTablesRead([table4, table9WithAnas]);
     const reads = api.getTablesState!.mock.calls.length;
     await toFloor(el);
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
@@ -1075,7 +1072,7 @@ describe("till-app: a table left for another keeps its button", () => {
 
   it("keeps ✎ T4 when a floor read after its save fails", async () => {
     const { el, answer } = await leaveT4ForT9(phone, {
-      getTablesState: vi.fn().mockResolvedValue([mesa4, table("t5", "T5", null), mesa9WithAnas]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table("t5", "T5", null), table9WithAnas]),
       seatTable: vi.fn().mockResolvedValue({ tabId: "wo-5", partyId: "v5", revision: 1 }),
     });
     await openT9(el);
@@ -1096,7 +1093,7 @@ describe("till-app: a table left for another keeps its button", () => {
 
   it("opens T4's saved dishes from its kept button after a floor read failed", async () => {
     const { el, answer } = await leaveT4ForT9(phone, {
-      getTablesState: vi.fn().mockResolvedValue([mesa4, table("t5", "T5", null), mesa9WithAnas]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table("t5", "T5", null), table9WithAnas]),
       seatTable: vi.fn().mockResolvedValue({ tabId: "wo-5", partyId: "v5", revision: 1 }),
     });
     await openT9(el);
