@@ -27,8 +27,6 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { setLocale, t } from "./i18n/t.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 
-// Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
-
 const unit = {
   id: "unit-each",
   staffName: "Staff unit",
@@ -189,14 +187,14 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
   };
 }
 
-const mesa4 = table("t4", "4", party());
-const mesa7 = table(
+const table4 = table("t4", "4", party());
+const table7 = table(
   "t7",
   "7",
   party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
 );
 
-const mesa9 = {
+const table9 = {
   ...table("t9", "9", party({ id: "v9", mainBillId: "wo-9", tableIds: ["t9"] })),
   zoneId: "z2",
 };
@@ -259,7 +257,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+    getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
     listZones: vi
       .fn()
       .mockResolvedValue([
@@ -336,7 +334,7 @@ async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promis
   await flush(el);
 }
 
-async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
+async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
   await flush(el);
   await signIn(el);
   emit(shell(el), "screen-select", { screen: "floor" });
@@ -403,7 +401,7 @@ describe("A768 a moved course or category is read again", () => {
 
   it("an open table reads its offers again when a poll names new live fields", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const before = zoneReads();
     const moved = catalogue("v1", {}, "lf-2");
     moved.offers = moved.offers.map((each) =>
@@ -418,7 +416,7 @@ describe("A768 a moved course or category is read again", () => {
 
   it("an open table reads nothing more when a poll names the same live fields", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const before = api.listZoneOffers.mock.calls.length;
     const checks = api.menuState.mock.calls.length;
     api.menuState.mockImplementation(async () => state("v1", "lf-1"));
@@ -441,7 +439,7 @@ describe("A768 a held zone's menu", () => {
 
   it("a second open of a table in a zone already read sends no offers read and one menu-state read", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     api.listZoneOffers.mockClear();
     api.menuState.mockClear();
@@ -455,7 +453,7 @@ describe("A768 a held zone's menu", () => {
 
   it("a menu published while the zone was off screen is read again when the table opens", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     api.listZoneOffers.mockClear();
     api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
@@ -468,7 +466,7 @@ describe("A768 a held zone's menu", () => {
 
   it("a table in a zone not yet read reads its offers", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     api.listZoneOffers.mockClear();
     await reopen(el, "t9");
@@ -477,11 +475,11 @@ describe("A768 a held zone's menu", () => {
 
   it("a server switch forgets every held menu", async () => {
     const { el, switchServer } = await mountWithRouter();
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     await switchServer();
     api.listZoneOffers.mockClear();
-    await openMesa(el, "t7");
+    await openTable(el, "t7");
     expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
   });
 
@@ -501,14 +499,14 @@ describe("A768 a held zone's menu", () => {
     answerOld(catalogue("v1", { Beer: "9.99" }));
     await flush(el);
     api.listZoneOffers.mockClear();
-    await openMesa(el, "t7");
+    await openTable(el, "t7");
     expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
     expect(beer(el)!.unitPrice).toBe("5.00");
   });
 
   it("a new api forgets every held menu", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     const next = stubApi();
     el.api = next as unknown as TillApi;
@@ -572,7 +570,7 @@ describe("A768 a held zone's menu follows the server", () => {
       listZoneOffers: vi.fn().mockResolvedValue(twoMenus("lunch")),
       menuState: vi.fn(async () => twoMenuState("lunch")),
     });
-    await openMesa(el);
+    await openTable(el);
     expect(tableOrder(el)!.selectedMenuId).toBe("lunch");
     await back(el);
     api.menuState.mockImplementation(async () => twoMenuState("dinner"));
@@ -583,7 +581,7 @@ describe("A768 a held zone's menu follows the server", () => {
 
   it("a check for the table just left loads nothing into the next table while it opens", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     const check = later<MenuStateAnswer>();
     api.menuState.mockImplementationOnce(() => check.promise);
@@ -612,7 +610,7 @@ describe("A768 a held zone's menu follows the server", () => {
       listZoneOffers: vi.fn().mockResolvedValue(twoMenus("lunch")),
       menuState: vi.fn(async () => twoMenuState("lunch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await back(el);
     const first = later<MenuStateAnswer>();
     const second = later<MenuStateAnswer>();
@@ -707,7 +705,7 @@ describe("A768 the left draft saves in the background", () => {
 
   it("another party's table shows its order before the left draft's save answers", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
     await back(el);
@@ -719,18 +717,18 @@ describe("A768 the left draft saves in the background", () => {
     expect(savedLines()).toContain("offer-beer ×1");
   });
 
-  /** Opens Mesa 7 from Mesa 4's order screen, so the save of Mesa 4's draft is the release's own. */
-  async function moveToMesa7(el: TillApp): Promise<void> {
+  /** Opens Table 7 from Table 4's order screen, so the save of Table 4's draft is the release's own. */
+  async function moveToTable7(el: TillApp): Promise<void> {
     emit(tableOrder(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
   }
 
   it("a background save that fails is said on the next table", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     expect(tableOrder(el)!.party?.id).toBe("v7");
     expect(banner(el)).toBeNull();
     release(new TypeError("Failed to fetch"));
@@ -741,10 +739,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("reopening a failed left draft reads the saved bill before offering its local candidate", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     await back(el);
@@ -763,10 +761,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a background save refused for another reason says it on the next table", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release({ code: "draft.taken_over", status: 409, ownerName: "Bea" });
     await flush(el);
     expect(tableOrder(el)!.party?.id).toBe("v7");
@@ -775,10 +773,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a background save refused for an ended session says nothing", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release({ code: "session.required", status: 401 });
     await flush(el);
     expect(tableOrder(el)!.party?.id).toBe("v7");
@@ -793,7 +791,7 @@ describe("A768 the left draft saves in the background", () => {
         return server.saveDraft(...args);
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
     await back(el);
@@ -830,7 +828,7 @@ describe("A768 the left draft saves in the background", () => {
 
   it("the same party's table still waits for its own save", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
     await back(el);
@@ -843,7 +841,7 @@ describe("A768 the left draft saves in the background", () => {
 
   it("A, B, then A again waits for A's own save", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
     await back(el);
@@ -864,12 +862,12 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a server switch lets go of a left draft's save sent to the old server", async () => {
     const { el, switchServer } = await mountWithRouter();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     await switchServer();
-    await openMesa(el, "t4");
+    await openTable(el, "t4");
     expect(tableOrder(el)?.party?.id).toBe("v1");
     expect(rows(el)).toEqual([]);
   });
@@ -881,10 +879,10 @@ describe("A768 the left draft saves in the background", () => {
         return server.listDrafts(...args);
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     expect(banner(el)!.textContent).toContain(t("table.draft_read_failed"));
     release(new TypeError("Failed to fetch"));
     await flush(el);
@@ -893,10 +891,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("signing in again resumes the left party's draft only once its save answers", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     await back(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -916,10 +914,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a failed left draft is reviewed separately before the same person explicitly saves it", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     expect(tableOrder(el)!.party?.id).toBe("v7");
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
@@ -941,17 +939,17 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a left draft whose save and the next table's menu both failed is shown when its table opens again", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, { ...mesa7, zoneId: "z2" }, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, { ...table7, zoneId: "z2" }, table9]),
       listZoneOffers: vi
         .fn()
         .mockResolvedValueOnce(catalogue("v1"))
         .mockRejectedValueOnce(new TypeError("Failed to fetch menu"))
         .mockResolvedValue(catalogue("v1")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch save"));
     await flush(el, 6);
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -970,10 +968,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a left draft whose background save was refused is read afresh when its table opens again", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release({ code: "product.not_sold_separately", status: 409 });
     await flush(el, 6);
     await back(el);
@@ -993,10 +991,10 @@ describe("A768 the left draft saves in the background", () => {
       }),
       logout: vi.fn(async () => void calls.push("logout")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     calls.length = 0;
@@ -1046,10 +1044,10 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, the next person never sees or saves the order kept for the one before", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     await restartWithoutSignOut(el);
@@ -1065,10 +1063,10 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, the next person's sign-out does not send the order kept for the one before", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     await restartWithoutSignOut(el);
@@ -1082,10 +1080,10 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, a left order whose save fails once the next person is in is not theirs", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     await restartWithoutSignOut(el);
     await signIn(el, "p2", "Bea");
     release(new TypeError("Failed to fetch"));
@@ -1103,10 +1101,10 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, its author reviews a kept candidate before saving again", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     await restartWithoutSignOut(el);
@@ -1141,10 +1139,10 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, a reopen waiting on a left order's save does not save it as the next person while their sign-in loads", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     await back(el);
     await reopen(el, "t4");
     await restartWithoutSignOut(el);
@@ -1161,12 +1159,12 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, a left order's save queued behind one still out is not sent as the next person", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     const release = holdNextSave();
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     await tap(el, "Beer");
-    await moveToMesa7(el);
+    await moveToTable7(el);
     await restartWithoutSignOut(el);
     await signIn(el, "p2", "Bea");
     await flush(el, 6);
@@ -1180,7 +1178,7 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, the order on screen is not saved as the next person while their sign-in loads", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
-    await openMesa(el);
+    await openTable(el);
     const release = holdNextSave();
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -1217,17 +1215,17 @@ describe("A768 the left draft saves in the background", () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([table("t4", "4", party({ mainBillId: null })), mesa7, mesa9]),
+        .mockResolvedValue([table("t4", "4", party({ mainBillId: null })), table7, table9]),
       getPartyBills: vi.fn().mockResolvedValue(bills),
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
         savedBy.push(server.personId);
         return server.saveDraft(...args);
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     await back(el);
@@ -1249,10 +1247,10 @@ describe("A768 the left draft saves in the background", () => {
 
   it("after a restart with no sign-out, the next person is not left loading a table behind a left order's save that never answers", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     await back(el);
     await reopen(el, "t4");
     expect(tableOrder(el)?.draftStore ?? null).toBeNull();
@@ -1283,10 +1281,10 @@ describe("A768 the left draft saves in the background", () => {
     let answer!: () => void;
     const held = new Promise<void>((resolve) => (answer = resolve));
     const mounted = mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
       seatTable: vi.fn(async () => {
         await held;
-        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        vi.mocked(api.getTablesState).mockResolvedValue([table4, table7, seated]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
       }),
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
@@ -1297,8 +1295,8 @@ describe("A768 the left draft saves in the background", () => {
     return { savedBy, seat: () => answer(), mounted };
   }
 
-  async function seatMesa9WithBeer(el: TillApp): Promise<void> {
-    await openMesa(el, "t9");
+  async function seatTable9WithBeer(el: TillApp): Promise<void> {
+    await openTable(el, "t9");
     await tap(el, "Beer");
     emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
@@ -1315,7 +1313,7 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, lines carried to a table whose seating answers once the next person is in are not saved as them", async () => {
     const { savedBy, seat, mounted } = mountHeldSeating();
     const { el } = await mounted;
-    await seatMesa9WithBeer(el);
+    await seatTable9WithBeer(el);
     await restartWithoutSignOut(el);
     await signIn(el, "p2", "Bea");
     await flush(el, 6);
@@ -1330,7 +1328,7 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, lines carried to a table whose seating answers while the next person's sign-in loads are not saved as them", async () => {
     const { savedBy, seat, mounted } = mountHeldSeating();
     const { el } = await mounted;
-    await seatMesa9WithBeer(el);
+    await seatTable9WithBeer(el);
     await restartWithoutSignOut(el);
     const zones = holdNextZones();
     await signIn(el, "p2", "Bea");
@@ -1349,7 +1347,7 @@ describe("A768 the left draft saves in the background", () => {
   it("after a restart with no sign-out, lines carried to a table whose seating answers once the same person is back in are saved as them", async () => {
     const { savedBy, seat, mounted } = mountHeldSeating();
     const { el } = await mounted;
-    await seatMesa9WithBeer(el);
+    await seatTable9WithBeer(el);
     await restartWithoutSignOut(el);
     await signIn(el, "p1", "Ana");
     await flush(el, 6);
@@ -1363,15 +1361,15 @@ describe("A768 the left draft saves in the background", () => {
 
   it("a server switch lets go of a left draft whose background save got no answer", async () => {
     const { el, switchServer } = await mountWithRouter();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
     await switchServer();
     const saves = api.saveDraft.mock.calls.length;
-    await openMesa(el, "t4");
+    await openTable(el, "t4");
     await flush(el, 6);
     expect(tableOrder(el)?.party?.id).toBe("v1");
     expect(rows(el)).toEqual([]);
@@ -1382,10 +1380,10 @@ describe("A768 the left draft saves in the background", () => {
     const { el } = await mountApp({
       moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
     await flush(el, 6);
     await back(el);
@@ -1405,15 +1403,15 @@ describe("A768 the left draft saves in the background", () => {
     const { el } = await mountApp({
       moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
-    await moveToMesa7(el);
+    await moveToTable7(el);
     expect(tableOrder(el)!.party?.id).toBe("v7");
     api.getTablesState.mockResolvedValue([
       table("t4", "4", party({ revision: 4, tableIds: ["t4", "t7"] })),
       table("t7", "7", party({ revision: 4, tableIds: ["t4", "t7"] })),
-      mesa9,
+      table9,
     ]);
     const reads = api.listDrafts.mock.calls.length;
     emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
@@ -1526,13 +1524,13 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("a second open during the first's loading shows only the second table", async () => {
-    const mesa4Lines = deferred<{ lines: never[]; revision: number }>();
+    const table4Lines = deferred<{ lines: never[]; revision: number }>();
     const z2Offers = deferred<ZoneOfferCatalogue>();
     const { el } = await mountApp();
-    await openMesa(el, "t7");
+    await openTable(el, "t7");
     await back(el);
     api.getTabLines.mockImplementation(async (tabId: string) =>
-      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0 },
+      tabId === "wo-4" ? table4Lines.promise : { lines: [], revision: 0 },
     );
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
       zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
@@ -1544,7 +1542,7 @@ describe("A768 the order screen shows at once", () => {
     const z2 = catalogue("v1", { Beer: "7.00" });
     z2Offers.resolve({ ...z2, context: { ...z2.context, zoneId: "z2" } });
     await flush(el);
-    mesa4Lines.resolve({ lines: [], revision: 0 });
+    table4Lines.resolve({ lines: [], revision: 0 });
     await flush(el);
     expect(tableOrder(el)!.party?.id).toBe("v9");
     expect(tableOrder(el)!.products.find((p) => p.name === "Beer")!.unitPrice).toBe("7.00");
@@ -1552,13 +1550,13 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("a first open's reads answering while a second table's menu is read keep the second loading", async () => {
-    const mesa4Lines = deferred<{ lines: never[]; revision: number }>();
+    const table4Lines = deferred<{ lines: never[]; revision: number }>();
     const z2Offers = deferred<ZoneOfferCatalogue>();
     const { el } = await mountApp();
-    await openMesa(el, "t7");
+    await openTable(el, "t7");
     await back(el);
     api.getTabLines.mockImplementation(async (tabId: string) =>
-      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0 },
+      tabId === "wo-4" ? table4Lines.promise : { lines: [], revision: 0 },
     );
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
       zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
@@ -1569,7 +1567,7 @@ describe("A768 the order screen shows at once", () => {
     await back(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
     await flush(el);
-    mesa4Lines.resolve({ lines: [], revision: 0 });
+    table4Lines.resolve({ lines: [], revision: 0 });
     await flush(el, 6);
     expect(tableOrder(el)!.loading).toBe(true);
     expect(loadingLine(el)).not.toBeNull();
@@ -1587,7 +1585,7 @@ describe("A768 the order screen shows at once", () => {
     let refuse!: () => void;
     const lines = deferred<{ lines: never[]; revision: number }>();
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
       seatTable: vi.fn(
         () =>
           new Promise(
@@ -1595,7 +1593,7 @@ describe("A768 the order screen shows at once", () => {
           ),
       ),
     });
-    await openMesa(el, "t7");
+    await openTable(el, "t7");
     await back(el);
     api.getTabLines.mockImplementation(async (tabId: string) =>
       tabId === "wo-4" ? lines.promise : { lines: [], revision: 0 },
@@ -1616,7 +1614,7 @@ describe("A768 the order screen shows at once", () => {
 
   it("the table resumed at sign-in shows its loading line", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     emit(shell(el), "logout");
     await flush(el);
     const lines = deferred<{ lines: never[]; revision: number }>();
@@ -1689,7 +1687,7 @@ describe("A768 the order screen shows at once", () => {
   it("a seating that fails after a server switch leaves the switch's message", async () => {
     const { el, switchServer } = await mountWithRouter();
     let refuse!: () => void;
-    api.getTablesState.mockResolvedValue([mesa4, mesa7, table("t5", "5", null)]);
+    api.getTablesState.mockResolvedValue([table4, table7, table("t5", "5", null)]);
     api.seatTable = vi.fn(
       () =>
         new Promise(
@@ -1713,7 +1711,7 @@ describe("A768 the order screen shows at once", () => {
   it("a free table whose seating is refused goes back to the floor with the error", async () => {
     const free = table("t5", "5", null);
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
       seatTable: vi.fn().mockRejectedValue({ code: "table.occupied", status: 409 }),
     });
     await onFloor(el);
@@ -1754,7 +1752,7 @@ describe("A768 the order screen shows at once", () => {
 
   it("a same-party open shows its loading line while the left save is out", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
     await back(el);
@@ -1767,7 +1765,7 @@ describe("A768 the order screen shows at once", () => {
 
   it("an open abandoned during its flush leaves no loading line", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const release = holdNextSave();
     await back(el);
@@ -1885,14 +1883,14 @@ describe("A768 the order screen shows at once", () => {
     );
     const seat = deferred<void>();
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
       seatTable: vi.fn(async () => {
         await seat.promise;
-        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        vi.mocked(api.getTablesState).mockResolvedValue([table4, table7, seated]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
       }),
     });
-    await openMesa(el, "t9");
+    await openTable(el, "t9");
     await tap(el, "Beer");
     emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
@@ -1920,13 +1918,13 @@ describe("A768 the order screen shows at once", () => {
       party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
     );
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
       seatTable: vi.fn(async () => {
-        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        vi.mocked(api.getTablesState).mockResolvedValue([table4, table7, seated]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
       }),
     });
-    await openMesa(el, "t9");
+    await openTable(el, "t9");
     await tap(el, "Beer");
     emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el, 6);
@@ -1953,13 +1951,13 @@ describe("A768 the order screen shows at once", () => {
       party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
     );
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
       seatTable: vi.fn(async () => {
-        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        vi.mocked(api.getTablesState).mockResolvedValue([table4, table7, seated]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
       }),
     });
-    await openMesa(el, "t9");
+    await openTable(el, "t9");
     await tap(el, "Beer");
     emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el, 6);

@@ -498,8 +498,8 @@ until A977).
   The separate core-comment [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
-  naming sites remain in the till's boot/counter and parties suites; other
-  table-screen suites and shared helpers; the payment widget's idle-choice and main suites,
+  naming sites remain in the till's boot/counter, parties and drafts suites;
+  table-screen shared helpers; the payment widget's idle-choice and main suites,
   the server's till API tests and shared station fixtures.
   Shared current-order helper exports (`croquetas`, `tarta`) and their consumers still need English names.
   Shared equipment fixture exports and their other consumers still need English names.
