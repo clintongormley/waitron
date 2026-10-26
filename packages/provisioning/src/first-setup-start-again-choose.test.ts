@@ -660,6 +660,34 @@ it("a record that cannot be written after the set-aside folders were made remove
   expect(await folders(f.roots)).toEqual(before);
 });
 
+it.each([
+  ["symlink", (path: string, elsewhere: string) => symlink(elsewhere, path)],
+  ["file", (path: string) => writeFile(path, "not a folder")],
+] as const)(
+  "a %s at the state folder's set-aside name refuses the Move setup.start_again_set_aside_unavailable, writes no record and moves nothing; a Keep after it succeeds",
+  async (kind, place) => {
+    const f = await found();
+    const elsewhere = await scratch();
+    await place(join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR), elsewhere);
+    const source = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
+
+    await expect(choose(f, "move")).rejects.toMatchObject({
+      code: "setup.start_again_set_aside_unavailable",
+      reason: `set-aside failed: ${kind} state/${START_AGAIN_SET_ASIDE_DIR}`,
+    });
+
+    expect(await recordsOf(f)).toEqual([]);
+    expect(await readdir(elsewhere)).toEqual([]);
+    const still = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
+    expect([still.ino, still.size, still.mtimeNs]).toEqual([
+      source.ino,
+      source.size,
+      source.mtimeNs,
+    ]);
+    expect(await choose(f, "keep")).toEqual({ choice: "keep" });
+  },
+);
+
 it("no log call and no thrown error carries the administrator's name or email", async () => {
   const spies = (["log", "info", "warn", "error", "debug"] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => undefined),

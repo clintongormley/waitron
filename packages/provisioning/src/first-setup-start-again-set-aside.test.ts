@@ -1014,6 +1014,31 @@ it("a rename that fails at the resume refuses setup.start_again_incomplete with 
   ).toBe("found database");
 });
 
+it("a symlink put at the state folder's set-aside name after the record makes the resume refuse, and moves nothing", async () => {
+  const base = await scratch();
+  const attempt = await startAgainAttempt(base);
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  await prepared(roots, attempt.administratorId);
+  const setAside = join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR);
+  const elsewhere = join(base, "elsewhere");
+  await fs.rename(setAside, elsewhere);
+  await fs.symlink(elsewhere, setAside);
+  const [stem] = await readdir(elsewhere);
+  await mkdir(join(elsewhere, stem!, `${PROBE}1-${randomUUID()}`));
+  const before = await snapshot(elsewhere);
+
+  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${START_AGAIN_SET_ASIDE_DIR}`,
+  });
+
+  expect(await snapshot(elsewhere)).toEqual(before);
+  expect(await readFile(join(roots.stateDir, "trading.env"), "utf8")).toBe("X=1\n");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
 it("a piece that cannot be looked at refuses naming it", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
