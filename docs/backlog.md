@@ -123,10 +123,9 @@ come after the list above:
   Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
   bar and List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data)
-  in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built
-  from the build plan below. Slice 3 (the handheld's bar: Floor, a ✎ button per table with this
-  person's unsent dishes, then "?" and ☰) is in review, built from the build plan's slice 3;
-  slices 6–7 are next. A773-2 builds the pass's part, and the phone's
+  in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, and
+  slice 3 (the handheld's bar: Floor, a ✎ button per table with this person's unsent dishes,
+  then "?" and ☰) in #2097, built from the build plan below; slices 6–7 are next. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -2723,8 +2722,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
-  the build plan. Slice 3 (the handheld's bar) is in review, built from the build plan's slice 3;
-  slices 6–7 are next:
+  the build plan, and slice 3 (the handheld's bar) in #2097; slices 6–7 are next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
