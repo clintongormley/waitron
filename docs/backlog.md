@@ -5335,6 +5335,11 @@ Not in any track until the standalone primary is done.
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
 outstanding on code that exists.
 
+- **A1111. Personal sign-in on read-only mirrors.** Review the proposed account, session and
+  fifteen-minute freshness limits; then plan and build personal permission checks in place of the
+  ambient administrator. A usable release also needs qualified account-copy freshness.
+  [Design](superpowers/specs/2026-10-26-a1111-mirror-personal-sign-in-design.md)
+
 - **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a landed as
   [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24. Slices 3a onwards
   are still open; slice 3a's plan is next. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
