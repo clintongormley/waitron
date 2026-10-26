@@ -5,12 +5,10 @@ their full text.
 
 ## A790: document and printer routing plan
 
-The complete A–M / Q1–Q6 routing design, including its builder calls, was approved for
-implementation planning on 2026-10-22 at about 12:00. The
+The owner approved the complete
 [implementation plan](../superpowers/plans/2026-10-22-a790-document-printer-routing.md)
-now proposes the concrete persistence and recovery contract and divides the work into tasks.
-Review and agree the complete plan before execution. This milestone builds no product behavior
-or migration and proves no runtime, legal or physical-paper outcome.
+and build on 2026-10-23. Implementation waits for the A739/G4 recovery gates and release of
+the overlapping paths.
 
 Keep device Invoice selection in the same Equipment Invoice setting, Receipt holding under
 A796 and the dashboard's separate browser memory. Every accepted print keeps its fixed intent;
@@ -35,13 +33,8 @@ shared original/copy guard.
 
 ## Show a failed automatic invoice copy to staff
 
-Found in A366 slice 7 Part A's two run-it reviews. The plan keeps optional document failures
-from undoing a sale. `reserveStagedInvoiceDelivery` returns `undefined` after its failed
-reservation is rolled back; `enqueueSaleReceipt` then skips the paper original. The case
-“omits a refused staged delivery reservation inside an invoice transaction” in
-`apps/server/src/receipt-print.test.ts` exercises a refused email reservation and
-asserts one fiscal record/sale, no delivery rows and no print jobs. The branch's complete
-receipt-print suite passed this case; it does not exercise a staff-visible warning.
+`reserveStagedInvoiceDelivery` returns `undefined` after its failed reservation is rolled back;
+`enqueueSaleReceipt` then skips the paper original.
 
 Trace the working-order issuance and bill-payment answers before choosing a till message,
 retry or alternate-copy action. Keep the saved delivery choice, original/duplicate rules,
@@ -50,28 +43,27 @@ chosen destination.
 
 ## What the AppArmor profile (A129, #862; A134, #887) left open
 
-- **What the AppArmor profile (A129, #862; A134, #887) left open:**
-  - **`trust` is still refused.** A property write (`trust`) and `Disconnect` were measured still
-    refused against the stand-in BlueZ; BlueZ's `Agent1.Release` is not allowed either; the stand-in
-    never sends it, and whether a real BlueZ does is still open.
-  - **Box check owed:** after `sudo bash waitron.sh install`, switch off the kernel's rate limit on
-    its log first (`sudo sysctl -w kernel.printk_ratelimit=0`), which can drop refusal lines —
-    image-smoke switches it off for that reason. Then `scan on` / `scan off` and a pairing from
-    `docker compose exec -it print-agent bluetoothctl`, then
-    `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
-    `waitron-print-agent`.
-  - **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the
-    log do. The page is English-only, with no language switch to carry a Spanish line.
-  - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
-    2026-09-29 on a CI runner against the stand-in BlueZ, with a profile that allowed the bus
-    daemon's own messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed
-    "No default controller available" and exited 0.
-  - **`bluetooth scan failed` is logged on every pass** (left by A131, #915), where the agent's other
-    Bluetooth failure lines are logged once while the same failure repeats, so a box with no adapter
-    logs one line per pass while a discovery window is open.
-  - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
-    the agent has joined and is not out of touch, `/status.json` answers only loopback callers
-    (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
+- **`trust` is still refused.** A property write (`trust`) and `Disconnect` were measured still
+  refused against the stand-in BlueZ; BlueZ's `Agent1.Release` is not allowed either; the stand-in
+  never sends it, and whether a real BlueZ does is still open.
+- **Box check owed:** after `sudo bash waitron.sh install`, switch off the kernel's rate limit on
+  its log first (`sudo sysctl -w kernel.printk_ratelimit=0`), which can drop refusal lines —
+  image-smoke switches it off for that reason. Then `scan on` / `scan off` and a pairing from
+  `docker compose exec -it print-agent bluetoothctl`, then
+  `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
+  `waitron-print-agent`.
+- **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the
+  log do. The page is English-only, with no language switch to carry a Spanish line.
+- **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
+  2026-09-29 on a CI runner against the stand-in BlueZ, with a profile that allowed the bus
+  daemon's own messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed
+  "No default controller available" and exited 0.
+- **`bluetooth scan failed` is logged on every pass** (left by A131, #915), where the agent's other
+  Bluetooth failure lines are logged once while the same failure repeats, so a box with no adapter
+  logs one line per pass while a discovery window is open.
+- **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
+  the agent has joined and is not out of touch, `/status.json` answers only loopback callers
+  (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
 ## Unpair can come back for a short while after a successful unpairing
 
@@ -134,83 +126,81 @@ just a green typecheck.
 
 ## Photographs and timings of pictures on paper
 
-- **Photographs and timings of pictures on paper.** The owner's photographs of a receipt, a kitchen
-  ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
-  so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
-  pictures takes to print on the box is not measured"). Anything the timings or photographs show
-  wrong becomes a new item.
+The owner's photographs of a receipt, a kitchen
+ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
+so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
+pictures takes to print on the box is not measured"). Anything the timings or photographs show
+wrong becomes a new item.
 
 ## Repeat the 58mm physical receipt after the print-area fix
 
-- **Repeat the 58mm physical receipt after the print-area fix.** The owner's wider printer clipped
-  the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
-  printer's own width setting also contributed was not tested. The corrected paper output has not
-  yet been printed. Since C107 the print area is the image's width — 360 or 384 dots on 58 mm paper,
-  512 or 576 on 80 mm.
+The owner's wider printer clipped
+the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
+printer's own width setting also contributed was not tested. The corrected paper output has not
+yet been printed. Since C107 the print area is the image's width — 360 or 384 dots on 58 mm paper,
+512 or 576 on 80 mm.
 
 ## Nobody has yet typed a real printer's address into Check a known address
 
-- **Nobody has yet typed a real printer's address into Check a known address.** The owner's home is
-  the case that motivated it: the box sits on 192.168.10.x and the HP LaserJet on 192.168.20.x,
-  which the port-9100 sweep cannot reach. The first things to try on the box: add the Epson at
-  `192.168.10.81:9100` (the sweep should also list it) and print to it; then type the HP's
-  `192.168.20.56:9100`, which should come back as an office printer.
+The owner's home is
+the case that motivated it: the box sits on 192.168.10.x and the HP LaserJet on 192.168.20.x,
+which the port-9100 sweep cannot reach. The first things to try on the box: add the Epson at
+`192.168.10.81:9100` (the sweep should also list it) and print to it; then type the HP's
+`192.168.20.56:9100`, which should come back as an office printer.
 
 ## The setup-page link is unproven on the box
 
-- **The setup-page link is unproven on the box.** The print agent builds it from
-  `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
-  passes through), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`);
-  no review seat ran the deployed compose and nobody has yet followed the link from a dashboard on
-  the real box.
+The print agent builds it from
+`WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
+passes through), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`);
+no review seat ran the deployed compose and nobody has yet followed the link from a dashboard on
+the real box.
 
 ## Bluetooth at the box
 
-- **Bluetooth at the box.** A first real pairing, and an Unpair, through the dashboard and the
-  agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has
-  yet paired or unpaired a real printer through the dashboard. `waitron.sh install` switches
-  `autopair` off with a systemd drop-in where it can (`deploy/README.md` says when it leaves
-  Bluetooth alone), and the operator then types the PIN, 0000 for a 0000 printer; that drop-in was
-  tried on a GitHub runner, where the Bluetooth service itself never ran, and has not run on the
-  owner's box. Also owed: whether a real Bluetooth service sends `Agent1.Release`, which the
-  profile does not allow and the CI stand-in never sends; what the box's real adapter reports as
-  paired; time a pairing through the dashboard (whether scanning while pairing slows a real pairing
-  is not measured — the agent keeps scanning through a pairing because skipping the scan would drop
-  every unpaired device from the list).
+A first real pairing, and an Unpair, through the dashboard and the
+agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has
+yet paired or unpaired a real printer through the dashboard. `waitron.sh install` switches
+`autopair` off with a systemd drop-in where it can (`deploy/README.md` says when it leaves
+Bluetooth alone), and the operator then types the PIN, 0000 for a 0000 printer; that drop-in was
+tried on a GitHub runner, where the Bluetooth service itself never ran, and has not run on the
+owner's box. Also owed: whether a real Bluetooth service sends `Agent1.Release`, which the
+profile does not allow and the CI stand-in never sends; what the box's real adapter reports as
+paired; time a pairing through the dashboard (whether scanning while pairing slows a real pairing
+is not measured — the agent keeps scanning through a pairing because skipping the scan would drop
+every unpaired device from the list).
 
 ## Printing over RFCOMM from INSIDE the print-agent container (A140)
 
-- **Printing over RFCOMM from INSIDE the print-agent container (A140).** A real RFCOMM connection
-  and print from inside the container under the shipped profile — CI's runners cannot load
-  Bluetooth at all — and whether the printer gets every byte before the connection closes. The
-  owner printed on channel 1 from the host only. image-smoke runs the helper directly with its own
-  arguments, not through `RfcommTransport`, and only as far as creating the socket; and
-  `scripts/deploy-image-env.test.ts` reads the Dockerfile and `package.json` as text, so it does not
-  prove the bundle's default helper path resolves inside the image. The helper's 20 + 20 second
-  connect and send timeouts and the agent's 5-second grace (`apps/print-agent/src/rfcomm.ts`) were
-  not measured on the box.
+A real RFCOMM connection
+and print from inside the container under the shipped profile — CI's runners cannot load
+Bluetooth at all — and whether the printer gets every byte before the connection closes. The
+owner printed on channel 1 from the host only. image-smoke runs the helper directly with its own
+arguments, not through `RfcommTransport`, and only as far as creating the socket; and
+`scripts/deploy-image-env.test.ts` reads the Dockerfile and `package.json` as text, so it does not
+prove the bundle's default helper path resolves inside the image. The helper's 20 + 20 second
+connect and send timeouts and the agent's 5-second grace (`apps/print-agent/src/rfcomm.ts`) were
+not measured on the box.
 
 ## The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the box is not confirmed
 
-- **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
-  box is not confirmed.** It needs the fixed image on the box first: run
-  `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
-  `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
-  and where the printer falls among them; then open Add a printer repeatedly, record on which scan
-  the printer is first marked, and look for `bluetooth info failed` lines in
-  `docker compose logs print-agent`.
+It needs the fixed image on the box first: run
+`docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
+`docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
+and where the printer falls among them; then open Add a printer repeatedly, record on which scan
+the printer is first marked, and look for `bluetooth info failed` lines in
+`docker compose logs print-agent`.
 
 ## Adding a language to the venue also means adding its printer captions, and a language written outside the Latin letters means widening the font table
 
-- **Adding a language to the venue also means adding its printer captions, and a language written
-  outside the Latin letters means widening the font table.** The width ruler's captions are
-  exhaustive over the locale list (`CAPTIONS` in `apps/server/src/test-page.ts`), so a new locale
-  fails to compile until its captions exist. Printed letters come from a table holding
-  U+0020–U+007E, U+00A0–U+017F and the rest of Windows-1252's letters and signs
-  (`packages/printing/scripts/build-glyph-table.mjs`); anything else prints as `?` unless dropping
-  its accent leaves a letter the table holds (`prepareText`, `packages/printing/src/text.ts`). A
-  language needing Cyrillic or Greek needs the table regenerated with a wider range, if the font has
-  those letters (not checked).
+The width ruler's captions are
+exhaustive over the locale list (`CAPTIONS` in `apps/server/src/test-page.ts`), so a new locale
+fails to compile until its captions exist. Printed letters come from a table holding
+U+0020–U+007E, U+00A0–U+017F and the rest of Windows-1252's letters and signs
+(`packages/printing/scripts/build-glyph-table.mjs`); anything else prints as `?` unless dropping
+its accent leaves a letter the table holds (`prepareText`, `packages/printing/src/text.ts`). A
+language needing Cyrillic or Greek needs the table regenerated with a wider range, if the font has
+those letters (not checked).
 
 ## Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)
 
@@ -377,20 +367,20 @@ just a green typecheck.
 
 ## The till's on-screen receipt is a second copy of the layout
 
-- **The till's on-screen receipt is a second copy of the layout.** The till draws a sale's receipt
-  itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
-  … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
-  for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
-  also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), labels each
-  rate's base «Base» (`labels.base`) where paper now prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
-  invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
-  of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
-  dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
-  into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
-  not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a), nor
-  paper's header rows (A754): on every sale it shows captioned invoice-number and date rows, the
-  date in words, with the table and order on a line beneath them, and an operation date only on a
-  full invoice; it does pad the hour to two digits as paper does.
+The till draws a sale's receipt
+itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
+… / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
+for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
+also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), labels each
+rate's base «Base» (`labels.base`) where paper now prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
+invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
+of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
+dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
+into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
+not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a), nor
+paper's header rows (A754): on every sale it shows captioned invoice-number and date rows, the
+date in words, with the table and order on a line beneath them, and an operation date only on a
+full invoice; it does pad the hour to two digits as paper does.
 
 ## On an A4 full invoice, a caption and its amount can split across pages
 
@@ -422,14 +412,14 @@ just a green typecheck.
 
 ## A command queued behind a slow pair can run out of time
 
-- **A command queued behind a slow pair can run out of time.** The 120 seconds count from queueing
-  (`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
-  time (the background worker in `packages/print-agent/src/agent.ts`), and one pair can take the
-  agent up to about 90 seconds (`REGISTER_TIMEOUT_MS`, `PAIR_TIMEOUT_MS` and `EXIT_GRACE_MS`,
-  10, 75 and 5 seconds, in `apps/print-agent/src/bluetooth-command.ts`). A second command
-  waiting behind that pair can therefore expire on the server before it runs; its outcome is
-  then ignored and the screen says "No answer from the print agent — try again" whatever
-  actually happened.
+The 120 seconds count from queueing
+(`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
+time (the background worker in `packages/print-agent/src/agent.ts`), and one pair can take the
+agent up to about 90 seconds (`REGISTER_TIMEOUT_MS`, `PAIR_TIMEOUT_MS` and `EXIT_GRACE_MS`,
+10, 75 and 5 seconds, in `apps/print-agent/src/bluetooth-command.ts`). A second command
+waiting behind that pair can therefore expire on the server before it runs; its outcome is
+then ignored and the screen says "No answer from the print agent — try again" whatever
+actually happened.
 
 ## A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both languages' screens
 
@@ -475,37 +465,34 @@ unpaired outside the agent can resolve as attached for up to ten seconds.
 
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
-- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
-  A268 discards a waiting device's request when the last Add dialog closes. An agent told
-  `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
-  the `not_approved` branch), so its request outlives a shut window instead. **Next action:** find a
-  path, for example an agent that asks again on its own after a refusal, so agents follow the
-  device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
+A268 discards a waiting device's request when the last Add dialog closes. An agent told
+`not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
+the `not_approved` branch), so its request outlives a shut window instead. **Next action:** find a
+path, for example an agent that asks again on its own after a refusal, so agents follow the
+device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
 
 ## One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still open
 
-- **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
-  open:**
-  - No test pins what the two removed addresses, `/manage/receipt` and `/manage/location-settings`,
-    open now; a reading of the router says the overview page, which nobody has run — #993 added
-    that test for `/manage/sections`.
-  - The paper-width dropdown names widths only, not printers, so two printers of one width at
-    different resolutions cannot be told apart (owner's call).
-  - Re-check whether printer and device changes refresh the offered widths while the page stays
-    open. The 2026-10-01 probe found no refresh after `printers` or `tills` invalidation, with
-    `tenant_receipts` as its positive control. That receipt describes the earlier page: A238
-    retired `tills`, W111 added location-address refreshes, and A366 slice 7 replaces the editor
-    and its preview triggers. The printer/device case has not been re-probed on that branch.
+- No test pins what the two removed addresses, `/manage/receipt` and `/manage/location-settings`,
+  open now; a reading of the router says the overview page, which nobody has run — #993 added
+  that test for `/manage/sections`.
+- The paper-width dropdown names widths only, not printers, so two printers of one width at
+  different resolutions cannot be told apart (owner's call).
+- Re-check whether printer and device changes refresh the offered widths while the page stays
+  open. The 2026-10-01 probe found no refresh after `printers` or `tills` invalidation, with
+  `tenant_receipts` as its positive control. That receipt describes the earlier page: A238
+  retired `tills`, W111 added location-address refreshes, and A366 slice 7 replaces the editor
+  and its preview triggers. The printer/device case has not been re-probed on that branch.
 
 ## The Receipts preview redraws the whole receipt once per highlighted part
 
-- **The Receipts preview redraws the whole receipt once per highlighted part.** It finds each
-  part it highlights (a "mark") by drawing the receipt again without that part and comparing the
-  two (`apps/server/src/receipt-preview-api.ts`). W111 took the marks
-  from 2 to 6, so one preview can draw the receipt up to 7 times, and the screen asks for a
-  preview after each pause in typing. Cheaper: have `formatReceipt`
-  (`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
-  every mark. Not measured.
+It finds each
+part it highlights (a "mark") by drawing the receipt again without that part and comparing the
+two (`apps/server/src/receipt-preview-api.ts`). W111 took the marks
+from 2 to 6, so one preview can draw the receipt up to 7 times, and the screen asks for a
+preview after each pause in typing. Cheaper: have `formatReceipt`
+(`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
+every mark. Not measured.
 
 ## Left open by #1261's review, not acted on (2026-10-05)
 
@@ -513,16 +500,6 @@ unpaired outside the agent can resolve as attached for up to ten seconds.
   department receipt usage refuses a library delete. The phone and email length limits (30 and
   254) are copied into `apps/dashboard/src/screens/department-receipt-editor.ts`, separately
   from `packages/layouts/src/validate.ts`.
-
-**2026-10-12, A493:** the venue receipt is no longer a configuration-transfer entry. The
-real transfer cases in `apps/server/src/configuration-transfer.test.ts` assert its absence
-beside populated department receipts and imported logo rasters. The old follow-up asking
-for validation of exported `tenant_receipts` JSON is retired.
-
-The earlier malformed-JSON speculation is retired by the bounded-reader case in
-`packages/layouts/src/receipt-store.test.ts`: after inserting `{broken`, `getReceipt` returns
-`{}`, `getPrintedReceipt` returns `{ receipt: {}, logo: null }`, and `getStoredLogoRasters`
-returns `null`. This checks those readers, not every sale path.
 
 Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
 only the app keeps from deletion; no trigger protects it either.
@@ -558,53 +535,49 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## Loose ends left by #367
 
-- **Loose ends left by #367.**
-  - Follow-up (ruling C): the preview no longer shows the QR link as text for a raster receipt. A
-    possible fix is to carry the link alongside the print job so the preview can still show it as
-    text.
-  - Deferred (ruling H): decide whether to warn when no legal QR dot size exists. Re-check the
-    valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
+- Follow-up (ruling C): the preview no longer shows the QR link as text for a raster receipt. A
+  possible fix is to carry the link alongside the print job so the preview can still show it as
+  text.
+- Deferred (ruling H): decide whether to warn when no legal QR dot size exists. Re-check the
+  valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
 
 ## Loose ends left by A662 (#1803)
 
-- **Loose ends left by A662 (#1803).**
-  - Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes.
-    With Veri\*Factu always offering a default description, the Departments readiness list is empty
-    either way, so `apps/server/src/boot.departments-readiness.test.ts` no longer sees that flag;
-    only `packages/venue-service/src/routes.test.ts` covers "required, no default".
+- Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes.
+  With Veri\*Factu always offering a default description, the Departments readiness list is empty
+  either way, so `apps/server/src/boot.departments-readiness.test.ts` no longer sees that flag;
+  only `packages/venue-service/src/routes.test.ts` covers "required, no default".
 
 ## Loose ends left by A663 Part 3b (#1827)
 
-- **Loose ends left by A663 Part 3b (#1827).**
-  - The default guests count is worked out twice, kept equal by hand: on the till to fill the
-    field (`defaultReceiptGuests`, `apps/till/src/state/receipt-guests.ts`) and on the server when
-    no count is sent (`storableDefault` and `readReceiptGuests`, `apps/server/src/receipt-guests.ts`).
-    A change to one that misses the other shows the waiter one number and stores another.
-  - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
-    amount does ask. The plan chose this; the owner has not said whether leaving should ask.
-  - The number is `guests` on the wire and in the `sale_receipt_guests` column, but `guestCount` on
-    the seat-a-table route, and Split a table uses `guests` for something else. Free to rename
-    before go-live.
-  - On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
-    (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
-    `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guests` shows only at
-    the bottom: `refusalField` has no `guests` case.
-  - `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
-    shapes only so older tests that pin the exact argument count keep passing; one call per path
-    sends the same request.
+- The default guests count is worked out twice, kept equal by hand: on the till to fill the
+  field (`defaultReceiptGuests`, `apps/till/src/state/receipt-guests.ts`) and on the server when
+  no count is sent (`storableDefault` and `readReceiptGuests`, `apps/server/src/receipt-guests.ts`).
+  A change to one that misses the other shows the waiter one number and stores another.
+- Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
+  amount does ask. The plan chose this; the owner has not said whether leaving should ask.
+- The number is `guests` on the wire and in the `sale_receipt_guests` column, but `guestCount` on
+  the seat-a-table route, and Split a table uses `guests` for something else. Free to rename
+  before go-live.
+- On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
+  (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
+  `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guests` shows only at
+  the bottom: `refusalField` has no `guests` case.
+- `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
+  shapes only so older tests that pin the exact argument count keep passing; one call per path
+  sends the same request.
 
 ## Loose ends left by A661 (#1745)
 
-- **Loose ends left by A661 (#1745).**
-  - The till's payment-time options and a staged A4 choice resolve the device's invoice printer
-    without the sale's location. Both call `resolveInvoicePrinter` with no `at`
-    (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
-    another location is believed refused when the delivery is reserved; untested.
-  - The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
-    refuses to resend an original a print request sent, when that printer is not the till's invoice
-    printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The
-    dashboard's `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does
-    not apply that rule. Decide whether a manager's resend should.
+- The till's payment-time options and a staged A4 choice resolve the device's invoice printer
+  without the sale's location. Both call `resolveInvoicePrinter` with no `at`
+  (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
+  another location is believed refused when the delivery is reserved; untested.
+- The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
+  refuses to resend an original a print request sent, when that printer is not the till's invoice
+  printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The
+  dashboard's `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does
+  not apply that rule. Decide whether a manager's resend should.
 
 ## Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768)
 
@@ -623,33 +596,29 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
 
-- **A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full
-  comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).**
-  The receipt table (`apps/server/src/receipt-table.ts`) wraps item text longer than the item
-  column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
-  for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
-  there. Decide whether a short label should be kept whole. The wrapped text is pinned in
-  `apps/server/src/receipt-ticket.test.ts`, in the case "prints F1 reductions before VAT, at their
-  rate, on '80mm' in 'eu-ES'".
+The receipt table (`apps/server/src/receipt-table.ts`) wraps item text longer than the item
+column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
+for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
+there. Decide whether a short label should be kept whole. The wrapped text is pinned in
+`apps/server/src/receipt-ticket.test.ts`, in the case "prints F1 reductions before VAT, at their
+rate, on '80mm' in 'eu-ES'".
 
 ## A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento 100%» whenever every line at its rate was filed at zero (left open by A758-4).
 
-- **A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento
-  100%» whenever every line at its rate was filed at zero (left open by A758-4).** `named` is null
-  when no one adjustment names the row, for instance a dish with two or more comps of its own
-  (`GroupDiscount`, `apps/server/src/receipt-figures.ts`), and the row then falls back to the
-  zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
-  dish to zero as one «Descuento 100%» row, though neither amount counts as full by A911's rule.
-  And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
-  only its own part (the A758-4 plan's owner point 3). Owner to confirm.
+`named` is null
+when no one adjustment names the row, for instance a dish with two or more comps of its own
+(`GroupDiscount`, `apps/server/src/receipt-figures.ts`), and the row then falls back to the
+zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
+dish to zero as one «Descuento 100%» row, though neither amount counts as full by A911's rule.
+And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
+only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 ## Loose ends left by A331 batch 3b (#1415)
 
-- **Loose ends left by A331 batch 3b (#1415).**
-  - A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
-    2026-10-08, for the owner to confirm.
-  - The printer name dialog is titled "Add a printer" when its button says Enable — seen and not
-    changed.
+- A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
+  2026-10-08, for the owner to confirm.
+- The printer name dialog is titled "Add a printer" when its button says Enable — seen and not
+  changed.
 
 ## A department's receipt logo save re-checks only the image's revision, not its id
 
@@ -826,12 +795,6 @@ Add Kitchen A4 and Reception A4 separately and print distinguishable pages to bo
 announced server name, each queue path and where the paper emerges. Repeat with one queue
 unavailable and an already saved single-queue printer. These physical checks remain open.
 
-The local end-to-end fixture uses two paths on one HTTP listener, the real server routes, agent
-loop and IPP sender. It checks each submission's path, printer URI, media and document bytes,
-queue-scoped polling when both jobs return the same id, and both delivery results. Its saved-row
-control compares the row before and after printing without rediscovery. Neither fixture uses
-physical printers or the shipped container.
-
 The discovery caption uses the announced server hostname, with the local suffix removed, when
 available. It falls back to the routing address when no server name was announced; it does not
 construct a friendly computer name from a printer label. See the
@@ -888,12 +851,12 @@ construct a friendly computer name from a printer label. See the
 
 ## A552. Invoices on the owner's office printer are unchecked with the committed code
 
-- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Owed on
-  the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
-  with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
-  from the Printers tab; and what Waitron reports with the tray empty and when the printer is
-  switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
-  A231q changed how a job the printer is holding is reported. Left open by A231q.
+Owed on
+the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
+with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
+from the Printers tab; and what Waitron reports with the tray empty and when the printer is
+switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
+A231q changed how a job the printer is holding is reported. Left open by A231q.
 
 ## A wt-dialog holding hinted fields is taller inside than it shows
 
@@ -910,20 +873,18 @@ construct a friendly computer name from a printer label. See the
   removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
   hint.
 
-
 ## A department's Receipts preview logs nothing when its saved logo's read fails.
 
-- **A department's Receipts preview logs nothing when its saved logo's read fails.** When the draft
-  names the saved logo, `apps/server/src/receipt-preview-api.ts` reads the stored picture through
-  `readPrintedDepartmentReceipt` with the plain scope, no `receiptDiagnostic`, unlike the no-logo
-  branch beside it (since `082553a65`, 2026-10-12; found by #2050's review). Pass the same
-  diagnostic, with a test that a failed read warns.
-
+When the draft
+names the saved logo, `apps/server/src/receipt-preview-api.ts` reads the stored picture through
+`readPrintedDepartmentReceipt` with the plain scope, no `receiptDiagnostic`, unlike the no-logo
+branch beside it (since `082553a65`, 2026-10-12; found by #2050's review). Pass the same
+diagnostic, with a test that a failed read warns.
 
 ## Half of an older receipt test can no longer fail.
 
-- **Half of an older receipt test can no longer fail.** In `apps/server/src/receipt-print.test.ts`,
-  "omits a corrupt explicit department picture without substituting the `tenant_receipts` logo"
-  checks that no `tenant_receipts` logo is substituted, but printing never passed that logo (found
-  by #2050's review); the newer case for a department naming a logo whose pictures are bad covers
-  the real rule. Owner's call: delete the old test, or keep only its corrupt-picture half.
+In `apps/server/src/receipt-print.test.ts`,
+"omits a corrupt explicit department picture without substituting the `tenant_receipts` logo"
+checks that no `tenant_receipts` logo is substituted, but printing never passed that logo (found
+by #2050's review); the newer case for a department naming a logo whose pictures are bad covers
+the real rule. Owner's call: delete the old test, or keep only its corrupt-picture half.

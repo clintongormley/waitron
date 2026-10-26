@@ -3484,7 +3484,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A790. Choose a document and its permitted printer.** The
   [implementation plan](superpowers/plans/2026-10-22-a790-document-printer-routing.md) is
-  published for agreement; implementation remains open.
+  approved for build (owner, 2026-10-23); implementation waits for A739/G4 recovery gates
+  and release of the overlapping paths.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**
