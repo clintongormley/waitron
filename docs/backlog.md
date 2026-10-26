@@ -1183,7 +1183,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   by A756 PR 4's review (#2020).
 
 - **A1083. The department delete preview says "Removes 1 floor plan sets."**
-  Fix: a singular wording for a count of 1.
   [Detail](backlog/service-periods.md#a1083-the-department-delete-preview-says-removes-1-floor-plan-sets)
 
 - **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
@@ -1220,15 +1219,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Left open by A721.
 
 - **A season reads two shades of its colour**
-  Owner's call: keep, or have the chooser show the tint for seasons. Left open by A721.
   [Detail](backlog/service-periods.md#a-season-reads-two-shades-of-its-colour)
 
 - **At phone width the Seasons window cuts longer colour names**
-  Owner's call whether the cut is acceptable or the row should stack on a phone. Left open by A721.
   [Detail](backlog/service-periods.md#at-phone-width-the-seasons-window-cuts-longer-colour-names)
 
 - **At 390 px the Seasons window's month picker runs off the right edge.**
-  Left open by A783.
   [Detail](backlog/service-periods.md#at-390-px-the-seasons-windows-month-picker-runs-off-the-right-edge)
 
 - **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
@@ -1242,11 +1238,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (finish-branch's account of its own fix on #1838; not re-run since). Left open by A719.
 
 - **A per-field department policy repair changes the trading-name default.**
-  With no policy row, readers show the trading name off; PATCH of `orderStart` inserts a row with it on.
   [Detail](backlog/service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
 
 - **A855. The till's zones read builds date formatters on every call (2026-10-18).**
-  Next: keep one formatter per time zone. Left open by A504.
   [Detail](backlog/service-periods.md#a855-the-tills-zones-read-builds-date-formatters-on-every-call)
 
 - **The Month's year link: its focus ring nearly touches the month's name.** The ring sits in the
@@ -1255,8 +1249,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Left open by A759.
 
 - **Loose ends left by A755 (#1809).**
-  The Venue card says nothing about a time zone locked by a past business-day change.
-  A896. The Venue details panel's Venue card keeps an open draft's unsaved-changes protection when it turns read-only.
   [Detail](backlog/service-periods.md#loose-ends-left-by-a755-1809)
 
 - **Loose ends left by A788 (the business-day start changes at the next changeover).**
@@ -1268,50 +1260,48 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   `preview_paper`, `trading_name_location`, `trim_save_error`, `venue_defaults` and `venue_wide`.
 
 - **Loose ends left by A720.**
-  Look at a picked, focused today in the Month.
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-- **A server write that changes a department's hours leaves its zones' closures outside them** —
-  left open by A723 (#1849); the next save of such a zone is refused. [Detail](backlog/service-periods.md#a-server-write-that-changes-a-departments-hours-leaves-its-zones-closures-outside-them)
+- **A server write that changes a department's hours leaves its zones' closures outside them**
+  [Detail](backlog/service-periods.md#a-server-write-that-changes-a-departments-hours-leaves-its-zones-closures-outside-them)
 
-- **The zone-closure hours check runs at the routes, not inside the writers** — left open by A723 (#1849);
-  a direct caller of the writers is not checked. [Detail](backlog/service-periods.md#the-zone-closure-hours-check-runs-at-the-routes-not-inside-the-writers)
+- **The zone-closure hours check runs at the routes, not inside the writers**
+  [Detail](backlog/service-periods.md#the-zone-closure-hours-check-runs-at-the-routes-not-inside-the-writers)
 
-- **Unticking a special date's "Closed all day" brings back its zone paint unchecked** — left open
-  by A723 (#1849). [Detail](backlog/service-periods.md#unticking-a-special-dates-closed-all-day-brings-back-its-zone-paint-unchecked)
+- **Unticking a special date's "Closed all day" brings back its zone paint unchecked**
+  [Detail](backlog/service-periods.md#unticking-a-special-dates-closed-all-day-brings-back-its-zone-paint-unchecked)
 
 - **A change to a department's season week can leave a special date's zone closure outside its
-  new hours** — left open by A723 (#1849); nothing checks it. [Detail](backlog/service-periods.md#a-change-to-a-departments-season-week-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
+  new hours**
+  [Detail](backlog/service-periods.md#a-change-to-a-departments-season-week-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
 
-- **A yearly special day's zone paint is checked against its stored date only** — left open by
-  A723 (#1849), not against each later year's weekday and season. [Detail](backlog/service-periods.md#a-yearly-special-days-zone-paint-is-checked-against-its-stored-date-only)
+- **A yearly special day's zone paint is checked against its stored date only**
+  [Detail](backlog/service-periods.md#a-yearly-special-days-zone-paint-is-checked-against-its-stored-date-only)
 
 - **`opening.follow_week` and `menu.normal_week` have no reader** — found during A723 (#1849); it
   predates A723. Both strings, English and Spanish, are in
   `packages/venue-service/src/dashboard/strings.ts` and nothing reads them; delete them or use them.
 
-- **A special day whose dates have different changeovers is cut on the first date's changeover** —
-  left open by A723 (#1849); the server checks each date on its own and can refuse. [Detail](backlog/service-periods.md#a-special-day-whose-dates-have-different-changeovers-is-cut-on-the-first-dates-changeover)
+- **A special day whose dates have different changeovers is cut on the first date's changeover**
+  [Detail](backlog/service-periods.md#a-special-day-whose-dates-have-different-changeovers-is-cut-on-the-first-dates-changeover)
 
 - **The season-week and closed-week routes do not lower-case a zone or season id, as the
-  special-day route does** — found during A723 (#1849); it predates A723. [Detail](backlog/service-periods.md#the-season-week-and-closed-week-routes-do-not-lower-case-a-zone-or-season-id-as-the-special-day-route-does)
+  special-day route does**
+  [Detail](backlog/service-periods.md#the-season-week-and-closed-week-routes-do-not-lower-case-a-zone-or-season-id-as-the-special-day-route-does)
 
-- **A cut-away zone stroke hides another day's refusal marker until the next Save** — left open by
-  A723 (#1849). [Detail](backlog/service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
+- **A cut-away zone stroke hides another day's refusal marker until the next Save**
+  [Detail](backlog/service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
 
-- **A season closure on a special date is not cut or checked against that date's shorter hours** —
-  found during A723 (#1849), by reading. [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
+- **A season closure on a special date is not cut or checked against that date's shorter hours**
+  [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
 
-- **A723's plan defaults sent to the owner as an FYI** (Decisions 1, 3, 6 and 7; A762's Decision 3,
-  #1850, superseded Decision 9) — the owner may overrule any.
+- **A723's plan defaults sent to the owner as an FYI**
   [Detail](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
 
-- **A762's plan defaults sent to the owner as an FYI** (Decisions 1, 2, 3, 8 and 10) — left open by
-  A762, #1850; the owner may overrule any.
+- **A762's plan defaults sent to the owner as an FYI**
   [Detail](backlog/service-periods.md#a762s-plan-defaults-sent-to-the-owner-as-an-fyi)
 
-- **A purple season looks like a special day** — left open by A762, #1850. A purple season's band and
-  Staffing-month line are 1.26:1 (light) and 1.63:1 (dark) from the special-day purple.
+- **A purple season looks like a special day**
   [Detail](backlog/service-periods.md#a-purple-season-looks-like-a-special-day)
 
 - **The Opening hours Month marks a special day only by its name** — left open by A762, #1850 (its plan's
@@ -1330,24 +1320,19 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A506-1, #1577.
 
 - **Loose ends left by A506-3 (#1591).**
-  - The Business day start dialog repeats the server's conflict-counting rule (`#conflictLines`,
-    `business-day-start-editor.ts`), so a server change would make it miscount unnoticed.
-    [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
+  [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
 
 - **Loose ends left by A506-4 (#1597).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a506-4-1597)
 
-- **A department or zone delete's preview never counts a special day's painted hours**, yet the
-  delete removes them — left open by A506-5, #1603.
+- **A department or zone delete's preview never counts a special day's painted hours**
   [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
 - **Loose ends left by A577 (#1702).**
-  The Opening hours Year page does not show the warning that two special days share a date.
   [Detail](backlog/service-periods.md#loose-ends-left-by-a577-1702)
 
-- **The readiness line for a repeating holiday date names the official holiday**, not the special
-  day's own name, and the Year's missing-holiday warning does the same — left open by A506-5,
-  #1603. [Detail](backlog/service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
+- **The readiness line for a repeating holiday date names the official holiday**
+  [Detail](backlog/service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
 
 - **Once a stored holiday date's year has passed, each order's service-state read
   (`readServiceDayPlan`) also reads the tenant, location and holiday area** to find that year's
@@ -1363,8 +1348,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   open by A789 slice 1, #1948.
 
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
-  kitchen agreed for**, so a routing cell's line for Lunch does not apply to a Lunch dish confirmed
-  after Lunch. Left open by A789 slice 3, #2051 (plan D33).
+  kitchen agreed for**
   [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
 
 - **A1085. Extras added later to a dish sent after its period carry no mark.** An extras-only edit
@@ -1378,16 +1362,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/service-periods.md#a1090-the-zone-keep-opens-managers-pin-dialog-closed-while-its-pin-is-checked-can-leave-the-zones-keep-open-dialog-stuck)
 
 - **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
-  without signing out**, and a send's refusal can open the window after the waiter has left the
-  table; Kitchen agreed then answers "table.error" (`#sendDraft`, `apps/till/src/till-app.ts`). Close
-  both when the table changes, and open the refusal's window only on the table that sent.
-  Reproduced in a browser test by the slice 4 review (#2057). Left open by A789 slice 4.
+  without signing out**
+  [Detail](backlog/service-periods.md#a1091-the-late-send-window-and-its-managers-pin-dialog-stay-open-when-the-waiter-changes-table-without-signing-out)
 
 - **A1095. The till's refusal "A dish's period has ended." names no next step**
-  (`menu_period.ended`, `apps/till/src/i18n/codes.ts`). The till shows it when the box refuses a
-  late dish the till cannot match to any dish it sent, so no late-send window opens; sending again
-  meets the same refusal. Word what the waiter can do (for example, remove the dish or reopen the
-  table so the till marks it). Left open by A789 slice 4, #2057; the wording came with slice 3.
+  [Detail](backlog/service-periods.md#a1095-the-tills-refusal-a-dishs-period-has-ended-names-no-next-step)
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
@@ -1414,8 +1393,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **`range-dialog.ts` (`<range-dialog>`) has no caller**; only its own tests load it — left open by
   A506-9, #1651.
 
-- **A date another manager removed stays in the special-day draft** when this draft changed its
-  paint or Closed tick — left open by A506-9, #1651.
+- **A date another manager removed stays in the special-day draft**
   [Detail](backlog/service-periods.md#a-date-another-manager-removed-stays-in-the-special-day-draft)
 
 - **A special-day draft whose only edits were dropped keeps its old clock revision**
@@ -1443,18 +1421,15 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
 
 - **Cosmetic points from A722 Part 3's look, #1834:**
-  The Spanish phone Month breaks "Sin pedidos" mid-word.
   [Detail](backlog/service-periods.md#cosmetic-points-from-a722-part-3s-look-1834)
 
 - **The painter cannot resize a block by dragging its edge**; painting over a block lengthens it
   and painting Closed shortens it — left open by A506-8, #1634.
 
-- **Painting stops short of an off-quarter-hour changeover** (05:45–06:00 cannot be painted on a
-  05:50 changeover) — left open by A506-8, #1634.
+- **Painting stops short of an off-quarter-hour changeover**
   [Detail](backlog/service-periods.md#painting-stops-short-of-an-off-quarter-hour-changeover)
 
-- **A season painter save writes each edited week whole**, so it can put back days another
-  manager changed, and nothing shows it — left open by A506-8, #1634.
+- **A season painter save writes each edited week whole**
   [Detail](backlog/service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
 
 - **`ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for
@@ -1487,24 +1462,19 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The special-day painter's note under "Every year" (`special.holiday_note`) says "each year"
   twice in English** and reads as awkwardly in Spanish — left open by A506-7, #1623.
 
-- **Two date helpers read years 0 to 99 as 1900 to 1999** (`isLocalDate`, `addMonths`); changing
-  `isLocalDate` changes which dates the server accepts, so it needs a decision — left open by
-  A506-6, #1609. [Detail](backlog/service-periods.md#two-date-helpers-read-years-0-to-99-as-1900-to-1999)
+- **Two date helpers read years 0 to 99 as 1900 to 1999**
+  [Detail](backlog/service-periods.md#two-date-helpers-read-years-0-to-99-as-1900-to-1999)
 
 - **Two holidays with one name in one year's list**
-  Re-check when a new year's list is added.
   [Detail](backlog/service-periods.md#two-holidays-with-one-name-in-one-years-list)
 
 - **Re-check that each Departments screen recovery case fails when its recovery step is deleted.**
   An unresolved assertion finding from A366 slice 6 Part C (#1510); A493 relocated its owner.
 
 - **A897. Sales by department**
-  Left open by #297; found by A825.
   [Detail](backlog/service-periods.md#a897-sales-by-department)
 
-- **Refresh service settings on an open till** — decide how changed department/zone policy
-  reaches an empty till and preserves an existing basket's facts, then carry it through polling.
-  Fresh sign-in reads changed settings; the open till keeps its loaded flow.
+- **Refresh service settings on an open till**
   [Detail](backlog/service-periods.md#refresh-service-settings-on-an-open-till)
 
 - **Concurrent department settings edits** — decide whether two managers editing the same
@@ -1512,21 +1482,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   probe remains to be run before choosing a conflict policy.
 
 - **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
-  Served at a table or counter; payment due before the kitchen, at collection or at the end of
-  the tab. Slice 6 keeps the three-value order record and its behaviour.
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
 
 - **Compare computed station weeks with live routing on a painted special-day date without zone paint.**
   The slice 4 review read the planning and zone-week paths but did not compare the real sale
   resolver. Add a real-database comparison before claiming they agree on that case.
 
-- **Who authorised today's station or zone change** — A366 slice 3 decision 14 leaves
-  the authorising person's identity unstored. Decide whether to retain that identity before
-  adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-zone-change)
+- **Who authorised today's station or zone change**
+  [Detail](backlog/service-periods.md#who-authorised-todays-station-or-zone-change)
 
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — residuals.**
-  Tabs without tables, the remaining department-name survey, and advisor questions stay open.
-  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md);
   [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
 
 - **A rename refusal without a supplied name remains a database error, rather than returning an
