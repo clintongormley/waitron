@@ -395,8 +395,8 @@ describe("zone CRUD", () => {
 // tab → fire → bump → serve path.
 async function setupTabVenue(): Promise<{
   cfg: OriginConfig;
-  cafeId: string;
-  aguaId: string;
+  coffeeId: string;
+  waterId: string;
   tableId: string;
   offers: ZoneOffers;
 }> {
@@ -424,20 +424,20 @@ async function setupTabVenue(): Promise<{
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const { cafeId, aguaId, tableId, offers } = await withTransaction(db, async (tx) => {
+  const { coffeeId, waterId, tableId, offers } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const cafe = await createProduct(tx, {
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const coffee = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, {
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -446,21 +446,21 @@ async function setupTabVenue(): Promise<{
     await assignCatalogueToLocation(tx, locationId, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
-    return { cafeId: cafe.id, aguaId: agua.id, tableId: table.id, offers };
+    return { coffeeId: coffee.id, waterId: water.id, tableId: table.id, offers };
   });
-  return { cfg, cafeId, aguaId, tableId, offers };
+  return { cfg, coffeeId, waterId, tableId, offers };
 }
 
 describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
   it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
-    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
+    const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "1" },
+          { productId: coffeeId, quantity: "1" },
+          { productId: waterId, quantity: "1" },
         ]),
       }),
     );
@@ -505,14 +505,14 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
 
 describe("listTablesWithState — A773 no dispatch state", () => {
   it("reports ready food without a dispatch field and keeps service and Undo counts", async () => {
-    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
+    const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "1" },
+          { productId: coffeeId, quantity: "1" },
+          { productId: waterId, quantity: "1" },
         ]),
       }),
     );
@@ -577,14 +577,14 @@ describe("listTablesWithState — A773 no dispatch state", () => {
 // The worst age band across the open tab's unserved lines, each against its own station's thresholds.
 describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   it("bands a line by its station thresholds and clears once served (design §3 — ages until it reaches the guest)", async () => {
-    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
+    const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "1" },
+          { productId: coffeeId, quantity: "1" },
+          { productId: waterId, quantity: "1" },
         ]),
       }),
     );
@@ -621,14 +621,14 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   });
 
   it("worst-line-wins: a forgotten line outranks a fresh one on the same table", async () => {
-    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
+    const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "1" },
+          { productId: coffeeId, quantity: "1" },
+          { productId: waterId, quantity: "1" },
         ]),
       }),
     );
