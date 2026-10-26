@@ -1129,14 +1129,16 @@ describe("a start refused before it began", () => {
     {
       code: "setup.start_again_incomplete",
       "en-GB": {
-        title: "Start again did not finish, and the box found files it did not expect.",
+        title:
+          "Start again did not finish: the box found files it did not expect, or could not read or delete one.",
         action:
-          "The box has not changed these files, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
+          "The box has not changed files it did not expect, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
       },
       "es-ES": {
-        title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+        title:
+          "«Empezar de nuevo» no terminó: el equipo encontró archivos que no esperaba, o no pudo leer o borrar uno.",
         action:
-          "El equipo no ha cambiado estos archivos, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.",
+          "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
       },
     },
   ] as const;

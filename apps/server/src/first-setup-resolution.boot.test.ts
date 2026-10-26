@@ -467,9 +467,10 @@ const REFUSED_TEXT = {
     action: "Reinstall Waitron on this box to start fresh.",
   },
   "setup.start_again_incomplete": {
-    title: "Start again did not finish, and the box found files it did not expect.",
+    title:
+      "Start again did not finish: the box found files it did not expect, or could not read or delete one.",
     action:
-      "The box has not changed these files, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
+      "The box has not changed files it did not expect, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
   },
 } as const;
 
