@@ -768,8 +768,8 @@ it("answers a stale tab's Check after a finished Cloud recovery, and leases noth
 });
 
 // The Cloud fixture leaves its pending id waiting with no holder, so a fence with nothing running
-// seals it; a Start after that is a new wait, under a new id and a new Cloud request.
-async function startsAfresh(
+// seals it; a Start after that leases a new wait, which carries the sealed one's Cloud request.
+async function leasesNewWait(
   f: Awaited<ReturnType<typeof cloudFixture>>,
   started: Promise<unknown>,
 ) {
@@ -777,18 +777,19 @@ async function startsAfresh(
   expect(answer.state).toBe("awaiting_owner");
   expect(f.service.runningInMemory()).toBe(true);
   expect(await f.service.liveness()).toMatchObject({ state: "running" });
-  expect(answer.requestId).not.toBe(f.approved.requestId);
   f.service.cloudRenew("A");
+  return answer;
 }
 
-it("starts a fresh Cloud recovery when Start is pressed after a fence sealed the waiting one", async () => {
+it("keeps the waiting Cloud request when Start is pressed after a fence sealed its wait, under a new wait", async () => {
   const f = await cloudFixture();
   f.service.sealLapsed();
   expect(() => f.service.cloudRenew("A")).toThrow(refused);
-  await startsAfresh(f, f.service.cloudStart("A"));
+  const answer = await leasesNewWait(f, f.service.cloudStart("A"));
+  expect(answer.requestId).toBe(f.approved.requestId);
 });
 
-it("starts a fresh Cloud recovery when a fence seals the waiting one while Start waits its turn", async () => {
+it("keeps the waiting Cloud request under a new wait when a fence seals the old one while Start waits its turn", async () => {
   const f = await cloudFixture();
   const gate = barrier();
   const holding = f.options.host.coordinator.run(() => gate.promise);
@@ -800,7 +801,8 @@ it("starts a fresh Cloud recovery when a fence seals the waiting one while Start
     gate.resolve();
   }
   await holding;
-  await startsAfresh(f, starting);
+  const answer = await leasesNewWait(f, starting);
+  expect(answer.requestId).toBe(f.approved.requestId);
 });
 
 it("keeps the waiting Cloud recovery's own request when nothing seals it while Start waits its turn", async () => {
@@ -817,11 +819,121 @@ it("keeps the waiting Cloud recovery's own request when nothing seals it while S
   f.service.cloudRenew("A");
 });
 
-it("starts a fresh Cloud recovery when Start again is pressed after a fence sealed the waiting one", async () => {
+it("keeps A's hold on the waiting Cloud recovery when B presses Start with nothing sealed", async () => {
+  const f = await heldCloudWait("A");
+  expect((await f.service.cloudStart("B")).requestId).toBe(f.approved.requestId);
+  f.service.cloudRenew("A");
+  f.service.cloudRenew("B");
+});
+
+it("asks Cloud about the old request when Start again is pressed after a fence sealed its wait, as with no seal", async () => {
   const f = await cloudFixture();
   f.service.sealLapsed();
   f.control.expired = true;
-  await startsAfresh(f, f.service.cloudStartAgain("A"));
+  const before = f.calls.length;
+  const answer = await leasesNewWait(f, f.service.cloudStartAgain("A"));
+  expect(f.calls.slice(before)).toEqual(["status", "start"]);
+  expect(answer.requestId).not.toBe(f.approved.requestId);
+});
+
+it("keeps an approved Cloud request through a seal: Start returns it, and Start again is refused while it is live", async () => {
+  const f = await cloudFixture();
+  f.service.sealLapsed();
+  await expect(f.service.cloudStartAgain("A")).rejects.toThrow("Cloud recovery is unavailable");
+  expect(await f.service.cloudStatus("A")).toMatchObject({
+    state: "approved",
+    requestId: f.approved.requestId,
+  });
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(() => f.service.cloudRenew("A")).toThrow(refused);
+  const answer = await leasesNewWait(f, f.service.cloudStart("A"));
+  expect(answer.requestId).toBe(f.approved.requestId);
+  expect(await f.service.cloudStatus("A")).toMatchObject({
+    state: "approved",
+    requestId: f.approved.requestId,
+  });
+  await expect(f.service.cloudStartAgain("A")).rejects.toThrow("Cloud recovery is unavailable");
+  expect(f.service.runningInMemory()).toBe(true);
+  f.service.cloudRenew("A");
+});
+
+it("leaves a sealed Cloud wait and its request as they were when the Start after the seal fails", async () => {
+  const f = await cloudFixture();
+  f.service.sealLapsed();
+  f.control.refuse = "start";
+  await expect(f.service.cloudStart("A")).rejects.toThrow("Cloud recovery is unavailable");
+  f.control.refuse = "";
+  expect(await f.service.cloudStatus("A")).toMatchObject({
+    state: "approved",
+    requestId: f.approved.requestId,
+  });
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(() => f.service.cloudRenew("A")).toThrow(refused);
+  const answer = await leasesNewWait(f, f.service.cloudStart("A"));
+  expect(answer.requestId).toBe(f.approved.requestId);
+});
+
+it("keeps the new wait a Start takes over leased when a fence runs during its Cloud call", async () => {
+  const f = await cloudFixture();
+  const gate = barrier();
+  const reached = barrier();
+  let holding = false;
+  const service = recovery({
+    ...f.options,
+    cloud: {
+      ...f.options.cloud,
+      fetch: async (url: string | URL | Request, init?: RequestInit) => {
+        if (holding) {
+          reached.resolve();
+          await gate.promise;
+        }
+        return f.options.cloud.fetch(url, init);
+      },
+    },
+  });
+  const first = await service.cloudStart();
+  service.sealLapsed();
+  holding = true;
+  const starting = service.cloudStart("A");
+  starting.catch(() => {});
+  try {
+    await reached.promise;
+    service.sealLapsed();
+  } finally {
+    gate.resolve();
+  }
+  expect((await starting).requestId).toBe(first.requestId);
+  expect(service.runningInMemory()).toBe(true);
+  service.cloudRenew("A");
+});
+
+it("writes the journal of an open after a seal under a new wait, so its holder's Check leases once the session closes", async () => {
+  const f = await cloudFixture();
+  f.service.sealLapsed();
+  const session = await f.service.open(f.request, client);
+  await f.service.prepare(session.sessionId, { action: "clock-challenge" }, client);
+  expect((await f.workspace.read()).at(-1)!.target.recoveryId).toBe(session.recoveryId);
+  await f.service.close(session.sessionId);
+  expect(f.service.runningInMemory()).toBe(false);
+  expect((await f.service.cloudStatus("A")).state).toBe("approved");
+  expect(f.service.runningInMemory()).toBe(true);
+  f.service.cloudRenew("A");
+});
+
+it("leaves a sealed Cloud wait and its request as they were when an open after the seal fails", async () => {
+  const f = await cloudFixture();
+  f.service.sealLapsed();
+  f.control.refuse = "read";
+  await expect(f.service.open(f.request, client)).rejects.toBeDefined();
+  f.control.refuse = "";
+  expect(await f.service.cloudStatus("A")).toMatchObject({
+    state: "approved",
+    requestId: f.approved.requestId,
+  });
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(() => f.service.cloudRenew("A")).toThrow(refused);
+  const answer = await leasesNewWait(f, f.service.cloudStart("A"));
+  expect(answer.requestId).toBe(f.approved.requestId);
 });
 
 it("answers Check on a sealed Cloud recovery from its own request, and leases nothing", async () => {

@@ -314,15 +314,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     cloudScratch.push(stateDir);
     clouds.set(id, { stateDir, client: createCloudRecoveryClient({ ...options.cloud, stateDir }) });
   };
-  // A sealed id stays final. With no journal nothing is kept under it, so the next Start or Start
-  // again begins a new wait under a new id and a new Cloud request; Check keeps reading the old one.
+  // A seal bars only its id's wait. With no journal, a Start, Start again or open that succeeds
+  // moves the sealed id's Cloud client, and with it the Cloud request, to a new id with a new wait,
+  // so an approval Cloud already granted is kept. Check never moves it.
   const pendingSealed = () =>
     pendingCloudId !== undefined && cloudWaits.get(pendingCloudId)?.sealed !== undefined;
-  const freshCloud = async () => {
-    const id = randomUUID();
-    await scratchCloud(id);
-    clouds.delete(pendingCloudId!);
+  const takeOver = (sealed: string, id: string = randomUUID()) => {
+    const cloud = clouds.get(sealed);
+    if (cloud !== undefined) clouds.set(id, cloud);
+    clouds.delete(sealed);
     pendingCloudId = id;
+    const { startedAt, lastActiveAt } = lease();
+    cloudWaits.set(id, { startedAt, lastActiveAt, holders: new Map() });
+    return id;
   };
   const saveCloud = async (entry: Entry, destination: string) => {
     const cloud = await cloudFor(entry.session.recoveryId);
@@ -694,13 +698,14 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           pendingCloudId = record.target.recoveryId;
           clouds.delete(pendingCloudId);
-        } else if (pendingSealed()) await freshCloud();
+        }
+        const sealed = record === undefined && pendingSealed();
         pendingCloudId ??= randomUUID();
         await scratchCloud(pendingCloudId);
         generation++;
         const id = pendingCloudId;
         const answer = await (await cloudFor(id)).client.start();
-        holdCloud(id, record, holder);
+        holdCloud(sealed ? takeOver(id) : id, record, holder);
         return answer;
       });
     },
@@ -732,11 +737,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             )) !== null)
         )
           conflict();
-        if (record === undefined && pendingSealed()) await freshCloud();
+        const sealed = record === undefined && pendingSealed();
         generation++;
         const id = pendingCloudId;
         const answer = await (await cloudFor(id)).client.startAgain();
-        holdCloud(id, record, holder);
+        holdCloud(sealed ? takeOver(id) : id, record, holder);
         return answer;
       });
     },
@@ -762,9 +767,15 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
           const records = await liveRecords();
           const record = records.at(-1);
+          const sealedId =
+            request.recoveryId === undefined && request.source.kind === "cloud" && pendingSealed()
+              ? pendingCloudId
+              : undefined;
           const recoveryId =
             request.recoveryId ??
-            (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
+            (request.source.kind === "cloud" && sealedId === undefined
+              ? pendingCloudId
+              : undefined) ??
             randomUUID();
           if (
             request.recoveryId === undefined
@@ -781,9 +792,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           const digest = await options.workspace.inspect(recoveryId);
           if (record !== undefined && digest !== record.observation.originalsDigest) conflict();
-          return { digest, generation: ++generation, record, recoveryId };
+          return { digest, generation: ++generation, record, recoveryId, sealedId };
         });
-        const { recoveryId } = before;
+        const { recoveryId, sealedId } = before;
+        const cloudId = sealedId ?? recoveryId;
         // Decrypted copies and key derivation stay outside the retained roots and their action lock.
         const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
         let selected: Selected | undefined;
@@ -803,7 +815,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               ...(request.source.kind === "cloud"
                 ? {
                     cloudRecovery:
-                      options.cloud === undefined ? undefined : (await cloudFor(recoveryId)).client,
+                      options.cloud === undefined ? undefined : (await cloudFor(cloudId)).client,
                   }
                 : {}),
               stateDir: scratch,
@@ -876,7 +888,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               provedVerifier,
               ...(request.source.kind === "cloud"
                 ? {
-                    cloudState: await readCloudRecoveryState((await cloudFor(recoveryId)).stateDir),
+                    cloudState: await readCloudRecoveryState((await cloudFor(cloudId)).stateDir),
                   }
                 : {}),
             };
@@ -933,6 +945,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               }
               refresh(entry);
               touch(entry);
+              if (sealedId !== undefined) takeOver(sealedId, recoveryId);
               handOver(recoveryId);
               owned = false;
               return structuredClone(session);
