@@ -82,7 +82,7 @@ export const initialOwnerStrings = {
       "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
     recoveryUnreadable:
       "Este equipo encontró una recuperación desde una copia cuyos registros no se pueden leer.",
-    checkAgain: "Comprobar de nuevo",
+    checkAgain: "Comprobar otra vez",
     missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",

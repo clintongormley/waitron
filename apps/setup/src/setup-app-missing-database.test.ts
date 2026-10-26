@@ -5,6 +5,7 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import { backupRepairStrings } from "./i18n/backup-repair.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 
 import {
@@ -889,5 +890,12 @@ it.each(locales)(
     expect(q(app, "check-again")).toBeNull();
     expect(q(app, "recovery-unreadable")).toBeNull();
     expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "the setup page's Check again has the backup screen's words for the same button (%s)",
+  (locale) => {
+    expect(initialOwnerStrings[locale].checkAgain).toBe(backupRepairStrings[locale].reconnect);
   },
 );
