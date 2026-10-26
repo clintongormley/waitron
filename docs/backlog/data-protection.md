@@ -206,8 +206,10 @@ by the answers):
   (`tenants.privacy_notice_url`, `tenants.privacy_email`, saved from the **Privacy** card on
   **Venue settings → Venue details**; the
   [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)), and the
-  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Until then nothing reads the stored
-  values. The readers, as of 2026-10-26:
+  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Waits for S1a2 (the export point
+  below). Until S1b, only the Privacy card's own read uses the stored values; the emails, the
+  sign-in page, the profile page and the downloads still take the environment setting. The
+  readers, as of 2026-10-26:
   - `apps/server/src/boot.ts:2012`, into `mountManagementApi`, which passes the link to the
     invitation and reset emails (`apps/server/src/management-api.ts:194`) and answers it on
     `GET /management-api/google/config` (`management-api.ts:788-790`), a route that needs no
@@ -224,17 +226,21 @@ by the answers):
   - `apps/server/README.md:487` documents the environment setting; S1b removes it with the setting.
   - The guide (`apps/server/src/guide/<language>/data-protection.md`): S1b rewrites the
     `privacy-settings` section's last sentence, "For now Waitron only keeps them here: nothing
-    else on the box shows them." ("Por ahora Waitron solo los guarda aquí: nada más en la caja los
+    else on the box shows them." ("Por ahora Waitron solo los guarda aquí: nada más en el equipo los
     muestra."), and names the setting in `staff-notice` and `full-notice`.
-- **A configuration export carries the privacy contact** (the owner's answer of 2026-10-26 to the
-  S1a plan's decision B, overriding its default). Today the export names the taxpayer's fields one
+- **S1a2 — a configuration export carries the privacy contact** (the owner's answer of
+  2026-10-26 to the S1a plan's decision B, overriding its default). Today the export names the taxpayer's fields one
   by one and selects neither column (`packages/provisioning/src/configuration-transfer.ts`, bundle
   `version: 8`), so a new box set up from Bar Ejemplo's export shows "Not set" for both. Next
-  action: add both to the bundle, its import check (which must refuse exactly what the Privacy
-  card's save refuses, `packages/shared/src/privacy-contact.ts`) and the setup paths that apply it
-  (`apps/server/src/setup-api.ts`, `packages/provisioning/src/venue-apply.ts`), then drop the
-  guide's "A configuration export does not carry them …" sentence in both languages. The owner
-  asked for it inside S1a if it fits, else as the next slice before S1b.
+  action: add both to `configuration-transfer.ts`'s export query and its import check (which
+  must refuse exactly what the Privacy card's save refuses, `packages/shared/src/privacy-contact.ts`),
+  and to the setup path that applies them: `apps/server/src/setup-api.ts`,
+  `packages/provisioning/src/venue-plan.ts`, `packages/provisioning/src/venue-apply.ts` and
+  `packages/provisioning/src/first-setup-state.ts`. Then drop the guide's "A configuration export
+  does not carry them …" sentence in both languages. It is its own slice, S1a2, after S1a and
+  before S1b (ruled 2026-10-26: it changes the bundle between `@waitron/provisioning` and the
+  server, so it gets its own plan and a FULL review; FYI in lane B's questions file, "A980 S1a:
+  the export of the privacy contact is the NEXT slice, S1a2").
 - **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
   confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
   `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
@@ -317,12 +323,13 @@ by the answers):
   watcher, `questions.md:4400` in lane B's campaign folder.
 - **A980 S1a, 2026-10-26:** the owner kept five of the
   [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)'s six defaults (its
-  "Open decisions for the owner"; decision B was overridden, the export point under A980 above).
+  "Open decisions for the owner"; decision B was overridden, S1a2 under A980 above).
   Relayed by the watcher, the "OWNER ANSWER — A980 S1a plan defaults A–F" section of lane B's
   questions file.
-  - **A. Nothing reads the setting until S1b.** A manager saves
-    `https://barejemplo.es/privacidad` on the Privacy card and the card shows it, but an
-    invitation sent that afternoon carries no privacy link until S1b.
+  - **A. Nothing but the Privacy card reads the setting until S1b.** A manager saves
+    `https://barejemplo.es/privacidad` on the Privacy card and the card shows it, but on a box,
+    which has no `WAITRON_PRIVACY_NOTICE_URL`, an invitation sent that afternoon carries no privacy
+    link until S1b.
   - **C. A supervisor sees the values.** The card is shown under `venue.view`, read-only and with
     no Edit button without `venue.configure`.
   - **D. The card is last among the core cards**: Business, Venue, Business day, Defaults, Privacy,
