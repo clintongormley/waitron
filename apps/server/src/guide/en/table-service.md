@@ -148,7 +148,8 @@ table you are at, and at any other table when the Floor next updates its tables.
 Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
 in **More** (☰): your name and clock actions when the bar has no room for them, which on a phone is
 always, the screens your profile allows, **Settings** (**Zones on this device**, **Equipment**,
-**Language** and **Theme**) and **Log out**.
+**Language** and **Theme**) and **Log out** and, while the venue has a logo, **Powered by Waitron**
+under it.
 
 ## Give a table a short name {#short-names}
 

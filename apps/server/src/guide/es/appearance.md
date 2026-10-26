@@ -153,9 +153,12 @@ El logotipo del tema en uso se ve en estos lugares:
   teléfono, lo deja fuera del todo.
 - **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
   del nombre del dispositivo y de la lista de nombres.
-- **«Con la tecnología de Waitron»**, una línea bajo el formulario de inicio de sesión del panel y
-  al pie de la pantalla de inicio de sesión de una caja registradora o de un terminal de camarero,
-  que se ve mientras hay un logotipo.
+- **«Con la tecnología de Waitron»**, que se ve mientras hay un logotipo: bajo el formulario de
+  inicio de sesión del panel; en la franja superior del panel con la sesión iniciada, antes de los
+  botones del final (en una pantalla estrecha, como la de un teléfono, tras la razón social, en la
+  segunda línea de la franja, o debajo de ella si no caben en la misma línea); al pie de la pantalla
+  de inicio de sesión de una caja registradora o de un terminal de camarero; y al pie del menú
+  **Más** (☰) de un terminal de camarero, bajo **Salir**.
 - **Un ticket que se muestra en la pantalla de una caja registradora o de un terminal de
   camarero**, encima del nombre del local. Ahí también tiene prioridad el logotipo de ticket propio
   del departamento, y siempre se ve el logotipo principal, nunca la versión para pantallas oscuras.

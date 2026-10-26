@@ -1512,6 +1512,10 @@ banner and the bar keep Waitron's own and nothing is added. Exactly where:
   a hand-set page or muted colour could lower that, as it already can for every hint on the page.
   I add no rule for it, because a new rule would change the sweeps' counts of section 6.
 
+(2026-10-25, A1096: the owner added the line to the signed-in dashboard banner and the foot of a
+handheld's ☰ menu; a cash register's ☰ menu gains it with slice 14 — see `docs/backlog.md`,
+"A1096's last part".)
+
 **Light and dark** (my call). One image is required; a second, for dark screens, is optional. With
 both, each screen draws its version's image, the Theme setting deciding as it does for colours
 (section 7). With one, dark screens draw it on a **plate**: a rounded box filling the logo's box,

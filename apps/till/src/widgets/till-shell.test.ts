@@ -1433,7 +1433,7 @@ describe("till-shell at phone width", () => {
     [360, 640],
     [390, 664],
   ])(
-    "puts Log out last in More, reachable by scrolling it, at %ix%i, in Spanish",
+    "with no venue logo, puts Log out last in More, reachable by scrolling it, at %ix%i, in Spanish",
     async (width, height) => {
       const original = currentLocale();
       setLocale("es-ES");

@@ -1998,12 +1998,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   113–120 ms for a second table in the same zone.
 
 - **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
-  2026-10-17).** On a handheld, since A797 slice 3, Log out is last in ☰, after the Settings group
-  (design §3.1), so with every entry offered it sits below the menu's bottom edge at 360×640 (759 px
-  against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and nothing says the
-  menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px). Decide whether
-  More should show that it scrolls, or hold fewer items on a short
-  screen.
+  2026-10-17).** On a handheld, since A797 slice 3, Log out follows the Settings group, last in ☰
+  but for A1096's "Powered by" line (and its rule) under it while a venue logo is in use, which adds
+  to the height (design §3.1), so with every entry offered it sits below the menu's bottom edge at
+  360×640 (759 px against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and
+  nothing says the menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px).
+  Decide whether More should show that it scrolls, or hold fewer items on a short screen.
 
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
   2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
@@ -2943,7 +2943,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   invoices of every department with no receipt logo of its own and of a sale with no department, a
   department's own logo still first; a department whose receipt settings cannot be trusted prints
   no logo; the till's ticket view and a department's Receipts preview follow the same rule.
-  Next: 9b, 11, 12 and 14.
+  Next: 9b, 11, 12 and 14 (14 with A1096's last part, below).
+
+- **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
+  A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
+  and a handheld's ☰ menu show the sign-in screens' "Powered by" line (A1096). A cash register's ☰
+  menu gains the same line, under Log out, once its bar draws the logo (slice 14); until then its
+  bar draws no logo and no word. Mock-up: `t2-till-menu-light.png` and `-dark` in
+  [mockups/a1096-powered-by/](backlog/mockups/a1096-powered-by/). Test it as the handheld's is
+  tested: shown exactly while a logo is in use, English and Spanish, both themes, an axe check.
 
 - **The theme delete dialog does not say the tills' text changes size (A841 slice 10a's review,
   #2045).** Deleting the theme in use puts Waitron's theme, at 100%, on every screen; the switch

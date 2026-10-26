@@ -56,7 +56,7 @@ async function mountShell(
 async function controlHeight(signedIn: boolean, locale: Locale): Promise<number> {
   const { banner } = await mountShell(null, signedIn, locale);
   expect(banner.querySelector(".brand-logo")).not.toBeNull();
-  const height = banner.getBoundingClientRect().height;
+  const height = heightWithoutVenueRow(banner);
   cleanupWidgets();
   return height;
 }
@@ -66,6 +66,17 @@ function sameRow(a: Element, b: Element): boolean {
   const first = a.getBoundingClientRect();
   const second = b.getBoundingClientRect();
   return first.top < second.bottom && second.top < first.bottom;
+}
+
+/**
+ * The banner's height without the row holding the legal name, which a narrow banner puts second
+ * and a wide one lays out in its only row (the row's own box then measures 0). With a logo in use a
+ * signed-in banner also shows Powered by in it, which the no-logo control lacks, and how many lines
+ * that row then takes depends on the fonts.
+ */
+function heightWithoutVenueRow(banner: HTMLElement): number {
+  const row = banner.querySelector(".venue-row")!.getBoundingClientRect();
+  return banner.getBoundingClientRect().height - row.height;
 }
 
 let width = 0;
@@ -116,7 +127,7 @@ async function check(
     expect(sameRow(logo, banner.querySelector("[data-test=theme-chooser]")!)).toBe(true);
     expect(sameRow(logo, banner.querySelector("[data-test=language-chooser]")!)).toBe(true);
   }
-  expect(banner.getBoundingClientRect().height).toBe(expectedHeight);
+  expect(heightWithoutVenueRow(banner)).toBe(expectedHeight);
   expect(el.shadowRoot!.querySelector(".brand-logo")?.checkVisibility() ?? false).toBe(false);
 }
 

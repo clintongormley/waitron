@@ -674,6 +674,13 @@ export class DashboardApp extends LitElement {
         display: contents;
       }
 
+      .banner-powered-by {
+        flex: 0 0 auto;
+        margin-inline-start: auto;
+        padding-inline-end: var(--wt-space-3);
+        border-inline-end: 1px solid var(--wt-color-border);
+      }
+
       .venue {
         display: flex;
         align-items: center;
@@ -750,9 +757,9 @@ export class DashboardApp extends LitElement {
          constant that drives the narrow state). */
       @media (max-width: 48rem) {
         /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
-           one line, so the name, the pill and the inbox link, when shown, take a second row and the
-           trailing controls stay at the trailing edge of the first. The lockup's column is the one
-           that shrinks, so the trailing controls keep the first row. */
+           one line, so the name, the pill and, signed in with a venue logo, Powered by take a second
+           row and the trailing controls stay at the trailing edge of the first. The lockup's column
+           is the one that shrinks, so the trailing controls keep the first row. */
         .brand-banner {
           display: grid;
           grid-template-columns: auto minmax(0, max-content) 1fr auto;
@@ -776,15 +783,24 @@ export class DashboardApp extends LitElement {
           grid-area: actions;
           margin-inline-start: var(--wt-space-2);
         }
+        /* Powered by moves under the name, rather than past the screen's edge, whenever the name and
+           its Live pill on one line do not fit beside it: the name block keeps its content-sized
+           basis, so the row breaks before the name would. A name wider than the whole row wraps
+           inside it. */
         .venue-row {
           grid-area: venue;
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
-          gap: var(--wt-space-3);
+          gap: var(--wt-space-2) var(--wt-space-3);
         }
         .venue-name {
           padding-inline-start: 0;
           border-inline-start: 0;
+        }
+        .banner-powered-by {
+          padding-inline-end: 0;
+          border-inline-end: 0;
         }
         /* The closed drawer is moved out past .layout's left edge, which is not the window's: the
            page's own padding would show its last strip. */
@@ -1741,10 +1757,10 @@ export class DashboardApp extends LitElement {
     ></wt-demo-bar>`;
   }
 
-  #poweredBy(): TemplateResult | typeof nothing {
+  #poweredBy(where = "powered-by"): TemplateResult | typeof nothing {
     const state = this.#venueLogo.state;
     return state.kind === "logo" && !state.failed
-      ? html`<wt-powered-by class="powered-by" label=${t("login.powered_by")}></wt-powered-by>`
+      ? html`<wt-powered-by class=${where} label=${t("login.powered_by")}></wt-powered-by>`
       : nothing;
   }
 
@@ -1801,7 +1817,8 @@ export class DashboardApp extends LitElement {
                   >`
                 : nothing
             }
-          </span></span
+          </span>
+          ${authenticated ? this.#poweredBy("banner-powered-by") : nothing}</span
         >
       </div>
       <div class="banner-actions">
