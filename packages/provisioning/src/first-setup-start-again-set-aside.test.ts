@@ -1053,6 +1053,8 @@ it.each(["", "/state", "/venue"])(
     const elsewhere = join(base, "elsewhere");
     await fs.rename(linked, elsewhere);
     await fs.symlink(elsewhere, linked);
+    // Named as a probe a cut left: the clean-up must not reach it through the link.
+    await mkdir(join(elsewhere, `${PROBE}1-${randomUUID()}`));
     const before = await snapshot(elsewhere);
 
     await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
@@ -1065,6 +1067,28 @@ it.each(["", "/state", "/venue"])(
     expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
   },
 );
+
+it("a symlink put at a nested piece's parent inside the destination makes the resume refuse, and its target stays empty", async () => {
+  const base = await scratch();
+  const attempt = await startAgainAttempt(base);
+  const { roots } = attempt;
+  const found = `${RECORDS}/${randomUUID()}`;
+  await put(join(roots.stateDir, found, "step-000001", "step.json"), "{}");
+  const record = await prepared(roots, attempt.administratorId);
+  const elsewhere = join(base, "elsewhere");
+  await mkdir(elsewhere);
+  await fs.symlink(elsewhere, join(setAsideFolderPaths(roots, record.setAside!).state, RECORDS));
+
+  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${found}`,
+  });
+
+  expect(await readdir(elsewhere)).toEqual([]);
+  expect(await readFile(join(roots.stateDir, found, "step-000001", "step.json"), "utf8")).toBe(
+    "{}",
+  );
+});
 
 it("a piece that cannot be looked at refuses naming it", async () => {
   const attempt = await startAgainAttempt(await scratch());

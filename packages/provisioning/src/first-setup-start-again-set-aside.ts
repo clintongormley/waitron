@@ -123,14 +123,19 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
       throw error;
     }
   };
+  // Descends only into real folders, so nothing is read or removed through a link.
   const folders: string[] = [];
   for (const root of [roots.stateDir, roots.venueDir]) {
     folders.push(root);
     if ((await notASetAsideFolder(root, io)) !== null) continue;
     const base = join(root, START_AGAIN_SET_ASIDE_DIR);
     for (const stem of await list(base)) {
-      folders.push(join(base, stem));
-      for (const sub of ["state", "venue"]) folders.push(join(base, stem, sub));
+      const stemFolder = join(base, stem);
+      if ((await notAFolder(stemFolder, io)) !== null) continue;
+      folders.push(stemFolder);
+      for (const sub of ["state", "venue"])
+        if ((await notAFolder(join(stemFolder, sub), io)) === null)
+          folders.push(join(stemFolder, sub));
     }
   }
   for (const folder of folders)
@@ -257,8 +262,7 @@ async function makeDestinationFolders(
   for (const root of ["state", "venue"] as const) {
     if (!record.listed.units.some((unit) => unit.root === root)) continue;
     const at = under[root] === roots.stateDir ? "state" : "venue";
-    // The Move made every folder below the root; a link or file there now would take the pieces
-    // somewhere else.
+    // A link there would take the pieces somewhere else.
     for (const folder of chain(under[root], folders[root]).slice(1)) {
       const found = await notAFolder(folder, io).catch((error: unknown) => codeOf(error));
       if (found !== null) throw failed(found, `${at}/${relative(under[root], folder)}`);
@@ -293,6 +297,10 @@ async function movePiece(
       },
     );
     if (present) throw failed("EEXIST", `${unit.root}/${piece}`);
+    for (const folder of chain(folders[unit.root], dirname(to))) {
+      const found = await notAFolder(folder, io);
+      if (found !== null) throw failed(found, `${unit.root}/${piece}`);
+    }
     await io.mkdir(dirname(to), { recursive: true, mode: MODE });
     await io.rename(from, to);
     await syncFolder(dirname(from));

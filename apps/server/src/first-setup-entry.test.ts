@@ -658,7 +658,7 @@ it("a move whose resume fails with an error that is not a refusal is refused set
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe(
-    `set-aside failed: EACCES state/${relative(await fs.realpath(f.stateDir), await fs.realpath(stem))}`,
+    `set-aside failed: EACCES state/${relative(await fs.realpath(f.stateDir), await fs.realpath(stem))}/state`,
   );
   expect(entry.survey).toBeUndefined();
   expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
