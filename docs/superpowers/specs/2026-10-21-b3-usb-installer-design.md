@@ -1,8 +1,10 @@
 # B3 — The bootable USB installer
 
-**Status:** design, revised 2026-10-21 for the owner's answers to its five questions (§18) and for
-W60 (§12); the revision awaits the owner's approval, and one new question (§18). Nothing in it is
-built. Lane A. Backlog entry: `docs/backlog.md`, "B3. The bootable USB installer". Pictures:
+**Status:** proposed design, revised 2026-10-21 for the owner's five answers and W60, then revised
+2026-10-26 by Lane F (B3r) for the owner's settled same-box Prepare-to-Live answer (§12) and time-zone
+clarification (§10). This revision awaits design approval through ONE question (§18); Q2 is answered.
+No build is authorised by this revision. Lane A's installer design otherwise stands.
+Backlog entry: `docs/backlog.md`, "B3. The bootable USB installer". Pictures:
 [`docs/backlog/mockups/b3-usb-installer/`](../../backlog/mockups/b3-usb-installer/).
 
 **What the revision changed.** The first version carried every release on a large stick, needed no
@@ -14,6 +16,14 @@ start on the till (§9); the disk encrypted with its key held in the box's secur
 maintenance login handed out by the box itself (§11); and, during the install, the installer's own
 Wi-Fi hotspot as the fallback when there is no cable (§5.3). The watcher folded W60 in: a production box offers neither Demo nor
 Prepare, and nobody can set up a box before its owner does (§12).
+
+**2026-10-26 revision pointer.** The owner subsequently chose Prepare on the SAME stick-installed
+box, followed by an admin's dashboard action that saves only configuration and restarts fresh Live
+setup. No USB, operating-system reinstall, disk/encryption reset or promotion of the practice
+database is involved. A genuinely production-started box still offers neither Demo nor Prepare;
+an unprovisioned stick box offers Prepare, Live and the existing-venue paths, but not Demo (§12).
+The original 2026-10-21 external research and the dated A798 pointer in §10 remain historical
+provenance. The new configuration inventory is a source trace, not an execution receipt (§12.3).
 
 Calls marked **my call** are mine, not the owner's; each can be overturned without changing the
 rest. Everything said about outside software carries a source in the Provenance section at the
@@ -103,7 +113,7 @@ wizard.
 | Waitron images | Pulled from GHCR (`:main`) and Docker Hub at install | `deploy/waitron.sh:329-330` |
 | Box files | `/opt/waitron/compose.yml`, `.env`, the print agent's AppArmor profile, a Bluetooth drop-in | `deploy/waitron.sh:184-319` |
 | Starting after a power cut | Docker's `restart: unless-stopped`; no Waitron service | `deploy/compose.yml:12`, `deploy/README.md:165-166` |
-| Clock | Nothing sets up time synchronisation | `deploy/waitron.sh` (grep `timesyncd\|timedatectl\|chrony\|ntp`: none) |
+| Clock | Nothing sets up time synchronisation | `deploy/waitron.sh` (grep `timesyncd\|timedatectl\|chrony\|ntp`: none); historical 2026-10-21 inventory, see §10's dated A798 update |
 | Disk layout | Whatever the preparer chose; "The Docker volumes live on the same disk as Docker's images" | `docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md` §2.6 |
 | Disk encryption | None designed; an older design pointed at "full-disk encryption, TPM-sealed auto-unlock" in a spec since deleted | `docs/superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md:60` |
 | Network | Assumed wired; nothing configures it | `deploy/waitron.sh` (grep `nmcli\|netplan`: none) |
@@ -295,8 +305,8 @@ is left exactly as it was.
 
 The installer reads the **release list** attached to the newest GitHub Release, checks its
 signature against the keys on the stick (§14), and downloads the ready-made disk that list names,
-checking its checksum. **The clock comes first:** the HTTPS download's certificate check fails on a
-clock that is far wrong (P54), and a mini PC that came with Windows keeps its battery clock in local
+checking its checksum. **The clock's time instant comes first; the venue's time zone is separate
+(§10):** the HTTPS download's certificate check fails on a clock that is far wrong (P54), and a mini PC that came with Windows keeps its battery clock in local
 time (P28), so the installer sets the clock from network time before it downloads anything, and
 writes the result to the battery clock in UTC. The installer image's clock floor is raised to its
 own build date at build time (`/usr/lib/clock-epoch`, P54), so a dead battery cannot set it to 1970.
@@ -659,8 +669,8 @@ installer would add, such as the clock service (P23; inference, not built):
 - **The box's host service** (`waitron-box`), **my call**: one small service on the host, outside
   Docker, that does for Waitron what a container cannot — the box's settings (§10), the maintenance
   login (§11), the recovery key's handover (§7.5), the name tag (§7.6), handing Waitron the setup
-  code the installer left on the disk (§12), the box's screen (§9), the first-start failure page
-  (§7.3), and the release check (§14), which is
+  code the installer left on the disk and the private same-box re-setup handoff (§12), the box's
+  screen (§9), the first-start failure page (§7.3), and the release check (§14), which is
   also the "small updater with access to Docker" A950 needs (`docs/backlog/box.md:93-96`). Waitron
   reaches it through a socket in a mounted folder; it accepts a fixed list of requests and nothing
   else, and a request that changes the box carries the person and permission the server checked, so
@@ -710,8 +720,9 @@ it (P50). Picture 5 and picture 7.
 
 **What the screen shows:**
 
-1. **Before setup:** the setup wizard, already holding the box's setup code, so the person at the
-   box's own screen types nothing extra (§12).
+1. **Before setup:** the setup wizard, already holding the initial setup code, so the person at
+   the box's own screen types nothing extra. After the same-box Prepare-to-Live action it receives
+   a new private setup grant instead; the original code stays exhausted (§12).
 2. **After setup: the dashboard** (`/manage`), at its sign-in page. A spare box's screen (A947)
    follows the same setting, and also shows A947's switch page while the main box is silent
    (A947 §6.6, `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:905-906`).
@@ -787,13 +798,25 @@ named beside it (the box's own settings sit under `system.manage` today, which m
 | Setting | What it does | Permission |
 | --- | --- | --- |
 | **Red** | Shows the wired connection and its address; lists Wi-Fi networks, joins one, forgets one | `system.manage` |
-| **Hora** | Shows the box's time, whether it is synchronised and from where. **No hand setting** (below) | — (read only) |
+| **Hora** | Shows the box's time instant, whether it is synchronised and from where. **No typed time** (below); venue time zone is separate | — (read only) |
 | **Pantalla de este equipo** | Panel or Caja (§9) | `system.manage` |
 | **Nombre en la red** | A917's "Change network name…", which A917 places on the Servers screen (`docs/superpowers/specs/2026-10-20-a917-box-local-name-design.md:550-554`); this page links to it | A917's |
 | **Reiniciar / Apagar** | Restarts or shuts down the box, after a confirmation that names what stops (sales, the tills) | `system.manage` |
 | **Acceso de mantenimiento** | §11 | admin only |
 
-**No hand-set clock.** The owner's answer recorded "also the clock" as a setting
+**The time instant and the time zone are separate.** The owner's clarification (2026-10-21
+~23:30, recorded at `~/waitron-campaign/archive/questions-to-2026-10-23.md:4517`) says you choose the
+venue's time zone through its administrative area at setup, using that area's country-pack default,
+and edit it later in the dashboard's venue details. The setup UI writes
+`area?.timeZone ?? selectedPack.defaultTimeZone` (`apps/setup/src/screens/venue-screen.ts:646`);
+the server checks the same derivation (`apps/server/src/setup-api.ts:435`, `:454`, `:490`). Venue
+details renders a time-zone field (`apps/dashboard/src/screens/venue-details-panel.ts:542`). Today
+that edit is conditional: the server refuses it after sales, orders, daily closes or business-day
+cutover history (`apps/server/src/venue-details.ts:94-113`, `:241-259`). This clarification does not
+remove those limits. Choosing the venue's time zone is separate from setting the clock's time instant.
+
+**No hand-set clock means no typed time instant, not a ban on choosing the time zone.** The owner's
+answer recorded "also the clock" as a setting
 (§18 Q2 follow-up, as the watcher wrote it down). A798, whose design the owner approved, decided the
 opposite: "**No 'set the clock' action anywhere in Waitron**: a clock a page can set is a way to date
 sales at will" (`docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md` §6, "Decisions
@@ -802,7 +825,8 @@ revision 5 makes", decision 10).
 now sets the clock from network time (§5.4), and the battery clock keeps it through a power cut, so
 the case A798 left to "whoever installed the box … from the operating system"
 (that design's §4.8 b) no longer needs a terminal. If the owner wants a hand-set clock after all, it is A798's
-decision to reopen, not this page's; the approval question names it (§18).
+decision to reopen, not this page's. This paragraph records the 2026-10-21 reasoning; the dated
+A798 update below records the subsequent decision.
 
 _2026-10-24: the owner reopened it for A798 (design revision 7, §4.9). The box now sets its own
 clock from AEAT's time, two agreeing tills, or an administrator's own phone or computer — never a
@@ -853,72 +877,274 @@ unauthenticated recovery page "must not itself grant administrative access" (`:9
 keeps that: the password is handed out only to an authenticated admin, and the LAN recovery page
 (`apps/server/src/recovery-surface.ts:28`) offers nothing of it.
 
-## 12. Nobody sets up a box before its owner does (W60)
+## 12. Private setup, and Prepare to fresh Live on the same box (W60, B3r)
 
-Picture 10. Two loose ends the watcher folded in, from the backlog's A680 entry (`docs/backlog.md:714-722`):
+**Proposed design, revised 2026-10-26.** The owner's Q2 answer is settled, not a choice to ask again:
+"we shouldn't use the usb for this. We can run it from the box itself."
+(`~/waitron-campaign/archive/questions-to-2026-10-23.md:4514-4519`, Q2 and its two clarifications).
+Pictures 10 and 11 show this path; the old two-option picture is superseded (see the
+pictures' README). The USB reinstall of §5 remains a separate, physical rebuild path.
 
-**(a) A production box offers Demo and Prepare, then fails generically.** "A box started with
-`WAITRON_ENV=production` still offers Demo and Preparation (`apps/setup/src/screens/mode-screen.ts`
-shows only a production warning), and either one is refused with that code, so the operator sees
-the wizard's generic failure" (`docs/backlog.md:715-718`; the refusal is
-`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts:26-30`).
+### 12.1 Which modes a box offers
 
-- **On a box started in production, the mode screen offers only «En vivo» and «Ya tengo un
-  restaurante»** (restore a backup, or become a spare box, A947); Demo and Prepare are not drawn at
-  all. The refusal code `sif.throwaway_allocation_refused` gets its own words in the wizard, for a
-  request that reaches it anyway. This is the backlog's fix, for a box installed by hand.
-- **A box installed from the stick offers the same two** (**my call, and §18's new question**): the
-  stick is for venues, and CLAUDE.md §5 says a pre-production database is never promoted. It does
-  **not** start in production: like every blank box it starts unprovisioned and pre-production,
-  and reaches production the way any box does today — "production is only ever reached by an owner
-  choosing it in the wizard" (`.github/workflows/image-smoke.yml:191-192`). The stick-installed
-  image tells the wizard only which choices to draw (a marker the plan places; the server reads its
-  environment from its own process and `trading.env` in the state folder,
-  `apps/server/src/box-env.ts:7`, never from compose's `.env`, which passes no `WAITRON_ENV` to the
-  app, `deploy/compose.yml:21-45`). The VM test of §13 asserts a stick box's wizard draws neither
-  Demo nor Prepare.
-- **Practising first** is done on another machine: Demo or Prepare on any computer installed by
-  hand with `waitron.sh`, then the venue's menus and layouts come across at Live setup through the
-  existing Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`,
-  named at `docs/backlog.md:1034`).
+- **A box started in production:** only «En vivo» and «Ya tengo un restaurante» (restore a backup,
+  or become a spare box, A947). Demo and Prepare are not drawn. The refusal
+  `sif.throwaway_allocation_refused` gets its own words for a request that reaches it anyway.
+  This retains W60's production rule; hiding a choice is not the server's environment check.
+- **A blank stick-installed box:** Prepare, Live and «Ya tengo un restaurante», never Demo. It
+  starts unprovisioned and preproduction, not production. The installer marker describes the
+  available setup paths, not permission to change an existing database's environment. Selecting
+  Prepare creates a practice venue; selecting Live follows fresh Live setup. A hand-installed
+  preproduction box keeps its existing Demo/Prepare choices.
+- **A prepared box:** an admin starts the same-box re-setup below. A fresh Live database receives
+  only the allowed configuration. No practice sale, invoice number, counter or fiscal chain crosses.
+  The standard/full/rectificative series *codes* are configuration defaults (§12.3), not retained
+  invoice numbers or chain identity. A Live or restored production venue is never eligible for this
+  action, even if a caller forges a Prepare flag or retries an old request. Reading an existing
+  completion receipt is allowed; it cannot start another cutover.
 
-**(b) A stranger can set up an unconfigured box first.** "Demo and Preparation can be set up by
-anyone who reaches the setup wizard first … on a shared network a stranger can set up an
-unconfigured box in either mode before its owner does" (`docs/backlog.md:719-722`). Live is a
-first-come claim today (`packages/provisioning/src/first-setup-state.ts:507-515`), and the setup
-routes are unauthenticated by design (`apps/server/src/setup-api.ts:613`).
+These are proposed B3 rules, not claims about today's mode screen. The current server reads its
+process environment and `trading.env` (`apps/server/src/box-env.ts:7`); compose passes no
+`WAITRON_ENV` to the app (`deploy/compose.yml:21-45`). The later plan must bind mode checks to the
+then-current authoritative deployment state, not a browser marker.
 
-- **Every box gets a setup code**: ten digits, **made by the installer** at the start of the install
-  (§5 step 3), written onto the stick and onto the new disk, where the box's host service hands it
-  to Waitron on the first start; the server keeps it only as a hash. **Every request that changes
-  anything while the box is not yet set up needs the code** — every `POST /setup-api/…` route
-  (among them provision, adopt, the restores, the fiscal test and resetting an incomplete adoption,
-  `apps/server/src/setup-api.ts:745`, `:776`, `:951`, `:1040`, `:1103`), the first-setup claim, and
-  A917's naming form, which is the setup's first page (§17); so the code is asked on that first
-  page. Wrong codes are counted and
-  slowed like a PIN. The code stops working once setup is complete. A stick put back into a box
-  that already holds Waitron writes no line (§5 step 2); an install that fails after step 3 leaves a
-  line for a code that never reached a disk, and the next install writes a newer one — the newest
-  line for a box's serial number is the one that counts. Slice 2 tests a stick put back into a box
-  installed but not yet set up: the stick's newest line must still open the wizard. Whether the
-  read-only previews (`/setup-api/restore/preview`, `:1223`, and the like) ask for the code too is
-  the plan's to decide. How the dev stack (`wa-wt demo`) and the setup routes' tests supply or skip the code is the
-  plan's.
-- **Where the person finds it:**
-  - **on the box's own screen**: the wizard there already holds it (§9), so the person at the box
-    types nothing;
-  - **on the stick**: the installer writes it into `WAITRON/codigos-de-configuracion.txt` with the
-    date, time and the box's serial number, before it says the stick can come out (§5 step 3) — so a box
-    with no screen is set up by reading the stick on any computer. A stick that installs two boxes
-    (A947) holds both codes, each named by its box;
-  - **for a box installed by hand**, `waitron.sh` prints it in its closing banner and on the
-    box's console, beside the links it prints today (`deploy/waitron.sh:374-391`).
-- **Never** on the installer's status page, its hotspot page or the LAN recovery page, all of which
-  a stranger can open.
-- **My call** on all of the above. The cost: a person setting up a screenless box from a phone needs
-  a computer (or a phone adapter) to read the stick. The alternative weighed and rejected: a press of
-  the box's power button as proof of presence, which a stranger's waiting request would collect as
-  easily as the owner's.
+### 12.2 The admin's action: save configuration, then restart first setup
+
+Working label: **«Empezar en Live con esta configuración»**, on the Prepare dashboard. You use it
+on the box itself or from an authenticated remote dashboard. It is admin-only, with fresh
+reauthentication for this action: password or passkey, plus enrolled TOTP (the authenticator-app
+code) when present, as for maintenance access (§11). An existing dashboard session alone is not
+enough. A non-admin gets an explanation with admin sign-in there and **Stop**; a Live box gets no
+such action, and its server refuses the operation as well.
+
+The confirmation names what you keep, what is removed and what you must reconnect (§12.3). It says
+that practice sales and fiscal history will be removed and that Live starts a new venue database.
+It offers **Stop** before removal and the explicit start action. It must not promise that
+"everything is ready" merely because menus have been saved.
+
+**The proposed sequence and its failure boundary:**
+
+1. **Check before removal.** Check the authoritative Prepare/preproduction state and absence of
+   Live/production history, the admin's fresh proof, installed release eligibility for Live,
+   module availability and schema versions. Build the allowlisted configuration, decode it again,
+   run every participating module's validation, and prove it can import into a fresh disposable
+   target without making Live fiscal records. The preview must let you confirm the prospective
+   Live venue/language choices before these checks. Close A989's required-language check first,
+   using those selected Live languages. A missing/unsupported module, invalid configuration,
+   incompatible version, missing translation, insufficient space or unreadable handoff must fail here, with
+   practice intact and a reason you can act on. Live's later fiscal-readiness and clock checks
+   still apply; this does not authorise changing a Live fiscal writer.
+2. **Make the handoff durable.** Save the checked configuration and a pending operation record
+   outside every venue-removal path, on the box's existing encrypted disk. The record binds one
+   operation id to this box, this source practice venue, the bundle's digest, module versions,
+   the initiating admin and the target **fresh Live** intent. Use host-owned encryption keys
+   independent of the practice venue's key ring. Reopen and validate the durable copy before
+   accepting removal. Keep both the handoff's secrets and the audit evidence outside the venue
+   being removed. The existing import staging is not itself this handoff: it writes to `stateDir`
+   and wraps the passphrase with the supplied key ring
+   (`packages/provisioning/src/configuration-import.ts:21-32`, `:68-85`).
+3. **Give the admin a private way back before the old login disappears.** Make a NEW setup grant;
+   never reactivate the original installer code, exhausted by Prepare setup. The initiating
+   browser receives a dedicated, private resume credential over its authenticated connection;
+   its server-side hash and operation binding survive the restart outside the old venue. Give
+   that admin a separate one-use recovery code to keep before confirming removal, so a lost
+   browser session can resume the same operation. Redeeming it rotates the resume credential
+   and issues a replacement recovery code to keep until setup is complete. The host keeps only
+   its hash. Neither grant is a general administrative login: each permits only this operation's
+   fresh Live setup and saved-config preview. A short-lived browser session can be renewed with that recovery code;
+   expiry must not make the pending operation public or require another erase. The plan specifies
+   cookie scope, rotation and expiry. Codes are rate-limited, excluded from URLs and logs, never
+   put on the old stick, an open status page or an unauthenticated recovery page.
+4. **Stop practice writes, then cut over once.** Under exclusive ownership, stop/drain the practice
+   writers and background work, recheck that the admin's proof is still fresh, rebuild and
+   revalidate the final snapshot if anything changed since the preview, and bind the confirmed
+   digest before removal. A changed snapshot needs a new preview/confirmation, not silent consent.
+   Keep a durable cutover state that boot checks before allowing practice work again. Remove the practice venue and its
+   runtime queues through the approved reset mechanism, without erasing host identity, network
+   settings, the installed system, disk encryption, handoff/disk keys or audit evidence. Isolate
+   practice connection settings and credentials, including any retained host-file references, so
+   a restart cannot silently reuse them as Live credentials. Do not
+   leave old print, email, payment or scheduled work able to run against the new venue. Do not
+   relabel or move the old database into production. The precise removal set, stopping order,
+   lock ownership and reset calls are the later plan's work after A1042's release; this revision
+   selects no reset/locking API and changes none today. Never implement this as deleting a state
+   directory that also holds the handoff, its keys or the audit.
+5. **Restart into private first setup with Live selected and the saved configuration ready.** The
+   box's own console obtains a fresh grant through the host service's private channel to the
+   managed kiosk, not §9's forgeable screen marker or an unauthenticated loopback claim. The
+   remote admin resumes with the credential from step 3. Every setup mutation, claim and preview
+   of saved configuration checks this operation's grant; a different LAN browser cannot claim
+   the now-blank box first. An unauthenticated page reveals neither config nor code. Both routes
+   reach the same saved-config preview and ordinary fresh Live setup; neither retains the old
+   dashboard session as a new venue's admin account. The admin reviews venue/taxpayer defaults,
+   creates the Live admin, supplies the missing credentials and completes the usual Live checks
+   and recovery steps. This is new integration, not today's file-upload UI (§12.4).
+6. **Finish durably, then retire grants.** On success, retain the operation's completion receipt,
+   link it into the new venue's audit trail and revoke every setup/resume/recovery grant. Remove
+   temporary configuration copies and handoff keys only after durable completion, without
+   deleting the audit receipt. Record who requested and authorised the action, the confirmed
+   digest, each cutover phase, refusals/retries and completion, in a host-owned audit journal
+   outside the removed venue; keep a linked record in the practice audit before cutover and in
+   the Live audit afterwards. No password, TOTP, passkey response or recovery code is logged.
+
+**An interruption retries the operation, not the erase.** Before cutover is durably committed, a
+failure leaves practice available; an admin can Stop and discard the pending handoff. Once removal
+starts, boot holds practice stopped and resumes the recorded phase with the same private grants.
+A power cut after removal but before setup leaves the saved configuration and private resume path
+available. A cut during fresh Live setup resumes that same setup attempt. Once the new venue exists,
+a repeated request must never remove it; a completion receipt answers the retry. An ambiguous or
+corrupt phase stops with private retry/recovery choices and retained evidence, never a fresh LAN
+claim, a return to selling the old database or an automatic second wipe. The plan must bind these
+phases to the actual A1042 setup/reset ownership APIs and prove every boundary before building the
+action. This is only **Prepare → fresh Live**, not a general reset or a Live-box eraser.
+
+### 12.3 What the existing configuration copy carries today
+
+**Source inspection on 2026-10-26, not a test run.** The existing export is available for Prepare
+and Live (`apps/server/src/boot.ts:2033-2043`). Its route requires a management session and
+`system.manage`, reads the bundle in one transaction, and encrypts it with a supplied passphrase
+of at least 12 characters (`apps/server/src/configuration-export-api.ts:35-62`). That export
+permission does not authorise the new destructive admin action.
+
+The server re-exports the engine from provisioning
+(`apps/server/src/configuration-transfer.ts:1-11`). `buildConfigurationBundle` reads venue details
+and current series codes, then calls the table exporter
+(`packages/provisioning/src/configuration-transfer.ts:86-151`). The table exporter reads only the
+participating modules' explicit declarations; an undeclared contribution refuses export, and
+`kind: "none"` contributes no rows (`:178-214`, `:251-329`). Composition wires those declarations
+in `packages/composition/src/modules.ts:144-386`, including `MEDIA_MODULE` at `:192`.
+
+The following is the complete declaration inventory at that source revision. Each row describes
+what can cross when its module participates; it is not a promise to enable an absent module.
+Except for the exclusions below, the exporter reads whole rows, not just the fields named in this
+explanation (`packages/provisioning/src/configuration-transfer.ts:286-327`).
+
+| Module / category | Declared configuration tables | Declaration receipt |
+| --- | --- | --- |
+| Core: menus, kitchen, products, profiles, floor layouts, printers and themes | `catalogues`, `kitchen_stations`, `kitchen_courses`, `categories`, `products`, `location_catalogues`, `ingredients`, `recipe_lines`, `device_profiles`, `floor_zones`, `dining_tables`, `floor_plan_sets`, `floor_plans`, `floor_plan_tables`, `floor_plan_placements`, `floor_plan_table_parts`, `floor_plan_table_sizes`, `print_agents`, `printers`, `page_printers`, `device_profile_printers`, `station_printers`, `custom_themes` | `packages/db/src/configuration-transfer.ts:62-113`; `packages/composition/src/modules.ts:153`, core/theme validators `packages/composition/src/modules.ts:118-124` |
+| Catalogue: languages, defaults, units, menu content, options and extras | `category_details`, `content_languages`, `catalogue_settings`, `unit_seed_states`, `units`, `product_units`, `menu_items`, `menu_item_variant_overrides`, `option_lists`, `option_labels`, `extra_lists`, `extra_list_items`, `product_modifiers`, `sections`, `section_members`, `menu_details` | `packages/catalogue/src/configuration-transfer.ts:159-181`; `packages/composition/src/modules.ts:169` |
+| Venue service: departments, receipts/sale rules, profile access, kitchen screens/routing, menus/timetables, hours and holidays | `departments`, `service_steps`, `department_receipts`, `department_sale_policies`, `zone_service_policies`, `zone_sale_policies`, `device_profile_service_access`, `device_profile_zones`, `device_profile_kitchen_screens`, `device_profile_kitchen_screen_stations`, `device_profile_kitchen_screen_zones`, `department_transfer_desks`, `department_transfer_destinations`, `routing_cells`, `department_floor_plan_sets`, `menu_periods`, `menu_period_staff_menus`, `routing_cell_periods`, `special_days`, `special_day_dates`, `seasons`, `department_days`, `department_day_ranges`, `zone_days`, `zone_day_ranges`, `holiday_geographies` | `packages/venue-service/src/configuration-transfer.ts:697-728`; `packages/composition/src/modules.ts:186` |
+| Media: images, bytes and edits | `media_images`, `media_image_data`, `media_image_blobs`, `media_image_edits` | `packages/media/src/module.ts:13-25`, `:29-38` |
+| Identity: people and profile admission rules | `persons`, `device_profile_admission_roles`, `device_profile_admission_persons` | `packages/identity/src/configuration-transfer.ts:1-23`; `packages/composition/src/modules.ts:208` |
+| Workforce: employment, availability, pay-period settings, shift templates | `employments`, `availability`, `pay_period_settings`, `shift_templates` | `packages/workforce/src/configuration-transfer.ts:1-9`; `packages/composition/src/modules.ts:227` |
+| Workforce Spain: agreement settings | `convenio_config` | `packages/workforce-es/src/configuration-transfer.ts:1-4`; `packages/composition/src/modules.ts:244` |
+| Payments: offline policy only | `payment_policy` | `packages/payments/src/configuration-transfer.ts:1-5`; `packages/composition/src/modules.ts:256`; policy columns `packages/payments/src/schema/payment-policy.ts:12-19` |
+| Adjustments: reasons and settings | `adjustment_reasons`, `adjustment_settings` | `packages/adjustments/src/configuration-transfer.ts:65-69`; `packages/composition/src/modules.ts:364` |
+| Staffing: roles, assignments and planning rows | `staff_roles`, `person_staff_roles`, `staffing_days`, `staffing_blocks` | `packages/staffing/src/configuration-transfer.ts:3-11`; `packages/composition/src/modules.ts:383` |
+| No transferred tables: scheduler, credentials, fiscal-verifactu, fiscal-none, bookings | Each declares `kind: "none"` | `packages/composition/src/modules.ts:271`, `:285`, `:313`, `:327`, `:346` |
+
+**Venue defaults travel separately:** country, tax id, legal name, taxpayer domicile; location name,
+receipt languages, operation description, fiscal territory, address, time zone, current business-day
+start, fire control and default catalogue; and the three current series codes. The query reads
+these exact fields (`packages/provisioning/src/configuration-transfer.ts:86-104`). An outstanding
+future business-day-start change refuses export; the bundle uses the current effective start
+(`:125-132`). It carries neither the old series rows nor their counters. Staffing planning rows
+are in the allowlist, even if dated; there is no general date filter in the table export (`:286-329`).
+They need review as configuration, not a promise that the Live diary starts empty in every module.
+Only the settings in this inventory travel; it is not a copy of all application or host settings.
+
+**What is excluded, stripped or disabled:**
+
+- Retired device profiles, inactive kitchen stations/courses and floor zones, deleted printers,
+  and inactive departments are left behind by their declarations
+  (`packages/db/src/configuration-transfer.ts:67-104`,
+  `packages/venue-service/src/configuration-transfer.ts:700`). Rows whose database foreign keys
+  reach left-behind rows are removed too, repeatedly
+  (`packages/provisioning/src/configuration-transfer.ts:311`, `:428-461`). This is not a general
+  "active rows only" filter: product rows, for example, have no leave-behind selector.
+- Person PIN/password hashes, TOTP secrets, email-verification time, Google subject, pending email
+  and its folded form, and passkey-offered time are omitted
+  (`packages/identity/src/configuration-transfer.ts:6-18`). Names, current email, roles and other
+  unomitted person fields remain. Import skips the exporting operator and every row with their
+  `person_id`; it preserves the newly provisioned admin and gives other imported people new ids,
+  unusable PINs, no password/TOTP/Google link, no verified-email state and **suspended** status
+  (`packages/provisioning/src/configuration-transfer.ts:695-740`). Passkey registrations and login
+  sessions are not in the declaration inventory. Staff must be reviewed, reactivated and given
+  fresh credentials/enrolments; the exporting admin is created through Live setup, not copied.
+- Print-agent token hash, last-seen time, host, source node id, setup URL and port are omitted;
+  printer poll-token hashes are omitted (`packages/db/src/configuration-transfer.ts:91-106`).
+  Non-empty agent/printer/page-printer tables are flagged for reconnect (`:97`, `:103`, `:106`;
+  engine `packages/provisioning/src/configuration-transfer.ts:327`). Import sets agents and both
+  printer kinds **inactive**, gives agents unusable tokens, and clears page printers' agent id
+  (`:741-747`). Review mappings, reconnect/re-enrol agents and printers, then enable them; staying
+  on the same hardware does not retain their venue credentials.
+- Product name keys, dining-table clearing state and short-name keys are omitted; import rebuilds
+  the product/table keys through the modules' `afterImport` hooks
+  (`packages/db/src/configuration-transfer.ts:74`, `:83`, `:112`,
+  `packages/catalogue/src/configuration-transfer.ts:180`,
+  `packages/provisioning/src/configuration-transfer.ts:771-773`). New row ids and declared
+  references/location columns are remapped (`:708-730`).
+- Actual devices and their pairings, card readers/provider registrations, backup destinations,
+  Cloud/mail connections, fiscal certificates, recovery secrets, sales/orders, invoice numbers,
+  fiscal records/chains, operational jobs, booking records and audit history are not copied by
+  this allowlist. Device **profiles**, printing definitions and payment **policy** do cross;
+  enrolments and connections must be redone. The no-table declarations above exclude credential,
+  fiscal, scheduler and bookings rows. The retained host audit in §12.2 is separate evidence of
+  this action, not an import of the practice venue's business history.
+
+**A989 remains OPEN and blocks destructive re-setup.** Catalogue validation checks units, colours,
+menus and duplicate names (`packages/catalogue/src/configuration-transfer.ts:77-157`), but does not
+run the required-language check `content.language_required`. The engine's validator dispatches
+only the declared module validators (`packages/provisioning/src/configuration-transfer.ts:587-610`). Media's own default-language
+image-name check (`packages/media/src/configuration-transfer.ts:60-67`) does not close the catalogue
+required-language gap. Do not claim the existing copy is ready for this action: A989 must close
+the language gap before step 1 can pass, and every participating module must pass its own readiness/import checks before
+removal. This revision neither fixes A989 nor expands the allowlist.
+
+### 12.4 Today's import/prefill, and what you still redo
+
+Today you select an encrypted export file and its passphrase on Live's source screen
+(`apps/setup/src/screens/live-source-screen.ts:121-134`, `:147-185`). The setup endpoint stages it
+(`apps/server/src/setup-api.ts:1475-1496`); boot selects modules and validates module schema versions
+before staging (`apps/server/src/boot.ts:1271-1279`). Staging decodes and validates before writing
+private files and returns venue defaults, non-empty table counts and reconnect flags
+(`packages/provisioning/src/configuration-import.ts:68-86`). The UI merges those defaults, excluding
+the source location id, into its draft (`apps/setup/src/setup-app.ts:1822-1837`). Its preview shows
+counts and reconnect names and asks whether the taxpayer is the same or new
+(`apps/setup/src/screens/configuration-preview-screen.ts:45-78`); a new-taxpayer choice clears the
+taxpayer fields before the admin step (`apps/setup/src/setup-app.ts:1850-1866`). These are defaults
+to review, not completed Live setup.
+
+Both server provisioning paths call the importer inside the new venue's transaction
+(`apps/server/src/boot.ts:1363-1386`,
+`packages/provisioning/src/first-setup-command-deployment.ts:321-337`); the command path rechecks
+bundle digest, country/taxpayer and module versions (`:73-95`). The importer revalidates and replaces
+the declared configuration rows, preserving the new admin (`packages/provisioning/src/configuration-transfer.ts:614-621`,
+`:695-719`). Its final location patch writes only fire control and the mapped default catalogue
+(`:154-165`, `:764-770`), leaving the other details as the reviewed provisioning request wrote them.
+The saved time zone is a prefill, not a bypass of setup's country/area check (§10).
+
+For the new same-box path you still create the Live admin and credentials, confirm the real
+venue/taxpayer/address/receipt-language and series defaults, supply Live's fiscal certificate and
+complete its ordinary readiness, clock and recovery-sheet steps. Configure Live mail, backups and
+Cloud as needed; re-enrol till devices (including the box's own till), card readers and print
+agents/printers, check their profile/mapping assignments, and reactivate staff with fresh credentials.
+The OS, its network and disk encryption remain installed. Keep the existing disk recovery sheet;
+fresh Live setup cannot promise a reprint of a key already handed out and deleted from the host
+(§7.5). No practice sale or chain is a starting point for Live.
+
+### 12.5 Nobody else claims first setup (W60)
+
+The original first-setup protection remains a proposed part of B3. **Every box gets a setup code**:
+ten digits, made by the installer before «Ya puedes quitar el USB» (§5 step 3), written onto the
+stick and new disk, and handed to Waitron by the host service; the server keeps only its hash.
+Every request that changes anything while unconfigured, including the first-setup claim, A917's
+naming form, provisioning, adoption, restores, fiscal test and incomplete-adoption reset, needs the
+code. Wrong codes are counted and slowed like a PIN. The original installer code stops working
+once Prepare or Live setup completes. The same-box fresh Live handoff uses §12.2's new grant, never
+that exhausted code. Private previews there require the grant too; the plan still decides the
+code policy for other read-only previews and the dev stack/tests.
+
+You find the initial code on the box's own screen, already supplied privately; in
+`WAITRON/codigos-de-configuracion.txt` with date/time and serial number for remote setup; or in
+`waitron.sh`'s closing banner and console for a hand-installed box. Never on an installer's status
+page, its hotspot page or the LAN recovery page. A stick put back into an existing Waitron box
+writes no new code; a failed install after code creation can leave a line that never reached a
+disk, so the newest line for that serial number is the one to use. Slice 2 must still show that
+reinserting a stick into an installed but not yet configured box does not replace its usable code.
+The original tradeoff remains: screenless first setup needs a computer or adapter to read the stick;
+a power-button press is not substituted for the private code. The later same-box handoff needs
+neither the stick nor that reader.
 
 ## 13. Built and published for every release
 
@@ -935,8 +1161,22 @@ new CI job:
    that boots to a blank screen passes every other check (CLAUDE.md §2, "a bundle that renders
    nothing passes anyway"). It also restarts once with the virtual stick left in and checks that
    the box comes back trading (guard 3); boots the installer once with Secure Boot off and once with
-   no virtual TPM, and expects both refusals with the disk untouched (§7.7); and checks that a stick
-   box's wizard draws neither Demo nor Prepare (§12).
+   no virtual TPM, and expects both refusals with the disk untouched (§7.7). It checks separately
+   that a blank stick box offers Prepare/Live/existing-venue paths without Demo, while a
+   production-started box offers neither Demo nor Prepare, including direct-request refusals (§12).
+   **The proposed same-box acceptance** then prepares the stick-installed VM, saves representative
+   configuration from every participating module, records practice sales, and runs the admin action
+   without a USB attached. It must reach private fresh Live setup with saved-config preview, a new
+   database and no practice sale, invoice number, counter or chain. Assert the copied categories,
+   stripped credentials, suspended staff, inactive printers and missing physical-device enrolments
+   of §12.3, not only menu counts. Both the real managed console and an authenticated remote
+   browser must resume after restart; an unrelated LAN browser, forged console marker, exhausted
+   original code and replay after completion must fail. Non-admin, stale reauthentication, Live
+   source, missing module, version mismatch, required-language refusal and broken/unreadable handoff
+   must fail before removal. Interrupt each durable phase of §12.2, including immediately after
+   removal and during Live setup; assert retriable private resume, audit continuity and no second
+   wipe of the newly created venue. Record OS/disk/encryption identity before and after. These are
+   acceptance requirements for the build, not experiments run by this docs revision.
 3. Attaches to the GitHub Release: the ready-made disk, its SHA-256, the signed release list (§14),
    the list of every Debian package and version in the disk, and the declaración responsable
    (A940 §7.1). **A GitHub Release file must be under 2 GiB** (P26); slice 1 measures the
@@ -1036,8 +1276,9 @@ nothing:
 2. **A ready-made disk over 2 GiB** (§13): split the file or host it elsewhere, decided once slice 1
    measures it.
 3. **Resetting a box without a terminal** (`docs/backlog/box.md:149-163`) is answered for the whole
-   box by a reinstall from the stick. A reset that keeps the certificate has no path on a stick box;
-   that entry stays open, still refused on a Live box as it asks.
+   box by a reinstall from the stick. The 2026-10-26 revision adds only Prepare-to-fresh-Live
+   re-setup without reinstalling (§12); it does not close that entry's wider reset/certificate
+   questions, and adds no Live reset path.
 4. **First Live setup's clock check** compares the box's clock with the browser's
    (`docs/operations/first-live-fiscal-setup.md:14-17`), which proves nothing when the browser is the
    box's own screen — handed to A798.
@@ -1078,22 +1319,28 @@ file, outside the repository):
 5. **Wi-Fi:** wired first, the box's own hotspot as the fallback, open or with one password shared by
    every box: "At that stage we're not protecting anything." → §5.3, §10.
 
-**The questions left**, in [`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt):
+**Q2 about practising was answered 2026-10-21 ~23:30.** Practise on the SAME box in Prepare,
+then an admin saves configuration and restarts fresh Live setup from the dashboard, without USB or
+OS/disk/encryption reset. The owner also clarified that the time zone is chosen through the setup
+area and editable in venue details; no typed clock time is implied. Maintenance needed no change.
+Receipt: `~/waitron-campaign/archive/questions-to-2026-10-23.md:4514-4519`. The previous alternative
+of another practice machine or a USB reinstall is superseded, not an open approval question.
 
-1. **Approve the revision?** It names the calls a reader would most want to overturn: starting the
-   installed box after 15 seconds rather than stopping (guard 3); the 60-second wait before erasing
-   another system (§5.2), and never erasing a disk it cannot classify without a key; the installer's
-   open hotspot (§5.3), and **no hotspot at all once a box holds a venue** (§10); no hand-set clock,
-   keeping A798's decision (§10; _2026-10-24: reopened for A798, see §10's pointer — still no typed
-   time_); the till signed out when «Panel» opens the dashboard (§9);
-   maintenance for admins only, at the box's own console (§11); the setup code, made by the
-   installer, on the stick and asked on every setup request (§12); the installer refusing a box with
-   Secure Boot off (§7.7); and the update to Microsoft's newer certificate needing a person present
-   until slice 1 settles it (§7.4).
-2. **Practising on a stick-installed box** (picture 11). **A (recommended):** a stick box offers only
-   Live, restore or spare; practise on another computer and bring the menus across at Live setup
-   (§12). **B:** the stick box offers Prepare too; going Live later is a reinstall from the stick
-   that brings the prepared menus across the same way.
+**ONE question remains**, in [`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt):
+**“B3 — approve the revised USB installer design?”**
+
+The revision includes Lane A's installer calls: starting the installed box after 15 seconds;
+the 60-second erase wait and refusal to erase an unclassified disk without a key; an open installer
+hotspot and no hotspot after setup; no typed clock time (§10, including its 2026-10-24 A798 pointer,
+with the time zone separate); signing out between till and dashboard; admin-only console
+maintenance; setup codes; the Secure Boot refusal and the unresolved certificate-update case.
+It now includes §12's admin-only same-box action, pre-delete validation, durable private handoff,
+audit continuity and retry boundaries. It does not approve code, close A989 or authorise a Live
+fiscal writer change.
+
+- **A (recommended) — approve.** Plan slices 1, 2, 3, 5, 6 and 8 next.
+- **B — approve with changes.** Say which.
+- **Stop here — I'll write.**
 
 ## 19. Build order, one pull request each
 
@@ -1123,19 +1370,29 @@ file, outside the repository):
    key, guard 1 and guard 3 on its firmware, the clock, §7.2's experiments (c), (e) and (h), the traps,
    a power cut with the stick put back in.
 7. **The release check** — §14's service, handed to A950.
-8. **Setup on a stick box** (W60) — §12: the setup code on every setup request, A917's naming form
-   included; the mode screen of a production box and of a stick box; the refusal's words;
-   `waitron.sh` prints the code; and the disk's recovery key on the recovery sheet, with the host
-   service's copy deleted on the sheet's "kept" confirmation (§7.5).
+8. **Setup and same-box Prepare → fresh Live** (W60, B3r) — §12: the setup code on every setup
+   request, A917's naming form included; distinct production/stick mode rules; refusal wording;
+   `waitron.sh` prints the initial code; and the disk recovery-key handover (§7.5). Includes the
+   admin-only, freshly reauthenticated dashboard action, complete copy/reconnect disclosure,
+   pre-delete module/import validation with A989 closed, host-owned private handoff independent
+   of removed venue secrets, fresh setup/resume/recovery grants for console and remote admin,
+   audit continuity, retriable cutover and the refusal to erase a Live venue. Carry §13's failure
+   and interruption acceptance into the plan. Bind reset/locking and setup-attempt APIs only after
+   A1042's release, tracing their then-current consumers; this revision changes none. Reuse the
+   ordinary fresh Live fiscal setup without changing a Live fiscal writer. If that binding would
+   require fiscal changes, stop and obtain the separate fiscal authorisation before that work.
 
 **The go-live minimum is slices 1, 2, 3, 5, 6 and 8.** A Live box runs only a release (A940 §5.1),
 so the first venue's box is installed from the first release tag, which waits for A940's release
 slices; encryption is in slice 1 because the owner wants it before go-live; the box's screen is the
 counter till at a one-box venue (A947 §6.6 calls the counter till "often the main box's own screen",
 `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:878`); and the setup code closes a
-way for a stranger to take a new box and puts the disk's recovery key on paper. Slices 4 and 7
-follow. Slice 8 changes how setup is
-authorised, so it takes the full review; none of the slices is fiscal.
+way for a stranger to take a new box, puts the disk's recovery key on paper and covers the owner's
+same-box Prepare-to-Live path. Slice 8 must include the fresh-authentication check it needs even
+though the maintenance-login feature itself remains in slice 4. Slices 4 and 7 follow. Slice 8
+changes setup authorisation and removes practice data, so it takes the full review. This design
+authorises no change to Live fiscal writers; any such discovery is a separate fiscal gate.
+Approval means writing the plan next, not starting a build.
 
 ## 20. What this design does not settle, for the builder
 
@@ -1144,7 +1401,10 @@ authorised, so it takes the full review; none of the slices is fiscal.
 - How a change to register 7 itself (Microsoft's newer certificate) is taken without a person
   present (§7.4).
 - How the box's screen service tells Waitron which page to open, and how the box's screen marks
-  itself (§9).
+  itself (§9). The forgeable display marker is never proof for §12's setup handoff.
+- The concrete private handoff storage, durable phase transitions and reset/locking API binding
+  after A1042's release (§12.2), including key lifetime, cookie scope/expiry and recovery-code
+  rotation. The plan must prove both console and remote resume without reopening a LAN claim.
 - The host service's request list and its socket's permissions (§8).
 - How the image build reuses `waitron.sh`'s file-writing steps (§8).
 - The exact Docker version and image-store folders `@images` covers (§6).

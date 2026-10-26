@@ -744,9 +744,10 @@ old name only points at the new one for 14 days. Five slices; no migration.
 
 ## B3. The bootable USB installer
 
-**B3. The bootable USB installer** — DESIGNED 2026-10-21 and REVISED the same day for the
-owner's five answers and W60; waiting for the owner to approve the revision and answer one new
-question: [design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md) §18,
+**B3. The bootable USB installer** — DESIGNED 2026-10-21 and revised for the owner's five answers
+and W60; revised again 2026-10-26 (B3r) for the settled SAME-box Prepare → fresh Live answer.
+One design-approval question remains; Q2 is recorded answered. No build authorised:
+[design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md) §18,
 [pictures](../backlog/mockups/b3-usb-installer/). A small stick boots an installer that, with nobody
 at the box, fetches the newest release, checks its signature, and writes a ready-made Waitron disk
 (Debian 13, Docker, the release's images; btrfs subvolumes for A950) inside an encrypted container
@@ -755,7 +756,21 @@ box's own disk first in the boot order, no restart until the stick is out, and a
 Waitron starts the box unless a key is pressed. The box's screen runs Chromium with no desktop:
 the setup wizard, then the dashboard, which can make the screen a till; its settings are a Waitron
 page; a one-time maintenance login comes from the dashboard. A setup code stops a stranger setting
-up a new box first (W60). Built and booted in CI for every release. Not built. Box image
+up a new box first (W60). A blank stick box offers Prepare, Live and existing-venue paths, without
+Demo; a genuinely production-started box offers neither Demo nor Prepare. In Prepare, an admin
+freshly reauthenticates with password/passkey plus enrolled TOTP to save allowed configuration,
+clear practice venue data and restart private fresh Live setup on the SAME box. No USB, OS
+reinstall, disk/encryption reset or promotion of the practice database; no practice sale, invoice
+number or chain survives into Live. The design's §12 inventories the current copy, stripped
+credentials, suspended staff, inactive printers, missing device enrolments and reconnect work.
+Pre-delete module/import readiness and A989's still-open required-language check must pass before
+removal; a durable private handoff and audit survive outside the removed venue. Interruptions retry
+the same cutover without erasing a newly created Live venue. This is no general reset or Live-box
+eraser. Bind actual reset/locking APIs in the later plan after A1042's release. The revised approval
+question plans slices 1, 2, 3, 5, 6 and 8, the unchanged go-live minimum. The time zone is chosen
+through the setup area and editable in venue details under its existing limits; "no hand-set clock"
+means the time instant (§10, including the dated A798 pointer). Intended build/VM acceptance runs
+per release, including same-box cutover and private resume. Not built. Box image
 constraints under [Box image constraints (B3)](../backlog/box.md#box-image-constraints-b3). The
 design's §17 lists what it leaves open, each to become its own entry once the revision is approved
 (among them moving a box from Debian 13 to 14 before Chromium's fixes stop, and notes for A940,

@@ -4669,9 +4669,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
   files; reconsider using a standard encryption and archive format.
 
-- **B3. The bootable USB installer** — DESIGNED 2026-10-21 and REVISED the same day for the
-  owner's five answers and W60; waiting for the owner to approve the revision and answer one new
-  question. Not built.
+- **B3. The bootable USB installer** — revised 2026-10-26 for same-box Prepare → fresh Live.
+  One design-approval question remains; Q2 is answered. Plan the go-live slices after approval;
+  the build waits on A989's validation and A1042's reset work. Nothing built.
   [Detail](backlog/box.md#b3-the-bootable-usb-installer)
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)

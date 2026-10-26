@@ -1,22 +1,27 @@
-B3 — THE BOOTABLE USB INSTALLER: REVISED FOR YOUR FIVE ANSWERS — TWO QUESTIONS, ONE AT A TIME
+B3 — THE BOOTABLE USB INSTALLER: REVISED 2026-10-26 — ONE APPROVAL QUESTION
 Design: docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md (revision note at the top; §18).
-Pictures in this folder. Ask 1, then 2. Each has a recommendation; the last option is always
-"Stop here — I'll write".
+Pictures in this folder; README.md links every revised view of 8, 10 and 11. This is a proposed
+design awaiting approval, with no build. Q2 about practising was answered on 2026-10-21 ~23:30:
+SAME box, Prepare first, then fresh Live setup from the dashboard, without USB or OS reinstall.
+Do not ask Q2 again. Its recorded answer is in the design's §18.
 
-In short: a small stick boots an installer that, with nobody at the box, fetches the newest release,
+A small stick boots an installer that, with nobody at the box, fetches the newest release,
 checks its signature, writes it onto the box's disk inside an encrypted container and restarts once
 the stick is out. Your three guards are all in. The disk's key lives in the box's security chip; a
 printed recovery key opens it when the chip will not. The box's screen runs the setup wizard, then
 the dashboard, and can become a till; its settings are a Waitron page. A setup code stops a stranger
-setting up a new box first.
+setting up a new box first. A stick box offers Prepare too; the admin's later action saves only
+allowed configuration and clears the practice venue before restarting private first setup in Live.
+The disk, encryption and installed system stay; no practice sale, invoice number or chain crosses.
 
 ------------------------------------------------------------------------------------------------
-QUESTION 1 of 2 — approve the revision?
-Pictures: 1-unattended-install.png, 2-existing-box.png, 7-till-and-dashboard.png, 10-setup-code.png
-(then 3, 6, 8, 9)
+B3 — approve the revised USB installer design?
+Pictures: 1-unattended-install.png, 2-existing-box.png, 7-till-and-dashboard.png, 10-setup-code.png,
+11-q2-practise.png (then 3, 6, 8, 9). Revised pictures are linked in README.md;
+the earlier pictures and two-question text are kept in superseded-2026-10-21/.
 
-Example: Monday 10:00, the deli's new box arrives with no screen. Marta plugs in the cable and the
-stick and presses the power button. At 10:01 the installer has copied itself into memory, checked
+Example (all times illustrative, not measured): Monday 10:00, the deli's new box arrives with no
+screen. Marta plugs in the cable and the stick and presses the power button. At 10:01 the installer has copied itself into memory, checked
 the box has its security chip and Secure Boot switched on and holds no Waitron, and written the
 box's setup code onto the stick; from then on the stick may come out (the card gives the time). By
 10:02 it has the
@@ -24,12 +29,33 @@ internet time and has fetched and checked Waitron 1.4.0; at 10:03 it erases the 
 with (60 seconds after the check — nobody sees it). She takes the stick out at 10:05 and the box
 restarts itself at 10:07, seals its disk key into its chip and restarts once more to prove it. At
 10:10 she opens waitron.local on her phone, types the setup code from the stick's
-WAITRON/codigos-de-configuracion.txt (read on the shop laptop), and sets up the venue. The recovery
-sheet the wizard prints now also carries the disk's recovery key. Friday: a power cut, and someone has put the stick back in. The
-box starts from the stick, sees «Bar Santet», waits 15 seconds, and starts its own disk: one extra
-restart, no erase, and no new code written to the stick.
+WAITRON/codigos-de-configuracion.txt (read on the shop laptop), and chooses Prepare on that SAME
+box. She keeps the disk recovery sheet, prepares the real menus and floor plans, and the staff
+practise there.
 
-The calls you might want to overturn (all mine, all in the design):
+On opening day, Marta signs in as admin and proves who she is again with her password or passkey,
+plus her enrolled authenticator code. In the dashboard she chooses «Empezar en Live con esta
+configuración». She reviews the copy/reconnect list and keeps the new private recovery code before
+confirming. The box validates and durably saves only the allowed configuration, records the action,
+clears practice data and restarts first setup with Live selected and that configuration ready to
+load. No USB, no OS reinstall, no disk/encryption reset. Her remote browser resumes privately; the
+original code on the stick is exhausted. The managed box console also has a private way in; another
+browser on the LAN cannot take over.
+
+She creates the Live admin and credentials, checks the venue/taxpayer and receipt-language/series
+defaults, supplies Live's fiscal certificate and completes the ordinary Live checks and recovery
+steps. Staff records cross suspended, without their passwords, PINs, passkeys or TOTP enrolment;
+she reviews and reactivates them with fresh credentials. Printer/print-agent definitions cross
+inactive and need reconnecting and enabling. Device profiles cross, but the tills (including this
+box's own till) must join again; card readers, mail, backups and Cloud connections need setting up
+as needed. Practice sales, invoice numbers and chains do not cross. She keeps the original disk
+recovery sheet, since the host cannot promise to reprint its already-deleted copy of that key.
+
+Friday, after going Live: a power cut, and someone has put the stick back in. The box starts from
+the stick, sees «Bar Santet», waits 15 seconds, and starts its own disk: one extra restart, no erase,
+and no new code written to the stick.
+
+The design details included in this approval:
   - a stick in a Waitron box STARTS the box after 15 seconds rather than stopping (your guard 3,
     "refuse to do anything", without leaving the venue dark until someone finds the stick);
   - 60 seconds' wait before erasing another system, which a key can stop;
@@ -39,9 +65,9 @@ The calls you might want to overturn (all mine, all in the design):
   - a disk the installer cannot recognise (a damaged Waitron disk, someone else's encrypted disk)
     is never erased without a keyboard;
   - the installer refuses a box with Secure Boot or the security chip switched off, before erasing;
-  - NO hand-set clock: your answer listed "the clock" as a setting, but A798 (approved) says "No set
-    the clock action anywhere in Waitron". Every install now sets the clock from the internet, so I
-    kept A798. Say if you want it reopened;
+  - NO typed clock time: this concerns the time instant. You choose the time zone through the
+    setup area (country-pack default), and edit it later in venue details under that screen's
+    existing history limits. The original clock decision and its dated A798 update stay in §10;
     (2026-10-24: you reopened it for A798. The box is to set its own clock from AEAT's time, two
     agreeing tills or an administrator's own phone or computer, never a typed time: A798-B slice
     9b, not built yet. See the B3 design's §10.)
@@ -50,7 +76,13 @@ The calls you might want to overturn (all mine, all in the design):
   - maintenance access for admins only, shown once, used only at the box's own screen (no SSH);
   - the setup code is made by the installer and written onto the stick before it says the stick can
     come out (and already filled in on the box's own screen); every setup request needs it, the
-    box's naming page included.
+    box's naming page included; Prepare completing setup exhausts that original code;
+  - the same-box action is admin-only with fresh reauthentication. Its configuration, private new
+    setup/resume credentials and audit survive outside the venue being removed. A missing module,
+    invalid import or missing required language must refuse before removal. A989 remains OPEN
+    and must close before this action can be built. Interrupted cutover resumes the same operation
+    without erasing a newly created Live venue. Concrete reset/locking APIs are for the later plan
+    after A1042's release. This is Prepare to fresh Live only, never a Live-box eraser.
 Found on the way: Debian 13 cannot unlock its main disk from the chip out of the box (an open
 Debian bug), so the box uses a different startup tool (dracut). The obvious chip setting would let
 any Debian stick unlock the disk, and systemd's own protections need a kind of signed kernel this box
@@ -59,23 +91,9 @@ nine experiments, with controls where a broken test would look like a pass. One 
 newer certificate, that update waits for a person with the recovery key until the first build
 settles how to take it unattended.
 
-  A (recommended) — approve as written. Plan slices 1, 2, 3, 5, 6 and 8 (the go-live minimum) next.
+  A (recommended) — approve. Plan slices 1, 2, 3, 5, 6 and 8 (the unchanged go-live minimum) next.
   B — approve with changes (say which).
   Stop here — I'll write.
 
-------------------------------------------------------------------------------------------------
-QUESTION 2 of 2 — practising on a box installed from the stick
-Picture: 11-q2-practise.png (and 10-setup-code.png, lower half)
-
-Example: the deli gets its box on Monday and wants to practise with its real menu before it starts
-filing with AEAT on the 1st.
-
-  A (recommended) — a stick box offers only Live, restore or spare. The deli practises with Prepare
-    on another computer (installed by hand with waitron.sh), then brings its menus and layouts across
-    at Live setup with the existing configuration copy. The box never holds a practice database.
-  B — the stick box offers Prepare too. When the deli is ready it exports its configuration,
-    reinstalls the box from the stick, and brings the menus across at Live setup. Practice happens on
-    the real box and screen, at the cost of one reinstall before going live.
-  (Either way, a box installed by hand and started in production stops offering Demo and Prepare —
-  W60's fix.)
-  Stop here — I'll write.
+Approval is for this revised design and planning next, not a build or a Live fiscal writer change.
+Q2 is recorded answered; the same-box path is part of what you are approving here.

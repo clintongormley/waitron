@@ -5,6 +5,19 @@ Redrawn 2026-10-21 for the revision (the owner's five answers and W60), from HTM
 `--wt-*` tokens. Screens in Spanish as the venue sees them; captions in English. Owner questions:
 [`question.txt`](question.txt).
 
+**2026-10-26, B3r:** the owner answered the practising question on 2026-10-21 ~23:30. The revised
+proposed design awaits one approval question; nothing is built. Prepare runs on the SAME box,
+then an admin freshly reauthenticates in the dashboard, saves allowed configuration and starts
+private fresh Live setup without USB, OS reinstall or disk/encryption reset. No practice sale,
+invoice number or chain crosses. §12 gives the copy/reconnect inventory, pre-delete validation,
+private restart handoff and retained audit. The time-zone choice is separate from setting the
+clock's time (§10, retaining the dated A798 pointer).
+
+Pictures 8, 10 and 11 were redrawn on 2026-10-26. Their original names show Spanish, light,
+1280 px views. [Other views](revision-2026-10-26/) cover English and Spanish, both themes and
+390 px and 1280 px widths. The [previous pictures and question](superseded-2026-10-21/) are
+historical, superseded by this revision. The other installer pictures remain unchanged.
+
 1. `1-unattended-install.png` — nobody at the box: the release fetched and checked, then 60 seconds before erasing another system; the status page.
 2. `2-existing-box.png` — a stick in a box that holds Waitron starts the box after 15 seconds; a key opens the reinstall screen.
 3. `3-no-network.png` — no cable: the installer's open Wi-Fi network and the page a phone sees.
@@ -12,7 +25,7 @@ Redrawn 2026-10-21 for the revision (the owner's five answers and W60), from HTM
 5. `5-box-screen.png` — the box's own screen: the setup wizard, then the dashboard offering «Usar esta pantalla como caja».
 6. `6-stick-and-disk.png` — the stick's WAITRON folder, and the encrypted disk.
 7. `7-till-and-dashboard.png` — «Panel» in the till's menu, «Volver a la caja» in the dashboard.
-8. `8-box-settings.png` — Settings → Este equipo, and maintenance access.
+8. `8-box-settings.png` — Settings → Este equipo, maintenance access and the separate time-zone choice in Venue details, subject to its history limits.
 9. `9-recovery-key.png` — the disk's recovery key as a section of the recovery sheet, and the prompt that asks for it.
-10. `10-setup-code.png` — the setup code: from a phone, on the stick, and a stick box's mode screen.
-11. `11-q2-practise.png` — question 2's two options.
+10. `10-setup-code.png` — the initial setup code from a phone/on the stick; blank stick modes include Prepare, Live and existing venue, without Demo. A genuinely production-started box offers neither Demo nor Prepare. The exhausted original code is not reused for fresh Live.
+11. `11-q2-practise.png` — Q2 recorded answered: Prepare on the same box, the admin's reauthenticated dashboard action, what is removed/kept/reconnected, private resume into fresh Live with saved configuration, and no USB. One revised-design approval question, no choice between practice machines or reinstall paths.
