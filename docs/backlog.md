@@ -4594,9 +4594,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md), no build.
   No setup codes: the owner closed W60's first-claim concern as not a concern; production-mode restrictions stay.
   Every sheet repeats the disk key. Owner ~13:45/~14:00 answers settle locked redirects and the minimal unencrypted normal Wi-Fi copy, with theft/password-change guidance and cable/local fallback; no recovery SSID/hotspot.
-  Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. Owner, 2026-10-24 (A1042 Q3): a reinstall from the stick, and
-  the dashboard's reinstall, keep the box's series-name note; the B3 plan's first task resolves that
-  against A1042's released behaviour. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
+Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. Owner, 2026-10-24 (A1042 Q3): a reinstall from the stick, and the dashboard's reinstall, keep the box's series-name note; the B3 plan's first task resolves that against A1042's released behaviour. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 

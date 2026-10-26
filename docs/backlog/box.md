@@ -349,12 +349,6 @@ Open:
 
 ## Litestream at trace logging deadlocked sales for five seconds
 
-**A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133 #889,
-A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run 36559470238) on one runner in 20 found the CI runner's disk stalling, not the bucket, and the stream
-tests' CI step now sets `TMPDIR=/dev/shm`. The figures are in
-[testing-guide.md](../developers/testing-guide.md), "A sale can wait behind Litestream's own
-checkpoint".
-
 - **Open: Litestream at trace logging deadlocked sales for five seconds.** The probe first ran it at
   trace level by mistake, and 13 of 24 runs failed with a 500, each one looked at being
   `begin immediate` failing `database is locked` after 5,006 to 5,008 ms. The inferred mechanism:
@@ -761,7 +755,7 @@ catalogue and deployment gates; see the
 [Waitron implementation and release handoff](../superpowers/plans/2026-10-20-a850-backup-verification.md#task-27-finish-evidence-branch-review-and-release-handoff)
 and [box limits](../backlog/box.md#backup-data-verification-and-cloud-release).
 A1017 qualified the existing [authorised ordinary-restore fixture](../developers/authorised-cloud-restore-fixture.md)
-separately (99 existing restore tests passed). Cloud still needs its own same-run proof and
+separately. Cloud still needs its own same-run proof and
 must distinguish verifier non-activation from the ordinary restore's authorised fiscal recovery.
 
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
@@ -859,6 +853,22 @@ so the updater must read the hold before offering or applying the version, and o
 once released. Belongs with A1016.
 
 ## Decisions and deliberate limits
+
+**A798-B clock, disk and printer decisions.**
+
+The owner's four answers: no reserved
+  space on the disk, a warning and an email at 2 GB free; when a printer stops, every till and
+  handheld is told at two minutes; while the box's clock reads earlier than its last recorded
+  sale, every action that takes or gives back money, or would write a fiscal record, stops on every
+  device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the
+  defaults that answer left open are in §6); and payments restart only on fresh proof that the clock
+  is right. On 2026-10-24 the owner replaced that last answer's manager's restart, at most 24 hours
+  behind (question 4, 2026-10-20): payments restart by themselves, whatever the gap, once AEAT, two
+  devices from two network addresses or an administrator's own device confirms the clock, and the
+  sales a clock running ahead dated wrongly are listed for the owner and the tax adviser (design
+  §4.9).
+
+**Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
@@ -1328,8 +1338,7 @@ recovery with the continuous source absent. Separate recovery authority still ap
 
 **A1017, 2026-10-22:** the existing `archiveHost()` / `archiveCommand()` fixture is qualified
 for a separately authorised ordinary restore at Waitron `0ee4ec275461cae439b74ef62bfba884b9466d12`.
-Its three unchanged recovery-placement suites passed all 99 tests, including the ordinary
-command, wrong-key and missing-preparation controls. Use the
+Use the
 [fixture recipe and qualification limits](../developers/authorised-cloud-restore-fixture.md).
 Cloud's same-run capture-to-recovery proof remains open. Its evidence must distinguish the
 verifier's non-activation from the ordinary restore's authorised fresh fiscal allocation;
@@ -1486,24 +1495,12 @@ Left open by A1088.
 
 **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
   it can still sell.** Design revision 7 (2026-10-24); every owner question answered except one the slice 9b outline
-  keeps for when 9b is planned. The build
-  follows the design's §8 slices:
+  keeps for when 9b is planned. The remaining build follows the design's §8 slices:
   [plan](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
-  [mock-ups](../backlog/mockups/a798-degraded-trading/README.md). The owner's four answers: no reserved
-  space on the disk, a warning and an email at 2 GB free; when a printer stops, every till and
-  handheld is told at two minutes; while the box's clock reads earlier than its last recorded
-  sale, every action that takes or gives back money, or would write a fiscal record, stops on every
-  device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the
-  defaults that answer left open are in §6); and payments restart only on fresh proof that the clock
-  is right. On 2026-10-24 the owner replaced that last answer's manager's restart, at most 24 hours
-  behind (question 4, 2026-10-20): payments restart by themselves, whatever the gap, once AEAT, two
-  devices from two network addresses or an administrator's own device confirms the clock, and the
-  sales a clock running ahead dated wrongly are listed for the owner and the tax adviser (design
-  §4.9). It adds a module seat for staff notices and one
-  migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
-  `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora on the Box status page: a manager has the records waiting after a failed send tried again at once, never before AEAT's wait between sends except a full batch, which AEAT's own rule lets go at once, and never releasing a chain held after repeated refusals; and the Tax agency row's last acceptance) landed in #2030; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration) landed in #2012; slice 10 (emails to the managers about the disk and a clock before 28-10-2024, `reader.offline`, the printer notice on every till, and `waitron.sh` switching on time synchronisation and deleting the images an upgrade replaced) landed in #2019; slice 9 (devices report their clock; `clock.disagrees` and `clock.unusable` in the bell; the box records when each clock stop began, and payments restart by themselves, with no cap and one step back per confirmation, once AEAT, two devices from two network addresses or an administrator's own device — never the box's own screen outside development — confirms the clock, each confirmation kept in `clock_confirmations`; the sales dated wrongly listed on the Box status page with `clock.records_misdated`, or that alert saying the box cannot tell; the bell alerts, the managers' emails and the disproof check; the clock-stop email) landed in #2025. Two slices from those answers are open, each its own later pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([outline](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)); and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
+  [mock-ups](../backlog/mockups/a798-degraded-trading/README.md).
+
+Two slices from those answers are open, each its own later pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([outline](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)); and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
   [Q51](../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24),
   [Q52](../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
   and
