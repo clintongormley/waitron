@@ -15,6 +15,7 @@ import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
   type StartAgainRecoveryShown,
+  type StartAgainSummary,
   type VenueRequest,
 } from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -74,11 +75,19 @@ function registerAnswer(value: unknown): import("@waitron/provisioning").Registe
 
 function missingDatabaseConfirmation(value: unknown) {
   const body = exact(value, ["nothingFiledOrSold", "shown"]);
-  const shown = exact(body.shown, ["reached", "lastName"], ["recoveryRecordDamaged", "recovery"]);
+  if (body.nothingFiledOrSold !== true) invalid();
+  return { nothingFiledOrSold: true as const, shown: shownSummary(body.shown) };
+}
+function recoveryDiscardConfirmation(value: unknown) {
+  const shown = shownSummary(exact(value, ["shown"]).shown);
+  if (shown.recovery === undefined) invalid();
+  return { shown };
+}
+function shownSummary(value: unknown): StartAgainSummary {
+  const shown = exact(value, ["reached", "lastName"], ["recoveryRecordDamaged", "recovery"]);
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
   const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
   if (
-    body.nothingFiledOrSold !== true ||
     (damaged && shown.recoveryRecordDamaged !== true) ||
     !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string) ||
     (shown.lastName !== null &&
@@ -88,13 +97,10 @@ function missingDatabaseConfirmation(value: unknown) {
   )
     invalid();
   return {
-    nothingFiledOrSold: true as const,
-    shown: {
-      reached: shown.reached as "claimed" | "named" | "fiscal-started" | "fiscal-finished",
-      lastName: shown.lastName as string | null,
-      ...(damaged && { recoveryRecordDamaged: true as const }),
-      ...(recovery !== undefined && { recovery }),
-    },
+    reached: shown.reached as StartAgainSummary["reached"],
+    lastName: shown.lastName as string | null,
+    ...(damaged && { recoveryRecordDamaged: true as const }),
+    ...(recovery !== undefined && { recovery }),
   };
 }
 function shownRecovery(value: unknown): StartAgainRecoveryShown {
@@ -937,6 +943,7 @@ export function mountFirstSetupResolutionApi(
           "ownerGeneration",
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
+          ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
           ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
             ? ["recoveryRecordDamagedShown"]
             : []),
@@ -958,6 +965,9 @@ export function mountFirstSetupResolutionApi(
         const confirmMissingDatabase = Object.hasOwn(body, "confirmMissingDatabase")
           ? missingDatabaseConfirmation(body.confirmMissingDatabase)
           : undefined;
+        const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
+          ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
+          : undefined;
         try {
           await options.startAgain!({
             inspectionId: text(body.inspectionId),
@@ -965,6 +975,7 @@ export function mountFirstSetupResolutionApi(
             ownerGeneration: body.ownerGeneration as number,
             register,
             ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+            ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
             ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
               ? { recoveryRecordDamagedShown: true as const }
               : {}),

@@ -174,7 +174,7 @@ it.each([
   ["an unparseable time", { at: "yesterday" }],
   ["a time not in canonical form", { at: "2026-10-24T13:50:12Z" }],
   ["an attempt id that is not a UUID", { attemptId: "../escape" }],
-  ["a database other than missing", { database: "present" }],
+  ["a database other than missing or present", { database: "gone" }],
   ["a negative owner generation", { ownerGeneration: -1 }],
   ["a fractional owner generation", { ownerGeneration: 1.5 }],
   ["an unknown reached", { shown: { reached: "sold", lastName: null } }],
@@ -293,3 +293,23 @@ it.each([
     expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
   },
 );
+
+it("a record with the database present is written when it showed a stopped backup recovery", async () => {
+  const dir = await stateDir();
+  const present = { ...record, database: "present", shown: { ...record.shown, recovery } };
+  await writeStartAgainConfirmation(dir, present as typeof record);
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
+  ).toEqual({ version: 1, ...present });
+});
+
+it("a record with the database present that showed no backup recovery is refused setup.attempt_invalid and writes nothing", async () => {
+  const dir = await stateDir();
+  await expect(
+    writeStartAgainConfirmation(dir, {
+      ...record,
+      database: "present",
+    } as unknown as typeof record),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+  expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+});

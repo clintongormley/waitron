@@ -30,7 +30,7 @@ export interface StartAgainConfirmation {
   version: 1;
   at: string;
   attemptId: string;
-  database: "missing";
+  database: "missing" | "present";
   administrator: { displayName: string; email: string };
   ownerGeneration: number;
   shown: StartAgainSummary;
@@ -98,7 +98,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     !isCanonicalInstant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
-    database !== "missing" ||
+    (database !== "missing" && database !== "present") ||
     !object(administrator) ||
     !text(administrator.displayName) ||
     !text(administrator.email) ||
@@ -107,14 +107,16 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     !object(shown) ||
     !(REACHED as readonly unknown[]).includes(shown.reached) ||
     (shown.lastName !== null && typeof shown.lastName !== "string") ||
-    (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true)
+    (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true) ||
+    // With the database present, the only Start again that writes a record discards a recovery.
+    (database === "present" && !Object.hasOwn(shown, "recovery"))
   )
     throw invalid();
   return {
     version: 1,
     at,
     attemptId,
-    database,
+    database: database as StartAgainConfirmation["database"],
     administrator: { displayName: administrator.displayName, email: administrator.email },
     ownerGeneration: ownerGeneration as number,
     shown: {

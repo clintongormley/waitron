@@ -962,6 +962,182 @@ it("a stopped recovery with the database present: no summary showed it, so Start
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
 });
 
+/** The inspection reads the venue database as present and empty. */
+function databasePresent(host: Host): Host {
+  const inspect = host.resolution.inspectFirstSetupResolution;
+  return {
+    ...host,
+    resolution: {
+      ...host.resolution,
+      inspectFirstSetupResolution: async () => ({
+        ...(await inspect()),
+        database: "no-venue-rows" as const,
+        emptyDatabase: true,
+      }),
+    },
+  };
+}
+
+async function presentOver(f: Pick<Repair, "host" | "roots">, backupRecovery: Service) {
+  const { owner, ids } = await signedIn(f.host);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: databasePresent(f.host),
+    backupRecovery,
+  });
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  return {
+    shown,
+    owner,
+    ids,
+    actions,
+    run: (confirmed: StartAgainSummary = shown) =>
+      actions.startAgainFirstSetup({ ...ids, owner, confirmRecoveryDiscard: { shown: confirmed } }),
+  };
+}
+
+it("with the database present, the password and the confirmed summary discard a stopped recovery, with a record of who chose it", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const startAgain = await presentOver(f, f.service);
+  expect(startAgain.shown.recovery).toMatchObject({ lastName: f.selected.identity });
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  const records = await confirmations(f.roots.stateDir);
+  expect(records).toHaveLength(1);
+  expect(records[0]).toMatchObject({
+    database: "present",
+    administrator: { displayName: "Elena", email: "elena@example.test" },
+  });
+});
+
+it("with the database present, a stopped recovery's Start again without the setup password is refused setup.owner_required, and nothing changes", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const startAgain = await presentOver(f, f.service);
+  const last = (await f.workspace.readChain()).at(-1)!;
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(
+    startAgain.actions.startAgainFirstSetup({
+      ...startAgain.ids,
+      confirmRecoveryDiscard: { shown: startAgain.shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expectNothingWritten(f, before);
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+});
+
+it.each([
+  ["without confirmRecoveryDiscard", () => undefined],
+  [
+    "with a summary whose recovery was active at another time",
+    (shown: StartAgainSummary) => ({
+      shown: {
+        ...shown,
+        recovery: { ...shown.recovery!, lastActiveAt: shown.recovery!.startedAt },
+      },
+    }),
+  ],
+  [
+    "with a summary that named no recovery",
+    (shown: StartAgainSummary) => ({
+      shown: Object.fromEntries(
+        Object.entries(shown).filter(([key]) => key !== "recovery"),
+      ) as StartAgainSummary,
+    }),
+  ],
+] as const)(
+  "with the database present, a stopped recovery's Start again %s is refused setup.attempt_conflict, and nothing changes",
+  async (_label, confirm) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    const startAgain = await presentOver(f, f.service);
+    expect(startAgain.shown.recovery!.lastActiveAt).not.toBe(startAgain.shown.recovery!.startedAt);
+    const last = (await f.workspace.readChain()).at(-1)!;
+    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+    const confirmRecoveryDiscard = confirm(startAgain.shown);
+    await expect(
+      startAgain.actions.startAgainFirstSetup({
+        ...startAgain.ids,
+        owner: startAgain.owner,
+        ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+      }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    await expectNothingWritten(f, before);
+    expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+  },
+);
+
+it("with the database missing, confirmRecoveryDiscard is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const startAgain = await startAgainOver(f, f.service);
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(
+    startAgain.actions.startAgainFirstSetup({
+      ...startAgain.ids,
+      owner: startAgain.owner,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown: startAgain.shown },
+      confirmRecoveryDiscard: { shown: startAgain.shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectNothingWritten(f, before);
+});
+
+it("with the database present and no recovery, the summary refuses setup.not_ready and confirmRecoveryDiscard is refused setup.attempt_conflict", async () => {
+  const f = await fixture(true);
+  const service = recovery(f.options);
+  const { owner, ids } = await signedIn(f.host);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: databasePresent(f.host),
+    backupRecovery: service,
+  });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      confirmRecoveryDiscard: { shown: { reached: "claimed", lastName: null } },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectNothingWritten(f, before);
+});
+
+it("with the database present, the fence refuses Start again while the recovery runs, and nothing changes", async () => {
+  const f = await selectedRepair();
+  const { app } = repairApp({ ...f, host: databasePresent(f.host) });
+  const { owner, ids } = await signedIn(f.host);
+  const activity = (await f.service.liveness())!;
+  expect(activity.state).toBe("running");
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  const refused = await app.request(
+    "https://box.test/setup-api/first-setup/resolution/start-again",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Waitron-Setup-Owner": owner.capability,
+        "X-Waitron-Setup-Attempt": owner.attemptId,
+        "X-Waitron-Setup-Revision": String(owner.revision),
+        "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
+      },
+      body: JSON.stringify({
+        ...ids,
+        confirmRecoveryDiscard: { shown: { reached: "claimed", lastName: null } },
+      }),
+    },
+    tls(),
+  );
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "setup.recovery_in_progress" } });
+  await expectNothingWritten(f, before);
+});
+
 it("a summary read before the recovery stopped, naming no recovery, refuses Start again setup.attempt_conflict, and nothing is written", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);

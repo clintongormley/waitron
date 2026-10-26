@@ -663,6 +663,52 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
+it("the Start again route takes confirmRecoveryDiscard only in its exact shape, with a shown recovery", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const reached: unknown[] = [];
+  const app = routes(f, {
+    ...actions,
+    startAgainFirstSetup: async (body) => {
+      reached.push(body.confirmRecoveryDiscard);
+    },
+  });
+  const recovery = {
+    startedAt: "2026-10-16T11:40:00.000Z",
+    lastActiveAt: "2026-10-16T11:44:00.000Z",
+    lastActiveSource: "memory",
+    lastName: name,
+    failed: false,
+    cloud: false,
+  };
+  const shown = { reached: "named", lastName: name, recovery };
+  const send = (confirmRecoveryDiscard: unknown) =>
+    sendStartAgain(app, owner, { ...ids, register: request.register, confirmRecoveryDiscard });
+  for (const malformed of [
+    null,
+    {},
+    { shown, extra: 1 },
+    { nothingFiledOrSold: true, shown },
+    { shown: { reached: "named", lastName: name } },
+    { shown: { ...shown, extra: 1 } },
+    { shown: { ...shown, recovery: { ...recovery, extra: 1 } } },
+    { shown: { ...shown, recovery: { ...recovery, cloud: 0 } } },
+    { shown: { ...shown, recoveryRecordDamaged: false } },
+    { shown: { ...shown, reached: "complete" } },
+  ]) {
+    const refused = await send(malformed);
+    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+  expect(reached).toEqual([]);
+  const damaged = { ...shown, recoveryRecordDamaged: true };
+  for (const value of [shown, damaged]) {
+    const passed = await send({ shown: value });
+    expect(passed.status, await passed.clone().text()).toBe(200);
+  }
+  expect(reached).toEqual([{ shown }, { shown: damaged }]);
+});
+
 function recoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   return join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`);
 }

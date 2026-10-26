@@ -45,6 +45,7 @@ export interface StartAgainFirstSetupRequest {
   owner?: FirstSetupOwnerAttempt;
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
+  confirmRecoveryDiscard?: { shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
 }
 export interface StartAgainSummaryRequest {
@@ -295,7 +296,7 @@ export function createFirstSetupResolutionActions(
           const recovery = found?.kind === "stopped" ? found.shown : undefined;
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
-          if (inspection.database !== "missing") unavailable();
+          if (inspection.database !== "missing" && recovery === undefined) unavailable();
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
           await assertRecoveredOwner(request.owner, retained.state);
@@ -321,6 +322,7 @@ export function createFirstSetupResolutionActions(
             "owner",
             "register",
             "confirmMissingDatabase",
+            "confirmRecoveryDiscard",
             "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
@@ -335,6 +337,8 @@ export function createFirstSetupResolutionActions(
           const missing = inspection.database === "missing";
           if (!missing && request.confirmMissingDatabase !== undefined) conflict();
           if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
+          const discardsStopped = !missing && found?.kind === "stopped";
+          if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
           if (missing) {
             // D3a: with the database missing, any status but complete, and only once confirmed.
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
@@ -377,8 +381,10 @@ export function createFirstSetupResolutionActions(
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();
-          // Only the missing-database ask shows a recovery, so only its confirmation can discard one.
-          if (found?.kind === "stopped" && !missing) unavailable();
+          if (discardsStopped) {
+            if (request.owner === undefined) throw new AppError("setup.owner_required", {});
+            if (request.confirmRecoveryDiscard === undefined) conflict();
+          }
           const box = await assertStartAgainAllowedOnDisk(roots, discarding);
           const markerFor = async (markerOptions: { discarding?: string }) => {
             const marker = await startAgainMarkerFor(
@@ -415,12 +421,15 @@ export function createFirstSetupResolutionActions(
           // abandoned it.
           const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
-          const shown = missing ? summaryOf(state, gathered, recovery) : undefined;
+          const shown =
+            missing || discardsStopped ? summaryOf(state, gathered, recovery) : undefined;
           if (
             missing &&
             (confirmation?.nothingFiledOrSold !== true ||
               !isDeepStrictEqual(confirmation.shown, shown))
           )
+            conflict();
+          if (discardsStopped && !isDeepStrictEqual(request.confirmRecoveryDiscard?.shown, shown))
             conflict();
           const backup = options.backupRecovery;
           const refuseRunning = async (): Promise<never> => {
@@ -431,12 +440,12 @@ export function createFirstSetupResolutionActions(
           // No await between this check and the first write: the record and the note change the
           // recovery's originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
-          if (missing && !finishing) {
+          if ((missing || discardsStopped) && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
             await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),
               attemptId: state.frozen.attemptId,
-              database: "missing",
+              database: missing ? "missing" : "present",
               administrator: { displayName, email },
               ownerGeneration: state.ownerGeneration,
               shown: shown!,
