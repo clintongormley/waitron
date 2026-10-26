@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { tenants, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readPrivacyContact, savePrivacyContact } from "./index.js";
+import { readPrivacyContact, savePrivacyContact, type PrivacyContact } from "./index.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -81,15 +81,31 @@ describe("readPrivacyContact and savePrivacyContact", () => {
     await withTransaction(suite.db, (tx) =>
       savePrivacyContact(tx, { privacyEmail: "privacy@example.com" }),
     );
+    const before = await stored();
 
     const result = await withTransaction(suite.db, (tx) =>
       savePrivacyContact(tx, { privacyEmail: null }),
     );
 
     expect(result).toEqual({ privacyNoticeUrl: null, privacyEmail: null });
+    expect(await stored()).toEqual({ ...before, privacyEmail: null });
     expect(suite.db.all(sql`select privacy_email is null as unset from tenants`)).toEqual([
       { unset: 1 },
     ]);
+  });
+
+  it("writes only the two privacy columns when handed an object carrying another key", async () => {
+    await insertTaxpayer();
+    const before = await stored();
+    const changes = {
+      privacyEmail: "privacy@example.com",
+      legalName: "Hijacked SL",
+    } as Partial<PrivacyContact>;
+
+    const result = await withTransaction(suite.db, (tx) => savePrivacyContact(tx, changes));
+
+    expect(result).toEqual({ privacyNoticeUrl: null, privacyEmail: "privacy@example.com" });
+    expect(await stored()).toEqual({ ...before, privacyEmail: "privacy@example.com" });
   });
 
   it("answers null and writes no row when there is no taxpayer row", async () => {

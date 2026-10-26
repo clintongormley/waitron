@@ -6,6 +6,7 @@ import { deviceFormFactorEnum, deviceProfiles } from "../schema/device-profiles.
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
+import { nowIso } from "../schema/columns.js";
 
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
@@ -28,7 +29,7 @@ export async function seedTenant(db: Database): Promise<void> {
   // Plain SQL: upgrade tests seed a database migrated only to an earlier point, where today's
   // columns do not exist yet.
   await db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
-    values (1, 'ES', ${freshNif()}, 'Test SL', ${new Date().toISOString()})
+    values (1, 'ES', ${freshNif()}, 'Test SL', ${nowIso()})
     on conflict (id) do nothing`);
 }
 

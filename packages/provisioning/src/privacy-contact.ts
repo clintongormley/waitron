@@ -26,9 +26,9 @@ export async function savePrivacyContact(
   tx: Transaction,
   changes: Partial<PrivacyContact>,
 ): Promise<PrivacyContact | null> {
-  const values = Object.fromEntries(
-    Object.entries(changes).filter(([, value]) => value !== undefined),
-  ) as Partial<PrivacyContact>;
+  const values: Partial<PrivacyContact> = {};
+  if (changes.privacyNoticeUrl !== undefined) values.privacyNoticeUrl = changes.privacyNoticeUrl;
+  if (changes.privacyEmail !== undefined) values.privacyEmail = changes.privacyEmail;
   if (Object.keys(values).length === 0) return readPrivacyContact(tx);
   const [row] = await tx
     .update(tenants)
