@@ -783,18 +783,16 @@ export class DashboardApp extends LitElement {
           grid-area: actions;
           margin-inline-start: var(--wt-space-2);
         }
-        /* Powered by moves under the name rather than past the screen's edge when the two cannot
-           share a row. A zero basis makes the row break on the narrowest width of the name and its
-           Live pill, so a long name still shrinks beside Powered by wherever both fit. */
+        /* Powered by moves under the name, rather than past the screen's edge, whenever the name and
+           its Live pill on one line do not fit beside it: the name block keeps its content-sized
+           basis, so the row breaks before the name would. A name wider than the whole row wraps
+           inside it. */
         .venue-row {
           grid-area: venue;
           display: flex;
           flex-wrap: wrap;
           align-items: center;
           gap: var(--wt-space-2) var(--wt-space-3);
-        }
-        .venue {
-          flex: 1 1 0;
         }
         .venue-name {
           padding-inline-start: 0;

@@ -101,6 +101,14 @@ function sameRow(a: DOMRect, b: DOMRect): boolean {
   return a.top < b.bottom && b.top < a.bottom;
 }
 
+/** How many lines an element's text is laid out on. */
+function textLines(element: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const tops = [...range.getClientRects()].map((rect) => Math.round(rect.top));
+  return new Set(tops).size;
+}
+
 let width = 0;
 let height = 0;
 
@@ -263,11 +271,11 @@ describe("Powered by in the signed-in banner", () => {
 
   describe.each(["en-GB", "es-ES"] as const)("at phone width (%s)", (locale) => {
     it.each([
-      ["a short", undefined],
-      ["a long", LONG_NAME],
+      ["a short legal name, sits beside it", undefined, "beside"],
+      ["a legal name too long to share the row, sits under it", LONG_NAME, "under"],
     ] as const)(
-      "with %s legal name, takes the second row's trailing end and leaves the first row alone",
-      async (_kind, venueName) => {
+      "with %s at the second row's trailing end and leaves the first row alone",
+      async (_kind, venueName, placement) => {
         await page.viewport(390, 844);
         store(withLogo);
         startVenueTheme(document.documentElement, { fetchImpl: never });
@@ -283,8 +291,13 @@ describe("Powered by in the signed-in banner", () => {
         const box = banner(el).getBoundingClientRect();
         expect(at.top).toBeGreaterThanOrEqual(logo.bottom);
         expect(at.top).toBeGreaterThanOrEqual(menu.bottom);
-        expect(sameRow(at, name)).toBe(true);
-        expect(at.left).toBeGreaterThanOrEqual(name.right);
+        if (placement === "beside") {
+          expect(sameRow(at, name)).toBe(true);
+          expect(at.left).toBeGreaterThanOrEqual(name.right);
+        } else {
+          expect(at.top).toBeGreaterThanOrEqual(name.bottom);
+          expect(name.right).toBeLessThanOrEqual(390);
+        }
         expect(overlaps(at, name)).toBe(false);
         expect(at.left).toBeGreaterThanOrEqual(0);
         expect(at.right).toBeLessThanOrEqual(390);
@@ -299,6 +312,46 @@ describe("Powered by in the signed-in banner", () => {
         expect(words.width).toBeGreaterThan(0);
       },
     );
+
+    // The widths come from what this run's fonts measure, so the case lands where the line just
+    // stops fitting beside the name, whichever fonts draw it.
+    it("goes under a short legal name rather than breaking the name onto two lines", async () => {
+      store(withLogo);
+      startVenueTheme(document.documentElement, { fetchImpl: never });
+      await page.viewport(390, 844);
+      const el = await signedIn({ locale });
+      const line = await theLine(el);
+      const nameEl = banner(el).querySelector("[data-test=venue-name]")!;
+      const row = banner(el).querySelector(".venue-row")!;
+      expect(textLines(nameEl)).toBe(1);
+      const nameWidth = nameEl.getBoundingClientRect().width;
+      const lineWidth = line.getBoundingClientRect().width;
+      const outsideRow = 390 - row.getBoundingClientRect().width;
+      const gap = parseFloat(getComputedStyle(row).columnGap);
+      const widest = Math.ceil(outsideRow + nameWidth + gap + lineWidth);
+
+      async function at(viewport: number) {
+        await page.viewport(viewport, 844);
+        await vi.waitFor(() => expect(window.innerWidth).toBe(viewport));
+        const menu = banner(el).querySelector("[data-test=account-menu]")!.getBoundingClientRect();
+        return { line: line.getBoundingClientRect(), name: nameEl.getBoundingClientRect(), menu };
+      }
+
+      // Between 1 and 2 px short of room for the name at its one-line width.
+      const short = await at(widest - 2);
+      expect(textLines(nameEl), "the legal name's lines").toBe(1);
+      expect(short.name.width).toBeCloseTo(nameWidth, 1);
+      expect(short.line.top, "the line under the name").toBeGreaterThanOrEqual(short.name.bottom);
+      expect(short.line.left).toBeGreaterThanOrEqual(0);
+      expect(short.line.right).toBeLessThanOrEqual(widest - 2);
+      expect(Math.abs(short.line.right - short.menu.right)).toBeLessThanOrEqual(1);
+
+      const roomy = await at(widest + 1);
+      expect(textLines(nameEl)).toBe(1);
+      expect(sameRow(roomy.line, roomy.name), "the line beside the name").toBe(true);
+      expect(roomy.line.left).toBeGreaterThanOrEqual(roomy.name.right);
+      expect(Math.abs(roomy.line.right - roomy.menu.right)).toBeLessThanOrEqual(1);
+    });
   });
 
   it.each([100, 130] as const)(

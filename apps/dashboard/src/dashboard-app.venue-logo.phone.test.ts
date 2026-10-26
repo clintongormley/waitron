@@ -56,7 +56,7 @@ async function mountShell(
 async function controlHeight(signedIn: boolean, locale: Locale): Promise<number> {
   const { banner } = await mountShell(null, signedIn, locale);
   expect(banner.querySelector(".brand-logo")).not.toBeNull();
-  const height = banner.getBoundingClientRect().height;
+  const height = heightWithoutVenueRow(banner);
   cleanupWidgets();
   return height;
 }
@@ -69,17 +69,14 @@ function sameRow(a: Element, b: Element): boolean {
 }
 
 /**
- * The height Powered by's own row adds when it sits under the legal name. A logo in use brings the
- * line into a signed-in banner, and on a narrow banner it wraps under the name whenever the two do
- * not fit side by side, which depends on the fonts; the no-logo control has no such line. That row
- * is allowed for, and nothing else: a logo that made its own row taller still fails.
+ * The banner's height without the row holding the legal name, which a narrow banner puts second
+ * and a wide one lays out in its only row (the row's own box then measures 0). With a logo in use a
+ * signed-in banner also shows Powered by in it, which the no-logo control lacks, and how many lines
+ * that row then takes depends on the fonts.
  */
-function poweredByRowBelowName(banner: HTMLElement): number {
-  const poweredBy = banner.querySelector(".banner-powered-by");
-  if (poweredBy === null) return 0;
-  const line = poweredBy.getBoundingClientRect();
-  const name = banner.querySelector(".venue")!.getBoundingClientRect();
-  return line.top >= name.bottom ? line.bottom - name.bottom : 0;
+function heightWithoutVenueRow(banner: HTMLElement): number {
+  const row = banner.querySelector(".venue-row")!.getBoundingClientRect();
+  return banner.getBoundingClientRect().height - row.height;
 }
 
 let width = 0;
@@ -130,9 +127,7 @@ async function check(
     expect(sameRow(logo, banner.querySelector("[data-test=theme-chooser]")!)).toBe(true);
     expect(sameRow(logo, banner.querySelector("[data-test=language-chooser]")!)).toBe(true);
   }
-  expect(banner.getBoundingClientRect().height - poweredByRowBelowName(banner)).toBe(
-    expectedHeight,
-  );
+  expect(heightWithoutVenueRow(banner)).toBe(expectedHeight);
   expect(el.shadowRoot!.querySelector(".brand-logo")?.checkVisibility() ?? false).toBe(false);
 }
 
