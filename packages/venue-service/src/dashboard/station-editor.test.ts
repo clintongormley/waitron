@@ -344,8 +344,8 @@ it("keeps a printer choice it can no longer send out of the save when the statio
   expect(el.dirty).toBe(true);
 });
 
-const TIMINGS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
-const STATION_MINUTES = [...TIMINGS, "readyWarningAfterMinutes"] as const;
+const LATE_FLAGS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+const STATION_MINUTES = [...LATE_FLAGS, "readyWarningAfterMinutes"] as const;
 it("opens on the station's own minutes, each required, with no placeholder and no venue note", async () => {
   const el = await mount();
   expect(STATION_MINUTES.map((name) => timingField(el, name).value)).toEqual([
@@ -483,13 +483,13 @@ it("puts a connection failure at the bottom only, marking no timing", async () =
   await setTiming(el, "warmAfterMinutes", "3");
   el.refusal = { code: "connection.failed" };
   await el.updateComplete;
-  expect(TIMINGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
+  expect(STATION_MINUTES.map((name) => timingField(el, name).error)).toEqual(["", "", "", ""]);
   expect(formMessage(el)).toBe("The change could not be saved.");
 });
 
 it("reads the timings in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
+  expect(LATE_FLAGS.map((name) => timingField(el, name).label)).toEqual([
     "Esperando",
     "Con retraso",
     "Olvidado",
@@ -883,7 +883,7 @@ it.each(["", "0", "1.5", "abc", "2147483648"])(
     expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
       "Use whole minutes, at least 1.",
     );
-    expect(TIMINGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
+    expect(LATE_FLAGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
     expect(nameField(el).error).toBe("");
     expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
     expect(saveButton(el).disabled).toBe(true);
@@ -918,7 +918,7 @@ it.each(["management.request_invalid", "station.thresholds_invalid"] as const)(
     expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
       "Use whole minutes, at least 1.",
     );
-    expect(TIMINGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
+    expect(LATE_FLAGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
     expect(nameField(el).error).toBe("");
     expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
     expect(saveButton(el).disabled).toBe(false);

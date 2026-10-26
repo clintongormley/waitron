@@ -210,7 +210,8 @@ export function stationRefusalField(refusal: Refusal | undefined): Field | undef
 }
 
 function refusalText(refusal: Refusal): string {
-  switch (stationRefusalField(refusal)) {
+  const field = stationRefusalField(refusal);
+  switch (field) {
     case "name":
       return t("prep.name_taken");
     case "colour":
@@ -223,10 +224,8 @@ function refusalText(refusal: Refusal): string {
       return refusal.code === "station.not_found"
         ? `${t("prep.save_error")} ${t("prep.station_not_found")}`
         : t("prep.save_error");
-    case "readyWarningAfterMinutes":
-      return t("prep.ready_warning_invalid");
     default:
-      return t("prep.threshold_invalid");
+      return timingMessage(field);
   }
 }
 
