@@ -404,8 +404,7 @@ rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 
 ## Raw engine imports in `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`
 
-**Raw engine imports in `apps/server/src/recovery-lock.ts` and
-`apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155), which closed
+Left open by W45 (#1155), which closed
 "`packages/migrations` opened its own raw `node:sqlite` connection": a 2026-10-03 search of
 non-test files under `apps/` and `packages/` also found raw engine imports in
 `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`. **Next
@@ -622,9 +621,7 @@ In A435 step 5's second run-it review, deleting the `working_orders` location `e
 
 OPEN.
 
-- **A switched-off module's append-only tables are neither re-protected nor checked.** A start
-  migrates, re-protects and checks only the modules switched on.
-  [Detail](architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
+- [Switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
 - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
   `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
   `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses
@@ -637,29 +634,19 @@ OPEN.
 
 ## Loose ends left by the tenant-column removal (#378, 2026-09-16)
 
-- **These index and key names still read `tenant`, and the columns they name are gone.** This is
-  its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in
-  production error translation, so renaming them changes behaviour and wants its own failing
-  tests first.
-  [Detail](architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
-- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved
-  for facts about the process itself.** **Next action:** choose a prefix (`credentials.missing`
-  is the nearest sibling) and rename it in one change, checking the prefix matchers
-  `docs/developers/conventions-data.md` lists.
-  [Detail](architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
+- [Index and key names that still read `tenant`](#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone).
+- [`server.credential_unusable`'s domain prefix](#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself).
 
 ## The `authorized_by` comment on `drawer_opens` says only a manual open sets it
 
-**The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
-  (`packages/db/src/schema/drawer-opens.ts:50-51`), but a cash refund's opening sets it too:
+The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund's opening:
   `enqueueTenderRefundDrawer` takes a required `authorizedBy` and writes it into the row
   (`apps/server/src/receipt-print.ts:622`, `:645-653`). Found by A980 S2c's review (#2073); the
   lines predate that branch. Correct the comment to name every reason that sets it.
 
 ## A query with tens of thousands of bound values crashes before it reaches the database
 
-**A query with tens of thousands of bound values crashes before it reaches the database**: drizzle's
-  session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
+Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
   (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
   value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
   call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
