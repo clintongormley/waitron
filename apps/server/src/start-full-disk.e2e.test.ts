@@ -740,11 +740,24 @@ describe("a start on a real full disk", () => {
 
     const full = entryDeps(stateDir);
     await runEntry(full);
-    expect(vi.mocked(full.log).mock.calls).toContainEqual([
-      "warn",
-      "setup.recovery_cleanup_refused",
-      { reason: "storage.disk_full", errno: "ERR_SQLITE_ERROR", errcode: 14, path: discarded.path },
+    const refused = vi
+      .mocked(full.log)
+      .mock.calls.filter(([, event]) => event === "setup.recovery_cleanup_refused");
+    expect(refused).toEqual([
+      [
+        "warn",
+        "setup.recovery_cleanup_refused",
+        {
+          reason: "storage.disk_full",
+          errno: "ERR_SQLITE_ERROR",
+          errcode: expect.any(Number),
+          path: discarded.path,
+        },
+      ],
     ]);
+    // SQLite says "full" (13) on CI's Linux filesystem and "unable to open" (14) on macOS's
+    // hdiutil image; `fullDiskFailure` classifies both as a full disk here.
+    expect([13, 14]).toContain((refused[0]![2] as { errcode: number }).errcode);
     expect(statSync(discarded.database).size).toBe(4 * 1024 * 1024);
     expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(false);
     expect(full.startServer).not.toHaveBeenCalled();
