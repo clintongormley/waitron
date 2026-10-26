@@ -289,35 +289,19 @@ server without changing their deployed same-origin paths; this also affects setu
 2026-10-22: A994 adds a root worker limit calculated from startup processor and memory headroom.
 Its simultaneous-root-suite experiment is described in
 [CI and gates](../developers/ci-and-gates.md#root-workers-start-from-available-headroom).
-The historical experiment below also adds eight spinning loops; repeat that workload before
-closing this entry. Its retained results describe the earlier configuration.
+The historical experiment also adds eight spinning loops; repeat that workload before
+closing this entry.
 
-Measured 2026-10-16 on the 18-core Mac (64 GB, 58–60% of memory free), Node v26.11.1, Vitest
-4.1.11: three root projects at once (`pnpm vitest run`, one with `--coverage`) and eight shell
-loops that only spin; the one-minute load average peaked at 72 before the change and 102 on the
-branch. Receipts in lane B's campaign folder,
+Three root projects at once (`pnpm vitest run`, one with `--coverage`) and eight shell
+loops that only spin.
+
+Receipts in lane B's campaign folder,
 `a751-receipts/heavy3/` (before A751) and `a751-receipts/verify-heavy3/` (A751's branch,
 `425cf16b8`).
 
-Before A751, each of the three runs failed 30–33 tests in 8–10 files. On A751's branch each failed
-7–8 tests in four or five files, every one of them in all three runs except `guarded-teardowns` (one run):
-
-| File | Case | What it printed (one run) |
-| --- | --- | --- |
-| `scripts/fiscal-allocation-migration.test.ts` | the whole file | `Hook timed out in 60000ms`, in `useVenueDb`'s `beforeAll` (`packages/db/src/testing/venue-db.ts`) |
-| `scripts/guarded-teardowns.test.ts` | guards the resource it releases | `STACK_TRACE_ERROR` after 82 s |
-| `scripts/menu-sections-upgrade.test.ts` | both cases | `STACK_TRACE_ERROR` after 43–69 s |
-| `scripts/mutation-shard.test.mjs` | fills every shard | `STACK_TRACE_ERROR` after 51–58 s |
-| `scripts/pre-push.test.mjs` | four to five cases | assertion failures or `STACK_TRACE_ERROR`, after 17–40 s |
-
-`brand-build` (`status: null` after 10 s), `run-with-deadline` and `write-path-tables` failed the
-same load before A751 and passed it on the branch; whether that is A751's lighter `ci-workflow` and
-upgrade walk or chance was not measured. `fiscal-allocation-migration` passed the load before A751
-(7.1–7.5 s) and failed it in all three runs on the branch. It failed the same way, `Hook timed out
-in 60000ms`, on `main`'s code (`b81f1481c`) in the run where the load was kept up for 20 minutes
-(`a751-receipts/heavy3-lifted/root1.json`), so it fails under sustained load without A751. On the
-branch the load lasts longer because each root's upgrade walk is no longer cut off at 173 s. None of these failed with the root project and 16 spinning
-loops alone (`a751-receipts/loaded16-full-root.json`), nor in lane G's failing push of 2026-10-16.
+The retained failures name `scripts/fiscal-allocation-migration.test.ts`,
+`scripts/guarded-teardowns.test.ts`, `scripts/menu-sections-upgrade.test.ts`,
+`scripts/mutation-shard.test.mjs` and `scripts/pre-push.test.mjs`.
 Each needs the same treatment A751 gave its own four files: what the bound waits for, its worst case under
 this load with the bound lifted, and whether the case can be made cheaper.
 
@@ -326,52 +310,19 @@ this load with the bound lifted, and whether the case can be made cheaper.
 2026-10-22: A994 reproduces the diagnostic failure cold and starts that fixture after self refresh,
 retaining its Docker, error, signal and 700 ms assertions. Its root worker estimate and concurrent
 validation are recorded in [CI and gates](../developers/ci-and-gates.md#root-workers-start-from-available-headroom).
-The historical recurrence below describes the earlier fixture and worker configuration. Added
-external-pressure testing remains under A751 above.
 
 2026-10-17: A770 (#1816, `d2f9bc3de08c2a3c0d2284a03efcc342319809a1`) reproduced
 paused-thread failures in the step-watch cases and changed their budgets, retaining their phase
-checks. Lane G resumed A668-5 after rebasing onto that change. The installer, menu-upgrade and
-mutation-fixture failures below retain their separate investigations. The original observations
-follow unchanged.
+checks. The installer, menu-upgrade and mutation-fixture failures retain their separate investigations.
 
-At branch head `73e539c90f6ed27c62bda0c36485d47e134c04ab`, the normal pre-push
-`pnpm vitest run --coverage` failed two of 6,780 cases in 264.73 seconds:
-
-- `scripts/menu-sections-upgrade.test.ts:150`: the populated rebuild case exceeded 30,000 ms
-  (reported 30,172 ms). The suite's second case passed.
-- `scripts/waitron-sh.test.mjs:1843`: the intentional 700 ms timeout produced ETIMEDOUT and
-  SIGTERM, but the retained stub calls reached the self-update curl/copy, not Docker, so the
-  existing `/docker/` assertion failed. The timeout case reported 816 ms.
-
-The process snapshot's one-minute load average was 100.88, later 111.16; 73–74% of memory was
-free. These measurements do not establish the cause. The remaining upgrade-walk worker had its
-temporary database open and was running when inspected. The branch changes none of these two
-files, `deploy/waitron.sh` or `packages/migrations` (`git diff origin/main...HEAD --name-only --`
-with those paths printed nothing). That path check does not exclude an indirect effect.
-
-After the full run ended, `pnpm exec vitest run scripts/menu-sections-upgrade.test.ts
-scripts/waitron-sh.test.mjs` passed all 105 cases in 63.99 seconds on the same head, with no
-assertion, deadline or product change. This is a focused observation, not a repair. Retain the
-full-suite workload when investigating the menu-upgrade failure; for the installer case, separate
+Retain the full-suite workload when investigating the menu-upgrade failure; for the installer case, separate
 the preparation before Docker from the deliberately hung command before deciding what its
 700 ms budget should measure. Lane G retains both full logs and the process/open-file/memory
 snapshots under its A668-5 receipts.
 
-The next normal-hook attempt, on `ec0a6a92742275449d6d7731e7a283fee9a9eccd` after
-integrating A771, failed three of 6,780 cases in 201.03 seconds:
-
-- `scripts/mutation-shard.test.mjs:371`, "fills every shard": exceeded 30,000 ms (reported
-  33,088 ms).
-- `scripts/step-watch.test.mjs:360`, the moving-phases case: rejected after phase one took
-  212 ms against the 100 ms no-progress limit (case duration 363 ms).
-- `scripts/step-watch.test.mjs:379`: the diagnostic-matching case raised
-  `TypeError: object null is not iterable` at line 390 (case duration 425 ms).
-
-The captured one-minute load average was 87.83. These failures were not repaired or assigned a
-cause, and none of these test files or their implementations changed in A668-5. After these two
-full-suite failures, Lane G parked the branch under RUNNER H10; it did not make another push,
-change a test/limit or bypass the hook. Investigate the monitor's observed phase timing and its
+The moving-phases case in `scripts/step-watch.test.mjs` rejected against its no-progress
+limit; the diagnostic-matching case raised `TypeError: object null is not iterable`.
+Investigate the monitor's observed phase timing and its
 missing diagnostic match separately from the mutation fixture's elapsed-time limit. The new
 failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
 
@@ -894,3 +845,7 @@ to every browser package's test command. The original wait remains unlocated.
 On recurrence, retain the failed step log and use its file list and process state
 to identify the blocked operation. Keep the venue-service startup investigation
 and A419's dashboard stall separate; no shared cause is established.
+
+## A1089 merge read-back: server coverage upload timed out
+
+- **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.

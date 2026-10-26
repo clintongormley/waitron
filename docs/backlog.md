@@ -5427,7 +5427,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
+- **A1089 merge read-back: server coverage upload timed out.**
+  [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 
 - **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
   Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or
@@ -5491,10 +5492,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A891: retain input and timer timing if the missing product-information window recurs.**
   [Detail](backlog/ci.md#a891-retain-input-and-timer-timing-if-the-missing-product-information-window-recurs).
 
-- **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, a median of 144 s over six
-  runs in A938. A938's profile of its slowest test, without coverage, put 95% of the time under `width()`; caching the advance width per string
-  is the untried fix. Left open by A801.
-  [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run)
+- **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
+  [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
 - **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard**
   [Detail](backlog/ci.md#appsserversrcfirst-fiscal-houre2etestts-sets-the-floor-under-its-shard).
@@ -5543,15 +5542,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one.**
   [Detail](backlog/ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one).
 
-- **A1027 residual: the till shard's blocked operation is unknown.** Main run `39898823017`
-  lost shard 2's log. Browser shards now report unfinished files and processes before their
-  command deadline. On recurrence, retain that report and locate the wait before changing tests.
+- **A1027 residual: the till shard's blocked operation is unknown.**
   [Detail](backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
 
-- **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
-  attempt 1 timed out before any browser test started; attempt 2 passed on the same commit. A527
-  did not reproduce it in 100 Linux repeats; a failed shard now keeps its start-up record. Next:
-  when it recurs, read that record for the missing step. [Detail](backlog/ci.md#venue-service-browser-startup-remains-unexplained-1557).
+- **Venue-service browser startup remains unexplained (#1557).**
+  [Detail](backlog/ci.md#venue-service-browser-startup-remains-unexplained-1557).
 
 - **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).** codeql.yml
   saves no overlay-base database, which the default setup's runs did, so its own durations may
@@ -5575,10 +5570,9 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
   queued.
 
-- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
-  attempt 1, job 111163230954, 2026-10-03; passed on re-run).** The original one-off race has not
-  been reproduced locally. If the control fails again, retain that run's log and inspect the child
-  state before naming another cause. [Detail](backlog/ci.md#the-stream-pause-tests-frozen-bucket-control-failed-once-in-ci)
+- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254 attempt 1, job 111163230954, 2026-10-03; passed on re-run).**
+  The original one-off race has not been reproduced locally.
+  [Detail](backlog/ci.md#the-stream-pause-tests-frozen-bucket-control-failed-once-in-ci).
 
 - **What the stream pause test's last-restore fix (A387, #1398) left open:** a local Linux run
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
@@ -5588,8 +5582,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#the-upgrade-walks-historical-runtime-variation-remains-unexplained-after-reducing-setup-work-a736-1788).
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
-  `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
-  runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
+  [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open).
 
 - **Boot suites that release a port probe before binding still have a race (A80/#740, A907).**
   [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
@@ -5610,33 +5603,24 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
   person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](backlog/ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
 
-- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
-  retrying** (standing rule: a flaky test is fixed at the root). The original log and screenshot were
-  kept; the cause is unexplained, so retain them again on the next sighting rather than re-running to
-  green. [Detail](backlog/ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying)
+- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying**
+  [Detail](backlog/ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying).
 
 - **The unexplained dashboard heading-order failure remains open** after #350. The
   `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence,
   so nothing here explains it — treat it as still unexplained.
 
-- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
-  Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Keep the job log on the
-  next sighting — it is the cheapest evidence there is. [Detail](backlog/ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414)
+- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.**
+  [Detail](backlog/ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414).
 
 - **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
-  Either stamp the label in that rig or accept cleaning it by hand — but the rig's schema is three
-  storage decisions out of date anyway (its own entry, _The PGlite throughput bench no longer matches the shape it says it matches_), so the two decisions belong
-  together. [Detail](backlog/ci.md#benchpglite-throughput-starts-a-container-pnpm-reap-cannot-see)
+  [Detail](backlog/ci.md#benchpglite-throughput-starts-a-container-pnpm-reap-cannot-see).
 
-- **A throwaway script found six comments that described code that was no longer there, and it is
-  not a guard yet** (written 2026-09-14 during the tenant-column removal). **Next action:** rewrite it
-  as a real root guard with an allowlist for that header-then-member shape, and its own tests, rather
-  than re-running a scratch script. [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet)
+- **A throwaway script found six comments that described code that was no longer there, and it is not a guard yet**
+  [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet).
 
-- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative
-  control.** **Next action:** find a failure the empty database still causes without the guard, and
-  name it; if there is none, say so in the comment and stop calling the case a guard test.
-  [Detail](backlog/ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control)
+- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
+  [Detail](backlog/ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control).
 
 - _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
@@ -5649,23 +5633,17 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Loose ends left by the comment-pruning pull requests (#559 to #624).**
   [Detail](backlog/ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
 
-- **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL (found
-  2026-10-03 by #1139's review). **Next action:** the owner decides whether the rule covers every
-  agent, then the two docs follow.
-  [Detail](backlog/ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never)
+- **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
+  [Detail](backlog/ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
 
-- **The shard layout was measured against an engine that is gone** — OPEN (found 2026-09-23, task
-  F1's review wave). `packages/db`'s ten mutation shards have been timed on SQLite (2.9 to 12.2
-  minutes on run 38241392066), but the count has not been re-cut from those times. [Detail](backlog/ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone)
+- **The shard layout was measured against an engine that is gone** — OPEN.
+  [Detail](backlog/ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone).
 
-- **The PGlite throughput bench no longer matches the shape it says it matches** — OPEN (found
-  2026-09-21, task P6). Either bring the three decisions across and re-baseline, or change the
-  sentence to say what it is.
-  [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches)
-- **The PGlite throughput bench fails while seeding** — OPEN (found 2026-10-18, A861's review of
-  #1856). Its seed insert binds two values but its SQL names only `$2`, so PGlite refuses it with
-  `42P18`; on pglite 0.5.9 and 0.5.10 alike.
-  [Detail](backlog/ci.md#the-pglite-throughput-bench-fails-while-seeding)
+- **The PGlite throughput bench no longer matches the shape it says it matches** — OPEN.
+  [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches).
+
+- **The PGlite throughput bench fails while seeding** — OPEN.
+  [Detail](backlog/ci.md#the-pglite-throughput-bench-fails-while-seeding).
 
 - **`packages/db`'s static mutants are not in its mutation score** — OPEN. Owner's call.
   [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
@@ -5678,10 +5656,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN.
   [Detail](backlog/ci.md#mutationyml-repeats-one-shard-and-merge-job-pair-three-times).
 
-- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left
-  behind by the vite 8 upgrade (#450, 2026-09-19). `bundle-smoke` builds esbuild bundles only. This
-  is the work item `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
-  [Detail](backlog/ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci)
+- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI**
+  [Detail](backlog/ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci).
 
 - **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
   provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
@@ -5723,22 +5699,18 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   its name**, so a reference named otherwise is still unseen. Left open by W72d (#1238).
 
 - **W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered notifications" from the Products tree's category name box.**
-  A261-3 (2026-10-05) and A349 (2026-10-08) then saw the message in other dashboard suites; that comparison does not establish which observer causes it or its effect on the rendered screen.
   [Detail](backlog/ci.md#chromiums-resizeobserver-loop-message-in-other-dashboard-suites-after-w72h).
 
-- **Tests that close a dialog and then check after a single `flush` were not searched** (A452,
-  #1487). Popovers (combobox, help tooltip, row actions) report their toggle late too, and were not
-  looked at. [Detail](backlog/ci.md#tests-that-close-a-dialog-and-then-check-after-a-single-flush-a452-1487)
+- **Tests that close a dialog and then check after a single `flush` were not searched**
+  [Detail](backlog/ci.md#tests-that-close-a-dialog-and-then-check-after-a-single-flush-a452-1487).
 
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after each
   Escape.** **Next action:** decide whether "closes on a real Escape press" should wait for its
   `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
   (#916). [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
-- **`scripts/dashboard-browser-purity.test.ts` checks only some of venue-service's dashboard
-  files**, because the whole folder fails the guard. **Next action:** list each browser-safe
-  venue-service export as a file. Left open by the reviews of A261 step 5 (Hours, #1298) and by
-  A585-4. [Detail](backlog/ci.md#the-browser-purity-guard-checks-only-some-of-venue-services-dashboard-files)
+- **`scripts/dashboard-browser-purity.test.ts` checks only some of venue-service's dashboard files**
+  [Detail](backlog/ci.md#the-browser-purity-guard-checks-only-some-of-venue-services-dashboard-files).
 
 - **Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run).
   [Detail](backlog/ci.md#task-2s-review-found-no-test-that-fails-when-device_profile_admission_roles-or-device_profile_admission_persons-is-left-out-of-appsserversrctestingclear-provision-fixturets).
@@ -5752,18 +5724,14 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
   the same limit and, if so, share one constant.
 
-- **Two browser tests failed once each during A454's work (search everywhere), and neither was
-  reproduced or checked on `main`**: one in `wt-data-table.test.ts`, one in
-  `units-reassignment.unsaved.test.ts`. **Next action:** reproduce each under load and fix at the
-  root. [Detail](backlog/ci.md#two-browser-tests-failed-once-each-during-a454s-work)
+- **Two browser tests failed once each during A454's work (search everywhere), and neither was reproduced or checked on `main`**
+  [Detail](backlog/ci.md#two-browser-tests-failed-once-each-during-a454s-work).
 
 - **The relocated independent department preview needs a load investigation.**
   [Detail](backlog/ci.md#the-relocated-independent-department-preview-needs-a-load-investigation).
 
-- **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**:
-  "a press after one edit sends the edit and the field as it was read". **Next action:** reproduce
-  it under load and fix at the root.
-  [Detail](backlog/ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes)
+- **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
+  [Detail](backlog/ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
 
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
