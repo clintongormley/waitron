@@ -1,7 +1,12 @@
 // Side-effect import: registers the `station.*`/`course.*` codes this file throws (errors.ts).
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { AppError, DEFAULT_STATION_THRESHOLDS, compareStationNames } from "@waitron/shared";
+import {
+  AppError,
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
+  DEFAULT_STATION_THRESHOLDS,
+  compareStationNames,
+} from "@waitron/shared";
 import {
   isUniqueViolation,
   kitchenCourses,
@@ -42,6 +47,7 @@ export interface Station {
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
+  readyWarningAfterMinutes: number;
 }
 
 /**
@@ -109,6 +115,8 @@ export async function createStation(
           thresholds.overdueAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.overdueAfterMinutes,
         forgottenAfterMinutes:
           thresholds.forgottenAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.forgottenAfterMinutes,
+        readyWarningAfterMinutes:
+          thresholds.readyWarningAfterMinutes ?? DEFAULT_READY_WARNING_AFTER_MINUTES,
       })
       .returning({ id: kitchenStations.id });
     if (input.printerIds !== undefined) {
@@ -140,6 +148,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
     })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
@@ -184,13 +193,21 @@ export async function updateStation(
   if (Object.hasOwn(patch, "active"))
     throw new AppError("management.request_invalid", { field: "active" });
   await requireLiveStation(tx, cfg, id);
-  const { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes, printerIds, ...set } =
-    patch;
+  const {
+    warmAfterMinutes,
+    overdueAfterMinutes,
+    forgottenAfterMinutes,
+    readyWarningAfterMinutes,
+    printerIds,
+    ...set
+  } = patch;
   const timingPatch: StationTimingPatch = {};
   if (warmAfterMinutes !== undefined) timingPatch.warmAfterMinutes = warmAfterMinutes;
   if (overdueAfterMinutes !== undefined) timingPatch.overdueAfterMinutes = overdueAfterMinutes;
   if (forgottenAfterMinutes !== undefined)
     timingPatch.forgottenAfterMinutes = forgottenAfterMinutes;
+  if (readyWarningAfterMinutes !== undefined)
+    timingPatch.readyWarningAfterMinutes = readyWarningAfterMinutes;
   const [station] = await tx
     .select({
       name: kitchenStations.name,

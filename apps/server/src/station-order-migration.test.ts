@@ -50,6 +50,10 @@ const changes = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ ta
 );
 if (changes === undefined)
   throw new Error("the station changes after sending migration is missing");
+const readyWarning = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+  tag.endsWith("_station_ready_warning"),
+);
+if (readyWarning === undefined) throw new Error("the station ready warning migration is missing");
 
 // Every set cut at the same moment, so no set references a table a later core migration made.
 function setsAsOf(name: string, keep: (when: number) => boolean): VenueMigrationOptions[] {
@@ -251,7 +255,8 @@ it("A725 drops only station order with populated cascading and restrictive child
         when <= retirement.when ||
         when === printing.when ||
         when === bump.when ||
-        when === changes.when,
+        when === changes.when ||
+        when === readyWarning.when,
     ),
   );
   expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);

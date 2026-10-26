@@ -1570,6 +1570,7 @@ export function mountManagementApi(
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
+        readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -1643,6 +1644,7 @@ export function mountManagementApi(
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
+        readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -1662,6 +1664,7 @@ export function mountManagementApi(
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
+        readyWarningAfterMinutes?: number;
         printerIds?: string[];
       } = {};
       if (body.name !== undefined) {

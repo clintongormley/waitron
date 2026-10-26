@@ -1385,6 +1385,76 @@ describe("/management-api/stations (KDS-1 config)", () => {
     },
   );
 
+  it("POST and PATCH store a station's ready warning and GET lists it", async () => {
+    const created = await req(
+      "/stations",
+      {
+        method: "POST",
+        body: JSON.stringify({ name: unique("Ready warning"), readyWarningAfterMinutes: 6 }),
+      },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      readyWarningAfterMinutes: 6,
+    });
+    const patched = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ readyWarningAfterMinutes: 20 }) },
+      managerCookie,
+    );
+    expect(patched.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      forgottenAfterMinutes: 15,
+      readyWarningAfterMinutes: 20,
+    });
+  });
+
+  it.each([0, 1.5, "3", null, 2_147_483_648])(
+    "PATCH refuses a ready warning of %j and leaves the station as it was",
+    async (value) => {
+      const name = unique("Bad ready warning");
+      const id = await createStation(name);
+      const response = await req(
+        `/stations/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ name: "Should not save", readyWarningAfterMinutes: value }),
+        },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "readyWarningAfterMinutes" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        name,
+        readyWarningAfterMinutes: 3,
+      });
+      const refusedName = unique("Bad ready warning post");
+      const refused = await req(
+        "/stations",
+        {
+          method: "POST",
+          body: JSON.stringify({ name: refusedName, readyWarningAfterMinutes: value }),
+        },
+        managerCookie,
+      );
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "readyWarningAfterMinutes" },
+        },
+      });
+      expect((await listStations()).some((station) => station.name === refusedName)).toBe(false);
+    },
+  );
+
   it("PATCH refuses an order inversion against the stored minutes before saving name or minutes, and unknown ids affect no station", async () => {
     const name = unique("Effective order");
     const id = await createStation(name);

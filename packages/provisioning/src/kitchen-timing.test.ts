@@ -113,7 +113,8 @@ it("assertImportedStationTimings names a station with no text name by an empty n
 });
 
 it("parseStationTimingPatch reads a ready warning with the late flags", () => {
-  expect(parseStationTimingPatch({ readyWarningAfterMinutes: 20 })).toEqual({
+  expect(parseStationTimingPatch({ warmAfterMinutes: 4, readyWarningAfterMinutes: 20 })).toEqual({
+    warmAfterMinutes: 4,
     readyWarningAfterMinutes: 20,
   });
   expect(parseStationTimingPatch({})).toEqual({});
@@ -148,6 +149,21 @@ it("assertStationTiming holds the ready warning in range but in no order", () =>
     expect.objectContaining({
       code: "station.thresholds_invalid",
       params: { field: "readyWarningAfterMinutes", stationId: "station", name: "Grill" },
+    }),
+  );
+});
+
+it("assertStationTiming names a late flag out of order before a ready warning out of range", () => {
+  const lateFlags = { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
+  expect(() =>
+    assertStationTiming({ warmAfterMinutes: 12, readyWarningAfterMinutes: 0 }, lateFlags, {
+      id: "station",
+      name: "Grill",
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: "station.thresholds_invalid",
+      params: { field: "overdueAfterMinutes", stationId: "station", name: "Grill" },
     }),
   );
 });

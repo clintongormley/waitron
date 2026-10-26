@@ -220,6 +220,7 @@ describe("kitchen-station config", () => {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      readyWarningAfterMinutes: 3,
     };
     expect(list).toEqual([
       {
@@ -414,6 +415,7 @@ describe("kitchen-station config", () => {
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
+        readyWarningAfterMinutes: 3,
       },
     ]);
     await asApp(cfg, (tx) => deleteStation(tx, cfg, id));
@@ -544,6 +546,62 @@ describe("kitchen-station config", () => {
     const station = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
     expect(station).not.toHaveProperty("timingDefaults");
     expect(station).not.toHaveProperty("timingOverrides");
+  });
+
+  async function storedReadyWarning(id: string) {
+    return (
+      await db
+        .select({ readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, id))
+    )[0]!.readyWarningAfterMinutes;
+  }
+
+  it("createStation stores a given ready warning, and 3 when none is given; listStations reads it", async () => {
+    const cfg = await setupVenue();
+    const { id: given } = await asApp(cfg, (tx) =>
+      createStation(tx, cfg, { name: "Given", thresholds: { readyWarningAfterMinutes: 6 } }),
+    );
+    const { id: plain } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plain" }));
+    expect(await storedReadyWarning(given)).toBe(6);
+    expect(await storedReadyWarning(plain)).toBe(3);
+    const list = await asApp(cfg, (tx) => listStations(tx, cfg));
+    expect(list.find((s) => s.id === given)!.readyWarningAfterMinutes).toBe(6);
+    expect(list.find((s) => s.id === plain)!.readyWarningAfterMinutes).toBe(3);
+  });
+
+  it("updateStation saves a ready warning of 20 beside Forgotten after 15, and leaves the late flags", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Pass" }));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { readyWarningAfterMinutes: 20 }));
+    expect(await storedReadyWarning(id)).toBe(20);
+    expect(await storedMinutes(id)).toEqual({
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    });
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: 4 }));
+    expect(await storedReadyWarning(id)).toBe(20);
+    expect(await storedMinutes(id)).toEqual({
+      warmAfterMinutes: 4,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    });
+  });
+
+  it("updateStation refuses a ready warning of 0, naming it, and writes nothing", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Pass" }));
+    await expect(
+      asApp(cfg, (tx) =>
+        updateStation(tx, cfg, id, { name: "Renamed", readyWarningAfterMinutes: 0 }),
+      ),
+    ).rejects.toMatchObject({
+      code: "station.thresholds_invalid",
+      params: { field: "readyWarningAfterMinutes", stationId: id, name: "Pass" },
+    });
+    expect(await storedReadyWarning(id)).toBe(3);
+    expect((await asApp(cfg, (tx) => listStations(tx, cfg))).map((s) => s.name)).toEqual(["Pass"]);
   });
 
   it("setDefaultStation throws station.not_found for an absent OR a deleted station", async () => {
