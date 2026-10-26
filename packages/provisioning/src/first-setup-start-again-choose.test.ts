@@ -667,9 +667,10 @@ it.each([
   "a %s at the state folder's set-aside name refuses the Move setup.start_again_set_aside_unavailable, writes no record and moves nothing; a Keep after it succeeds",
   async (kind, place) => {
     const f = await found();
+    const before = await folders(f.roots);
     const elsewhere = await scratch();
-    await place(join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR), elsewhere);
-    const source = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
+    const placed = join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR);
+    await place(placed, elsewhere);
 
     await expect(choose(f, "move")).rejects.toMatchObject({
       code: "setup.start_again_set_aside_unavailable",
@@ -678,15 +679,63 @@ it.each([
 
     expect(await recordsOf(f)).toEqual([]);
     expect(await readdir(elsewhere)).toEqual([]);
-    const still = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
-    expect([still.ino, still.size, still.mtimeNs]).toEqual([
-      source.ino,
-      source.size,
-      source.mtimeNs,
-    ]);
     expect(await choose(f, "keep")).toEqual({ choice: "keep" });
+    // The link goes before the snapshot, which cannot read through it; the Keep added only its record.
+    await unlink(placed);
+    expect(withoutChoices(await folders(f.roots))).toEqual(withoutChoices(before));
   },
 );
+
+it("an empty set-aside folder that was there before the Move survives a failed record write", async () => {
+  const f = await found();
+  const base = join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR);
+  await mkdir(base);
+  const before = await folders(f.roots);
+  const choicesLink = join(f.roots.stateDir, START_AGAIN_CHOICES_DIR);
+  await symlink(await scratch(), choicesLink);
+
+  await expect(choose(f, "move")).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+
+  await unlink(choicesLink);
+  expect(await folders(f.roots)).toEqual(before);
+  expect((await lstat(base)).isDirectory()).toBe(true);
+});
+
+it("a set-aside folder holding another stem's folder keeps it after a failed record write", async () => {
+  const f = await found();
+  const other = join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR, "1761472800000-other");
+  await mkdir(other, { recursive: true });
+  const before = await folders(f.roots);
+  const choicesLink = join(f.roots.stateDir, START_AGAIN_CHOICES_DIR);
+  await symlink(await scratch(), choicesLink);
+
+  await expect(choose(f, "move")).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+
+  await unlink(choicesLink);
+  expect(await folders(f.roots)).toEqual(before);
+});
+
+it("a set-aside folder that cannot be removed after a failed record write stays, and the record's refusal is the one answered", async () => {
+  const f = await found();
+  const choicesLink = join(f.roots.stateDir, START_AGAIN_CHOICES_DIR);
+  await symlink(await scratch(), choicesLink);
+  const refused: string[] = [];
+  const io: SetAsideIo = {
+    ...realIo,
+    rmdir: async (path) => {
+      if (!path.toString().includes(PROBE)) {
+        refused.push(path.toString());
+        throw errno("EBUSY");
+      }
+      await rmdir(path);
+    },
+  };
+
+  await expect(choose(f, "move", { io })).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+
+  expect(refused.length).toBeGreaterThan(0);
+  for (const path of refused) expect((await lstat(path)).isDirectory()).toBe(true);
+});
 
 it("no log call and no thrown error carries the administrator's name or email", async () => {
   const spies = (["log", "info", "warn", "error", "debug"] as const).map((method) =>
