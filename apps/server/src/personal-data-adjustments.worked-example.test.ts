@@ -39,9 +39,9 @@ import {
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
-// The backlog's worked example (docs/backlog/data-protection.md, A980 S2d): Marta, a cashier, voids
-// three lines on table 4's bill with Void…, and a fourth line she removes before preparation started
-// leaves no adjustment.
+// The S2d plan's worked example (docs/superpowers/plans/2026-10-25-a980-s2d-line-voids.md, Tasks 6a
+// and 6b): Marta, a cashier, voids three lines on table 4's bill with Void…, and a fourth line she
+// removes before preparation started leaves no adjustment.
 
 const DISHES = [
   { name: "Grilled squid", customer: "Squid from the griddle", kitchen: "SQUID", price: "12.35" },

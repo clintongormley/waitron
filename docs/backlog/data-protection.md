@@ -146,6 +146,13 @@ by the answers):
   and Marta's copy shows the approved swap with no time. The alternative is to add the two shifts
   the swap names as `fromShift` and `toShift`, which shows Marta the times of a shift that is Ana's.
   Include them, yes or no?
+- **Owner question: a void reason that names someone.** `adjustments.json` carries each
+  adjustment's reason as the venue named it on the Voids and comps page. The free-text note is
+  left out because it can name someone else, but nothing stops a reason's own name from doing the
+  same. Example: a venue adds the Void reason "Ana's mistake"; Marta voids a line with it and Luis
+  approves, so both their copies say "Ana's mistake". S2d's finish review made such a reason
+  through the real reason and cancel code and found its words in the requester's download. The
+  alternative is to leave the reason out of the file. Keep the reason, yes or no?
 - **The working-time record of a box with more than one location** — only this node's location is
   exported (S2b decision 6). Today provisioning refuses a second, different location.
 - **Measure the working-time, actions and adjustments parts on a box.** On a Mac, with 48 closed
@@ -179,7 +186,8 @@ by the answers):
   a fixture with no sales, measured 238.2 ms median on the Mac (Apple M5 Pro), its slowest run
   249.9 ms, against S2d decision 13's rule to stop if that median is over 250 ms; about 89% of it
   is the working-time read (about 213 ms). The margin is thin, and a slower box or a longer history
-  may cross it.
+  may cross it. S2d's finish review re-ran Task 3b's test on the same Mac: medians of 240.8 ms with
+  every part, 255.8 ms without the adjustments part, and 285.6 ms with every part again.
   Options: give a module's part write-lock turns of its own, as the actions part has, or narrow the
   working-time read further.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
