@@ -999,22 +999,44 @@ describe("the logo in the editor", () => {
       expect(printed(el)).toBeNull();
     });
 
-    it("on a 390 px screen the figure stays inside the card, its caption under the box", async () => {
-      setLocale("en-GB");
+    /** The card's content box, its print figure, the figure's paper box and its caption. */
+    async function measuredAt(width: number) {
       const before = { width: innerWidth, height: innerHeight };
-      await page.viewport(390, 900);
+      await page.viewport(width, 900);
       try {
         const { el } = await mountEditing(inUse(withLogo({ light: L })));
         await expect.poll(() => figure(el)?.getAttribute("aria-busy")).toBe("false");
-        const card = q(el, "section.settings-card")!.getBoundingClientRect();
-        const box = figure(el)!.getBoundingClientRect();
-        const paper = figure(el)!.querySelector(".paper")!.getBoundingClientRect();
-        const caption = figure(el)!.querySelector("figcaption")!.getBoundingClientRect();
-        expect(box.right).toBeLessThanOrEqual(card.right);
-        expect(caption.top).toBeGreaterThanOrEqual(paper.bottom - 0.5);
+        const section = q(el, "section.settings-card") as HTMLElement;
+        const outer = section.getBoundingClientRect();
+        const style = getComputedStyle(section);
+        const contentRight =
+          outer.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+        const shown = figure(el)!;
+        return {
+          contentRight,
+          box: shown.getBoundingClientRect(),
+          paper: shown.querySelector(".paper")!.getBoundingClientRect(),
+          caption: shown.querySelector("figcaption")!.getBoundingClientRect(),
+        };
       } finally {
         await page.viewport(before.width, before.height);
       }
+    }
+
+    it("on a 390 px screen the figure stays inside the card, its caption under the box", async () => {
+      setLocale("en-GB");
+      const { contentRight, box, paper, caption } = await measuredAt(390);
+      expect(box.right).toBeLessThanOrEqual(contentRight + 0.5);
+      expect(caption.top).toBeGreaterThanOrEqual(paper.bottom - 0.5);
+    });
+
+    it("on a 1280 px screen the caption sits beside the box", async () => {
+      setLocale("en-GB");
+      const { contentRight, box, paper, caption } = await measuredAt(1280);
+      expect(box.right).toBeLessThanOrEqual(contentRight + 0.5);
+      expect(caption.left).toBeGreaterThanOrEqual(paper.right);
+      expect(caption.top).toBeLessThan(paper.bottom);
+      expect(caption.bottom).toBeGreaterThan(paper.top);
     });
   });
 });

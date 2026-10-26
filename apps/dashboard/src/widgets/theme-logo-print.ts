@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { watchMediaImage } from "@waitron/ui/src/live-media-image.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { fixLineStyles } from "./fix-line-styles.js";
@@ -46,7 +46,7 @@ export class DashboardThemeLogoPrint extends LitElement {
       }
       figcaption,
       .failed {
-        flex: 1 1 calc(var(--wt-space-6) * 6);
+        flex: 1 1 calc(var(--wt-space-6) * 5);
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
@@ -118,7 +118,13 @@ export class DashboardThemeLogoPrint extends LitElement {
       return;
     }
     this.shown = { kind: "asking" };
-    this.api.getThemeLogoPrint(image).then(
+    let asked: Promise<ThemeLogoPrint>;
+    try {
+      asked = this.api.getThemeLogoPrint(image);
+    } catch (error) {
+      asked = Promise.reject(error);
+    }
+    asked.then(
       (print) => {
         if (generation !== this.#generation) return;
         this.shown =

@@ -137,6 +137,15 @@ it("a failed ask says so and Try again asks again", async () => {
   expect(q(el, '[data-test="logo-print-failed"]')).toBeNull();
 });
 
+it("an ask that throws at once says so, as a refused one does", async () => {
+  getThemeLogoPrint.mockImplementationOnce(() => {
+    throw new Error("no such method");
+  });
+  const el = await mount(libraryName());
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-failed"]')).not.toBeNull());
+  expect(q(el, '[data-test="logo-print"]')).toBeNull();
+});
+
 it("an answer for an image no longer held is dropped", async () => {
   const a = libraryName();
   const b = libraryName();
