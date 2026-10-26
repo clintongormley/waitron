@@ -16,6 +16,7 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
+import type { MergedQueueGroup } from "../state/kitchen-cards.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -67,8 +68,7 @@ interface GroupSection {
   items: StationQueueItem[];
 }
 
-/** A merged queue's order: one station's lines of it, so `stationId` names whose. */
-export type MergedQueueGroup = StationQueueGroup & { stationId?: string };
+export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 
 /** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
 function courseOrder(course: StationQueueCourse | null): number {
