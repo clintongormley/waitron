@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { withTransaction } from "@waitron/db";
+import { tenants, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { appliedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { enabledModules } from "@waitron/module";
+import { enabledModules, type WaitronModule } from "@waitron/module";
+import { sql } from "drizzle-orm";
 import { applyHistoricalTestVenue } from "../test/allocated-venue.js";
 import { configurationBundle } from "../test/configuration-bundle.js";
 import { request, PASSWORD } from "../test/first-setup-request.js";
@@ -12,14 +13,18 @@ import {
   buildConfigurationBundle,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
+  importConfigurationTables,
   validateConfigurationBundle,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 import { planVenue } from "./venue-plan.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
-import { savePrivacyContact } from "./privacy-contact.js";
+import { readPrivacyContact, savePrivacyContact, type PrivacyContact } from "./privacy-contact.js";
+import { applyVenue } from "./venue-apply.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const importTarget = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const empty = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const passphrase = "SYNTHETIC transfer passphrase";
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -120,4 +125,99 @@ it.each([
   }
   expect(thrown).toMatchObject({ code: "venue.detail_invalid" });
   expect((thrown as { params: unknown }).params).toEqual(params);
+});
+
+const stored = {
+  privacyNoticeUrl: "https://example.com/privacy",
+  privacyEmail: "privacy@example.com",
+};
+
+async function targetVenue(taxId = "123456789") {
+  const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
+  return applyVenue(
+    planVenue(
+      {
+        ...request,
+        country: "GB",
+        taxId,
+        location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+        admin: {
+          displayName: "Owner",
+          email: "owner@example.test",
+          pinHash: "synthetic-pin",
+          passwordHash: "synthetic-password",
+        },
+      },
+      modules,
+    ),
+    { db: importTarget.db, modules },
+  );
+}
+
+async function taxpayerRow(db: Database) {
+  return db.select().from(tenants);
+}
+
+it.each(["123456789", "987654321"])(
+  "an import writes the bundle's privacy contact onto the taxpayer row (target tax ID %s)",
+  async (taxId) => {
+    const target = await targetVenue(taxId);
+    const [before] = await taxpayerRow(importTarget.db);
+    await withTransaction(importTarget.db, (tx) =>
+      importConfigurationTables(tx, configurationBundle(), target, [], {}),
+    );
+    expect(await taxpayerRow(importTarget.db)).toEqual([{ ...before, ...stored }]);
+  },
+);
+
+it("an import stores the privacy contact trimmed and composed", async () => {
+  const target = await targetVenue();
+  const [before] = await taxpayerRow(importTarget.db);
+  const bundle = withContact({
+    privacyNoticeUrl: "  https://example.com/privacy  ",
+    privacyEmail: `jose${String.fromCodePoint(0x301)}@example.com`,
+  });
+  await withTransaction(importTarget.db, (tx) =>
+    importConfigurationTables(tx, bundle, target, [], {}),
+  );
+  expect(await taxpayerRow(importTarget.db)).toEqual([
+    {
+      ...before,
+      privacyNoticeUrl: "https://example.com/privacy",
+      privacyEmail: `jos${String.fromCodePoint(0xe9)}@example.com`,
+    },
+  ]);
+});
+
+it("an import writes the privacy contact before the modules' afterImport hooks, and a failing hook rolls it back", async () => {
+  const target = await targetVenue();
+  const [before] = await taxpayerRow(importTarget.db);
+  let seen: PrivacyContact | null | undefined;
+  const module: WaitronModule = {
+    ...ALL_MODULES.find((candidate) => candidate.name === "fiscal-none")!,
+    name: "synthetic-transfer",
+    configurationTransfer: {
+      kind: "tables",
+      tables: [],
+      afterImport: async (tx) => {
+        seen = await readPrivacyContact(tx);
+        throw new Error("synthetic afterImport failure");
+      },
+    },
+  };
+  const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": 1 } };
+  await expect(
+    withTransaction(importTarget.db, (tx) =>
+      importConfigurationTables(tx, bundle, target, [module], { "synthetic-transfer": 1 }),
+    ),
+  ).rejects.toThrow("synthetic afterImport failure");
+  expect(seen).toEqual(stored);
+  expect(await taxpayerRow(importTarget.db)).toEqual([before]);
+});
+
+it("an import with no taxpayer row finishes and creates none", async () => {
+  await withTransaction(empty.db, (tx) =>
+    importConfigurationTables(tx, configurationBundle(), { locationId: "absent" }, [], {}),
+  );
+  expect((await empty.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([{ n: 0 }]);
 });

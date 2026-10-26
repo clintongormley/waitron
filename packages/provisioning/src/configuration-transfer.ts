@@ -15,7 +15,11 @@ import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 import { readLocationClock } from "@waitron/reporting";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
-import { privacyContactChecked, type PrivacyContact } from "./privacy-contact.js";
+import {
+  privacyContactChecked,
+  savePrivacyContact,
+  type PrivacyContact,
+} from "./privacy-contact.js";
 
 const ENTRY = "configuration.json";
 
@@ -789,6 +793,15 @@ export async function importConfigurationTables(
       bundle.venue.location.catalogueId === null
         ? null
         : (idMap.get(bundle.venue.location.catalogueId) ?? bundle.venue.location.catalogueId),
+  });
+  const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
+  await savePrivacyContact(tx, {
+    privacyNoticeUrl:
+      privacyNoticeUrl === null
+        ? null
+        : privacyContactChecked("privacyNoticeUrl", privacyNoticeUrl),
+    privacyEmail:
+      privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
   });
   for (const module of modules) {
     const contribution = module.configurationTransfer;
