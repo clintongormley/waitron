@@ -305,6 +305,13 @@ guard or claiming the two checks are equivalent for every input. No combined-fau
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+Conditional automatic conflict recovery,
+corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
+old-backup/new-hardware operational exercise remain queued. Cloud allocation production
+enablement still needs qualified custody, signing, subscription and continuity policies; the
+[manual recovery and explicit report adapters](../developers/cloud-fiscal-allocation.md) select
+none of those defaults. Paper allocation does not require a subscription.
+
 **2026-10-15 W41s-C3 contract check:** Cloud D62 and local W41s-4/6 have landed. On Cloud
 `04cb54637d2fd714e959f749f3d800b5444ee4c8`, Node v26.11.1, calling
 `validateReserve` from `packages/fiscal-allocation/src/validation.ts` with the same recovery
@@ -866,6 +873,9 @@ money. Settle its fiscal document, source-history checks, paper and reporting in
 design. A802's gross-reduction workflow does not authorise this build.
 
 ## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
+
+The 2026-10-09 research found the only 0% rate in the VAT Law is art. 91.Cuatro, goods
+donated to non-profits; the 0% on basic foods ended on 30 September 2024.
 
 From **The product editor and catalogue (#345, #379, #387) — what is left open.**
 [Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
@@ -1512,3 +1522,94 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
   [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
   (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
   open.
+
+## A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).
+
+The producer's statement that a version meets the Veri\*Factu rules, one per release,
+readable on every terminal and before installation (compliance plan Step 8). The
+[design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
+from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
+request and `pnpm release tag` tag it, adds About Waitron to the dashboard, the till's More menu,
+an ⓘ corner and the setup wizard, serves it at `/legal/declaration` before setup, on the
+plain-HTTP page and on the recovery page, attaches it to each GitHub Release, and gives the
+`@waitron/verifactu` library its own declaration. The owner answered all four questions on
+2026-10-21: he is the producer (his name, NIF and a publishable postal address are still to be
+supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
+Q53, pending their answer; production boxes run releases only. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
+A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1,
+built from its [plan](../superpowers/plans/2026-10-22-a940-1-software-identity.md), landed on
+2026-10-23 (pull request #2000): every record kind's software block, built in
+`buildSistemaInformatico` (`packages/fiscal-verifactu/src/backend.ts`), names "Waitron", the
+build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
+and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies
+his name and NIF: meanwhile records still carry the taxpayer's name and NIF there, and a
+published build set to production refuses to trade (`sif.producer_unset`). Two test checks
+changed with it: the Spanish practice sales were re-recorded (only their software block moved),
+and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
+changed (the owner accepted it on 2026-10-23). Still open: the producer's name and NIF (Task 8 of the plan), then
+slices 1b to 6, and A993's plan. Still needed from outside: his name, NIF and publishable
+address, and the asesor's answer to Q53.
+[Mock-ups](mockups/a940-declaracion-responsable/README.md)
+
+## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.
+
+AEAT identifies an invoicing system by the taxpayer's NIF,
+the two-character code and the installation number, and the code counts only together with its
+producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
+to another fiscal policy (the owner: one installation, one policy) makes a different system.
+Each chain stores the producer and compliance mode it was opened under (today `registro_sif`
+stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); the upgrade's step and
+every start compare them with the running release's and, on a difference, open a new installation, series and chain in
+one transaction, on the filing node only, through a new `identity-change` activation that only
+the upgrade's step, or a start that finds the change not made, can authorise (A947's slice 4a
+amends CLAUDE.md §5's "does not mint an installation number" sentence; A993 adds the one
+allocation no person asks for); a guard, proven by deletion, refuses to add a record to a chain
+opened under another identity. Corrections of invoices issued before the change join the new
+chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
+five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
+asked for. Because A947 needs a second clock for every name and a start has nobody present, the
+design has the upgrade check the clock while the old release still serves, and make
+the change only once that check passes — otherwise the old release never stops. A sale can still
+wait on the internet after a crash between the migration and the change, or when the new release
+is started by hand; and a power cut during the upgrade's stop leaves no app running until the
+upgrade runs again, until the restart-at-boot step the design adds is built. Chosen by the owner
+on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
+case the page the box shows instead of trading also accepts a phone's or a till's clock under
+A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
+picture 6). A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes
+after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
+until the first non-Veri\*Factu mode.
+[Design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
+
+## Can a simplified invoice carry an operation date different from its issue date?
+
+Left open by A663 Part 2. If it can,
+art. 7.1.c requires that date on the receipt. The document builder already prints one on a
+simplified receipt, in captioned rows, whenever the receipt's data
+carries one (`apps/server/src/receipt-document.ts`, A754), but no sale has one: the only writer of
+a sale's operation date writes none without a customer tax identity
+(`packages/core/src/record-sale.ts:284-286`). Check, then record the date on such a sale if needed.
+
+## The three alta builders repeat their record assembly
+
+`recordSale`/`recordCorrection`/
+`recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
+`toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
+needs a huella-invariance re-run across all three.
+Fiscal: each behind its own review, owner sign-off at land.
+
+## Cloud fiscal reporting has no running host caller yet.
+
+The adapter can collect a committed
+activation and send its retained report, but reporting is an explicit API call. Choose an
+authenticated operator entry point or background duty before promising unattended reconciliation.
+The calls are qualified in `apps/server/src/cloud-fiscal-allocation.test.ts` and the separately
+owned Cloud joint suite; neither starts a production reporting worker.
+
+## Rename the `hour-*` names to minute names
+
+Left by A947 slice 4a, which made every
+installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-*.ts` file names,
+their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
+say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
+no compatibility code: until then any installation may be reset (CLAUDE.md §3).

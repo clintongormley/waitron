@@ -155,10 +155,9 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-- **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate
-  dialog offers file/type changes, another check and Cancel. Add connection/configuration
-  diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not
-  resolve every HTTP or unclassified failure.
+- **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
+  connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
+  failure.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The
@@ -180,61 +179,15 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed
-  2026-10-23 (#2000).** The producer's statement that a version meets the Veri\*Factu rules, one per release,
-  readable on every terminal and before installation (compliance plan Step 8). The
-  [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
-  from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
-  request and `pnpm release tag` tag it, adds About Waitron to the dashboard, the till's More menu,
-  an ⓘ corner and the setup wizard, serves it at `/legal/declaration` before setup, on the
-  plain-HTTP page and on the recovery page, attaches it to each GitHub Release, and gives the
-  `@waitron/verifactu` library its own declaration. The owner answered all four questions on
-  2026-10-21: he is the producer (his name, NIF and a publishable postal address are still to be
-  supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
-  Q53, pending their answer; production boxes run releases only. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
-  A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1,
-  built from its [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md), landed on
-  2026-10-23 (pull request #2000): every record kind's software block, built in
-  `buildSistemaInformatico` (`packages/fiscal-verifactu/src/backend.ts`), names "Waitron", the
-  build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
-  and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies
-  his name and NIF: meanwhile records still carry the taxpayer's name and NIF there, and a
-  published build set to production refuses to trade (`sif.producer_unset`). Two test checks
-  changed with it: the Spanish practice sales were re-recorded (only their software block moved),
-  and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
-  changed (the owner accepted it on 2026-10-23). Still open: the producer's name and NIF (Task 8 of the plan), then
-  slices 1b to 6, and A993's plan. Still needed from outside: his name, NIF and publishable
-  address, and the asesor's answer to Q53.
-  [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
+- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
+  Still open: the producer's name and NIF (Task 8 of the plan), then slices 1b to 6, and A993's plan.
+  Still needed from outside: his name, NIF and publishable address, and the asesor's answer to Q53.
+  [Detail](backlog/fiscal.md#a940-waitrons-declaración-responsable--design-approved-2026-10-22-slice-1-landed-2026-10-23-2000).
 
-- **A993. A change of the system's identity opens a new installation by itself — designed in A940
-  §5.6, approved 2026-10-22; fiscal, the owner lands it.** AEAT identifies an invoicing system by the taxpayer's NIF,
-  the two-character code and the installation number, and the code counts only together with its
-  producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
-  to another fiscal policy (the owner: one installation, one policy) makes a different system.
-  Each chain stores the producer and compliance mode it was opened under (today `registro_sif`
-  stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); the upgrade's step and
-  every start compare them with the running release's and, on a difference, open a new installation, series and chain in
-  one transaction, on the filing node only, through a new `identity-change` activation that only
-  the upgrade's step, or a start that finds the change not made, can authorise (A947's slice 4a
-  amends CLAUDE.md §5's "does not mint an installation number" sentence; A993 adds the one
-  allocation no person asks for); a guard, proven by deletion, refuses to add a record to a chain
-  opened under another identity. Corrections of invoices issued before the change join the new
-  chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
-  five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
-  asked for. Because A947 needs a second clock for every name and a start has nobody present, the
-  design has the upgrade check the clock while the old release still serves, and make
-  the change only once that check passes — otherwise the old release never stops. A sale can still
-  wait on the internet after a crash between the migration and the change, or when the new release
-  is started by hand; and a power cut during the upgrade's stop leaves no app running until the
-  upgrade runs again, until the restart-at-boot step the design adds is built. Chosen by the owner
-  on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
-  case the page the box shows instead of trading also accepts a phone's or a till's clock under
-  A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
-  picture 6). A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes
-  after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
-  until the first non-Veri\*Factu mode.
-  [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
+- **A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.**
+  A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes after slice 1's,
+  and it lands before the first production venue goes live.
+  [Detail](backlog/fiscal.md#a993-a-change-of-the-systems-identity-opens-a-new-installation-by-itself--designed-in-a940-56-approved-2026-10-22-fiscal-the-owner-lands-it).
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
@@ -252,12 +205,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
   Fiscal: the owner lands it.
 
-- **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2. If it can,
-  art. 7.1.c requires that date on the receipt. The document builder already prints one on a
-  simplified receipt, in captioned rows, whenever the receipt's data
-  carries one (`apps/server/src/receipt-document.ts`, A754), but no sale has one: the only writer of
-  a sale's operation date writes none without a customer tax identity
-  (`packages/core/src/record-sale.ts:284-286`). Check, then record the date on such a sale if needed.
+- **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2.
+  If it can, art. 7.1.c requires that date on the receipt. Check, then record the date on such a sale if needed.
+  [Detail](backlog/fiscal.md#can-a-simplified-invoice-carry-an-operation-date-different-from-its-issue-date).
 
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
   value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
@@ -272,12 +222,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
   with no invoice until the bill is paid. Asked as [S3](compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
 
-- **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full
-  invoice.** [Detail](backlog/fiscal.md#decisions-and-deliberate-limits)
-  _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b removed it
-  ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09
-  answer. Until 2026-10-12 this entry asked that the consent request say how the invoice will arrive
-  and how consent is withdrawn._
+- **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full invoice.**
+  [Detail](backlog/fiscal.md#decisions-and-deliberate-limits) _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b
+  removed it ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09 answer. Until 2026-10-12 this entry asked
+  that the consent request say how the invoice will arrive and how consent is withdrawn._
 
 - **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
   An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
@@ -290,22 +238,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
 
 - **Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale** —
-  found by #601 while pruning comments. The quarterly _modelo 303_ keeps its old behaviour, pinned
-  by a test in `vat-return.test.ts`, until the asesor answers `docs/compliance/asesor-questions.md`
-  Q25 (which VAT period a later annulment lands in). No till screen or server route calls
-  `recordVoid` yet.
+  The quarterly _modelo 303_ keeps its old behaviour until the asesor answers Q25 (which VAT period a later annulment lands in).
+  No till screen or server route calls `recordVoid` yet.
   [Detail](backlog/fiscal.md#owner-decision-2026-09-24-a-void-counts-on-the-day-it-is-made-not-the-day-of-the-sale)
 
-- **Test titles still carry claims the comments no longer make** — found by #598 while pruning
-  comments (`packages/core`). No test reaches `settleSale`'s catch that turns a `sale_settlements`
-  unique-key refusal into `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured
-  the earlier check stopping both concurrent-settlement tests first.
+- **Test titles still carry claims the comments no longer make** — found by #598 while pruning comments (`packages/core`).
   [Detail](backlog/fiscal.md#test-titles-still-carry-claims-the-comments-no-longer-make-598)
 
-- **Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts` are
-  code, not comments** — found by #592 while pruning comments. `FiscalBackend.pendingCount` has no
-  caller outside the backends and their tests, yet `packages/db/src/schema/sales.ts:29` says it is
-  how the count is read.
+- **Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts` are code, not comments** — found by #592 while pruning comments.
   [Detail](backlog/fiscal.md#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments)
 
 - **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** the inner
@@ -313,11 +253,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `appendToChain`'s nested `tx.transaction` makes no test fail; and `write-path.e2e.test.ts` points
   at fixture lines that have moved. [Detail](backlog/fiscal.md#packagesfiscal-verifactu-code)
 
-- **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/
-  `recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
-  `toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
-  needs a huella-invariance re-run across all three.
+- **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/`recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`.
   Fiscal: each behind its own review, owner sign-off at land.
+  [Detail](backlog/fiscal.md#the-three-alta-builders-repeat-their-record-assembly).
 
 - `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH`
   when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
@@ -328,11 +266,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   one issue year and accepted in another with a warning. The receipt date still sets the VAT
   reporting period.
 
-- **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98,
-  #1106). Two pre-filing caveats a human must clear before the first LIVE 303 filing: validate the
-  DR303 file once against the real AEAT "por fichero" uploader (we omit página 2, régimen
-  simplificado); and an asesor must confirm the **prorrata** treatment (`computeInputVat` scales only
-  the cuota by `deductible_proportion`). [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
+- **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98, #1106).
+  [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
 
 - **Modelo 303's deferred build slices (parked):** rectificativas de facturas recibidas (casilla
   40/41, needs a `corrects_purchase_invoice_id` self-FK); bienes-de-inversión regularización (43);
@@ -349,18 +284,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   fix: it reproduces AEAT's vector-1 hash and the exact-XML expectations in `xml/serialize.test.ts`
   would all move. Raised by the A1 review wave (A1d).
 
-- **`packages/fiscal-verifactu` restates rules the validator owns** — Exporting the patterns from
-  the library instead was DEFERRED on purpose (owner, 2026-09-12) — it widens an audited fiscal
-  library's public surface and the drift guard already closes the risk. Revisit when something else
-  needs those patterns. Raised by the A1 review wave (A1d).
+- **`packages/fiscal-verifactu` restates rules the validator owns** — Exporting the patterns from the library instead was DEFERRED on purpose (owner, 2026-09-12).
+  Revisit when something else needs those patterns.
   [Detail](backlog/fiscal.md#packagesfiscal-verifactu-restates-rules-the-validator-owns)
 
-- **A1e. Simplified and full invoices use separate series** — BUILT, PUBLIC F1 DISABLED
-  (2026-10-06); and **A231. Full invoices at the till** — GATED IMPLEMENTATION LANDED (2026-10-06).
-  Public F1 issuance remains disabled; no route calls `recordSubstitution`. **Next action:** verify
-  physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4
-  choice (A555), obtain the asesor's manual-remedy approval and settle applicable B2B delivery
-  before enabling public F1.
+- **A1e. Simplified and full invoices use separate series** — BUILT, PUBLIC F1 DISABLED (2026-10-06); and **A231. Full invoices at the till** — GATED IMPLEMENTATION LANDED (2026-10-06).
+  **Next action:** verify physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4 choice (A555),
+  obtain the asesor's manual-remedy approval and settle applicable B2B delivery before enabling public F1.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 
 - **A554. Should any screen show the address an invoice email went to?** An owner question, open
@@ -410,19 +340,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   distinguishing case. Preserve both guards while adding that qualification.
   [Detail](backlog/fiscal.md#pin-the-early-recovery-source-refusal).
 
-- **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
-  corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
-  old-backup/new-hardware operational exercise remain queued. Cloud allocation production
-  enablement still needs qualified custody, signing, subscription and continuity policies; the
-  [manual recovery and explicit report adapters](developers/cloud-fiscal-allocation.md) select
-  none of those defaults. Paper allocation does not require a subscription.
+- **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery, corrective-record resolution,
+  filing investigation, outside evidence and fencing, and the complete old-backup/new-hardware operational exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
-- **Cloud fiscal reporting has no running host caller yet.** The adapter can collect a committed
-  activation and send its retained report, but reporting is an explicit API call. Choose an
-  authenticated operator entry point or background duty before promising unattended reconciliation.
-  The calls are qualified in `apps/server/src/cloud-fiscal-allocation.test.ts` and the separately
-  owned Cloud joint suite; neither starts a production reporting worker.
+- **Cloud fiscal reporting has no running host caller yet.**
+  Choose an authenticated operator entry point or background duty before promising unattended reconciliation.
+  [Detail](backlog/fiscal.md#cloud-fiscal-reporting-has-no-running-host-caller-yet).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** Complete the copy and authenticated establishment path before presenting a successful fiscal
@@ -434,18 +358,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
   [Detail](backlog/fiscal.md#still-open-after-w41s-3-1289-one-reply-can-open-up-to-1000-filing-cases)
 
-- **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
-  again).** — left open by W41s-3b (#1303). Task 8 as planned resolves records that have a case of
-  their own; a record the brake holds has none. The hourly retry in
-  [#1309](https://github.com/clintongormley/waitron/pull/1309) releases eligible brake holds after
-  an accept or a different-code refusal. A manual release remains Task 8.
+- **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records again).** — left open by W41s-3b (#1303).
+  A manual release remains Task 8.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-- **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the
-  asesor; owner 2026-10-06). The decision is put to the asesor as
-  [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-  (S19 in the short list), covering this hold and the three-refusal brake. The holds after a 3000
-  conflict and behind a cancellation of a refused invoice were dropped on 2026-10-12 (owner).
+- **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the asesor; owner 2026-10-06).
+  The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12) (S19 in the short list),
+  covering this hold and the three-refusal brake.
   [Detail](backlog/fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-the-asesor-answers)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
@@ -469,43 +388,24 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-  - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.** Every
-    role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and `cash.drawer`, so
-    its cases cannot tell which of those it reads.
-  - **C132 (landed as #1060): a credit note's line names the invoice line it reverses.** Open, for
-    partial corrections only, which no product code makes yet (only tests and demo scripts do):
-    whether a line a correction ADDS stays unlinked, and whether two adjustments may name the same
-    invoice line. When a report starts reading the link it will want an index on the column.
-  - **A fully credited bill's original invoice can still be reprinted**, from the till and from the
-    dashboard; the server allows it. Whether a reprint should say the invoice was credited is not
-    decided.
-  - **An invoice that already has a correction cannot be cancelled.** No route issues a credit note
-    other than this one.
-  - **The credit note is not printed** for the customer (asesor Q32 (b)).
 
-- **Asesor questions to send:** Q27 (money before the invoice, then a split; printing the invoice
-  first), Q28 (unpaid departure; built on the owner's decision, asked to confirm), Q29 (how a
-  discount or comp appears on the invoice) and Q32 (a cancelled, already-issued ticket: credit or
-  annul; built on the owner's decision). Q19 stays open.
+- **Asesor questions to send:** Q27 (money before the invoice, then a split; printing the invoice first), Q28 (unpaid departure; built on the owner's
+  decision, asked to confirm), Q29 (how a discount or comp appears on the invoice) and Q32 (a cancelled, already-issued ticket: credit or annul; built on
+  the owner's decision). Q19 stays open.
   [Detail](backlog/fiscal.md#asesor-questions-to-send)
 
-- **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the
-  original invoice total.** **PARKED (owner, 2026-09-29)** until the product can issue a corrective
-  invoice; the owner's points for that design are on the corrective-invoice entry (R5, above). Left
+- **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the original invoice total.** **PARKED (owner,
+  2026-09-29)** until the product can issue a corrective invoice; the owner's points for that design are on the corrective-invoice entry (R5, above). Left
   open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
-- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and
-  it reproduces itself.** Two compliance-track documents carry the same shape about tips
-  (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`). **Next
-  action:** whoever next works the compliance track widens those two sentences.
+- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it reproduces itself.**
+  **Next action:** whoever next works the compliance track widens those two sentences.
   [Detail](backlog/fiscal.md#the-fiscal-record-is-built-from-total--vat_breakdown-is-a-false-narrow-enumeration-and-it-reproduces-itself)
 
-- **A receipt printer can lose its reply after printing.** Automatic delivery retries and an
-  exhausted original's retry retain the original bytes. The customer may therefore receive an
-  extra unmarked sheet when the previous attempt printed but its reply was lost. **Next action:**
-  decide how an uncertain physical delivery should be recovered; request deduplication alone does
-  not establish one physical print. [Detail](backlog/fiscal.md#uncertain-receipt-delivery)
+- **A receipt printer can lose its reply after printing.**
+  **Next action:** decide how an uncertain physical delivery should be recovered; request deduplication alone does not establish one physical print.
+  [Detail](backlog/fiscal.md#uncertain-receipt-delivery)
 
 - **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The
   owner approved landing A795 on 2026-10-19 before these ran.
@@ -513,9 +413,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
 
 - **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
-  Design one flow for setup and renewal: the box makes the key
-  and request, the owner pastes the request into FNMT's form, and the box takes back only the issued
-  certificate. Fiscal: the owner lands it.
+  Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
 
 - **VAT at line add (M7v, A68).** — left open by the menus plan. Asesor Q26 (the rate on the day of
@@ -523,12 +421,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `apps/till/src/state/working-order.ts`) that no screen shows.
   [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
 
-- **A802 — correct part of a paid invoice: build the approved design.** Nothing in the
-  product can issue a corrective invoice (R5, _factura rectificativa_) for part of an issued
-  simplified invoice: the engine exists and only the whole-order cancel uses it.
-  Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md),
-  including its separate protected-writer approval and exact-gross qualification. The fiscal PR
-  waits for the owner to land it.
+- **A802 — correct part of a paid invoice: build the approved design.**
+  Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md), including its separate protected-writer approval
+  and exact-gross qualification. The fiscal PR waits for the owner to land it.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **Correct VAT without returning money.** Design the separate correction for a wrong VAT rate
@@ -536,18 +431,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   A802's money-back scope on 2026-10-21; no build is approved.
   [Detail](backlog/fiscal.md#correct-vat-without-returning-money)
 
-- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
-  filing.** The 2026-10-09 research found the only 0% rate in the VAT Law is art. 91.Cuatro, goods
-  donated to non-profits; the 0% on basic foods ended on 30 September 2024. The advisor is asked only
-  to confirm (review item [R3](compliance/asesor-questions.md#the-shortened-list-2026-10-09)).
+- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live filing.**
+  The advisor is asked only to confirm (review item [R3](compliance/asesor-questions.md#the-shortened-list-2026-10-09)).
   **Non-blocking while pre-production; blocking before going live.**
   [Detail](backlog/fiscal.md#no-tax-0-is-an-open-fiscal-question-and-it-must-be-answered-before-the-first-live-filing)
 
-- **Rename the `hour-*` names to minute names** — left by A947 slice 4a, which made every
-  installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-*.ts` file names,
-  their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
-  say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
-  no compatibility code: until then any installation may be reset (CLAUDE.md §3).
+- **Rename the `hour-*` names to minute names** — left by A947 slice 4a.
+  Before go-live it needs no compatibility code: until then any installation may be reset (CLAUDE.md §3).
+  [Detail](backlog/fiscal.md#rename-the-hour--names-to-minute-names).
 
 - **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the
   minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
