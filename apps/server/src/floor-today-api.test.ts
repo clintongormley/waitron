@@ -6,6 +6,7 @@ import { asc, sql, eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import {
   tableInService,
   diningTables,
@@ -68,8 +69,9 @@ import "./errors.js";
 let v: PartyVenue;
 let app: Hono;
 let cookie: string;
-/** The moment the till routes read; null reads the real clock. */
-let fixedAt: Date | null = null;
+
+const NOW = new Date("2026-10-14T12:00:00Z");
+let fixedAt = NOW;
 
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
@@ -83,16 +85,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: fixedAt }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: {
-        ...v.clock,
-        now: () => ({ ...v.clock.now(), ...(fixedAt === null ? {} : { instant: fixedAt }) }),
-      },
+      clock,
       cfg: v.cfg,
       tableRemovals: REMOVALS,
       secureCookies: false,
@@ -112,7 +114,7 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  fixedAt = null;
+  fixedAt = NOW;
 });
 
 async function send(method: string, path: string, body?: unknown): Promise<Response> {
@@ -198,11 +200,15 @@ describe("the table routes' revision", () => {
 
   /** A room of two ordinary tables and a spare. */
   const ROOM = () =>
-    plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "b", place: { x: 20, y: 0 } },
-      { key: "spare", place: null },
-    ]);
+    plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 20, y: 0 } },
+        { key: "spare", place: null },
+      ],
+      NOW,
+    );
 
   type Setup = () => Promise<{ zoneId: string; tableId: string; body: Record<string, unknown> }>;
 
@@ -261,7 +267,7 @@ describe("the table routes' revision", () => {
     [
       "mark-moved",
       async () => {
-        const { zoneId, tableId } = await needingMoving(v);
+        const { zoneId, tableId } = await needingMoving(v, NOW);
         return { zoneId, tableId, body: {} };
       },
     ],
@@ -392,10 +398,14 @@ describe("the table routes' revision", () => {
   });
 
   it("a stale screen is refused when the catch-up changes the room", async () => {
-    const { zoneId, table, master, revision } = await plannedZone(v, [
-      { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
-      { key: "a", place: { x: 0, y: 0 } },
-    ]);
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [
+        { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
+        { key: "a", place: { x: 0, y: 0 } },
+      ],
+      NOW,
+    );
     const partyId = await seatAt(table.bar!);
     const label = (await tableRow(v, table.bar!)).label;
     const other = (await tableRow(v, table.a!)).label;
@@ -410,10 +420,17 @@ describe("the table routes' revision", () => {
       partKeys: [],
     });
     await inTx(v, async (tx) =>
-      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
-        revision,
-        tables: [entry("bar", renamed, 40), entry("a", other, 0)],
-      }),
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        {
+          revision,
+          tables: [entry("bar", renamed, 40), entry("a", other, 0)],
+        },
+        NOW,
+      ),
     );
     await expectRevision(v, resetZoneToday(zoneId), zoneId);
     expect((await tableRow(v, table.bar!)).label).toBe(label);
@@ -473,10 +490,14 @@ describe("the table routes' revision", () => {
 
 describe("today's routes", () => {
   it("moves, turns, takes off, puts back, places and sets seats through the routes, answering the room's revision", async () => {
-    const { table } = await plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "spare", place: null },
-    ]);
+    const { table } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "spare", place: null },
+      ],
+      NOW,
+    );
 
     await expectRevision(v, today(table.a!, "move", { x: 30, y: 12 }));
     expect((await floorToday(table.a!))?.placement).toMatchObject({ x: 30, y: 12, rotation: 0 });
@@ -509,7 +530,7 @@ describe("today's routes", () => {
   });
 
   it("sends a table back to its saved place", async () => {
-    const { table } = await plannedZone(v, [{ key: "a", seats: 4, place: { x: 10, y: 20 } }]);
+    const { table } = await plannedZone(v, [{ key: "a", seats: 4, place: { x: 10, y: 20 } }], NOW);
     await expectRevision(v, today(table.a!, "move", { x: 60, y: 60 }));
     await expectRevision(v, today(table.a!, "rotate"));
 
@@ -523,10 +544,14 @@ describe("today's routes", () => {
   });
 
   it("resets a zone to the layout", async () => {
-    const { zoneId, table } = await plannedZone(v, [
-      { key: "free", place: { x: 0, y: 0 } },
-      { key: "seated", place: { x: 20, y: 0 } },
-    ]);
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "free", place: { x: 0, y: 0 } },
+        { key: "seated", place: { x: 20, y: 0 } },
+      ],
+      NOW,
+    );
     await seatAt(table.seated!);
     await expectRevision(v, today(table.free!, "move", { x: 50, y: 50 }));
     await expectRevision(v, today(table.seated!, "move", { x: 70, y: 70 }));
@@ -539,26 +564,35 @@ describe("today's routes", () => {
   });
 
   it("a change sent from a read after the catch-up marks a table is applied, and survives the next read", async () => {
-    const { zoneId, table, master, revision } = await plannedZone(v, [
-      { key: "t", label: "T", place: { x: 0, y: 0 } },
-    ]);
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [{ key: "t", label: "T", place: { x: 0, y: 0 } }],
+      NOW,
+    );
     const partyId = await seatAt(table.t!);
     const label = (await tableRow(v, table.t!)).label;
     await inTx(v, async (tx) =>
-      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
-        revision,
-        tables: [
-          {
-            id: master.t!,
-            key: "t",
-            label,
-            seats: 4,
-            fixed: false,
-            placement: { x: 50, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
-            partKeys: [],
-          },
-        ],
-      }),
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        {
+          revision,
+          tables: [
+            {
+              id: master.t!,
+              key: "t",
+              label,
+              seats: 4,
+              fixed: false,
+              placement: { x: 50, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      ),
     );
     await expectRevision(v, resetZoneToday(zoneId), zoneId);
     expect((await todayRow(v, table.t!))?.x).toBe(0);
@@ -580,7 +614,7 @@ describe("today's routes", () => {
   });
 
   it("leaves a disabled planned zone's tables off on a reset", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a" }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a" }], NOW);
     await inTx(v, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
     );
@@ -595,11 +629,15 @@ describe("today's routes", () => {
   });
 
   it("answers a refusal with its code and status", async () => {
-    const { table } = await plannedZone(v, [
-      { key: "fixed", fixed: true },
-      { key: "spare", place: null },
-      { key: "off", place: { x: 20, y: 0 } },
-    ]);
+    const { table } = await plannedZone(
+      v,
+      [
+        { key: "fixed", fixed: true },
+        { key: "spare", place: null },
+        { key: "off", place: { x: 20, y: 0 } },
+      ],
+      NOW,
+    );
     await expectRevision(v, today(table.off!, "take-off"));
 
     expect(await refusal(today(table.fixed!, "move", { x: 5, y: 5 }))).toEqual({
@@ -617,12 +655,16 @@ describe("today's routes", () => {
   });
 
   it("answers 409 table.in_joined_table for placing a part", async () => {
-    const { table } = await plannedZone(v, [
-      { key: "c3", label: "Counter 3", seats: 2, place: null },
-      { key: "c4", label: "Counter 4", seats: 6, place: null },
-      { key: "c5", label: "Counter 5", seats: 4, place: null },
-      { key: "long", label: "Long table", seats: 10, partKeys: ["c3", "c4", "c5"] },
-    ]);
+    const { table } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        { key: "long", label: "Long table", seats: 10, partKeys: ["c3", "c4", "c5"] },
+      ],
+      NOW,
+    );
 
     expect(await refusal(today(table.c4!, "place", { x: 40, y: 50 }))).toEqual({
       status: 409,
@@ -632,7 +674,7 @@ describe("today's routes", () => {
   });
 
   it("refuses a malformed id or body", async () => {
-    const { table } = await plannedZone(v, [{ key: "a" }]);
+    const { table } = await plannedZone(v, [{ key: "a" }], NOW);
 
     expect(await refusal(today("not-a-uuid", "move", { x: 1, y: 0 }))).toMatchObject({
       status: 404,
@@ -719,10 +761,14 @@ describe("today's routes", () => {
   });
 
   it("merges two free tables in a zone that takes payment first", async () => {
-    const { zoneId, table } = await plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "b", place: { x: 20, y: 0 } },
-    ]);
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 20, y: 0 } },
+      ],
+      NOW,
+    );
     await payFirst(zoneId, "prepay");
 
     await expectRevision(
@@ -740,7 +786,7 @@ describe("the zone reset's revision", () => {
   });
 
   it("refuses a revision older than the room's and writes nothing", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     await seatAt(table.a!);
     await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
     const from = (await zoneRevisionOf(v, zoneId))!;
@@ -755,7 +801,7 @@ describe("the zone reset's revision", () => {
   });
 
   it("refuses a revision newer than the room's", async () => {
-    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const { zoneId } = await plannedZone(v, [{ key: "a" }], NOW);
     const from = (await zoneRevisionOf(v, zoneId))!;
     const before = await everything();
 
@@ -767,7 +813,7 @@ describe("the zone reset's revision", () => {
   });
 
   it("applies the room's current revision and answers it moved by one", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
     const from = (await zoneRevisionOf(v, zoneId))!;
 
@@ -781,7 +827,7 @@ describe("the zone reset's revision", () => {
     ["no body", {}],
     ["a body that is not JSON", { body: "{", headers: { "content-type": "application/json" } }],
   ])("refuses %s and writes nothing", async (_, init) => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
     const from = (await zoneRevisionOf(v, zoneId))!;
     const before = await everything();
@@ -802,14 +848,14 @@ describe("the zone reset's revision", () => {
   });
 
   it("applies null on a room none of whose tables has a today's row", async () => {
-    const { zoneId } = await plannedZone(v, []);
+    const { zoneId } = await plannedZone(v, [], NOW);
     expect(await zoneRevisionOf(v, zoneId)).toBe(1);
 
     await expectRevision(v, resetZoneToday(zoneId, { zoneRevision: null }), zoneId, 2);
   });
 
   it("refuses null once a table of the room has a today's row", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     await expectRevision(v, today(table.a!, "move", { x: 50, y: 50 }));
     const from = (await zoneRevisionOf(v, zoneId))!;
     const before = await everything();
@@ -823,7 +869,7 @@ describe("the zone reset's revision", () => {
   });
 
   it("answers a disabled room's revision unchanged when it is current", async () => {
-    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const { zoneId } = await plannedZone(v, [{ key: "a" }], NOW);
     await inTx(v, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
     );
@@ -832,27 +878,36 @@ describe("the zone reset's revision", () => {
   });
 
   it("refuses a stale reset when the catch-up changes the room, and rolls the catch-up back", async () => {
-    const { zoneId, table, master, revision } = await plannedZone(v, [
-      { key: "t", label: "T", place: { x: 0, y: 0 } },
-    ]);
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [{ key: "t", label: "T", place: { x: 0, y: 0 } }],
+      NOW,
+    );
     const partyId = await seatAt(table.t!);
     const label = (await tableRow(v, table.t!)).label;
     const renamed = `${label} b`;
     await inTx(v, async (tx) =>
-      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
-        revision,
-        tables: [
-          {
-            id: master.t!,
-            key: "t",
-            label: renamed,
-            seats: 4,
-            fixed: false,
-            placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
-            partKeys: [],
-          },
-        ],
-      }),
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        {
+          revision,
+          tables: [
+            {
+              id: master.t!,
+              key: "t",
+              label: renamed,
+              seats: 4,
+              fixed: false,
+              placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      ),
     );
     await expectRevision(v, resetZoneToday(zoneId), zoneId);
     expect((await tableRow(v, table.t!)).label).toBe(label);
@@ -871,7 +926,7 @@ describe("the zone reset's revision", () => {
   });
 
   it("refuses a revision that is not a whole number from 0", async () => {
-    const { zoneId } = await plannedZone(v, [{ key: "a" }]);
+    const { zoneId } = await plannedZone(v, [{ key: "a" }], NOW);
     const before = await everything();
 
     for (const zoneRevision of [-1, 1.5, "3"]) {
@@ -891,7 +946,7 @@ describe("today's name route", () => {
   const suffix = () => randomUUID().slice(0, 6);
 
   it("answers the revision unchanged when a table is renamed to the name it already has", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "bar", label: "Bar" }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "bar", label: "Bar" }], NOW);
     const name = `Window ${suffix()}`;
     await expectRevision(v, today(table.bar!, "name", { name }), zoneId);
     const read = (await zoneRevisionOf(v, zoneId))!;
@@ -900,11 +955,15 @@ describe("today's name route", () => {
   });
 
   it("refuses Split tables… and a rename from the read before another till renamed the group", async () => {
-    const { zoneId, table } = await plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "b", place: { x: 20, y: 0 } },
-      { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
-    ]);
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 20, y: 0 } },
+        { key: "bar", label: "Bar", place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
     await expectRevision(
       v,
       today(table.a!, "merge", { targetId: table.b!, side: "right", seats: 8 }),
@@ -943,8 +1002,8 @@ describe("today's name route", () => {
   });
 
   it("gives a name to one of two tables in two rooms renamed to it at once, and refuses the other", async () => {
-    const first = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
-    const second = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const first = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
+    const second = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     const name = `Window ${suffix()}`;
     const bodies = [
       await withRevision(v, first.table.a!, { name }),
@@ -969,7 +1028,7 @@ describe("today's name route", () => {
   });
 
   it("names a table, and an empty name clears it", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     const name = `Window ${suffix()}`;
 
     await expectRevision(v, today(table.a!, "name", { name: `  ${name} ` }), zoneId);
@@ -983,7 +1042,7 @@ describe("today's name route", () => {
     ["41 characters", { name: "x".repeat(41) }],
     ["a missing name", {}],
   ])("refuses %s and writes nothing", async (_, body) => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     const read = await zoneRevisionOf(v, zoneId);
     const before = await everything();
 
@@ -997,19 +1056,23 @@ describe("today's name route", () => {
 });
 
 const LONG = async () => {
-  const zone = await plannedZone(v, [
-    { key: "c3", label: "Counter 3", seats: 2, place: null },
-    { key: "c4", label: "Counter 4", seats: 6, place: null },
-    { key: "c5", label: "Counter 5", seats: 4, place: null },
-    {
-      key: "long",
-      label: "Long table",
-      seats: 10,
-      place: { x: 10, y: 20, width: 6, height: 2 },
-      partKeys: ["c3", "c4", "c5"],
-    },
-    { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0 } },
-  ]);
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0 } },
+    ],
+    NOW,
+  );
   await giveKeptSize(v, zone.master.c3!, { width: 2, height: 2 });
   await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
   return zone;
@@ -1214,8 +1277,8 @@ describe("the joined table's reset route", () => {
 
 describe("the till's zone list", () => {
   it("says a zone of a department with a set has a plan, with tables, a saved layout or neither", async () => {
-    const { zoneId: withTables } = await plannedZone(v, [{ key: "a" }]);
-    const { zoneId: emptyPlan } = await plannedZone(v, []);
+    const { zoneId: withTables } = await plannedZone(v, [{ key: "a" }], NOW);
+    const { zoneId: emptyPlan } = await plannedZone(v, [], NOW);
     const unplanned = await tableServiceZone(v);
 
     const answer = await send("GET", "/api/zones");
@@ -1395,7 +1458,7 @@ describe("Reset to … plan", () => {
             partKeys: t.partIds,
           })),
         },
-        fixedAt!,
+        fixedAt,
       );
     });
   }

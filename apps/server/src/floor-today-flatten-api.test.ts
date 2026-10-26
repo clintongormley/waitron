@@ -4,6 +4,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import {
   floorTodayJoinTables,
   floorTodayJoins,
@@ -52,13 +53,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock,
       cfg: v.cfg,
       tableRemovals: enabledTableRemovals(ALL_MODULES),
       secureCookies: false,

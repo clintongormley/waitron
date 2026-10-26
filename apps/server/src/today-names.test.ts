@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import { printJobs, ticketItems } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
@@ -61,6 +62,8 @@ let app: Hono;
 let cookie: string;
 let kitchenPrinter: string;
 
+const NOW = new Date("2026-10-10T12:00:00Z");
+
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -87,13 +90,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock,
       cfg: v.cfg,
       tableRemovals: enabledTableRemovals(ALL_MODULES),
       secureCookies: false,
@@ -117,21 +123,25 @@ beforeAll(async () => {
  * free tables with a place, Counter 6 (2 seats) and Table 9 (4 seats).
  */
 async function LONG_TABLE() {
-  const zone = await plannedZone(v, [
-    { key: "c3", label: "Counter 3", seats: 2, place: null },
-    { key: "c4", label: "Counter 4", seats: 6, place: null },
-    { key: "c5", label: "Counter 5", seats: 4, place: null },
-    {
-      key: "long",
-      label: "Long table",
-      seats: 10,
-      place: { x: 10, y: 20, width: 6, height: 2 },
-      partKeys: ["c3", "c4", "c5"],
-    },
-    { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
-    { key: "c6", label: "Counter 6", seats: 2, place: { x: 60, y: 0, width: 2, height: 2 } },
-    { key: "t9", label: "Table 9", seats: 4, place: { x: 70, y: 0, width: 2, height: 2 } },
-  ]);
+  const zone = await plannedZone(
+    v,
+    [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 10,
+        place: { x: 10, y: 20, width: 6, height: 2 },
+        partKeys: ["c3", "c4", "c5"],
+      },
+      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
+      { key: "c6", label: "Counter 6", seats: 2, place: { x: 60, y: 0, width: 2, height: 2 } },
+      { key: "t9", label: "Table 9", seats: 4, place: { x: 70, y: 0, width: 2, height: 2 } },
+    ],
+    NOW,
+  );
   for (const key of ["c3", "c4", "c5"])
     await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
   return zone;

@@ -2717,6 +2717,31 @@ The delay is an experiment, not part of the shipped fixture. The owner approved 
 one-line correction; every assertion and the initial date stay unchanged.
 
 
+## A floor test pins the till API's clock away from the day change
+
+A suite that sends a room's revision to a today's-floor write route, whether it read the revision
+from the API or the database, gives the mounted API a clock fixed at the suite's own time (`{ ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) }`),
+and seeds its rooms at that same time. The today's-floor write routes
+(`apps/server/src/floor-today-api.ts`) call `ensureToday` (`apps/server/src/floor-today-store.ts`)
+with the API's clock before checking the revision sent, and it resets a room onto its due layout
+once the venue's business day has moved on. The party venue changes day at 05:00 Madrid time, so a revision read
+before 05:00 and sent after it can be refused `floor_today.out_of_date`.
+
+Measured on 26 October 2026 for A1117. CI run 40266252596 failed
+`floor-today-reset-table.test.ts`'s "Counter 6 free" case at 04:00:00 UTC, which that day was 05:00 in
+Madrid. A probe whose API clock read 03:59:59.5 UTC until that case's reset request and 04:00:00.5
+after it reproduced the same refusal and revision; the same probe without the step passed. A
+process-wide `Date` shifted so the change fell at a different moment of each run failed one
+case in 18 of 129 runs across `floor-today-reset-table`, `floor-today-flatten-api`,
+`floor-today-split-group`, `till-api.today-joins` and `today-names`, and none of 145 runs failed once
+each of the five pinned its clock. `till-api.profile-zones` failed none of 31 such runs and was left on the system clock.
+The same shift over `floor-today-api` (36 runs, each starting a different number of milliseconds before the change), `floor-today-merge-api` (31) and
+`floor-today-seat-api` (31), the three sweeps running side by side, failed a case in 2, 1 and 0 runs
+on the system clock and in none from the same starting points once each pinned its clock. Those failures' error
+codes were not recorded.
+`floor-today-seat-api` failed none of its runs and was pinned anyway, because it too reads a room's revision from the database and sends it to these routes.
+Nothing guards a suite against mounting the API on `v.clock`.
+
 ## Run backup verification with worker threads denied
 
 `apps/server/src/backup-verification.permission.test.ts` builds the private verifier separately and imports
