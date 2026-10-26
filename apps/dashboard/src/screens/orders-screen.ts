@@ -28,6 +28,7 @@ import {
   writeOrdersFilter,
   type OrdersFilter,
 } from "./orders-filter.js";
+import "../widgets/invoice-customer-dialog.js";
 import "../widgets/order-detail-dialog.js";
 import "../widgets/order-reprint-dialog.js";
 
@@ -52,8 +53,16 @@ export class OrdersScreen extends LitElement {
       :host {
         display: block;
       }
+      .heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-4);
+      }
       h1 {
-        margin: 0 0 var(--wt-space-4);
+        margin: 0;
         font-size: var(--wt-font-size-lg);
       }
       .filters {
@@ -86,6 +95,8 @@ export class OrdersScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   /** The session holds `report.export`. */
   @property({ attribute: false }) canExport = false;
+  /** The session holds `personal_data.export`. */
+  @property({ attribute: false }) canExportPersonalData = false;
   @state() private filter: OrdersFilter = DEFAULT_ORDERS_FILTER;
   @state() private pages = 1;
   @state() private page?: OrdersPageDto;
@@ -96,6 +107,7 @@ export class OrdersScreen extends LitElement {
   @state() private reprintRow: OrderRowDto | null = null;
   /** `invoice` when `reprintRow` is a full invoice being printed again on any printer. */
   @state() private reprintMode: "receipt" | "invoice" = "receipt";
+  @state() private findingCustomer = false;
   #textTimer?: ReturnType<typeof setTimeout>;
 
   readonly #queries = new DashboardQueries(
@@ -297,7 +309,21 @@ export class OrdersScreen extends LitElement {
   override render() {
     const rows = this.page?.rows ?? [];
     const errorFor = (field: string) => (this.refusal?.field === field ? this.refusal.message : "");
-    return html`<h1>${t("orders.title")}</h1>
+    return html`<div class="heading">
+        <h1>${t("orders.title")}</h1>
+        ${
+          this.canExportPersonalData
+            ? html`<wt-button
+                variant="secondary"
+                data-test="find-invoice-customer"
+                @click=${() => {
+                  this.findingCustomer = true;
+                }}
+                >${t("invoice_customer.heading")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
       <div class="filters">
         <wt-combobox
           name="status"
@@ -435,7 +461,14 @@ export class OrdersScreen extends LitElement {
         @wt-close=${() => {
           this.reprintRow = null;
         }}
-      ></dashboard-order-reprint-dialog>`;
+      ></dashboard-order-reprint-dialog>
+      <dashboard-invoice-customer-dialog
+        .api=${this.api}
+        .open=${this.findingCustomer}
+        @wt-close=${() => {
+          this.findingCustomer = false;
+        }}
+      ></dashboard-invoice-customer-dialog>`;
   }
 }
 
