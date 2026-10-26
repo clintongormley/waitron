@@ -959,7 +959,7 @@ async function discard(
   recoveryId: string,
 ) {
   const { recordedAt } = await f.workspace.abandon(recoveryId);
-  await f.options.host.coordinator.run(() => f.service.discardInTurn(recoveryId));
+  await f.options.host.coordinator.run(() => f.service.discardInTurn(recoveryId, recordedAt));
   await emptyAbandonedBackupRecovery(f.roots, recoveryId);
   return recordedAt;
 }
@@ -1002,7 +1002,115 @@ it("refuses a late step from a discarded recovery after a restart, with when it 
     restarted.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
   ).rejects.toEqual(discardedAt(at));
   expect(() => restarted.renew(f.session.sessionId)).toThrow(discardedAt(at));
-  expect(() => restarted.cloudRenew("A")).toThrow(discardedAt(at));
+  expect(() => restarted.cloudRenew("A")).toThrow(refused);
+});
+
+it("still tells a discarded recovery's tab when it was discarded after a fence sealed its session first", async () => {
+  const f = await preparedSession();
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  const at = await discard(f, f.session.recoveryId);
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(discardedAt(at));
+  await expect(
+    f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+  await expect(f.service.close(f.session.sessionId)).rejects.toEqual(discardedAt(at));
+});
+
+it("tells a new recovery's tab whose session a second tab took that the owner is needed, not that it was discarded, before and after a restart", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  const second = await f.service.open(f.request, client);
+  const third = await f.service.open(f.request, client);
+  expect(third.recoveryId).not.toBe(second.recoveryId);
+  expect(() => f.service.renew(second.sessionId)).toThrow(refused);
+  await expect(
+    f.service.prepare(second.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(refused);
+  await expect(f.service.close(second.sessionId)).rejects.toEqual(refused);
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(discardedAt(at));
+  await expect(
+    f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+  await expect(f.service.close(f.session.sessionId)).rejects.toEqual(discardedAt(at));
+  f.service.renew(third.sessionId);
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  await expect(
+    restarted.prepare(second.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(refused);
+  expect(() => restarted.renew(second.sessionId)).toThrow(refused);
+  await expect(restarted.close(second.sessionId)).rejects.toEqual(refused);
+  await expect(
+    restarted.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+  expect(() => restarted.renew(f.session.sessionId)).toThrow(discardedAt(at));
+  await expect(restarted.close(f.session.sessionId)).rejects.toEqual(discardedAt(at));
+});
+
+it("tells a new recovery's tab whose session a fence sealed that the owner is needed, not that it was discarded, before and after a restart", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  const second = await f.service.open(f.request, client);
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  await expect(
+    f.service.prepare(second.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(refused);
+  expect(() => f.service.renew(second.sessionId)).toThrow(refused);
+  await expect(
+    f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  await expect(
+    restarted.prepare(second.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(refused);
+  await expect(
+    restarted.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+});
+
+it("tells the holder of a Cloud wait started after a discard that the owner is needed after a restart, not that it was discarded", async () => {
+  const f = await closedCloudSession();
+  expect((await f.service.cloudStatus("A")).state).toBe("approved");
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  const at = await discard(f, f.session.recoveryId);
+  expect((await f.service.cloudStart("C")).state).toBe("awaiting_owner");
+  f.service.cloudRenew("C");
+  expect(() => f.service.cloudRenew("A")).toThrow(discardedAt(at));
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  await restarted.status();
+  expect(() => restarted.cloudRenew("C")).toThrow(refused);
+  expect(() => restarted.cloudRenew("A")).toThrow(refused);
+});
+
+it("makes a fresh open in flight lose when the recovery another tab opened is discarded meanwhile", async () => {
+  const f = await fixture(true);
+  const service = recovery(f.options);
+  const first = await service.open(f.request, client);
+  const gate = barrier();
+  const reached = barrier();
+  const real = vi.mocked(sources.openFirstSetupBackupSource).getMockImplementation()!;
+  vi.mocked(sources.openFirstSetupBackupSource).mockImplementationOnce(async (...args) => {
+    reached.resolve();
+    await gate.promise;
+    return real(...args);
+  });
+  const opening = service.open(f.request, client);
+  opening.catch(() => {});
+  await reached.promise;
+  try {
+    await service.prepare(first.sessionId, { action: "clock-challenge" }, client);
+    expect((await f.workspace.read()).at(-1)!.target.recoveryId).toBe(first.recoveryId);
+    await discard({ ...f, service }, first.recoveryId);
+  } finally {
+    gate.resolve();
+  }
+  await expect(opening).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(service.runningInMemory()).toBe(false);
 });
 
 it("makes a resume in flight when the recovery is discarded lose", async () => {
@@ -1117,7 +1225,8 @@ it("starts a new Cloud recovery after a stopped one is discarded in the same ser
 it("answers owner-required for an unknown session once a new recovery is under way beside the tombstone", async () => {
   const f = await preparedSession();
   const at = await discard(f, f.session.recoveryId);
-  expect(() => f.service.renew("unknown")).toThrow(discardedAt(at));
+  expect(() => f.service.renew("unknown")).toThrow(refused);
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(discardedAt(at));
   const second = await f.service.open(f.request, client);
   await f.service.prepare(second.sessionId, { action: "clock-challenge" }, client);
   expect(second.recoveryId).not.toBe(f.session.recoveryId);

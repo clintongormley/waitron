@@ -231,14 +231,25 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     wait.lastActiveAt = new Date().toISOString();
   };
   const handOver = (recoveryId: string) => cloudWaits.get(recoveryId)?.holders.clear();
-  // The latest record as last read, when it is `abandoned`: a renewal has no turn to read it in.
+  // The latest record, when it is `abandoned`, as last read or as a discard gave it: a renewal
+  // has no turn to read it in.
   let tombstone: { recoveryId: string; at: string } | undefined;
+  // Only a caller that belonged to the discarded recovery is told it was discarded. A Cloud holder
+  // is known only in memory; a session id carries a hash binding it to its recovery, so it still
+  // matches after a restart.
   const retiredHolders = new Map<string, string>();
+  const sessionTag = (recoveryId: string, nonce: string) =>
+    createHash("sha256").update(`${recoveryId}\0${nonce}`).digest("hex").slice(0, 32);
+  const newSessionId = (recoveryId: string) => {
+    const nonce = randomBytes(16).toString("hex");
+    return nonce + sessionTag(recoveryId, nonce);
+  };
   const observe = (last: BackupRepairRecord | undefined) => {
     tombstone =
       last?.phase === "abandoned"
         ? { recoveryId: last.target.recoveryId, at: last.recordedAt }
         : undefined;
+    if (last !== undefined && tombstone === undefined) retiredHolders.clear();
     return tombstone;
   };
   // An unreadable journal leaves the refusal the caller would give anyway.
@@ -254,6 +265,13 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
   const refuseDiscarded = async (recoveryId: string) => {
     const found = await readTombstone();
     if (found?.recoveryId === recoveryId) discarded(found);
+  };
+  const refuseDiscardedSession = (sessionId: string, found = tombstone) => {
+    if (
+      found !== undefined &&
+      sessionId.slice(32) === sessionTag(found.recoveryId, sessionId.slice(0, 32))
+    )
+      discarded(found);
   };
   // A Cloud call can wait 30 s for Cloud before it takes its lease, so it reads as running meanwhile.
   const cloudCalls = new Map<object, string>();
@@ -467,7 +485,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       active.session.sessionId !== sessionId ||
       active.sealed !== undefined
     ) {
-      discarded(await readTombstone());
+      refuseDiscardedSession(sessionId, await readTombstone());
       ownerRequired();
     }
     const entry = active;
@@ -898,7 +916,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               conflict();
             await drop();
             const session = {
-              sessionId: randomBytes(32).toString("hex"),
+              sessionId: newSessionId(recoveryId),
               recoveryId,
               binding,
               preview,
@@ -1140,7 +1158,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             void previousRecordDigest;
             void recordedAt;
             const session = {
-              sessionId: randomBytes(32).toString("hex"),
+              sessionId: newSessionId(request.recoveryId),
               recoveryId: request.recoveryId,
               preview: selected.preview,
               binding: record.binding,
@@ -1457,7 +1475,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     close(sessionId: string): Promise<void> {
       return turn(async () => {
         if (active === undefined || active.session.sessionId !== sessionId) {
-          discarded(await readTombstone());
+          refuseDiscardedSession(sessionId, await readTombstone());
           ownerRequired();
         }
         if (performance.now() - active.usedAt > UNUSED_MS) {
@@ -1469,7 +1487,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     },
     renew(sessionId: string): void {
       const entry = active;
-      if (entry === undefined || entry.session.sessionId !== sessionId) discarded(tombstone);
+      if (entry === undefined || entry.session.sessionId !== sessionId)
+        refuseDiscardedSession(sessionId);
       if (entry === undefined || entry.session.sessionId !== sessionId || !live(entry))
         ownerRequired();
       refresh(entry);
@@ -1477,11 +1496,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     cloudRenew(holder: string): void {
       const wait = cloudWait();
       const renewed = wait?.holders.get(holder);
-      const retired = retiredHolders.get(holder);
       if (
         !disposed &&
-        (wait === undefined ||
-          (renewed === undefined && retired !== undefined && retired === tombstone?.recoveryId))
+        renewed === undefined &&
+        tombstone !== undefined &&
+        retiredHolders.get(holder) === tombstone.recoveryId
       )
         discarded(tombstone);
       if (disposed || wait?.sealed !== undefined || renewed === undefined || !held(renewed))
@@ -1511,8 +1530,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       wait.sealed ??= { at };
       cloudWaits.set(pendingCloudId, wait);
     },
-    // Runs inside the caller's turn, after the recovery's `abandoned` record is written.
-    async discardInTurn(recoveryId: string): Promise<void> {
+    // Runs inside the caller's turn; `discardedAt` is the `abandoned` record's `recordedAt`.
+    async discardInTurn(recoveryId: string, discardedAt: string): Promise<void> {
       generation++;
       if (active?.session.recoveryId === recoveryId) await drop();
       if (pendingCloudId === recoveryId) pendingCloudId = undefined;
@@ -1520,7 +1539,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       for (const holder of cloudWaits.get(recoveryId)?.holders.keys() ?? [])
         retiredHolders.set(holder, recoveryId);
       cloudWaits.delete(recoveryId);
-      await readTombstone();
+      tombstone = { recoveryId, at: discardedAt };
     },
     runningInMemory,
     async liveness(): Promise<BackupRepairActivity | null> {
