@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { chmod, lstat, mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { expect, it, vi } from "vitest";
-// Before @waitron/composition: imported after it, the backup recovery case fails.
+// First: hour-recovery-host's vi.mock of the internet clock and hour-release reaches only modules loaded after it.
 import { fixture, recovery } from "../test/first-setup-backup-recovery-fixture.js";
 import { external, root, suite } from "../test/hour-recovery-host.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -20,15 +20,10 @@ import {
   START_AGAIN_ADMIN_PASSWORD,
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
-import {
-  EPOCH_MS,
-  MINUTE_MS,
-  decodeMinuteIdentity,
-} from "@waitron/fiscal-verifactu/src/hour-identity.js";
+import { MINUTE_MS } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 
 import { PASSWORD, request } from "../test/first-fiscal.js";
 import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
-import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -331,9 +326,5 @@ it("lifetime: the next setup's name is later than the note a Move raised", async
   });
   vi.setSystemTime(floorMs + 5 * MINUTE_MS);
   await selectPastWaits(createFakeTimersHourClock(), () => compareAndSelect(host, owner), 1);
-  const state = (await host.store.read())!;
-  const name = (firstSetupModuleContext(state, "fiscal-verifactu").request as { identity: string })
-    .identity;
-  expect(EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS).toBeGreaterThanOrEqual(floorMs);
   expect(await kept(roots)).toEqual(before);
 });

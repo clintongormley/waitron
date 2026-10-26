@@ -15,7 +15,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   START_AGAIN_MARKER_FILE,
@@ -38,7 +38,12 @@ import { freePorts } from "./testing/free-ports.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
+import { resumeStartAgainSetAside } from "@waitron/provisioning";
 
+vi.mock("@waitron/provisioning", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/provisioning")>();
+  return { ...actual, resumeStartAgainSetAside: vi.fn(actual.resumeStartAgainSetAside) };
+});
 vi.mock("./first-setup-backup-entry.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./first-setup-backup-entry.js")>();
   return { ...actual, resolveFirstSetupBackupEntry: vi.fn(actual.resolveFirstSetupBackupEntry) };
@@ -554,7 +559,12 @@ const fileTree = async (dir: string) =>
   Object.fromEntries(
     await Promise.all(
       (await readdir(dir, { recursive: true }))
-        .filter((name) => !/^venue\.(lock|holder\.json|lock-journal)$/.test(name))
+        .filter(
+          (name) =>
+            !/^(venue\.(lock|holder\.json|lock-journal)|migrations\.lock|recovery\.lock)$/.test(
+              name,
+            ),
+        )
         .sort()
         .map(async (name) => {
           const path = join(dir, name);
@@ -647,11 +657,39 @@ it("a move whose resume fails with an error that is not a refusal is refused set
   if (entry.kind === "resolution") await entry.dispose();
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
-  expect(entry.error.reason).toBe("set-aside failed: EACCES");
+  expect(entry.error.reason).toBe(
+    `set-aside failed: EACCES state/${relative(await fs.realpath(f.stateDir), await fs.realpath(stem))}`,
+  );
   expect(entry.survey).toBeUndefined();
   expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
   expect(await boxTree(f)).toEqual(before);
 });
+
+it.each([
+  ["an error with no code", () => new Error("no code"), "set-aside failed: unknown"],
+  [
+    "a path in the venue folder",
+    (venue: string) =>
+      Object.assign(new Error("io"), { code: "EIO", path: join(venue, "venue.db") }),
+    "set-aside failed: EIO venue/venue.db",
+  ],
+  [
+    "a path outside both folders",
+    () => Object.assign(new Error("io"), { code: "EIO", path: "/elsewhere/file" }),
+    "set-aside failed: EIO /elsewhere/file",
+  ],
+])(
+  "a resume that fails with %s names it in the reason",
+  async (_name, error: (venue: string) => Error, reason) => {
+    const f = await moveRecordedNothingMoved();
+    const venue = await fs.realpath(f.venueDir);
+    vi.mocked(resumeStartAgainSetAside).mockRejectedValueOnce(error(venue));
+    const entry = await resolveFirstSetupEntry(f.roots, {});
+    expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+    if (entry.kind !== "refused") throw new Error("expected a refused start");
+    expect(entry.error.reason).toBe(reason);
+  },
+);
 
 it("a move to resume while another connection holds the venue lock is refused setup.start_again_incomplete, and nothing moves", async () => {
   const f = await moveRecordedNothingMoved();

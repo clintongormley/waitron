@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
@@ -143,7 +143,7 @@ async function refusedAtStart(
           "setup.start_again_incomplete",
           {},
           {
-            reason: `set-aside failed: ${error instanceof AppError ? error.code : (errnoOf(error) ?? "unknown")}`,
+            reason: setAsideFailure(canonical, error),
           },
         ),
       }
@@ -155,12 +155,37 @@ async function refusedAtStart(
     if (!(error instanceof AppError) || error.code !== "setup.start_again_incomplete")
       return refused(error);
     const classified = await classifyStartAgainRefusal(canonical, error);
+    if (classified.survey === undefined)
+      return {
+        kind: "refused",
+        code: "setup.start_again_incomplete",
+        roots: canonical,
+        error: classified.error,
+      };
     return {
-      ...refused(classified.error)!,
-      ...(classified.survey ? { survey: classified.survey } : {}),
+      kind: "refused",
+      code: "setup.start_again_files_found",
+      roots: canonical,
+      error: classified.error,
+      survey: classified.survey,
     };
   }
   return undefined;
+}
+
+/** D1's `set-aside failed: <errno> <root>/<path>`, the path left out when the error names none. */
+function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
+  const code = error instanceof AppError ? error.code : (errnoOf(error) ?? "unknown");
+  const path: unknown = (Object(error) as { path?: unknown }).path;
+  if (typeof path !== "string") return `set-aside failed: ${code}`;
+  const under = (
+    [
+      ["state", roots.stateDir],
+      ["venue", roots.venueDir],
+    ] as const
+  ).find(([, root]) => path.startsWith(`${root}${sep}`));
+  const where = under === undefined ? path : `${under[0]}/${relative(under[1], path)}`;
+  return `set-aside failed: ${code} ${where}`;
 }
 
 /** Finishes a discard a power cut stopped after the abandon; a refusal is logged and the start goes on. */
