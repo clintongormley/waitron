@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { SetupApi } from "./api/client.js";
 import { FirstSetupBackupSession } from "./first-setup-backup-session.js";
 import type { BackupRepairOpenRequest, BackupRepairSession } from "./api/first-setup-types.js";
@@ -359,4 +359,126 @@ it("never installs malformed authority even when closing its supplied grant is r
   expect(session.current).toBeUndefined();
   await session.dispose();
   expect(calls.map((call) => call.action)).toEqual(["open", "close"]);
+});
+
+function leaseFixture(renew: (body: unknown) => Response | Promise<Response>) {
+  const calls: { action: string; body: unknown }[] = [];
+  const api = new SetupApi("", async (url, init) => {
+    const action = String(url).split("/").at(-1)!;
+    const body: unknown =
+      init?.body instanceof FormData ? undefined : JSON.parse(String(init?.body ?? "{}"));
+    calls.push({ action, body });
+    if (action === "renew") return renew(body);
+    if (action === "open") return Response.json(response);
+    if (action === "commit") return Response.json({ restarting: true });
+    if (action === "prepare") return Response.json({ status: "selected", binding, input: {} });
+    return Response.json({ closed: true });
+  });
+  const refusals: unknown[] = [];
+  const session = new FirstSetupBackupSession(api, {
+    onRenewalRefused: (cause) => refusals.push(cause),
+  });
+  const renewals = () => calls.filter((call) => call.action === "renew");
+  return { session, calls, refusals, renewals };
+}
+function visibility(state: DocumentVisibilityState) {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+it("renews its session every 30 s while it holds one, and stops after dispose", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { session, renewals } = leaseFixture(() => Response.json({ renewed: true }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renewals()).toHaveLength(0);
+    await session.open(request);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(renewals()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(renewals().map((call) => call.body)).toEqual([{ sessionId: response.sessionId }]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(renewals()).toHaveLength(2);
+    await session.dispose();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(renewals()).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops renewing once its recovery is committed", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { session, renewals } = leaseFixture(() => Response.json({ renewed: true }));
+    await session.open(request);
+    await session.prepare({ action: "select" });
+    await session.commit({});
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(renewals()).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("renews when the page becomes visible, and not when it is hidden or after dispose", async () => {
+  try {
+    const { session, renewals } = leaseFixture(() => Response.json({ renewed: true }));
+    visibility("visible");
+    expect(renewals()).toHaveLength(0);
+    await session.open(request);
+    visibility("hidden");
+    expect(renewals()).toHaveLength(0);
+    visibility("visible");
+    await expect.poll(() => renewals()).toHaveLength(1);
+    await session.dispose();
+    visibility("visible");
+    await new Promise((done) => setTimeout(done, 50));
+    expect(renewals()).toHaveLength(1);
+  } finally {
+    delete (document as { visibilityState?: unknown }).visibilityState;
+  }
+});
+
+it("stops renewing at the first refusal and reports it", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { session, renewals, refusals } = leaseFixture(() =>
+      Response.json(
+        { error: { code: "setup.recovery_discarded", params: { discardedAt: "x" } } },
+        { status: 409 },
+      ),
+    );
+    await session.open(request);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect.poll(() => refusals).toHaveLength(1);
+    expect(refusals[0]).toMatchObject({
+      code: "setup.recovery_discarded",
+      params: { discardedAt: "x" },
+      status: 409,
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+    visibility("visible");
+    expect(renewals()).toHaveLength(1);
+    await session.dispose();
+  } finally {
+    vi.useRealTimers();
+    delete (document as { visibilityState?: unknown }).visibilityState;
+  }
+});
+
+it("keeps renewing when a renewal could not reach the box", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { session, renewals, refusals } = leaseFixture(() => {
+      throw new TypeError("Failed to fetch");
+    });
+    await session.open(request);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renewals()).toHaveLength(2);
+    expect(refusals).toEqual([]);
+    await session.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
 });

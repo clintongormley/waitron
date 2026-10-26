@@ -1,10 +1,10 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { WtButton } from "@waitron/ui";
 import { FirstSetupBackupScreen } from "./first-setup-backup-screen.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { backupRepairStrings } from "../i18n/backup-repair.js";
 import {
   repairApi,
@@ -549,3 +549,282 @@ it.each(["back", "source"])(
     });
   },
 );
+
+const root = "/setup-api/first-setup/resolution/backup";
+const discardedAt = "2026-10-25T14:41:00.000Z";
+function shownAt(iso: string) {
+  return new Date(iso).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
+}
+const refused = (code: string, params: Record<string, unknown> = {}) =>
+  Response.json(
+    { error: { code, params } },
+    { status: code === "setup.owner_required" ? 403 : 409 },
+  );
+const approvedView = {
+  requestId: "approval",
+  code: "ABCD",
+  openCloudUrl: "https://cloud.example.test/approve",
+  expiresAt: "2026-10-24T11:00:00Z",
+  state: "awaiting_owner",
+};
+async function openedWithRenewal(renew: () => Response) {
+  const fixture = await mount((action, body) =>
+    action === "renew" && (body as { sessionId?: string }).sessionId !== undefined
+      ? renew()
+      : undefined,
+  );
+  await bucketProof(fixture.el);
+  await click(fixture.el, "prove");
+  await expect.poll(() => q(fixture.el, "review")).not.toBeNull();
+  return fixture;
+}
+function expectNoStep(el: FirstSetupBackupScreen) {
+  for (const name of ["review", "prove", "resume", "commit", "proof-key", "source", "cloud-check"])
+    expect(q(el, name)).toBeNull();
+}
+
+it("renews an open session every 30 s and stops when the screen closes", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el, calls } = await openedWithRenewal(() => Response.json({ renewed: true }));
+    const renewals = () => calls.filter((call) => call.path === `${root}/renew`);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renewals().map((call) => call.body)).toEqual([
+      { sessionId: saved.sessionId },
+      { sessionId: saved.sessionId },
+    ]);
+    el.remove();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(renewals()).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(["en-GB", "es-ES"] as const)(
+  "stops renewing and says the recovery stopped when a renewal is refused, in %s",
+  async (locale) => {
+    setLocale(locale);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el, calls } = await openedWithRenewal(() => refused("setup.owner_required"));
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect.poll(() => q(el, "stopped")).not.toBeNull();
+      expect(q(el, "stopped").textContent).toBe(
+        backupRepairStrings[locale === "es-ES" ? "es" : "en"].stopped,
+      );
+      expectNoStep(el);
+      expect(q(el, "back")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(calls.filter((call) => call.path === `${root}/renew`)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "shows a discarded recovery's sentence with its time and no step after it, in %s",
+  async (locale) => {
+    setLocale(locale);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el } = await openedWithRenewal(() =>
+        refused("setup.recovery_discarded", { discardedAt }),
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect.poll(() => q(el, "discarded")).not.toBeNull();
+      expect(q(el, "discarded").textContent).toBe(
+        backupRepairStrings[locale === "es-ES" ? "es" : "en"].discarded.replace(
+          "{at}",
+          shownAt(discardedAt),
+        ),
+      );
+      expectNoStep(el);
+      expect(q(el, "stopped")).toBeNull();
+      expect(q(el, "reload-status")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it("shows the discarded sentence when completing a discarded recovery is refused", async () => {
+  const { el } = await mount((action) =>
+    action === "status"
+      ? Response.json({ phase: "restored", proofRequired: true, recoveryId: saved.recoveryId })
+      : action === "resume"
+        ? Response.json({ ...saved, input: { exact: "saved" } })
+        : action === "commit"
+          ? refused("setup.recovery_discarded", { discardedAt })
+          : undefined,
+  );
+  await bucketProof(el);
+  await click(el, "resume");
+  await expect.poll(() => q(el, "review")).not.toBeNull();
+  await click(el, "commit");
+  await expect
+    .poll(() => q(el, "discarded")?.textContent)
+    .toBe(backupRepairStrings.en.discarded.replace("{at}", shownAt(discardedAt)));
+  expectNoStep(el);
+});
+
+it.each(["prepared", "placement-started", "restored"])(
+  "offers neither resume nor reopening for a stopped %s recovery",
+  async (phase) => {
+    const fixture = repairApi((action) =>
+      action === "status"
+        ? Response.json({ phase, proofRequired: true, recoveryId: saved.recoveryId })
+        : action === "activity"
+          ? Response.json({
+              activity: {
+                state: "stopped",
+                startedAt: "2026-10-25T14:35:00.000Z",
+                lastActiveSource: "memory",
+                lastActiveAt: "2026-10-25T14:41:00.000Z",
+                phase,
+                recoveryId: saved.recoveryId,
+                failed: false,
+                cloud: false,
+              },
+            })
+          : undefined,
+    );
+    const { el } = await mountWidget<FirstSetupBackupScreen>("setup-first-backup", {
+      api: fixture.api,
+      inspection,
+    });
+    await expect.poll(() => q(el, "stopped")).not.toBeNull();
+    expect(q(el, "stopped").textContent).toBe(backupRepairStrings.en.stopped);
+    expectNoStep(el);
+    expect(fixture.calls.map((call) => call.action)).toEqual(["status", "resolution", "activity"]);
+  },
+);
+
+it("still offers resume when the saved recovery is not reported stopped", async () => {
+  const { el, calls } = await mount((action) =>
+    action === "status"
+      ? Response.json({ phase: "restored", proofRequired: true, recoveryId: saved.recoveryId })
+      : action === "activity"
+        ? Response.json({ activity: null })
+        : undefined,
+  );
+  expect(q(el, "resume")).not.toBeNull();
+  expect(q(el, "stopped")).toBeNull();
+  expect(calls.map((call) => call.action)).toEqual(["status", "resolution", "activity"]);
+});
+
+async function cloudWait(renew: () => Response) {
+  const fixture = await mount((action, body) => {
+    const held = (body as { holder?: string }).holder !== undefined;
+    if (action === "start" || (action === "status" && held)) return Response.json(approvedView);
+    if (action === "renew" && held) return renew();
+    if (action === "release") return Response.json({ released: true });
+  });
+  q(fixture.el, "source").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "cloud" } }),
+  );
+  await fixture.el.updateComplete;
+  await click(fixture.el, "cloud-start");
+  await expect.poll(() => fixture.el.shadowRoot!.querySelector("a")).not.toBeNull();
+  const cloudRenewals = () => fixture.calls.filter((call) => call.path === `${root}/cloud/renew`);
+  return { ...fixture, cloudRenewals };
+}
+
+it("holds the Cloud wait with one holder: renews every 30 s and on becoming visible, releases on leaving", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el, calls, cloudRenewals } = await cloudWait(() => Response.json({ renewed: true }));
+    const holder = (
+      calls.find((call) => call.path === `${root}/cloud/start`)!.body as {
+        holder: string;
+      }
+    ).holder;
+    expect(holder).toMatch(/^[a-f0-9]{32}$/);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(cloudRenewals().map((call) => call.body)).toEqual([{ holder }, { holder }]);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await expect.poll(() => cloudRenewals()).toHaveLength(3);
+    el.remove();
+    await expect
+      .poll(() => calls.filter((call) => call.path === `${root}/cloud/release`).map((c) => c.body))
+      .toEqual([{ holder }]);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(cloudRenewals()).toHaveLength(3);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(["setup.owner_required", "setup.attempt_conflict"])(
+  "a Cloud renewal refused with %s stops renewing and keeps Check, which still asks Cloud",
+  async (code) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el, calls, cloudRenewals } = await cloudWait(() => refused(code));
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect.poll(() => cloudRenewals()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(cloudRenewals()).toHaveLength(1);
+      await el.updateComplete;
+      expect(q(el, "stopped")).toBeNull();
+      expect(q(el, "discarded")).toBeNull();
+      expect(q(el, "cloud-check")).not.toBeNull();
+      await click(el, "cloud-check");
+      await expect
+        .poll(() => calls.filter((call) => call.path === `${root}/cloud/status`))
+        .toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it("a Cloud renewal refused as discarded shows the discarded sentence with its time", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el } = await cloudWait(() => refused("setup.recovery_discarded", { discardedAt }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect
+      .poll(() => q(el, "discarded")?.textContent)
+      .toBe(backupRepairStrings.en.discarded.replace("{at}", shownAt(discardedAt)));
+    expectNoStep(el);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("hands the Cloud wait's lease to the session once the approved point is opened", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const view = {
+      ...approvedView,
+      state: "approved",
+      point: {
+        id: "00000000-0000-4000-8000-000000000009",
+        venueId: "venue",
+        capturedAt: "2026-10-24T10:00:00Z",
+        modules: {},
+      },
+    };
+    const { el, calls } = await mount((action, body) => {
+      const held = (body as { holder?: string }).holder !== undefined;
+      if (action === "start") return Response.json(view);
+      if (action === "renew") return Response.json({ renewed: true });
+      if (action === "release" && held) return Response.json({ released: true });
+    });
+    q(el, "source").dispatchEvent(new CustomEvent("wt-change", { detail: { value: "cloud" } }));
+    await el.updateComplete;
+    await click(el, "cloud-start");
+    await expect.poll(() => el.shadowRoot!.querySelector("a")).not.toBeNull();
+    await key(el);
+    for (const name of ["offline", "sole"]) await userEvent.click(q<HTMLInputElement>(el, name));
+    await click(el, "prove");
+    await expect.poll(() => q(el, "review")).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls.filter((call) => call.path === `${root}/cloud/renew`)).toHaveLength(0);
+    expect(calls.filter((call) => call.path === `${root}/renew`)).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
