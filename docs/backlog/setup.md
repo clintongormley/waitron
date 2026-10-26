@@ -495,6 +495,38 @@ box once, each start restarted it zero times, and nothing kept was deleted.
 Follow-up: A1098 covers files the box did not create (the choice to keep them or move them aside).
 A file the box created, such as this restored database, stays a manual loop.
 
+## A1130: a renewal from the open recovery page extends the backup-recovery session's 15 minutes
+
+Left open by A1042 (#2101). The box's backup-recovery session (from A731) ends after 15 minutes
+without a recovery step, and the page's 30-second renewals do not extend it. Someone still filling
+in the recovery form at minute 15 is told the recovery stopped, and another browser may then
+discard it. Codex reproduced it on #2101: renewing every 30 seconds, a 14-minute run stayed
+running; a 16-minute run was refused at 930 seconds (`setup.owner_required`, state `stopped`).
+This conflicts with the owner's 2026-10-25 14:38 rule that an open page keeps a recovery running.
+
+Owner, 2026-10-26 ~15:45 (option B): a renewal from the open page extends the 15 minutes. The owner
+accepts that an open tab keeps the session holding the decrypted backup key alive while it stays
+open. Update the guides' "if 15 minutes pass without a recovery step, even with the page open"
+lines (`apps/server/src/guide/en/backup-recovery.md` and its Spanish twin) in the same change.
+
+## A1131: Start again stays enabled beside a stopped recovery or an unreadable recovery record
+
+Left open by A1042 (#2101), points 2 and 3 of its owner questions.
+- **A stopped recovery beside a setup database that already holds records.** The stopped line says
+  "… did not finish. Start again deletes it." while Start again is disabled because the database
+  holds records; a sentence says why it is disabled, but the promise is false there.
+- **A recovery record that cannot be read, with the setup database missing.** The box refuses both
+  a new recovery and Start again; only Reconnect is enabled, and Reconnect re-reads the same
+  unreadable record.
+
+Owner, 2026-10-26 ~15:55 and ~16:00: "Start again shouldn't be disabled. We explain the situation and
+what could be lost, and then leave the choice to the user." In both places Start again is enabled.
+The page says plainly what is on the box (for the first case, what the database holds — for example
+how many records, and whether any were already filed with AEAT), what Start again deletes and what
+could be lost, with a safe Cancel beside it. No new recovery is offered in the second case unless
+enabling Start again needs it. If deleting could lose a filed record or reuse a chain or invoice
+number (CLAUDE.md §5), stop and ask the owner with a worked example instead of building it.
+
 ## A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery waits
 
 Left open by A1042. While a backup recovery is running, a Waitron Cloud wait included, the box

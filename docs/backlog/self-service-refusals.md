@@ -536,7 +536,7 @@ Wording: `apps/setup/src/i18n/strings/shell.ts:23`, `apps/setup/src/i18n/strings
 
 State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a Cloud recovery dependency is absent (first-setup-backup-source.ts:40), a required reset callback is absent (setup-api.ts:1053), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
 
-Route: Missing: distinguish temporary preparation from unsupported/unavailable recovery and retained-file refusal. Offer a supported source or administrator recovery route. The A1042 branch changes some of these paths; recheck it after landing.
+Route: Missing: distinguish temporary preparation from unsupported/unavailable recovery and retained-file refusal. Offer a supported source or administrator recovery route. A1042 (#2101, landed 2026-10-26) changed some of these paths; recheck them against main.
 
 ### Recovery from a backup
 
