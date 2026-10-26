@@ -123,8 +123,8 @@ come after the list above:
   Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
   bar and List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data)
-  in #2076; slice 2 (the dashboard's short-name field, which refuses a "+") is in review, built
-  from the build plan below, and slice 3 is next. A773-2 builds the pass's part, and the phone's
+  in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built
+  from the build plan below; slice 3 is next. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -2778,8 +2778,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
-  #2076. Slice 2 (the dashboard's short-name field, which refuses a "+") is in review, built from
-  the build plan, and slice 3 is next:
+  #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
+  the build plan; slice 3 is next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate

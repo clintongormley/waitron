@@ -1054,7 +1054,7 @@ the bill-specific draft handles that race.
   [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), as is slice 5 (the
   Ready bar on a handheld's Floor and List/Map kept per zone on the device), landed in #2063.
   Slice 1 (table short names, data) landed in #2076; slice 2 (the dashboard's short-name field,
-  which refuses a "+") is in review, both built from the same plan, and slice 3 is next. Build
+  which refuses a "+") landed in #2083, both built from the same plan, and slice 3 is next. Build
   slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
