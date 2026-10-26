@@ -74,7 +74,7 @@ const party: TableParty = {
   reminder: null,
 };
 
-const mesa4: TableState = {
+const table4: TableState = {
   id: "t4",
   label: "4",
   shortName: "4",
@@ -234,7 +234,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa4]),
+    getTablesState: vi.fn().mockResolvedValue([table4]),
     listZones: vi.fn().mockResolvedValue([zone]),
     getPartyBills: vi.fn().mockResolvedValue([bill]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [wine], revision: 6 }),
@@ -309,7 +309,7 @@ const inDialog = (el: TillApp, selector: string) =>
 const bottomMessage = (el: TillApp) =>
   dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
 
-async function openMesa4(el: TillApp, locale?: string): Promise<TillTableOrderScreen> {
+async function openTable4(el: TillApp, locale?: string): Promise<TillTableOrderScreen> {
   await flush(el);
   emit(lock(el)!, "logged-in", {
     personId: "p1",
@@ -418,7 +418,7 @@ describe("till-app: giving away a dish", () => {
         revision: 7,
       });
     const { el } = await mountApp({ getTabLines });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
 
     await requestComp(el, order, 1);
     expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
@@ -451,7 +451,7 @@ describe("till-app: giving away a dish", () => {
 
   it("sends nothing when closed", async () => {
     const { el } = await mountApp();
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-back]"));
     await press(el, inDialog(el, "[data-adjust-close]"));
@@ -475,7 +475,7 @@ describe("till-app: giving away a dish", () => {
     const { el } = await mountApp({
       listAdjustmentReasons: vi.fn().mockResolvedValue([mistake]),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     expect(inDialog(el, "[data-no-reasons]").textContent!.trim()).toBe(t("adjust.no_reasons"));
   });
@@ -484,7 +484,7 @@ describe("till-app: giving away a dish", () => {
     const { el } = await mountApp({
       listAdjustmentReasons: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     expect(dialog(el)).toBeNull();
     expect(banner(el)!.textContent).toBe(t("adjust.reasons_error"));
@@ -492,7 +492,7 @@ describe("till-app: giving away a dish", () => {
 
   it("discounts the whole bill", async () => {
     const { el } = await mountApp();
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await press(el, order.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!);
     await chooseReason(el, "Complaint");
     const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
@@ -518,7 +518,7 @@ describe("till-app: an adjustment someone must approve", () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
       "Someone who can approve Complaint must enter their PIN.",
@@ -555,7 +555,7 @@ describe("till-app: an adjustment someone must approve", () => {
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       applyAdjustment: vi.fn().mockRejectedValue({ code: "pin.invalid", status: 401 }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -576,7 +576,7 @@ describe("till-app: an adjustment someone must approve", () => {
         status: 429,
       }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -592,7 +592,7 @@ describe("till-app: an adjustment someone must approve", () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     await press(el, approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
@@ -607,7 +607,7 @@ describe("till-app: an adjustment someone must approve", () => {
         .fn()
         .mockResolvedValue(preview({ needsApproval: { by: "reason", roles: ["admin"] } })),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith(["admin"]);
@@ -623,7 +623,7 @@ describe("till-app: an adjustment someone must approve", () => {
         }),
       ),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith(["supervisor", "admin"]);
@@ -649,7 +649,7 @@ describe("till-app: a bill changed on another device", () => {
         status: 409,
       }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     const reads = getTabLines.mock.calls.length;
 
@@ -676,7 +676,7 @@ describe("till-app: a bill changed on another device", () => {
       getTabLines,
       previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     expect(dialog(el)).toBeNull();
     expect(banner(el)!.textContent).toBe(t("adjust.changed_line_gone").replace("{line}", "Wine"));
@@ -687,7 +687,7 @@ describe("till-app: a bill changed on another device", () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await press(el, order.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!);
     await chooseReason(el, "Complaint");
     const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
@@ -706,7 +706,7 @@ describe("till-app: an adjustment with no answer", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValue({ adjustmentIds: ["a-1"], revision: 7, party: null });
     const { el } = await mountApp({ applyAdjustment });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
 
     inDialog(el, "[data-adjust-confirm]").click();
@@ -726,7 +726,7 @@ describe("till-app: an adjustment with no answer", () => {
   it("reads the bill again and says the change may have been made when no answer ever comes", async () => {
     const applyAdjustment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ applyAdjustment });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     const reads = vi.mocked(api.getTabLines).mock.calls.length;
 
@@ -750,7 +750,7 @@ describe("till-app: a refused adjustment", () => {
     const { el } = await mountApp({
       applyAdjustment: vi.fn().mockRejectedValue({ code: "bill.line_paid", status: 409 }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -766,7 +766,7 @@ describe("till-app: a refused adjustment", () => {
         .fn()
         .mockRejectedValue({ code: "adjustment.action_not_allowed", status: 409 }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
 
     expect(
@@ -784,7 +784,7 @@ describe("till-app: a refused adjustment", () => {
       listAdjustmentReasons,
       applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -803,7 +803,7 @@ describe("till-app: a refused adjustment", () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
   });
@@ -813,7 +813,7 @@ describe("till-app: a refused adjustment", () => {
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       listAdjustmentApprovers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(approval(el)).toBeNull();
@@ -827,7 +827,7 @@ describe("till-app: a refused adjustment", () => {
         .fn()
         .mockRejectedValue({ code: "adjustment.approval_required", approval: "reason" }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     await pinPad(el, "7777");
@@ -844,7 +844,7 @@ describe("till-app: a refused adjustment", () => {
         previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
         applyAdjustment: vi.fn().mockRejectedValue({ code, personId: "w-1", status: 404 }),
       });
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await previewComp(el, order);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
       await pinPad(el, "7777");
@@ -858,7 +858,7 @@ describe("till-app: the adjustment flow and the operator's session", () => {
   it("closes the dialog when the till locks", async () => {
     const activity = sessionActivityStub();
     const { el } = await mountApp({}, activity);
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
     await flush(el);
@@ -882,7 +882,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("reads the reasons once however often Give away is pressed while they load", async () => {
     const reasons = deferred<AdjustmentReason[]>();
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order);
     await requestComp(el, order);
     reasons.resolve([complaint]);
@@ -894,7 +894,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("opens nothing when the till locks while the reasons load", async () => {
     const reasons = deferred<AdjustmentReason[]>();
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     emit(tableOrder(el), "logout");
     await flush(el);
@@ -906,7 +906,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("sends one preview while one is out, and none of its answer reaches a closed dialog", async () => {
     const answer = deferred<AdjustmentPreview>();
     const { el } = await mountApp({ previewAdjustment: vi.fn(() => answer.promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
     const choice = { action: "comp", reasonId: "r-complaint", note: null };
@@ -925,7 +925,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("says nothing of a refused preview once the dialog is closed", async () => {
     const answer = deferred<AdjustmentPreview>();
     const { el } = await mountApp({ previewAdjustment: vi.fn(() => answer.promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     emit(dialog(el)!, "adjust-close");
     await flush(el);
@@ -941,7 +941,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       listAdjustmentApprovers: vi.fn(() => approvers.promise),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     emit(dialog(el)!, "adjust-close");
@@ -957,7 +957,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       applyAdjustment: vi.fn(() => answer.promise),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "7777" });
@@ -974,7 +974,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
       const answer = deferred<unknown>();
       const activity = sessionActivityStub();
       const { el } = await mountApp({ applyAdjustment: vi.fn(() => answer.promise) }, activity);
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await previewComp(el, order);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
       (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
@@ -996,7 +996,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("closes the cancel dialog when a finish pressed before it answers and the till leaves the table", async () => {
     const finished = deferred<void>();
     const { el } = await mountApp({ finishTable: vi.fn(() => finished.promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     emit(order, "finish-table");
     await flush(el);
     await requestCancel(el, order, 1);
@@ -1016,7 +1016,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
       finishTable: vi.fn(() => finished.promise),
       applyAdjustment: vi.fn(() => answer.promise),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     emit(order, "finish-table");
     await flush(el);
     await previewComp(el, order);
@@ -1043,7 +1043,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     async () => {
       const answer = deferred<unknown>();
       const landed: TableState = {
-        ...mesa4,
+        ...table4,
         tabTotal: "0.00",
         party: { ...party, revision: 5, outstanding: "0.00" },
       };
@@ -1056,7 +1056,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
           throw new TypeError("Failed to fetch");
         });
       const { el } = await mountApp({ applyAdjustment });
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await previewComp(el, order);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
       emit(order, "back-to-floor");
@@ -1076,7 +1076,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     const { el } = await mountApp({
       applyAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(banner(el)!.textContent).toBe(t("adjust.changed_bill"));
@@ -1093,7 +1093,7 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
         () => new Promise<AdjustmentPreview>((resolve) => (answer = resolve)),
       ),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
     await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
@@ -1120,7 +1120,7 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(
@@ -1156,7 +1156,7 @@ describe("till-app: cancelling a dish", () => {
       .mockResolvedValueOnce({ lines: [wine], revision: 6 })
       .mockResolvedValue({ lines: [], revision: 7 });
     const { el } = await mountApp({ getTabLines });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
@@ -1201,7 +1201,7 @@ describe("till-app: cancelling a dish", () => {
         return { adjustmentIds: ["a-1"], revision: 7, party: { id: "v1", revision: 4 } };
       }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
 
     await requestCancel(el, order, 1);
     await previewCancel(el);
@@ -1212,7 +1212,7 @@ describe("till-app: cancelling a dish", () => {
 
   it("sends nothing when the cancel dialog is closed", async () => {
     const { el } = await mountApp();
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestCancel(el, order, 1);
     await press(el, inDialog(el, "[data-adjust-close]"));
     await expect.poll(() => dialog(el)).toBeNull();
@@ -1238,7 +1238,7 @@ describe("till-app: cancelling a dish", () => {
       listAdjustmentReasons: vi.fn().mockResolvedValue([defaultReason]),
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: null })),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
 
     await requestCancel(el, order, 1);
     const names = [
@@ -1281,7 +1281,7 @@ describe("till-app: cancelling a dish", () => {
 
     it("cancels one of them when One is chosen", async () => {
       const { el } = await mountPair();
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await requestCancel(el, order, 1);
       await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
       await previewCancel(el);
@@ -1325,7 +1325,7 @@ describe("till-app: cancelling a dish", () => {
           revision: 7,
         });
       const { el } = await mountApp({ getTabLines });
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await requestComp(el, order, 1);
       await chooseReason(el, "Complaint");
       await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
@@ -1370,7 +1370,7 @@ describe("till-app: cancelling a dish", () => {
           revision: 6,
         }),
       });
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await requestCancel(el, order, 2);
       const shown = dialog(el)!.shadowRoot!.textContent!;
       expect(shown).toContain(t("table.cancel_extra_told"));
@@ -1379,7 +1379,7 @@ describe("till-app: cancelling a dish", () => {
 
     it("gives away an extra on its own, sending no quantity", async () => {
       const { el } = await mountPair();
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await requestComp(el, order, 2);
       expect(dialog(el)!.shadowRoot!.querySelector("[data-quantity]")).toBeNull();
       await chooseReason(el, "Complaint");
@@ -1396,7 +1396,7 @@ describe("till-app: cancelling a dish", () => {
 
     it("cancels both, sending no quantity, when All is left chosen", async () => {
       const { el } = await mountPair();
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await requestCancel(el, order, 1);
       await previewCancel(el);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
@@ -1414,7 +1414,7 @@ describe("till-app: cancelling a dish", () => {
         .fn()
         .mockResolvedValue([{ personId: "m-1", displayName: "Marta, who refunds" }]),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestCancel(el, order, 1);
     await previewCancel(el);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
@@ -1451,7 +1451,7 @@ describe("till-app: a box update while an adjustment still waits for the server"
     const { el } = await mountApp({ applyAdjustment }, activity);
     const reload = vi.fn();
     el.reload = reload;
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(applyAdjustment).toHaveBeenCalledOnce();
@@ -1544,7 +1544,7 @@ describe("till-app: service cancellation consent", () => {
         .fn()
         .mockRejectedValue({ code: "fiscal.fingerprint_mismatch", status: 409 });
       const { el } = await mountApp(apiFor(consent(), { cancelItem }));
-      await openMesa4(el);
+      await openTable4(el);
       setLocale(locale);
       await openCancel(el);
       await submitOffBill(el);
@@ -1566,7 +1566,7 @@ describe("till-app: service cancellation consent", () => {
   it("previews and applies off-bill cancellation from its main dialog without a second editor", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     expect(api.previewAdjustment).toHaveBeenCalledExactlyOnceWith("wo-4", {
@@ -1608,7 +1608,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
@@ -1638,7 +1638,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue(preview()),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     expect(cancelDialog(el)?.refusal).toBe(codeMessage("adjustment.note_required"));
@@ -1659,7 +1659,7 @@ describe("till-app: service cancellation consent", () => {
       ),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     expect(api.previewAdjustment).toHaveBeenCalledOnce();
@@ -1677,7 +1677,7 @@ describe("till-app: service cancellation consent", () => {
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="remove_charge"]');
     await chooseChargedReason(el);
@@ -1705,7 +1705,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue(preview()),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     expect(cancelDialog(el)).not.toBeNull();
@@ -1728,7 +1728,7 @@ describe("till-app: service cancellation consent", () => {
       ),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
@@ -1750,7 +1750,7 @@ describe("till-app: service cancellation consent", () => {
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await submitOffBill(el);
     const old = approval(el)!;
@@ -1777,7 +1777,7 @@ describe("till-app: service cancellation consent", () => {
     const read = consent();
     const methods = apiFor(read);
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     emit(cancelDialog(el)!, "cancel-item-choice", {
       lineId: "line-1",
@@ -1804,7 +1804,7 @@ describe("till-app: service cancellation consent", () => {
   it("loads the inline cancel reasons after the charged choice and sends only after the reason is selected", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
     await clickChoice(el, 'input[value="keep_charge"]');
@@ -1833,7 +1833,7 @@ describe("till-app: service cancellation consent", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValue([mistake]);
     const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     expect(cancelDialog(el)!.refusal).toBe(t("adjust.reasons_error"));
@@ -1861,7 +1861,7 @@ describe("till-app: service cancellation consent", () => {
     const methods = apiFor();
     const reasons = vi.fn().mockReturnValueOnce(oldReply).mockResolvedValue([mistake]);
     const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     const original = cancelDialog(el)!;
     await clickChoice(el, 'input[value="keep_charge"]');
@@ -1887,7 +1887,7 @@ describe("till-app: service cancellation consent", () => {
       cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -1910,7 +1910,7 @@ describe("till-app: service cancellation consent", () => {
     });
     const reasons = vi.fn().mockResolvedValueOnce([mistake]).mockResolvedValue([replacement]);
     const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -1932,7 +1932,7 @@ describe("till-app: service cancellation consent", () => {
       .mockResolvedValueOnce([mistake])
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -1956,7 +1956,7 @@ describe("till-app: service cancellation consent", () => {
       .mockReturnValueOnce(new Promise<AdjustmentReason[]>((resolve) => (answer = resolve)))
       .mockResolvedValue([mistake]);
     const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -1986,7 +1986,7 @@ describe("till-app: service cancellation consent", () => {
       listAdjustmentReasons: vi.fn().mockResolvedValue([{ ...mistake, noteRequired: false }]),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     emit(cancelDialog(el)!.shadowRoot!.querySelector("wt-combobox")!, "wt-change", {
@@ -2019,7 +2019,7 @@ describe("till-app: service cancellation consent", () => {
     const read = consent("open", "not_started");
     const methods = apiFor(read);
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[name="preparation"][value="no"]');
     await clickChoice(el, "[data-confirm]");
@@ -2048,7 +2048,7 @@ describe("till-app: service cancellation consent", () => {
     const read = consent("open", "not_started");
     const methods = apiFor(read);
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[name="preparation"][value="yes"]');
     await clickChoice(el, 'input[value="remove_charge"]');
@@ -2113,7 +2113,7 @@ describe("till-app: service cancellation consent", () => {
         ]),
       });
       const { el } = await mountApp(methods);
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
       await order.updateComplete;
       order.style.width = "1280px";
@@ -2175,7 +2175,7 @@ describe("till-app: service cancellation consent", () => {
   it("keeps the shown editor observation in the explicit cancellation command", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2189,7 +2189,7 @@ describe("till-app: service cancellation consent", () => {
       listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [] }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     expect(methods.getCancellation).not.toHaveBeenCalled();
     expect(cancelDialog(el)).toBeNull();
@@ -2202,7 +2202,7 @@ describe("till-app: service cancellation consent", () => {
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
@@ -2237,7 +2237,7 @@ describe("till-app: service cancellation consent", () => {
       });
       const methods = apiFor(consent(), { listDrafts });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       await clickChoice(el, 'input[value="keep_charge"]');
       await chooseChargedReason(el);
@@ -2264,7 +2264,7 @@ describe("till-app: service cancellation consent", () => {
       cancelItem: vi.fn().mockRejectedValue({ code: "draft.taken_over" }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2298,7 +2298,7 @@ describe("till-app: service cancellation consent", () => {
       ),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     const calls = listDrafts.mock.calls.length;
     version = 1;
@@ -2329,7 +2329,7 @@ describe("till-app: service cancellation consent", () => {
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     expect(approval(el)).not.toBeNull();
@@ -2369,7 +2369,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2392,7 +2392,7 @@ describe("till-app: service cancellation consent", () => {
     const read = consent();
     const methods = apiFor(read);
     const { el } = await mountApp(methods);
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await openCancel(el);
     expect(methods.getCancellation).toHaveBeenCalledWith("v1", "line-1", expect.any(Object));
     expect(cancelDialog(el)?.name).toBe("Wine");
@@ -2434,7 +2434,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2472,7 +2472,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue(consent()),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -2494,7 +2494,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2531,7 +2531,7 @@ describe("till-app: service cancellation consent", () => {
     const read = consent("open", "not_started");
     const methods = apiFor(read);
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     expect(cancelDialog(el)).toBeNull();
@@ -2576,7 +2576,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
@@ -2616,7 +2616,7 @@ describe("till-app: service cancellation consent", () => {
       cancelItem: vi.fn().mockRejectedValue({ code: "tab.cancel_context_changed" }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     expect(dialog(el)).toBeNull();
@@ -2669,7 +2669,7 @@ describe("till-app: service cancellation consent", () => {
       }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     expect(cancelDialog(el)?.name).toBe("Recorded wine");
     expect(cancelDialog(el)?.consent?.context.billStatus).toBe("settled");
@@ -2686,7 +2686,7 @@ describe("till-app: service cancellation consent", () => {
   it("a successful keep closes before a failed refresh and never offers another confirmation", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     vi.mocked(api.getPartyBills).mockRejectedValue({ code: "server.internal" });
     await clickChoice(el, 'input[value="keep_charge"]');
@@ -2700,7 +2700,7 @@ describe("till-app: service cancellation consent", () => {
   it("never revives the old confirmation after disconnect and reconnect", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2714,7 +2714,7 @@ describe("till-app: service cancellation consent", () => {
 
   it("does not open an adjustment behind the active cancellation chooser", async () => {
     const { el } = await mountApp(apiFor());
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     emit(tableOrder(el), "adjust", {
       kind: "discount",
@@ -2743,7 +2743,7 @@ describe("till-app: service cancellation consent", () => {
       ),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2772,7 +2772,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2788,7 +2788,7 @@ describe("till-app: service cancellation consent", () => {
       cancelItem: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2813,7 +2813,7 @@ describe("till-app: service cancellation consent", () => {
       cancelItem: vi.fn().mockRejectedValue({ code: "tab.cancel_context_changed" }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2834,7 +2834,7 @@ describe("till-app: service cancellation consent", () => {
         }),
     );
     const { el } = await mountApp(apiFor(consent(), { getCancellation: oldRead }));
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     const replacement = stubApi(apiFor());
     el.api = replacement;
@@ -2860,7 +2860,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 5 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
@@ -2890,7 +2890,7 @@ describe("till-app: service cancellation consent", () => {
       ),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await openCancel(el);
     expect(methods.getCancellation).toHaveBeenCalledOnce();
@@ -2908,7 +2908,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue(consent()),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     expect(cancelDialog(el)).toBeNull();
     expect(banner(el)?.textContent).toBe(codeMessage("permission.denied"));
@@ -2920,7 +2920,7 @@ describe("till-app: service cancellation consent", () => {
   it("never confirms a dish whose context now belongs to another bill", async () => {
     const methods = apiFor({ ...consent(), billId: "other-bill" });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     expect(cancelDialog(el)).toBeNull();
     expect(methods.cancelItem).not.toHaveBeenCalled();
@@ -2937,7 +2937,7 @@ describe("till-app: service cancellation consent", () => {
       }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     const quantity = cancelDialog(el)!.shadowRoot!.querySelector("wt-number-stepper")!;
     await quantity.updateComplete;
@@ -2964,7 +2964,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue([mistake]),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await clickChoice(el, 'input[name="preparation"][value="yes"]');
     await clickChoice(el, 'input[value="remove_charge"]');
@@ -2989,7 +2989,7 @@ describe("till-app: service cancellation consent", () => {
         .mockResolvedValue({ revision: 4 }),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     expect(cancelDialog(el)?.refusal).toBe(codeMessage("adjustment.note_required"));
@@ -3014,7 +3014,7 @@ describe("till-app: service cancellation consent", () => {
       ),
     });
     const { el } = await mountApp(methods);
-    await openMesa4(el);
+    await openTable4(el);
     await openCancel(el);
     await removeCharge(el);
     const replacement = stubApi(apiFor());
@@ -3126,7 +3126,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
       expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ refundHandoff: true });
@@ -3157,7 +3157,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(approval(el)).not.toBeNull();
       await pinPad(el, "1111");
@@ -3189,7 +3189,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(cancelDialog(el)?.refusal).toBe(codeMessage("server.internal"));
       expect(approval(el)).toBeNull();
@@ -3208,7 +3208,7 @@ describe("till-app: service cancellation consent", () => {
         listRefundAuthorizers: vi.fn(() => people),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
       emit(cancelDialog(el)!, "cancel-item-close");
@@ -3229,7 +3229,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(approval(el)).not.toBeNull();
       emit(approval(el)!, "override-cancel");
@@ -3265,7 +3265,7 @@ describe("till-app: service cancellation consent", () => {
         );
         host.dataset.theme = theme;
         host.style.width = "100%";
-        await openMesa4(el, locale === "es" ? "es-ES" : "en-GB");
+        await openTable4(el, locale === "es" ? "es-ES" : "en-GB");
         await chooseRefund(el);
         const prompt = approval(el)!;
         await prompt.updateComplete;
@@ -3303,7 +3303,7 @@ describe("till-app: service cancellation consent", () => {
           getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method, manual }]),
         });
         const { el } = await mountApp(methods);
-        await openMesa4(el);
+        await openTable4(el);
         await openCancel(el);
         expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
         expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
@@ -3326,7 +3326,7 @@ describe("till-app: service cancellation consent", () => {
           getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method, manual }]),
         });
         const { el } = await mountApp(methods);
-        await openMesa4(el);
+        await openTable4(el);
         await openCancel(el);
         const widget = cancelDialog(el)!;
         expect(widget.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
@@ -3364,7 +3364,7 @@ describe("till-app: service cancellation consent", () => {
           getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, ...remaining }]),
         });
         const { el } = await mountApp(methods);
-        await openMesa4(el);
+        await openTable4(el);
         await openCancel(el);
         expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
         expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
@@ -3385,7 +3385,7 @@ describe("till-app: service cancellation consent", () => {
           ]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
       expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
@@ -3411,7 +3411,7 @@ describe("till-app: service cancellation consent", () => {
             ]),
         });
         const { el } = await mountApp(methods);
-        await openMesa4(el);
+        await openTable4(el);
         await chooseRefund(el);
         await expect.poll(() => refundForm(el)).not.toBeNull();
         expect(refundForm(el)!.tenders.map((row) => row.tenderId)).toEqual([allowed]);
@@ -3438,7 +3438,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([cash]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       expect(cancelDialog(el)).toBeNull();
       expect(banner(el)?.textContent).toBe(codeMessage("server.internal"));
@@ -3460,7 +3460,7 @@ describe("till-app: service cancellation consent", () => {
         ),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       expect(cancelDialog(el)).toBeNull();
       const oldRead = vi.mocked(api.getRefundableTenders).mock.results[0]!.value;
@@ -3489,7 +3489,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([cash]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       const oldRead = vi.mocked(api.getRefundableTenders).mock.results[0]!.value;
       emit(shell(el), "screen-select", { screen: "floor" });
@@ -3515,7 +3515,7 @@ describe("till-app: service cancellation consent", () => {
         cancelItem: vi.fn().mockRejectedValue({ code: "tab.cancel_context_changed" }),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(cancelDialog(el)?.consent).toEqual(fresh);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
@@ -3527,7 +3527,7 @@ describe("till-app: service cancellation consent", () => {
     it("stops the kitchen once, opens its filed transaction, and refunds only the explicitly confirmed amount", async () => {
       const methods = paidMethods();
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
@@ -3616,7 +3616,7 @@ describe("till-app: service cancellation consent", () => {
     it("opens the refund filled in with the dish, its value and the cancel's reason", async () => {
       const methods = linkedMethods();
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       const form = refundForm(el)!;
       expect(form.target).toBe("3.34");
@@ -3642,7 +3642,7 @@ describe("till-app: service cancellation consent", () => {
 
     it("sends no cancellation ids when the amount is raised above the filled total", async () => {
       const { el } = await mountApp(linkedMethods());
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       await sendRefund(el, { appliedAmount: "3.35" });
       expect(api.refundTransaction).toHaveBeenCalledOnce();
@@ -3655,7 +3655,7 @@ describe("till-app: service cancellation consent", () => {
       const whole = { ...consent("settled"), saleId: "own-sale" };
       const methods = linkedMethods({ getCancellation: vi.fn().mockResolvedValue(whole) });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       emit(cancelDialog(el)!, "cancel-item-choice", {
         lineId: "line-1",
@@ -3675,7 +3675,7 @@ describe("till-app: service cancellation consent", () => {
 
     it("sends the cancellation ids for an amount at or below the filled total", async () => {
       const { el } = await mountApp(linkedMethods());
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       await sendRefund(el, { appliedAmount: "3.00" });
       expect(vi.mocked(api.refundTransaction).mock.calls[0]![1]).toMatchObject({
@@ -3691,7 +3691,7 @@ describe("till-app: service cancellation consent", () => {
         .mockRejectedValueOnce(new TypeError("Failed to fetch"))
         .mockResolvedValue([complaint, mistake, unserved]);
       const { el } = await mountApp(linkedMethods({ listAdjustmentReasons }));
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       emit(refundForm(el)!, "tender-refund-close");
       await flush(el);
@@ -3734,7 +3734,7 @@ describe("till-app: service cancellation consent", () => {
             .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, card]),
         }),
       );
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       const form = refundForm(el)!;
       expect(form.refundAtTill).toBe(true);
@@ -3762,7 +3762,7 @@ describe("till-app: service cancellation consent", () => {
             .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, card]),
         }),
       );
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       expect(refundForm(el)!.refundAtTill).toBe(false);
     });
@@ -3792,7 +3792,7 @@ describe("till-app: service cancellation consent", () => {
             .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, manual, integrated]),
         }),
       );
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       const form = refundForm(el)!;
       expect(form.refundAtTill).toBe(false);
@@ -3802,7 +3802,7 @@ describe("till-app: service cancellation consent", () => {
     it("reuses the cancel's reasons on the refund screen and reads them again from the receipt", async () => {
       const listAdjustmentReasons = vi.fn().mockResolvedValue([complaint, mistake, unserved]);
       const { el } = await mountApp(linkedMethods({ listAdjustmentReasons }));
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       await flush(el);
       expect(refundForm(el)!.reasons).toEqual([complaint, mistake, unserved]);
@@ -3824,7 +3824,7 @@ describe("till-app: service cancellation consent", () => {
       async (locale, quantity, words) => {
         setLocale(locale);
         const { el } = await mountApp(linkedMethods());
-        await openMesa4(el, locale);
+        await openTable4(el, locale);
         expect(currentLocale()).toBe(locale);
         await openCancel(el);
         emit(cancelDialog(el)!, "cancel-item-choice", {
@@ -3843,7 +3843,7 @@ describe("till-app: service cancellation consent", () => {
     it("opens a receipt's refund with nothing filled in and the reasons read", async () => {
       const methods = linkedMethods();
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await cancelAndRefundOne(el);
       emit(refundForm(el)!, "tender-refund-close");
       await flush(el);
@@ -3909,7 +3909,7 @@ describe("till-app: service cancellation consent", () => {
             }),
         );
         const { el } = await mountApp(pinMethods({ refundTransaction }));
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
         expect(sent()).toEqual([
@@ -3944,7 +3944,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el, { appliedAmount: "3.35" });
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
@@ -3969,7 +3969,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el, whole);
         expect(refundForm(el)!.target).toBe("30.00");
         await sendRefund(el, { tipAmount: "2.00" });
@@ -3990,7 +3990,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
         expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
@@ -4009,7 +4009,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
         expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
@@ -4032,7 +4032,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
         expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
@@ -4056,7 +4056,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el, { appliedAmount: "3.00" });
         expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
@@ -4080,7 +4080,7 @@ describe("till-app: service cancellation consent", () => {
             getRefundableTenders: vi.fn().mockResolvedValue([keyed]),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         emit(refundForm(el)!.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
           checked: true,
@@ -4102,7 +4102,7 @@ describe("till-app: service cancellation consent", () => {
               .mockResolvedValue(refunded),
           }),
         );
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         emit(refundForm(el)!, "tender-refund-close");
         await flush(el);
@@ -4117,7 +4117,7 @@ describe("till-app: service cancellation consent", () => {
 
       it("closes the refund screen without sending a refund on sign-out", async () => {
         const { el } = await mountApp(pinMethods());
-        await openMesa4(el);
+        await openTable4(el);
         await cancelWithPin(el);
         emit(ticket(el)!, "logout");
         await flush(el);
@@ -4129,7 +4129,7 @@ describe("till-app: service cancellation consent", () => {
     it("offers Refund only when this paid dish maps to a filed sale", async () => {
       const methods = paidMethods();
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
       expect(methods.cancelItem).not.toHaveBeenCalled();
@@ -4143,7 +4143,7 @@ describe("till-app: service cancellation consent", () => {
         getTenderRefund: vi.fn().mockResolvedValue(refunded),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       await submitRefund(el);
@@ -4188,7 +4188,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue(refunded),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       await submitRefund(el);
@@ -4212,7 +4212,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue({ ...refunded, state: "failed", completedAt: null }),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       await submitRefund(el);
@@ -4229,7 +4229,7 @@ describe("till-app: service cancellation consent", () => {
         cancelItem: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(cancelDialog(el)?.refusal).toBe(codeMessage("working_order.out_of_date"));
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
@@ -4250,7 +4250,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue({ revision: 4 }),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       expect(cancelDialog(el)?.consent).toEqual(fresh);
       expect(
@@ -4280,7 +4280,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue({ revision: 4 }),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el), { timeout: 4000 }).not.toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledTimes(2);
@@ -4304,7 +4304,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       await submitRefund(el);
@@ -4331,7 +4331,7 @@ describe("till-app: service cancellation consent", () => {
           .mockResolvedValue([{ ...cash, method: "voucher" }]),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => ticket(el)).not.toBeNull();
       await flush(el);
@@ -4346,7 +4346,7 @@ describe("till-app: service cancellation consent", () => {
         getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect
         .poll(() => el.shadowRoot!.textContent)
@@ -4372,7 +4372,7 @@ describe("till-app: service cancellation consent", () => {
         ),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => api.getTransactionReceipt).toHaveBeenCalledOnce();
       emit(shell(el), "screen-select", { screen: "floor" });
@@ -4402,7 +4402,7 @@ describe("till-app: service cancellation consent", () => {
           ),
       });
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => api.getRefundableTenders).toHaveBeenCalledTimes(2);
       el.api = stubApi(paidMethods());
@@ -4417,7 +4417,7 @@ describe("till-app: service cancellation consent", () => {
     it("can discard an edited refund without undoing or repeating the kitchen cancellation", async () => {
       const methods = paidMethods();
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       const form = refundForm(el)!;
@@ -4446,7 +4446,7 @@ describe("till-app: service cancellation consent", () => {
     it("keeps the payment choice available without inventing a sale for an unfiled paid bill", async () => {
       const methods = apiFor(consent("settled"));
       const { el } = await mountApp(methods);
-      await openMesa4(el);
+      await openTable4(el);
       await openCancel(el);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="outcome"]')).toBeNull();
@@ -4471,7 +4471,7 @@ describe("table adjustments retain bill editing authority", () => {
 
   it("sends the shown bill observation with both the comp preview and apply", async () => {
     const { el } = await mountApp();
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", { ...ask, expectedEdit });
     await press(el, inDialog(el, "[data-adjust-confirm]"));
@@ -4487,7 +4487,7 @@ describe("table adjustments retain bill editing authority", () => {
     const { el } = await mountApp({
       listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [] }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     expect(dialog(el)).toBeNull();
     expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
@@ -4501,7 +4501,7 @@ describe("table adjustments retain bill editing authority", () => {
       resolve = answer;
     });
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     el.api = stubApi();
     await flush(el);
@@ -4513,7 +4513,7 @@ describe("table adjustments retain bill editing authority", () => {
 
   it("does not submit an old confirmation through a replacement API", async () => {
     const { el } = await mountApp();
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     const original = api;
     const replacement = stubApi();
@@ -4530,7 +4530,7 @@ describe("table adjustment editing recovery", () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockRejectedValue({ code: "draft.taken_over" }),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
     drafts.listDrafts.mockClear();
@@ -4547,7 +4547,7 @@ describe("table adjustment editing recovery", () => {
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     await pinPad(el, "1234");
@@ -4578,7 +4578,7 @@ describe("table adjustment editing recovery", () => {
       resolve = answer;
     });
     const { el } = await mountApp({ applyAdjustment: vi.fn(() => promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     const replacement = stubApi();
@@ -4608,7 +4608,7 @@ describe("table adjustment confirmation observations", () => {
         };
       });
       const { el } = await mountApp({ listDrafts });
-      const order = await openMesa4(el);
+      const order = await openTable4(el);
       await previewComp(el, order);
       const calls = listDrafts.mock.calls.length;
       version = 1;
@@ -4639,7 +4639,7 @@ describe("table adjustment reason-read identity", () => {
       reject = refuse;
     });
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => promise) });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     await requestComp(el, order, 1);
     const replacement = stubApi();
     el.api = replacement;
@@ -4683,7 +4683,7 @@ it.each([
       getTablesState: vi
         .fn()
         .mockResolvedValue([
-          { ...mesa4, tabTotal: "36.00", party: { ...party, outstanding: "36.00" } },
+          { ...table4, tabTotal: "36.00", party: { ...party, outstanding: "36.00" } },
         ]),
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...wine, quantity: "3.000", unitPriceGross: "10.00" }, extra],
@@ -4713,7 +4713,7 @@ it.each([
     });
     host.dataset.theme = theme;
     host.style.width = "100%";
-    const order = await openMesa4(el, locale === "es" ? "es-ES" : "en-GB");
+    const order = await openTable4(el, locale === "es" ? "es-ES" : "en-GB");
     expect(currentLocale().startsWith(locale)).toBe(true);
     const drawer = order.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
     expect(drawer.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
@@ -4802,7 +4802,7 @@ it("a combined amount refusal returns to its amount field and permits correction
       .mockResolvedValue([{ ...complaint, actions: ["discount_amount"] }]),
     applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.exceeds_amount" }),
   });
-  const order = await openMesa4(el);
+  const order = await openTable4(el);
   emit(order, "adjust", {
     kind: "comp",
     combined: true,
@@ -4829,7 +4829,7 @@ it("a combined amount refusal returns to its amount field and permits correction
 
 it("a combined Comp preview cannot become a write after its bill is paid", async () => {
   const { el } = await mountApp();
-  const order = await openMesa4(el);
+  const order = await openTable4(el);
   emit(order, "adjust", {
     kind: "comp",
     combined: true,
@@ -4857,7 +4857,7 @@ it.each(["en-GB", "es-ES"])(
       .fn()
       .mockRejectedValue({ code: "fiscal.fingerprint_mismatch", status: 409 });
     const { el } = await mountApp({ applyAdjustment });
-    const order = await openMesa4(el);
+    const order = await openTable4(el);
     setLocale(locale);
     try {
       await previewComp(el, order);
