@@ -23,6 +23,7 @@ import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 import { createAccountEmailSender, type AccountEmailSender } from "./account-email.js";
 import { createAttendanceEmailSender } from "./attendance-email.js";
+import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
 import { createLogger, type Logger, type LogLevel } from "./logger.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { mountManagementApi } from "./management-api.js";
@@ -119,7 +120,9 @@ async function expectLogged(
   expect(lineFor(file, event)).toEqual(expected);
   expect(page).toContain(event);
   for (const [key, value] of Object.entries(fields)) {
-    if (value === "***") expect(page).toContain(`&quot;${key}&quot;:&quot;***&quot;`);
+    if (PERSONAL_LOG_KEYS.has(key)) {
+      expect(page).toContain(`&quot;${key}&quot;:&quot;${String(value)}&quot;`);
+    }
   }
   for (const secret of hidden) {
     expect(stdout).not.toContain(secret);
@@ -353,7 +356,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     );
 
     expect(answer).toEqual(EMAIL_TAKEN);
-    await expectLogged(r, "person.email_taken", { email: "***" }, [MARTA_EMAIL]);
+    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [MARTA_EMAIL]);
   });
 
   it("masks the display name a new staff member was refused for", async () => {
@@ -376,7 +379,9 @@ describe("the recovery page, the log file and stdout carry no person's details",
     );
 
     expect(answer).toEqual(NAME_TAKEN);
-    await expectLogged(r, "person.display_name_taken", { displayName: "***" }, [MARTA_NAME]);
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
+      MARTA_NAME,
+    ]);
   });
 
   it("masks both when an administrator gives a staff member another person's email, then name", async () => {
@@ -397,8 +402,11 @@ describe("the recovery page, the log file and stdout carry no person's details",
     expect(await edit({ email: "clerk@example.test", displayName: MARTA_NAME })).toEqual(
       NAME_TAKEN,
     );
-    await expectLogged(r, "person.email_taken", { email: "***" }, [MARTA_EMAIL, MARTA_NAME]);
-    await expectLogged(r, "person.display_name_taken", { displayName: "***" }, [
+    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [
+      MARTA_EMAIL,
+      MARTA_NAME,
+    ]);
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
       MARTA_EMAIL,
       MARTA_NAME,
     ]);
@@ -422,11 +430,14 @@ describe("the recovery page, the log file and stdout carry no person's details",
       NAME_TAKEN,
     );
     expect(await profile({ displayName: "Clerk", email: MARTA_EMAIL })).toEqual(EMAIL_TAKEN);
-    await expectLogged(r, "person.display_name_taken", { displayName: "***" }, [
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
       MARTA_EMAIL,
       MARTA_NAME,
     ]);
-    await expectLogged(r, "person.email_taken", { email: "***" }, [MARTA_EMAIL, MARTA_NAME]);
+    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [
+      MARTA_EMAIL,
+      MARTA_NAME,
+    ]);
   });
 
   it("masks people's names at any depth through the error boundary, and keeps things' names", async () => {
@@ -562,7 +573,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     const stdout = r.stdout.join("").split("\n").filter(Boolean);
     const file = (await r.file()).split("\n").filter(Boolean);
     const expected = [
-      { draftId: "d1", ownerId: "p1", ownerName: "***", event: "draft.taken_over" },
+      { draftId: "d1", ownerId: "p1", ownerName: "M***a S***r", event: "draft.taken_over" },
       {
         billId: "b1",
         draftId: null,
@@ -571,7 +582,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         edit: {
           billId: "b1",
           editorId: "p2",
-          editorName: "***",
+          editorName: "M***a S***r",
           editorVersion: 3,
           draftId: null,
           draftRevision: null,
@@ -582,21 +593,21 @@ describe("the recovery page, the log file and stdout carry no person's details",
         field: "receiptPrinterId",
         holderDeviceId: "dev1",
         holderDeviceName: "Bar till",
-        holderPersonName: "***",
+        holderPersonName: "M***a S***r",
         event: "device.equipment_held",
       },
-      { todayName: "***", field: "name", event: "table.label_taken" },
+      { todayName: "S***r", field: "name", event: "table.label_taken" },
       { label: "Patio 1", event: "table.label_taken" },
       {
-        legalName: "***",
-        taxId: "***",
+        legalName: "J***i P***g F***r",
+        taxId: "1***Z",
         locationName: LOCATION_NAME,
         event: "restore.stream_venue_unconfirmed",
       },
       {
         merchants: [
-          { code: "MC1", name: "***" },
-          { code: "MC2", name: "***" },
+          { code: "MC1", name: "J***i P***g F***r" },
+          { code: "MC2", name: "M***a S***r" },
         ],
         event: "payment.provider_merchant_ambiguous",
       },
@@ -614,17 +625,19 @@ describe("the recovery page, the log file and stdout carry no person's details",
     ]) {
       expect(page).toContain(code);
     }
-    for (const key of [
-      "ownerName",
-      "editorName",
-      "holderPersonName",
-      "todayName",
-      "legalName",
-      "taxId",
+    for (const [key, masked] of [
+      ["ownerName", "M***a S***r"],
+      ["editorName", "M***a S***r"],
+      ["holderPersonName", "M***a S***r"],
+      ["todayName", "S***r"],
+      ["legalName", "J***i P***g F***r"],
+      ["taxId", "1***Z"],
     ]) {
-      expect(page).toContain(`&quot;${key}&quot;:&quot;***&quot;`);
+      expect(page).toContain(`&quot;${key}&quot;:&quot;${masked}&quot;`);
     }
-    expect(page).toContain("&quot;code&quot;:&quot;MC2&quot;,&quot;name&quot;:&quot;***&quot;");
+    expect(page).toContain(
+      "&quot;code&quot;:&quot;MC2&quot;,&quot;name&quot;:&quot;M***a S***r&quot;",
+    );
     for (const visible of [LOCATION_NAME, "MC1", "Patio 1", "Bar till"]) {
       expect(page).toContain(visible);
     }
@@ -679,7 +692,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         error: { code: "table.label_taken", params: { todayName: TODAY_NAME, field: "name" } },
       },
     });
-    await expectLogged(r, "table.label_taken", { todayName: "***", field: "name" }, [TODAY_NAME]);
+    await expectLogged(r, "table.label_taken", { todayName: "S***r", field: "name" }, [TODAY_NAME]);
   });
 
   it("reads the codes above from the log tail, not some other part of the page", async () => {
@@ -722,7 +735,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     ]) {
       expect(withoutLog).not.toContain(code);
     }
-    expect(withoutLog).not.toContain("&quot;***&quot;");
+    expect(withoutLog).not.toContain("***");
   });
 
   for (const at of ["rcpt", "data"] as const) {

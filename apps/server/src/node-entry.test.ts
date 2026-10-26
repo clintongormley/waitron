@@ -773,7 +773,7 @@ describe("runEntry", () => {
       ),
     ).rejects.toThrow();
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
-    expect(reported).toContain('params: {"email":"***"}');
+    expect(reported).toContain('params: {"email":"m***r@e***e.test"}');
     expect(reported).not.toContain("marta.soler@example.test");
   });
 

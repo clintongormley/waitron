@@ -242,7 +242,7 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
  * The tail and the detail carry caught errors' own words, stacks and `AppError` params: the
  * operator's only window on why the box did not start (owner decision, 2026-09-26). What bounds
  * them is not this page: `redactSecrets`, which masks passwords in a URL and nothing else, the
- * personal-data mask, which writes `***` for the details `PERSONAL_LOG_KEYS` names
+ * personal-data mask over the details `PERSONAL_LOG_KEYS` names
  * (`apps/server/src/log-personal-data.ts`), and the convention that an `AppError`'s params never
  * carry a secret (`apps/server/src/errors.ts`).
  *
