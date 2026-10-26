@@ -9,6 +9,11 @@ with the scripts and outputs they cite); every ruling is folded below. Folding r
 tasks and split one: old Task 2 is now Tasks 3 and 4, old Task 3 is now Tasks 5 and 6, old Task 4
 is now Task 7, and Task 2 is new. Folding round 3 split Task 6 into Task 6a (named types) and
 Task 6b (log calls' fields), so the tasks are 1 to 5, 6a, 6b and 7.
+
+**2026-10-26, after the build: the owner chose partial masking** (decision 14). Tasks 1, 3 and 7
+were written for, and first built with, a bare `***`. Their tests and words now carry the partial
+form decision 14 describes; where a task below still quotes `***` as the masked value, decision 14
+is what the code does.
 Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §2.3 (rows d5
 and d6), §4.8 (the "log file masks URL passwords" row, marked **unverified (S10)**), §5.3 row S10 ("a
@@ -37,8 +42,8 @@ answer keeps every detail the till, the dashboard and the setup wizard read (dec
 renamed key no screen reads (decision 10). One screen does change: the dashboard's log view
 (**Diagnostics**, `GET /management-api/diagnostics/recent`, `apps/server/src/diagnostics-api.ts:71-81`,
 permission `diagnostics.view`, called from `apps/dashboard/src/api/client.ts:4208`) reads the log
-files through `createLogReader` (`apps/server/src/boot.ts:937`), so it will show `***` where the
-file does. The pull request says so.
+files through `createLogReader` (`apps/server/src/boot.ts:937`), so it shows the masked values the
+file holds. The pull request says so.
 
 ## Words used here
 
@@ -71,7 +76,8 @@ file does. The pull request says so.
   stack, causes, and each `AppError`'s details as `params: {…}`
   (`apps/server/src/node-entry.ts:172-204`). It is written to the log as `server.boot_failed`'s
   `detail` (`:562-565`) and shown on the page.
-- To **mask** a value is to write `***` in its place, the token `redactSecrets` already uses.
+- To **mask** a value is to keep only the first and last character of each of its pieces around
+  `***`, the token `redactSecrets` already uses (decision 14).
 
 ## What the probe ran, and what it printed
 
@@ -147,13 +153,15 @@ details by meaning (decision 4). Round 1's review extracted every structured log
 ## What this slice builds, and what it leaves
 
 1. **A list of detail names that hold a person's name, email or tax number**, plus one path rule
-   (`merchants[].name`), and a mask that writes `***` for their values in every log line, at any
+   (`merchants[].name`), and a mask that keeps only the first and last character of each piece of
+   their values (decision 14) in every log line, at any
    depth, on both halves of the logger (stdout and the file). The failed-start report masks the same
    names.
 2. **Two call sites stop handing a person's details to the log**: a till's name for today travels
    under a masked key, and the profile route logs the email sender's code, not its message.
 3. **The probe as tests**: each leaking path above, driven through the real route or the real error
-   boundary into the real file, the captured stdout and the real recovery page, now showing `***`;
+   boundary into the real file, the captured stdout and the real recovery page, now showing the
+   masked values;
    and the email-server paths, the attendance sender included, pinned as not leaking, with the
    relay's own reply as the control.
 4. **A root guard** that fails when a registry or a log call gains a detail whose name looks like a
@@ -191,8 +199,9 @@ note 5).
      `packages/identity/src/staff.ts` cannot conflict (the build plan's order note expected S10 might
      edit that file; it does not).
 2. **The list**: `email`, `displayName`, `ownerName`, `editorName`, `holderPersonName`, `person`,
-   `supplierTaxId`, `legalName`, `taxId`, `idEmisorFactura` and `todayName`. A value under one of
-   these names is written as `"***"` whatever its type; `null` and an absent value stay as they are,
+   `supplierTaxId`, `legalName`, `taxId`, `idEmisorFactura` and `todayName`. A string under one of
+   these names is masked by decision 14's rule for that name, and any other value is written as
+   `"***"`; `null` and an absent value stay as they are,
    so "no person" still reads differently from "a person". `person` is on the list although its one
    code is never logged today, because its meaning is a person's name and the list costs nothing for
    it. **The path rule**: under a key `merchants` whose value is an array, each element's `name` is
@@ -226,8 +235,8 @@ note 5).
    the venue from the answer (decision 3), the restore command prints it on its own terminal
    (`restore-command.ts:410-413`, a terminal line, not a log line), and the code alone says what is
    waiting. The alternative, showing them, is owner note 2.
-6. **Stdout is masked too.** The mask sits before the tee, so `docker logs` shows `***` as the file
-   does. `redactSecrets` stays file-only (`boot.ts:938-942` explains why for passwords: masked, a
+6. **Stdout is masked too.** The mask sits before the tee, so `docker logs` shows the same masked
+   values as the file. `redactSecrets` stays file-only (`boot.ts:938-942` explains why for passwords: masked, a
    wrong password and none look alike); no such need exists for a person's email, which the request's
    own answer carried to the person who typed it, and the design counts the container's output as
    personal data kept on the box (§2.3 row d6).
@@ -292,6 +301,45 @@ note 5).
     `name` or `taxId`, because the list is flat across every code and a bare `name` cannot be masked
     without masking every thing's name. The rule goes in the root `CLAUDE.md` line Task 7 adds. The
     existing bare `taxId` is the venue's own and is on the list (decision 5).
+14. **Partial masking, by the owner's answer** (2026-10-26, relayed by the watcher; lane B's
+    `questions.md`, the section "OWNER ANSWER … A980 S10: mask PARTIALLY"). The owner: "it may be
+    better to partially mask, eg leaving the first and last letters of an email address so that we
+    can still distinguish different values which may be important for debugging, while still
+    protecting privacy." Built as the watcher read it, in `apps/server/src/log-personal-data.ts` alone:
+    - The middle is always exactly `***`, so a value's length is not shown.
+    - An email (`email`): the part before the `@` and the domain name each keep their first and
+      last character; the `@` and the ending after the domain's last dot stay.
+      `marta.soler@example.test` → `m***r@e***e.test`.
+    - A name (`displayName`, `ownerName`, `editorName`, `holderPersonName`, `person`, `legalName`,
+      `todayName` and `merchants[].name`): each word keeps its first and last character.
+      `Jordi Puig Ferrer` → `J***i P***g F***r`.
+    - A tax number (`taxId`, `supplierTaxId`, `idEmisorFactura`): the whole value keeps its first
+      and last character. `12345678Z` → `1***Z`.
+    - A value, word or email half of three characters or fewer is `***` alone.
+    - Unchanged: which details are masked, stdout and the file, the failed-start report, and the
+      answers, which keep the full value.
+
+    Choices made where the answer left a point open, each on the side that shows less:
+    - **Which rule applies** goes by the detail's name, as listed above, not by the value's shape.
+    - **A value under `email` that is not an address** is masked as one piece: not exactly one
+      `@`, whitespace anywhere, nothing before the `@`, no dot in the domain, nothing before the
+      domain's last dot, or an ending that is not all letters. `marta@localhost` → `m***t`. The
+      ending must be all letters because it is written as it is; a punycode ending such as
+      `xn--p1ai` therefore falls back too.
+    - **Anything but a string** under a listed name (an object, an array, a number, a boolean) is
+      `***`, and nothing inside it is looked at. `null` and an absent value stay; a function or a
+      symbol is dropped, as plain JSON drops it.
+    - **Characters are code points**, so an accented or astral first or last letter stays whole:
+      `Àngel` → `À***l`, and a word of three code points is `***` even when one of them takes two
+      UTF-16 units.
+    - **Words are split on any whitespace and joined by one space**, so the original spacing is
+      not shown: `"  Jordi   Puig\tFerrer"` → `J***i P***g F***r`. An empty or blank value is `***`.
+    - **A hyphenated name is one word**: `Puig-Ferrer` → `P***r`, which shows less than masking
+      each half. A tax number with spaces inside is one piece too: `B 1234567 8` → `B***8`.
+
+    The tests: `describe("maskPersonalData keeps the first and last character of each piece")` in
+    `apps/server/src/logger.test.ts`, and the exact partial forms in the logger, failed-start and
+    recovery-page cases.
 
 ## Open decisions for the owner (FYI, built with the default)
 
@@ -300,7 +348,7 @@ note 5).
    table 4 "García" for tonight; later another waiter tries to name table 7 "García" too, and the
    till says "Another table already has that name". Before this slice the log line read
    `{"label":"García","field":"name",…,"event":"table.label_taken"}` and was on the recovery page;
-   now it reads `{"todayName":"***","field":"name",…}`. But a manager who names a permanent table
+   now it reads `{"todayName":"G***a","field":"name",…}`. But a manager who names a permanent table
    "García" in the floor plan and collides still logs `{"label":"García",…}`, and the same goes for
    a device named "Marta's phone", a location named after its owner, or a takeaway order labelled
    "Marta" (that one is an incident, not logged today). Alternative: mask `label`, `orderLabel`,
@@ -309,15 +357,16 @@ note 5).
 2. **The venue's own name and tax number are masked** (decision 5). Example: Jordi Puig Ferrer, a
    sole trader with NIF 12345678Z, restores from a bucket; the box refuses until he confirms the
    venue. The log line now reads
-   `{"legalName":"***","taxId":"***","locationName":"Bar del Port",…,"event":"restore.stream_venue_unconfirmed"}`,
+   `{"legalName":"J***i P***g F***r","taxId":"1***Z","locationName":"Bar del Port",…,"event":"restore.stream_venue_unconfirmed"}`,
    while the setup wizard still shows "Jordi Puig Ferrer, 12345678Z" to confirm and the restore
    command still prints "if Jordi Puig Ferrer (tax id 12345678Z) is your business, re-run with
    --confirm-venue 12345678Z" on its terminal. Likewise a SumUp key covering two accounts logs
-   `{"merchants":[{"code":"MC1","name":"***"},{"code":"MC2","name":"***"}],…}` while the connect form
+   `{"merchants":[{"code":"MC1","name":"J***i P***g F***r"},{"code":"MC2","name":"M***a S***r"}],…}` while the connect form
    still lists both names. Alternative: show them, as the venue's receipts do, by taking `legalName`,
    `taxId`, `idEmisorFactura` and the `merchants` path off the list.
 3. **`docker logs` is masked as well as the file** (decision 6). Example: an invitation refused
-   `person.email_taken` shows `{"email":"***","event":"person.email_taken"}` in both; an installer
+   `person.email_taken` for `marta.soler@example.test` shows
+   `{"email":"m***r@e***e.test","event":"person.email_taken"}` in both; an installer
    who needs to know which address finds it in the dashboard's Users list. Alternative: mask the file
    only, as `redactSecrets` does.
 4. **No email-shaped mask in free text** (decision 7). After decision 11 no known call site logs an
@@ -333,6 +382,11 @@ note 5).
    refusal from the trading watch (round 1 review). Alternative: start the tail at the latest
    `server.boot_started` (written at `apps/server/src/node-entry.ts:505`), which removes every running
    server's line from the page, free text included, and loses that explanation.
+6. **The open points of the partial mask** (decision 14) were each settled on the side that shows
+   less: a value under `email` that is not an address is masked as one piece, anything but a string
+   is `***`, the spacing between words is not kept, and a hyphenated name is one word. Example:
+   `Marta Puig-Ferrer` logs as `M***a P***r`, not `M***a P***g-F***r`. Alternative for each: say
+   which, and the change is to `apps/server/src/log-personal-data.ts` alone.
 
 ## Global constraints
 
@@ -346,7 +400,7 @@ note 5).
 - **Every database test uses `useVenueDb`** with `migrationOptionsFor(manifestSets(), null)`, as
   the probe did. Every refused request asserts its domain code and status.
 - **Each "not on the page" assertion has its control**: the same page shows the event's code and
-  `***` (so an empty tail cannot pass), and for the email-server cases the relay's own reply is shown
+  the masked value (so an empty tail cannot pass), and for the email-server cases the relay's own reply is shown
   to hold the address (so a relay that never echoed it cannot pass).
 - **No package changes.** `git diff --name-only main...HEAD -- packages/` prints nothing at the end.
 - **Coverage**: `@waitron/server` holds 98/98/98/95; the new file is covered by Task 1's tests. No

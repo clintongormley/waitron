@@ -40,7 +40,10 @@ no migration. 2026-10-26: S10 is built
 ([its plan](2026-10-26-a980-s10-log-personal-data.md)): the probe found people's names and emails in
 logged error details, so every line the server's logger writes, and the failed start's report, now
 shows `***` for a detail named on `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`), and
-a root guard refuses a person-looking detail that is neither listed nor named harmless. S10 does
+a root guard refuses a person-looking detail that is neither listed nor named harmless. Later the
+same day, by the owner's answer, the mask became partial: each word, each half of an email address
+and each tax number keeps its first and last character around `***` (the S10 plan's decision 14).
+S10 does
 not touch `packages/identity/src/staff.ts`, which the build order below expected it might. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each

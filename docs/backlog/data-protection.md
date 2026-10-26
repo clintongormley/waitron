@@ -255,14 +255,18 @@ by the answers):
   watcher, `questions.md:4400` in lane B's campaign folder.
 - **A980 S10, 2026-10-26:** what the log masks and what it leaves, each built with the default
   and open for the owner to reverse (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
-  owner note 5). Masked, as `***`, in every line the server's logger writes, on `docker logs` as
+  owner note 5). Masked in every line the server's logger writes, on `docker logs` as
   well as in `waitron.log` and on the recovery page: a person's name, email or tax number under a
-  listed detail name. A refused invitation logs `{"email":"***",…,"event":"person.email_taken"}`. The
+  listed detail name. Masked partly, by the owner's decision of 2026-10-26 (the plan's decision 14, which
+  also lists the choices made where the answer left a point open):
+  each word, each half of an email address and each tax number keeps only its first and last
+  character around `***`, so a refused invitation logs
+  `{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`. The
   venue's own legal name and tax number are masked too, because for a sole trader they are a
   person's: Jordi Puig Ferrer's refused restore logs
-  `{"legalName":"***","taxId":"***","locationName":"Bar del Port",…}`, while the setup wizard and the
+  `{"legalName":"J***i P***g F***r","taxId":"1***Z","locationName":"Bar del Port",…}`, while the setup wizard and the
   restore command still show them. A table's name for today, normally a booking's surname, travels
-  as `todayName` and is masked: `{"todayName":"***","field":"name",…}`. Left visible: the names of
+  as `todayName` and is masked: `{"todayName":"S***r","field":"name",…}`. Left visible: the names of
   things, even when they name someone (a floor-plan table named "García" still logs
   `{"label":"García",…}`, and so do a device named "Marta's phone" and a location named after its
   owner); email-shaped text inside a message, because the mask goes by key, not by pattern; the

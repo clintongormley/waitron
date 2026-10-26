@@ -201,8 +201,10 @@ docker compose logs app | tail -50    # the failed boot's error, its cause chain
 Both carry the caught error's own words — a missing column, a database file that would not open, the
 counts behind `migrations.incomplete`, the migration hashes behind `provisioning.database_ahead` —
 with any credentials embedded in a URL masked before it is written. A person's name, email or tax
-number in an error's details shows as `***` in the server's own log lines, on the page and in
-`docker compose logs`, under the detail names Waitron lists; the names of things, such as a table's
+number in an error's details is partly masked in the server's own log lines, on the page and in
+`docker compose logs`, under the detail names Waitron lists: each word, each half of an email
+address and each tax number keeps only its first and last character around `***`, as in
+`m***r@e***e.test`, `J***i P***g F***r` and `1***Z`; the names of things, such as a table's
 label or a device's name, stay visible. The command-line tools still print an error's details on
 their own terminal: the setup and credentials tools, and the restore command's venue confirmation,
 which prints the venue's name and tax number on purpose so that you can type the tax number back.

@@ -1151,17 +1151,23 @@ logged on Monday is still on the page after a start fails on Tuesday, until 200 
 rotation push it out. That is kept on purpose, because those lines explain a stop the running server
 saw, such as the trading watch's append-only refusal.
 
-**People's names, emails and tax numbers in the tail show as `***`.** Every line the server's
-logger writes (`createLogger`, `apps/server/src/logger.ts`) goes through `maskPersonalData`
-(`apps/server/src/log-personal-data.ts`), which writes `***` for the value of any key on
-`PERSONAL_LOG_KEYS`, at any depth, and for each `name` inside an array under `merchants`. A `null`
-or absent value stays as it is, so "no person" still reads differently from "a person". The failed
+**People's names, emails and tax numbers in the tail are partly masked.** Every line the server's
+logger writes (`createLogger`, `apps/server/src/logger.ts`) is serialised by `stringifyMasked`
+(`apps/server/src/log-personal-data.ts`), which applies `maskPersonalData` only to a line holding a
+key on `PERSONAL_LOG_KEYS` or `merchants` (or one plain JSON cannot serialise). `maskPersonalData`
+masks the value of any key on `PERSONAL_LOG_KEYS`, at any depth, and each `name` inside an array
+under `merchants`, keeping the first and last character of each piece around a fixed `***` (owner
+decision 2026-10-26, the S10 plan's decision 14): an email keeps them for the part before the `@`
+and for the domain name, with the ending after the last dot (`m***r@e***e.test`); a name keeps them
+for each word (`J***i P***g F***r`); a tax number keeps them for the whole value (`1***Z`). A piece
+of three characters or fewer, and any value that is not a string, is `***` alone. A `null` or
+absent value stays as it is, so "no person" still reads differently from "a person". The failed
 start's report masks the same names in an `AppError`'s params (`paramsLine`,
 `apps/server/src/node-entry.ts`). So a refused invitation's line reads
-`{"email":"***",…,"event":"person.email_taken"}`, while the answer to the request still carries the
-address to the person who typed it. The mask runs before the logger splits a line between the
-container's output and the file, so `docker compose logs` shows `***` too. The dashboard's
-Diagnostics log view shows `***` the same way, because it reads the same files (`createLogReader`,
+`{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`, while the answer to the request still
+carries the address to the person who typed it. The mask runs before the logger splits a line
+between the container's output and the file, so `docker compose logs` shows the same masked values.
+So does the dashboard's Diagnostics log view, because it reads the same files (`createLogReader`,
 `apps/server/src/boot.ts`).
 
 The receipt: before the change, the probe in the
@@ -1170,7 +1176,7 @@ that names a person wrote the name or email into stdout, the file and the page, 
 server's refusal did not, because Waitron reduces it to a code first. Its cases are now tests:
 `apps/server/src/recovery-page-personal-data.test.ts` drives the real staff, profile and till routes
 and the real error boundary into the real file, the captured stdout and the real page, each with a
-control that the same tail shows the event's code and `***`; it pins the invitation, profile and
+control that the same tail shows the event's code and the masked value; it pins the invitation, profile and
 attendance email paths as logging no address, with the relay's own reply shown holding it.
 `apps/server/src/logger.test.ts` and the failed-start case in `apps/server/src/node-entry.test.ts`
 pin the mask itself.
