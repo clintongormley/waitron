@@ -126,7 +126,7 @@ come after the list above:
   in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, and
   slice 3 (the handheld's bar: Floor, a ✎ button per table with this person's unsent dishes,
   then "?" and ☰) in #2097, built from the build plan below. Slice 6 (each prep station's Ready
-  warning time, 3 minutes by default, and the till's read carrying it) is in review, built from
+  warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
   the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md); slice 7
   (the Ready bar's warning) is next. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
@@ -2652,7 +2652,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
-  warning time, 3 minutes by default, and the till's read carrying it) is in review, built from
+  warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
   the build plan's slice 6; slice 7 (the Ready bar's warning) is next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
