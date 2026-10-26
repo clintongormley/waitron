@@ -44,7 +44,6 @@ export const tenants = table(
     taxId: label("tax_id").notNull(),
     legalName: label("legal_name").notNull(),
     taxpayerDomicile: label("taxpayer_domicile"),
-    // NULL is unset: the writer (`@waitron/provisioning`'s privacy-contact.ts) never stores "".
     privacyNoticeUrl: label("privacy_notice_url"),
     privacyEmail: label("privacy_email"),
     createdAt: ts("created_at").notNull().$defaultFn(now),

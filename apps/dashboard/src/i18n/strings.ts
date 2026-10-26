@@ -953,11 +953,11 @@ export const en = {
   "venue_privacy.email": "Privacy email",
   "venue_privacy.email_placeholder": "privacy@example.com",
   "venue_privacy.web_address_invalid":
-    "Enter the page's full web address, such as https://example.com/privacy.",
+    "Enter the page's full web address, starting with https:// or http://, with no spaces and no user name or password, such as https://example.com/privacy.",
   "venue_privacy.email_invalid": "Enter an email address such as privacy@example.com.",
   "venue_privacy.too_long": "Use at most {max} characters.",
   "venue_privacy.notice_url_help":
-    "The page on your own web site that holds your full privacy notice. The guide has templates for it and for the short notices that point to it.",
+    "The page on your own web site that holds your full privacy notice. The guide has a checklist for it and templates for the short notices that point to it.",
   "venue_privacy.notice_url_help_label": "What this page is for",
   "venue_privacy.notice_url_help_guide": "Privacy notice templates",
   "venue_settings.tab.receipts": "Receipts",
@@ -4330,11 +4330,11 @@ export const es: Record<StringKey, string> = {
   "venue_privacy.email": "Correo de privacidad",
   "venue_privacy.email_placeholder": "privacidad@ejemplo.es",
   "venue_privacy.web_address_invalid":
-    "Introduce la dirección web completa de la página, como https://ejemplo.es/privacidad.",
+    "Introduce la dirección web completa de la página, que empiece por https:// o http://, sin espacios y sin nombre de usuario ni contraseña, como https://ejemplo.es/privacidad.",
   "venue_privacy.email_invalid": "Introduce un correo electrónico como privacidad@ejemplo.es.",
   "venue_privacy.too_long": "Usa como máximo {max} caracteres.",
   "venue_privacy.notice_url_help":
-    "La página de tu propia web con tu aviso de privacidad completo. La guía tiene plantillas para él y para los avisos breves que remiten a él.",
+    "La página de tu propia web con tu aviso de privacidad completo. La guía tiene una lista de lo que debe decir y plantillas para los avisos breves que remiten a él.",
   "venue_privacy.notice_url_help_label": "Para qué sirve esta página",
   "venue_privacy.notice_url_help_guide": "Plantillas de avisos de privacidad",
   "venue_settings.tab.receipts": "Recibos",
