@@ -8,6 +8,104 @@
 The open entries are listed in [the backlog](../backlog.md), under "Fiscal records, invoices and the asesor". This file holds
 their full text.
 
+## A696. Invoice issue dates and record offsets follow the process zone
+
+- **A696. Invoice issue dates and record offsets follow the process zone.**
+  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
+  DST included; old records stay unchanged. The owner approved the
+  [startup design](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+  on 21 October, including the minimal A166 country-zone list and creation/import checks first.
+  Follow the [implementation plan](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md):
+  validate before trading, check every saved-zone writer and let a manager confirm only a
+  missing/invalid zone. Implementation and runtime acceptance remain open; the separate FULL
+  fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 separate.
+  [Detail](fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
+
+## A444. A full invoice for a meal past midnight should carry the day the meal ends
+
+- **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
+  the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
+  a service at its end (V1476-13, by analogy); asked as [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
+  Fiscal: the owner lands it.
+
+## A445. A free item on a bill with mixed VAT rates should take a share of the price paid
+
+- **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
+  value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
+  deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at cost
+  (V2347-24). Asked as [S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live. Fiscal: the owner lands it.
+
+## A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the invoice that follows
+
+- **A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the
+  invoice that follows.** AEAT's FAQ calls a system without that link «susceptible de sanción»,
+  and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
+
+## A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice
+
+- **A447. A guest's part-payment taken before the table is fully served may need its own
+  advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
+  with no invoice until the bill is paid. Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
+
+## The till offers no way back to a simplified invoice for a bill already saved as a full one
+
+- **The till offers no way back to a simplified invoice for a bill already saved as a full one** —
+  left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the server
+  accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
+
+## Adviser confirmation: supplier invoice numbers by issue year
+
+- **Adviser confirmation: supplier invoice numbers by issue year.** Confirm the owner's A981
+  rule in [Q18(b)](../compliance/asesor-questions.md): the same supplier's number is refused within
+  one issue year and accepted in another with a warning. The receipt date still sets the VAT
+  reporting period.
+
+## A554. Should any screen show the address an invoice email went to?
+
+- **A554. Should any screen show the address an invoice email went to?** An owner question, open
+  point 1 of the [A231q plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md). Until
+  it is answered none does: the delivery status the till and the dashboard read carries no address,
+  and both email forms open empty. Left open by A231q.
+
+## A557. A success reported after an attempt had ended is not shown
+
+- **A557. A success reported after an attempt had ended is not shown.** The delivery status marks
+  such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
+  nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
+
+## A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop
+
+- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop**, in the
+  till and the dashboard, in English and Spanish (`apps/till/src/i18n/codes.ts`,
+  `apps/dashboard/src/i18n/codes.ts`). A wording decision left open by A231q.
+
+## `FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records
+
+- **`FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records**, as it leaves out held
+  (`detenido`) ones, so neither counts as unconfirmed there. It has no production caller yet (see
+  [the `pendingCount` note](#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments)); decide what "unconfirmed" includes before anything reads it.
+  Left open by #1596.
+
+## The reconcile sweep may raise a second "accepted with errors" warning
+
+- **The reconcile sweep may raise a second "accepted with errors" warning** when it corrects a
+  record the drain is still sending (`packages/fiscal-verifactu/src/reconcile.ts`); only one case
+  opens, as cases are one per record. Found by reading in #1596's review, not run; nothing runs the
+  sweep yet, so check it when the sweep is scheduled.
+
+## The test "does not send a successor past a cancellation held for its original"
+
+- **The test "does not send a successor past a cancellation held for its original"**
+  (`packages/fiscal-verifactu/src/drain.test.ts`) still reads like the old hold. It is true for the
+  first pass it checks, but since #1596 a cancellation of a refused original is set aside and holds
+  nothing: retitle it on the next touch.
+
+## Should `packages/fiscal-verifactu` have a mutation floor?
+
+- **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the
+  minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
+  plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
+
 ## Walk-up invoice dates follow the server process time zone
 
 Found during A693's test-only fix (2026-10-15). In an installed disposable copy,

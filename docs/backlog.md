@@ -190,37 +190,25 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a993-a-change-of-the-systems-identity-opens-a-new-installation-by-itself--designed-in-a940-56-approved-2026-10-22-fiscal-the-owner-lands-it).
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**
-  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
-  DST included; old records stay unchanged. The owner approved the
-  [startup design](superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
-  on 21 October, including the minimal A166 country-zone list and creation/import checks first.
-  Follow the [implementation plan](superpowers/plans/2026-10-21-a696-startup-zone-validation.md):
-  validate before trading, check every saved-zone writer and let a manager confirm only a
-  missing/invalid zone. Implementation and runtime acceptance remain open; the separate FULL
-  fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 separate.
-  [Detail](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
+  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone, DST included; old records stay unchanged.
+  Implementation and runtime acceptance remain open; the separate FULL fiscal PR finishes green for the owner to land.
+  [Detail](backlog/fiscal.md#a696-invoice-issue-dates-and-record-offsets-follow-the-process-zone).
 
-- **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
-  the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
-  a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
-  Fiscal: the owner lands it.
+- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
 
 - **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2.
   If it can, art. 7.1.c requires that date on the receipt. Check, then record the date on such a sale if needed.
   [Detail](backlog/fiscal.md#can-a-simplified-invoice-carry-an-operation-date-different-from-its-issue-date).
 
-- **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
-  value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
-  deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at cost
-  (V2347-24). Asked as [S10](compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live. Fiscal: the owner lands it.
+- **A445. A free item on a bill with mixed VAT rates should take a share of the price paid.** Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
 
-- **A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the
-  invoice that follows.** AEAT's FAQ calls a system without that link «susceptible de sanción»,
-  and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](compliance/asesor-questions.md#the-shortened-list-2026-10-09).
+- **A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the invoice that follows.**
+  [Detail](backlog/fiscal.md#a446-when-the-pre-bill-is-built-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
-- **A447. A guest's part-payment taken before the table is fully served may need its own
-  advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
-  with no invoice until the bill is paid. Asked as [S3](compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
+- **A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice.** No change until answered.
+  [Detail](backlog/fiscal.md#a447-a-guests-part-payment-taken-before-the-table-is-fully-served-may-need-its-own-advance-payment-invoice).
 
 - **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full invoice.**
   [Detail](backlog/fiscal.md#decisions-and-deliberate-limits) _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b
@@ -233,9 +221,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
 
-- **The till offers no way back to a simplified invoice for a bill already saved as a full one** —
-  left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the server
-  accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
+- **The till offers no way back to a simplified invoice for a bill already saved as a full one.**
+  [Detail](backlog/fiscal.md#the-till-offers-no-way-back-to-a-simplified-invoice-for-a-bill-already-saved-as-a-full-one).
 
 - **Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale** —
   The quarterly _modelo 303_ keeps its old behaviour until the asesor answers Q25 (which VAT period a later annulment lands in).
@@ -261,10 +248,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
   Fiscal: each behind its own review, owner sign-off at land.
 
-- **Adviser confirmation: supplier invoice numbers by issue year.** Confirm the owner's A981
-  rule in [Q18(b)](compliance/asesor-questions.md): the same supplier's number is refused within
-  one issue year and accepted in another with a warning. The receipt date still sets the VAT
-  reporting period.
+- **Adviser confirmation: supplier invoice numbers by issue year.**
+  [Detail](backlog/fiscal.md#adviser-confirmation-supplier-invoice-numbers-by-issue-year).
 
 - **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98, #1106).
   [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
@@ -293,10 +278,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   obtain the asesor's manual-remedy approval and settle applicable B2B delivery before enabling public F1.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 
-- **A554. Should any screen show the address an invoice email went to?** An owner question, open
-  point 1 of the [A231q plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md). Until
-  it is answered none does: the delivery status the till and the dashboard read carries no address,
-  and both email forms open empty. Left open by A231q.
+- **A554. Should any screen show the address an invoice email went to?** An owner question, open.
+  [Detail](backlog/fiscal.md#a554-should-any-screen-show-the-address-an-invoice-email-went-to).
 
 - **A555. Keep a counter full invoice's email or A4 choice through payment** — DESIGN PROPOSED,
   awaiting the owner's one delivery-choice decision and full-design approval.
@@ -307,13 +290,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.
   [Detail](backlog/fiscal.md#a556-a-full-invoice-that-later-replaces-a-bills-simplified-one-would-not-be-delivered-through-the-bill)
 
-- **A557. A success reported after an attempt had ended is not shown.** The delivery status marks
-  such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
-  nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
+- **A557. A success reported after an attempt had ended is not shown.**
+  [Detail](backlog/fiscal.md#a557-a-success-reported-after-an-attempt-had-ended-is-not-shown).
 
-- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop**, in the
-  till and the dashboard, in English and Spanish (`apps/till/src/i18n/codes.ts`,
-  `apps/dashboard/src/i18n/codes.ts`). A wording decision left open by A231q.
+- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop.**
+  [Detail](backlog/fiscal.md#a558-the-invoice_delivery-refusals-other-than-active-end-without-a-full-stop).
 
 - **When the business e-invoicing regime starts** — found by A231d's research. So from about
   October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a
@@ -371,20 +352,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
   yet, so the screen should add an open-only filter or paging when it calls them. From W41s.
 
-- **`FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records**, as it leaves out held
-  (`detenido`) ones, so neither counts as unconfirmed there. It has no production caller yet (see
-  the `pendingCount` entry above); decide what "unconfirmed" includes before anything reads it.
-  Left open by #1596.
+- **`FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records.**
+  [Detail](backlog/fiscal.md#fiscalbackendpendingcount-leaves-out-set-aside-retenido-records).
 
-- **The reconcile sweep may raise a second "accepted with errors" warning** when it corrects a
-  record the drain is still sending (`packages/fiscal-verifactu/src/reconcile.ts`); only one case
-  opens, as cases are one per record. Found by reading in #1596's review, not run; nothing runs the
-  sweep yet, so check it when the sweep is scheduled.
+- **The reconcile sweep may raise a second "accepted with errors" warning.**
+  [Detail](backlog/fiscal.md#the-reconcile-sweep-may-raise-a-second-accepted-with-errors-warning).
 
-- **The test "does not send a successor past a cancellation held for its original"**
-  (`packages/fiscal-verifactu/src/drain.test.ts`) still reads like the old hold. It is true for the
-  first pass it checks, but since #1596 a cancellation of a refused original is set aside and holds
-  nothing: retitle it on the next touch.
+- **The test "does not send a successor past a cancellation held for its original".**
+  [Detail](backlog/fiscal.md#the-test-does-not-send-a-successor-past-a-cancellation-held-for-its-original).
 
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
@@ -440,9 +415,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Before go-live it needs no compatibility code: until then any installation may be reset (CLAUDE.md §3).
   [Detail](backlog/fiscal.md#rename-the-hour--names-to-minute-names).
 
-- **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the
-  minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
-  plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
+- **Should `packages/fiscal-verifactu` have a mutation floor?**
+  [Detail](backlog/fiscal.md#should-packagesfiscal-verifactu-have-a-mutation-floor).
 
 - **A679's internet time reading came back unavailable against pre-production in each of four runs
   on 2026-10-23.** Found while planning A798-B slice 9.
