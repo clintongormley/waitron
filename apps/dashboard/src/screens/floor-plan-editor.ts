@@ -56,6 +56,7 @@ import {
   saveFromDraft,
   tableName,
   withLiveTables,
+  withSentShortNames,
   type DraftTable,
   type FloorPlanChange,
   type FloorPlanDraft,
@@ -910,8 +911,8 @@ export class FloorPlanEditor extends LitElement {
     this.saving = false;
     if (request !== this.#request) return;
     const { ids } = answer;
-    const saved = rekeyDraft(sentDraft, ids);
-    const current = rekeyDraft(trimLabels(this.draft!, draft), ids);
+    const saved = rekeyDraft(withSentShortNames(sentDraft, sentDraft), ids);
+    const current = rekeyDraft(withSentShortNames(trimLabels(this.draft!, draft), sentDraft), ids);
     const rekey = rekeyWith(ids);
     this.#rekeyMarks(rekey);
     this.#places = new Map([...this.#places].map(([key, place]) => [rekey(key), place]));

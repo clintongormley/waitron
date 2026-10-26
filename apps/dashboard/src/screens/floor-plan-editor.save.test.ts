@@ -382,6 +382,81 @@ it("a short name sent with spaces round it is kept trimmed, and Save is quiet af
   expectSave(el, "quiet");
 });
 
+function storedPlus(): FloorPlan {
+  const stored = plan();
+  stored.tables[0]!.shortName = "1+2";
+  return stored;
+}
+
+const plusRefusal = {
+  key: "m1",
+  field: "shortName",
+  message: "Leave out +: it marks joined tables.",
+};
+
+describe.each([
+  ["has not answered", () => new Promise<FloorPlan>(() => {})],
+  ["failed", () => Promise.reject({ code: "server.internal" })],
+])("while the re-read after a save %s", (_, reread) => {
+  it("a stored + short name saved as another is refused when typed back", async () => {
+    const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: savedIds });
+    const getFloorPlan = vi.fn().mockResolvedValueOnce(storedPlus()).mockImplementation(reread);
+    const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+    await fromCanvas(el, "floor-plan-change", {
+      draft: patchTable(el["draft"]!, "m1", { shortName: "12" }),
+    });
+    await press(el, "save");
+    expectSave(el, "quiet");
+    await fromCanvas(el, "floor-plan-change", {
+      draft: patchTable(el["draft"]!, "m1", { shortName: "1+2" }),
+    });
+    await press(el, "save");
+    expect(el.fieldError).toEqual(plusRefusal);
+    expect(saveFloorPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("a stored + short name sent unchanged may still be saved again", async () => {
+    const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: savedIds });
+    const getFloorPlan = vi.fn().mockResolvedValueOnce(storedPlus()).mockImplementation(reread);
+    const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+    await move(el, "m1", 5);
+    await press(el, "save");
+    await move(el, "m1", 7);
+    await press(el, "save");
+    expect(el.fieldError).toBeNull();
+    expect(saveFloorPlan).toHaveBeenCalledTimes(2);
+    const body = saveFloorPlan.mock.calls[1]![2] as ReturnType<typeof saveFromDraft>;
+    expect(body.tables.find((t) => t.key === "m1")!.shortName).toBe("1+2");
+  });
+});
+
+it("a stored + short name typed back while the save of another is sent is refused at the next Save", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const saveFloorPlan = vi
+    .fn()
+    .mockReturnValueOnce(write.promise)
+    .mockResolvedValue({ revision: 5, ids: savedIds });
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(storedPlus())
+    .mockReturnValue(new Promise(() => {}));
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(el["draft"]!, "m1", { shortName: "12" }),
+  });
+  await press(el, "save");
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(el["draft"]!, "m1", { shortName: "1+2" }),
+  });
+  write.resolve({ revision: 4, ids: savedIds });
+  await flush(el);
+  expect(el["draft"]!.tables.find((t) => t.key === "m1")!.shortName).toBe("1+2");
+  expectSave(el, "awake");
+  await press(el, "save");
+  expect(el.fieldError).toEqual(plusRefusal);
+  expect(saveFloorPlan).toHaveBeenCalledTimes(1);
+});
+
 it("a read's failure does not replace an action's message", async () => {
   const saveFloorPlan = vi
     .fn()

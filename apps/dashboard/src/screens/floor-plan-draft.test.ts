@@ -20,6 +20,7 @@ import {
   saveFromDraft,
   setParts,
   withLiveTables,
+  withSentShortNames,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -149,6 +150,16 @@ function shortNamePlan(): FloorPlan {
 }
 
 describe("short names", () => {
+  it("after a save, each table it sent stores the short name it sent, and a table it did not send keeps its own", () => {
+    const opened = draftFromPlan(shortNamePlan());
+    const d = {
+      tables: opened.tables.map((t) => (t.key === "b" ? { ...t, savedShortName: "A+" } : t)),
+    };
+    const sent = { tables: [{ ...table(d, "a"), shortName: " 12 " }] };
+    const r = withSentShortNames(d, sent);
+    expect(r.tables.map((t) => t.savedShortName)).toEqual(["12", "A+"]);
+  });
+
   it("opens each table with its stored short name, or its name's proposal when it has none", () => {
     const d = draftFromPlan(shortNamePlan());
     expect(d.tables.map((t) => t.shortName)).toEqual(["Tb1", "Win"]);

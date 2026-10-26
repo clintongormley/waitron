@@ -119,6 +119,17 @@ export function rekeyDraft(
   };
 }
 
+/** After a save: each table the save sent holds, as its stored short name, the one it sent. */
+export function withSentShortNames(draft: FloorPlanDraft, sent: FloorPlanDraft): FloorPlanDraft {
+  const sentNames = new Map(sent.tables.map((t) => [t.key, t.shortName.trim()]));
+  return {
+    tables: draft.tables.map((t) => {
+      const savedShortName = sentNames.get(t.key);
+      return savedShortName === undefined ? t : { ...t, savedShortName };
+    }),
+  };
+}
+
 /** Each table keyed as in `from` takes its live table from there; the same draft when none moves. */
 export function withLiveTables(draft: FloorPlanDraft, from: FloorPlanDraft): FloorPlanDraft {
   const live = new Map(from.tables.map((t) => [t.key, t.liveTableId]));

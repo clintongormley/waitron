@@ -2886,7 +2886,9 @@ no short name**.
   it on every save would hold Save off for every later edit of that zone until someone retyped a
   table they never touched. So `DraftTable` gains `savedShortName?: string`, set by
   `draftFromPlan` only when the plan read's `shortName` is not `null`, never sent and not compared
-  by `sameTable` (like `keptSize`). The check refuses "+" only when the trimmed short name differs
+  by `sameTable` (like `keptSize`). (2026-10-26, review fix: a successful save also sets it, to the
+  trimmed short name each sent table carried — `withSentShortNames`.) The check refuses "+" only
+  when the trimmed short name differs
   from `savedShortName`. A saved joined table named after its parts ("1+2") is probably the
   commonest source. Message "Leave out +: it marks joined tables." / «Quita el +: marca mesas unidas.»
   The server, the proposal function and the configuration import are unchanged: a seed or an API
@@ -3318,7 +3320,8 @@ A1110 in the backlog with the answer.
 
 **Files:**
 - Modify: `apps/dashboard/src/screens/floor-plan-draft.ts` (`DraftTable` gains
-  `savedShortName?: string`, set by `draftFromPlan` only from a non-null read, never sent and not
+  `savedShortName?: string`, set by `draftFromPlan` from a non-null read and, after a successful
+  save, from what it sent, never sent and not
   compared by `sameTable`; `DraftProblem` gains `"short_name_plus"`, checked after
   `short_name_too_long`, only for a trimmed short name that differs from `savedShortName`), `floor-plan-editor.ts`
   (`#markProblem`, `tableProblem`), `floor-plan-add-tables.ts` and
