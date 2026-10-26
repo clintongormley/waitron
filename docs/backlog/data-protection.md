@@ -69,34 +69,7 @@ and its [build plan](../superpowers/plans/2026-10-24-a980-data-protection-build.
 answered all ten questions on 2026-10-22 (design §8). The open slices, by the design's numbers (S5, S7 and S8 were dropped
 by the answers):
 
-- **S2** — a staff member downloads their own data from their profile; an admin downloads another
-  person's under a new admin-only permission, `personal_data.export`. Built: the server route for a
-  person's own download (`GET /management-api/me/personal-data/export`, a ZIP of their profile and
-  sign-in details with a `README.txt` first, in the person's own language, English or Spanish), the
-  Profile page's **Download** button beside **Copy of your data**, and the Users guide's "Download
-  your data" section (`{#own-data}`) in English and Spanish. When the workforce module is on, the
-  download also holds `employment.json`, `rota.json`, `absences.json` and `attendance.json`, and
-  when the staffing module is on, `staff-roles.json`. When workforce and a working-time exporter
-  (today `workforce-es`) are both on, it also holds the working-time record (`time-record.pdf`,
-  `time-record.csv`), but only if the person has an entry at this box's location
-  (`apps/server/src/personal-data-time-record.ts:26`, `:42`). Since S2c
-  ([its plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md)) it also holds
-  `actions.json` when the person has at least one such action: the whole sales already recorded
-  whose void they authorised, the refunds they asked for, authorised or recorded the outcome of,
-  and the cash-drawer openings they made or authorised, with how many of each, the invoice number
-  and amount where there is one, when, and their part in each refund and opening
-  (`apps/server/src/personal-data-actions.ts`); the README inside the download lists every field
-  (`apps/server/src/i18n/personal-data-readme.ts`). No product path records a whole-sale void yet, so
-  the voids list is empty on every box until one does (S2c decision 3). Since S2d
-  ([its plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)) it also holds
-  `adjustments.json` when the person made or approved an adjustment: the voids, comps and
-  discounts on a bill that they made giving a reason, or approved for someone else, from the
-  adjustments module's own part (`packages/adjustments/src/personal-data.ts`; S2d decision 4). An
-  admin downloads another person's data, a disabled person's included, from **Download their
-  data** in the person's row menu on **Users** (`GET /management-api/staff/:id/personal-data/export`),
-  with the README in that person's language, else the venue's, and the Users guide's "Download
-  another person's data" section (`{#person-data}`) says how. What is left of S2 is in the points
-  below.
+- **S2** — the remaining download work is listed below.
 - **A manager's own copy of what they decided about others** — the absences and swaps they
   decided, the rotas they published and the attendance answers they authorised: the design's "who
   did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
@@ -155,39 +128,19 @@ by the answers):
   alternative is to leave the reason out of the file. Keep the reason, yes or no?
 - **The working-time record of a box with more than one location** — only this node's location is
   exported (S2b decision 6). Today provisioning refuses a second, different location.
-- **Measure the working-time, actions and adjustments parts on a box.** On a Mac, with 48 closed
-  pay periods × 30 staff, Task 6a's run timed the read inside the write lock at 669.7 ms. Task 6c,
-  measuring its own before-figure on the same Mac at 590.2 ms median, moved the person cut to read
-  time, with one
-  copy of the export's logic, and brought it to 213.8 ms median with an identical CSV. The
-  whole-history PDF for 4 years × about 20 shifts a month rendered in 2.6 s (4.0 MB) on the Mac
-  (Task 6a); the plan's 650 ms estimate was for 1,000 sessions. The PDF renders on the thread that
-  serves sales, which is why the box's figure matters. Measure both on a box.
+- **Measure the working-time, actions and adjustments parts on a box.** The PDF renders on the
+  thread that serves sales, which is why the box's figure matters. Measure the working-time read
+  and PDF on a box.
   The actions part (S2c) reads in write-lock turns of its own while the files are built, after the
-  turn that reads the other parts. S2c's Task 3 measured them on the Mac, with 1,000,000 drawer
-  openings and 20,000 whole-sale voids, for a person with 33,677 openings: medians of 12 builds, in
-  each of two freshly loaded databases, of row turn 1 (voids and refunds) about 7 ms; row turn 2
-  (drawer openings) 105 and 125 ms (single builds 97–196 ms); each of the 83 invoice-number turns
-  (up to 500 sales a turn) about 2 ms; one bill-payment turn under 1 ms; the whole build about
-  0.3 s over 86 turns. `actions.json` was 7.07 MB. The two row turns scan their whole tables,
-  because none of the person columns they select on has an index, so they grow with the venue's
-  whole history, not only the person's (S2c decision 4). A control with indexes on those columns,
-  not shipped, brought row turn 2 to 61 and 75 ms. Repeat the turns and the file's size on a box.
-  The adjustments part (S2d) reads in the first turn. S2d's Task 3a timed it on the Mac with
-  200,000 adjustments over 100,000 bills: medians of 15 reads, for a person named on 6,667 rows,
-  31.4 ms with the two indexes of adjustments migration 0009 and 52.5 ms with them dropped; for a
-  person named on 50 rows, 0.26 ms and 30.8 ms. The heavy person's `adjustments.json` was 2.6 MB.
-  Task 3b timed the whole first turn, every part, for a person heavy in both the working-time
-  history (48 closed pay periods × 30 staff) and the adjustments: a median of 238.2 ms over 12
-  runs (234.5 ms on a repeat; 213.1 ms without the adjustments part, which itself took about
-  24 ms), with the route's own single-row reads left out. Repeat both on a box.
-- **The first snapshot turn is close to S2d's 250 ms stop rule for a person heavy in two
-  histories.** S2d's Task 3b, for a person heavy in the working-time and adjustments histories, in
-  a fixture with no sales, measured 238.2 ms median on the Mac (Apple M5 Pro), its slowest run
-  249.9 ms, against S2d decision 13's rule to stop if that median is over 250 ms; about 89% of it
-  is the working-time read (about 213 ms). The margin is thin, and a slower box or a longer history
-  may cross it. S2d's finish review re-ran Task 3b's test on the same Mac: medians of 240.8 ms with
-  every part, 255.8 ms without the adjustments part, and 285.6 ms with every part again.
+  turn that reads the other parts. The two row turns scan their whole tables, because none of the
+  person columns they select on has an index, so they grow with the venue's whole history, not
+  only the person's (S2c decision 4). Repeat the turns and the file's size on a box.
+  The adjustments part (S2d) reads in the first turn. Measure that read and the whole first turn
+  on a box.
+- **Reduce the first snapshot turn's cost for a person heavy in two histories.** The
+  [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md#decisions-this-plan-makes-that-the-spec-does-not),
+  decision 13, sets a 250 ms median stop rule for its Mac fixture with heavy working-time and
+  adjustments histories.
   Options: give a module's part write-lock turns of its own, as the actions part has, or narrow the
   working-time read further.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
@@ -212,9 +165,7 @@ by the answers):
   checklist.
 - **S10** — check that logged errors carry no names or email addresses; mask them if they do.
 - **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
-  environment setting a box cannot set. Adds a migration, so while lane B builds it, it waits for
-  lane B's parked pull request (#2025) to close: lane B's own rule; it carries no
-  migration.
+  environment setting a box cannot set. Adds a migration.
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
   migration; waits for the labour and privacy specialists (A664 G2, G3).
@@ -226,6 +177,10 @@ by the answers):
   at the command why not.
 
 ## Decisions and deliberate limits
+
+- **A980 S2c, decision 3:** no product path records a whole-sale void yet, so the voids list is
+  empty on every box until one does. See the
+  [S2c plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md).
 
 - **A664, 2026-10-17:** you adopted the revised retention proposal for specialist review.
   Six years remains the discussion baseline. Q48 is yours to send; all product/report code
