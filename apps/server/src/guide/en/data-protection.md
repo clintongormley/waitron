@@ -148,6 +148,23 @@ Copy and adapt the next paragraph, to open the page:
 **Who is responsible for your data.** _Your venue's legal name_ (_your tax number_),
 _your address_. Write to _your privacy email address_ about your data.
 
+## Your privacy page and email in Waitron {#privacy-settings}
+
+Waitron keeps two details of your privacy notice with the venue's other details: the address of
+the web page that holds your full notice, and the email address people write to about their data.
+To set them, open **Venue settings**, stay on the **Venue details** tab and find the **Privacy**
+card. Choose **Edit**, fill in either or both, and choose **Save**.
+
+- **Privacy notice web page** takes the page's full address, starting with `https://` or
+  `http://`, such as `https://example.com/privacy`. Waitron refuses an address without that start,
+  with a space in it, or with a user name or password in it.
+- **Privacy email** takes one email address, such as `privacy@example.com`.
+
+To remove one, empty its field and choose **Save**. A manager or an admin can change them, and a
+supervisor can see them. A configuration export does not carry them, so after you set up a new box
+from one, enter them again. For now Waitron only keeps them here: nothing else on the box shows
+them.
+
 ## Your record of processing {#record}
 
 The law asks a controller to keep a written record of how it uses personal data, and to show it to
