@@ -17,10 +17,11 @@ export interface RotatingFileSinkOptions {
  * little late. On ANY IO failure it reports once (via `onError`) and becomes a no-op: logging never
  * throws into a request path.
  *
- * Every line goes through `redactSecrets` FIRST, because the unauthenticated recovery page serves this
- * file's tail (`recovery-surface.ts` → `readLog`) and any module may log a caught error's own words.
- * The mask belongs to the FILE, not to the call sites, so a new module is covered without knowing the
- * page exists.
+ * Every line this sink writes goes through `redactSecrets` FIRST, because the unauthenticated
+ * recovery page serves this file's tail (`recovery-surface.ts` → `readLog`) and any module may log a
+ * caught error's own words. The mask belongs to the FILE, not to the call sites, so a new module is
+ * covered without knowing the page exists. The personal-data mask is not here: it runs in
+ * `createLogger` (`log-personal-data.ts`).
  */
 export function createRotatingFileSink(
   opts: RotatingFileSinkOptions,

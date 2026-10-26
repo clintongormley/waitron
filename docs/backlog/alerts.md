@@ -108,7 +108,8 @@ the report and sends it later, and the sender sees which.
 
 **A1048. Opt-in automatic error reports to Waitron Cloud (owner, 2026-10-24: "Should be opt
 in").** Setup asks plainly, unticked; settings can change it. A report holds only the error's
-code and source, the version, counts and masked log lines (A980 O9), is signed with the box's
+code and source, the version, counts and masked log lines (A980 O9; the log's own mask covers only listed detail names, not
+free text), is signed with the box's
 Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
 by version to catch a bad release (design section 10).
 

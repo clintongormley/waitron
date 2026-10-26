@@ -338,7 +338,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail is the file's last lines, whichever start or running server wrote them,
   written through `redactSecrets` and the personal-data mask (except the frozen-process watchdog's
-  own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26).
+  own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
+  S10's defaults, open to the owner).
   `redactSecrets` masks only a password in a URL, which is why no code's params and no logged
   message may carry a secret.
 
@@ -361,7 +362,7 @@ called weaker than its name, the topic file lists what it does not see.
   sign-in-free recovery page. Guard:
   `scripts/personal-log-params.test.ts`, weaker than its name: reads text, judges keys by a word
   list and a named type only by its name, sees no spread at a throw site or in a log call, no free
-  text and not the watchdog's own line. Limits: [conventions-ui.md](docs/developers/conventions-ui.md).
+  text and not the watchdog's own line. Limits: [conventions-ui.md](docs/developers/conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-the-failed-starts-report-and-the-logs-last-lines).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,

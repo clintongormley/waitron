@@ -275,7 +275,10 @@ note 5).
     `errorCode` is the key 49 sibling lines in `apps/server/src` use for `codeOf(…)`
     (`git grep -c -E 'errorCode: codeOf\('`, 2026-10-26). `codeOf` answers `"unknown"` for anything
     that is not an `AppError` (`packages/server-kit/src/error-code.ts:7-9`). Still `apps/server`, so
-    no package changes.
+    no package changes. Added during the build: both account-email senders in `boot.ts` throw
+    `AccountEmailFailure("email.unconfigured", …)` instead of a plain `Error` when no email server is
+    set, so the profile route logs that case as `email.unconfigured` rather than `"unknown"`
+    (`boot.venue-details.test.ts`).
 12. **The frozen-process watchdog's line is not covered by the mask, and writes no person's details
     today.** `packages/store/src/venue-liveness.ts:174-179` appends `venue.holder_frozen` to
     `waitron.log` without a `Logger`. Its fields are `code` (`VENUE_HOLDER_FROZEN_CODE`, `:243`),
@@ -366,7 +369,8 @@ note 5).
 - **Both channels**: stdout and file masked (decision 6); the failed-start report masked (case L).
 - **The controls**: every "absent" assertion paired with a "present" one.
 - **The guard's limits** (decision 9), stated in its header and at the `CLAUDE.md` rule.
-- **Cost on the sale path**: `createLogger` now runs a replacer on every line; Task 1's measurement
+- **Cost on the sale path**: `createLogger` now masks every line (at finish, through
+  `stringifyMasked`, which runs the replacer only on a line whose text holds a listed key); Task 1's measurement
   through the real file sink and the replacer's own share, against the 5% bar both must exceed to
   miss it.
 - **Codex run-it seat**: two reviews, the second told to set this plan aside.
@@ -458,7 +462,9 @@ listed key or path parent followed by `":` (round 1 measured about 0.61 µs agai
 replacer on every line); add a case that a line with no listed key is byte-identical to plain
 `JSON.stringify`, re-run cases 1–7 unchanged, and measure again the same way. **If the fallback still
 misses, keep the fallback**, put both runs' numbers in the pull request, and carry on with Task 2:
-do not iterate further.
+do not iterate further. The bar was met with the replacer on every line; `/finish-branch` built the
+fallback anyway (`stringifyMasked`), because a review measured the replacer at about four times the
+cost of serialising a line without it, and its numbers are in the pull request.
 
 ## Task 2 — two call sites stop handing a person's details to the log
 
@@ -724,8 +730,8 @@ finds every call whose first argument is a level literal (`"debug"`, `"info"`, `
 `"error"`), written `name(`, `a.b(` or `name?.(`, as round 1's `logcalls.pl` does (it found 250
 such calls, and the review a further 11 written `log?.(`). When the third argument is an object
 literal, it collects every key in it, `key:` and shorthand `key`, at any depth, and judges each with Task 5's id rule and word list. A judged key
-must be on `PERSONAL_LOG_KEYS` or in a `HARMLESS_LOG_FIELDS` map keyed `event.key` (the event
-literal; for an event that is not a literal, the file's path and the key), with a one-line reason;
+must be on `PERSONAL_LOG_KEYS`, be a `merchants[].name` child (added at finish), or be in a
+`HARMLESS_LOG_FIELDS` map keyed `event.key` (the event literal; for an event that is not a literal, the file's path and the key), with a one-line reason;
 an entry no call uses any more fails. The planner's run of the widened list over `logcalls.tsv` on
 2026-10-26 judged `owner` (`staff_notice.*` lines in `apps/server/src/staff-notices.ts:91`, `:98`,
 `:150` and `apps/server/src/box-health.ts:352`: the id of a notice's source, such as

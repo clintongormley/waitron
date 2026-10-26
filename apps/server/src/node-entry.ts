@@ -182,7 +182,8 @@ function paramsLine(params: unknown): string {
  * What a failed boot reports, to the installer's channel and to the log file the recovery page
  * reads: the outer error's name, message and stack, then each wrapped `cause` by name and message
  * down to `MAX_CAUSE_DEPTH` levels in all, and an `AppError`'s params at whichever of those levels
- * carries them, all through `redactSecrets`.
+ * carries them, all through `redactSecrets`, with the params through the personal-data mask as
+ * well.
  */
 function failureDetail(error: unknown): string {
   const lines: string[] = [];
