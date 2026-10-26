@@ -47,14 +47,14 @@ function product(key: string, name: string, extra: Partial<TillProduct> = {}): T
   };
 }
 
-const cafe = product("cafe", "Café");
+const coffee = product("cafe", "Café");
 const lemonade = product("lemonade", "Lemonade");
 const cola = product("cola", "Cola");
-const cana = product("cana", "Caña");
+const draughtBeer = product("cana", "Caña");
 const water = product("water", "Agua");
-const tostada = product("tostada", "Tostada");
+const toast = product("tostada", "Tostada");
 const burger = product("burger", "Burger", { available: false });
-const jamon = product("jamon", "Jamón", {
+const ham = product("jamon", "Jamón", {
   unitPrice: "10.00",
   unit: {
     staffName: "Staff unit",
@@ -69,7 +69,7 @@ const jamon = product("jamon", "Jamón", {
 const wine = product("wine", "Vino", {
   variants: [
     {
-      ...sellingValuesOf(cafe),
+      ...sellingValuesOf(coffee),
       id: "v-glass",
       name: "Copa",
       unitPrice: "3.00",
@@ -177,9 +177,9 @@ function display(
   return { ...menu, home: { ...menu.home, [device]: { ...menu.home[device], ...values } } };
 }
 
-const tarta = product("tarta", "Tarta", { available: false });
+const cake = product("tarta", "Tarta", { available: false });
 
-const PRODUCTS = [cafe, lemonade, cola, cana, water, tostada, burger, jamon, wine, tarta];
+const PRODUCTS = [coffee, lemonade, cola, draughtBeer, water, toast, burger, ham, wine, cake];
 
 /** Burger is placed under Food and under a section whose every product is sold out. */
 function soldOutMenu(): TillZoneMenu {
@@ -532,10 +532,10 @@ describe("till-menu-browser", () => {
 
     it("shows a product's staff name, never its customer or kitchen name, on a tile and a search result", async () => {
       const { el } = await mount();
-      const cafeName = (button: Button) => button.querySelector(".name")!.textContent!.trim();
-      expect(cafeName(entries(el, "shortcuts")[0]!)).toBe("Café");
+      const coffeeName = (button: Button) => button.querySelector(".name")!.textContent!.trim();
+      expect(coffeeName(entries(el, "shortcuts")[0]!)).toBe("Café");
       await search(el, "caf");
-      expect(entries(el, "results").map(cafeName)).toEqual(["Café"]);
+      expect(entries(el, "results").map(coffeeName)).toEqual(["Café"]);
       expect(root(el).querySelector('[data-region="results"]')!.textContent).not.toMatch(
         /carta|KDS/,
       );
@@ -806,12 +806,12 @@ describe("till-menu-browser", () => {
     });
 
     it("follows a change of the venue's content languages in its unit, and never in the staff name", async () => {
-      // The pain carries a customer name in both configured languages; the tile still shows the
+      // The bread carries a customer name in both configured languages; the tile still shows the
       // staff name, while its unit abbreviation is per-language content and re-resolves.
       setLocale("es-ES");
       setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "en"] });
       try {
-        const pain = product("pain", "Pain", {
+        const bread = product("pain", "Pain", {
           customerName: { fr: "Baguette", en: "Bread" },
           unit: {
             staffName: "Staff unit",
@@ -825,7 +825,7 @@ describe("till-menu-browser", () => {
         });
         const { el } = await mount({
           menu: lunch({ structure: { members: [member("pain")] } }),
-          products: [pain],
+          products: [bread],
         });
         const tile = () => entry(el, "structure", "Pain");
         expect(tile().querySelector(".price")!.textContent).toContain("/pc");
@@ -1052,7 +1052,7 @@ describe("till-menu-browser", () => {
     const cortado = offerOn("drinks", "cortado", "Cortado", {
       variants: [
         {
-          ...sellingValuesOf(cafe),
+          ...sellingValuesOf(coffee),
           id: "v-cortado-large",
           name: "Grande",
           unitPrice: "2.80",
@@ -1422,7 +1422,7 @@ describe("till-menu-browser", () => {
     it("a product tile rings up one of that product", async () => {
       const { el, store } = await mount();
       await tap(el, entry(el, "shortcuts", "Café"));
-      expect(store.lines).toEqual([{ product: cafe, quantity: "1" }]);
+      expect(store.lines).toEqual([{ product: coffee, quantity: "1" }]);
     });
 
     it("a weighed product asks for its quantity without touching the basket", async () => {
@@ -1430,7 +1430,7 @@ describe("till-menu-browser", () => {
       const selected: unknown[] = [];
       store.on("product-selected", (picked) => selected.push(picked));
       await tap(el, entry(el, "shortcuts", "Jamón"));
-      expect(selected).toEqual([jamon]);
+      expect(selected).toEqual([ham]);
       expect(store.lines).toEqual([]);
     });
 
@@ -1455,7 +1455,7 @@ describe("till-menu-browser", () => {
         .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.5" } }));
       await weigh.updateComplete;
       weigh.shadowRoot!.querySelector<HTMLElement>("wt-button.add")!.click();
-      expect(store.lines).toEqual([{ product: jamon, quantity: "0.5" }]);
+      expect(store.lines).toEqual([{ product: ham, quantity: "0.5" }]);
     });
 
     it("uses the full width for a weighed dish's action", async () => {
@@ -1951,7 +1951,7 @@ describe("till-menu-browser", () => {
 
     it("keeps a product with only some variants sold out orderable, beside one with all sold out, greyed", async () => {
       const variant = (id: string, available: boolean) => ({
-        ...sellingValuesOf(cafe),
+        ...sellingValuesOf(coffee),
         id,
         name: id,
         unitPrice: "4.50",
@@ -1964,7 +1964,7 @@ describe("till-menu-browser", () => {
       const allGone = product("cava", "Cava", { variants: [variant("copa", false)] });
       const { el, store } = await mount({
         menu: lunch({ structure: { members: [member("cafe"), member("tinto"), member("cava")] } }),
-        products: [cafe, mixed, allGone],
+        products: [coffee, mixed, allGone],
       });
       const shown = entries(el, "structure");
       expect(names(shown)).toEqual(["Café", "Tinto", "Cava"]);
@@ -2107,8 +2107,8 @@ describe("till-menu-browser", () => {
         addAllergens: null,
         suitableFor: [],
       };
-      const tostadaWithExtras = {
-        ...tostada,
+      const toastWithExtras = {
+        ...toast,
         offeredModifiers: [
           {
             kind: "extras" as const,
@@ -2124,8 +2124,8 @@ describe("till-menu-browser", () => {
       };
       const { el } = await mount({
         products: [
-          ...withOrdering("not_sold_separately", "cola").filter((each) => each.id !== tostada.id),
-          tostadaWithExtras,
+          ...withOrdering("not_sold_separately", "cola").filter((each) => each.id !== toast.id),
+          toastWithExtras,
         ],
       });
       await search(el, "col");
@@ -2140,7 +2140,7 @@ describe("till-menu-browser", () => {
 
   describe("a section a diet filter empties keeps its place, greyed (A297)", () => {
     // Favourites holds Lemonade and Café; the filter hides both. Drinks follows it.
-    const filtered = PRODUCTS.filter((each) => each !== lemonade && each !== cafe);
+    const filtered = PRODUCTS.filter((each) => each !== lemonade && each !== coffee);
 
     function box(button: Button): { x: number; y: number } {
       const { x, y } = button.getBoundingClientRect();
@@ -2196,7 +2196,7 @@ describe("till-menu-browser", () => {
     it("is greyed where the filter hid what the inactive products left", async () => {
       const { el } = await mount({
         products: filtered,
-        unfilteredProducts: PRODUCTS.filter((each) => each !== cafe),
+        unfilteredProducts: PRODUCTS.filter((each) => each !== coffee),
       });
       expect(entry(el, "structure", "Favourites (EN)").hasAttribute("data-filtered")).toBe(true);
     });
@@ -2223,7 +2223,7 @@ describe("till-menu-browser", () => {
 
     it("leaves out a section whose products are all not sold separately, as before", async () => {
       const extrasOnly = PRODUCTS.map((each) =>
-        each === lemonade || each === cafe
+        each === lemonade || each === coffee
           ? { ...each, ordering: "not_sold_separately" as const }
           : each,
       );
@@ -2262,7 +2262,7 @@ describe("till-menu-browser", () => {
 
     it("greys a nested section the filter empties, in its place inside the open section", async () => {
       const { el } = await mount({
-        products: PRODUCTS.filter((each) => each !== cana),
+        products: PRODUCTS.filter((each) => each !== draughtBeer),
         unfilteredProducts: PRODUCTS,
       });
       await tap(el, entry(el, "structure", "Drinks (EN)"));
@@ -2280,7 +2280,7 @@ describe("till-menu-browser", () => {
     it("still says Not found when the filter empties the section that is open", async () => {
       const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       await tap(el, entry(el, "shortcuts", "Beer (EN)"));
-      el.products = PRODUCTS.filter((each) => each !== cana);
+      el.products = PRODUCTS.filter((each) => each !== draughtBeer);
       el.unfilteredProducts = PRODUCTS;
       await el.updateComplete;
       expect(notice(el)).toBe("Not found");
@@ -2552,7 +2552,9 @@ describe("till-menu-browser", () => {
       // Greyed by a diet filter, it is still drawn from the copy it would open.
       const filtered = await mount({
         menu: twice(paintedBar, shortcut),
-        products: PRODUCTS.filter((each) => each !== cola && each !== lemonade && each !== cana),
+        products: PRODUCTS.filter(
+          (each) => each !== cola && each !== lemonade && each !== draughtBeer,
+        ),
         unfilteredProducts: PRODUCTS,
       });
       const greyed = entry(filtered.el, "shortcuts", "Bar (EN)");
@@ -2609,7 +2611,7 @@ describe("till-menu-browser", () => {
     it("says Not found when new products leave the open section with nothing to order", async () => {
       const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       await tap(el, entry(el, "shortcuts", "Beer (EN)"));
-      el.products = PRODUCTS.filter((each) => each !== cana);
+      el.products = PRODUCTS.filter((each) => each !== draughtBeer);
       await el.updateComplete;
       expect(notice(el)).toBe("Not found");
       expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
@@ -2884,9 +2886,9 @@ describe("A461 served-menu section search", () => {
   const setup = (props: Partial<TillMenuBrowser> = {}) =>
     mount({
       menu: current,
-      products: [cafe],
+      products: [coffee],
       menus: [current, other],
-      servedProducts: [cafe, espresso, cake],
+      servedProducts: [coffee, espresso, cake],
       ...props,
     });
 
@@ -2912,8 +2914,8 @@ describe("A461 served-menu section search", () => {
 
   it("A461 another menu with only a diet-disabled section still appears", async () => {
     const { el, store } = await setup({
-      servedProducts: [cafe],
-      unfilteredServedProducts: [cafe, espresso, cake],
+      servedProducts: [coffee],
+      unfilteredServedProducts: [coffee, espresso, cake],
     } as Partial<TillMenuBrowser>);
     const selected = vi.fn();
     el.addEventListener("menu-selected", selected);
@@ -2938,7 +2940,7 @@ describe("A461 served-menu section search", () => {
     "A461 other-menu section tap waits for its owner and opens %s",
     async (label) => {
       const { el, store } = await setup();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const basket = [...store.lines];
       const events: CustomEvent<{ id: string }>[] = [];
       el.addEventListener("menu-selected", (event) =>
@@ -2966,7 +2968,7 @@ describe("A461 served-menu section search", () => {
       );
       expect(store.lines).toEqual(basket);
       el.menu = current;
-      el.products = [cafe];
+      el.products = [coffee];
       await el.updateComplete;
       el.menu = other;
       el.products = [espresso, cake];
@@ -2979,9 +2981,9 @@ describe("A461 served-menu section search", () => {
     const { el } = await setup();
     await search(el, "coffee");
     await tap(el, entry(el, "results", "Coffee second"));
-    el.servedProducts = [cafe, espresso];
+    el.servedProducts = [coffee, espresso];
     await el.updateComplete;
-    el.servedProducts = [cafe, espresso, cake];
+    el.servedProducts = [coffee, espresso, cake];
     el.menu = other;
     el.products = [espresso, cake];
     await el.updateComplete;
@@ -3120,7 +3122,7 @@ it("keeps the published menu and chosen order unchanged while mounted thumbnails
   const replacement = mediaTestReference("replacement.webp");
   const menu = display("till", { tiles: "thumbnails" });
   const original = JSON.stringify(menu);
-  const products = [{ ...cafe, image: reference }, ...PRODUCTS.filter((p) => p.id !== cafe.id)];
+  const products = [{ ...coffee, image: reference }, ...PRODUCTS.filter((p) => p.id !== coffee.id)];
   const { el, store } = await mount({ menu, products });
   const img = entry(el, "shortcuts", "Café").querySelector("img")!;
   await vi.waitFor(() =>
