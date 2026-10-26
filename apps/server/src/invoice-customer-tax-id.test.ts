@@ -25,6 +25,7 @@ const ACCEPT: [string, string][] = [
   ["1234567L", "01234567L"],
   ["01234567L", "01234567L"],
   ["es 1234567l", "01234567L"],
+  ["12345678Z" + " ".repeat(55), "12345678Z"],
 ];
 
 const REFUSE: [string, string | undefined][] = [
@@ -32,7 +33,7 @@ const REFUSE: [string, string | undefined][] = [
   ["empty", ""],
   ["only spaces", "   "],
   ["only the prefix", "ES"],
-  ["65 characters", "1".repeat(65)],
+  ["65 characters", "12345678Z" + " ".repeat(56)],
   ["a letter outside A-Z", "12345678Ñ"],
   ["a slash", "1234/5678Z"],
   ["21 letters", "A".repeat(21)],
