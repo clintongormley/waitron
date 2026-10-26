@@ -148,11 +148,11 @@ beforeAll(async () => {
   cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     // Every case asserts against this 1.00 gross.
     const product = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "1.00",

@@ -227,7 +227,7 @@ describe("invoiceDiscounts", () => {
     listUnitPriceGross: "30.00",
     net: net("22.31", "22.31", "21.00"),
   });
-  const pan = filed({
+  const bread = filed({
     gross: "2.25",
     listGross: "2.50",
     listUnitPriceGross: "2.50",
@@ -236,7 +236,7 @@ describe("invoiceDiscounts", () => {
 
   // S5: a whole-bill 10% and nothing of a dish's own.
   const s5Bill = own("3.25");
-  const s5 = { groups: [group(0, 0, rioja), group(1, 1, pan)], bill: [s5Bill] };
+  const s5 = { groups: [group(0, 0, rioja), group(1, 1, bread)], bill: [s5Bill] };
 
   // S1: the burger's own 10%, the bill's 10% over everything; the croquetas are one family.
   const s1Own = own("1.20");
@@ -323,7 +323,7 @@ describe("invoiceDiscounts", () => {
           adjustments: [{ kind: "comp", amount: "27.00" }],
         }),
       ),
-      group(1, 1, pan),
+      group(1, 1, bread),
     ],
     bill: [s5Bill],
   };
@@ -419,7 +419,7 @@ describe("invoiceDiscounts", () => {
           net: net("1.10", "1.10", "10.00"),
         }),
       ),
-      group(1, 2, pan),
+      group(1, 2, bread),
     ],
     bill: [own("1.20")],
   };
@@ -638,7 +638,7 @@ describe("invoiceDiscounts", () => {
             net: net("0.90", "0.90", "4.00"),
           }),
         ),
-        group(2, 0, pan),
+        group(2, 0, bread),
       ],
       [s5Bill],
     );
