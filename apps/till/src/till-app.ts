@@ -16595,7 +16595,6 @@ export class TillApp extends LitElement {
       }`;
   }
 
-  /** The finished party's order is closed on every face: a till's drill, or a handheld's order tab. */
   #leaveTable(): void {
     this.#forgetParty();
     this.#returnToFloor();

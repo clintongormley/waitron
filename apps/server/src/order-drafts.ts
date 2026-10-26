@@ -346,7 +346,6 @@ export interface UnsentDraft {
   billNumber: number;
   ownerId: string;
   ownerName: string;
-  /** The draft's `updated_at`, as stored. */
   savedAt: string;
   lineCount: number;
 }
