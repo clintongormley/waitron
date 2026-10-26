@@ -6,6 +6,8 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es, type StringKey } from "../i18n/strings.js";
 import type { DashboardApi, InvoiceCustomerSearchDto } from "../api/client.js";
+import type { DownloadedFile } from "@waitron/dashboard-kit";
+import { codeMessage } from "../i18n/codes.js";
 import type { InvoiceCustomerDialog } from "./invoice-customer-dialog.js";
 
 const modules = import.meta.glob<typeof import("./invoice-customer-dialog.js")>(
@@ -46,19 +48,80 @@ const THREE: InvoiceCustomerSearchDto = {
 async function mountDialog(
   find: (taxId: string) => Promise<InvoiceCustomerSearchDto>,
   theme?: "light" | "dark",
+  download: (taxId: string) => Promise<DownloadedFile> = async () => FILE,
 ) {
   const load = modules["./invoice-customer-dialog.ts"];
   expect(load, "invoice customer dialog exists").toBeTypeOf("function");
   await load!();
-  const api = { findInvoiceCustomer: vi.fn(find) } as unknown as DashboardApi;
+  const api = {
+    findInvoiceCustomer: vi.fn(find),
+    downloadInvoiceCustomerData: vi.fn(download),
+  } as unknown as DashboardApi;
   const mounted = await mountWidget<InvoiceCustomerDialog>(
     "dashboard-invoice-customer-dialog",
     { api, open: true },
     theme,
   );
   await mounted.el.updateComplete;
-  return { ...mounted, find: vi.mocked(api.findInvoiceCustomer) };
+  return {
+    ...mounted,
+    find: vi.mocked(api.findInvoiceCustomer),
+    download: vi.mocked(api.downloadInvoiceCustomerData),
+  };
 }
+
+const FILE: DownloadedFile = {
+  blob: new Blob(["zip"], { type: "application/zip" }),
+  fileName: "invoice-customer-12345678Z.zip",
+};
+
+function spyOnSaving() {
+  const blobs: Blob[] = [];
+  const create = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    blobs.push(blob as Blob);
+    return "blob:invoice-customer";
+  });
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const links: HTMLAnchorElement[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    links.push(this);
+  });
+  return { blobs, create, revoke, links };
+}
+
+function downloadButton(el: InvoiceCustomerDialog): WtButton | null {
+  return el.shadowRoot!.querySelector<WtButton>("[data-test=download]");
+}
+
+async function pressDownload(el: InvoiceCustomerDialog): Promise<void> {
+  downloadButton(el)!.click();
+  await el.updateComplete;
+}
+
+const preparing = (el: InvoiceCustomerDialog) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[role=status][data-test=preparing]");
+const refusal = (el: InvoiceCustomerDialog) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[role=alert][data-test=refusal]");
+const refusalText = (el: InvoiceCustomerDialog) =>
+  refusal(el)?.querySelector("[data-test=refusal-text]")?.textContent?.trim();
+
+async function searched(el: InvoiceCustomerDialog): Promise<void> {
+  await type(el, "es 12345678z");
+  await press(el);
+  await expect.poll(() => downloadButton(el)).not.toBeNull();
+}
+
+function pending<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function taxField(el: InvoiceCustomerDialog): WtInput {
   return el.shadowRoot!.querySelector<WtInput>("wt-input[name=taxId]")!;
@@ -100,9 +163,12 @@ describe.each([
   ["en-GB", en],
   ["es-ES", es],
 ] as const)("in %s", (locale, words: Readonly<Record<StringKey, string>>) => {
-  const mount = async (find: (taxId: string) => Promise<InvoiceCustomerSearchDto>) => {
+  const mount = async (
+    find: (taxId: string) => Promise<InvoiceCustomerSearchDto>,
+    download?: (taxId: string) => Promise<DownloadedFile>,
+  ) => {
     setLocale(locale);
-    return mountDialog(find);
+    return mountDialog(find, undefined, download);
   };
 
   it("keeps Find quiet and disabled while the field is empty, and primary once it has text", async () => {
@@ -240,6 +306,164 @@ describe.each([
     await press(el);
     await expect.poll(() => taxField(el).error).toBe(words["invoice_customer.tax_id_invalid"]);
     expect((await bottomLine(el))?.textContent?.trim()).toBe(words["form.fix_fields"]);
+    expect(findButton(el).disabled).toBe(false);
+  });
+
+  it("downloads the answered tax number, not the field's text, and saves it under the server's name", async () => {
+    const saving = spyOnSaving();
+    const answer = pending<DownloadedFile>();
+    const { el, download } = await mount(
+      async () => THREE,
+      () => answer.promise,
+    );
+    await searched(el);
+    expect(preparing(el)).toBeNull();
+    await pressDownload(el);
+    expect(download).toHaveBeenCalledExactlyOnceWith("12345678Z");
+    expect(downloadButton(el)!.disabled).toBe(true);
+    expect(preparing(el)?.textContent?.trim()).toBe(words["invoice_customer.preparing"]);
+    await pressDownload(el);
+    expect(download).toHaveBeenCalledOnce();
+    answer.resolve(FILE);
+    await expect.poll(() => saving.links.length).toBe(1);
+    expect(saving.links[0]!.download).toBe("invoice-customer-12345678Z.zip");
+    expect(saving.links[0]!.href).toBe("blob:invoice-customer");
+    expect(saving.blobs).toEqual([FILE.blob]);
+    expect(saving.revoke).toHaveBeenCalledExactlyOnceWith("blob:invoice-customer");
+    await el.updateComplete;
+    expect(preparing(el)).toBeNull();
+    expect(downloadButton(el)!.disabled).toBe(false);
+    expect(refusal(el)).toBeNull();
+  });
+
+  it("saves under a fallback name when the server names no file", async () => {
+    const saving = spyOnSaving();
+    const { el } = await mount(
+      async () => THREE,
+      async () => ({ blob: FILE.blob, fileName: null }),
+    );
+    await searched(el);
+    await pressDownload(el);
+    await expect.poll(() => saving.links.length).toBe(1);
+    expect(saving.links[0]!.download).toBe("invoice-customer-data.zip");
+    expect(saving.revoke).toHaveBeenCalledOnce();
+  });
+
+  it("explains a lost permission and offers to sign in as an administrator, once, across the shadow root", async () => {
+    spyOnSaving();
+    const { el, download } = await mount(
+      async () => THREE,
+      () => Promise.reject({ code: "authorization.not_permitted" }),
+    );
+    const heard: Event[] = [];
+    const listener = (event: Event) => heard.push(event);
+    document.body.addEventListener("admin-sign-in", listener);
+    try {
+      await searched(el);
+      await pressDownload(el);
+      await expect.poll(() => refusalText(el)).toBe(words["invoice_customer.not_permitted"]);
+      const signIn = refusal(el)!.querySelector<WtButton>("[data-test=admin-sign-in]")!;
+      expect(signIn.textContent!.trim()).toBe(words["staff.sign_in_as_admin"]);
+      expect(downloadButton(el)!.disabled).toBe(false);
+      expect(findButton(el).disabled).toBe(false);
+      signIn.click();
+      expect(heard).toHaveLength(1);
+      expect(heard[0]!.bubbles).toBe(true);
+      expect(heard[0]!.composed).toBe(true);
+      await pressDownload(el);
+      expect(download).toHaveBeenCalledTimes(2);
+    } finally {
+      document.body.removeEventListener("admin-sign-in", listener);
+    }
+  });
+
+  it.each([
+    ["invoice_customer.not_found", "invoice_customer.vanished"],
+    ["node.read_only", "invoice_customer.read_only"],
+  ] as const)("shows a download's %s refusal and keeps Download pressable", async (code, key) => {
+    const saving = spyOnSaving();
+    let refuse = true;
+    const { el, download } = await mount(
+      async () => THREE,
+      async () => {
+        if (refuse) throw { code };
+        return FILE;
+      },
+    );
+    await searched(el);
+    await pressDownload(el);
+    await expect.poll(() => refusalText(el)).toBe(words[key]);
+    expect(refusal(el)!.querySelector("[data-test=admin-sign-in]")).toBeNull();
+    expect(downloadButton(el)!.disabled).toBe(false);
+    refuse = false;
+    await pressDownload(el);
+    expect(refusal(el)).toBeNull();
+    await expect.poll(() => saving.links.length).toBe(1);
+    expect(download).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows any other download refusal through the code's message", async () => {
+    spyOnSaving();
+    const { el } = await mount(
+      async () => THREE,
+      () => Promise.reject({ code: "server.internal" }),
+    );
+    await searched(el);
+    await pressDownload(el);
+    await expect.poll(() => refusalText(el)).toBe(codeMessage("server.internal"));
+    expect(downloadButton(el)!.disabled).toBe(false);
+  });
+
+  it("shows Find's read-only refusal with the mirror's sentence and keeps Find pressable", async () => {
+    const { el, find } = await mount(() => Promise.reject({ code: "node.read_only" }));
+    await type(el, "12345678Z");
+    await press(el);
+    await expect.poll(() => refusalText(el)).toBe(words["invoice_customer.read_only"]);
+    expect(findButton(el).disabled).toBe(false);
+    expect(findButton(el).variant).toBe("primary");
+    await press(el);
+    expect(find).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows Find's other refusals through the code's message", async () => {
+    const { el } = await mount(() => Promise.reject({ code: "server.internal" }));
+    await type(el, "12345678Z");
+    await press(el);
+    await expect.poll(() => refusalText(el)).toBe(codeMessage("server.internal"));
+    expect(findButton(el).disabled).toBe(false);
+  });
+
+  it("drops a download's answer once the dialog has closed", async () => {
+    const saving = spyOnSaving();
+    const answer = pending<DownloadedFile>();
+    const { el } = await mount(
+      async () => THREE,
+      () => answer.promise,
+    );
+    await searched(el);
+    await pressDownload(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+    await expect.poll(() => el.open).toBe(false);
+    answer.resolve(FILE);
+    await tick();
+    await el.updateComplete;
+    expect(saving.links).toEqual([]);
+    expect(saving.create).not.toHaveBeenCalled();
+  });
+
+  it("forgets the first press when the dialog is closed and reopened", async () => {
+    const { el } = await mount(async () => THREE);
+    await type(el, "12/34");
+    await press(el);
+    expect(taxField(el).error).toBe(words["invoice_customer.tax_id_invalid"]);
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    expect(taxField(el).value).toBe("");
+    await type(el, "12/34");
+    expect(taxField(el).error).toBe("");
+    expect(await bottomLine(el)).toBeNull();
     expect(findButton(el).disabled).toBe(false);
   });
 });

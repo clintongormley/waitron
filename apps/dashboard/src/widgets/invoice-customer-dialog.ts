@@ -4,9 +4,13 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
   submitOnEnter,
   type DataTableColumn,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -22,6 +26,8 @@ import { countOf } from "./count-text.js";
 import { invoiceTaxIdProblem, normaliseInvoiceTaxId } from "./invoice-tax-id.js";
 
 type FoundInvoice = InvoiceCustomerSearchDto["invoices"][number];
+type Draft = { taxId: string };
+type Refusal = { code: string; action: "find" | "download" };
 
 @customElement("dashboard-invoice-customer-dialog")
 export class InvoiceCustomerDialog extends LitElement {
@@ -52,25 +58,58 @@ export class InvoiceCustomerDialog extends LitElement {
   @state() private taxId = "";
   @state() private searching = false;
   @state() private found: InvoiceCustomerSearchDto | null = null;
+  @state() private downloading = false;
   @state() private fieldRefusal = "";
-  @state() private actionError = "";
+  @state() private refusal: Refusal | null = null;
   /** The form says nothing about the field until Find is first pressed. */
   @state() private attempted = false;
   /** Bumped by every edit and close, so an answer to an earlier number is dropped. */
   #generation = 0;
+  /** Bumped by every edit and close, so a late file is never saved. */
+  #download = 0;
+  #scope?: DraftScope<Draft>;
+  #leave?: LeaveCoordinator;
 
   #reset(): void {
     this.#generation++;
+    this.#download++;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
     this.taxId = "";
     this.searching = false;
+    this.downloading = false;
     this.found = null;
     this.fieldRefusal = "";
-    this.actionError = "";
+    this.refusal = null;
     this.attempted = false;
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("open") && !this.open) this.#reset();
+    if (this.open && this.isConnected && this.#scope === undefined) this.#track();
+  }
+
+  #track(): void {
+    const { coordinator, scope } = draftScopeFor<Draft>(this, {
+      id: this,
+      current: () => ({ taxId: this.taxId }),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.taxId === b.taxId,
+      restore: (value) => {
+        this.#generation++;
+        this.#download++;
+        this.taxId = value.taxId;
+        this.searching = false;
+        this.downloading = false;
+        this.found = null;
+        this.fieldRefusal = "";
+        this.refusal = null;
+      },
+    });
+    this.#scope = scope;
+    this.#leave = coordinator;
+    scope.commit({ taxId: this.taxId });
   }
 
   override disconnectedCallback(): void {
@@ -81,11 +120,14 @@ export class InvoiceCustomerDialog extends LitElement {
   #edit(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.#generation++;
+    this.#download++;
     this.taxId = event.detail.value;
     this.searching = false;
+    this.downloading = false;
     this.found = null;
     this.fieldRefusal = "";
-    this.actionError = "";
+    this.refusal = null;
+    this.#scope?.changed();
   }
 
   /** Nothing but ignored characters and a leading ES: the dialog is still waiting for a number. */
@@ -102,28 +144,82 @@ export class InvoiceCustomerDialog extends LitElement {
     if (this.searching || this.#awaitingInput()) return;
     this.attempted = true;
     if (this.#ownProblem() !== "") {
-      await this.updateComplete;
-      focusFirstInvalid(this.shadowRoot!);
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
     const generation = ++this.#generation;
     this.searching = true;
     this.found = null;
     this.fieldRefusal = "";
-    this.actionError = "";
+    this.refusal = null;
+    const sent = this.taxId;
     try {
-      const found = await this.api.findInvoiceCustomer(this.taxId);
+      const found = await this.api.findInvoiceCustomer(sent);
       if (generation !== this.#generation) return;
       this.found = found;
+      this.#scope?.commit({ taxId: sent });
     } catch (error) {
       if (generation !== this.#generation) return;
       const field = (error as { params?: { field?: string } } | null)?.params?.field;
       if (codeOf(error) === "management.request_invalid" && field === "taxId")
         this.fieldRefusal = t("invoice_customer.tax_id_invalid");
-      else this.actionError = codeMessage(codeOf(error));
+      else this.refusal = { code: codeOf(error), action: "find" };
     } finally {
       if (generation === this.#generation) this.searching = false;
     }
+  }
+
+  async #downloadData(): Promise<void> {
+    const found = this.found;
+    if (this.downloading || found === null) return;
+    const download = ++this.#download;
+    const sent = this.taxId;
+    this.downloading = true;
+    this.refusal = null;
+    try {
+      const file = await this.api.downloadInvoiceCustomerData(found.taxId);
+      if (download !== this.#download) return;
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName ?? "invoice-customer-data.zip";
+      link.click();
+      URL.revokeObjectURL(url);
+      this.#scope?.commit({ taxId: sent });
+    } catch (error) {
+      if (download !== this.#download) return;
+      this.refusal = { code: codeOf(error), action: "download" };
+    } finally {
+      if (download === this.#download) this.downloading = false;
+    }
+  }
+
+  #refusalText(refusal: Refusal): string {
+    if (refusal.code === "authorization.not_permitted") return t("invoice_customer.not_permitted");
+    if (refusal.code === "node.read_only") return t("invoice_customer.read_only");
+    if (refusal.code === "invoice_customer.not_found" && refusal.action === "download")
+      return t("invoice_customer.vanished");
+    return codeMessage(refusal.code);
+  }
+
+  #renderRefusal() {
+    const refusal = this.refusal;
+    if (refusal === null) return nothing;
+    return html`<div role="alert" data-test="refusal">
+      <p data-test="refusal-text">${this.#refusalText(refusal)}</p>
+      ${
+        refusal.code === "authorization.not_permitted"
+          ? html`<wt-button
+              data-test="admin-sign-in"
+              @click=${(event: Event) =>
+                event.currentTarget!.dispatchEvent(
+                  new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+                )}
+              >${t("staff.sign_in_as_admin")}</wt-button
+            >`
+          : nothing
+      }
+    </div>`;
   }
 
   #columns(): DataTableColumn<FoundInvoice>[] {
@@ -160,9 +256,24 @@ export class InvoiceCustomerDialog extends LitElement {
         .rowKey=${(row: FoundInvoice) => row.invoice}
       ></wt-data-table>
       <div>
-        <wt-button variant="primary" data-test="download">${t("person.download_data")}</wt-button>
-      </div>`;
+        <wt-button
+          variant="primary"
+          data-test="download"
+          ?disabled=${this.downloading}
+          @click=${() => void this.#downloadData()}
+          >${t("person.download_data")}</wt-button
+        >
+      </div>
+      ${
+        this.downloading
+          ? html`<p role="status" data-test="preparing">${t("invoice_customer.preparing")}</p>`
+          : nothing
+      }`;
   }
+
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#leave ||
+    (await this.#leave.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
   #close(): void {
     this.#reset();
@@ -179,6 +290,7 @@ export class InvoiceCustomerDialog extends LitElement {
     return html`<wt-dialog
       .open=${this.open}
       heading=${t("invoice_customer.heading")}
+      .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#close();
@@ -204,8 +316,7 @@ export class InvoiceCustomerDialog extends LitElement {
                 .error=${problem}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event)}
               ></wt-input>
-              ${this.#renderFound()}
-              ${this.actionError ? html`<p role="alert">${this.actionError}</p>` : nothing}
+              ${this.#renderFound()} ${this.#renderRefusal()}
             </div>`
           : nothing
       }

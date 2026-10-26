@@ -80,4 +80,37 @@ describe.each(["light", "dark"] as const)("invoice customer dialog accessibility
     await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("checks the downloading status and the permission refusal", async () => {
+    setLocale("en-GB");
+    const load = modules["./invoice-customer-dialog.ts"];
+    expect(load).toBeTypeOf("function");
+    await load!();
+    let refuse!: (error: unknown) => void;
+    const api = {
+      findInvoiceCustomer: async () => THREE,
+      downloadInvoiceCustomerData: () =>
+        new Promise((_, reject) => {
+          refuse = reject;
+        }),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<InvoiceCustomerDialog>(
+      "dashboard-invoice-customer-dialog",
+      { api, open: true },
+      theme,
+    );
+    await type(el, "12345678Z");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=find]")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=download]")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=download]")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=preparing]")).not.toBeNull();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    await expectNoA11yViolations(host);
+
+    refuse({ code: "authorization.not_permitted" });
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=admin-sign-in]"))
+      .not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });
