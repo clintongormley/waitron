@@ -89,6 +89,10 @@ const exactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
 const missing = (error: unknown) => object(error) && error.code === "ENOENT";
 const pathOf = (error: unknown) =>
   object(error) && typeof error.path === "string" ? error.path : undefined;
+const checkFailed = (error: unknown) =>
+  incomplete(
+    `check failed: ${codeOf(error)}${pathOf(error) === undefined ? "" : ` ${pathOf(error)}`}`,
+  );
 const entryName = (name: string) =>
   name !== "" && name !== "." && name !== ".." && !name.includes("/") && !name.includes("\0");
 
@@ -350,7 +354,9 @@ export async function startAgainMarkerFor(
   options: Options = {},
 ): Promise<StartAgainMarker> {
   const canonical = await canonicalRoots(roots);
-  const items = await itemsOnDisk(canonical, options);
+  const items = await itemsOnDisk(canonical, options).catch((error: unknown) => {
+    throw error instanceof AppError ? error : checkFailed(error);
+  });
   const files: StartAgainMarkedFile[] = [];
   for (const item of items)
     if (item.kind === "file")
@@ -535,11 +541,7 @@ export async function finishStartAgainDeletion(roots: Roots): Promise<void> {
     await deleteMarkedAttempt(canonical, marker);
     await removeAndSync(join(canonical.venueDir, START_AGAIN_MARKER_FILE), "file");
   } catch (error) {
-    throw error instanceof AppError
-      ? error
-      : incomplete(
-          `check failed: ${codeOf(error)}${pathOf(error) === undefined ? "" : ` ${pathOf(error)}`}`,
-        );
+    throw error instanceof AppError ? error : checkFailed(error);
   } finally {
     hold.release();
   }

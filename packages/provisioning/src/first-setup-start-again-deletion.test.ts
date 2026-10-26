@@ -372,6 +372,36 @@ it("refuses a tombstone holding a file whose name only begins with a lock file's
   });
 });
 
+it.each([
+  [
+    "a pointer whose recovery folder is gone",
+    "ENOENT",
+    async (roots: Roots) => {
+      const { base } = await prepared(roots);
+      await rm(base, { recursive: true });
+      return base;
+    },
+  ],
+  [
+    "a records folder that is a file",
+    "ENOTDIR",
+    async (roots: Roots) => {
+      await writeFile(join(roots.stateDir, RECORDS), "not a folder");
+      return join(roots.stateDir, NAMESPACE);
+    },
+  ],
+])(
+  "reports %s as a failed check when building the marker, naming the error and the path",
+  async (_name, code, damage) => {
+    const roots = await box();
+    const path = await damage(roots);
+    expect(await refusal(startAgainMarkerFor(roots, attempt))).toEqual({
+      code: "setup.start_again_incomplete",
+      reason: `check failed: ${code} ${path}`,
+    });
+  },
+);
+
 it("reports a recovery folder it cannot read as a failed check, naming the error and the path", async () => {
   const roots = await box();
   const { base } = await tombstone(roots);
