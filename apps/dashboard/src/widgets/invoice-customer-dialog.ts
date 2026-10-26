@@ -63,9 +63,7 @@ export class InvoiceCustomerDialog extends LitElement {
   @state() private refusal: Refusal | null = null;
   /** The form says nothing about the field until Find is first pressed. */
   @state() private attempted = false;
-  /** Bumped by every edit and close, so an answer to an earlier number is dropped. */
   #generation = 0;
-  /** Bumped by every edit and close, so a late file is never saved. */
   #download = 0;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
@@ -114,6 +112,7 @@ export class InvoiceCustomerDialog extends LitElement {
 
   override disconnectedCallback(): void {
     this.#reset();
+    this.open = false;
     super.disconnectedCallback();
   }
 
@@ -141,7 +140,7 @@ export class InvoiceCustomerDialog extends LitElement {
   }
 
   async #find(): Promise<void> {
-    if (this.searching || this.#awaitingInput()) return;
+    if (this.searching || this.downloading || this.#awaitingInput()) return;
     this.attempted = true;
     if (this.#ownProblem() !== "") {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
@@ -284,7 +283,7 @@ export class InvoiceCustomerDialog extends LitElement {
   override render() {
     const ownProblem = this.attempted && !this.#awaitingInput() ? this.#ownProblem() : "";
     const problem = ownProblem || this.fieldRefusal;
-    const ready = !this.#awaitingInput() && ownProblem === "";
+    const ready = !this.#awaitingInput() && ownProblem === "" && !this.downloading;
     const bottom = problem ? t("form.fix_fields") : "";
     const dialog = () => this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
     return html`<wt-dialog

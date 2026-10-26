@@ -2,7 +2,12 @@ import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LeaveController, type WtDialog, type WtInput, type WtUnsavedChanges } from "@waitron/ui";
-import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogClosed,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, InvoiceCustomerSearchDto } from "../api/client.js";
 import type { InvoiceCustomerDialog } from "./invoice-customer-dialog.js";
@@ -137,4 +142,18 @@ it("closes without asking after the customer's data was downloaded", async () =>
   pressClose(form);
   await expect.poll(() => form.open).toBe(false);
   expect((await warning(app)).open).toBe(false);
+});
+
+it("disconnect closes the dialog and clears the typed number, and a reopened dialog protects new text", async () => {
+  const { app, form } = await fixture();
+  await edit(form, "12345678Z");
+  await reattachAfterDetachedUpdate(form);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(form.open).toBe(false);
+  form.open = true;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector<WtInput>("[name=taxId]")!.value).toBe("");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await edit(form, "12345678Z");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
 });

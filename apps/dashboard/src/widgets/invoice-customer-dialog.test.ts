@@ -451,6 +451,75 @@ describe.each([
     expect(saving.create).not.toHaveBeenCalled();
   });
 
+  it("drops a download's answer once the field is edited", async () => {
+    const saving = spyOnSaving();
+    const answer = pending<DownloadedFile>();
+    const { el } = await mount(
+      async () => THREE,
+      () => answer.promise,
+    );
+    await searched(el);
+    await pressDownload(el);
+    await type(el, "12345678");
+    answer.resolve(FILE);
+    await tick();
+    await el.updateComplete;
+    expect(saving.links).toEqual([]);
+    expect(saving.create).not.toHaveBeenCalled();
+  });
+
+  it("drops a download's answer once a different number has been searched", async () => {
+    const saving = spyOnSaving();
+    const answer = pending<DownloadedFile>();
+    const { el, find } = await mount(
+      async () => THREE,
+      () => answer.promise,
+    );
+    await searched(el);
+    await pressDownload(el);
+    await type(el, "87654321X");
+    await press(el);
+    expect(find).toHaveBeenLastCalledWith("87654321X");
+    await expect.poll(() => downloadButton(el)).not.toBeNull();
+    answer.resolve(FILE);
+    await tick();
+    await el.updateComplete;
+    expect(saving.links).toEqual([]);
+    expect(saving.create).not.toHaveBeenCalled();
+    expect(preparing(el)).toBeNull();
+    expect(downloadButton(el)!.disabled).toBe(false);
+  });
+
+  it("shows Find's not-found refusal through the code's message, not the download's fault sentence", async () => {
+    const { el } = await mount(() => Promise.reject({ code: "invoice_customer.not_found" }));
+    await type(el, "12345678Z");
+    await press(el);
+    await expect.poll(() => refusalText(el)).toBe(codeMessage("invoice_customer.not_found"));
+    expect(refusalText(el)).not.toBe(words["invoice_customer.vanished"]);
+  });
+
+  it("keeps Find quiet and disabled while a download is out, sends no search, and is primary again after", async () => {
+    spyOnSaving();
+    const answer = pending<DownloadedFile>();
+    const { el, find } = await mount(
+      async () => THREE,
+      () => answer.promise,
+    );
+    await searched(el);
+    expect(findButton(el).disabled).toBe(false);
+    expect(findButton(el).variant).toBe("primary");
+    await pressDownload(el);
+    expect(findButton(el).disabled).toBe(true);
+    expect(findButton(el).variant).toBe("secondary");
+    await press(el);
+    expect(find).toHaveBeenCalledOnce();
+    expect(downloadButton(el)).not.toBeNull();
+    expect(preparing(el)).not.toBeNull();
+    answer.resolve(FILE);
+    await expect.poll(() => findButton(el).variant).toBe("primary");
+    expect(findButton(el).disabled).toBe(false);
+  });
+
   it("forgets the first press when the dialog is closed and reopened", async () => {
     const { el } = await mount(async () => THREE);
     await type(el, "12/34");
