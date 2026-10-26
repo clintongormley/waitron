@@ -59,8 +59,8 @@ tax number and download them. On **Orders**, press **Find a customer by tax numb
 number and press **Find**. Letter case, spaces, dots, hyphens and an ES at the start make no
 difference. The window lists every full invoice that names the number; press **Download their
 data** to get a ZIP with a PDF copy of each invoice, an `invoices.json` file with the name, tax
-number and address on each and every email address the box sent, or tried to send, each one to,
-and a `README.txt` in the venue's language. Managers do not see this action. A booking holds no
+number and address on each and every address the box emailed it to or tried to, and a
+`README.txt` in the venue's language. Managers do not see this action. A booking holds no
 tax number, so this search does not find bookings. Waitron keeps no list of these requests, so
 note the request and your answer in the venue's own records.
 
