@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, flan, jamon, mount, store } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, ham, mount, store } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { OrderLine } from "../state/working-order.js";
 
@@ -133,7 +133,7 @@ it.each(["sending", "locked", "group-command"] as const)(
 it("does not offer unit splitting for measured, single or fractional quantities", async () => {
   const { el } = await mount();
   store(el).loadFrom(store(el).id, [
-    { product: jamon, quantity: "3" },
+    { product: ham, quantity: "3" },
     { product: beer, quantity: "1" },
     { product: beer, quantity: "2.5" },
   ]);
@@ -235,7 +235,7 @@ it.each([
   else if (change === "source") draft.lines[1]!.source = source;
   else if (change === "price") draft.lines[1]!.product = { ...beer, unitPrice: "4.00" };
   else if (change === "unit") {
-    for (const line of draft.lines) line.product = jamon;
+    for (const line of draft.lines) line.product = ham;
   } else if (change === "options") draft.lines[1]!.options = [{ listId: "ice", labelId: "none" }];
   else if (change === "extras")
     draft.lines[1]!.extras = [

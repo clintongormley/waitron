@@ -9,7 +9,7 @@ import {
   beer,
   browser,
   flan,
-  jamon,
+  ham,
   menuOf,
   mount,
   openDraftLine,
@@ -198,7 +198,7 @@ describe("till-table-order-screen: Split quantity on a draft line", () => {
   it("is offered only on a line of more than one whole unit", async () => {
     const { el } = await mount();
     await tap(el, "Flan");
-    store(el).addProduct(jamon, "2");
+    store(el).addProduct(ham, "2");
     await el.updateComplete;
     expect(split(el, 0)).toBeNull();
     expect(split(el, 1)).toBeNull();

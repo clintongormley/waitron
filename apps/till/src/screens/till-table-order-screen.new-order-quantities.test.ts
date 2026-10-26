@@ -4,7 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { SubmitDraftDetail } from "./till-table-order-screen.js";
-import { jamon, menuOf, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import { ham, menuOf, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -19,7 +19,7 @@ describe("New order quantities keep display separate from submission", () => {
         it(`${locale} at ${width}px shows the weighed row ${locked ? "read-only" : "editable"}`, async () => {
           setLocale(locale);
           await page.viewport(width, 900);
-          const product = { ...jamon, name: "Jamón 1.5, 2 small" };
+          const product = { ...ham, name: "Jamón 1.5, 2 small" };
           const { el, host } = await mount({ products: [product], menus: menuOf([product]) });
           host.style.width = "100%";
           await resized(el);
@@ -80,7 +80,7 @@ describe("New order quantities keep display separate from submission", () => {
       it(`${locale} keeps precision and unit punctuation ${JSON.stringify(abbreviation)}`, async () => {
         setLocale(locale);
         const product = {
-          ...jamon,
+          ...ham,
           unit: {
             id: "fractional-unit",
             staffName: "Staff unit",

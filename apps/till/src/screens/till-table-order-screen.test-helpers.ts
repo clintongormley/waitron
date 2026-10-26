@@ -9,9 +9,6 @@ import { DraftStore } from "../state/draft-sync.js";
 import type { OfferedModifier, TillProduct } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 
-// Beer and Flan ring straight in; the Burger asks for its doneness and its extras first (Bacon
-// comes preselected); Jamón is sold by weight.
-
 export const beer: TillProduct = {
   id: "beer",
   menuItemId: "offer-beer",
@@ -104,7 +101,7 @@ export const burger: TillProduct = {
   offeredModifiers: [cookedList, extrasList],
 };
 
-export const jamon: TillProduct = {
+export const ham: TillProduct = {
   ...beer,
   id: "jamon",
   menuItemId: "offer-jamon",
@@ -113,7 +110,7 @@ export const jamon: TillProduct = {
   unitPrice: "20.00",
 };
 
-export const products = [beer, flan, burger, jamon];
+export const products = [beer, flan, burger, ham];
 
 export function menuOf(
   offered: TillProduct[],
