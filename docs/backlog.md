@@ -442,12 +442,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A box on an older configuration format blames the export when it is the box that is out of
-  date.** Given a newer export, it shows "This export is not compatible with this Waitron version.
-  Export it again from a box running the current version, …"
-  (`apps/setup/src/i18n/strings/shell.ts:139-140`), but the file already came from a current box,
-  and it is the receiving box that needs updating. The same sentence answers module version
-  mismatches in both directions (`describeConfigurationRefusal`, `apps/setup/src/setup-app.ts`), so
-  the fix is to word the too-new case on its own. Found by A980 S1a2's plan review.
+  date.** Word the too-new case on its own. Found by A980 S1a2's plan review.
+  [Detail](backlog/setup.md#a-box-on-an-older-configuration-format-blames-the-export-when-it-is-the-box-that-is-out-of-date)
 
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
@@ -5231,10 +5227,8 @@ For package distribution and the four-minute target, use the
   [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
 
 - **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
-  In `apps/server/src/first-fiscal-setup.e2e.test.ts`, a failure inside a row's success branch makes
-  the Vitest worker exit ("Worker exited unexpectedly"), so the later rows never run and the run
-  reports one failure (it still exits 1). Reproduced on `27ae35c09` by breaking the existing
-  tax-number check, during A980 S1a2. Cause not found.
+  The later rows never run; the run still exits 1. Cause not found.
+  [Detail](backlog/ci.md#one-failing-success-branch-check-in-the-first-fiscal-setup-end-to-end-file-ends-its-worker)
 
 - **A backlog detail link still names the old five-handler heading.**
   [Detail](backlog/ci.md#a-backlog-detail-link-still-names-the-old-five-handler-heading).

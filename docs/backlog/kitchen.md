@@ -398,7 +398,7 @@ the change (plan PR 8 Decision 1).
   **2026-10-23 (A756 PR 6):** the choice is the station's own: Print or Don't print.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
   source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
-  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6. **2026-10-23:** A756 PR 5 moved it to version 7. **2026-10-24:** A756 PR 8 moved it to version 8.
+  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6. **2026-10-23:** A756 PR 5 moved it to version 7. **2026-10-24:** A756 PR 8 moved it to version 8. **2026-10-26:** A980 S1a2 moved it to version 9.
 
 - **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
   instruction above a counter order or a table party's dishes, alongside each dish's own note.

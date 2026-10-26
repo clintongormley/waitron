@@ -411,6 +411,15 @@ that every node holds the current note
 ([replication-cloud.md](replication-cloud.md#replication-membership--failover--residuals-afterwards))
 depends on this.
 
+## A box on an older configuration format blames the export when it is the box that is out of date
+
+Given a newer export, it shows "This export is not compatible with this Waitron version. Export it
+again from a box running the current version, …" (`apps/setup/src/i18n/strings/shell.ts:139-140`),
+but the file already came from a current box, and it is the receiving box that needs updating. The
+same sentence answers module version mismatches in both directions (`describeConfigurationRefusal`,
+`apps/setup/src/setup-app.ts`), so the fix is to word the too-new case on its own. Found by A980
+S1a2's plan review.
+
 ## The first-setup record store still accepts the `retire` and `select-workspace` actions and `nextWorkspace`, which nothing writes since A1042
 
 Left open by A1042 (D4). `packages/provisioning/src/first-setup-resolution.ts` still declares and

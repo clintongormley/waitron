@@ -984,3 +984,10 @@ helper; other merge jobs still use that action. Audit those jobs separately and 
 report naming and coverage merge before adopting the helper. Preserve their bounded retry and
 cleanup rules. The original main runner's socket state was not captured; the link to that
 historical timeout remains an inference. See [the developer receipt](../developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
+
+## One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker
+
+In `apps/server/src/first-fiscal-setup.e2e.test.ts`, a failure inside a row's success branch makes
+the Vitest worker exit ("Worker exited unexpectedly"), so the later rows never run and the run
+reports one failure (it still exits 1). Reproduced on `27ae35c09` by breaking the existing
+tax-number check, during A980 S1a2. Cause not found.

@@ -1653,10 +1653,12 @@ The setup app sends the setup preview's `venue` back in the first-setup claim, w
 `apps/setup/src/setup-app.ts`). The claim refuses any venue or location key it does not list
 (`exact(...)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup
 field lives outside `venue`'s own keys, as `privacyContact` does. `venue.location` already carries
-two such values, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
+three such values, `id`, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
 and they are safe only because the setup app filters the location. Cost: from #1752 to A980 S1a2
-every Live setup from an export on a production box was refused at the claim, because the setup app
-copied those two keys into it; the tests that set up a production box from an export
+every Live setup from an export on a production box was refused at the claim, because the setup app,
+which dropped only `id`, copied the other two into it (probes 2 to 4 of the
+[S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
+the tests that set up a production box from an export
 (`apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows, and
 `apps/server/src/first-fiscal-hour-import.e2e.test.ts`'s `production` rows through
 `apps/server/test/owned-hour-setup.ts`) sent the claim a hand-written venue, never the preview's.
@@ -1667,7 +1669,8 @@ claim, but cuts the location down by the test's own `request.location` keys, not
 `LocationDraft`'s, so it would pass if the setup app copied `fireControl` again. Only
 `apps/setup/src/setup-app-first-fiscal.test.ts`'s "claims a staged preview's venue with only the
 location fields the claim accepts" catches that, against a stubbed server. Both cover one export
-shape.
+shape. Nothing checks `CLAIM_LOCATION_FIELDS` against the claim's own `exact(raw.location, …)` list:
+the compile-time check ties it to `LocationDraft` alone, a hand copy of the server's shape.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
