@@ -190,7 +190,7 @@ after" and unifies the Spanish in those fields (design §3.8 Warm row).
 changes, so this slice starts after it and regenerates on top of `0188`; an added `count()` column
 with a default is expected to be `ALTER TABLE … ADD` (no CHECK in `columns.ts`, read) — read the SQL.
 **Do not add the new value to the ordered-thresholds CHECK** `kitchen_stations_thresholds_ordered`
-(`packages/db/src/schema/kitchen-stations.ts:46-49`, warm < overdue < forgotten): changing a table's
+(`packages/db/src/schema/kitchen-stations.ts:53-56`, warm < overdue < forgotten): changing a table's
 CHECK makes drizzle rebuild the table (CLAUDE.md §3); check the ready-warning bound in the writer.
 **Dependencies:** #2037 landed; slice 1's migration landed or not open. **Open decisions:** the
 column name; whether the station editor's existing three fields keep their order with the fourth last. _Expanded into tasks below (2026-10-26)._
@@ -4734,12 +4734,13 @@ fourth field.** Then:
 - `pnpm --filter @waitron/db exec vitest run` → `Test Files 103 passed (103)`, `Tests 1458 passed (1458)`.
 - `pnpm --filter @waitron/shared exec vitest run` → `Test Files 47 passed (47)`, `Tests 861 passed (861)`.
 - `pnpm --filter @waitron/reporting exec vitest run src/overdue-orders.test.ts` → `Tests 17 passed (17)`.
-- `pnpm --filter @waitron/provisioning exec vitest run` → `Tests 7 failed | 1605 passed (1612)`, all
-  seven in `src/cli-owned-entry.test.ts`, `src/cli-same-hour-entry.test.ts` and
-  `src/first-setup-command-import.test.ts`, each expecting an empty standard error and getting a
-  `<claude-code-hint …>` line. **Not this slice's:** the same three files at the base, with none of
-  the probe's code (ran, the control worktree) → `Tests 7 failed | 10 passed (17)`, the same hint
-  in each. Under an AI agent's session expect them; CI's provisioning job is the judge. Any other
+- `env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION pnpm --filter @waitron/provisioning exec vitest run`
+  → every test passes. Run it with those two variables unset: the Stripe 23 library writes a
+  `<claude-code-hint …>` line to standard error whenever `CLAUDECODE` or `CLAUDE_CODE_CHILD_SESSION`
+  is set (`node_modules/.pnpm/stripe@23.0.0_@types+node@26.6.5/node_modules/stripe/cjs/stripe.core.js:142-144`),
+  and seven cases in `src/cli-owned-entry.test.ts`, `src/cli-same-hour-entry.test.ts` and
+  `src/first-setup-command-import.test.ts` expect an empty standard error. With both unset those
+  three files gave `Tests 17 passed (17)` (ran by the plan review); CI sets neither. Any
   provisioning failure is a STOP.
 - `pnpm --filter @waitron/server typecheck`, `@waitron/venue-service`'s after the fixtures below, and
   `@waitron/dashboard`'s → 0 errors.
@@ -4747,12 +4748,14 @@ fourth field.** Then:
   signals or the configuration file (ran: `grep -rlE "kitchenStations|kitchen_stations|byStation|listStations|createStation|updateStation|management-api/stations|AfterMinutes|tables/state|listTablesWithState|readBillSignals|readPartySignals|kind: \"ready\"|configuration" src --include='*.test.ts'`
   in `apps/server`, then `pnpm exec vitest run <those>`) → `Test Files 6 failed | 191 passed (197)`,
   `Tests 20 failed | 8271 passed (8291)`. The twenty:
-  - **Harness, not a check (Fixture-only, Task 2):** `src/canvas-retirement-upgrade.test.ts`
+  - **Harness, not a check (Fixture-only):** `src/canvas-retirement-upgrade.test.ts`
     "refuses the populated predecessor for reset and retains every row after rollback" (`:384`;
     "table kitchen_stations has no column named ready_warning_after_minutes", from today's
-    `applyVenue` writing into a predecessor schema) and `src/station-order-migration.test.ts` "A725
-    drops only station order with populated cascading and restrictive children" (`listStations`
-    reading the column after a cut that stops before it). Each file lists the later
+    `applyVenue` writing into a predecessor schema) fails once the column exists (Task 2; the plan
+    review ran it with the column alone). `src/station-order-migration.test.ts` "A725 drops only
+    station order with populated cascading and restrictive children" fails once `listStations`
+    reads the new column, after a cut that stops before it (Task 4; with the column alone it
+    passes, ran by the plan review). Each file lists the later
     `kitchen_stations` migrations to apply ahead — `"_table_short_names"` at `:399`, and
     `printing`/`bump`/`changes` at `:40-52` and `:252-254` — and each new one has been appended
     there (`git log -S"_station_changes_after_sending" -- apps/server/src/station-order-migration.test.ts`
@@ -4780,9 +4783,14 @@ fourth field.** Then:
   - **`src/split-off-extras.groups.test.ts`** "names Fryer as ready and counts plates rather than
     the extra's pieces" (`:197`, its `toContainEqual` at `:211`): the same two keys. Reason: D4.
 
-  These checks' `ready_at` is the moment the case bumped the dish (`advanceSet`'s `nowIso()`), so
-  each changed entry pins **`oldestReadyAt: expect.any(String)`** and **`readyWarningAfterMinutes:
-  3`**, and Task 5's new cases pin exact times on stamps they write themselves. No other server
+  In `table-signals.test.ts` and `split-off-extras.groups.test.ts`, `ready_at` is the moment the
+  case bumped the dish (`advanceSet`'s `nowIso()`), so each changed entry there pins
+  **`oldestReadyAt: expect.any(String)`** and **`readyWarningAfterMinutes: 3`**. In
+  `table-signals.service-lifetime.test.ts` no case bumps: its `fixture` writes `readyAt` itself, the
+  time `at` (`:104`, written at `:130`), so its seven changed checks pin **`oldestReadyAt: at`**
+  exactly — `fixture` hands `at` back and `expectedSignals` takes it — and
+  **`readyWarningAfterMinutes: 3`**. Task 5's new cases pin exact times on stamps they write
+  themselves. No other server
   case failed: `management-api.test.ts` and `configuration-transfer.test.ts` read stations with
   `toMatchObject` or by column (ran: both in the 191 that passed).
 - **venue-service** (browser; free memory 82 % before the run, ran `memory_pressure`):
@@ -4917,7 +4925,6 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   `meta/_journal.json` (drizzle-kit writes all three)
 - Test: `packages/db/src/schema/kitchen-stations.test.ts` (new case),
   `apps/server/src/kitchen.test.ts` (new case beside `:491`),
-  `apps/server/src/station-order-migration.test.ts` and
   `apps/server/src/canvas-retirement-upgrade.test.ts` (harness, Fixture-only)
 
 - [ ] **Step 1: Failing tests.**
@@ -4936,13 +4943,11 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   exactly D1's one statement. A `__new_` table, a `DROP TABLE`, a `PRAGMA`, or any other statement
   is a **STOP**: report it with the file, do not edit it. If `main` has gained a 0192 since this
   plan, regenerate on top (CLAUDE.md §3), never renumber by hand.
-- [ ] **Step 4: The two upgrade harnesses** (Fixture-only; the changed-checks list says why):
+- [ ] **Step 4: The upgrade harness** (Fixture-only; the changed-checks list says why):
   `canvas-retirement-upgrade.test.ts` gains `"_station_ready_warning"` after `"_table_short_names"`
-  (`:399`); `station-order-migration.test.ts` gains a `readyWarning` journal entry found by
-  `tag.endsWith("_station_ready_warning")` beside `changes` (`:48-52`, with its "missing" throw)
-  and `|| when === readyWarning.when` after `when === changes.when` (`:254`). Run them:
-  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts`
-  (probe: `Tests 6 passed (6)`).
+  (`:399`). Run it:
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts`; PASS (read
+  the `Tests` count). `station-order-migration.test.ts` passes unedited here; its harness is Task 4's.
 - [ ] **Step 5: Run; expect PASS**, then the guard suites from the root:
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts scripts/id-columns-are-references.test.ts scripts/journal-monotonic.test.ts`
   (probe: 9 files, 498 tests passed) and
@@ -4950,7 +4955,7 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   (probe: 20 passed; it passes **unedited**, or STOP). Then `pnpm --filter @waitron/db exec vitest run`
   (probe: all 1458 passed).
 - [ ] **Step 6:** typecheck db and server; eslint the changed `.ts` files (not the generated SQL or
-  JSON); `pnpm format:check`; ledger (the two harness files as Fixture-only);
+  JSON); `pnpm format:check`; ledger (the harness file as Fixture-only);
   `git commit -s -m "A797-6: each prep station holds a ready warning time, 3 minutes by default"`
 
 ### Task 3: The ready warning's bound at the routes, the writers and the import
@@ -4991,9 +4996,10 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   its default (they pin that, D1, and stay).
 - [ ] **Step 3: Implement** D3. Keep the three's order check exactly as it is (`invalidTimingField`,
   `:46-59`); the ready warning's range check is its own and runs after it.
-- [ ] **Step 4: Run; expect PASS**; then `pnpm --filter @waitron/provisioning exec vitest run`
-  (expect only the seven CLI cases the changed-checks list names, if under an agent; any other
-  failure is a STOP) and the whole `configuration-transfer.test.ts` and
+- [ ] **Step 4: Run; expect PASS**; then
+  `env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION pnpm --filter @waitron/provisioning exec vitest run`
+  (fully green; the changed-checks list says why the two variables are unset; any failure is a
+  STOP) and the whole `configuration-transfer.test.ts` and
   `configuration-import.test.ts` in `apps/server`.
 - [ ] **Step 5:** typecheck provisioning and server; eslint the changed files; `pnpm format:check`;
   ledger; `git commit -s -m "A797-6: a station's ready warning is whole minutes from 1, in no order with its late flags"`
@@ -5008,7 +5014,9 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   POST and PATCH body types, `:1565-1574`, `:1633-1647`, and the PATCH `patch` type, `:1653-1666`,
   name the field; the parse already reads it)
 - Test: `apps/server/src/kitchen.test.ts` (two changed checks; new cases),
-  `apps/server/src/management-api.test.ts` (new cases in `describe("/management-api/stations (KDS-1 config)")`, `:1022`)
+  `apps/server/src/management-api.test.ts` (new cases in `describe("/management-api/stations (KDS-1 config)")`, `:1022`),
+  `apps/server/src/station-order-migration.test.ts` (harness, Fixture-only: it fails once
+  `listStations` reads the new column)
 
 - [ ] **Step 1: Failing tests.** `kitchen.test.ts`:
   1. "createStation stores a given ready warning, and 3 when none is given; listStations reads it".
@@ -5027,10 +5035,16 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   `readyWarningAfterMinutes: 3` on each listed station.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/kitchen.test.ts src/management-api.test.ts -t "station"`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; expect PASS**, then the whole `kitchen.test.ts`, `management-api.test.ts`,
+- [ ] **Step 4: The upgrade harness** (Fixture-only; it fails once `listStations` reads the new
+  column): `station-order-migration.test.ts` gains a `readyWarning` journal entry found by
+  `tag.endsWith("_station_ready_warning")` beside `changes` (`:48-52`, with its "missing" throw)
+  and `|| when === readyWarning.when` after `when === changes.when` (`:254`). Run
+  `pnpm --filter @waitron/server exec vitest run src/station-order-migration.test.ts src/canvas-retirement-upgrade.test.ts`
+  (probe, both edits: `Tests 6 passed (6)`).
+- [ ] **Step 5: Run; expect PASS**, then the whole `kitchen.test.ts`, `management-api.test.ts`,
   `kitchen-timing-consumers.test.ts` and `station-delete.test.ts` in `apps/server`.
-- [ ] **Step 5:** typecheck server; eslint the changed files; `pnpm format:check`; ledger (both
-  changed checks); `git commit -s -m "A797-6: the station routes save and list the ready warning time"`
+- [ ] **Step 6:** typecheck server; eslint the changed files; `pnpm format:check`; ledger (both
+  changed checks; the harness file as Fixture-only); `git commit -s -m "A797-6: the station routes save and list the ready warning time"`
 
 ### Task 5: The ready signal carries each station's oldest ready time and its warning minutes
 
@@ -5041,6 +5055,9 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   `readyAt` and `readyWarningAfterMinutes`; `readKitchenLines` selects `ticketItems.readyAt` and
   `kitchenStations.readyWarningAfterMinutes`; `kitchenSignals` keeps the earliest by `Date.parse`
   and maps both into each entry, `:113-119`)
+- **Size:** an implementer that passes about 150 tool calls with the task unfinished stops at a
+  green (or cleanly red) point, commits, and returns a handover — what is done, what is left, the
+  files, and each check's state — and a fresh implementer continues from it.
 - Test: `apps/server/src/table-signals.test.ts` (new cases; eight changed checks),
   `apps/server/src/table-signals.service-lifetime.test.ts` (seven), `apps/server/src/split-off-extras.groups.test.ts` (one)
 - Fixture-only: every `byStation` entry in `apps/till/src` (D12): `src/till-app-device-zones.test.ts`,
@@ -5074,8 +5091,12 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   (and the other two by name).
 - [ ] **Step 3: Implement** D4 in the two files.
 - [ ] **Step 4: The changed checks** (probe): in the sixteen cases the changed-checks list names,
-  each `byStation` entry gains `oldestReadyAt: expect.any(String), readyWarningAfterMinutes: 3`,
-  every other value unchanged. Run
+  each `byStation` entry gains `readyWarningAfterMinutes: 3` and an `oldestReadyAt`, every other
+  value unchanged. In the nine cases that stamp the time through the real bump
+  (`table-signals.test.ts`, `split-off-extras.groups.test.ts`) it is `expect.any(String)`; in the
+  seven of `table-signals.service-lifetime.test.ts` it is the exact `at` the `fixture` writes as
+  `readyAt` (`:104`, `:130`): `fixture` returns it beside the order, and `expectedSignals` takes it
+  and sets it on each entry. Run
   `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts src/table-signals.service-lifetime.test.ts src/split-off-extras.groups.test.ts src/kitchen-allergy.notices.test.ts src/print-api.printer-wiring.test.ts src/station-printers.test.ts`;
   PASS.
 - [ ] **Step 5: The till's fixtures** (D12): `pnpm --filter @waitron/till typecheck` lists them
@@ -5183,7 +5204,7 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
 **Files:**
 - Modify: `apps/server/src/guide/en/kitchen-service.md` (`:106-108`) and
   `apps/server/src/guide/es/kitchen-service.md` (`:122-124`), `docs/developers/design-system.md`
-  (`:2931`, `:4693-4694`, `:4700-4702`), `docs/backlog.md` (both A797 entries, `:120-129` and the
+  (`:2931`, `:4534`, `:4693-4694`, `:4700-4702`), `docs/backlog.md` (both A797 entries, `:120-129` and the
   order line in the till area), `docs/backlog/till.md` (A797's entry, `:1036-1046`),
   `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.6's row `:375`, §3.8's Warm
   row `:427`, §5's Ready warning point `:529-541`: dated pointers)
@@ -5200,7 +5221,9 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
   `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
 - [ ] **Step 3: design-system.md.** `:2931` "a station's three late-flag minutes" → "a station's
-  three late-flag minutes and its ready warning time"; `:4693-4694` "the three late-flag fields in
+  three late-flag minutes and its ready warning time"; `:4534` "The Edit window groups its
+  late-flag minutes into one row." → "The Edit window sets its four minutes fields two to a row.";
+  `:4693-4694` "the three late-flag fields in
   one row under 'Late flags (minutes)'" → "the four minutes fields, two to a row, under 'Late
   flags (minutes)': Waiting, Overdue, Forgotten, then Ready warning"; `:4700-4702`: "… and that
   waiting < overdue < forgotten; the ready warning is in no order with them, and its own message
@@ -5234,9 +5257,9 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
     field marked with its own message and the bottom line;
   - Add station: Waiting after, Overdue after, Forgotten after, Ready warning after (min) at 3,
     then Printers;
-  - save a ready warning of 6 on Kitchen and check it stored:
-    `sqlite3 <the worktree's venue folder>/venue.db "select name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes, ready_warning_after_minutes from kitchen_stations"`
-    (read-only; `wa-wt ls` names the folder); write the rows in the ledger.
+  - save a ready warning of 6 on Kitchen and check it stored, opening the database read-only:
+    `sqlite3 -readonly <the worktree's venue folder>/venue.db "select name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes, ready_warning_after_minutes from kitchen_stations"`
+    (`wa-wt ls` names the folder); write the rows in the ledger.
 - [ ] **Step 3: Save** the PNGs under `/Users/clintongormley/waitron-campaign-c/a797-6-shots/`
   (`<step>-<width>-<theme>-<lang>.png`), open each, describe them in the ledger and the PR body.
   Expected: every label reads in full, «Listo sin recoger» included, at 390 px; nothing scrolls
@@ -5261,7 +5284,7 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   station's fourth field and Q51 (f) 7's words; nothing on the till until slice 7); **Decisions**
   D1–D12 in one line each; **Changed test checks** (from the ledger: Task 4's two, Task 5's
   sixteen, Task 6's eighteen, Task 7's two extended, Task 8's thirteen); **Fixture-only** (Task
-  2's two harnesses, Task 5's fourteen till files, Task 7's venue-service fixtures); **LOOK**.
+  2's and Task 4's upgrade harnesses, Task 5's fourteen till files, Task 7's venue-service fixtures); **LOOK**.
 - **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D3 (the
   ready warning is in no order with the late flags, so 20 beside Forgotten after 15 is allowed);
   D5 (the Spanish of Waiting, Overdue and Forgotten in Add station now reads «Esperando a partir
