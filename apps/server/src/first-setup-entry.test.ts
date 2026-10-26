@@ -2,15 +2,34 @@ import { CORE_MIGRATIONS, tenants, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   START_AGAIN_MARKER_FILE,
+  chooseStartAgainLeftovers,
+  readStartAgainChoices,
+  setAsideFolderPaths,
   startAgainMarkerFor,
+  surveyStartAgainLeftovers,
   writeStartAgainMarker,
 } from "@waitron/provisioning";
+import {
+  START_AGAIN_ADMIN_PASSWORD,
+  startAgainAttempt,
+} from "@waitron/provisioning/testing/start-again-attempt";
 import { startServer } from "./boot.js";
 import { writeValidated, validateDatabaseEntries } from "./restore.js";
 import { runStagedRestore } from "./restore-request.js";
@@ -492,4 +511,172 @@ it("folders that cannot be put in canonical form fall through to today's path", 
   expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
     '{"synthetic":"attempt"}',
   );
+});
+
+/** A Start again a cut left, with a venue.db placed after the marker: a survey of kind `choice`. */
+async function foundAfterMarker() {
+  const base = await mkdtemp(join(tmpdir(), "first-entry-found-"));
+  dirs.push(base);
+  const attempt = await startAgainAttempt(base);
+  await writeFile(join(attempt.roots.venueDir, "venue.db"), "found database");
+  const survey = await surveyStartAgainLeftovers(attempt.roots);
+  if (survey?.kind !== "choice") throw new Error(`expected choice, got ${JSON.stringify(survey)}`);
+  return { ...attempt, ...attempt.roots, survey };
+}
+
+/** A Move recorded for the found files, cut before its first rename: every unit still in place. */
+async function moveRecordedNothingMoved() {
+  const f = await foundAfterMarker();
+  await expect(
+    chooseStartAgainLeftovers({
+      roots: f.roots,
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "move",
+      listed: f.survey.digest,
+      now: () => new Date(),
+      io: {
+        lstat: fs.lstat,
+        mkdir: fs.mkdir,
+        rmdir: fs.rmdir,
+        rename: async (from, to) => {
+          if (!from.includes(".first-setup-set-aside-probe-")) throw new Error("cut");
+          await fs.rename(from, to);
+        },
+      },
+    }),
+  ).rejects.toThrow();
+  const [record] = await readStartAgainChoices(f.stateDir, f);
+  if (record?.choice !== "move" || record.setAside === null) throw new Error("expected a move");
+  return { ...f, folders: setAsideFolderPaths(f.roots, record.setAside), record };
+}
+
+const fileTree = async (dir: string) =>
+  Object.fromEntries(
+    await Promise.all(
+      (await readdir(dir, { recursive: true }))
+        .filter((name) => !/^venue\.(lock|holder\.json|lock-journal)$/.test(name))
+        .sort()
+        .map(async (name) => {
+          const path = join(dir, name);
+          const info = await fs.lstat(path);
+          return [
+            name,
+            info.isFile() ? `${info.ino}:${await readFile(path, "utf8")}` : String(info.ino),
+          ];
+        }),
+    ),
+  );
+const boxTree = async (f: { venueDir: string; stateDir: string }) => ({
+  state: await fileTree(f.stateDir),
+  venue: await fileTree(f.venueDir),
+});
+
+it("a venue.db placed after the marker is refused setup.start_again_files_found, with its survey and nothing changed", async () => {
+  const f = await foundAfterMarker();
+  const before = await boxTree(f);
+  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
+  const entry = await resolveFirstSetupEntry(f.roots, {});
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_files_found" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.error).toMatchObject({ code: "setup.start_again_files_found" });
+  expect(entry.error.reason).toMatch(/venue\.db/);
+  expect(entry.survey).toEqual(f.survey);
+  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
+  expect(await boxTree(f)).toEqual(before);
+});
+
+it("a keep record for the marker is refused setup.start_again_kept even after the found files are removed, and the marked files stay", async () => {
+  const f = await foundAfterMarker();
+  await chooseStartAgainLeftovers({
+    roots: f.roots,
+    password: START_AGAIN_ADMIN_PASSWORD,
+    choice: "keep",
+    listed: f.survey.digest,
+    now: () => new Date(),
+  });
+  await rm(join(f.venueDir, "venue.db"));
+  const before = await boxTree(f);
+  const entry = await resolveFirstSetupEntry(f.roots, {});
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_kept" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.survey).toBeUndefined();
+  expect(await boxTree(f)).toEqual(before);
+  expect(await stat(join(f.stateDir, "first-setup.json"))).toBeTruthy();
+  expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
+});
+
+it("a move record with every unit still in place is resumed and setup is served", async () => {
+  const f = await moveRecordedNothingMoved();
+  const entry = await resolveFirstSetupEntry(f.roots, {});
+  expect(entry.kind).toBe("normal");
+  await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
+  await gone(join(f.stateDir, "first-setup.json"));
+  await gone(join(f.venueDir, "venue.db"));
+  expect(await readFile(join(f.folders.venue, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a move record whose resume rename fails is refused setup.start_again_incomplete with no survey", async () => {
+  const f = await moveRecordedNothingMoved();
+  await chmod(f.folders.venue, 0o500);
+  try {
+    const entry = await resolveFirstSetupEntry(f.roots, {});
+    expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+    if (entry.kind !== "refused") throw new Error("expected a refused start");
+    expect(entry.error.reason).toMatch(/^set-aside failed: EACCES venue\/venue\.db$/);
+    expect(entry.survey).toBeUndefined();
+    expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
+    expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
+    expect(await stat(join(f.stateDir, "first-setup.json"))).toBeTruthy();
+  } finally {
+    await chmod(f.folders.venue, 0o700);
+  }
+});
+
+it("a move whose resume fails with an error that is not a refusal is refused setup.start_again_incomplete, and nothing reads the half-moved folder", async () => {
+  const f = await moveRecordedNothingMoved();
+  const stem = dirname(f.folders.state);
+  const before = await boxTree(f);
+  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
+  await chmod(stem, 0o000);
+  let entry: Awaited<ReturnType<typeof resolveFirstSetupEntry>>;
+  try {
+    entry = await resolveFirstSetupEntry(f.roots, {});
+  } finally {
+    await chmod(stem, 0o700);
+  }
+  if (entry.kind === "resolution") await entry.dispose();
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.error.reason).toBe("set-aside failed: EACCES");
+  expect(entry.survey).toBeUndefined();
+  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
+  expect(await boxTree(f)).toEqual(before);
+});
+
+it("a move to resume while another connection holds the venue lock is refused setup.start_again_incomplete, and nothing moves", async () => {
+  const f = await moveRecordedNothingMoved();
+  const before = await boxTree(f);
+  const holder = await holdVenueElsewhere(f.venueDir);
+  let entry: Awaited<ReturnType<typeof resolveFirstSetupEntry>>;
+  try {
+    entry = await resolveFirstSetupEntry(f.roots, {});
+  } finally {
+    await holder.stop();
+  }
+  if (entry.kind === "resolution") await entry.dispose();
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.error.reason).toBe("set-aside failed: provisioning.database_in_use");
+  expect(await boxTree(f)).toEqual(before);
+});
+
+it("the same venue.db beside the existing synthetic record is still refused setup.start_again_incomplete", async () => {
+  const f = await markedDeletion();
+  await writeFile(join(f.venueDir, "venue.db"), "found database");
+  const entry = await resolveFirstSetupEntry(f, {});
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.survey).toBeUndefined();
+  expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
+  expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
 });
