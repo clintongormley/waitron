@@ -626,7 +626,7 @@ on the actual CI head to check those.
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
-(`apps/server`) as three-way and sixteen-way file shards, each with a `-merge` job that enforces the thresholds on
+(`apps/server`) as three-way and twenty-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
 scenarios, the rehearsal's send gate and interrupt suites, and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
@@ -1358,7 +1358,47 @@ which CI's `changes` job answers `code=false` and runs no package's tests: the s
 72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
 busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
 
+### The server's shards: twenty after splitting the recovery suites
+
+When a server job exceeds four minutes, check whether one file dominates before
+adding runners. A1137 (2026-10-26) splits the slow recovery suites and runs twenty
+duration-packed shards. You still merge their coverage with the separate stream
+job; the test commands, coverage thresholds and four-worker limit keep their
+previous settings.
+
+Main run `40362707290` had 1,034 measured server files totalling 12,571 file-seconds.
+The slowest shard jobs took 348 and 336 seconds. Their largest files were
+`first-setup-start-again-backup.test.ts` (292 seconds) and
+`first-setup-backup-lease.test.ts` (277 seconds); neither file was in the duration
+table. On runs `40358961862` and `40358601734`, those files took 349/345 and
+302/276 seconds. Moving either whole file cannot meet a four-minute job target.
+
+The two files now each occupy three suites; `setup-first-backup-api.test.ts`,
+which took 223–227 seconds on those runs, occupies two. Each original test block
+keeps its assertions, setup and waits. The table refresh uses six successful main
+runs (`40362707290`, `40358961862`, `40358601734`, `40357741507`, `40356182742`,
+`40347986969`) for unchanged files. The eight split files and the newly added
+venue-privacy API file use hosted measurements from PR run `40384194599`.
+That first run used local coverage timings for the split files; its twenty shard
+jobs took 164–266 seconds, median 244. Its logs contain each of the 1,040 selected
+ordinary-shard paths exactly once, and its server coverage merge passed.
+
+A four-worker scheduling model over the three newest measured runs, with an assumed
+55 seconds of job overhead and equal-duration subdivisions, estimated 265–284 seconds
+for sixteen shards and 230–247 seconds for twenty. These are estimates, not hosted
+results. Replaying the first hosted run's measured file times with the refreshed
+split estimates gives a 240-second slowest job at twenty shards and 234 seconds
+at twenty-two, with the same assumed overhead. The pull request records final
+hosted timings; refresh from logs when the estimates drift again.
+
+The existing shard-count check in `scripts/ci-workflow.test.mjs` now pins twenty.
+It reads workflow text; the duration sequencer's tree-walk guard still does not
+prove which files Vitest executes or that the estimates are fresh.
+
 ### The server's shards: sixteen, packed by measured duration
+
+The following A938 measurements describe the earlier sixteen-shard layout. The current
+layout is described [above](#the-servers-shards-twenty-after-splitting-the-recovery-suites).
 
 A938 (2026-10-21). On six `main` runs (39425472781, 39444354037, 39449527877, 39500330558,
 39503634628, 39507125783) the slowest of the eleven `test-server (N)` jobs took 349 to 410 s, and on

@@ -1,5 +1,11 @@
 # A731 repair-page backup recovery implementation plan
 
+> 2026-10-26 (A1137): the backup API checks referenced below now span
+> `setup-first-backup-api.test.ts` and `setup-first-backup-api-adapters.test.ts`.
+> Run both files to include the queued-commit and provider-adapter cases.
+> The original test blocks and assertions are unchanged.
+
+
 > **For agentic workers:** use `superpowers:executing-plans` inline, under the parent driver. Steps use checkboxes. Execution is already authorised; do not ask for plan approval or dispatch per-task implementers/reviewers. Read the TDD skill before writing implementation or tests.
 
 **Goal:** recover an authenticated archive, bucket copy or supported managed-Cloud copy from the first-setup repair page, retaining the old attempt and every old database independently.

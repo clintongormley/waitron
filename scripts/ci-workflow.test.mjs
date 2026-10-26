@@ -2233,7 +2233,7 @@ describe("the sharded jobs", () => {
       "@waitron/db": 3,
       "@waitron/fiscal-verifactu": 4,
       "@waitron/provisioning": 6,
-      "@waitron/server": 16,
+      "@waitron/server": 20,
       "@waitron/venue-service": 4,
       "@waitron/till": 7,
     });

@@ -1,5 +1,11 @@
 # A1042: "Start again" keeps one small note, not an archive — implementation plan
 
+> 2026-10-26 (A1137): the backup API checks referenced below now span
+> `setup-first-backup-api.test.ts` and `setup-first-backup-api-adapters.test.ts`.
+> Run both files to include the queued-commit and provider-adapter cases.
+> The original test blocks and assertions are unchanged.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
 **Task 0 re-runs a fresh-context review of this plan against main after A731 lands, before any implementer is dispatched.**
