@@ -384,7 +384,16 @@ describe("till-table-details-sheet", () => {
         ...seated,
         party: party({
           outstanding: "5.00",
-          unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Luis", lineCount: 2 }],
+          unsentDrafts: [
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-luis",
+              ownerName: "Luis",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
         }),
       }),
     });
@@ -400,8 +409,22 @@ describe("till-table-details-sheet", () => {
         party: party({
           billCount: 2,
           unsentDrafts: [
-            { billId: "b1", billNumber: 1, ownerName: "Luis", lineCount: 2 },
-            { billId: "b2", billNumber: 2, ownerName: "Luis", lineCount: 1 },
+            {
+              billId: "b1",
+              billNumber: 1,
+              ownerId: "p-luis",
+              ownerName: "Luis",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+            {
+              billId: "b2",
+              billNumber: 2,
+              ownerId: "p-luis",
+              ownerName: "Luis",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
           ],
           reminder: { groupId: "g1", dueAt: "2026-10-10T11:00:00Z" },
         }),
@@ -433,10 +456,19 @@ describe("till-table-details-sheet", () => {
                 {
                   billId: "b1",
                   billNumber: 1,
+                  ownerId: "p-alexandradelrosariodelasmercedesfernandezfernandez",
                   ownerName: "AlexandradelRosariodelasMercedesFernandezFernandez",
                   lineCount: 2,
+                  savedAt: "2026-10-26T12:00:00.000Z",
                 },
-                { billId: "b2", billNumber: 2, ownerName: "Luis", lineCount: 1 },
+                {
+                  billId: "b2",
+                  billNumber: 2,
+                  ownerId: "p-luis",
+                  ownerName: "Luis",
+                  lineCount: 1,
+                  savedAt: "2026-10-26T12:00:00.000Z",
+                },
               ],
             }),
           }),

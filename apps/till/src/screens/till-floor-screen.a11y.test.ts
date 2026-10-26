@@ -335,8 +335,22 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
             party: {
               ...table.party,
               unsentDrafts: [
-                { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
-                { billId: "bill-2", billNumber: 2, ownerName: "", lineCount: 1 },
+                {
+                  billId: "bill-1",
+                  billNumber: 1,
+                  ownerId: "p-alex",
+                  ownerName: "Alex",
+                  lineCount: 2,
+                  savedAt: "2026-10-26T12:00:00.000Z",
+                },
+                {
+                  billId: "bill-2",
+                  billNumber: 2,
+                  ownerId: "p-",
+                  ownerName: "",
+                  lineCount: 1,
+                  savedAt: "2026-10-26T12:00:00.000Z",
+                },
               ],
             },
           };
@@ -533,7 +547,16 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
             timingBand: "forgotten",
             party: {
               ...table.party,
-              unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+              unsentDrafts: [
+                {
+                  billId: "bill-1",
+                  billNumber: 1,
+                  ownerId: "p-alex",
+                  ownerName: "Alex",
+                  lineCount: 2,
+                  savedAt: "2026-10-26T12:00:00.000Z",
+                },
+              ],
             },
             signals: [
               {

@@ -1071,8 +1071,10 @@ function lateSaveLiveFloor() {
             .map((one) => ({
               billId: one.billId,
               billNumber: 1,
+              ownerId: one.ownerId,
               ownerName: one.ownerName,
               lineCount: one.lines.length,
+              savedAt: "2026-10-26T12:00:00.000Z",
             })),
         },
       })),

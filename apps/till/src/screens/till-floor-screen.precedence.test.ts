@@ -210,7 +210,16 @@ describe("till-floor-screen: the card's ring", () => {
       "not-sent",
       {
         party: party({
-          unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+          unsentDrafts: [
+            {
+              billId: "bill-1",
+              billNumber: 1,
+              ownerId: "p-alex",
+              ownerName: "Alex",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
         }),
       },
     ],
@@ -372,7 +381,14 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
       if (chip !== null) return `[data-chip="${chip}"]`;
       return `[${mark.getAttributeNames().find((name) => name.startsWith("data-"))}]`;
     });
-  const draft = { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 };
+  const draft = {
+    billId: "bill-1",
+    billNumber: 1,
+    ownerId: "p-alex",
+    ownerName: "Alex",
+    lineCount: 2,
+    savedAt: "2026-10-26T12:00:00.000Z",
+  };
 
   it("lists every mark, most urgent first, and draws nothing after Reserved", async () => {
     const { el } = await mountFloor([
@@ -447,7 +463,14 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
           party: party({
             unsentDrafts: [
               { ...draft, ownerName: "AlexandradelRosariodelasMercedesFernandez" },
-              { billId: "bill-2", billNumber: 2, ownerName: "Alex", lineCount: 1 },
+              {
+                billId: "bill-2",
+                billNumber: 2,
+                ownerId: "p-alex",
+                ownerName: "Alex",
+                lineCount: 1,
+                savedAt: "2026-10-26T12:00:00.000Z",
+              },
             ],
           }),
         }),
@@ -489,7 +512,14 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
           party: party({
             unsentDrafts: [
               { ...draft, ownerName: "AlexandradelRosariodelasMercedesFernandezFernandez" },
-              { billId: "bill-2", billNumber: 2, ownerName: "Alex", lineCount: 1 },
+              {
+                billId: "bill-2",
+                billNumber: 2,
+                ownerId: "p-alex",
+                ownerName: "Alex",
+                lineCount: 1,
+                savedAt: "2026-10-26T12:00:00.000Z",
+              },
             ],
           }),
         }),
@@ -553,7 +583,14 @@ describe("till-floor-screen: the calm card", () => {
   });
 
   it("keeps the solid edge, and no check, once anything is needed", async () => {
-    const draft = { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 };
+    const draft = {
+      billId: "bill-1",
+      billNumber: 1,
+      ownerId: "p-alex",
+      ownerName: "Alex",
+      lineCount: 2,
+      savedAt: "2026-10-26T12:00:00.000Z",
+    };
     const ids = ["t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"];
     const { el, host } = await mountFloor(
       [
