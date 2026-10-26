@@ -463,6 +463,9 @@ invoices. The export holds the three invoice PDFs (the existing route,
 `apps/server/src/orders-api.ts:364-383`), the name, NIF and address on each, the email addresses
 they were sent to and when, and one line: "sent to the Agencia Tributaria as part of each invoice
 record". Bookings are found separately by phone or name, because a booking holds no NIF.
+2026-10-26: as built, S3 makes the PDFs with the Orders PDF's reader and renderer, not its route,
+and records no download (the S3 plan's decisions 9 and 12); `invoices.json` lists every attempt to
+email an invoice, whatever came of it.
 
 ### 4.3 Erasure
 
@@ -538,6 +541,9 @@ always the venue's; Waitron's material offers the questions, never a verdict.
 receipt, who opened the drawer ([audit](2026-10-16-a664-personal-data-audit.md#core-88-tables)).
 **What it cannot tell:** who looked at a booking, a customer or a staff record, who downloaded a
 configuration export, and from which address. No read is recorded and no IP is stored.
+2026-10-26: after S3, "who downloaded an invoice PDF" holds only for the Orders page's own PDF
+button; the invoices in an invoice customer's download are not recorded (the S3 plan's decision
+12).
 
 **Worked example.** On a Saturday night a till tablet is stolen. The manager revokes it
 (_Devices → Revoke_, `apps/server/src/device-api.ts:743`, which ends its open sign-ins,

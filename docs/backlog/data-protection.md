@@ -108,7 +108,8 @@ by the answers):
     text that filing overwrites with the frozen table grouping (S2d decision 9).
 - **An administrator's sign-in that keeps the current session**, offered in place on a permission
   refusal. Today the dashboard has none (S2c decision 12), so when a person who has lost
-  `personal_data.export` presses **Download their data**, the refusal's **Sign in as an
+  `personal_data.export` presses **Download their data** on a person, or **Find** or **Download
+  their data** in Orders' **Find a customer by tax number**, the refusal's **Sign in as an
   administrator** signs them out first. The server already checks an administrator's credentials
   for one request without replacing the session — `checkManagerPassword`, then `loginManagerById`
   → `authorizeManager` → `endManagementSession` in one transaction
@@ -131,10 +132,11 @@ by the answers):
   The adjustments part (S2d) reads in the first turn. Measure that read and the whole first turn
   on a box.
   The invoice customer's search and download (S3) read in a search turn, a first turn and one turn
-  per invoice; S3 decision 7 sets 250 ms stop rules for those turns and for the longest stall of
-  the event loop across a download, on the developer's Mac. Repeat them, the ZIP's size and the
-  whole download's time on a box. If a box's search turn crosses 250 ms, an index on the stored
-  tax number would be a migration slice of its own (S3 decision 7).
+  per invoice. S3 decision 7's stop rules, on the developer's Mac: a 250 ms median for the search
+  turn and the first turn, a 50 ms median for an invoice turn with no single one over 250 ms, and
+  250 ms for the longest stall of the event loop across a download. Repeat them, the ZIP's size
+  and the whole download's time on a box. A bar crossed there goes to the owner with decision 7's
+  options.
 - **Reduce the first snapshot turn's cost for a person heavy in two histories.** The
   [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md#decisions-this-plan-makes-that-the-spec-does-not),
   decision 13, sets a 250 ms median stop rule for its Mac fixture with heavy working-time and
@@ -158,26 +160,6 @@ by the answers):
   `modulesNamed` and `MeApiDeps.now`.
   The admin's download of another person (S2c) is mounted by the same function,
   `mountPersonalDataExportApi`, so the move takes both routes.
-- **S3** — an admin finds an invoice customer by tax number and downloads what the box holds
-  about them. Built ([its plan](../superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)):
-  on **Orders**, whoever holds `personal_data.export` sees **Find a customer by tax number**,
-  which opens a dialog that lists the full invoices naming the typed number (invoice, issue date,
-  name on the invoice, total) and offers **Download their data**. The search
-  (`GET /management-api/invoice-customers/personal-data?taxId=…`) and the download
-  (`GET /management-api/invoice-customers/personal-data/export?taxId=…`), both in
-  `apps/server/src/invoice-customer-data-api.ts`, require that permission, and refuse on a mirror
-  (the S3 decision under _Decisions and deliberate limits_). They read issued sales
-  at every node, and ignore letter case, spaces, dots, hyphens and one leading `ES`; a seven-digit
-  DNI matches with or without its leading zero (`apps/server/src/invoice-customer-tax-id.ts`). The
-  ZIP holds `README.txt`; `invoices.json`, giving for each invoice its number, issue time, the
-  name, tax number, country and address on it, its total, its PDF's name, whether the box keeps a
-  tax record of it, and every attempt to email it, whatever came of it
-  (`apps/server/src/invoice-customer-data.ts`); and a PDF copy of each invoice in `invoices/`,
-  from the same reader and renderer as the Orders page's PDF. The README is in the venue's
-  language, because a customer has no saved language. Neither route records anything: no download
-  row is written and the admin's last-seen time is left alone. No box issues a full invoice today,
-  so the search finds nothing on every box until full invoices are switched on (S3 decision 21).
-  What is left of S3 is in the points below.
 - **What the box keeps with a tax number outside issued sales is not in the invoice customer's
   download** (S3 decision 19): the customer typed for a full invoice on a bill
   (`working_orders.recipient_tax_id`, `recipient_legal_name`, `recipient_address` and
@@ -271,9 +253,7 @@ by the answers):
   the person who used it and the person who approved it). The free-text note stays out (S2d
   decision 8). Relayed by the watcher, `questions.md:4377` in lane B's campaign folder.
 - **A980 S3, 2026-10-26:** the invoice customer's search and download refuse on a mirror
-  (403 `node.read_only`), unlike S2c's admin download of a person, because a mirror signs in as an
-  administrator everyone who reaches it and a lookup by a typed tax number is wider than one
-  person's download (the [S3 plan](../superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)'s
+  (403 `node.read_only`), unlike S2c's admin download of a person (the [S3 plan](../superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)'s
   decision 14). The owner then decided that a mirror is to serve no dashboard at all, so this
   refusal is the permanent answer, not a wait for A1111, which is withdrawn. Relayed by the
   watcher, `questions.md:4400` in lane B's campaign folder.

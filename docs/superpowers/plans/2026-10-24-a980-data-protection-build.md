@@ -142,7 +142,10 @@ person's download; a staff member gets only their own.
 
 **S3.** The export holds the invoice PDFs through the existing route, the name, NIF and address on
 each, the addresses each was emailed to and when, and one line saying each was sent to the Tax
-Agency.
+Agency. 2026-10-26: superseded by [the S3 plan](2026-10-26-a980-s3-invoice-customer-download.md)
+(decisions 9 and 11): the PDFs come from the Orders PDF's reader and renderer, not its route,
+`invoices.json` lists every attempt to email each invoice, and the Tax Agency line is written only
+when the box keeps a tax record of an invoice.
 
 **S6.** The pages are text a venue's adviser fills in; none gives a verdict on whether to notify a
 breach. Spanish text is allowed here: the guide's `es/` folder is a translation file.

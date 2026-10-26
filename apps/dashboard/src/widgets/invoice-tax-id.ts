@@ -1,5 +1,5 @@
 // A second copy of apps/server/src/invoice-customer-tax-id.ts: an app cannot import another app's
-// code. invoice-tax-id.test.ts runs the server's own tables against it.
+// code. invoice-tax-id.test.ts holds a copy of the server's tables.
 const IGNORED = /[\s.\-\u2010-\u2015\u200b-\u200d\ufeff]/gu;
 const MAX_TYPED_LENGTH = 64;
 
