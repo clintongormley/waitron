@@ -21,95 +21,92 @@ Naming 0.45.3: `scripts/journal-monotonic.test.ts:12` and `docs/developers/conve
 
 **Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).**
 
-- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
-  Packages run `tsc` at 7; the repository root resolves the name `typescript` to
-  `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads.
-  typescript-eslint tracks the work in its issue 10940, and the message it prints today names
-  version **7.1** as the target. When a release supports it, the root entry goes back to a plain
-  `^7` range and the alias disappears. `scripts/comments-only.mjs`,
-  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
-  `scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` parse with
-  the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them,
-  before that move. The arrangement is in [ci-and-gates.md](../developers/ci-and-gates.md) → _Two
-  TypeScript compilers are installed, and that is deliberate_.
+Packages run `tsc` at 7; the repository root resolves the name `typescript` to
+`npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads.
+typescript-eslint tracks the work in its issue 10940, and the message it prints today names
+version **7.1** as the target. When a release supports it, the root entry goes back to a plain
+`^7` range and the alias disappears. `scripts/comments-only.mjs`,
+`scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
+`scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` parse with
+the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them,
+before that move. The arrangement is in [ci-and-gates.md](../developers/ci-and-gates.md) → _Two
+TypeScript compilers are installed, and that is deliberate_.
 
 ## A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it
 
 **Left behind by the Stryker upgrade (#447, 2026-09-19).**
 
-- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** Vitest 5 was
-  abandoned because Stryker 9.6.1 kills almost nothing under it in `packages/fiscal` and
-  `packages/shared` (stryker-js#6210). Stryker 10.0.0's release notes mention neither issue,
-  and nothing here was run under Vitest 5, so the question is untouched rather than resolved. A
-  retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
-  PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
-  `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
-  (`docs/developers/workflow-guide.md` → Dependabot pull requests).
-  See the owner's ignore-qualification decision below.
+Vitest 5 was
+abandoned because Stryker 9.6.1 kills almost nothing under it in `packages/fiscal` and
+`packages/shared` (stryker-js#6210). Stryker 10.0.0's release notes mention neither issue,
+and nothing here was run under Vitest 5, so the question is untouched rather than resolved. A
+retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
+PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
+`@vitest/browser-playwright` 5.x holds that package back, and clear it if so
+(`docs/developers/workflow-guide.md` → Dependabot pull requests).
+See the owner's ignore-qualification decision below.
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
 
 **Left behind by the dependency refresh (#432, 2026-09-19).**
 
-- **Whether a declared floor follows the installed version is undecided — one decision for every
-  manifest.** #432 raised five low floors (`hono`, `pg`, `playwright`, `@types/pg`,
-  `@aws-sdk/client-s3`) so that every package declared one identical range; no commit or doc
-  explains why those floors were low, so this was a judgement, not a rule being followed. The vite 8
-  and passkey upgrades below left the same shape (at the time: `^8.0.0` against 8.3.0 installed;
-  `^14.0.0` below 14.0.2 in two manifests). Dependabot's npm updates set no `versioning-strategy`; its first npm PR,
-  #765, raised the floor of each caret range it changed to the new version and kept each manifest's own form (an
-  exact pin stayed exact), so it did not restore #432's one-range shape where that had lapsed:
-  `@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
-  `bench/sqlite-failover`. The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
+#432 raised five low floors (`hono`, `pg`, `playwright`, `@types/pg`,
+`@aws-sdk/client-s3`) so that every package declared one identical range; no commit or doc
+explains why those floors were low, so this was a judgement, not a rule being followed. The vite 8
+and passkey upgrades below left the same shape (at the time: `^8.0.0` against 8.3.0 installed;
+`^14.0.0` below 14.0.2 in two manifests). Dependabot's npm updates set no `versioning-strategy`; its first npm PR,
+#765, raised the floor of each caret range it changed to the new version and kept each manifest's own form (an
+exact pin stayed exact), so it did not restore #432's one-range shape where that had lapsed:
+`@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
+`bench/sqlite-failover`. The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
 
 ## Only the request side of that adapter was compared between the two versions
 
 **Left behind by the Hono Node adapter upgrade (#444, 2026-09-19).** `apps/server` and
 `apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1. Two things it leaves open:
 
-- **Only the request side of that adapter was compared between the two versions.** Version 2 also
-  changed response code — `Response` fast paths, null-body handling, a close handler for
-  `Blob`/`ReadableStream` responses, and `Response.json()`/`Response.redirect()` — and nothing
-  compared a response BODY or its headers across the two. The suites pass, so nothing is known to
-  be broken. Re-running the comparison needs a scratch install of 1.19.15.
+Version 2 also
+changed response code — `Response` fast paths, null-body handling, a close handler for
+`Blob`/`ReadableStream` responses, and `Response.json()`/`Response.redirect()` — and nothing
+compared a response BODY or its headers across the two. The suites pass, so nothing is known to
+be broken. Re-running the comparison needs a scratch install of 1.19.15.
 
 ## The default browser floor rose, and no BROWSER floor is stated anywhere in the repo
 
 **Left behind by the vite 8 upgrade (#450, 2026-09-19).**
 
-- **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.** Nothing
-  sets a `build.target` and there is no `browserslist`, so the SPAs take vite's default: on 8.3.0
-  `["chrome111","edge111","firefox114","safari16.4","ios16.4"]`, where 6.4.3 gave
-  `["es2020","edge88","firefox78","chrome87","safari14"]`. A `browserslist` field would not fix this
-  (measured against vite 8.3.0: it leaves the resolved target at the default, while
-  `build: { target: … }` sets it). Nothing is known to break, and the devices are bought new — but
-  the hardware track's own stated floors do NOT establish that, and one of them cuts the other way:
-  Screen Wake Lock's iOS Safari 16.4
-  (`docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md`) sits exactly ON
-  the new floor, and Web NFC's Chrome for Android 89
-  (`docs/superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md`) is twenty-two majors
-  BELOW the new chrome111. What is missing is anywhere that states a browser floor, so the next
-  bump moves it again silently.
+Nothing
+sets a `build.target` and there is no `browserslist`, so the SPAs take vite's default: on 8.3.0
+`["chrome111","edge111","firefox114","safari16.4","ios16.4"]`, where 6.4.3 gave
+`["es2020","edge88","firefox78","chrome87","safari14"]`. A `browserslist` field would not fix this
+(measured against vite 8.3.0: it leaves the resolved target at the default, while
+`build: { target: … }` sets it). Nothing is known to break, and the devices are bought new — but
+the hardware track's own stated floors do NOT establish that, and one of them cuts the other way:
+Screen Wake Lock's iOS Safari 16.4
+(`docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md`) sits exactly ON
+the new floor, and Web NFC's Chrome for Android 89
+(`docs/superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md`) is twenty-two majors
+BELOW the new chrome111. What is missing is anywhere that states a browser floor, so the next
+bump moves it again silently.
 
 ## The browser-mode packages that declare no vite follow the others' by deduplication, not by a declaration
 
 **Left behind by the vite 8 upgrade (#450, 2026-09-19).**
 
-- **The browser-mode packages that declare no vite follow the others' by deduplication, not by a
-  declaration.** `packages/adjustments`, `bookings`, `media`, `payments-stripe`, `payments-sumup`
-  and `venue-service` resolve vite because vitest declares it as a required peer spanning three
-  majors and pnpm deduped onto the one the declaring manifests choose. If a future change puts a
-  second vite in the tree, they could land on a different one silently.
+`packages/adjustments`, `bookings`, `media`, `payments-stripe`, `payments-sumup`
+and `venue-service` resolve vite because vitest declares it as a required peer spanning three
+majors and pnpm deduped onto the one the declaring manifests choose. If a future change puts a
+second vite in the tree, they could land on a different one silently.
 
 ## A dependency-optimizer receipt taken on vite 6 was not re-measured
 
 **Left behind by the vite 8 upgrade (#450, 2026-09-19).**
 
-- **A dependency-optimizer receipt taken on vite 6 was not re-measured.** The `vitest.config.ts` of
-  `apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui` each carry an
-  `optimizeDeps.include` list; only `apps/setup`'s comment still quotes Vite's warning — "Vite
-  unexpectedly reloaded a test" — as the flake it fixes. Vite 8's migration guide says Rolldown "is
-  now used for dependency optimization instead of esbuild".
+The `vitest.config.ts` of
+`apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui` each carry an
+`optimizeDeps.include` list; only `apps/setup`'s comment still quotes Vite's warning — "Vite
+unexpectedly reloaded a test" — as the flake it fixes. Vite 8's migration guide says Rolldown "is
+now used for dependency optimization instead of esbuild".
 
 No `include` change or controlled cold-cache comparison was made, so the fix
 remains unmeasured.
@@ -118,13 +115,13 @@ remains unmeasured.
 
 **Left behind by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).**
 
-- **The till's QR pin compares the code against itself, not an authority.** `qrSvg`'s one product
-  call site is the on-screen ticket (`apps/till/src/screens/till-ticket-view.ts`); the PRINTED QR's
-  test reads the error-correction level back out of the format-information bits (`formatInfoLevel`
-  in `apps/server/src/qr-matrix.test.ts`) with negative controls, which asserts what art. 21.1
-  mandates. Giving the till the same reader needs a matrix accessor as well (`qrSvg` returns a
-  string, never the library's `qr` object) and a module-boundary decision about where the helper
-  lives.
+`qrSvg`'s one product
+call site is the on-screen ticket (`apps/till/src/screens/till-ticket-view.ts`); the PRINTED QR's
+test reads the error-correction level back out of the format-information bits (`formatInfoLevel`
+in `apps/server/src/qr-matrix.test.ts`) with negative controls, which asserts what art. 21.1
+mandates. Giving the till the same reader needs a matrix accessor as well (`qrSvg` returns a
+string, never the library's `qr` object) and a module-boundary decision about where the helper
+lives.
 
 ## `node-forge` has a high-severity security alert with no fixed version
 
@@ -153,15 +150,15 @@ Next, diagnose why the updater failed to recognise the new resolution.
 **Left behind by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server` and
 `@simplewebauthn/browser` moved to 14.
 
-- **Whether the vulnerability the upgrade fixes is reachable in this product is open.** 14.0.2's
-  release note describes it as "Revamped certificate revocation logic to only cryptographically
-  verify and process CRLs from certificates that chained back to an RP-chosen trust anchor"
-  (GHSA-2g3p-m8c9-hhwh; the release note is the only source). We ask for `attestation: "none"` and
-  never call `MetadataService`, but the attestation FORMAT is chosen by the RESPONSE: the verifier
-  dispatches on the `fmt` inside the client-supplied attestation object, and the `apple` and
-  `android-key` formats carry the library's own built-in trust anchors, which is what makes
-  `validateCertificatePath` — the only caller of `isCertRevoked` — do work. The cheap evidence leans
-  towards reachable rather than away.
+14.0.2's
+release note describes it as "Revamped certificate revocation logic to only cryptographically
+verify and process CRLs from certificates that chained back to an RP-chosen trust anchor"
+(GHSA-2g3p-m8c9-hhwh; the release note is the only source). We ask for `attestation: "none"` and
+never call `MetadataService`, but the attestation FORMAT is chosen by the RESPONSE: the verifier
+dispatches on the `fmt` inside the client-supplied attestation object, and the `apple` and
+`android-key` formats carry the library's own built-in trust anchors, which is what makes
+`validateCertificatePath` — the only caller of `isCertRevoked` — do work. The cheap evidence leans
+towards reachable rather than away.
 
 ## One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it
 

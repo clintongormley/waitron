@@ -5677,67 +5677,51 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 _Formerly parts of B9 and Track C._ Open work:
 [backlog/dependencies.md](backlog/dependencies.md).
 
-- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** A retry
-  removes the Vitest-major ignore in `.github/dependabot.yml` (A779).
+- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
-- **Bundled npm notices stop at a module-type-only package manifest.** Stripe and Nodemailer
-  carry separate installed licence copies until the generator can reach the owning package.
-  Fix the lookup and test both module layouts and workspace exclusion.
+- **Bundled npm notices stop at a module-type-only package manifest.**
   [Detail](backlog/dependencies.md#npm-notices-and-module-type-only-manifests)
 
 - **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.
-  **Next action:** read each claim against the installed 0.45.4, then update the number or the claim.
   [Detail](backlog/dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
 
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
-  When a release supports it, the root entry goes back to a plain `^7` range and the alias
-  disappears.
   [Detail](backlog/dependencies.md#collapse-the-two-typescript-entries-back-into-one-once-typescript-eslint-supports-version-7)
 
 - **Whether a declared floor follows the installed version is undecided — one decision for every
-  manifest.** The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
+  manifest.**
   [Detail](backlog/dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
 
-- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it.** An
-  install that re-resolves the lockfile still warns that the `@esbuild-kit` packages are deprecated.
+- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it.**
   [Detail](backlog/dependencies.md#one-esbuild-copy-older-than-ours-stays-in-the-tree-drizzle-kits-own-range-holds-it)
 
-- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** It needs
-  an owner call on whether Node 24 is still supported.
+- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.**
   [Detail](backlog/dependencies.md#the-supported-node-version)
 
-- **Only the request side of that adapter was compared between the two versions.** Re-running the
-  comparison needs a scratch install of 1.19.15.
+- **Only the request side of that adapter was compared between the two versions.**
   [Detail](backlog/dependencies.md#only-the-request-side-of-that-adapter-was-compared-between-the-two-versions)
 
-- **`apps/server/src/tls.ts`'s type guarantee is still untested.** The Hono Node adapter upgrade
-  (#444) did not exercise an incompatible options reshape.
+- **`apps/server/src/tls.ts`'s type guarantee is still untested.**
   [Detail](backlog/dependencies.md#the-tls-options-type-guarantee-is-untested)
 
-- **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.** What
-  is missing is anywhere that states a browser floor, so the next bump moves it again silently.
+- **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.**
   [Detail](backlog/dependencies.md#the-default-browser-floor-rose-and-no-browser-floor-is-stated-anywhere-in-the-repo)
 
 - **The browser-mode packages that declare no vite follow the others' by deduplication, not by
-  a declaration.** If a future change puts a second vite in the tree, they could land on a
-  different one silently.
+  a declaration.**
   [Detail](backlog/dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
 
 - **The dependency-optimizer fix still needs a cold-cache check on Vite 8.**
   [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
 
-- **The till's QR pin compares the code against itself, not an authority.** Giving the till the same
-  reader needs a matrix accessor and a module-boundary decision.
+- **The till's QR pin compares the code against itself, not an authority.**
   [Detail](backlog/dependencies.md#the-tills-qr-pin-compares-the-code-against-itself-not-an-authority)
 
-- **There is no snapshot file anywhere in the repository.** Whether this repo wants snapshot files
-  at all is an owner decision.
+- **There is no snapshot file anywhere in the repository.**
   [Detail](backlog/dependencies.md#readable-qr-snapshot-differences)
 
-- **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot
-  alert #20). **Next action:** bump it when a fixed version is published, and run the certificate
-  suites in `packages/server-kit`, `apps/server` and `apps/print-agent`.
+- **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot alert #20).
   [Detail](backlog/dependencies.md#node-forge-has-a-high-severity-security-alert-with-no-fixed-version)
 
 - **Whether the vulnerability the upgrade fixes is reachable in this product is open** — left
@@ -5751,8 +5735,7 @@ _Formerly parts of B9 and Track C._ Open work:
   Diagnose `security_update_not_possible` in [run 40069322027](https://github.com/clintongormley/waitron/actions/runs/40069322027):
   it reports 3.1.8 even though a targeted pnpm refresh resolves 3.1.9 without an override.
 
-- **Dependabot's Zod security run reported an older latest resolvable version.** Diagnose why the
-  updater failed to recognise the new resolution.
+- **Dependabot's Zod security run reported an older latest resolvable version.**
   [Detail](backlog/dependencies.md#dependabots-zod-security-run-reported-an-older-latest-resolvable-version)
 
 
