@@ -3093,6 +3093,11 @@ export const en = {
   "appearance.logo_dark_without_light": "Add the main logo before a version for dark screens.",
   "appearance.logo_dark_own": "Dark screens: own version",
   "appearance.logo_dark_plate": "Dark screens: on a light plate",
+  "appearance.logo_print":
+    "How it prints on receipts of departments with no receipt logo of their own.",
+  "appearance.logo_print_blank": "This logo prints blank on receipts.",
+  "appearance.logo_print_failed": "Could not show how this logo prints.",
+  "appearance.logo_print_retry": "Try again",
   "appearance.theme_in_use": "Theme in use",
   "appearance.brand": "Brand colour",
   "appearance.brand_waitron": "Waitron's",
@@ -6540,6 +6545,11 @@ export const es: Record<StringKey, string> = {
     "Añade el logotipo principal antes de una versión para pantallas oscuras.",
   "appearance.logo_dark_own": "Pantallas oscuras: versión propia",
   "appearance.logo_dark_plate": "Pantallas oscuras: sobre una placa clara",
+  "appearance.logo_print":
+    "Así se imprime en los recibos de los departamentos sin logotipo de recibo propio.",
+  "appearance.logo_print_blank": "Este logotipo se imprime en blanco en los recibos.",
+  "appearance.logo_print_failed": "No se ha podido mostrar cómo se imprime este logotipo.",
+  "appearance.logo_print_retry": "Reintentar",
   "appearance.theme_in_use": "Tema en uso",
   "appearance.brand": "Color de marca",
   "appearance.brand_waitron": "De Waitron",
