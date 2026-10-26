@@ -647,6 +647,41 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(bar(el)).toEqual(["Floor", "[T5]", "✎ T9"]);
   });
 
+  it("names a party another device moved by its new table, and its button opens that table", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const moved = party({
+      tableIds: ["t9"],
+      displayName: "T9",
+      unsentDrafts: [unsent("wo-4", "p1")],
+    });
+    api.getTablesState!.mockResolvedValue([table("t4", "T4", null), table("t9", "T9", moved)]);
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]", "✎ T9"]);
+    expect(shell(el).barTables.map((button) => button.tableId)).toEqual(["t9"]);
+
+    barButton(el, "t9").click();
+    await flush(el, 6);
+    expect(selected(el)).toEqual(["T9"]);
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(draft(el).lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("shows ✎ T4 for a party seated at T4 since the held one left it", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    const since = party({
+      id: "v-new",
+      mainBillId: "wo-new",
+      unsentDrafts: [unsent("wo-new", "p1")],
+    });
+    api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
+    await toFloor(el);
+    expect(floor(el)?.tables[0]?.party?.id).toBe("v-new");
+    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+  });
+
   it("selects Floor on the Order screen with no table", async () => {
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),

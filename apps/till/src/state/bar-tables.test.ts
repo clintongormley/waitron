@@ -318,4 +318,36 @@ describe("barTables", () => {
       { tableId: "t5", name: "T4+T5", unsent: false, current: true },
     ]);
   });
+
+  it("names and opens a held party by the tables the read seats it at, when its held table is not one", () => {
+    const held = {
+      ...bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: 1 }),
+      onScreen: false,
+    };
+    const moved = [table(4, null), table(9, party("p4"))];
+    expect(barTables(moved, "ana", { held, released: [] })).toEqual([
+      { tableId: "t9", name: "T9", unsent: true, current: false },
+    ]);
+    const fromFree = { ...held, tableId: "t5", onScreen: true };
+    expect(
+      barTables([table(4, party("p4")), table(5, null)], "ana", { held: fromFree, released: [] }),
+    ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: true }]);
+  });
+
+  it("gives a held party the read does not list way to the open party the read seats at its table", () => {
+    const seatedSince = party("pNew", { unsentDrafts: [draft("b2", "ana")] });
+    const stale = { ...bill({ partyId: "pOld", tableId: "t4", billId: "b1" }), onScreen: true };
+    expect(
+      barTables([table(4, seatedSince), table(5, seatedSince)], "ana", {
+        held: stale,
+        released: [],
+      }),
+    ).toEqual([{ tableId: "t4", name: "T4+T5", unsent: true, current: true }]);
+    expect(
+      barTables([table(4, seatedSince)], "ana", {
+        held: { ...stale, onScreen: false },
+        released: [],
+      }),
+    ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: false }]);
+  });
 });
