@@ -71,14 +71,14 @@ and route, and no existing response or reader changes shape.
 **S1b, unchanged in scope, inherits this list** (each read on this tree, 2026-10-26), which
 corrects the overview's in three places (see "What this changes in the overview"):
 
-- `apps/server/src/boot.ts:2012`, into `mountManagementApi`, which passes it to the invitation and
+- `apps/server/src/boot.ts:2019`, into `mountManagementApi`, which passes it to the invitation and
   reset emails (`apps/server/src/management-api.ts:194`) and answers it on
   `GET /management-api/google/config` (`management-api.ts:788-790`), a route that needs no sign-in.
   Both the sign-in page (`apps/dashboard/src/screens/login-screen.ts:324-328`) and the profile page
   (`apps/dashboard/src/screens/profile-screen.ts:345-348`) read the link from that one route.
-- `boot.ts:2137`, into the S3 invoice-customer download
+- `boot.ts:2144`, into the S3 invoice-customer download
   (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`).
-- `boot.ts:2177`, into `mountMeApi`, which passes it to the own personal-data download
+- `boot.ts:2184`, into `mountMeApi`, which passes it to the own personal-data download
   (`apps/server/src/me-api.ts:130`, then `personal-data-export-api.ts:28`, `:97` and
   `personal-data-readme.ts:15`, `:50`, `:69`, `:100`, the README) and to the email-address check
   email (`me-api.ts:182`).
@@ -87,7 +87,7 @@ corrects the overview's in three places (see "What this changes in the overview"
 - The dashboard's live read `getGoogleConfig` depends on `google_config` alone
   (`apps/dashboard/src/api/live-queries.ts`), so S1b adds `tenants` to it once the route answers
   the stored setting.
-- `apps/server/README.md:487` documents the environment setting; S1b removes it with the setting.
+- `apps/server/README.md:492` documents the environment setting; S1b removes it with the setting.
 - The guide: S1b rewrites this slice's "nothing else on the box shows them" sentence in both
   languages, and adds the setting's name to `staff-notice` and `full-notice`.
 
@@ -975,8 +975,8 @@ packages' focused runs from each task; CI runs the package suites, coverage and 
 
 - **`tenants` has a write allow-list.** Only the files `scripts/write-path-tables.json` names may
   write it (probe 3), so the writer is a new listed file in `@waitron/provisioning` (decision 3).
-- **The readers moved and grew.** The privacy link is passed at `apps/server/src/boot.ts:2012`,
-  `:2137` and `:2177`, not `:1925` and `:2069`, and S3 added a reader the overview did not list,
+- **The readers moved and grew.** The privacy link is passed at `apps/server/src/boot.ts:2019`,
+  `:2144` and `:2184`, not `:1925` and `:2069`, and S3 added a reader the overview did not list,
   `apps/server/src/invoice-customer-data-api.ts:29`, `:125`. The invoice email has no privacy text
   to move: S1b adds it. The sign-in page and the profile page both read the link from one
   route that needs no sign-in (`management-api.ts:788-790`), so S1b reads `tenants` there.

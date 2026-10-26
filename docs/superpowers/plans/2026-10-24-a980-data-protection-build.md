@@ -190,7 +190,7 @@ has no dashboard entry point of its own).
 read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and passed in at
 `apps/server/src/boot.ts:1925` and `:2069`. 2026-10-26, corrected by the
 [S1a plan](2026-10-26-a980-s1a-notice-settings.md)'s reader list, which S1b inherits: the link is
-passed at `boot.ts:2012`, `:2137` and `:2177`; S3 added a reader this note did not list, the
+passed at `boot.ts:2019`, `:2144` and `:2184`; S3 added a reader this note did not list, the
 invoice customer's download (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`); and
 `invoice-email.ts` holds no privacy text, so S1b adds the invoice notice there rather than moving a
 link. The sign-in page and the profile page both read the link from one route that needs no

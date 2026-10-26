@@ -210,20 +210,20 @@ by the answers):
   below). Until S1b, only the Privacy card's own read uses the stored values; the emails, the
   sign-in page, the profile page and the downloads still take the environment setting. The
   readers, as of 2026-10-26:
-  - `apps/server/src/boot.ts:2012`, into `mountManagementApi`, which passes the link to the
+  - `apps/server/src/boot.ts:2019`, into `mountManagementApi`, which passes the link to the
     invitation and reset emails (`apps/server/src/management-api.ts:194`) and answers it on
     `GET /management-api/google/config` (`management-api.ts:788-790`), a route that needs no
     sign-in. The sign-in page and the profile page both read the link from that route.
-  - `boot.ts:2137`, into the invoice customer's download
+  - `boot.ts:2144`, into the invoice customer's download
     (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`).
-  - `boot.ts:2177`, into `mountMeApi`, which passes it to the own personal-data download
+  - `boot.ts:2184`, into `mountMeApi`, which passes it to the own personal-data download
     (`apps/server/src/me-api.ts:130`, then `personal-data-export-api.ts` and the README in
     `personal-data-readme.ts`) and to the email-address check email (`me-api.ts:182`).
   - `apps/server/src/invoice-email.ts` carries no privacy text today, so S1b adds the invoice
     notice there rather than moving a link.
   - The dashboard's live read `getGoogleConfig` depends on `google_config` alone
     (`apps/dashboard/src/api/live-queries.ts`); S1b adds `tenants` to it.
-  - `apps/server/README.md:487` documents the environment setting; S1b removes it with the setting.
+  - `apps/server/README.md:492` documents the environment setting; S1b removes it with the setting.
   - The guide (`apps/server/src/guide/<language>/data-protection.md`): S1b rewrites the
     `privacy-settings` section's last sentence, "For now Waitron only keeps them here: nothing
     else on the box shows them." ("Por ahora Waitron solo los guarda aquí: nada más en el equipo los
