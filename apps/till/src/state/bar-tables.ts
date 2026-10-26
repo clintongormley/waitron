@@ -25,16 +25,24 @@ const localUnsent = (bill: LocalBill): boolean => bill.lines > 0 && !bill.takenB
 
 /**
  * The tables a handheld's bar gives a button (D3, D4, D13): each open party where `personId` has
- * something unsent, and the held party or free table while it is on screen, in `tables`' order.
+ * something unsent, and the held party, or a held table whose party the read does not list, while it
+ * is on screen, in `tables`' order.
  * Per bill the held answer wins, then a released one, then the floor read.
  */
 export function barTables(
   tables: readonly TableState[],
   personId: string,
+  /** Later records of one bill win over earlier ones. */
   local: { held: Held | null; released: readonly LocalBill[] },
 ): BarTable[] {
   if (personId === "") return [];
   const held = local.held;
+  // D13: a held party the read does not list yet still has its table on screen.
+  const unlisted =
+    held !== null &&
+    (held.partyId === null || !tables.some((table) => table.party?.id === held.partyId))
+      ? held
+      : null;
 
   const unsentOf = (party: TableParty | null, mine: LocalBill | null): boolean => {
     const answers = new Map<string | null, boolean>();
@@ -51,12 +59,12 @@ export function barTables(
   };
 
   return groupTables<{ party: TableParty | null; mine: Held | null }>(tables, (table) => {
+    if (unlisted?.tableId === table.id) {
+      return { key: `table:${table.id}`, value: { party: null, mine: unlisted } };
+    }
     const party = table.party;
     if (party?.state === "open") {
       return { key: party.id, value: { party, mine: held?.partyId === party.id ? held : null } };
-    }
-    if (held !== null && held.partyId === null && held.tableId === table.id) {
-      return { key: `table:${table.id}`, value: { party: null, mine: held } };
     }
     return null;
   }).flatMap(({ value: { party, mine }, table, name }) => {

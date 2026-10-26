@@ -260,4 +260,62 @@ describe("barTables", () => {
     expect(barTables([table(4, null)], "ana", released)).toEqual([]);
     expect(barTables([table(4, party("p4", { state: "closed" }))], "ana", released)).toEqual([]);
   });
+
+  it("trusts the held bill over a released record of the same bill", () => {
+    const tables = [table(4, party("p4"))];
+    const local = (heldLines: number, releasedLines: number) => ({
+      held: {
+        ...bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: heldLines }),
+        onScreen: true,
+      },
+      released: [bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: releasedLines })],
+    });
+    expect(barTables(tables, "ana", local(0, 1))).toEqual([
+      { tableId: "t4", name: "T4", unsent: false, current: true },
+    ]);
+    expect(barTables(tables, "ana", local(1, 0))).toEqual([
+      { tableId: "t4", name: "T4", unsent: true, current: true },
+    ]);
+  });
+
+  it("trusts a later released record of a bill over an earlier one", () => {
+    const tables = [table(4, party("p4"))];
+    const released = (...lines: number[]) => ({
+      held: null,
+      released: lines.map((count) =>
+        bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: count }),
+      ),
+    });
+    expect(barTables(tables, "ana", released(1, 0))).toEqual([]);
+    expect(barTables(tables, "ana", released(0, 1))).toEqual([
+      { tableId: "t4", name: "T4", unsent: true, current: false },
+    ]);
+  });
+
+  it("keeps the table on screen when the read does not list its party yet, but not a closed one", () => {
+    const seated = {
+      held: { ...bill({ partyId: "pNew", tableId: "t3", billId: "b1", lines: 2 }), onScreen: true },
+      released: [],
+    };
+    expect(barTables([table(2, party("p2")), table(3, null)], "ana", seated)).toEqual([
+      { tableId: "t3", name: "T3", unsent: true, current: true },
+    ]);
+    expect(barTables([table(3, party("pNew", { state: "closed" }))], "ana", seated)).toEqual([]);
+    expect(barTables([table(2, party("p2"))], "ana", seated)).toEqual([]);
+  });
+
+  it("opens a held party at the table it is held from", () => {
+    const joined = party("p4");
+    const tables = [
+      table(4, joined, { today: today("j1") }),
+      table(5, joined, { today: today("j1") }),
+    ];
+    const local = {
+      held: { ...bill({ partyId: "p4", tableId: "t5", billId: "b1" }), onScreen: true },
+      released: [],
+    };
+    expect(barTables(tables, "ana", local)).toEqual([
+      { tableId: "t5", name: "T4+T5", unsent: false, current: true },
+    ]);
+  });
 });
