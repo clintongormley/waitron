@@ -148,9 +148,10 @@ by the answers):
   Include them, yes or no?
 - **The working-time record of a box with more than one location** — only this node's location is
   exported (S2b decision 6). Today provisioning refuses a second, different location.
-- **Measure the working-time and actions parts on a box.** On a Mac, with 48 closed pay periods ×
-  30 staff, Task 6a's run timed the read inside the write lock at 669.7 ms. Task 6c, measuring its own
-  before-figure on the same Mac at 590.2 ms median, moved the person cut to read time, with one
+- **Measure the working-time, actions and adjustments parts on a box.** On a Mac, with 48 closed
+  pay periods × 30 staff, Task 6a's run timed the read inside the write lock at 669.7 ms. Task 6c,
+  measuring its own before-figure on the same Mac at 590.2 ms median, moved the person cut to read
+  time, with one
   copy of the export's logic, and brought it to 213.8 ms median with an identical CSV. The
   whole-history PDF for 4 years × about 20 shifts a month rendered in 2.6 s (4.0 MB) on the Mac
   (Task 6a); the plan's 650 ms estimate was for 1,000 sessions. The PDF renders on the thread that
@@ -173,9 +174,12 @@ by the answers):
   history (48 closed pay periods × 30 staff) and the adjustments: a median of 238.2 ms over 12
   runs (234.5 ms on a repeat; 213.1 ms without the adjustments part, which itself took about
   24 ms), with the route's own single-row reads left out. Repeat both on a box.
-- **The first snapshot turn is close to S2b's 250 ms bar for a person heavy in every history.**
-  S2d's Task 3b measured 238.2 ms median on the Mac, its slowest run 249.9 ms, and about 89% of it
-  is the working-time read (about 213 ms). A slower box, or a longer history, would cross it.
+- **The first snapshot turn is close to S2d's 250 ms stop rule for a person heavy in two
+  histories.** S2d's Task 3b, for a person heavy in the working-time and adjustments histories, in
+  a fixture with no sales, measured 238.2 ms median on the Mac (Apple M5 Pro), its slowest run
+  249.9 ms, against S2d decision 13's rule to stop if that median is over 250 ms; about 89% of it
+  is the working-time read (about 213 ms). The margin is thin, and a slower box or a longer history
+  may cross it.
   Options: give a module's part write-lock turns of its own, as the actions part has, or narrow the
   working-time read further.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
@@ -215,14 +219,6 @@ by the answers):
 
 ## Decisions and deliberate limits
 
-- **A980 S2d, 2026-10-26:** line voids, comps and discounts are in the download as their own
-  `adjustments.json`, from the adjustments module's part, not in `actions.json`; that settles in
-  practice the S2c question the owner left open (should they have joined S2c?). An item taken off
-  with **Remove** before its preparation started is not in the file: no row records who removed
-  the line (an `order_group_events` row names the person only when the removal empties a held
-  group, and that column is not in the download yet). See the
-  [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 4 and 14.
-
 - **A664, 2026-10-17:** you adopted the revised retention proposal for specialist review.
   Six years remains the discussion baseline. Q48 is yours to send; all product/report code
   waits for relevant fiscal/commercial, labour and privacy design agreement. G4/G5 remain
@@ -237,3 +233,10 @@ by the answers):
   `docs/backlog/alerts.md`); EN/ES guide templates for the record of processing and breach
   checklist (O10). See the design's
   [§8](../superpowers/specs/2026-10-22-a980-data-protection-design.md#8-owner-decisions-answered-2026-10-22).
+- **A980 S2d, 2026-10-26:** line voids, comps and discounts are in the download as their own
+  `adjustments.json`, from the adjustments module's part, not in `actions.json`; that settles in
+  practice the S2c question the owner left open (should they have joined S2c?). An item taken off
+  with **Remove** before its preparation started is not in the file: no row records who removed
+  the line (an `order_group_events` row names the person only when the removal empties a held
+  group, and that column is not in the download yet). See the
+  [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 4 and 14.
