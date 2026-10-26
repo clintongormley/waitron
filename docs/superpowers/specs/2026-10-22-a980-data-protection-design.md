@@ -224,8 +224,9 @@ line the server's logger writes, and the failed start's report, shows `***` for 
 the container's output is masked only in the server's own log lines and the failed start's report:
 `console.warn` lines, the frozen-process watchdog's line on standard error and the command-line tools' output are not._
 
-_2026-10-26, later: by the owner's answer the S10 mask is partial: each word, each half of an email
-address and each tax number keeps its first and last character around `***`, so
+_2026-10-26, later: by the owner's answer the S10 mask is partial: each word, each tax number, and an
+email's part before the `@` and its domain name keep their first and last character around `***`,
+so
 `marta.soler@example.test` logs as `m***r@e***e.test` (the S10 plan's decision 14)._
 
 ### 2.4 Copies and routes off the box

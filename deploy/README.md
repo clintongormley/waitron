@@ -202,8 +202,9 @@ Both carry the caught error's own words — a missing column, a database file th
 counts behind `migrations.incomplete`, the migration hashes behind `provisioning.database_ahead` —
 with any credentials embedded in a URL masked before it is written. A person's name, email or tax
 number in an error's details is partly masked in the server's own log lines, on the page and in
-`docker compose logs`, under the detail names Waitron lists: each word, each half of an email
-address and each tax number keeps only its first and last character around `***`, as in
+`docker compose logs`, under the detail names Waitron lists: each word, each tax number, and
+an email's part before the `@` and its domain name keep only their first and last character
+around `***`, with the `@` and the ending after the last dot left whole, as in
 `m***r@e***e.test`, `J***i P***g F***r` and `1***Z`; the names of things, such as a table's
 label or a device's name, stay visible. The command-line tools still print an error's details on
 their own terminal: the setup and credentials tools, and the restore command's venue confirmation,

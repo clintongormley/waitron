@@ -329,9 +329,12 @@ note 5).
     - **Anything but a string** under a listed name (an object, an array, a number, a boolean) is
       `***`, and nothing inside it is looked at. `null` and an absent value stay; a function or a
       symbol is dropped, as plain JSON drops it.
-    - **Characters are code points**, so an accented or astral first or last letter stays whole:
-      `Àngel` → `À***l`, and a word of three code points is `***` even when one of them takes two
-      UTF-16 units.
+    - **Characters are code points**, so a first or last letter stored as one code point, accented
+      or astral, stays whole: `Àngel` → `À***l`, and a word of three code points is `***` even when
+      one of them takes two UTF-16 units. A letter written with a separate combining accent can
+      lose or strand its accent (`"Jose\u0301"` → `J***\u0301`), which shows no more of the value.
+    - **The domain name is everything before the last dot**: `marta@mail.example.co.uk` →
+      `m***a@m***o.uk`, not `m***a@e***e.co.uk`.
     - **Words are split on any whitespace and joined by one space**, so the original spacing is
       not shown: `"  Jordi   Puig\tFerrer"` → `J***i P***g F***r`. An empty or blank value is `***`.
     - **A hyphenated name is one word**: `Puig-Ferrer` → `P***r`, which shows less than masking

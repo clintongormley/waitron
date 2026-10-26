@@ -259,8 +259,8 @@ by the answers):
   well as in `waitron.log` and on the recovery page: a person's name, email or tax number under a
   listed detail name. Masked partly, by the owner's decision of 2026-10-26 (the plan's decision 14, which
   also lists the choices made where the answer left a point open):
-  each word, each half of an email address and each tax number keeps only its first and last
-  character around `***`, so a refused invitation logs
+  each word, each tax number, and an email's part before the `@` and its domain name keep only
+  their first and last character around `***`, so a refused invitation logs
   `{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`. The
   venue's own legal name and tax number are masked too, because for a sole trader they are a
   person's: Jordi Puig Ferrer's refused restore logs
