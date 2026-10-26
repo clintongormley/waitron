@@ -1,7 +1,9 @@
 import { mkdtemp, readFile } from "node:fs/promises";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
+import nodemailer from "nodemailer";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -19,6 +21,8 @@ import "@waitron/payments-sumup";
 import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
+import { createAccountEmailSender, type AccountEmailSender } from "./account-email.js";
+import { createAttendanceEmailSender } from "./attendance-email.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { mountManagementApi } from "./management-api.js";
@@ -38,6 +42,8 @@ const VENUE_LEGAL_NAME = "Jordi Puig Ferrer";
 const VENUE_TAX_ID = "12345678Z";
 const LOCATION_NAME = "Bar del Port";
 const TODAY_NAME = "Soler";
+const JORDI_EMAIL = "jordi.puig@example.test";
+const JORDI_NAME = "Jordi Puig";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -114,7 +120,7 @@ async function expectLogged(
 let nif = 0;
 let venueCfg: Parameters<typeof mountManagementApi>[1]["venueCfg"];
 
-async function setupVenue(): Promise<{ adminId: string; martaId: string; clerkId: string }> {
+async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
   nif += 1;
   const venue = await applyHistoricalTestVenue(
     planVenue(
@@ -158,16 +164,13 @@ async function setupVenue(): Promise<{ adminId: string; martaId: string; clerkId
   };
   return withTransaction(suite.db, async (tx) => {
     const [admin] = await tx.select({ id: persons.id }).from(persons).limit(1);
-    const [marta] = await tx
-      .insert(persons)
-      .values({
-        displayName: MARTA_NAME,
-        email: MARTA_EMAIL,
-        pinHash: hashPin("1111"),
-        passwordHash: hashPassword("martaPass123"),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    await tx.insert(persons).values({
+      displayName: MARTA_NAME,
+      email: MARTA_EMAIL,
+      pinHash: hashPin("1111"),
+      passwordHash: hashPassword("martaPass123"),
+      role: "staff",
+    });
     const [clerk] = await tx
       .insert(persons)
       .values({
@@ -178,7 +181,7 @@ async function setupVenue(): Promise<{ adminId: string; martaId: string; clerkId
         role: "staff",
       })
       .returning({ id: persons.id });
-    return { adminId: admin!.id, martaId: marta!.id, clerkId: clerk!.id };
+    return { adminId: admin!.id, clerkId: clerk!.id };
   });
 }
 
@@ -187,7 +190,7 @@ async function cookieFor(personId: string): Promise<string> {
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 
-function management(log: Logger): Hono {
+function management(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -198,6 +201,7 @@ function management(log: Logger): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      sendAccountEmail,
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
     },
     log,
@@ -205,7 +209,7 @@ function management(log: Logger): Hono {
   return app;
 }
 
-function me(log: Logger): Hono {
+function me(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
   const app = new Hono();
   mountMeApi(
     app,
@@ -215,6 +219,7 @@ function me(log: Logger): Hono {
       venueLocale: "en-GB",
       modules: ["core"],
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
+      sendAccountEmail,
     },
     log,
   );
@@ -234,6 +239,77 @@ async function send(
     body: JSON.stringify(body),
   });
   return { status: res.status, body: await res.json() };
+}
+
+interface Relay {
+  url: string;
+  recipients: string[];
+  close: () => Promise<void>;
+}
+
+/** An SMTP relay that refuses the recipient at `RCPT` or the message after `DATA`, echoing the address in its reply as Postfix does. */
+async function refusingRelay(at: "rcpt" | "data"): Promise<Relay> {
+  const recipients: string[] = [];
+  const server = createServer((socket: Socket) => {
+    socket.setEncoding("utf8");
+    socket.write("220 relay ESMTP\r\n");
+    let buffer = "";
+    let inData = false;
+    let rcpt = "";
+    socket.on("data", (chunk: string) => {
+      buffer += chunk;
+      for (let end = buffer.indexOf("\r\n"); end !== -1; end = buffer.indexOf("\r\n")) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        if (inData) {
+          if (line === ".") {
+            inData = false;
+            socket.write(`550 5.7.1 <${rcpt}>: message refused for ${rcpt}\r\n`);
+          }
+          continue;
+        }
+        if (line.startsWith("EHLO") || line.startsWith("HELO")) socket.write("250 relay\r\n");
+        else if (line.startsWith("RCPT")) {
+          rcpt = /<([^>]*)>/.exec(line)?.[1] ?? "?";
+          recipients.push(rcpt);
+          socket.write(
+            at === "rcpt"
+              ? `550 5.1.1 <${rcpt}>: Recipient address rejected: User unknown\r\n`
+              : "250 ok\r\n",
+          );
+        } else if (line === "DATA") {
+          inData = true;
+          socket.write("354 go\r\n");
+        } else if (line === "QUIT") socket.end("221 bye\r\n");
+        else socket.write("250 ok\r\n");
+      }
+    });
+    socket.on("error", () => {});
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    url: `smtp://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    recipients,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+/** What nodemailer itself hands over when this relay refuses Jordi: the control that the reply carries his address. */
+async function relayRefusal(relay: Relay): Promise<string> {
+  const transport = nodemailer.createTransport({ url: relay.url });
+  try {
+    await transport.sendMail({
+      from: "venue@example.test",
+      to: JORDI_EMAIL,
+      subject: "s",
+      text: "t",
+    });
+  } catch (error) {
+    return (error as Error).message;
+  } finally {
+    transport.close();
+  }
+  throw new Error("the relay accepted the message");
 }
 
 const EMAIL_TAKEN = {
@@ -654,4 +730,144 @@ describe("the recovery page, the log file and stdout carry no person's details",
     }
     expect(withoutLog).not.toContain("&quot;***&quot;");
   });
+
+  for (const at of ["rcpt", "data"] as const) {
+    it(`logs no address or name when the relay refuses an invitation at ${at.toUpperCase()}`, async () => {
+      const { adminId } = await setupVenue();
+      const r = await rig();
+      const relay = await refusingRelay(at);
+      try {
+        const sender = createAccountEmailSender({
+          url: relay.url,
+          from: "venue@example.test",
+          timeZone: "Europe/Madrid",
+        });
+
+        const answer = await send(
+          management(r.log, sender),
+          "POST",
+          "/management-api/staff",
+          await cookieFor(adminId),
+          {
+            displayName: JORDI_NAME,
+            firstNames: "Jordi",
+            lastNames: "Puig",
+            telephone: null,
+            role: "staff",
+            email: JORDI_EMAIL,
+          },
+        );
+
+        expect(answer).toEqual({
+          status: 201,
+          body: { id: expect.any(String), invitationSent: false },
+        });
+        const personId = (answer.body as { id: string }).id;
+        expect(relay.recipients).toEqual([JORDI_EMAIL]);
+        expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+        const stdout = r.stdout.join("");
+        const file = await r.file();
+        const page = await r.page();
+        const logged = {
+          purpose: "invitation",
+          personId,
+          at: expect.any(String),
+          level: "error",
+          event: "account_email.send_failed",
+        };
+        expect(lineFor(stdout, "account_email.send_failed")).toEqual(logged);
+        expect(lineFor(file, "account_email.send_failed")).toEqual(logged);
+        expect(page).toContain("account_email.send_failed");
+        for (const hidden of [JORDI_EMAIL, JORDI_NAME]) {
+          expect(stdout).not.toContain(hidden);
+          expect(file).not.toContain(hidden);
+          expect(page).not.toContain(hidden);
+        }
+      } finally {
+        await relay.close();
+      }
+    });
+  }
+
+  it("logs the sender's code, not the relay's reply, when a person's new email is refused", async () => {
+    const { clerkId } = await setupVenue();
+    const r = await rig();
+    const relay = await refusingRelay("rcpt");
+    try {
+      const sender = createAccountEmailSender({
+        url: relay.url,
+        from: "venue@example.test",
+        timeZone: "Europe/Madrid",
+      });
+
+      const answer = await send(
+        me(r.log, sender),
+        "PUT",
+        "/management-api/session/me/profile",
+        await cookieFor(clerkId),
+        {
+          displayName: "Clerk",
+          firstNames: "Clerk",
+          lastNames: "Person",
+          telephone: null,
+          locale: "en-GB",
+          currentPassword: "clerkPass123",
+          email: JORDI_EMAIL,
+        },
+      );
+
+      expect(answer).toEqual({ status: 200, body: { emailVerificationSent: false } });
+      expect(relay.recipients).toEqual([JORDI_EMAIL]);
+      expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+      const stdout = r.stdout.join("");
+      const file = await r.file();
+      const page = await r.page();
+      const logged = {
+        purpose: "email_change",
+        errorCode: "email.send_refused",
+        at: expect.any(String),
+        level: "error",
+        event: "account_email.send_failed",
+      };
+      expect(lineFor(stdout, "account_email.send_failed")).toEqual(logged);
+      expect(lineFor(file, "account_email.send_failed")).toEqual(logged);
+      expect(page).toContain("&quot;errorCode&quot;:&quot;email.send_refused&quot;");
+      expect(stdout).not.toContain(JORDI_EMAIL);
+      expect(file).not.toContain(JORDI_EMAIL);
+      expect(page).not.toContain(JORDI_EMAIL);
+    } finally {
+      await relay.close();
+    }
+  });
+
+  for (const at of ["rcpt", "data"] as const) {
+    it(`gives the attendance worker no address when the relay refuses at ${at.toUpperCase()}`, async () => {
+      const relay = await refusingRelay(at);
+      try {
+        const message = {
+          smtp: { url: relay.url, from: "venue@example.test" },
+          recipient: JORDI_EMAIL,
+          locale: "en" as const,
+          businessDay: "2026-10-25",
+          locationName: LOCATION_NAME,
+          missingKinds: ["in" as const],
+        };
+        // As boot.ts builds it: no onFailure.
+        const outcome = await createAttendanceEmailSender()(message);
+        const reasons: unknown[][] = [];
+        const reported = await createAttendanceEmailSender({
+          onFailure: (...args) => reasons.push(args),
+        })(message);
+
+        expect(outcome).toBe("rejected");
+        expect(reported).toBe("rejected");
+        expect(reasons).toEqual([["email.test_refused"]]);
+        expect(JSON.stringify([outcome, reasons])).not.toContain(JORDI_EMAIL);
+        expect(relay.recipients).toEqual([JORDI_EMAIL, JORDI_EMAIL]);
+        expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+      } finally {
+        await relay.close();
+      }
+    });
+  }
 });
