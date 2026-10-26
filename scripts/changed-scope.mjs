@@ -259,6 +259,8 @@ export const OWN_SHARD_PACKAGES = [
   ADJUSTMENTS_PACKAGE,
   STAFFING_PACKAGE,
   "@waitron/provisioning",
+  "@waitron/identity",
+  "@waitron/workforce",
 ];
 
 /**
@@ -292,8 +294,6 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/country-gb",
   "@waitron/country-packs",
   "@waitron/dashboard-kit",
-  "@waitron/identity",
-  "@waitron/workforce",
   "@waitron/credentials",
   "@waitron/catalogue",
   "@waitron/recipes",
@@ -363,6 +363,8 @@ export const SCOPE_GATES = [
   { output: "adjustments", covers: membership(ADJUSTMENTS_PACKAGE) },
   { output: "staffing", covers: membership(STAFFING_PACKAGE) },
   { output: "provisioning", covers: membership("@waitron/provisioning") },
+  { output: "identity", covers: membership("@waitron/identity") },
+  { output: "workforce", covers: membership("@waitron/workforce") },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
   { output: "light_b", covers: lightGate(LIGHT_B_PACKAGES) },
   { output: "shared", covers: membership("@waitron/shared") },

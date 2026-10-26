@@ -1767,6 +1767,35 @@ describe("the test shards", () => {
     expect(job("ci").body.join("\n")).toContain("- test-provisioning-merge");
   });
 
+  it.each(["identity", "workforce"])(
+    "isolates %s on a membership-gated coverage runner and propagates its refusal",
+    (gate) => {
+      const name = `@waitron/${gate}`;
+      const id = `test-${gate}`;
+      expect(OWN_SHARD_PACKAGES).toContain(name);
+      expect(LIGHT_A_PACKAGES).not.toContain(name);
+      expect(LIGHT_B_PACKAGES).not.toContain(name);
+      const body = job(id).body;
+      expect(gatesRead(body)).toEqual(["code", gate]);
+      expect(body.join("\n")).toContain(`${gate} == 'true'`);
+      expect(body.join("\n")).toContain(`pnpm --filter "${name}" test:coverage`);
+      expect(body.join("\n")).toContain("scripts/vitest-file-progress.mjs");
+      expect(job("changes").body.join("\n")).toContain(
+        `${gate}: \${{ steps.gates.outputs.${gate} }}`,
+      );
+      expect(needsOf(job("ci").body)).toContain(id);
+      const needs = Object.fromEntries(
+        needsOf(job("ci").body).map((needed) => [needed, { result: "success" }]),
+      );
+      expect(runVerdict(needs).status).toBe(0);
+      needs[id] = { result: "failure" };
+      const refused = runVerdict(needs);
+      expect(refused.status).toBe(JQ_REFUSED);
+      expect(refused.output).toContain(`not succeeded or skipped: ${id}`);
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
+
   it("isolates Bookings from the light bins", () => {
     const name = "@waitron/bookings";
     expect(OWN_SHARD_PACKAGES).toContain(name);
