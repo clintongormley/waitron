@@ -119,6 +119,7 @@ export async function mountReceiptApp(
         fixedReceiptLanguage: null,
         defaultProductVatClass: "general",
       } satisfies VenueDefaults,
+      "/management-api/venue-privacy": { privacyNoticeUrl: null, privacyEmail: null },
       "/management-api/alerts": { visible: false, alerts: [] },
       "/management-api/venue-service/opening-hours": {
         departments: [],

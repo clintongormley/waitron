@@ -102,6 +102,7 @@ async function mount(
           fixedReceiptLanguage: null,
           defaultProductVatClass: "general",
         }),
+        getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
         getVenueDepartments: async () => [],
         getMe: async () => ({
           personId: "p1",
@@ -891,6 +892,7 @@ it("Venue details hosts the Defaults card, whose Save stays quiet until the draf
   const put = vi.fn(savedCatalan);
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
+    getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
     putVenueDefaults: put,
   });
   const panel = await readyDefaults(app);
@@ -922,6 +924,7 @@ it("saving the Defaults card preserves a separate venue-details draft", async ()
   const detailsWrite = vi.fn<DashboardApi["patchVenueDetails"]>();
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
+    getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
     putVenueDefaults: put,
     patchVenueDetails: detailsWrite,
   });
@@ -955,6 +958,7 @@ it("saving the Defaults card preserves a separate venue-details draft", async ()
 it("the hosted Defaults card protects sidebar navigation through Keep and Discard", async () => {
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
+    getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
   });
   const panel = await readyDefaults(app);
   await editDefaults(panel);
@@ -973,23 +977,54 @@ it("the hosted Defaults card protects sidebar navigation through Keep and Discar
   expect(unload.defaultPrevented).toBe(false);
 });
 
-it("the Venue details tab's four cards are spaced evenly", async () => {
+it("leaving Venue settings with a changed Privacy draft asks, and Discard leaves without a write", async () => {
+  const put = vi.fn<DashboardApi["putVenuePrivacy"]>();
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
+    getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: "privacy@example.com" }),
+    putVenuePrivacy: put,
+  });
+  const privacy = () => settings(app).shadowRoot!.querySelector("dashboard-venue-privacy-panel");
+  await expect.poll(() => privacy()?.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
+  const panel = privacy()!;
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
+  await expect.poll(() => panel.shadowRoot!.querySelector("[name=privacyEmail]")).toBeTruthy();
+  const email = panel.shadowRoot!.querySelector<WtInput>("[name=privacyEmail]")!;
+  await email.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(email.shadowRoot!.querySelector("input")!),
+    "typed@example.com",
+  );
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(put).not.toHaveBeenCalled();
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(false);
+});
+
+it("the Venue details tab's five cards are spaced evenly", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getVenueDefaults: async () => defaultsModel,
+    getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
   });
   const panel = await readyDefaults(app);
   const details = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
   const day = details.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
   await expect.poll(() => day.shadowRoot?.querySelector(".settings-card")).toBeTruthy();
+  const privacy = settings(app).shadowRoot!.querySelector("dashboard-venue-privacy-panel")!;
+  await expect.poll(() => privacy.shadowRoot?.querySelector(".settings-card")).toBeTruthy();
   const cards = [
     ...details.shadowRoot!.querySelectorAll(".settings-card"),
     day.shadowRoot!.querySelector(".settings-card")!,
     panel.shadowRoot!.querySelector(".settings-card")!,
+    privacy.shadowRoot!.querySelector(".settings-card")!,
   ].map((card) => card.getBoundingClientRect());
-  expect(cards).toHaveLength(4);
+  expect(cards).toHaveLength(5);
   const gaps = cards.slice(1).map((card, i) => Math.round(card.top - cards[i]!.bottom));
   expect(gaps[0]).toBeGreaterThan(0);
-  expect(gaps).toEqual([gaps[0], gaps[0], gaps[0]]);
+  expect(gaps).toEqual([gaps[0], gaps[0], gaps[0], gaps[0]]);
 });
 
 for (const locale of ["en-GB", "es-ES"]) {
@@ -1001,6 +1036,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         expect(window.innerWidth).toBe(width);
         const { app } = await mount("/manage/venue-settings/view/venue-details", locale, theme, {
           getVenueDefaults: async () => defaultsModel,
+          getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
         });
         const panel = await readyDefaults(app);
         const screen = settings(app);
