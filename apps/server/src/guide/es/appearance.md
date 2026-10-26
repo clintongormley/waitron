@@ -369,8 +369,7 @@ aspecto de ninguna pantalla.
 
 **Usar en todas las pantallas** pregunta antes, con una pregunta como «¿Usar Terraza en todas las
 pantallas?». Si el tema tiene colores que se leen mal, la pregunta los muestra bajo «Se leen mal:».
-Si el tamaño del texto del tema es distinto del que está en uso, el diálogo dice también «El texto
-de las cajas también cambia de tamaño.» **Usarlo** pone el tema en uso, y **Volver** no cambia nada.
+**Usarlo** pone el tema en uso, y **Volver** no cambia nada.
 
 Cuando un tema pasa a estar en uso, el panel que estás usando cambia a él al momento y los demás
 paneles abiertos a la vez lo siguen por su cuenta. Las cajas con la sesión iniciada lo siguen igual

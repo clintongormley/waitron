@@ -3121,7 +3121,6 @@ export const en = {
   "appearance.text_size_standard": "{size} (standard)",
   "appearance.bad_text_size": "Pick one of the steps from 100% to 130%.",
   "appearance.preview_product": "Sparkling elderflower lemonade",
-  "appearance.switch_text_size": "Text on the tills changes size too.",
   "appearance.note":
     "Applies to the dashboard and every till. Each screen shows this theme's light or dark version, as its own Theme setting says: Light, Dark or Follow device.",
   "appearance.editing_in_use": "Theme in use: {name}. Saving changes every screen.",
@@ -6573,7 +6572,6 @@ export const es: Record<StringKey, string> = {
   "appearance.text_size_standard": "{size} (estándar)",
   "appearance.bad_text_size": "Elige uno de los pasos del 100 % al 130 %.",
   "appearance.preview_product": "Tinto de verano con limón",
-  "appearance.switch_text_size": "El texto de las cajas también cambia de tamaño.",
   "appearance.note":
     "Se aplica al panel y a todas las cajas. Cada pantalla muestra la versión clara u oscura de este tema, según su propio ajuste de Tema: Claro, Oscuro o Según el dispositivo.",
   "appearance.editing_in_use": "Tema en uso: {name}. Al guardar cambian todas las pantallas.",

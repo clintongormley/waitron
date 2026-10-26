@@ -338,8 +338,7 @@ renaming a theme changes no screen's look.
 
 **Use on every screen** asks first, with a question such as "Use Terrace on every screen?" When
 the theme has colours that are hard to read, the question lists them under "Hard to read:".
-When the theme's text size differs from the one in use, the dialog also says "Text on the tills
-changes size too." **Use it** puts the theme in use, and **Back** changes nothing.
+**Use it** puts the theme in use, and **Back** changes nothing.
 
 Once a theme is in use, the dashboard you are using changes to it at once and other dashboards
 open at the same time follow on their own. Signed-in tills follow as they do when you save the

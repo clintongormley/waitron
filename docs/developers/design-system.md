@@ -4227,9 +4227,7 @@ The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data
   dialog lists them under "Hard to read:". A name refusal (`theme.name_taken`, or `theme.invalid`
   naming the name field) shows under the field; any other refusal shows at the bottom.
 - **The switch dialog** (`apps/dashboard/src/widgets/theme-switch-dialog.ts`) asks "Use {name} on
-  every screen?", adds "Text on the tills changes size too." when the theme's text size differs
-  from the one in use's (Waitron's theme counts as 100%), lists the theme's warnings when it has
-  any, and never refuses a theme for them;
+  every screen?", lists the theme's warnings when it has any, and never refuses a theme for them;
   Back and Use it, with a refusal shown at the bottom.
 - **The delete dialog is `wt-delete-dialog`, its impact built from the card's live list**
   (`themeDeleteImpact`, `apps/dashboard/src/widgets/theme-delete.ts:7`) rather than read from the

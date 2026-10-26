@@ -1484,6 +1484,9 @@ whether those reads should follow today's map once a group is left.
   started may still be split. Moving sent work to another table is allowed and tells the kitchen.
   These decisions remain covered in `apps/server/src/split-bill.test.ts`.
 
+- **No text-size warning in theme dialogs (A841, owner, 2026-10-25).** Switching or deleting a
+  theme says nothing about the tills' text size.
+
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration
