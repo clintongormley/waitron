@@ -184,6 +184,30 @@ and a disabled device can ask to come back (point 1).
 9. **Logs.** **Diagnostics / Diagnóstico** (S:973/4380) shows the recent log lines (names, emails and
    tax numbers partly masked since S10); **Alerts / Avisos** (S:814/4318) lists alerts.
 
+**Corrected after the claim check (2026-10-26).** Task 4 (`~/waitron-campaign-b/a980-s6-claim-check.md`)
+showed four points above wrong or too broad; the text above is left as written.
+
+- Point 1: a deleted device's **Last seen** does not go with it. Delete is soft and keeps
+  `last_seen_at` (`device-delete.ts:209-218` sets `deletedAt` and clears the token hash); only the
+  Devices list hides the row (`device-api.ts:731` filters `isNull(devices.deletedAt)`). So the page
+  says the list takes **Last seen** off the screen, and to note it before deleting.
+- Point 3: cash-drawer openings are on a screen. **Print Queue / Cola de impresión** (S:1603/5019,
+  a tab of the Printers screen) lists recent completed jobs of every kind, drawer jobs included
+  (`print-api.ts:1412-1416`), with columns for printer, status, attempts, queued and delivered
+  (`printers-screen.ts:3187-3260`): no column marks a drawer job and none names a person. And
+  **View details** names who asked only where a person is recorded (`order-detail-dialog.ts:94-99`);
+  the original print at the sale is listed with no person (`invoice-delivery-status.ts:265-276`).
+- Point 7: refund drafts are cleared, but by the till app when it signs the person out
+  (`till-app.ts:16663-16673` → `#clearTenderRefundSession`, `:7751-7759`), not by disabling or
+  deleting the device, which clears nothing on it.
+- Point 9: Diagnostics masks only details logged under a listed key (`log-personal-data.ts:31-45`),
+  each piece shown as at most its first and last character; a name, email or tax number logged any other way
+  is not masked. The page now says exactly that much.
+
+The plan's L11 row and Task 2 step 2 say "certificate or Cl@ve"; the AEPD guide names "certificado
+electrónico reconocido o sistemas Cl@ve permanente y PIN24H", and the page now quotes those names
+and no gloss.
+
 ## Global constraints
 
 - **Every sentence about the product is checked against the code before it is written**, and the
@@ -364,4 +388,5 @@ AEPD: `https://www.aepd.es/guias/guia-brechas-seguridad.pdf`, extracted with `pd
 | L13 | first layer: controller, purpose, rights, and a way to the rest | LOPDGDD 11.1–2 | design R23 |
 | L14 | working-time record kept four years and available | ET 34.9 | design R32 |
 | L15 | answer within a month | GDPR 12(3) | design R9 |
+| L16 | answer without undue delay and within one month; two more months where needed, for complex or many requests, if the person is told with reasons within the first month (added 2026-10-26 after the claim check) | GDPR 12(3); Spanish first sentence as corrected by the 2021 corrigendum (`corr2021.html`, point 3) | ES (`gdpr-es.txt`, first sentence from `corr2021.html`): «3. El responsable del tratamiento facilitará al interesado información relativa a sus actuaciones sobre la base de una solicitud con arreglo a los artículos 15 a 22, sin dilación indebida y, en cualquier caso, en el plazo de un mes a partir de la recepción de la solicitud. Dicho plazo podrá prorrogarse otros dos meses en caso necesario, teniendo en cuenta la complejidad y el número de solicitudes. El responsable informará al interesado de cualquiera de dichas prórrogas en el plazo de un mes a partir de la recepción de la solicitud, indicando los motivos de la dilación». EN (`gdpr-en.txt`): "3. The controller shall provide information on action taken on a request under Articles 15 to 22 to the data subject without undue delay and in any event within one month of receipt of the request. That period may be extended by two further months where necessary, taking into account the complexity and number of the requests. The controller shall inform the data subject of any such extension within one month of receipt of the request, together with the reasons for the delay." |
 

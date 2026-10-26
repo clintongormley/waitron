@@ -14,9 +14,11 @@ duties include these:
 
 - Tell people about their data when you collect it. The sections below give you short notices for
   staff, invoice customers and guests who book, and a checklist for your full notice.
-- Answer a person who asks to see, correct or delete their data without undue delay, and within
-  one month at the latest. Waitron keeps no list of these requests, so note each request, its date
-  and your answer in your own records.
+- Answer a person who asks to see, correct or delete their data, or to use another of their rights,
+  without undue delay and within one month of receiving the request. If a request is complex, or you
+  have many, the law lets you take two more months where needed, as long as you tell the person,
+  with your reasons, within the first month. Waitron keeps no list of these requests, so note each
+  request, its date and your answer in your own records.
 - Keep a written record of how you use personal data.
 - Act if personal data is lost or exposed, and decide with your adviser whether to tell the AEPD,
   Spain's data-protection authority, and the people affected.
@@ -37,7 +39,8 @@ Waitron helps with requests from people in these ways:
   can also change their email, role and status. See
   [Names and contact details](staff.md#staff-details).
 - When an admin disables a person's account, Waitron deletes the person's PIN, password, passkeys,
-  two-factor settings and Google link. See [Account access](staff.md#account-access).
+  two-factor settings, recovery codes and Google link. See
+  [Account access](staff.md#account-access).
 
 The templates on this page are in English. The Spanish page, at `/help/es/data-protection`, holds
 the same templates in Spanish, for the text you publish in Spain.
@@ -54,12 +57,13 @@ outside Waitron.
 Copy and adapt:
 
 **Data protection.** Controller: _your venue's legal name_ (_your tax number_), _your address_,
-_your privacy email address_. We use your data to manage your contract, your access to Waitron
-and the daily working-time record, which the law requires us to keep for four years. Waitron
-records which person performs each till operation, such as voids, refunds and opening the cash
-drawer. You can exercise your rights of access, rectification, erasure, restriction, objection and
-portability by writing to _your privacy email address_, and you can complain to the AEPD. More
-information: _the address of your staff privacy page_.
+_your privacy email address_. We use your data to manage your contract, your access to Waitron and
+the daily working-time record, which the law requires us to keep for four years. Waitron records
+which member of staff rang up a sale, authorised a void, asked for or authorised a refund, and
+opened the cash drawer or authorised its opening. You can exercise your rights of access,
+rectification, erasure, restriction, objection and portability by writing to _your privacy email
+address_, and you can complain to the AEPD. More information: _the address of your staff privacy
+page_.
 
 The last line points to your full notice, which goes on your own web page. See
 [The full notice on your web page](data-protection.md#full-notice).
@@ -79,13 +83,14 @@ information: _your privacy email address_, _the address of your privacy page_.
 Waitron does not show this notice anywhere yet. Show it where staff take the customer's details,
 for example on a sign beside the till.
 
-If you also want it on paper, you can type a short version into the receipt's **Footer message**.
-In **Departments and zones**, open the department and choose its **Receipts** tab. What you type
-there prints at the bottom of the receipts the till prints for that department, simplified
-receipts and full invoices alike. Three limits apply. You set it for each department separately.
-You write it once for each language the receipt editor shows. It holds at most 200 characters,
-and the notice above is longer than that, so use a short version such as this one, and count its
-length once your details are in.
+If you also want it on paper, you can type a short version into the receipt's **Footer message**. In
+**Departments and zones**, open the department and choose its **Receipts** tab. What you type there
+prints at the bottom of the receipts the till prints for that department, simplified receipts and
+full invoices alike. It also appears on the A4 copy of a full invoice, printed or as a PDF, the PDF
+you email included. Three limits apply. You set it for each department separately. You write it once
+for each language the receipt editor shows. It holds at most 200 characters, and the notice above is
+longer than that, so use a short version such as this one, and count its length once your details
+are in.
 
 Copy and adapt:
 
@@ -117,8 +122,9 @@ invoice customers and guests who book. For each group, the law asks the notice t
 - where a use rests on legitimate interests, the interests you or someone else pursue;
 - who receives the data, or which kinds of recipient, if anyone does, such as the Tax Agency for
   invoices, your email provider and the provider of your backup storage;
-- where it applies, that you intend to transfer the data to a country outside the European Union,
-  which can happen through the providers you chose, so check with each one;
+- where it applies, that you intend to transfer the data to a third country or an international
+  organisation, as the law calls them; this can happen through the providers you chose, so ask each
+  one where it keeps data, and ask your adviser which countries count;
 - how long you keep the data, or, if you cannot say, how you decide; the law sets four years for
   the working-time record, and your adviser helps you set the rest;
 - that the person may ask you for access to their data, and for its rectification or erasure, may
@@ -126,7 +132,8 @@ invoice customers and guests who book. For each group, the law asks the notice t
 - where a use rests on consent, that the person can withdraw it at any time;
 - that the person can complain to a supervisory authority, which in Spain is the AEPD, at
   https://www.aepd.es;
-- whether the person has to give the data by law or by contract;
+- whether the person has to give the data, by law, by contract or to enter into a contract, and what
+  happens if they do not;
 - whether you make automated decisions about the person, including profiling.
 
 Copy and adapt, to open the page:
@@ -137,12 +144,13 @@ _your address_. Write to _your privacy email address_ about your data.
 ## Your record of processing {#record}
 
 The law asks a controller to keep a written record of how it uses personal data, and to show it to
-the AEPD when the AEPD asks for it. An electronic document counts as written. Organisations with
-fewer than 250 employees are spared, but not when their processing is likely to put people's rights
-at risk, is not occasional, or includes special categories of data, such as health data. A
-restaurant uses its staff's and its invoice customers' data every day, which is not occasional, and
-that on its own is enough for the exemption not to apply. Allergy notes can be health data as well.
-Ask your adviser to confirm that you need a record, and whether your allergy notes are health data.
+the AEPD when the AEPD asks for it. An electronic document counts as written. Organisations
+employing fewer than 250 people are spared, but not when their processing is likely to put people's
+rights at risk, is not occasional, or includes special categories of data, such as health data. A
+restaurant uses its staff's and its invoice customers' data every day, which is hard to call
+occasional, and the law lists the three cases as alternatives, so any one of them is enough for the
+exemption not to apply. Allergy notes can be health data as well. Ask your adviser to confirm that
+you need a record, and whether your allergy notes are health data.
 
 The law asks the record to say:
 
@@ -150,18 +158,20 @@ The law asks the record to say:
 - why you use the data;
 - whose data it is, and what kinds of data;
 - who receives it, or which kinds of recipient;
-- where it applies, transfers of the data to a country outside the European Union;
+- where it applies, transfers of the data to a third country or an international organisation;
 - where possible, when you expect to delete each kind of data;
 - where possible, a general description of how you keep it secure.
 
-The entries below cover what Waitron does for you, one entry for each use. Copy them into your own
-record, replace each part in italics, and add what you do outside Waitron, such as payroll run by
-your accountant. Two facts apply to every entry, so they are not repeated in each one:
+The entries below cover the main uses Waitron makes of personal data, one entry for each. Copy them
+into your own record, replace each part in italics, and add what you do outside Waitron, such as
+payroll run by your accountant. Two facts apply to every entry, so they are not repeated in each
+one:
 
-- Waitron does not encrypt the database itself, neither on the box's disk nor in the copy in your
-  backup bucket, so whoever gets hold of either copy can read every entry below.
+- Waitron does not encrypt the database itself, neither on the box's disk nor in the continuous copy
+  in your backup bucket, so whoever gets hold of either can read every entry below. Scheduled
+  backups are encrypted with the recovery key, which the box keeps.
 - The copy in your bucket holds the whole database, so your backup storage provider receives
-  everything below. Transfers outside the European Union depend on the providers you chose, and
+  everything below. Whether any data goes to a third country depends on the providers you chose, and
   Waitron does not check where they keep data, so check with each provider.
 
 Copy and adapt, to open the record:
@@ -183,8 +193,8 @@ dashboard.
 - Security: Waitron stores PINs and passwords only as salted hashes, a deliberately slow scrambled
   form, so the database never holds them as typed. A short PIN can still be guessed from its hash
   with enough tries. Waitron encrypts the two-factor secret and stores sign-in tokens only as
-  hashes. Disabling an account deletes the person's PIN, password, passkeys, two-factor settings
-  and Google link.
+  hashes. Disabling an account deletes the person's PIN, password, passkeys, two-factor settings,
+  recovery codes and Google link.
 
 **Employment, planning and absences.** If you plan staff in Waitron, it keeps each person's
 contract details, rota and leave.
@@ -203,7 +213,9 @@ working hours the law requires.
 
 - Purpose: keep the working-time record the law requires.
 - Whose data: staff, including former staff.
-- What data: the times each person clocked in and out.
+- What data: the times each person clocked in and out and started and ended each break, the device
+  that recorded an entry where one did, each correction with its reason and who asked for or
+  approved it, and the email address each reminder went to.
 - Who receives it: your email provider, which delivers the reminder emails Waitron sends a person
   who missed a clock-in or clock-out. The law says the record stays available to the workers, their
   legal representatives and the Labour Inspectorate.
@@ -211,12 +223,13 @@ working hours the law requires.
 - Security: Waitron refuses to change or delete an entry once it is written. Each person's copy of
   their own data includes their working-time record.
 
-**Who did what at the till.** Waitron records which person performs each till operation.
+**Who did what at the till.** Waitron records who rang up sales, who authorised voids, who asked for
+or authorised refunds, and who opened the cash drawer or authorised it.
 
 - Purpose: know who made each sale, void, refund and cash-drawer opening.
 - Whose data: staff.
-- What data: who rang each sale, who authorised each void, who asked for, authorised or recorded
-  the outcome of each refund, who opened the cash drawer or authorised it, and when.
+- What data: who rang up a sale, who authorised a void, who asked for, authorised or recorded the
+  outcome of a refund, who opened the cash drawer or authorised it, and when.
 - Who receives it: _anyone you share it with_.
 - How long: _set with your adviser_. Waitron never changes or deletes a recorded sale.
 - Security: as for every entry.
@@ -231,8 +244,9 @@ details, and Waitron can email them the invoice.
   address, with each invoice record; your email provider, for each invoice you email, which carries
   the invoice as a PDF with the customer's name, tax number and address.
 - How long: _set with your adviser_. Waitron never changes or deletes an issued invoice. It also
-  keeps what it sends to each printer and deletes none of it, so the customer's details printed on
-  an invoice stay in the database too.
+  keeps every receipt and ticket it sends to a receipt or kitchen printer and deletes none of them,
+  so the customer's details on an invoice printed at the till stay in the database too. An A4
+  invoice is made again each time it is printed, and that printed copy is not kept.
 - Security: as for every entry. Printed copies are yours to look after.
 
 **Supplier invoices from sole traders.** When you enter a supplier's invoice in **Purchases**, the
@@ -255,6 +269,21 @@ supplier's name and tax number are personal data if the supplier is a sole trade
 - How long: _set with your adviser_.
 - Security: as for every entry. Notes are free text, so ask staff to write only what service needs.
 
+**Table names and notes.** Staff can give a table a name at the till, and type notes on an order or
+a dish for the kitchen.
+
+- Purpose: find the right table, and tell the kitchen what each order needs.
+- Whose data: guests at a table, and anyone a note names.
+- What data: the name typed for the table, which prints on kitchen tickets and on the table's
+  receipts and invoices, the emailed PDF included, and the notes typed on orders and dishes, which
+  print on kitchen tickets. A note is free text and can mention health, such as a diet, so ask your
+  adviser how to treat it.
+- Who receives it: your email provider, for each invoice you email; _anyone else you share it with_.
+- How long: _set with your adviser_. Waitron keeps every receipt and ticket it sends to a receipt or
+  kitchen printer and deletes none of them, so the names and notes printed on them stay in the
+  database too.
+- Security: as for every entry. Notes are free text, so ask staff to write only what service needs.
+
 **Allergies.** Staff note a table's allergies so the kitchen can prepare food safely.
 
 - Purpose: prepare each guest's food safely.
@@ -263,8 +292,8 @@ supplier's name and tax number are personal data if the supplier is a sole trade
   a copy with each kitchen ticket. This can be health data, so ask your adviser to confirm how to
   treat it.
 - Who receives it: _anyone you share it with_.
-- How long: _set with your adviser_. Waitron keeps what it sends to each printer and deletes none
-  of it, so the allergy details printed on kitchen tickets stay in the database too.
+- How long: _set with your adviser_. Waitron keeps every ticket it sends to a kitchen printer and
+  deletes none of them, so the allergy details printed on kitchen tickets stay in the database too.
 - Security: as for every entry.
 
 **Card payments.** When a customer pays by card, Waitron keeps the payment's details.
@@ -278,23 +307,30 @@ supplier's name and tax number are personal data if the supplier is a sole trade
 - How long: _set with your adviser_.
 - Security: as for every entry.
 
-**Backups and the configuration export.** Waitron copies the database to a bucket you own, and can
-export your setup to start another venue.
+**Backups and the configuration export.** Waitron copies the database continuously to a bucket you
+own, can also make scheduled backups, and can export your setup to start another venue.
 
 - Purpose: recover the venue after a failure, and set up a new venue from this one.
-- Whose data: everyone in the entries above, in the bucket copy; staff, including former staff, in
-  the configuration export.
-- What data: the bucket copy holds the whole database. The configuration export holds every person
-  on the staff list with their name, email, telephone, role and status, and their employment records
-  with pay rate and availability. It never holds a PIN, password, two-factor secret or Google link.
-- Who receives it: your backup storage provider; whoever you give a configuration export file to.
-- How long: the bucket copy keeps a week of history. Turning the copy off leaves what is already in
-  the bucket, so delete it at your provider when you no longer need it. Anything else: _set with
-  your adviser_.
+- Whose data: everyone in the entries above, in the bucket copy and in each scheduled backup; staff,
+  including former staff, in the configuration export.
+- What data: the bucket copy and each scheduled backup hold the whole database. The configuration
+  export holds every person on the staff list with their name, email, telephone, role and status,
+  and their employment records with pay rate and availability. It never holds a PIN, password,
+  passkey, two-factor secret, recovery code or Google link.
+- Who receives it: your backup storage provider, and the provider of any other bucket you send
+  scheduled backups to; whoever you give a configuration export file to. Scheduled backups saved to
+  **A folder on this box** stay wherever that folder is.
+- How long: the bucket copy keeps a week of history. Each time Waitron stores a scheduled backup in
+  a place, it deletes from that place any backup beyond the newest 7 and any older than 30 days,
+  unless you change those settings. Turning off the bucket copy or the scheduled backups leaves what
+  is already stored, so delete it at your provider, or from the folder, when you no longer need it.
+  Anything else: _set with your adviser_.
 - Security: Waitron does not encrypt the bucket copy, but the passwords and keys it keeps for your
-  providers are encrypted inside it. The configuration export is encrypted under a passphrase of at
-  least 12 characters, so it is as safe as that passphrase. The recovery kit opens the bucket copy,
-  so keep it offline.
+  providers are encrypted inside it. Each scheduled backup is encrypted with the recovery key, which
+  the box keeps. While it makes one, the box writes an unencrypted copy of the database on its own
+  disk and deletes it when the backup ends. The configuration export is encrypted under a passphrase
+  of at least 12 characters, so it is as safe as that passphrase. The recovery kit opens the bucket
+  copy, so keep it offline.
 
 ## If personal data is lost or exposed {#breach}
 
@@ -318,17 +354,18 @@ answers four questions:
 
 You do not need every answer at once: the information may follow in stages, without further undue
 delay. The AEPD takes notifications through an online form on its electronic office, the Sede
-Electrónica. The person who fills it in needs a recognised electronic certificate or Cl@ve, Spain's
-system for identifying yourself online, so check that you have one before you need it. The form
-lets you send an initial notification before the 72 hours are up, with what you know so far, and
-complete it within 30 days of that initial notification.
+Electrónica. The AEPD's guide of June 2021 says that to open the form, the person who fills it in
+needs a recognised electronic certificate or the Cl@ve permanente and PIN24H systems, so check that
+you have one before you need it. The form lets you send an initial notification before the 72 hours
+are up, with what you know so far, and complete it within 30 days of that initial notification.
 
-Third, the people affected. When the incident is likely to result in a high risk to their rights
-and freedoms, you tell them without undue delay, in clear and plain language. One of the cases
-where this is not needed is when the affected data was protected in a way that makes it
-unintelligible to anyone not allowed to see it, such as encryption. Whether that holds when the key
-may have been exposed too, as with a lost recovery kit, which carries its key, or a configuration
-export, which is only as safe as its passphrase, is a question for your adviser. The AEPD's
+Third, the people affected. When the incident is likely to result in a high risk to their rights and
+freedoms, you tell them without undue delay, in clear and plain language. One of the cases where
+this is not needed is when the affected data was protected in a way that makes it unintelligible to
+anyone not allowed to see it, such as encryption. Whether that holds when the key may have been
+exposed too, as with a scheduled backup when the recovery key was lost as well, or a configuration
+export whose passphrase may have leaked, is a question for your adviser. Waitron does not encrypt
+the database copy in your bucket, so that copy gets no such protection from Waitron. The AEPD's
 Comunica-Brecha RGPD tool helps you decide whether to tell the people affected.
 
 Whether an incident must be notified to the AEPD, and whether the people affected must be told, is
@@ -340,20 +377,24 @@ To answer those questions you need facts: what was exposed, whose it was, and si
 what the dashboard can show you.
 
 - **Devices** shows each device's **Last seen**, the last time the box heard from it. A deleted
-  device leaves the list, and its **Last seen** goes with it.
+  device leaves that list, which takes its **Last seen** off the screen, so note it before you
+  delete the device.
 - No screen lists who signed in on which device. Each person's copy of their data does: an admin
   downloads it from **Users**, with **Download their data** in the person's row menu, and its
   `sign-in.json` file lists the person's sign-ins on each device, from when to when, and their
   dashboard sign-ins. See [Download another person's data](staff.md#person-data).
-- On **Orders**, **View details** shows who printed each copy, who downloaded the invoice PDF, and
-  who asked for each delivery of the invoice, by email included.
-- Cash-drawer openings appear on no screen. They are in the `actions.json` file of the copy of the
-  data of the person who opened the drawer or authorised it.
-- **Diagnostics** shows the box's recent log lines, with the people's names, emails and tax numbers
-  Waitron writes there partly hidden. **Alerts** lists the alerts the box has raised.
+- On **Orders**, **View details** lists each time the receipt or invoice was printed or emailed,
+  with who asked for it when someone did, and who downloaded the invoice PDF.
+- No screen shows who opened the cash drawer. Recent openings are among the jobs in **Print Queue**,
+  on **Printers**, but no column says which jobs they are, and none names a person. Who opened the
+  drawer, or authorised it, is in the `actions.json` file of that person's copy of their data.
+- **Diagnostics** shows the box's recent log lines. Where Waitron writes a person's name, email or
+  tax number as a detail it marks as personal, the line shows only a few of its characters.
+  **Alerts** lists the alerts the box has raised.
 
 Waitron does not record who opened or read a record on a screen, or the network address a sign-in
-or request came from.
+came from. The one address it keeps from a request is that of a device whose clock helped confirm
+the box's clock.
 
 ## Common losses {#breach-losses}
 
@@ -362,33 +403,43 @@ Each loss below says what it exposes and what to do in Waitron. Then answer the 
 
 **A stolen till device.** A till's browser keeps a few things on the device itself: an identifier
 for the last person who signed in on it, the list of dishes to make now with any notes typed on
-them, and unfinished refunds with the reason typed for each. Waitron does not clear the first two
-when you disable or delete the device. Act in this order. On **Devices**, choose **Disable** in the
-device's row at once: it ends every staff sign-in on the device and stops it connecting. Next, note
-its **Last seen**, and find who used it from the copies of each person's data. Then choose
-**Delete**, which stops the device ever proving who it is again, and which Waitron refuses while a
-payment is in progress on it. Until you delete it, a disabled device can ask to come back and
-appear under **Devices asking to join**. Never choose **Enable** for a device you lost.
+them, and unfinished refunds with the reason typed for each. Disabling or deleting the device clears
+nothing on it. The till app deletes unfinished refunds when it signs the person out, but keeps the
+other two. Act in this order. On **Devices**, choose **Disable** in the device's row at once: it
+ends every staff sign-in on the device and stops it connecting. Next, note its **Last seen**, and
+find who used it from the copies of each person's data. Then choose **Delete**, which stops the
+device ever proving who it is again, and which Waitron refuses while a payment is in progress on it.
+Until you delete it, a disabled device can ask to come back and appear under **Devices asking to
+join**. Never choose **Enable** for a device you lost.
 
-**A stolen phone or laptop used for the dashboard.** Disabling a device ends only its till
-sign-ins; a dashboard sign-in belongs to the person. So an admin opens **Users** and chooses **Reset
-login** for that person. It signs them out everywhere, deletes their PIN, password, passkeys,
-two-factor settings and Google link, and sends them a new invitation. The browser also keeps the
-person's email address if they chose **Remember my email on this device** when signing in. If the
-phone or laptop was also used as a till, follow the steps for a stolen till device as well.
+**A stolen phone or laptop used for the dashboard.** Disabling a device ends only its till sign-ins;
+a dashboard sign-in belongs to the person. So an admin opens **Users** and chooses **Reset login**
+for that person. It signs them out everywhere, deletes their PIN, password, passkeys, two-factor
+settings, recovery codes and Google link, and sends them a new invitation if email is set up.
+Waitron refuses it for the venue's only active admin. The browser also keeps the person's email
+address if they chose **Remember my email on this device** when signing in. If the phone or laptop
+was also used as a till, follow the steps for a stolen till device as well.
 
 **A lost or stolen box.** Waitron does not encrypt the database on the box's disk, so treat
 everything in it as exposed: staff details and sign-ins, invoice customers, bookings, allergy notes
 and every sale. PINs and passwords are stored only as hashes, but a short PIN can be guessed from
 its hash. The box uses the passwords and keys it keeps for your providers, such as your email
 server's, without anyone typing a key, so treat those as exposed too and change them at each
-provider, your bucket's access keys included.
+provider, your bucket's access keys included. Among them are the certificate the box uses to send
+invoice records to the Tax Agency and its passphrase, so ask your adviser how to replace it. The box
+also keeps the recovery key, which opens your scheduled backups. The key that protects two-factor
+secrets is on the box too, so choose **Reset login** for each person who uses two-factor sign-in.
 
 **A lost recovery kit.** The kit holds your bucket's access key and secret and the recovery key, so
-whoever has it can read the whole database copy in your bucket, with every password and key stored
-in it. Revoke the old access keys at your bucket provider, which Waitron cannot do for you. Then, on
-**Backups**, choose **Change bucket** and enter the new keys, and choose **Change the recovery
-key**. Copies already in the bucket from before the change still open with the old key.
+whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
+stored in it. The recovery key also opens your scheduled backups, wherever that person can reach
+them. Revoke the old access keys at your bucket provider, which Waitron cannot do for you. Then, on
+**Backups**, choose **Change bucket** and enter the new keys. If your scheduled backups go to **The
+bucket copy's bucket**, also choose **Change destination or schedule** and save again, because they
+keep the keys they were saved with. A new recovery key does not change the passwords and keys for
+your other providers, so change those at each provider too. While scheduled backups are on,
+**Backups** also offers **Change the recovery key**; download the new recovery kit afterwards.
+Copies and backups made before the change still open with the old key.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with
@@ -398,9 +449,9 @@ how exposed the data is depends on how strong that passphrase was and whether it
 screen shows who downloaded an export.
 
 **An account someone else used.** On **Users**, an admin chooses **Disable** or **Reset login** for
-the person. Both sign the person out everywhere and delete their PIN, password, two-factor
-settings, Google link, passkeys and recovery codes. **Reset login** sends a new invitation, and
-**Disable** keeps the person out until an admin enables the account again. Then look at what was
+the person. Both sign the person out everywhere and delete their PIN, password, two-factor settings,
+Google link, passkeys and recovery codes. **Reset login** sends a new invitation, and **Disable**
+keeps the person out until an admin chooses **Enable and send invitation**. Then look at what was
 done under the account: download the person's copy of their data, and check **Orders**. See
 [Account access](staff.md#account-access).
 
