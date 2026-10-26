@@ -1,6 +1,8 @@
 # A980 slice S6: data-protection templates in the help guide
 
-**Status: plan, 2026-10-26. Nothing was built when this was written.** Written by lane B with
+**Status: plan, 2026-10-26, revised the same day after one fresh-context review
+(`~/waitron-campaign-b/a980-s6-plan-review.md`, findings I1–I4 and M1–M11, all folded). Nothing was
+built when this was written.** Written by lane B with
 nobody watching; every choice the design does not make is listed under "Decisions this plan
 makes" with the default that will be built. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.1 (the
@@ -29,7 +31,7 @@ these sections, in this order, in both languages:
 
 | id | English heading | What it says |
 | --- | --- | --- |
-| `who-does-what` | What the venue does and what Waitron does | the venue is the controller and carries the duties (design §1, §3, §4 table); what Waitron builds for each; these pages are templates for the venue's adviser, not legal advice |
+| `who-does-what` | What the venue does and what Waitron does | the venue is the controller and carries the duties (design §1, §3, §4 table's "venue does" column), including answering a request within one month (GDPR 12(3), L15); what Waitron offers today, only features on this tree (decision 10); these pages are templates for the venue's adviser, not legal advice |
 | `staff-notice` | A privacy notice for staff | the first-layer template for staff (design §4.1), with placeholders |
 | `invoice-notice` | A privacy notice for invoice customers | the first-layer template for a full invoice's customer (design §4.1), and where to show it today (decision 6) |
 | `booking-notice` | What to tell a guest who books | the spoken first layer (design §4.1) |
@@ -67,7 +69,12 @@ Left for later, on purpose:
 2. **Placeholders are written in italics inside the template text**, for example
    "Responsable: _razón social_ (_NIF_)". The guide subset reserves `[` for links, so the usual
    `[venue name]` cannot be written (`guide-markdown.ts`, the `[` branch of `renderInline`, which
-   fails "a [ that does not start a link"). Alternative: the design's fictional Bar Ejemplo S.L.
+   fails "a [ that does not start a link"). The review's renderer probes found where italics are
+   refused ("an _ that is neither inside a word nor emphasis"): a placeholder starts after a space,
+   `(` or the line start, never touches `«`, `“` or `/`, and is never part of a web address, so a
+   notice address is one whole placeholder ("_la dirección de tu página de privacidad_"). Write
+   Veri\*Factu as `Veri*Factu` in code, or avoid it (a lone `*` is refused), and never start a
+   wrapped line with a number and a full stop (`30. ` is read as a numbered list). Alternative: the design's fictional Bar Ejemplo S.L.
    filled in, which reads better but invites publishing the example unchanged.
 3. **The English page's templates are in English; the Spanish page's are in Spanish.** A venue in
    Spain publishes the Spanish text. The English page says that the Spanish page holds the same
@@ -87,8 +94,13 @@ Left for later, on purpose:
    the invoice email). Default text: show it where staff take the customer's details, and if the
    venue wants it on paper too, type a short version into the receipt's **Footer message**
    (dashboard label, `apps/dashboard/src/i18n/strings.ts:1234`; Spanish **Mensaje de pie**,
-   `:4646`), which prints on every till receipt, full invoices included
-   (`apps/server/src/receipt-document.ts:430-432`). It does not say whether the law requires a line
+   `:4646`), which prints on every till receipt, simplified ones and full invoices alike
+   (`apps/server/src/receipt-document.ts:430-432`). The page states the field's limits: it is set
+   per department, in the department's receipt panel (`apps/dashboard/src/dashboard-app.ts:1428`,
+   `apps/dashboard/src/screens/department-receipt-editor.ts:570`), per language, and holds at most
+   200 characters (`packages/layouts/src/validate.ts:7`, `MAX_RECEIPT_FIELD_LENGTH`); the design's
+   invoice notice is 238 characters, so the page gives a short version under 200 in each language
+   and says so. It does not say whether the law requires a line
    on the invoice: that is Q59, open with the adviser.
 7. **The breach sections never say whether to notify.** They give the art. 33(3) questions, the
    time limit, the documentation duty and the AEPD's tool, and say the judgement is the venue's
@@ -100,6 +112,17 @@ Left for later, on purpose:
    `person-data` and `invoice-customer-data` sections end "Waitron keeps no list of these
    requests…"; each gains one sentence pointing to `who-does-what` for the one-month answer time and
    the venue's other duties.
+10. **The page offers only what exists on this tree, and never mentions the notice-link
+    environment setting or a planned setting.** Today a venue's notice link reaches Waitron only
+    through `WAITRON_PRIVACY_NOTICE_URL` in the box's environment (`apps/server/src/config.ts:503-511`),
+    which an operator without a terminal cannot set. So `staff-notice` says the venue gives the
+    notice itself (with the contract, on paper or in its own email) and `full-notice` says it goes
+    on the venue's own web page. `who-does-what` lists, each checked at its file:line on this tree:
+    a person's own data copy, an admin's copy of another person's data and of an invoice customer's,
+    disabling an account deleting its sign-in secrets, editing a person's details. S1b updates the
+    page when the setting exists (Task 6 writes that into the overview).
+11. **Internal identifiers never reach the page**: no Q-numbers, R- or L-numbers, slice names or
+    file paths. The page says "ask your adviser to confirm"; the IDs stay in the commit and PR.
 
 ## Task 0 (done while planning) — what the dashboard can tell a manager after an incident
 
@@ -111,12 +134,20 @@ and a disabled device can ask to come back (point 1).
 
 1. **A stolen device.** **Devices / Dispositivos** (S:1315/4728), row actions **Disable /
    Deshabilitar** (S:1321/4734) and **Delete / Eliminar** (S:661/4066). Disable ends every open staff
-   sign-in on the device and stops it connecting (`device-delete.ts:179-189`, `login.ts:69-74`,
+   sign-in on the device and stops it connecting (`device-delete.ts:175-185`,
+   `packages/identity/src/login.ts:69-74`,
    `device-session.ts:224-225`), but keeps its token hash, so the device can ask to come back and
    appear under the devices asking to join with **Enable / Habilitar** (S:1376,1384/4789,4797;
    `join-requests.ts:231-243`). Delete (refused while a payment is in progress) also clears the token
-   hash, so the device can never prove itself again (`device-delete.ts:191-219`). The page
-   recommends **Delete** for a stolen device and warns not to enable a lost one that asks to join.
+   hash, so the device can never prove itself again (`device-delete.ts:191-219`). But a deleted
+   device leaves the Devices list (`device-api.ts:731` filters `isNull(devices.deletedAt)`), and its
+   **Last seen** with it. So the page orders the steps: **Disable** at once; note its **Last seen**
+   and who used it; then **Delete**, and never enable a lost device that asks to join. Sign-ins
+   survive a Delete (`sessions.device_id` is `onDelete: "restrict"` and the row is kept), so a
+   person's data copy still lists them under the device's name. Disabling a device ends its till
+   sign-ins only (`endDeviceSessions` touches `sessions`, `packages/identity/src/login.ts:69-74`); a
+   dashboard sign-in on a stolen phone or laptop is a per-person `management_sessions` row, ended by
+   that person's **Reset login** (point 4).
 2. **Who was signed in where.** No screen lists sign-ins per device. **Last seen / Visto por última
    vez** on Devices (S:1324/4737) shows when each device was last heard from. A person's
    sign-ins on each device (device, from, to) are in `sign-in.json` inside their data copy, which an
@@ -148,7 +179,8 @@ and a disabled device can ask to come back (point 1).
    (`sessions.ts:10-28`, `management-sessions.ts:14-22`, `request-id.ts:27-33`). The box does keep the
    LAN address of each device that took part in a clock check, inside `clock_confirmations.proof`
    (`packages/fiscal-verifactu/src/clock-checks.ts:133-137`). The page says "Waitron does not record
-   who looked at a record, or the network address a sign-in or request came from" and nothing broader.
+   who opened or read a record on a screen, or the network address a sign-in or request came from"
+   and nothing broader (Orders does record who downloaded a PDF and who printed a copy, point 3).
 9. **Logs.** **Diagnostics / Diagnóstico** (S:973/4380) shows the recent log lines (names, emails and
    tax numbers partly masked since S10); **Alerts / Avisos** (S:814/4318) lists alerts.
 
@@ -175,9 +207,9 @@ and a disabled device can ask to come back (point 1).
 - **English only outside the guide's `es/` folder and the title file's `es` value** (CLAUDE.md §3).
   Spanish legal terms on the English page appear only as quoted names of things (AEPD, Sede
   Electrónica, Comunica-Brecha RGPD), each explained in English the first time.
-- Commits `git commit -s`. Run `pnpm exec prettier --check` on changed `.ts` files; the guide
-  Markdown under `apps/server/src/guide/` — check with `pnpm exec prettier --file-info` whether it
-  is ignored before trusting a clean check (CLAUDE.md §2).
+- Commits `git commit -s`. Run `pnpm exec prettier --check` on every changed file, the guide
+  Markdown included: the review ran `pnpm exec prettier --file-info apps/server/src/guide/en/staff.md`
+  and it printed `"ignored": false`, so format checking covers these files.
 
 ## Task 1 — the page, its title and the test that pins its sections (`@waitron/server`)
 
@@ -209,7 +241,8 @@ sentence each, filled by Task 2).
    refused, write it as `code`.
 6. Run the test file again (green), `pnpm --filter @waitron/server exec vitest run
    src/guide-pages.test.ts src/guide-catalogue.test.ts`, and from the root `pnpm exec vitest run
-   scripts/guide-links.test.ts`. Commit.
+   scripts/guide-links.test.ts`, and `pnpm --filter @waitron/server typecheck` (Vitest does not
+   typecheck; a missing `names` entry in `guide-pages.ts` would show only there). Commit.
 
 ## Task 2 — the record of processing and the breach sections, in English
 
@@ -217,21 +250,35 @@ File: `apps/server/src/guide/en/data-protection.md`.
 
 1. `record`: why it is kept (art. 30(5): the under-250 exemption does not apply where processing
    is not occasional or includes special categories; a restaurant's staff and invoice processing is
-   continuous and allergy notes are health data; say the venue's adviser confirms, Q54(c)); the seven
-   art. 30(1) items in plain words; then one entry per activity (decision 5), each a short
-   paragraph naming the activity followed by a bullet list: purpose; whose data; what data;
-   who receives it; how long (only the working-time record's four years is stated; the rest "set with
-   your adviser"); how Waitron protects it. Facts from design §2.1–2.4, each re-checked against the
+   continuous, which on its own is enough; allergy notes can be health data, and the venue's
+   adviser confirms whether its are, and that the record is needed); the seven art. 30(1) items in
+   plain words; then one entry per activity (decision 5, plus **supplier invoices** from sole
+   traders, which carry a person's name and tax number, design §2.2), each a short paragraph naming
+   the activity followed by a bullet list: purpose; whose data; what data; who receives it;
+   transfers outside the EU (it depends on the providers the venue chose, which Waitron does not
+   check, so "check with each provider"); how long (only the working-time record's four years is
+   stated; the rest "set with your adviser"; print jobs, which keep the invoice and allergy blocks, are
+   never deleted today, design §2.2 c3, so the invoice and allergy entries say so); how Waitron
+   protects it. Missing-clock reminder emails go under the working-time entry's recipients (design
+   §2.1 s13). Facts from design §2.1–2.4, each re-checked against the
    code at the cited line before it is written.
 2. `breach`: the duty and the four questions, the 72-hour limit and the reason-for-delay rule, the
-   documentation duty for every breach, telling the people when the risk is high, the AEPD's form on
-   its Sede Electrónica with an initial notification within 72 hours completed within 30 days, the
-   Comunica-Brecha RGPD tool. One sentence: whether a breach must be notified, and whether people
+   documentation duty for every breach, telling the people when the risk is high, the AEPD's online
+   form on its Sede Electrónica, which the person filling it in reaches with a recognised electronic
+   certificate or Cl@ve (so check you have one before you need it), with an initial notification within 72 hours completed within 30 days, the
+   Comunica-Brecha RGPD tool. The cases where telling people is not needed are paraphrased from L10 as
+   written there: appropriate protection applied to the affected data that makes it unintelligible to
+   anyone not authorised, such as encryption; whether that holds when the key may be exposed too (a
+   recovery kit carries its key; an export is as safe as its passphrase) is for the adviser. One sentence: whether a breach must be notified, and whether people
    must be told, is the venue's decision with its adviser.
 3. `breach-records`: from Task 0 only.
-4. `breach-losses`: one short paragraph per loss (decision 5's list in "What this slice builds"),
+4. `breach-losses`: one short paragraph per loss (the list in "What this slice builds"),
    each saying what the loss exposes, what to do in Waitron with the exact dashboard labels from
-   Task 0, and which question in `breach` it feeds. Every action named must exist (Task 0).
+   Task 0, and which question in `breach` it feeds. Every action named must exist (Task 0). The stolen
+   device follows Task 0 point 1's order (Disable, note Last seen and users, then Delete), and a
+   stolen phone or laptop used for the dashboard adds **Reset login** for its person. A lost or stolen
+   box: the database on its disk is not encrypted by Waitron (design §4.8), so treat its data as
+   exposed and change the passwords and keys it holds; re-check that claim at the code first.
 5. Run the guide tests. Commit.
 
 ## Task 3 — the Spanish page, and the two cross-links
@@ -273,7 +320,13 @@ Hono app and writing each response to a file is enough; no dev stack needed.
 - `docs/superpowers/plans/2026-10-24-a980-data-protection-build.md`: a dated sentence in the status
   paragraph saying S6 is built and what it holds; in the S1a notes, the "?" link.
 - The design: a dated one-line pointer under §5.3 that the templates are at
-  `apps/server/src/guide/<lang>/data-protection.md`. Historical text is not rewritten.
+  `apps/server/src/guide/<lang>/data-protection.md`, and dated notes (historical text is not
+  rewritten) for three corrections Task 0 found: under §2.3, that `clock_confirmations.proof` keeps
+  the LAN address of each device in a clock check (row d3 said none stored); under §4.5, that no
+  screen shows who was signed in where, only a person's data copy does, and that the action is
+  **Disable** or **Delete**, not "Revoke".
+- The overview's S1b row: S1b also updates `data-protection`'s `staff-notice` and `full-notice`
+  sections once the setting exists.
 - `docs/backlog.md`: if its A980 entry lists S6 as open, remove it.
 
 ## Review focus
@@ -305,8 +358,8 @@ AEPD: `https://www.aepd.es/guias/guia-brechas-seguridad.pdf`, extracted with `pd
 | L7 | what a notification describes | GDPR 33(3)(a)–(d) | ES: «a) describir la naturaleza de la violación…, inclusive, cuando sea posible, las categorías y el número aproximado de interesados afectados, y las categorías y el número aproximado de registros de datos personales afectados; b) comunicar el nombre y los datos de contacto del delegado de protección de datos o de otro punto de contacto…; c) describir las posibles consecuencias…; d) describir las medidas adoptadas o propuestas…». EN: "(a) describe the nature of the personal data breach including where possible, the categories and approximate number of data subjects concerned and the categories and approximate number of personal data records concerned; (b) communicate the name and contact details of the data protection officer or other contact point…; (c) describe the likely consequences…; (d) describe the measures taken or proposed to be taken…" |
 | L8 | information may follow in phases | GDPR 33(4) | ES: «la información se facilitará de manera gradual sin dilación indebida». EN: "the information may be provided in phases without undue further delay" |
 | L9 | document every breach | GDPR 33(5) | ES: «documentará cualquier violación de la seguridad de los datos personales, incluidos los hechos relacionados con ella, sus efectos y las medidas correctivas adoptadas». EN: "shall document any personal data breaches, comprising the facts relating to the personal data breach, its effects and the remedial action taken" |
-| L10 | tell the people when the risk is high; in clear language; not needed when, for example, the data was encrypted | GDPR 34(1), 34(2), 34(3)(a) | ES: «Cuando sea probable que la violación … entrañe un alto riesgo…, el responsable del tratamiento la comunicará al interesado sin dilación indebida»; «en un lenguaje claro y sencillo»; «medidas que hagan ininteligibles los datos personales para cualquier persona que no esté autorizada a acceder a ellos, como el cifrado». EN: "likely to result in a high risk … shall communicate the personal data breach to the data subject without undue delay"; "in clear and plain language"; "render the personal data unintelligible to any person who is not authorised to access it, such as encryption" |
-| L11 | the AEPD's form, initial then complete within 30 days | AEPD guide (June 2021), p. 21 and §IV | «En la Sede Electrónica de la AEPD el formulario permite…»; «la posibilidad de realizar una notificación de tipo "inicial", antes de las 72 horas señaladas, rellenando el formulario con la información preliminar que se disponga»; «Antes del plazo máximo de 30 días desde la notificación inicial, el responsable de tratamiento deberá completar toda la información mediante una "modificación" de la notificación anterior» |
+| L10 | tell the people when the risk is high; in clear language; among the cases where it is not needed, appropriate protection applied to the affected data that makes it unintelligible, such as encryption | GDPR 34(1), 34(2), 34(3)(a) | ES: «Cuando sea probable que la violación … entrañe un alto riesgo…, el responsable del tratamiento la comunicará al interesado sin dilación indebida»; «en un lenguaje claro y sencillo»; «el responsable del tratamiento ha adoptado medidas de protección técnicas y organizativas apropiadas y estas medidas se han aplicado a los datos personales afectados por la violación de la seguridad de los datos personales, en particular aquellas que hagan ininteligibles los datos personales para cualquier persona que no esté autorizada a acceder a ellos, como el cifrado». EN: "likely to result in a high risk … shall communicate the personal data breach to the data subject without undue delay"; "in clear and plain language"; "render the personal data unintelligible to any person who is not authorised to access it, such as encryption" |
+| L11 | the AEPD's online form needs a recognised electronic certificate or Cl@ve; initial then complete within 30 days | AEPD guide (June 2021) | «la AEPD ha elaborado un formulario en línea y lo pone a disposición de los responsables de tratamiento a través de su Sede Electrónica» (design R38's words); «Para acceder al formulario es necesario disponer de un certificado electrónico reconocido» and, elsewhere in the same guide, «es necesario estar en posesión de un certificado electrónico reconocido o sistemas Cl@ve permanente y PIN24H», so the page says certificate or Cl@ve; «la posibilidad de realizar una notificación de tipo "inicial", antes de las 72 horas señaladas, rellenando el formulario con la información preliminar que se disponga»; «Antes del plazo máximo de 30 días desde la notificación inicial, el responsable de tratamiento deberá completar toda la información mediante una "modificación" de la notificación anterior» |
 | L12 | Comunica-Brecha RGPD helps decide whether to tell the people | AEPD guide, same file | «La herramienta Comunica-Brecha RGPD ofrece ayuda a los responsables de tratamiento para la toma de decisiones en cuanto a la obligación de comunicar una brecha de datos»; design R37 |
 | L13 | first layer: controller, purpose, rights, and a way to the rest | LOPDGDD 11.1–2 | design R23 |
 | L14 | working-time record kept four years and available | ET 34.9 | design R32 |
