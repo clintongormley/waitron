@@ -21,7 +21,7 @@ const stations: Station[] = ["Cocina", "Barra"].map((name, index) => ({
   sendsTo: null,
   why: index === 0 ? "default" : "open",
 }));
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -100,7 +100,7 @@ for (const locale of ["en", "es"]) {
           await page.viewport(width, 900);
           expect(window.innerWidth).toBe(width);
           const store = new WorkingOrderStore();
-          store.addProduct(cafe, "2");
+          store.addProduct(coffee, "2");
           const { el, host } = await mountWidget<TillTenderPay>(
             "till-tender-pay",
             { store, cardProvider: "simulator" },

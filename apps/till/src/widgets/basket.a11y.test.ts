@@ -5,7 +5,7 @@ import "./basket.js";
 import type { StoredLines, TillBasket } from "./basket.js";
 import type { TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -16,7 +16,7 @@ const cafe: TillProduct = {
   allergens: null,
 };
 
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -38,8 +38,8 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
 
   it("a populated basket (with remove controls) has no violations", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
-    store.addProduct(jamon, "0.320");
+    store.addProduct(coffee, "2");
+    store.addProduct(ham, "0.320");
     const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
     await expectNoA11yViolations(host);
   });
@@ -48,7 +48,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     const store = new WorkingOrderStore();
     store.loadFrom("held-1", [
       {
-        product: cafe,
+        product: coffee,
         quantity: "2",
         notOffered: true,
         notOfferedExtras: [{ productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 }],
@@ -65,13 +65,13 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       [
         {
           workingOrderLineId: "l-1",
-          product: cafe,
+          product: coffee,
           quantity: "2",
           extras: [
             { listId: "list-1", productId: "leche", name: "Leche", price: "0.30", quantity: 1 },
           ],
         },
-        { workingOrderLineId: "l-2", product: { ...cafe, unitPrice: "0.00" }, quantity: "1" },
+        { workingOrderLineId: "l-2", product: { ...coffee, unitPrice: "0.00" }, quantity: "1" },
       ],
       undefined,
       4,
@@ -143,8 +143,8 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
 
   it("a basket marking lines a menu change blocks has no violations", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
-    store.addProduct(jamon, "0.320");
+    store.addProduct(coffee, "1");
+    store.addProduct(ham, "0.320");
     store.setBlocked(["unavailable", "extra_removed"]);
     const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
     await expectNoA11yViolations(host);
@@ -152,7 +152,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
 
   it("a line with the note editor OPEN has no violations (order-line customisation)", async () => {
     const steak: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "steak",
       name: "Filete",
       customerName: { es: "Filete para el cliente" },
@@ -199,7 +199,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       suitableFor: ["halal" as const],
     };
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa carta" },
@@ -242,21 +242,21 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
   it("a basket with diet & contains badges (dietary-classification, Task 7) has no violations", async () => {
     const store = new WorkingOrderStore();
     const salad: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "salad",
       name: "Ensalada",
       customerName: { es: "Ensalada para el cliente" },
       dietDerivation: { origins: ["plant"], pending: false },
     };
     const meat: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "meat",
       name: "Chuleta",
       customerName: { es: "Chuleta para el cliente" },
       dietDerivation: { origins: ["meat"], pending: false },
     };
     const mystery: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "mystery",
       name: "Plato del día",
       customerName: { es: "Plato del día para el cliente" },

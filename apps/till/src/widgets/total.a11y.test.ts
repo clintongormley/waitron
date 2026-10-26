@@ -5,7 +5,7 @@ import "./total.js";
 import type { TillTotal } from "./total.js";
 import type { TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -21,7 +21,7 @@ afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)("till-total a11y (%s theme)", (theme) => {
   it("has no violations showing a total", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTotal>("till-total", { store }, theme);
     await expectNoA11yViolations(host);
   });
