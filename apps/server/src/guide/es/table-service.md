@@ -173,8 +173,21 @@ Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin t
 En un móvil o una tableta, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
 platos esperan, por ejemplo **Listo · M2 · 3**. Cada mesa aparece con su nombre corto, por ejemplo
 M2 para Mesa 2, o con su nombre completo mientras no tenga uno; una mesa unida a otra hoy muestra
-las dos, por ejemplo M4+M5. Toca una mesa para abrirla, o toca **Abrir ›** para abrir la primera de
-la lista. La barra muestra solo las mesas de las zonas que enseña este dispositivo, y desaparece
+las dos, por ejemplo M4+M5. Mientras ninguna comida haya esperado demasiado, primero aparece la
+mesa cuya comida lleva más tiempo esperando.
+
+La comida que se queda en el pase se enfría, así que la barra te avisa cuando un plato ha esperado
+demasiado. Cuando un plato listo ha esperado tanto como el tiempo de **Listo sin recoger** de su
+estación (3 minutos si no lo cambias
+[en **Estaciones de preparación**](kitchen-service.md#service-lifetime)), la barra se vuelve ámbar,
+su borde late despacio y dice cuánto ha esperado la comida de la primera mesa, por ejemplo **Listo
+4 min · M5 · 2 · M9 · 1**. Cada estación se juzga por su propio tiempo, así que una ensalada de una
+estación de 6 minutos y un plato de la parrilla de una de 3 avisan en momentos distintos. Las mesas
+cuya comida ha esperado ese tiempo van primero, en ámbar, y los minutos siguen contando mientras
+miras. En un dispositivo configurado para reducir el movimiento, la barra sigue en ámbar sin latir.
+Toca una mesa para abrirla, o toca **Abrir ›** para abrir la primera de la lista.
+
+La barra muestra solo las mesas de las zonas que enseña este dispositivo, y desaparece
 cuando no queda nada listo. Una caja muestra en cambio una lista **Listo** encima de las mesas, con
 una línea por cada estación. La lista cuenta la comida lista de las mesas de todas las zonas que
 permite su perfil, no solo de las que enseña.

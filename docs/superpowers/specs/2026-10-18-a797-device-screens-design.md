@@ -264,6 +264,10 @@ A757 built them (whole-table colour and a cue; A669's red "!" for an allergy). C
   4 min · T5 · 2 · T9 · 1 · Open ›". Under reduced motion nothing moves and the amber stays. The minutes count
   from the moment the dish was ready (`ticket_items.ready_at`, stamped by `advanceSet`,
   `apps/server/src/working-order.ts:7233-7237`), not from when it was fired (§5).
+  _2026-10-26, slice 7: warning tables come first, then the rest, each longest-waiting first, so
+  Open › opens the first; the bar warns once the wait reaches the time, not only past it; the
+  minutes show only while warning; the till compares the box's ready time with its own clock; see
+  the build plan's slice 7, D2–D4._
 - **List or Map is remembered on the device**, per zone, instead of for the session.
 
 **Order** (picture 02), under the bar:
@@ -541,8 +545,9 @@ Each point is (read); the plan confirms it before relying on it.
   entry gains its oldest ready time and that station's warning minutes, which the server works out
   as it already works out each station's other limits (`apps/server/src/table-signals.ts:58-60`).
   The till then turns the bar amber when any station's dishes at a table pass their own limit, so a
-  salad and a secreto at one table are judged separately. A cross-package contract. If the owner
-  picks the department alternative, the signal carries one limit per table instead.
+  salad and a secreto at one table are judged separately. (2026-10-26, slice 7: once they reach
+  it, not only past it; see §3.1.) A cross-package contract. If the owner picks the department
+  alternative, the signal carries one limit per table instead.
   **2026-10-23 (A756 PR 5):** the two late-flag tables named above were dropped; each station's
   late flags are its own `kitchen_stations` columns, so a Ready warning time would be a further
   station column.
@@ -664,7 +669,7 @@ settle may be built without waiting").
 6. **Ready warning time, data.** Migration; the Late flags and station editor field (2026-10-23, A756 PR 5: the Late flags panel is gone; the station editor and Add station hold each station's minutes); each station's
    entry in the ready signal gains its oldest ready time and its warning minutes. FULL. Q51 (c),
    answered 2026-10-24, puts the value in each prep station's editor.
-7. **The Ready bar's warning.** Amber, slow pulse, longest-waiting table first, reduced motion. LIGHT.
+7. **The Ready bar's warning.** Amber, slow pulse, warning tables first, then longest-waiting, reduced motion. LIGHT.
    After 5 and 6.
 
 **2 — The kitchen screen's cards, Overview and columns** (each taken in turn with A773-2, which

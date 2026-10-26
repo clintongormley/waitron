@@ -117,8 +117,8 @@
   --wt-color-on-table-bill: #ffffff;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
-  /* The list card's calm left edge, and the colours a pulsing floor ring and the till bar's
-     Waiting tab dim to half-way. */
+  /* The list card's calm left edge, and the colours a pulsing floor ring, the till bar's
+     Waiting tab and the Ready bar's warning dim to half-way. */
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;

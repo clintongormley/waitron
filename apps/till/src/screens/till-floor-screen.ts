@@ -123,9 +123,12 @@ import {
   type MapKind,
 } from "../state/floor-look.js";
 import {
+  nextReadyBarChange,
+  readyBar,
   readyByStation,
   readyTables,
   signalOf,
+  type ReadyBarTable,
   type ReadyTable,
   type StationReady,
 } from "../state/table-signals.js";
@@ -838,6 +841,47 @@ export class TillFloorScreen extends LitElement {
         border-radius: var(--wt-radius-full);
       }
 
+      /* The inset shadow doubles the edge without changing the bar's size. */
+      .ready-bar[data-warning] {
+        border-color: var(--wt-color-warning);
+        box-shadow: inset 0 0 0 1px var(--wt-color-warning);
+      }
+
+      .ready-bar.pulsing {
+        animation: ready-warning var(--wt-duration-pulse-slow) ease-in-out infinite;
+      }
+
+      @keyframes ready-warning {
+        50% {
+          border-color: var(--wt-color-warning-pulse-dim);
+          box-shadow: inset 0 0 0 1px var(--wt-color-warning-pulse-dim);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ready-bar.pulsing {
+          animation: none;
+        }
+      }
+
+      .ready-bar h2 wt-icon {
+        color: inherit;
+      }
+
+      .ready-bar[data-warning] h2 {
+        color: var(--wt-color-warning);
+      }
+
+      .ready-tables wt-button[data-warning]::part(button) {
+        color: var(--wt-color-warning);
+        border-color: var(--wt-color-warning);
+      }
+
+      /* The shared hover cue, which the part rule above would otherwise override. */
+      .ready-tables wt-button[data-warning]::part(button):hover:not(:disabled) {
+        border-color: var(--wt-color-primary-text);
+      }
+
       .ready-bar h2 {
         display: flex;
         align-items: center;
@@ -884,8 +928,7 @@ export class TillFloorScreen extends LitElement {
    * identical classes. A table crossing into a worse band shows on the next refresh.
    */
   @property({ attribute: false }) reducedMotion?: boolean;
-  /** Injectable clock for whether a party's release reminder is due; unset reads the real one and
-   * redraws the floor when the next reminder falls due, and each minute a held countdown changes. */
+  /** Injectable clock; unset reads the real one, and `#watchReminders` schedules the redraws. */
   @property({ attribute: false }) now?: number;
 
   @state() private activeZone: string | undefined = undefined;
@@ -955,7 +998,7 @@ export class TillFloorScreen extends LitElement {
   #carried = new Map<string | null, { revision: number; answeredAt: number }>();
   #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
 
-  /** The clock the last render judged reminders by. */
+  /** The clock the last render was drawn by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
   /** Zone keys of the tabs the strip does not show whole, by the end they are beyond. */
@@ -1076,8 +1119,8 @@ export class TillFloorScreen extends LitElement {
     return reminderDueAt(table.party?.reminder) <= this.#drawnAt;
   }
 
-  /** The server's floor does not change when a reminder falls due or a held countdown's minutes
-   * change, so the screen redraws itself then. */
+  /** The server's floor does not change when a reminder falls due, a held countdown's minutes
+   * change, or the Ready bar's minutes or warning change, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
     if (this.now !== undefined || !this.isConnected) return;
@@ -1091,6 +1134,8 @@ export class TillFloorScreen extends LitElement {
         : dueAt;
       if (at < next) next = at;
     }
+    if (this.handheld)
+      next = Math.min(next, nextReadyBarChange(this.#readyEntries(), this.#drawnAt));
     if (next === Number.POSITIVE_INFINITY) return;
     this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(next));
   }
@@ -2995,19 +3040,32 @@ export class TillFloorScreen extends LitElement {
     </section>`;
   }
 
-  /** The tables with food ready in the zones this Floor shows; Open opens the first listed. */
+  #readyEntries(): ReadyTable[] {
+    return readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)));
+  }
+
+  /**
+   * The tables with food ready in the zones this Floor shows: warning tables first, then the rest,
+   * each longest-waiting first; Open opens the first listed.
+   */
   #readyBar(): TemplateResult | typeof nothing {
     if (!this.handheld) return nothing;
-    const ready = readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)));
+    const { tables: ready, waitedMinutes } = readyBar(this.#readyEntries(), this.#drawnAt);
     const first = ready[0];
     if (first === undefined) return nothing;
+    const pulsing = waitedMinutes !== null && !this.#prefersReducedMotion();
     return html`<section
-      class="ready-bar help-anchor"
+      class="ready-bar help-anchor${pulsing ? " pulsing" : ""}"
       data-ready-bar
+      ?data-warning=${waitedMinutes !== null}
       aria-labelledby="ready-bar-title"
     >
       <h2 id="ready-bar-title">
-        <wt-icon name="floor-ready" size="sm"></wt-icon>${t("floor.ready_title")}
+        <wt-icon name="floor-ready" size="sm"></wt-icon>${
+          waitedMinutes === null
+            ? t("floor.ready_title")
+            : t("floor.ready_bar_waited").replace("{n}", String(waitedMinutes))
+        }
       </h2>
       <div class="ready-tables">${ready.map((entry) => this.#readyEntry(entry))}</div>
       <wt-button
@@ -3022,11 +3080,12 @@ export class TillFloorScreen extends LitElement {
     </section>`;
   }
 
-  #readyEntry(entry: ReadyTable): TemplateResult {
+  #readyEntry(entry: ReadyBarTable): TemplateResult {
     return html`<wt-button
       size="sm"
       variant="secondary"
       data-ready-table=${entry.tableId}
+      ?data-warning=${entry.warning}
       @click=${() => this.#openReady(entry)}
       >${t("floor.ready_bar_table")
         .replace("{table}", () => entry.name)

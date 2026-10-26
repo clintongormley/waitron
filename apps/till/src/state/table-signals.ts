@@ -53,6 +53,10 @@ export interface ReadyTable {
   tableId: string;
   name: string;
   count: number;
+  /** The earliest readable ready time over the party's stations, epoch ms; null when none. */
+  oldestReadyAt: number | null;
+  /** The first moment one of its stations has waited its own ready warning time; never when none is timed. */
+  warnsAt: number;
 }
 
 /**
@@ -68,9 +72,56 @@ export function readyTables(
     if (party === null || table.zoneId === null || !zoneIds.has(table.zoneId)) return null;
     const ready = signalOf(table.signals, "ready");
     if (ready === undefined) return null;
-    const count = ready.byStation.reduce((sum, station) => sum + station.count, 0);
-    return { key: party.id, value: { partyId: party.id, count } };
+    let count = 0;
+    let oldestReadyAt: number | null = null;
+    let warnsAt = Number.POSITIVE_INFINITY;
+    for (const station of ready.byStation) {
+      count += station.count;
+      const readyAt = Date.parse(station.oldestReadyAt ?? "");
+      if (Number.isNaN(readyAt)) continue;
+      oldestReadyAt = Math.min(oldestReadyAt ?? readyAt, readyAt);
+      warnsAt = Math.min(warnsAt, readyAt + station.readyWarningAfterMinutes * 60_000);
+    }
+    return { key: party.id, value: { partyId: party.id, count, oldestReadyAt, warnsAt } };
   }).map(({ value, table, name }) => ({ ...value, tableId: table.id, name }));
+}
+
+export interface ReadyBarTable extends ReadyTable {
+  warning: boolean;
+}
+
+export interface ReadyBar {
+  /** Warning tables first, then the rest; each group by `oldestReadyAt`, untimed last, ties in floor order. */
+  tables: ReadyBarTable[];
+  /** The first table's wait in whole minutes while it warns; null while the bar is calm. */
+  waitedMinutes: number | null;
+}
+
+export function readyBar(entries: readonly ReadyTable[], now: number): ReadyBar {
+  const tables = entries
+    .map((entry) => ({ ...entry, warning: now >= entry.warnsAt }))
+    .sort(
+      (a, b) =>
+        Number(b.warning) - Number(a.warning) ||
+        (a.oldestReadyAt ?? Number.POSITIVE_INFINITY) -
+          (b.oldestReadyAt ?? Number.POSITIVE_INFINITY),
+    );
+  const first = tables[0];
+  // A table warns only once a station has a readable time, so a warning one has `oldestReadyAt`.
+  const waitedMinutes =
+    first?.warning === true ? Math.floor((now - first.oldestReadyAt!) / 60_000) : null;
+  return { tables, waitedMinutes };
+}
+
+/** The next moment after `now` that `readyBar(entries, ·)` answers differently; never when none. */
+export function nextReadyBarChange(entries: readonly ReadyTable[], now: number): number {
+  let next = Number.POSITIVE_INFINITY;
+  for (const entry of entries) if (entry.warnsAt > now) next = Math.min(next, entry.warnsAt);
+  const { tables, waitedMinutes } = readyBar(entries, now);
+  if (waitedMinutes !== null) {
+    next = Math.min(next, tables[0]!.oldestReadyAt! + (waitedMinutes + 1) * 60_000);
+  }
+  return next;
 }
 
 /**

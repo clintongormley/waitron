@@ -1044,7 +1044,10 @@ may predate that branch:
   Floor, a ✎ button per table with this person's unsent dishes, then "?" and ☰, everything else in
   ☰) landed in #2097, built from the plan's slice 3. Slice 6 (each prep station's Ready warning
   time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from the plan's
-  slice 6; slice 7 (the Ready bar's warning) is next. Build slices (design §8), in the owner's
+  slice 6. Slice 7 (the Ready bar's warning: once a ready dish has waited its station's Ready
+  warning time the bar turns amber, pulses slowly, shows the minutes and puts those tables first)
+  is in flight on `feat/a797-7-ready-bar-warning`, from the plan's slice 7; slice 8 (the kitchen screen's group cards) is
+  next, taking turns with lane G's A773-2 on the station screen (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits

@@ -2344,7 +2344,12 @@ describe("a handheld's zones", () => {
   });
 
   describe("the Ready bar and the remembered view", () => {
-    const readyIn = (id: string, zoneId: string) => ({
+    const readyIn = (
+      id: string,
+      zoneId: string,
+      oldestReadyAt: string | null = null,
+      readyWarningAfterMinutes = 3,
+    ) => ({
       ...tableIn(id, zoneId),
       signals: [
         {
@@ -2354,8 +2359,8 @@ describe("a handheld's zones", () => {
               stationId: "bar",
               stationName: "Bar",
               count: 2,
-              oldestReadyAt: null,
-              readyWarningAfterMinutes: 3,
+              oldestReadyAt,
+              readyWarningAfterMinutes,
             },
           ],
         },
@@ -2408,6 +2413,52 @@ describe("a handheld's zones", () => {
       await onReadyFloor(el);
       await vi.waitFor(() => expect(summary(el)).not.toBeNull());
       expect(readyBar(el)).toBeNull();
+    });
+
+    /** One room table ready 4½ minutes and one ready 1 minute, both at 3, the newer read first. */
+    const waitingTables = () => {
+      const readyFor = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+      return [readyIn("t-late", "room", readyFor(1)), readyIn("t-room", "room", readyFor(4.5))];
+    };
+
+    it("a handheld's Ready bar warns once food has waited its station's minutes", async () => {
+      const drafts = draftServer(() => ({ tabId: "bill-t-room", revision: 1, groups: [] }));
+      drafts.bills.add("bill-t-room");
+      const { el } = await mountHandheld(selection(["room"], "room"), "phone-portrait", {
+        getTablesState: vi.fn().mockResolvedValue(waitingTables()),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        listDrafts: drafts.listDrafts,
+        saveDraft: drafts.saveDraft,
+        submitDraft: drafts.submitDraft,
+      });
+      await onReadyFloor(el);
+      await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
+      expect(readyBar(el)!.querySelector("h2")!.textContent!.trim()).toBe("Ready 4 min");
+      expect(readyBar(el)!.hasAttribute("data-warning")).toBe(true);
+      expect(readyEntries(el)).toEqual(["t-room", "t-late"]);
+      const entry = (id: string) =>
+        floor(el).shadowRoot!.querySelector(`[data-ready-table="${id}"]`)!;
+      expect(entry("t-room").hasAttribute("data-warning")).toBe(true);
+      expect(entry("t-late").hasAttribute("data-warning")).toBe(false);
+
+      floor(el).shadowRoot!.querySelector<HTMLElement>("[data-ready-open]")!.click();
+      const order = () =>
+        el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
+      await vi.waitFor(() => expect(order()).not.toBeNull());
+      await vi.waitFor(() => expect(order()!.orderId).toBe("bill-t-room"));
+      expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
+    });
+
+    it("a till's summary shows no warning", async () => {
+      const { el } = await mount(selection(["room"], "room"), {
+        getTablesState: vi.fn().mockResolvedValue(waitingTables()),
+      });
+      await onReadyFloor(el);
+      await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+      expect(readyBar(el)).toBeNull();
+      expect(floor(el).shadowRoot!.querySelector("[data-warning]")).toBeNull();
     });
 
     it.each([

@@ -105,7 +105,9 @@ ticket at once, under **Done on the screen** when you edit it in **Prep stations
 screen, an order at a whole-ticket station shows **Whole ticket** while a tap can still move it on.
 Each prep station sets
 its own late flags, and a **Ready warning** time of 3 minutes unless you change it, when you add it
-with **Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. Each
+with **Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. On a
+phone or tablet, the Ready bar turns amber once a ready dish has waited that long: see
+[See which tables have food ready](table-service.md#ready-bar). Each
 prep station also sets how identical dishes print on its tickets,
 whether it prints held groups in advance, and whether a dish already sent to it can be recalled or
 changed, under **Identical dishes on a kitchen ticket**, **Print held groups in advance** and
