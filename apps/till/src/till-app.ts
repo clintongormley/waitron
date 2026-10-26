@@ -3799,8 +3799,7 @@ export class TillApp extends LitElement {
       orders.revision !== party.revision
     )
       throw { code: "party.out_of_date" };
-    this.tables = tables;
-    this.barFloor = tables;
+    this.#setTables(tables, true);
     this.orderParty = party;
     this.tabGroups = groups.groups;
     this.currentOrders = orders;
@@ -10561,14 +10560,7 @@ export class TillApp extends LitElement {
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
     if (answered) this.#forgetReleased((each) => (each.savedBefore ?? read.number) < read.number);
-    const json = JSON.stringify(tables);
-    if (json === this.#tablesJson) {
-      if (answered) this.barFloor = this.tables;
-      return;
-    }
-    this.#tablesJson = json;
-    this.tables = tables;
-    if (answered) this.barFloor = tables;
+    if (!this.#setTables(tables, answered)) return;
     const party = this.orderParty;
     const latest = tables.find((row) => row.id === this.activeTableId)?.party;
     if (
@@ -10578,6 +10570,19 @@ export class TillApp extends LitElement {
       latest.kitchenNote.revision >= party.kitchenNote.revision
     )
       this.orderParty = { ...party, kitchenNote: latest.kitchenNote };
+  }
+
+  /** The one writer of `tables` and `barFloor`. A list equal to the one shown keeps the array shown;
+   * `barFloor` takes only a list the box answered. Answers whether `tables` changed. */
+  #setTables(tables: TableState[], answered: boolean): boolean {
+    const json = JSON.stringify(tables);
+    const changed = json !== this.#tablesJson;
+    if (changed) {
+      this.#tablesJson = json;
+      this.tables = tables;
+    }
+    if (answered) this.barFloor = this.tables;
+    return changed;
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
@@ -11780,8 +11785,7 @@ export class TillApp extends LitElement {
           outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
         return true;
       }
-      this.tables = tables;
-      this.barFloor = tables;
+      this.#setTables(tables, true);
       this.orderParty = party;
       this.tabGroups = groups.groups;
       this.currentOrders = orders;
