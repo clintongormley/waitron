@@ -503,6 +503,12 @@ export class SetupApp extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+        margin-block-end: var(--wt-space-2);
+      }
+
+      /* The repair page's loose buttons wrap as inline boxes; this keeps a wrapped row off the one above. */
+      section > wt-button {
+        margin-block-end: var(--wt-space-1);
       }
 
       .logo svg {
