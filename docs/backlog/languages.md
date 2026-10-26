@@ -116,14 +116,6 @@ Spanish variant badge "Se archivará al guardar", and the Spanish PIN reset conf
 (`person.confirm_reset_pin`, "no podrá usar") whose English is present were left alone by A477
 (#1530, delete windows in the present tense).
 
-## A1076. Spanish names the three late flags three ways
-
-- **A1076. Spanish names the three late flags three ways**: the station editor's «En demora»,
-  «Retrasado», «Olvidado» (`prep.health.*`), the error's «aviso < atraso < olvido»
-  (`prep.threshold_invalid`) and Add station's «Aviso / Atraso / Olvido a partir de (min)»
-  (`packages/venue-service/src/dashboard/strings.ts`); English says warm, overdue and forgotten.
-  Left open by A756 PR 5.
-
 ## Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen
 
 The dashboard's role name is «Encargado» (`roleName`, `apps/dashboard/src/i18n/domain.ts:11`,

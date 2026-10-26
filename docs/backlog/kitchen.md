@@ -366,7 +366,9 @@ the change (plan PR 8 Decision 1).
 - Add and Edit use the shared `wt-colour-chooser`, showing other stations that use a colour.
   The Edit window groups its three late-flag fields in one short row under Late flags (minutes),
   followed by one instruction to leave a field blank to use the venue setting. **2026-10-23 (A756
-  PR 5):** the minutes are the station's own and required; the instruction is gone.
+  PR 5):** the minutes are the station's own and required; the instruction is gone. **2026-10-26
+  (A797 slice 6):** a fourth field, Ready warning, follows the three, and the Edit window sets the
+  four two to a row.
 - The Edit switch reads "Also list the order's dishes from other stations", with "On this station's
   tickets and kitchen screen" beneath it. "Print a slip when sent dishes move table" offers
   "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.

@@ -120,8 +120,9 @@ o toda la comanda a la vez, en **Marcado en la pantalla** al editarla en **Estac
 pantalla de cocina, una comanda de una estación que avanza toda la comanda muestra **Toda la comanda**
 mientras un toque aún pueda avanzarla.
 Cada
-estación de preparación fija sus propios avisos de demora al crearla con **Añadir estación**, y en
-**Avisos de demora (minutos)** al editarla en **Estaciones de preparación**. Cada estación de
+estación de preparación fija sus propios avisos de demora, y un tiempo de **Listo sin recoger** de 3
+minutos si no lo cambias, al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
+editarla en **Estaciones de preparación**. Cada estación de
 preparación fija también cómo se imprimen los platos iguales en sus comandas, si imprime por
 adelantado los grupos en espera y si un plato ya enviado a ella se puede retirar o cambiar, en
 **Platos iguales en una comanda de cocina**, **Imprimir por adelantado los grupos en espera** y
