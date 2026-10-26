@@ -1377,15 +1377,19 @@ The two files now each occupy three suites; `setup-first-backup-api.test.ts`,
 which took 223–227 seconds on those runs, occupies two. Each original test block
 keeps its assertions, setup and waits. The table refresh uses six successful main
 runs (`40362707290`, `40358961862`, `40358601734`, `40357741507`, `40356182742`,
-`40347986969`) for unchanged files. The eight split files initially use a local
-coverage run (211 cases, 215.55 seconds overall); replace those estimates with
-hosted measurements before landing.
+`40347986969`) for unchanged files. The eight split files and the newly added
+venue-privacy API file use hosted measurements from PR run `40384194599`.
+That first run used local coverage timings for the split files; its twenty shard
+jobs took 164–266 seconds, median 244. Its logs contain each of the 1,040 selected
+ordinary-shard paths exactly once, and its server coverage merge passed.
 
 A four-worker scheduling model over the three newest measured runs, with an assumed
 55 seconds of job overhead and equal-duration subdivisions, estimated 265–284 seconds
 for sixteen shards and 230–247 seconds for twenty. These are estimates, not hosted
-results; the pull request records the actual before/after job times. Refresh the
-split-file estimates from hosted results when they become available.
+results. Replaying the first hosted run's measured file times with the refreshed
+split estimates gives a 240-second slowest job at twenty shards and 234 seconds
+at twenty-two, with the same assumed overhead. The pull request records final
+hosted timings; refresh from logs when the estimates drift again.
 
 The existing shard-count check in `scripts/ci-workflow.test.mjs` now pins twenty.
 It reads workflow text; the duration sequencer's tree-walk guard still does not
