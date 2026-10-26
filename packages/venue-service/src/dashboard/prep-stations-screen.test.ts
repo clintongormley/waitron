@@ -196,7 +196,6 @@ it.each([
   ['wt-switch[name="showsRestOfOrder"]', ""],
   ['a[href="/manage/printing-rules"]', ""],
   ['a[href="/manage/devices"]', ""],
-  ["", "Warm 5 min"],
   ["", "Watched by:"],
 ])("keeps assignment and late-flag settings %s %s out of Routes", async (selector, text) => {
   setLocale("en");

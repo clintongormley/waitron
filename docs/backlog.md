@@ -1438,19 +1438,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
 - **A1059. Add station and the station editor draw the late flags differently.** Add draws four
-  full-width fields ("Waiting after (min)" and so on, then "Ready warning after (min)"); the editor
-  draws its four two to a row under "Late flags (minutes)" (`prep-stations-screen.ts` `#dialog`,
-  `station-editor.ts`). The owner's one-row decision (A725) named the editor; A797 slice 6 made it
-  two rows for the fourth field. Ask whether Add should match. Left open by A756 PR 5.
+  full-width fields; the editor draws its four two to a row under "Late flags (minutes)"
+  (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). Ask whether Add should match. Left
+  open by A756 PR 5.
 
 - **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
   one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
 
-- **A1134. Add station marks no field when the server refuses a minutes field.** A
-  `station.thresholds_invalid` or `management.request_invalid` refusal naming a minutes field says
-  "Correct the highlighted fields to continue." with nothing highlighted: the catch in
-  `prep-stations-screen.ts` `#saveStation` places only name, colour and printers. Fix: put it under
-  that field, as the station editor does. Found in A797 slice 6's review; predates it.
+- **A1134. Add station marks no field when the server refuses a minutes field.** The station editor
+  puts it under the field; A1136 is Add station's own-check half.
+  [Detail](backlog/kitchen.md#a1134-add-station-marks-no-field-when-the-server-refuses-a-minutes-field)
 
 - **A1135. No test catches `classifyBand` measuring from the wrong end.** Stryker's mutant turning
   `nowMs - queuedAtMs` into `+` (`packages/shared/src/timing.ts`) survives: every case that asserts
@@ -1458,16 +1455,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   review; predates it.
 
 - **A1136. Add station's own check of a minutes field highlights nothing and puts its bottom line
-  inside the form.** With 0 typed in any minutes field (Waiting after tried as well as Ready
-  warning after) and Save tried, the field keeps its normal look with a red line under it, focus
-  stays put, and "Correct the highlighted fields to continue." sits inside the form (y 657 at
-  1280 px) rather than on its own line above the buttons (from y 766), against design-system.md →
-  Forms. The station editor does it right. Measured by A797 slice 6's LOOK
-  (`c3-add-zero-save-tried-*`); `git blame` dates `#saveStation`'s check to #1004 and #1325, before
-  that slice. A1134 is the server-refusal half.
+  inside the form.** The station editor does it right; A1134 is the server-refusal half.
+  [Detail](backlog/kitchen.md#a1136-add-stations-own-check-of-a-minutes-field-highlights-nothing-and-puts-its-bottom-line-inside-the-form)
 
-- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields**
-  [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-late-flags-row-and-held-work-note-are-wider-than-its-fields)
+- **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields**
+  [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-minutes-grid-and-held-work-note-are-wider-than-its-fields)
 
 - **A1062. Ask whether picture 10's Held courses dropdown, "Print when sent", replaces the station
   editor's switch "Print held groups in advance"** (left open by A756 PR 6).
@@ -4211,6 +4203,11 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
+
+- **A1137. The dashboard overview calls an Overdue order «Atrasado»; the station fields and the
+  till's signal say «Con retraso».** The overview's `overview.band_overdue`, `overview.overdue_count`
+  and `overview.overdue_none` (`apps/dashboard/src/i18n/strings.ts`) and the till's
+  `station.overdue_count` (`apps/till/src/i18n/strings.ts`) say «atrasado(s)». Decide which word wins.
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)

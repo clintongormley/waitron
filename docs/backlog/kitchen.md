@@ -257,9 +257,9 @@ slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and C
 taken off) — still print the bare order number (`formatCorrectionSlip`,
 `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
-## A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields
+## A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields
 
-- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its
+- **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its
   fields** (they end at about x 951, the fields at about 905, measured in Chromium by A756 PRs 5 and
   8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837); the
   note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
@@ -270,6 +270,22 @@ taken off) — still print the bare order number (`formatCorrectionSlip`,
   grid, the held-work note and the other note run x 329–951 (622 px), so the right-hand column
   (Overdue, Ready warning, x 644–951) is the part that sticks out. At 390 px everything runs
   x 17–373. Still not traced why the fields stop at 576 px.
+
+## A1134. Add station marks no field when the server refuses a minutes field
+
+A `station.thresholds_invalid` or `management.request_invalid` refusal naming a minutes field says
+"Correct the highlighted fields to continue." with nothing highlighted: the catch in
+`prep-stations-screen.ts` `#saveStation` places only name, colour and printers. Fix: put it under
+that field, as the station editor does.
+
+## A1136. Add station's own check of a minutes field highlights nothing and puts its bottom line inside the form
+
+With 0 typed in any minutes field (Waiting after tried as well as Ready warning after) and Save
+tried, the field keeps its normal look with a red line under it, focus stays put, and "Correct the
+highlighted fields to continue." sits inside the form (y 657 at 1280 px) rather than on its own line
+above the buttons (from y 766), against design-system.md → Forms. Measured in Chromium by A797
+slice 6's LOOK, 2026-10-26. The station editor does it right. `git blame` dates `#saveStation`'s
+check to #1004 and #1325, before A797 slice 6. A1134 is the server-refusal half.
 
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 

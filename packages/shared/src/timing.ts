@@ -14,6 +14,7 @@ export const DEFAULT_STATION_THRESHOLDS: Readonly<StationThresholds> = {
   forgottenAfterMinutes: 15,
 };
 
+// The kitchen_stations schema's declared default; a server test pins that the two agree.
 export const DEFAULT_READY_WARNING_AFTER_MINUTES = 3;
 
 export type StationTiming = StationThresholds & { readyWarningAfterMinutes: number };
