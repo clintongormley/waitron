@@ -1,7 +1,8 @@
+import { LitElement, html } from "lit";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setHelpMode, type WtButton, type WtInput } from "@waitron/ui";
+import { LeaveController, setHelpMode, type WtButton, type WtInput } from "@waitron/ui";
 import type { DashboardApi, VenuePrivacy } from "../api/client.js";
 import {
   cleanupWidgets,
@@ -52,6 +53,27 @@ async function mount(api: DashboardApi, readOnly = false) {
   await expect.poll(() => q(el, "section.settings-card dl")).toBeTruthy();
   await flush(el);
   return el;
+}
+class LeaveHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  api!: DashboardApi;
+  override render() {
+    return html`<dashboard-venue-privacy-panel .api=${this.api}></dashboard-venue-privacy-panel>
+      ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("venue-privacy-panel-leave-host", LeaveHost);
+async function mountWithLeave(api: DashboardApi) {
+  const { el: host } = await mountWidget<LeaveHost>("venue-privacy-panel-leave-host", { api });
+  const el = host.shadowRoot!.querySelector("dashboard-venue-privacy-panel")!;
+  await expect.poll(() => el.shadowRoot && q(el, "section.settings-card dl")).toBeTruthy();
+  await flush(el);
+  return el;
+}
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
 }
 const input = (el: Panel, name: string) => q(el, `wt-input[name=${name}]`) as WtInput | null;
 const native = (el: Panel, name: string) =>
@@ -533,13 +555,14 @@ it("Retry reads through the background client, as every read after the first doe
 
 it("a read begun before a successful save does not put back the old email", async () => {
   const r = rig(STORED);
-  const el = await mount(r.api);
+  const el = await mountWithLeave(r.api);
   const stale = deferred<VenuePrivacy>();
   r.api.getVenuePrivacy.mockImplementationOnce(() => stale.promise);
   r.liveData.invalidate([{ type: "tenants" }]);
   await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(2);
   await edit(el);
   await type(el, "privacyEmail", "new@example.com");
+  expect(unload()).toBe(true);
   await save(el);
   await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
   expect(savedEmail(el)).toBe("new@example.com");
@@ -548,6 +571,7 @@ it("a read begun before a successful save does not put back the old email", asyn
   await frame();
   await flush(el);
   expect(savedEmail(el)).toBe("new@example.com");
+  expect(unload()).toBe(false);
 });
 
 it("a save answer that arrives after a newer live value ends on the newer value", async () => {
@@ -625,6 +649,90 @@ it("a failed read after a successful save is a read failure, and the editor stay
   expect(savedEmail(el)).toBe("new@example.com");
 });
 
+it("a card removed while its save is in flight reads nothing more once the save succeeds", async () => {
+  const r = withBackground();
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  await save(el);
+  expect(saveButton(el).loading).toBe(true);
+  const parent = el.parentNode!;
+  el.remove();
+  r.state.stored = { ...STORED, privacyEmail: "new@example.com" };
+  pending.resolve({ ...STORED, privacyEmail: "new@example.com" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(r.background.getVenuePrivacy).not.toHaveBeenCalled();
+  parent.appendChild(el);
+  await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(1);
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(savedEmail(el)).toBe("new@example.com");
+  await edit(el);
+  expect(saveButton(el).loading).toBe(false);
+  expect(input(el, "privacyEmail")!.disabled).toBe(false);
+  expect(cancelButton(el).disabled).toBe(false);
+});
+
+it.each(["answer", "failure"] as const)(
+  "a re-read begun before the card left and came back is ignored, whatever its %s",
+  async (outcome) => {
+    const r = withBackground();
+    const reread = deferred<VenuePrivacy>();
+    const reload = deferred<VenuePrivacy>();
+    r.background.getVenuePrivacy
+      .mockImplementationOnce(() => reread.promise)
+      .mockImplementationOnce(() => reload.promise);
+    const el = await mount(r.api);
+    await edit(el);
+    await type(el, "privacyEmail", "new@example.com");
+    await save(el);
+    await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+    await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(1);
+    const parent = el.parentNode!;
+    el.remove();
+    parent.appendChild(el);
+    await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(2);
+    if (outcome === "answer") reread.resolve({ ...STORED, privacyEmail: "stale@example.com" });
+    else reread.reject({ code: "server.unavailable" });
+    await reread.promise.catch(() => {});
+    await frame();
+    await flush(el);
+    expect(savedEmail(el)).toBe("new@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+    reload.resolve({ ...STORED, privacyEmail: "later@example.com" });
+    await expect.poll(() => savedEmail(el)).toBe("later@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  },
+);
+
+it.each(["answer", "failure"] as const)(
+  "a re-read overtaken by a later live read leaves the live read showing, whatever its %s",
+  async (outcome) => {
+    const r = withBackground();
+    const reread = deferred<VenuePrivacy>();
+    r.background.getVenuePrivacy.mockImplementationOnce(() => reread.promise);
+    const el = await mount(r.api);
+    await edit(el);
+    await type(el, "privacyEmail", "new@example.com");
+    await save(el);
+    await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+    await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(1);
+    r.state.stored = { ...STORED, privacyEmail: "later@example.com" };
+    r.liveData.invalidate([{ type: "tenants" }]);
+    await expect.poll(() => savedEmail(el)).toBe("later@example.com");
+    if (outcome === "answer") reread.resolve({ ...STORED, privacyEmail: "new@example.com" });
+    else reread.reject({ code: "server.unavailable" });
+    await reread.promise.catch(() => {});
+    await frame();
+    await flush(el);
+    expect(savedEmail(el)).toBe("later@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  },
+);
+
 it("reconnecting while a save is in flight keeps Save disabled, so a second click sends nothing", async () => {
   const r = rig(STORED);
   const pending = deferred<VenuePrivacy>();
@@ -676,9 +784,10 @@ it("a save that succeeds after the card turned read-only and back leaves the new
   const r = rig(STORED);
   const pending = deferred<VenuePrivacy>();
   r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
-  const el = await mount(r.api);
+  const el = await mountWithLeave(r.api);
   await edit(el);
   await type(el, "privacyEmail", "new@example.com");
+  expect(unload()).toBe(true);
   saveButton(el).click();
   await el.updateComplete;
   el.readOnly = true;
@@ -697,6 +806,7 @@ it("a save that succeeds after the card turned read-only and back leaves the new
   expect(input(el, "privacyEmail")!.value).toBe("new@example.com");
   expect(saveButton(el).disabled).toBe(true);
   expect(saveButton(el).loading).toBe(false);
+  expect(unload()).toBe(false);
   reread.resolve({ ...STORED, privacyEmail: "new@example.com" });
 });
 

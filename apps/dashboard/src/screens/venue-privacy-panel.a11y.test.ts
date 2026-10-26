@@ -104,6 +104,10 @@ it.each(cases)(
         await expectNoA11yViolations(host);
         expect(el.scrollWidth).toBeLessThanOrEqual(390);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+        await page.screenshot({
+          element: host,
+          path: `__screenshots__/look/a980-privacy-${locale}-${theme}-390-${state}.png`,
+        });
         host.remove();
       }
     } finally {
