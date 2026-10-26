@@ -354,61 +354,121 @@ describe("the recovery page, the log file and stdout carry no person's details",
       },
       "recovery_test.failed",
     );
-    const editorEdit = {
-      billId: "b1",
-      editorId: "p2",
-      editorName: MARTA_NAME,
-      editorVersion: 3,
-      draftId: null,
-      draftRevision: null,
-    };
-    const throws: Record<string, AppError> = {
-      owner: new AppError("draft.taken_over", {
-        draftId: "d1",
-        ownerId: "p1",
-        ownerName: MARTA_NAME,
-      }),
-      editor: new AppError("draft.taken_over", {
-        billId: "b1",
-        draftId: null,
-        ownerId: "p2",
-        ownerName: null,
-        edit: editorEdit,
-      }),
-      holder: new AppError("device.equipment_held", {
-        field: "receiptPrinterId",
-        holderDeviceId: "dev1",
-        holderDeviceName: "Bar till",
-        holderPersonName: MARTA_NAME,
-      }),
-      today: new AppError("table.label_taken", { todayName: TODAY_NAME, field: "name" }),
-      plan: new AppError("table.label_taken", { label: "Patio 1" }),
-      venue: new AppError("restore.stream_venue_unconfirmed", {
-        legalName: VENUE_LEGAL_NAME,
-        taxId: VENUE_TAX_ID,
-        locationName: LOCATION_NAME,
-      }),
-      merchants: new AppError("payment.provider_merchant_ambiguous", {
-        merchants: [
-          { code: "MC1", name: VENUE_LEGAL_NAME },
-          { code: "MC2", name: MARTA_NAME },
-        ],
-      }),
-    };
+    // Built afresh per request and compared with literals, so a mask that wrote into the thrown
+    // params in place would show in the answers.
+    const throws: [string, () => AppError, string, Record<string, unknown>][] = [
+      [
+        "owner",
+        () =>
+          new AppError("draft.taken_over", { draftId: "d1", ownerId: "p1", ownerName: MARTA_NAME }),
+        "draft.taken_over",
+        { draftId: "d1", ownerId: "p1", ownerName: "Marta Soler" },
+      ],
+      [
+        "editor",
+        () =>
+          new AppError("draft.taken_over", {
+            billId: "b1",
+            draftId: null,
+            ownerId: "p2",
+            ownerName: null,
+            edit: {
+              billId: "b1",
+              editorId: "p2",
+              editorName: MARTA_NAME,
+              editorVersion: 3,
+              draftId: null,
+              draftRevision: null,
+            },
+          }),
+        "draft.taken_over",
+        {
+          billId: "b1",
+          draftId: null,
+          ownerId: "p2",
+          ownerName: null,
+          edit: {
+            billId: "b1",
+            editorId: "p2",
+            editorName: "Marta Soler",
+            editorVersion: 3,
+            draftId: null,
+            draftRevision: null,
+          },
+        },
+      ],
+      [
+        "holder",
+        () =>
+          new AppError("device.equipment_held", {
+            field: "receiptPrinterId",
+            holderDeviceId: "dev1",
+            holderDeviceName: "Bar till",
+            holderPersonName: MARTA_NAME,
+          }),
+        "device.equipment_held",
+        {
+          field: "receiptPrinterId",
+          holderDeviceId: "dev1",
+          holderDeviceName: "Bar till",
+          holderPersonName: "Marta Soler",
+        },
+      ],
+      [
+        "today",
+        () => new AppError("table.label_taken", { todayName: TODAY_NAME, field: "name" }),
+        "table.label_taken",
+        { todayName: "Soler", field: "name" },
+      ],
+      [
+        "plan",
+        () => new AppError("table.label_taken", { label: "Patio 1" }),
+        "table.label_taken",
+        { label: "Patio 1" },
+      ],
+      [
+        "venue",
+        () =>
+          new AppError("restore.stream_venue_unconfirmed", {
+            legalName: VENUE_LEGAL_NAME,
+            taxId: VENUE_TAX_ID,
+            locationName: LOCATION_NAME,
+          }),
+        "restore.stream_venue_unconfirmed",
+        { legalName: "Jordi Puig Ferrer", taxId: "12345678Z", locationName: "Bar del Port" },
+      ],
+      [
+        "merchants",
+        () =>
+          new AppError("payment.provider_merchant_ambiguous", {
+            merchants: [
+              { code: "MC1", name: VENUE_LEGAL_NAME },
+              { code: "MC2", name: MARTA_NAME },
+            ],
+          }),
+        "payment.provider_merchant_ambiguous",
+        {
+          merchants: [
+            { code: "MC1", name: "Jordi Puig Ferrer" },
+            { code: "MC2", name: "Marta Soler" },
+          ],
+        },
+      ],
+    ];
     const api = new Hono();
-    for (const [path, error] of Object.entries(throws)) {
+    for (const [path, error] of throws) {
       api.get(`/${path}`, (c) =>
         run(c, r.log, () => {
-          throw error;
+          throw error();
         }),
       );
     }
 
-    for (const [path, error] of Object.entries(throws)) {
+    for (const [path, , code, params] of throws) {
       const res = await api.request(`/${path}`);
       expect({ status: res.status, body: await res.json() }).toEqual({
         status: 409,
-        body: { error: { code: error.code, params: error.params } },
+        body: { error: { code, params } },
       });
     }
 
@@ -421,7 +481,14 @@ describe("the recovery page, the log file and stdout carry no person's details",
         draftId: null,
         ownerId: "p2",
         ownerName: null,
-        edit: { ...editorEdit, editorName: "***" },
+        edit: {
+          billId: "b1",
+          editorId: "p2",
+          editorName: "***",
+          editorVersion: 3,
+          draftId: null,
+          draftRevision: null,
+        },
         event: "draft.taken_over",
       },
       {
@@ -573,6 +640,16 @@ describe("the recovery page, the log file and stdout carry no person's details",
 
     for (const code of ["person.display_name_taken", "table.label_taken"]) {
       expect(withLog).toContain(code);
+    }
+    for (const code of [
+      "person.email_taken",
+      "person.display_name_taken",
+      "draft.taken_over",
+      "device.equipment_held",
+      "table.label_taken",
+      "restore.stream_venue_unconfirmed",
+      "payment.provider_merchant_ambiguous",
+    ]) {
       expect(withoutLog).not.toContain(code);
     }
     expect(withoutLog).not.toContain("&quot;***&quot;");
