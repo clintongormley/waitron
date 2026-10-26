@@ -843,6 +843,56 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     }
   }
 
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1024]) {
+      it(`has no violations with a warning Ready bar, in ${locale} at ${width} px`, async () => {
+        const [owing, paid] = partyTables as [TableState, TableState];
+        const now = Date.parse("2026-09-30T20:00:00.000Z");
+        const readyFor = (table: TableState, minutes: number): TableState => ({
+          ...table,
+          signals: [
+            {
+              kind: "ready",
+              byStation: [
+                {
+                  stationId: "grill",
+                  stationName: "Grill",
+                  count: 2,
+                  oldestReadyAt: new Date(now - minutes * 60_000).toISOString(),
+                  readyWarningAfterMinutes: 3,
+                },
+              ],
+            },
+          ],
+        });
+        const previous = currentLocale();
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        try {
+          setLocale(locale);
+          await page.viewport(width, 844);
+          const { el, host } = await mountWidget<TillFloorScreen>(
+            "till-floor-screen",
+            {
+              zones,
+              tables: [readyFor(owing, 2), readyFor(paid, 4)],
+              handheld: true,
+              now,
+              reducedMotion: true,
+            },
+            theme,
+          );
+          const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-ready-bar]")!;
+          expect(bar.hasAttribute("data-warning")).toBe(true);
+          expect(bar.querySelectorAll("[data-ready-table][data-warning]")).toHaveLength(1);
+          await expectNoA11yViolations(host);
+        } finally {
+          setLocale(previous);
+          await page.viewport(viewport.width, viewport.height);
+        }
+      });
+    }
+  }
+
   it("has no violations with an edge mark at 390 px", async () => {
     const [owing] = partyTables as [TableState];
     const names = ["Bar", "Upstairs lounge", "Garden terrace", "Patio", "Private room"];

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { commands, userEvent } from "vitest/browser";
 import { setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import {
   cleanupWidgets,
@@ -308,6 +309,90 @@ describe("till-floor-screen: the Ready bar's warning", () => {
   });
 });
 
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateReducedMotion: (reduced: boolean) => Promise<void>;
+  }
+}
+
+const native = (button: HTMLElement) => button.shadowRoot!.querySelector("button")!;
+const entry = (el: TillFloorScreen, id: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-ready-table="${id}"]`)!;
+
+describe("till-floor-screen: the Ready bar warning's look", () => {
+  afterEach(() => commands.emulateReducedMotion(false));
+
+  it("a warning bar pulses at the slow pulse token, 2 s by default", async () => {
+    await commands.emulateReducedMotion(false);
+    const el = await mountFloor(warningCase(), { reducedMotion: false });
+    expect(getComputedStyle(bar(el)!).animationName).toBe("ready-warning");
+    expect(getComputedStyle(bar(el)!).animationDuration).toBe("2s");
+    el.style.setProperty("--wt-duration-pulse-slow", "5000ms");
+    expect(getComputedStyle(bar(el)!).animationDuration).toBe("5s");
+    cleanupWidgets();
+    const calm = await mountFloor([table2()], { reducedMotion: false });
+    expect(getComputedStyle(bar(calm)!).animationName).toBe("none");
+  });
+
+  it("its edge dims to the amber dim colour half-way", async () => {
+    await commands.emulateReducedMotion(false);
+    const el = await mountFloor(warningCase(), { reducedMotion: false });
+    el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    el.style.setProperty("--wt-color-warning-pulse-dim", "rgb(7, 8, 9)");
+    const section = bar(el)!;
+    const [animation] = section.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 1000;
+    expect(getComputedStyle(section).borderTopColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(section).boxShadow).toContain("rgb(7, 8, 9)");
+    animation!.currentTime = 0;
+    expect(getComputedStyle(section).borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(section).boxShadow).toContain("rgb(4, 5, 6)");
+  });
+
+  it("under reduced motion nothing moves and the amber stays", async () => {
+    const still = async (el: TillFloorScreen) => {
+      el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+      const section = bar(el)!;
+      expect(getComputedStyle(section).animationName).toBe("none");
+      expect(getComputedStyle(section).borderTopColor).toBe("rgb(4, 5, 6)");
+      expect(getComputedStyle(section.querySelector("h2")!).color).toBe("rgb(4, 5, 6)");
+    };
+    await commands.emulateReducedMotion(false);
+    await still(await mountFloor(warningCase(), { reducedMotion: true }));
+    cleanupWidgets();
+    await commands.emulateReducedMotion(true);
+    await still(await mountFloor(warningCase(), { reducedMotion: undefined }));
+    cleanupWidgets();
+    // Turned on after the bar was drawn, with no redraw: the stylesheet's own gate stops it.
+    await commands.emulateReducedMotion(false);
+    const drawn = await mountFloor(warningCase(), { reducedMotion: undefined });
+    expect(getComputedStyle(bar(drawn)!).animationName).toBe("ready-warning");
+    await commands.emulateReducedMotion(true);
+    await still(drawn);
+  });
+
+  it("the warning entry is amber and keeps a hover cue; the calm entry is unchanged", async () => {
+    await commands.emulateReducedMotion(false);
+    const calm = await mountFloor([readyAt(["bar", "Bar", 1, ago(2 * minute), 3])]);
+    const calmLook = getComputedStyle(native(entry(calm, "t2")));
+    const calmColours = [calmLook.color, calmLook.borderTopColor];
+    cleanupWidgets();
+    const el = await mountFloor(warningCase());
+    el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    el.style.setProperty("--wt-color-primary-text", "rgb(10, 11, 12)");
+    const warning = native(entry(el, "t8"));
+    expect(getComputedStyle(warning).color).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(warning).borderTopColor).toBe("rgb(4, 5, 6)");
+    await userEvent.hover(warning);
+    expect(getComputedStyle(warning).borderTopColor).toBe("rgb(10, 11, 12)");
+    el.style.removeProperty("--wt-color-warning");
+    el.style.removeProperty("--wt-color-primary-text");
+    const other = getComputedStyle(native(entry(el, "t2")));
+    expect([other.color, other.borderTopColor]).toEqual(calmColours);
+  });
+});
+
 /** `n` tables, the first `readyCount` of them with food ready, named Table 1 to Table n. */
 const numbered = (n: number, readyCount: number): TableState[] =>
   Array.from({ length: n }, (_, i) =>
@@ -399,6 +484,22 @@ describe("till-floor-screen: where the Ready bar sits", () => {
       expect(new Set(tops).size).toBe(1);
       const strip = section.querySelector<HTMLElement>(".ready-tables")!;
       if (width === 390) expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    });
+
+    it(`the warning does not change the bar's height (${width} px)`, async () => {
+      await pageAt(width, height);
+      const calm = await inShell([
+        readyAt(["bar", "Bar", 1, ago(2 * minute), 3]),
+        readyAt8(["grill", "Grill", 2, ago(2 * minute), 3]),
+      ]);
+      expect(bar(calm.floor)!.hasAttribute("data-warning")).toBe(false);
+      const calmHeight = bar(calm.floor)!.getBoundingClientRect().height;
+      cleanupWidgets();
+      const { floor, area } = await inShell(warningCase());
+      expect(bar(floor)!.hasAttribute("data-warning")).toBe(true);
+      const warningHeight = bar(floor)!.getBoundingClientRect().height;
+      expect(warningHeight).toBe(calmHeight);
+      expect(warningHeight).toBeLessThanOrEqual(oneLine(area));
     });
 
     it(`with help on, the bar's badge shows whole inside the scrolling area (${width} px)`, async () => {

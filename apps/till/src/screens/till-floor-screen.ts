@@ -840,6 +840,43 @@ export class TillFloorScreen extends LitElement {
         border-radius: var(--wt-radius-full);
       }
 
+      /* The inset shadow doubles the edge without changing the bar's size. */
+      .ready-bar[data-warning] {
+        border-color: var(--wt-color-warning);
+        box-shadow: inset 0 0 0 1px var(--wt-color-warning);
+      }
+
+      .ready-bar.pulsing {
+        animation: ready-warning var(--wt-duration-pulse-slow) ease-in-out infinite;
+      }
+
+      @keyframes ready-warning {
+        50% {
+          border-color: var(--wt-color-warning-pulse-dim);
+          box-shadow: inset 0 0 0 1px var(--wt-color-warning-pulse-dim);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ready-bar.pulsing {
+          animation: none;
+        }
+      }
+
+      .ready-bar[data-warning] h2 {
+        color: var(--wt-color-warning);
+      }
+
+      .ready-tables wt-button[data-warning]::part(button) {
+        color: var(--wt-color-warning);
+        border-color: var(--wt-color-warning);
+      }
+
+      /* The shared hover cue, which the part rule above would otherwise override. */
+      .ready-tables wt-button[data-warning]::part(button):hover {
+        border-color: var(--wt-color-primary-text);
+      }
+
       .ready-bar h2 {
         display: flex;
         align-items: center;
@@ -3010,8 +3047,9 @@ export class TillFloorScreen extends LitElement {
     const { tables: ready, waitedMinutes } = readyBar(this.#readyEntries(), this.#drawnAt);
     const first = ready[0];
     if (first === undefined) return nothing;
+    const pulsing = waitedMinutes !== null && !this.#prefersReducedMotion();
     return html`<section
-      class="ready-bar help-anchor"
+      class="ready-bar help-anchor${pulsing ? " pulsing" : ""}"
       data-ready-bar
       ?data-warning=${waitedMinutes !== null}
       aria-labelledby="ready-bar-title"
