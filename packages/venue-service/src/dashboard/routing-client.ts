@@ -3,7 +3,7 @@ import type {
   ChangesAfterSending,
   DeleteImpact,
   StationColour,
-  StationThresholds,
+  StationTiming,
   TicketGrouping,
 } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
@@ -36,6 +36,7 @@ export interface PrepStation {
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
+  readyWarningAfterMinutes: number;
   showsRestOfOrder: boolean;
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
@@ -136,7 +137,7 @@ export class PrepStationsApi {
           | "bumpMode"
           | "changesAfterSending"
         > &
-        StationThresholds & {
+        StationTiming & {
           /** Needs `printer.manage` as well, and an active station. */
           printerIds: readonly string[];
         }

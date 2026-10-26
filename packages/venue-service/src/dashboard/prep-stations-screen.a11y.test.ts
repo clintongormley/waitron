@@ -126,6 +126,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                   warmAfterMinutes: 5,
                   overdueAfterMinutes: 10,
                   forgottenAfterMinutes: 15,
+                  readyWarningAfterMinutes: 3,
                   showsRestOfOrder: state === "station-rest-on",
                 },
               ],
@@ -251,6 +252,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
+        readyWarningAfterMinutes: 3,
       },
       {
         id: "bar",
@@ -260,6 +262,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
+        readyWarningAfterMinutes: 3,
       },
     ];
     el.api = {
@@ -468,6 +471,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
           warmAfterMinutes: 5,
           overdueAfterMinutes: 10,
           forgottenAfterMinutes: 15,
+          readyWarningAfterMinutes: 3,
           showsRestOfOrder: false,
           printMovedSlips: true,
           ticketGrouping: "combined",

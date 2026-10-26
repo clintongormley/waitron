@@ -27,6 +27,7 @@ async function mount(printerIds = ["epson"]) {
     warmAfterMinutes: 3,
     overdueAfterMinutes: 5,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
   };
   el.printers = [
     { id: "epson", name: "Epson" },

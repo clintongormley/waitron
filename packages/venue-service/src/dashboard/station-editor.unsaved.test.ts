@@ -26,6 +26,7 @@ class StationEditorLeaveApp extends LitElement {
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,
           forgottenAfterMinutes: 15,
+          readyWarningAfterMinutes: 3,
         }}
         .printers=${[
           { id: "epson", name: "Epson" },

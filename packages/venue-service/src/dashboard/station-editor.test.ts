@@ -31,6 +31,7 @@ const GRILL: StationEditorStation = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 12,
   forgottenAfterMinutes: 15,
+  readyWarningAfterMinutes: 3,
 };
 
 const STATIONS = [
@@ -344,16 +345,28 @@ it("keeps a printer choice it can no longer send out of the save when the statio
 });
 
 const TIMINGS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+const STATION_MINUTES = [...TIMINGS, "readyWarningAfterMinutes"] as const;
 it("opens on the station's own minutes, each required, with no placeholder and no venue note", async () => {
   const el = await mount();
-  expect(TIMINGS.map((name) => timingField(el, name).value)).toEqual(["5", "12", "15"]);
-  expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["", "", ""]);
-  expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
+  expect(STATION_MINUTES.map((name) => timingField(el, name).value)).toEqual([
+    "5",
+    "12",
+    "15",
+    "3",
+  ]);
+  expect(STATION_MINUTES.map((name) => timingField(el, name).placeholder)).toEqual([
+    "",
+    "",
+    "",
+    "",
+  ]);
+  expect(STATION_MINUTES.map((name) => timingField(el, name).label)).toEqual([
     "Waiting",
     "Overdue",
     "Forgotten",
+    "Ready warning",
   ]);
-  for (const name of TIMINGS) {
+  for (const name of STATION_MINUTES) {
     expect(timingField(el, name).required).toBe(true);
     expect(timingField(el, name).type).toBe("number");
     expect(timingField(el, name).hint).toBe("");
@@ -844,7 +857,85 @@ it("A725 ignores an event from the departed station chooser", async () => {
   expect(saveButton(el).disabled).toBe(true);
 });
 
-it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width) => {
+it("sends a typed ready warning, and nothing for 03 over a stored 3", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await setTiming(el, "readyWarningAfterMinutes", "7");
+  await save(el);
+  expect(seen).toEqual([{ readyWarningAfterMinutes: 7 }]);
+  expect(el.saved()).toBe(true);
+  const again = await mount();
+  const seenAgain = saves(again);
+  await setTiming(again, "readyWarningAfterMinutes", "03");
+  expect(saveButton(again).disabled).toBe(true);
+  await save(again);
+  expect(seenAgain).toEqual([]);
+});
+
+it.each(["", "0", "1.5", "abc", "2147483648"])(
+  "marks Ready warning for %j with its own message, sends nothing and focuses it",
+  async (value) => {
+    const el = await mount();
+    const seen = saves(el);
+    await setTiming(el, "readyWarningAfterMinutes", value);
+    await save(el);
+    expect(seen).toEqual([]);
+    expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
+      "Use whole minutes, at least 1.",
+    );
+    expect(TIMINGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
+    expect(nameField(el).error).toBe("");
+    expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+    expect(saveButton(el).disabled).toBe(true);
+    await expect
+      .poll(() => el.shadowRoot!.activeElement)
+      .toBe(timingField(el, "readyWarningAfterMinutes"));
+    await setTiming(el, "readyWarningAfterMinutes", "4");
+    expect(timingField(el, "readyWarningAfterMinutes").error).toBe("");
+    expect(formMessage(el)).toBe("");
+    expect(saveButton(el).disabled).toBe(false);
+    await save(el);
+    expect(seen).toEqual([{ readyWarningAfterMinutes: 4 }]);
+  },
+);
+
+it("a ready warning above Forgotten after is saved", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await setTiming(el, "readyWarningAfterMinutes", "20");
+  await save(el);
+  expect(seen).toEqual([{ readyWarningAfterMinutes: 20 }]);
+  expect(STATION_MINUTES.map((name) => timingField(el, name).error)).toEqual(["", "", "", ""]);
+});
+
+it.each(["management.request_invalid", "station.thresholds_invalid"] as const)(
+  "puts a %s refusal naming readyWarningAfterMinutes under that field with its own message",
+  async (code) => {
+    const el = await mount();
+    await setTiming(el, "readyWarningAfterMinutes", "4");
+    el.refusal = { code, params: { field: "readyWarningAfterMinutes" } };
+    await el.updateComplete;
+    expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
+      "Use whole minutes, at least 1.",
+    );
+    expect(TIMINGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
+    expect(nameField(el).error).toBe("");
+    expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+    expect(saveButton(el).disabled).toBe(false);
+  },
+);
+
+it("reads Ready warning in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  expect(timingField(el, "readyWarningAfterMinutes").label).toBe("Listo sin recoger");
+  await setTiming(el, "readyWarningAfterMinutes", "0");
+  await save(el);
+  expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
+    "Usa minutos enteros, al menos 1.",
+  );
+});
+
+it.each([390, 1280])("A725 draws the four minutes two to a row at %ipx", async (width) => {
   const previous = [window.innerWidth, window.innerHeight];
   try {
     await page.viewport(width, 1100);
@@ -853,15 +944,25 @@ it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width
       (fieldset) => fieldset.querySelector("legend")?.textContent === "Late flags (minutes)",
     );
     expect(group).toBeDefined();
-    const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
-      (name) => timingField(el, name),
-    );
+    const fields = STATION_MINUTES.map((name) => timingField(el, name));
     await Promise.all(fields.map((field) => field.updateComplete));
+    expect(fields.every((field) => group!.contains(field))).toBe(true);
     const boxes = fields.map((field) => field.getBoundingClientRect());
-    expect(new Set(boxes.map((box) => Math.round(box.top))).size).toBe(1);
+    const [first, second, third, fourth] = boxes.map((box) => ({
+      top: Math.round(box.top),
+      bottom: Math.round(box.bottom),
+      left: Math.round(box.left),
+      right: Math.round(box.right),
+    }));
+    expect(second!.top).toBe(first!.top);
+    expect(second!.left).toBeGreaterThanOrEqual(first!.right);
+    expect(third!.top).toBeGreaterThanOrEqual(first!.bottom);
+    expect(fourth!.top).toBe(third!.top);
+    expect(third!.left).toBe(first!.left);
+    expect(fourth!.left).toBe(second!.left);
     expect(boxes.every((box) => box.width > 0 && box.right <= window.innerWidth)).toBe(true);
-    expect(fields.map((field) => field.value)).toEqual(["5", "12", "15"]);
-    expect(fields.map((field) => field.hint)).toEqual(["", "", ""]);
+    expect(fields.map((field) => field.value)).toEqual(["5", "12", "15", "3"]);
+    expect(fields.map((field) => field.hint)).toEqual(["", "", "", ""]);
     expect(restSwitch(el).label).toBe("Also list the order's dishes from other stations");
     expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
       "On this station's tickets and kitchen screen",
@@ -878,9 +979,7 @@ it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", 
   try {
     await page.viewport(390, 1100);
     const el = await mount(GRILL, { locale });
-    const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
-      (name) => timingField(el, name),
-    );
+    const fields = STATION_MINUTES.map((name) => timingField(el, name));
     await Promise.all(fields.map((field) => field.updateComplete));
     for (const field of fields) {
       const text = field.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
@@ -888,8 +987,8 @@ it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", 
     }
     expect(fields.map((field) => field.label)).toEqual(
       locale === "en"
-        ? ["Waiting", "Overdue", "Forgotten"]
-        : ["Esperando", "Con retraso", "Olvidado"],
+        ? ["Waiting", "Overdue", "Forgotten", "Ready warning"]
+        : ["Esperando", "Con retraso", "Olvidado", "Listo sin recoger"],
     );
     const group = $(el, "fieldset[data-test=moved-slips-group]");
     expect(group).not.toBeNull();

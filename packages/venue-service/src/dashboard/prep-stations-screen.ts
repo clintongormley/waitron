@@ -763,6 +763,7 @@ export class PrepStationsScreen extends LitElement {
           warmAfterMinutes: station.warmAfterMinutes,
           overdueAfterMinutes: station.overdueAfterMinutes,
           forgottenAfterMinutes: station.forgottenAfterMinutes,
+          readyWarningAfterMinutes: station.readyWarningAfterMinutes,
         }}
         .printers=${this.view.printers}
         .stations=${this.#colourUsers()}
