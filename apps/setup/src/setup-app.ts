@@ -207,6 +207,12 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 const ACTIVITY_REREAD_MS = 30_000;
 const STOPPED_BACKUP_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
+const presentStartAgainAllowed = (inspection: FirstSetupInspection) =>
+  inspection.database !== "missing" &&
+  inspection.emptyDatabase &&
+  inspection.password === "checkable" &&
+  inspection.revision !== null &&
+  inspection.ownerGeneration !== null;
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -1384,8 +1390,15 @@ export class SetupApp extends LitElement {
         ) {
           this.firstRestartConfirm = false;
           this.firstRetireConfirmed = false;
+          // The refusal comes from a damaged record or a stopped recovery; only the activity says which.
+          const activity = await this.#readActivityAnswer().catch(() => undefined);
+          if (!current()) return;
+          if (activity !== undefined) {
+            this.firstActivity = activity;
+            this.#watchActivity();
+          }
+          this.#damagedInferred = activity === null;
           this.firstDamagedRecord = "password";
-          this.#damagedInferred = true;
           return;
         } else if (this.firstDamagedRecord === "confirm") {
           // A refused send leaves the session needing a fresh recovery, so the retry goes through
@@ -1396,7 +1409,9 @@ export class SetupApp extends LitElement {
           this.firstStoppedSummary = undefined;
           this.firstOwnerError = this.#describeFirstError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
-          if (current() && inspection) this.firstInspection = inspection;
+          if (!current() || !inspection) return;
+          this.firstInspection = inspection;
+          if (!presentStartAgainAllowed(inspection)) await this.#signOutFirstSession();
           return;
         }
         this.firstOwnerError = this.#describeFirstError(error);
@@ -1548,7 +1563,10 @@ export class SetupApp extends LitElement {
     this.firstOwnerError = undefined;
     this.firstOwnerBusy = true;
     const generation = ++this.#firstGeneration;
+    // The damaged-record steps sign this tab in only to start again, so Reconnect leaves signed out.
+    const leaveDamaged = this.firstDamagedRecord !== undefined;
     try {
+      if (leaveDamaged) await this.#signOutFirstSession();
       this.firstInspection = undefined;
       this.firstRestartConfirm = false;
       this.firstRetireConfirmed = false;
@@ -2403,6 +2421,10 @@ export class SetupApp extends LitElement {
     const stoppedHere =
       !missing && this.firstActivity?.state === "stopped" ? this.firstActivity : undefined;
     const offersStartAgain = !recoveryStarted || stopped !== undefined;
+    const unsettled = authenticatedMissing && this.firstRecoveryUnsettled;
+    // A password does not make Start again available for a database that holds records.
+    const unavailable =
+      inspection?.database === "occupied" ? t.startUnavailableOccupied : t.startUnavailable;
     const lastActive = (at: string, source?: "memory" | "saved-step") =>
       (source === "saved-step" ? t.recoveryLastSaved : t.recoveryLastActive).replace(
         "{at}",
@@ -2476,14 +2498,17 @@ export class SetupApp extends LitElement {
         this.#firstPasswordScope?.changed();
       }}
     ></wt-input>`;
-    const recoverBackup = html`<wt-button
-      data-test="recover-backup"
-      variant="secondary"
-      ?disabled=${this.firstOwnerBusy}
-      @click=${(event: Event) =>
-        dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}
-      >${t.recoverBackup}</wt-button
-    >`;
+    // Disabled where the page says a recovery's records cannot be read: the box refuses a new
+    // recovery beside a journal it cannot read.
+    const recoverBackup = (unreadable: boolean) =>
+      html`<wt-button
+        data-test="recover-backup"
+        variant="secondary"
+        ?disabled=${this.firstOwnerBusy || unreadable}
+        @click=${(event: Event) =>
+          dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}
+        >${t.recoverBackup}</wt-button
+      >`;
     const startAgainConfirm = this.firstRestartConfirm
       ? html`${
             this.#showsDamagedRecord(missing, ask)
@@ -2531,7 +2556,7 @@ export class SetupApp extends LitElement {
           </wt-form-actions>`
       : nothing;
     return html`<section data-test="screen-first-owner">
-      <h1>${inspection ? t.interrupted : t.heading}</h1>
+      <h1>${inspection || offersNothing ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
@@ -2594,19 +2619,21 @@ export class SetupApp extends LitElement {
           ? damaged && !warningClosed
             ? damaged === "confirm"
               ? startAgainConfirm
-              : damaged === "unread" && !this.firstOwnerBusy
+              : damaged === "unread"
                 ? html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}
                     <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}>
                       <wt-button
                         slot="cancel"
                         data-test="cancel-damaged-record"
                         variant="secondary"
+                        ?disabled=${this.firstOwnerBusy}
                         @click=${() => void this.#cancelDamagedRecord()}
                         >${t.cancel}</wt-button
                       >
                       <wt-button
                         data-test="check-again"
                         variant="secondary"
+                        ?disabled=${this.firstOwnerBusy}
                         @click=${() => void this.#checkPresentAgain()}
                         >${t.checkAgain}</wt-button
                       >
@@ -2633,30 +2660,30 @@ export class SetupApp extends LitElement {
                   ${
                     stopped
                       ? stoppedBlock(stopped)
-                      : html`${
-                            this.firstBackupPhase === "uncertain"
-                              ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
-                              : nothing
-                          }
-                          <p>${t.missingBackup}</p>`
+                      : this.firstBackupPhase === "uncertain"
+                        ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
+                        : html`<p>${t.missingBackup}</p>`
                   }
                   <div class="missing-actions" data-test="missing-actions">
-                    ${stopped ? nothing : recoverBackup}${offersStartAgain ? startAgain : nothing}
+                    ${stopped ? nothing : recoverBackup(this.firstBackupPhase === "uncertain")}${offersStartAgain ? startAgain : nothing}
                   </div>
                   ${offersStartAgain ? startAgainConfirm : nothing}`
-              : html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${startAgain}
-                ${!canRestart && !authenticatedMissing ? html`<p>${t.startUnavailable}</p>` : nothing}
-                ${startAgainConfirm} ${stoppedHere ? nothing : recoverBackup}
+              : html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${
+                  unsettled
+                    ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
+                    : nothing
+                }${startAgain}
+                ${!canRestart && !authenticatedMissing ? html`<p>${unavailable}</p>` : nothing}
+                ${startAgainConfirm} ${stoppedHere ? nothing : recoverBackup(unsettled)}
                 ${
-                  authenticatedMissing && this.firstRecoveryUnsettled
-                    ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>
-                        <wt-button
-                          data-test="check-again"
-                          variant="secondary"
-                          ?disabled=${this.firstOwnerBusy}
-                          @click=${() => void this.#checkMissingAskAgain()}
-                          >${t.checkAgain}</wt-button
-                        >`
+                  unsettled
+                    ? html`<wt-button
+                        data-test="check-again"
+                        variant="secondary"
+                        ?disabled=${this.firstOwnerBusy}
+                        @click=${() => void this.#checkMissingAskAgain()}
+                        >${t.checkAgain}</wt-button
+                      >`
                     : nothing
                 }
                 ${
@@ -2666,7 +2693,7 @@ export class SetupApp extends LitElement {
                 }`
           : nothing
       }
-      ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
+      ${!damaged && state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
       ${!missing && state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
       ${!missing && state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
       ${

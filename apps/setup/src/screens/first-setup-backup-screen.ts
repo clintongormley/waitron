@@ -17,7 +17,7 @@ import type {
   BackupRepairStatus,
   FirstSetupInspection,
 } from "../api/first-setup-types.js";
-import { FirstSetupBackupSession, keepLease } from "../first-setup-backup-session.js";
+import { FirstSetupBackupSession, keepLease, leaseEnded } from "../first-setup-backup-session.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import { backupRepairStrings } from "../i18n/backup-repair.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -230,6 +230,7 @@ export class FirstSetupBackupScreen extends LitElement {
         // A lapsed wait keeps Check: once Cloud approves, opening starts a new session.
         if (cause.code === "setup.recovery_discarded") this.#endRecovery(cause);
       },
+      leaseEnded,
     );
   }
   #endRecovery(cause: ApiError): void {

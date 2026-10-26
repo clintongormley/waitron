@@ -868,7 +868,7 @@ it("holds the Cloud wait with one holder: renews every 30 s and on becoming visi
   }
 });
 
-it.each(["setup.owner_required", "setup.attempt_conflict"])(
+it.each(["setup.owner_required"])(
   "a Cloud renewal refused with %s stops renewing and keeps Check, which still asks Cloud",
   async (code) => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
@@ -886,6 +886,32 @@ it.each(["setup.owner_required", "setup.attempt_conflict"])(
       await expect
         .poll(() => calls.filter((call) => call.path === `${root}/cloud/status`))
         .toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it.each([
+  [
+    "a fault",
+    () => Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 }),
+  ],
+  ["setup.attempt_conflict", () => refused("setup.attempt_conflict")],
+] as const)(
+  "a Cloud renewal answered with %s keeps renewing, and the wait stays as it was",
+  async (_name, answer) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el, cloudRenewals } = await cloudWait(answer);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect.poll(() => cloudRenewals()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await expect.poll(() => cloudRenewals()).toHaveLength(3);
+      await el.updateComplete;
+      expect(q(el, "stopped")).toBeNull();
+      expect(q(el, "discarded")).toBeNull();
+      expect(q(el, "cloud-check")).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }

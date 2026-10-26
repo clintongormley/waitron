@@ -44,6 +44,8 @@ export const initialOwnerStrings = {
     restarting: "The old attempt is deleted. Reconnect to continue.",
     startUnavailable:
       "Start again without a password is available only when the box can verify an unused, empty setup.",
+    startUnavailableOccupied:
+      "Start again is not available: this setup's database already holds records, and Start again deletes only a setup that holds none.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -107,6 +109,8 @@ export const initialOwnerStrings = {
     restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
     startUnavailable:
       "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
+    startUnavailableOccupied:
+      "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros, y Empezar de nuevo solo borra una configuración que no tiene ninguno.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",

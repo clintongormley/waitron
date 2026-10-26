@@ -321,6 +321,7 @@ it.each(["selected", "uncertain"] as const)(
     await recoverMissing(app);
     expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
     expect(q(app, "recover-backup")).not.toBeNull();
+    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(backupPhase === "uncertain");
     expect(q(app, "start-again")).toBeNull();
     expect(q(app, "recover-backup-note")).toBeNull();
     expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
@@ -692,6 +693,13 @@ it.each(locales)(
     expect(app.shadowRoot!.textContent).toContain(t.missingAsk);
     expect(q(app, "recover-backup")).not.toBeNull();
     expect(q(app, "start-again")).toBeNull();
+    // A new recovery beside an unreadable journal is refused by the box.
+    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
+    expect(app.shadowRoot!.textContent).not.toContain(t.missingBackup);
+    expect(
+      q(app, "recovery-unreadable")!.compareDocumentPosition(q(app, "recover-backup")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   },
 );
 
@@ -880,6 +888,16 @@ it.each(locales)(
     );
     expect(q(app, "recovery-stopped")).toBeNull();
     expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
+    expect(q<WtButton>(app, "recover-backup")?.disabled ?? true).toBe(true);
+    for (const button of ["start-again", "recover-backup"]) {
+      const drawn = q(app, button);
+      if (drawn)
+        expect(
+          q(app, "recovery-unreadable")!.compareDocumentPosition(drawn) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+          button,
+        ).toBeTruthy();
+    }
     const summaries = () => requests.filter((r) => r.path.endsWith("/start-again/summary"));
     const statuses = () => requests.filter((r) => r.path.endsWith("/backup/status"));
     expect([summaries().length, statuses().length]).toEqual([1, 1]);

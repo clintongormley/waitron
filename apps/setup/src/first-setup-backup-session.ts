@@ -67,15 +67,17 @@ function same(a: unknown, b: unknown): boolean {
 
 export const LEASE_RENEWAL_MS = 30_000;
 const SESSION_ENDED: readonly string[] = ["setup.owner_required", "setup.recovery_discarded"];
+/** The only renewal refusals that mean the lease is over; any other answer is retried. */
+export const leaseEnded = (cause: ApiError) => SESSION_ENDED.includes(cause.code);
 /**
  * Renews every 30 s and whenever the page becomes visible, until the returned stop is called or
- * the box answers a renewal with an error `final` accepts (by default any answer). A renewal that
+ * the box answers a renewal with an error `final` accepts. A renewal that
  * never reached the box, or one `final` does not accept, is not a refusal: the next one tries again.
  */
 export function keepLease(
   renew: () => Promise<unknown>,
   onRefused: (cause: ApiError) => void,
-  final: (cause: ApiError) => boolean = () => true,
+  final: (cause: ApiError) => boolean,
 ): () => void {
   let stopped = false;
   const tick = () => {
@@ -160,8 +162,7 @@ export class FirstSetupBackupSession {
         this.#stopLease = undefined;
         this.#onRenewalRefused?.(cause);
       },
-      // Only these answers mean the session has ended; after any other, the next renewal tries again.
-      (cause) => SESSION_ENDED.includes(cause.code),
+      leaseEnded,
     );
     return structuredClone(raw);
   }
