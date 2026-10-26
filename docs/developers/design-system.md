@@ -5663,8 +5663,8 @@ table that is not fixed. A joined table also has a required Made of picker below
 plain tables off the plan and in no other joined table; its required Seats takes 1 to 999. The
 reserved form area scrolls when its content needs more room. Add tables uses the same Moveable
 switch, on by default. Add tables shows the short names it will give on a second preview line,
-and refuses beside Prefix one the draft already holds; with custom names it puts a Short name
-beside each Name, stacked under it when the dialog is narrower than 480 px. Size and turn are set
+and refuses beside Prefix one the draft already holds or one containing "+"; with custom names it
+puts a Short name beside each Name, stacked under it when its fields are narrower than 480 px. Size and turn are set
 on the plan. A refusal naming a field selects the table and shows its own sentence beside that
 field.
 

@@ -136,7 +136,8 @@ repeat: **Done** clears the one on show, and another order starts the count agai
 
 ## Give a table a short name {#short-names}
 
-The till shows a table's short name where space is tight, such as the Ready bar. In the
+The till shows a table's short name where space is tight, such as the Ready bar on a phone or
+tablet. In the
 dashboard's **Floor plan**, each table has a **Short name** under its **Name**, filled in from the
 name: "T1" for "Terrace 1", "Win" for "Window", and a name of four characters or fewer as it is. It
 follows the name until you type your own, of up to five characters, which cannot contain "+"

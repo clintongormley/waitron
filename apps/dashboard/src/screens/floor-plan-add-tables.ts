@@ -97,8 +97,7 @@ export class FloorPlanAddTables extends LitElement {
         gap: var(--wt-space-2);
         max-width: var(--wt-field-max-width);
       }
-      /* A literal because a container query cannot read a token: below it, the Short name
-         column is too narrow for «Nombre corto 100 *». */
+      /* Below this width the Short name column is too narrow for its Spanish label. */
       @container (width < 480px) {
         .name-row {
           grid-template-columns: minmax(0, 1fr);

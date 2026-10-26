@@ -194,7 +194,7 @@ export function refusesPlus(
 export interface DraftCheck {
   key: string;
   problem: DraftProblem;
-  /** short_name_repeated: the earlier table's name and the short name the two share. */
+  /** short_name_repeated: the other table's name, and this table's short name. */
   takenBy?: string;
   shortName?: string;
 }

@@ -140,7 +140,8 @@ repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cue
 
 ## Dar a una mesa un nombre corto {#short-names}
 
-La caja muestra el nombre corto de una mesa donde hay poco espacio, como la barra Listo. En el
+La caja muestra el nombre corto de una mesa donde hay poco espacio, como la barra Listo de un
+móvil o una tableta. En el
 **Plano de sala** del panel, cada mesa tiene un **Nombre corto** debajo de su **Nombre**, que se
 rellena a partir del nombre: «T1» para «Terraza 1», «Ven» para «Ventana», y un nombre de cuatro
 caracteres o menos tal cual. Sigue al nombre hasta que escribes uno propio, de hasta cinco

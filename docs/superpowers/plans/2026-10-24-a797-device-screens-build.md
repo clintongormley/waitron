@@ -2838,7 +2838,8 @@ no short name**.
   name its own Short name field.**
   - **Automatic:** under today's preview, a second line `[data-short-preview]`, "Short names: T11
     to T15" / «Nombres cortos: T11 a T15». It uses the existing `name_range` for two or more and
-    the single short name for one. The proposals are of the automatic names. There is no
+    the single short name for one. (2026-10-26, LOOK fix: it uses its own `short_name_range`,
+    «{first} a {last}» in Spanish, because `name_range` gave «Nombres cortos: De T11 a T15».) The proposals are of the automatic names. There is no
     per-table field: up to 100 tables, and Custom exists for choosing. **The dialog checks them at
     Save**, by `shortNameKey`, against the draft's short names and each other: the first clash is
     refused beside **Prefix**, the field that changes them, "{takenBy} already uses {shortName}",
@@ -2903,7 +2904,9 @@ no short name**.
   canvas's one focus call passes `preventScroll: true`
   (`packages/ui/src/components/wt-floor-plan-canvas.ts:1053`). So the browser is not scrolling a
   focused field into view; the cause is still unlocated, and fixing it needs it found first. The LOOK (Task 9) shoots
-  the Short name refusal at 390 px, and Task 8 adds what it shows to A1103's entry.
+  the Short name refusal at 390 px, and Task 8 adds what it shows to A1103's entry. (2026-10-26: the LOOK
+  found the phone sheet keeps its scroll when a refusal selects a table; see A1103 in
+  `docs/backlog.md`.)
 
 ### Changed test checks (from the probes; the implementer confirms each)
 
