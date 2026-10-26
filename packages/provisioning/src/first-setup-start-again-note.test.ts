@@ -244,6 +244,81 @@ it("a write cut after its rename leaves the new one", async () => {
   expect((await fs.readdir(dir)).sort()).toEqual([START_AGAIN_NOTE_FILE]);
 });
 
+function folderSyncIo(dir: string, failSync: () => boolean) {
+  const io = {
+    folderSyncs: 0,
+    mkdir: fs.mkdir,
+    lstat: fs.lstat,
+    chmod: fs.chmod,
+    unlink: fs.unlink,
+    rename: fs.rename,
+    async open(path: string, flags: number, mode?: number) {
+      const handle = await fs.open(path, flags, mode);
+      return {
+        writeFile: (data: string) => handle.writeFile(data),
+        close: () => handle.close(),
+        async sync() {
+          if (path === dir) {
+            if (failSync()) throw new Error("folder sync failed");
+            io.folderSyncs++;
+          }
+          await handle.sync();
+        },
+      };
+    },
+  } satisfies DurableJsonIo & { folderSyncs: number };
+  return io;
+}
+
+it.each([
+  ["the same floor", 300],
+  ["a lower floor", 250],
+])(
+  "a retry with %s after a failed folder sync syncs the folder before returning the note",
+  async (_name, retryFloorMs) => {
+    const dir = await stateDir();
+    const path = join(dir, START_AGAIN_NOTE_FILE);
+    let fail = true;
+    const io = folderSyncIo(dir, () => fail);
+    await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
+    const raised = { floorMs: 300, lastName: "second", module: "m" };
+    await expect(raiseStartAgainNote(dir, raised, io)).rejects.toMatchObject(refused);
+    const bytes = await readFile(path);
+    expect(await readStartAgainNote(dir)).toEqual({ version: 1, ...raised });
+    await expect(
+      raiseStartAgainNote(dir, { floorMs: retryFloorMs, lastName: "retry", module: "n" }, io),
+    ).rejects.toMatchObject(refused);
+    fail = false;
+    const kept = await raiseStartAgainNote(
+      dir,
+      { floorMs: retryFloorMs, lastName: "retry", module: "n" },
+      io,
+    );
+    expect(kept).toEqual({ version: 1, ...raised });
+    expect(io.folderSyncs).toBe(1);
+    expect(await readFile(path)).toEqual(bytes);
+  },
+);
+
+it("a later floor after a failed folder sync writes the note and syncs the folder once", async () => {
+  const dir = await stateDir();
+  let fail = true;
+  const io = folderSyncIo(dir, () => fail);
+  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
+  await expect(
+    raiseStartAgainNote(dir, { floorMs: 300, lastName: "second", module: "m" }, io),
+  ).rejects.toMatchObject(refused);
+  fail = false;
+  const raised = await raiseStartAgainNote(
+    dir,
+    { floorMs: 400, lastName: "third", module: "n" },
+    io,
+  );
+  expect(raised).toEqual({ version: 1, floorMs: 400, lastName: "third", module: "n" });
+  expect(await readStartAgainNote(dir)).toEqual(raised);
+  expect(io.folderSyncs).toBe(1);
+});
+
 it("the module offers no way to delete the note", async () => {
   const exported = Object.keys(await import("./first-setup-start-again-note.js")).sort();
   expect(exported).toEqual([

@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import {
   type DurableJsonIo,
   readDurableHostJson,
+  syncDurableHostJsonFolder,
   writeDurableHostJson,
 } from "./durable-host-json.js";
 import "./errors.js";
@@ -59,9 +60,13 @@ export async function raiseStartAgainNote(
   io?: DurableJsonIo,
 ): Promise<StartAgainNote> {
   const candidate = parseNote({ version: 1, ...next });
+  const path = join(stateDir, START_AGAIN_NOTE_FILE);
   const current = await readStartAgainNote(stateDir);
-  if (current !== null && current.floorMs >= candidate.floorMs) return current;
-  await writeDurableHostJson(join(stateDir, START_AGAIN_NOTE_FILE), candidate, NOTE_LIMIT, io);
+  if (current !== null && current.floorMs >= candidate.floorMs) {
+    await syncDurableHostJsonFolder(path, io);
+    return current;
+  }
+  await writeDurableHostJson(path, candidate, NOTE_LIMIT, io);
   return candidate;
 }
 
