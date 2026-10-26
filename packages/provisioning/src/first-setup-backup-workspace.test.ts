@@ -670,6 +670,53 @@ it("refuses to abandon a recovery it does not hold, or when there is none", asyn
   });
   expect((await f.store.read()).at(-1)!.phase).toBe("prepared");
 });
+/** Rewrites the journal and both pointers so each agrees with the others but names `source`. */
+async function forgeSource(f: Awaited<ReturnType<typeof fixture>>, count: number) {
+  const { createHash } = await import("node:crypto");
+  const digest = (value: unknown) =>
+    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const source = {
+    venueDir: join(f.root, "foreign-venue"),
+    stateDir: join(f.root, "foreign-state"),
+  };
+  const target = { ...f.target, source };
+  const records: BackupRepairRecord[] = [];
+  for (let sequence = 1; sequence <= count; sequence++) {
+    const path = join(f.base, `${String(sequence).padStart(6, "0")}.json`);
+    const saved = JSON.parse(await readFile(path, "utf8")) as BackupRepairRecord;
+    const previous = records.at(-1);
+    const record = {
+      ...saved,
+      target,
+      previousRecordDigest: previous === undefined ? null : digest(previous),
+    };
+    await writeFile(path, JSON.stringify(record));
+    records.push(record);
+  }
+  const witness = {
+    version: 2,
+    target,
+    initialRecordDigest: digest(records[0]),
+    initialRecord: records[0],
+  };
+  for (const root of Object.values(f.anchor))
+    await writeFile(
+      join(root, "first-setup-resolutions", "backup-recovery", "current.json"),
+      JSON.stringify(witness),
+    );
+}
+it("refuses a journal whose records agree with each other but name another source folder", async () => {
+  const { f } = await journalAt("placement-started");
+  await forgeSource(f, 2);
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expect(f.store.abandon(recoveryId)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect((await f.store.readChain()).map((record) => record.phase)).toEqual([
+    "prepared",
+    "placement-started",
+  ]);
+});
 it("lets nothing follow an abandoned record", async () => {
   const { f, input } = await journalAt("restored");
   const restored = (await f.store.read()).at(-1)!;
