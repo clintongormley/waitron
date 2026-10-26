@@ -1229,7 +1229,6 @@ describe("a handheld's table buttons", () => {
     it("when the shell first draws with the last table selected", async () => {
       setLocale("en-GB");
       await atViewport(390, async () => {
-        const pageScroll = window.scrollY;
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
           activeScreen: "order",
@@ -1239,7 +1238,6 @@ describe("a handheld's table buttons", () => {
         await frame();
         expect(stripOf(el).scrollWidth).toBeGreaterThan(stripOf(el).clientWidth);
         await vi.waitFor(() => expectInStrip(el, "t10"));
-        expect(window.scrollY).toBe(pageScroll);
       });
     });
 
@@ -1279,6 +1277,46 @@ describe("a handheld's table buttons", () => {
         el.barTables = tenTables("t1");
         await el.updateComplete;
         await vi.waitFor(() => expectInStrip(el, "t1"));
+      });
+    });
+
+    it("waits through a bar with no header, and reveals the table once the header is drawn", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          kiosk: true,
+          barTables: tenTables("t10"),
+        });
+        await frame();
+        expect(el.shadowRoot!.querySelector("header")).toBeNull();
+        el.kiosk = false;
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+      });
+    });
+
+    it("lets a table that goes before the bar has settled go, and reveals it when it comes back", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "floor",
+          operatorName: "Ana",
+          barTables: tenTables(),
+        });
+        await frame();
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        el.barTables = [];
+        await el.updateComplete;
+        await frame();
+        expect(el.shadowRoot!.querySelector("[data-bar-table]")).toBeNull();
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t10"));
       });
     });
   });

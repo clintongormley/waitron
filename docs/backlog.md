@@ -2831,6 +2831,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A797 slice 3's LOOK, 2026-10-26 (`l-menu-open-360-light-es.png`, `l-menu-open-360-dark-es.png`,
   `l-menu-open-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`): to fit whole it starts
   at y 11. Nothing is lost, and tapping outside or Escape closes it.
+  See also "On a short phone the till's More menu is taller than the room it gets", above.
 
 - **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
   tab.** Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,

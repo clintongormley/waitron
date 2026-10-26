@@ -532,13 +532,17 @@ export class TillShell extends LitElement {
   async #revealSelectedTable(): Promise<void> {
     const tableId = this.barTables.find((table) => table.current)?.tableId;
     if (tableId === this.#revealedTable) return;
-    this.#revealedTable = tableId;
-    if (tableId === undefined) return;
+    if (tableId === undefined) {
+      this.#revealedTable = undefined;
+      return;
+    }
     await this.#settled();
+    // No button while the bar is not drawn (a kiosk, a kitchen screen) or once the table has gone.
     const button = this.renderRoot.querySelector<HTMLElement>(
       `[data-bar-table="${CSS.escape(tableId)}"]`,
     );
     if (!button) return;
+    this.#revealedTable = tableId;
     const strip = button.parentElement!;
     const box = button.getBoundingClientRect();
     const view = strip.getBoundingClientRect();
