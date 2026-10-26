@@ -16,7 +16,7 @@ import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 // A gross-1.50 espresso at the general rate.
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -36,7 +36,7 @@ const cafe: TillProduct = {
 };
 
 // A weight product priced per kg: 10.00/kg gross at the reduced rate.
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -66,24 +66,24 @@ const shot: SelectedExtra = {
 describe("order-line pricing", () => {
   describe("lineGross", () => {
     it("prices a plain each line as unitPrice × quantity", () => {
-      const line: OrderLine = { product: cafe, quantity: "2" };
+      const line: OrderLine = { product: coffee, quantity: "2" };
       expect(lineGross(line)).toBe("3.00");
     });
 
     it("prices a weight line as unitPrice × kg", () => {
-      const line: OrderLine = { product: jamon, quantity: "0.320" };
+      const line: OrderLine = { product: ham, quantity: "0.320" };
       expect(lineGross(line)).toBe("3.20");
     });
 
     it("adds each extras pick at the dish quantity", () => {
-      const line: OrderLine = { product: cafe, quantity: "2", extras: [shot] };
+      const line: OrderLine = { product: coffee, quantity: "2", extras: [shot] };
       // (1.50 + 0.50) × 2 = 4.00
       expect(lineGross(line)).toBe("4.00");
     });
 
     it("an options answer costs nothing", () => {
       const line: OrderLine = {
-        product: cafe,
+        product: coffee,
         quantity: "2",
         options: [{ listId: "list-cooked", labelId: "label-medium" }],
       };
@@ -93,7 +93,7 @@ describe("order-line pricing", () => {
     describe("per-pick quantity", () => {
       it("a pick of 2 on a dish-quantity-3 line contributes its price × 6", () => {
         const line: OrderLine = {
-          product: cafe,
+          product: coffee,
           quantity: "3",
           extras: [{ ...shot, quantity: 2 }],
         };
@@ -105,20 +105,20 @@ describe("order-line pricing", () => {
 
   describe("dishGross", () => {
     it("prices only the dish, ignoring its extras", () => {
-      const line: OrderLine = { product: cafe, quantity: "2", extras: [shot] };
+      const line: OrderLine = { product: coffee, quantity: "2", extras: [shot] };
       expect(dishGross(line)).toBe("3.00");
     });
   });
 
   describe("extraGross", () => {
     it("prices a pick at its price × dish quantity when it is taken once", () => {
-      const line: OrderLine = { product: cafe, quantity: "2", extras: [shot] };
+      const line: OrderLine = { product: coffee, quantity: "2", extras: [shot] };
       expect(extraGross(line, shot)).toBe("1.00");
     });
 
     it("a pick of 2 on a dish-quantity-3 line returns its price × 6", () => {
       const extra: SelectedExtra = { ...shot, quantity: 2 };
-      const line: OrderLine = { product: cafe, quantity: "3", extras: [extra] };
+      const line: OrderLine = { product: coffee, quantity: "3", extras: [extra] };
       // 0.50 × (3 × 2) = 3.00
       expect(extraGross(line, extra)).toBe("3.00");
     });
@@ -126,13 +126,13 @@ describe("order-line pricing", () => {
 
   describe("quantityLabel", () => {
     it("labels every line with its selected unit", () => {
-      expect(quantityLabel({ product: jamon, quantity: "0.320" })).toBe("0.320 kg");
-      expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2 ea");
+      expect(quantityLabel({ product: ham, quantity: "0.320" })).toBe("0.320 kg");
+      expect(quantityLabel({ product: coffee, quantity: "2" })).toBe("2 ea");
     });
 
     it("reads the quantity alone when the unit has no name to show", () => {
       const nameless = {
-        ...cafe,
+        ...coffee,
         unit: {
           staffName: "",
           staffAbbreviation: "",
@@ -149,8 +149,8 @@ describe("order-line pricing", () => {
 
   describe("displayQuantity", () => {
     it("shortens a whole-count unit's quantity and leaves a weighed one as it came", () => {
-      expect(displayQuantity(cafe, "2.000")).toBe("2");
-      expect(displayQuantity(jamon, "0.350")).toBe("0.350");
+      expect(displayQuantity(coffee, "2.000")).toBe("2");
+      expect(displayQuantity(ham, "0.350")).toBe("0.350");
     });
   });
 
@@ -166,12 +166,12 @@ describe("order-line pricing", () => {
 
   describe("toWireLineExtras", () => {
     it("forwards the note when the line carries one", () => {
-      const line: OrderLine = { product: cafe, quantity: "1", note: "no mayo" };
+      const line: OrderLine = { product: coffee, quantity: "1", note: "no mayo" };
       expect(toWireLineExtras(line)).toEqual({ note: "no mayo" });
     });
 
     it("returns an empty object when the line carries no note", () => {
-      const plain: OrderLine = { product: cafe, quantity: "1" };
+      const plain: OrderLine = { product: coffee, quantity: "1" };
       expect(toWireLineExtras(plain)).toEqual({});
     });
   });
@@ -179,7 +179,7 @@ describe("order-line pricing", () => {
   describe("toWireModifiers", () => {
     it("sends one entry per answered list, picks grouped under their own list", () => {
       const line: OrderLine = {
-        product: cafe,
+        product: coffee,
         quantity: "1",
         extras: [
           shot,
@@ -204,12 +204,12 @@ describe("order-line pricing", () => {
     });
 
     it("omits both keys on a line that answered nothing", () => {
-      const plain: OrderLine = { product: cafe, quantity: "1" };
+      const plain: OrderLine = { product: coffee, quantity: "1" };
       expect(toWireModifiers(plain)).toEqual({});
     });
 
     it("never sends a display value — a pick names its product and count alone", () => {
-      const line: OrderLine = { product: cafe, quantity: "1", extras: [shot] };
+      const line: OrderLine = { product: coffee, quantity: "1", extras: [shot] };
       const wire = toWireModifiers(line);
       expect(wire.extras![0]!.picks[0]).toEqual({ productId: "p-shot", quantity: 1 });
     });
@@ -242,7 +242,7 @@ describe("order-line pricing", () => {
 
 it("rounds each extras pick before summing", () => {
   const line: OrderLine = {
-    product: jamon,
+    product: ham,
     quantity: "0.125",
     extras: [{ ...shot, quantity: 2 }],
   };
@@ -252,7 +252,7 @@ it("rounds each extras pick before summing", () => {
 
 describe("needsModifierPicker", () => {
   const wine = (available: boolean) => ({
-    ...sellingValuesOf(cafe),
+    ...sellingValuesOf(coffee),
     id: "wine-125",
     name: "125 ml",
     unitPrice: "4.50",
@@ -262,12 +262,12 @@ describe("needsModifierPicker", () => {
 
   // A product with variants is never rung up as itself: tapping it always asks which.
   it("is true for a product with variants, whether or not one is available", () => {
-    expect(needsModifierPicker({ ...cafe, variants: [wine(true)] })).toBe(true);
-    expect(needsModifierPicker({ ...cafe, variants: [wine(false)] })).toBe(true);
+    expect(needsModifierPicker({ ...coffee, variants: [wine(true)] })).toBe(true);
+    expect(needsModifierPicker({ ...coffee, variants: [wine(false)] })).toBe(true);
   });
 
   it("is false for a product offering neither a variant nor a list", () => {
-    expect(needsModifierPicker({ ...cafe, variants: [], offeredModifiers: [] })).toBe(false);
+    expect(needsModifierPicker({ ...coffee, variants: [], offeredModifiers: [] })).toBe(false);
   });
 });
 
@@ -304,21 +304,21 @@ describe("offeredListsOf", () => {
   });
 
   it("offers no extras list on a dish sold in a measure, but keeps its options list", () => {
-    const vino = { ...cafe, unit: unit(true), offeredModifiers: [extrasList, optionsList] };
-    expect(offeredListsOf(vino)).toEqual([optionsList]);
-    expect(needsModifierPicker(vino)).toBe(true);
+    const wine = { ...coffee, unit: unit(true), offeredModifiers: [extrasList, optionsList] };
+    expect(offeredListsOf(wine)).toEqual([optionsList]);
+    expect(needsModifierPicker(wine)).toBe(true);
   });
 
   it("asks nothing on a dish sold in a measure whose only list is an extras list", () => {
-    expect(needsModifierPicker({ ...cafe, unit: unit(true), offeredModifiers: [extrasList] })).toBe(
-      false,
-    );
+    expect(
+      needsModifierPicker({ ...coffee, unit: unit(true), offeredModifiers: [extrasList] }),
+    ).toBe(false);
   });
 
   it("keeps every list on a dish sold in whole portions, a ración or Each", () => {
-    const racion = { ...cafe, unit: unit(false), offeredModifiers: [extrasList, optionsList] };
-    expect(offeredListsOf(racion)).toEqual([extrasList, optionsList]);
-    const each: TillProduct = { ...cafe, offeredModifiers: [extrasList, optionsList] };
+    const portion = { ...coffee, unit: unit(false), offeredModifiers: [extrasList, optionsList] };
+    expect(offeredListsOf(portion)).toEqual([extrasList, optionsList]);
+    const each: TillProduct = { ...coffee, offeredModifiers: [extrasList, optionsList] };
     delete each.unit;
     expect(offeredListsOf(each)).toEqual([extrasList, optionsList]);
   });

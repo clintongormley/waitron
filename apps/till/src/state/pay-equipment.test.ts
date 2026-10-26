@@ -60,7 +60,7 @@ function equipment(
   };
 }
 
-const lector = item("r1", { name: "Lector barra", portable: true, provider: "sumup" });
+const cardReader = item("r1", { name: "Lector barra", portable: true, provider: "sumup" });
 
 describe("payReaderOf", () => {
   it("a chosen, switched-on reader on a till provider is ready, not from the default", () => {
@@ -70,8 +70,8 @@ describe("payReaderOf", () => {
         selection: "item",
         chosenId: "r1",
         resolved: { id: "r1", name: "Lector barra", available: true, provider: "sumup" },
-        chosen: lector,
-        choices: [lector],
+        chosen: cardReader,
+        choices: [cardReader],
       },
     );
 
@@ -89,7 +89,7 @@ describe("payReaderOf", () => {
       {},
       {
         resolved: { id: "r1", name: "Lector barra", available: true, provider: "stripe" },
-        default: { ...lector, provider: "stripe" },
+        default: { ...cardReader, provider: "stripe" },
       },
     );
 
@@ -109,7 +109,7 @@ describe("payReaderOf", () => {
         selection: "item",
         chosenId: "r1",
         resolved: { id: "r1", name: "Lector barra", available: true, provider: "adyen" },
-        chosen: { ...lector, provider: "adyen" },
+        chosen: { ...cardReader, provider: "adyen" },
       },
     );
 
@@ -126,7 +126,7 @@ describe("payReaderOf", () => {
         selection: "item",
         chosenId: "r1",
         resolved: { id: "r1", name: "Lector barra", available: false, provider: "sumup" },
-        chosen: { ...lector, available: false },
+        chosen: { ...cardReader, available: false },
         choices: [],
       },
     );
@@ -137,7 +137,7 @@ describe("payReaderOf", () => {
   it("a chosen reader that resolves to nothing and is not available is switched_off", () => {
     const read = equipment(
       {},
-      { selection: "item", chosenId: "r1", chosen: { ...lector, available: false } },
+      { selection: "item", chosenId: "r1", chosen: { ...cardReader, available: false } },
     );
 
     expect(payReaderOf(read)).toEqual({ kind: "switched_off", id: "r1", name: "Lector barra" });
@@ -148,7 +148,7 @@ describe("payReaderOf", () => {
   });
 
   it("an available chosen reader that resolves to nothing is none", () => {
-    const read = equipment({}, { selection: "item", chosenId: "r1", chosen: lector });
+    const read = equipment({}, { selection: "item", chosenId: "r1", chosen: cardReader });
 
     expect(payReaderOf(read)).toEqual({ kind: "none" });
   });
@@ -159,8 +159,8 @@ describe("payReaderOf", () => {
   });
 });
 
-const barra = item("p1", { name: "Barra", kind: "receipt" });
-const terraza = item("p2", { name: "Terraza", kind: "receipt" });
+const counterPrinter = item("p1", { name: "Barra", kind: "receipt" });
+const terracePrinter = item("p2", { name: "Terraza", kind: "receipt" });
 
 describe("payPrinterOf", () => {
   it("a chosen, switched-on printer is ready, not from the default", () => {
@@ -168,8 +168,8 @@ describe("payPrinterOf", () => {
       selection: "item",
       chosenId: "p1",
       resolved: { id: "p1", name: "Barra", available: true },
-      chosen: barra,
-      choices: [barra, terraza],
+      chosen: counterPrinter,
+      choices: [counterPrinter, terracePrinter],
     });
 
     expect(payPrinterOf(read)).toEqual({
@@ -183,8 +183,8 @@ describe("payPrinterOf", () => {
   it("the profile's default printer, switched on, is ready from the default", () => {
     const read = equipment({
       resolved: { id: "p1", name: "Barra", available: true },
-      default: barra,
-      choices: [barra],
+      default: counterPrinter,
+      choices: [counterPrinter],
     });
 
     expect(payPrinterOf(read)).toEqual({
@@ -202,9 +202,9 @@ describe("payPrinterOf", () => {
       selection: "item",
       chosenId: "p1",
       resolved: { id: "p1", name: "Barra", available: false },
-      chosen: { ...barra, available: false },
-      default: terraza,
-      choices: [terraza],
+      chosen: { ...counterPrinter, available: false },
+      default: terracePrinter,
+      choices: [terracePrinter],
     });
 
     expect(payPrinterOf(read)).toEqual({ kind: "switched_off", id: "p1", name: "Barra" });
@@ -215,7 +215,7 @@ describe("payPrinterOf", () => {
   it("the profile's default printer, switched off, is switched_off", () => {
     const read = equipment({
       resolved: { id: "p1", name: "Barra", available: false },
-      default: { ...barra, available: false },
+      default: { ...counterPrinter, available: false },
       choices: [],
     });
 
@@ -223,7 +223,9 @@ describe("payPrinterOf", () => {
   });
 
   it("receipt choices with none chosen and no default is unset", () => {
-    expect(payPrinterOf(equipment({ choices: [barra, terraza] }))).toEqual({ kind: "unset" });
+    expect(payPrinterOf(equipment({ choices: [counterPrinter, terracePrinter] }))).toEqual({
+      kind: "unset",
+    });
   });
 
   it("no receipt choices, no chosen and no default printer is none_listed", () => {
@@ -333,16 +335,19 @@ describe("the choices the drop-downs offer", () => {
       provider: "sumup",
       busy: true,
     });
-    const read = equipment({ choices: [barra] }, { choices: [lector, busy] });
+    const read = equipment({ choices: [counterPrinter] }, { choices: [cardReader, busy] });
 
-    expect(readerChoices(read)).toEqual([lector, busy]);
+    expect(readerChoices(read)).toEqual([cardReader, busy]);
     expect(readerChoices(read)[1]!.busy).toBe(true);
   });
 
   it("printerChoices are the receipt role's choices", () => {
-    const read = equipment({ choices: [barra, terraza] }, { choices: [lector] });
+    const read = equipment(
+      { choices: [counterPrinter, terracePrinter] },
+      { choices: [cardReader] },
+    );
 
-    expect(printerChoices(read)).toEqual([barra, terraza]);
+    expect(printerChoices(read)).toEqual([counterPrinter, terracePrinter]);
   });
 
   it("no equipment read offers nothing", () => {
@@ -358,8 +363,8 @@ describe("the payment's hold for its equipment", () => {
       selection: "item",
       chosenId: "r1",
       resolved: { id: "r1", name: "Lector barra", available: true, provider: "sumup" },
-      chosen: lector,
-      choices: [lector],
+      chosen: cardReader,
+      choices: [cardReader],
     },
   );
   const noReader = equipment({
@@ -405,7 +410,7 @@ describe("the payment's hold for its equipment", () => {
     expect(payRowWantsOpen(ready, null)).toBe(false);
     expect(payRowWantsOpen(noReader, null)).toBe(true);
     expect(payRowWantsOpen(noReader, demo)).toBe(false);
-    expect(payRowWantsOpen(equipment({ choices: [barra] }), demo)).toBe(true);
+    expect(payRowWantsOpen(equipment({ choices: [counterPrinter] }), demo)).toBe(true);
   });
 });
 
@@ -413,40 +418,42 @@ describe("autoPickReader: a phone's first payment takes the one free reader", ()
   const offered = (...choices: EquipmentItem[]) => equipment({}, { choices });
 
   it("one free reader offered to a phone that has had none is picked", () => {
-    expect(autoPickReader(offered(lector), false)).toBe("r1");
+    expect(autoPickReader(offered(cardReader), false)).toBe("r1");
   });
 
   it("a phone that had a reader earlier in the page picks nothing", () => {
-    expect(autoPickReader(offered(lector), true)).toBeNull();
+    expect(autoPickReader(offered(cardReader), true)).toBeNull();
   });
 
   it("two readers offered pick nothing, and nor does none", () => {
-    expect(autoPickReader(offered(lector, item("r2")), false)).toBeNull();
+    expect(autoPickReader(offered(cardReader, item("r2")), false)).toBeNull();
     expect(autoPickReader(offered(), false)).toBeNull();
   });
 
   it("a reader another device holds, or is paying on, or that is switched off is never taken", () => {
     const holder = { deviceId: "d2", deviceName: "Phone 2", personName: null };
-    expect(autoPickReader(offered({ ...lector, heldBy: holder }), false)).toBeNull();
-    expect(autoPickReader(offered({ ...lector, busy: true }), false)).toBeNull();
-    expect(autoPickReader(offered({ ...lector, available: false }), false)).toBeNull();
+    expect(autoPickReader(offered({ ...cardReader, heldBy: holder }), false)).toBeNull();
+    expect(autoPickReader(offered({ ...cardReader, busy: true }), false)).toBeNull();
+    expect(autoPickReader(offered({ ...cardReader, available: false }), false)).toBeNull();
   });
 
   it("a phone that already has a reader, ready or switched off, or chose one, picks nothing", () => {
     const resolved = { id: "r1", name: "Lector barra", available: true, provider: "sumup" };
     expect(
       autoPickReader(
-        equipment({}, { choices: [lector], resolved, chosen: lector, chosenId: "r1" }),
+        equipment({}, { choices: [cardReader], resolved, chosen: cardReader, chosenId: "r1" }),
         false,
       ),
     ).toBeNull();
     expect(
       autoPickReader(
-        equipment({}, { choices: [lector], resolved: { ...resolved, available: false } }),
+        equipment({}, { choices: [cardReader], resolved: { ...resolved, available: false } }),
         false,
       ),
     ).toBeNull();
-    expect(autoPickReader(equipment({}, { choices: [lector], chosenId: "r9" }), false)).toBeNull();
+    expect(
+      autoPickReader(equipment({}, { choices: [cardReader], chosenId: "r9" }), false),
+    ).toBeNull();
   });
 
   it("an unread equipment picks nothing", () => {
@@ -455,16 +462,16 @@ describe("autoPickReader: a phone's first payment takes the one free reader", ()
 });
 
 describe("readerLoss: why a phone no longer has the reader it had (default 19)", () => {
-  const lector2 = item("r2", { name: "Lector 2", portable: true, provider: "sumup" });
+  const secondReader = item("r2", { name: "Lector 2", portable: true, provider: "sumup" });
   const marc = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
   const resolved = { id: "r2", name: "Lector 2", available: true, provider: "sumup" };
   const holding = equipment(
     {},
-    { selection: "item", chosenId: "r2", resolved, chosen: lector2, choices: [lector2] },
+    { selection: "item", chosenId: "r2", resolved, chosen: secondReader, choices: [secondReader] },
   );
 
   it("a reader another device now carries was taken, named with its device and person", () => {
-    const after = equipment({}, { choices: [{ ...lector2, heldBy: marc }] });
+    const after = equipment({}, { choices: [{ ...secondReader, heldBy: marc }] });
 
     expect(readerLoss(holding, after)).toEqual({
       kind: "taken",
@@ -483,12 +490,12 @@ describe("readerLoss: why a phone no longer has the reader it had (default 19)",
   });
 
   it("a reader still offered as the default or the choice has not gone", () => {
-    expect(readerLoss(holding, equipment({}, { default: lector2 }))).toBeNull();
-    expect(readerLoss(holding, equipment({}, { chosenId: "r2", chosen: lector2 }))).toBeNull();
+    expect(readerLoss(holding, equipment({}, { default: secondReader }))).toBeNull();
+    expect(readerLoss(holding, equipment({}, { chosenId: "r2", chosen: secondReader }))).toBeNull();
   });
 
   it("a switched-off reader the server keeps as the choice is neither taken nor gone", () => {
-    const off = { ...lector2, available: false };
+    const off = { ...secondReader, available: false };
     const after = equipment(
       {},
       {
@@ -505,14 +512,14 @@ describe("readerLoss: why a phone no longer has the reader it had (default 19)",
   it("an unpaired reader whose choice the server keeps is neither taken nor gone", () => {
     const after = equipment(
       {},
-      { selection: "item", chosenId: "r2", chosen: { ...lector2, available: false } },
+      { selection: "item", chosenId: "r2", chosen: { ...secondReader, available: false } },
     );
     expect(readerLoss(holding, after)).toBeNull();
   });
 
   it("after a fresh mount, or with no reader before, nothing was lost", () => {
     expect(readerLoss(null, equipment())).toBeNull();
-    expect(readerLoss(equipment({}, { choices: [lector2] }), equipment())).toBeNull();
+    expect(readerLoss(equipment({}, { choices: [secondReader] }), equipment())).toBeNull();
   });
 
   it("the same reader still resolved was not lost", () => {
@@ -520,19 +527,19 @@ describe("readerLoss: why a phone no longer has the reader it had (default 19)",
   });
 
   it("a receipt printer another device took is not the reader's loss", () => {
-    const barra = item("p1", { name: "Barra", portable: true });
+    const counterPrinter = item("p1", { name: "Barra", portable: true });
     const printerResolved = { id: "p1", name: "Barra", available: true };
     const before = equipment(
       {
         selection: "item",
         chosenId: "p1",
         resolved: printerResolved,
-        chosen: barra,
-        choices: [barra],
+        chosen: counterPrinter,
+        choices: [counterPrinter],
       },
       holding.roles[4],
     );
-    const after = equipment({ choices: [{ ...barra, heldBy: marc }] }, holding.roles[4]);
+    const after = equipment({ choices: [{ ...counterPrinter, heldBy: marc }] }, holding.roles[4]);
     expect(readerLoss(before, after)).toBeNull();
   });
 });
