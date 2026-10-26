@@ -123,6 +123,7 @@ import {
   type MapKind,
 } from "../state/floor-look.js";
 import {
+  nextReadyBarChange,
   readyBar,
   readyByStation,
   readyTables,
@@ -924,7 +925,8 @@ export class TillFloorScreen extends LitElement {
    */
   @property({ attribute: false }) reducedMotion?: boolean;
   /** Injectable clock for whether a party's release reminder is due; unset reads the real one and
-   * redraws the floor when the next reminder falls due, and each minute a held countdown changes. */
+   * redraws the floor when the next reminder falls due, each minute a held countdown changes, and
+   * when the Ready bar's minutes or warning change. */
   @property({ attribute: false }) now?: number;
 
   @state() private activeZone: string | undefined = undefined;
@@ -1115,8 +1117,8 @@ export class TillFloorScreen extends LitElement {
     return reminderDueAt(table.party?.reminder) <= this.#drawnAt;
   }
 
-  /** The server's floor does not change when a reminder falls due or a held countdown's minutes
-   * change, so the screen redraws itself then. */
+  /** The server's floor does not change when a reminder falls due, a held countdown's minutes
+   * change, or the Ready bar's minutes or warning change, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
     if (this.now !== undefined || !this.isConnected) return;
@@ -1130,6 +1132,8 @@ export class TillFloorScreen extends LitElement {
         : dueAt;
       if (at < next) next = at;
     }
+    if (this.handheld)
+      next = Math.min(next, nextReadyBarChange(this.#readyEntries(), this.#drawnAt));
     if (next === Number.POSITIVE_INFINITY) return;
     this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(next));
   }

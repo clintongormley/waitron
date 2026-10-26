@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import {
@@ -544,4 +544,97 @@ describe("till-floor-screen: where the Ready bar sits", () => {
       expect(getComputedStyle(floor).isolation).toBe("isolate");
     });
   }
+});
+
+describe("till-floor-screen: the Ready bar's warning, on the screen's own clock", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(now);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const onOwnClock = (tables: TableState[], over: Partial<TillFloorScreen> = {}) =>
+    mountFloor(tables, { now: undefined, ...over });
+  const advance = async (el: TillFloorScreen, ms: number) => {
+    await vi.advanceTimersByTimeAsync(ms);
+    await el.updateComplete;
+  };
+
+  it("counts the minutes up with no new floor read", async () => {
+    const el = await onOwnClock([readyAt(["bar", "Bar", 1, ago(2.5 * minute), 3])]);
+    const reads: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => reads.push(event));
+    expect(title(el)).toBe("Ready");
+    await advance(el, 30_000);
+    expect(title(el)).toBe("Ready 3 min");
+    expect(bar(el)!.hasAttribute("data-warning")).toBe(true);
+    await advance(el, minute);
+    expect(title(el)).toBe("Ready 4 min");
+    await advance(el, minute);
+    expect(title(el)).toBe("Ready 5 min");
+    expect(reads).toEqual([]);
+  });
+
+  it("turns amber at the crossing, judged per station", async () => {
+    const el = await onOwnClock([
+      readyAt(["cold", "Cold", 1, ago(4 * minute), 6]),
+      readyAt8(["grill", "Grill", 1, ago(2 * minute), 3]),
+    ]);
+    expect(title(el)).toBe("Ready");
+    expect(entries(el)).toEqual(["Table 2 · 1", "Table 8 · 1"]);
+    await advance(el, minute);
+    expect(title(el)).toBe("Ready 3 min");
+    expect(entries(el)).toEqual(["Table 8 · 1", "Table 2 · 1"]);
+    expect(warningEntries(el)).toEqual(["t8"]);
+    await advance(el, minute);
+    expect(title(el)).toBe("Ready 6 min");
+    expect(entries(el)).toEqual(["Table 2 · 1", "Table 8 · 1"]);
+    expect(warningEntries(el)).toEqual(["t2", "t8"]);
+  });
+
+  it("keeps one timer beside a held countdown, however often the floor redraws", async () => {
+    const heldTable = table({
+      id: "t4",
+      label: "4",
+      party: party({
+        id: "v4",
+        displayName: "4",
+        tableIds: ["t4"],
+        reminder: { groupId: "g2", dueAt: new Date(now + 5 * minute).toISOString() },
+      }),
+      signals: [{ kind: "held", count: 2 }],
+    });
+    const el = await onOwnClock([heldTable, readyAt(["bar", "Bar", 1, ago(4 * minute), 3])]);
+    expect(title(el)).toBe("Ready 4 min");
+    expect(vi.getTimerCount()).toBe(1);
+    for (let redraw = 0; redraw < 3; redraw++) {
+      el.requestUpdate();
+      await el.updateComplete;
+    }
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("keeps no timer for ready food with no time, nor on a till", async () => {
+    const untimed = await onOwnClock([readyAt(["bar", "Bar", 1, null, 3])]);
+    const till = await onOwnClock([readyAt(["bar", "Bar", 1, ago(2.5 * minute), 3])], {
+      handheld: false,
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    const redraws = [vi.spyOn(untimed, "requestUpdate"), vi.spyOn(till, "requestUpdate")];
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    for (const redraw of redraws) expect(redraw).not.toHaveBeenCalled();
+  });
+
+  it("reads the minutes now on coming back to the page", async () => {
+    const el = await onOwnClock([readyAt(["bar", "Bar", 1, ago(4.5 * minute), 3])]);
+    expect(title(el)).toBe("Ready 4 min");
+    const parent = el.parentElement!;
+    el.remove();
+    await vi.advanceTimersByTimeAsync(3 * minute);
+    parent.append(el);
+    await advance(el, 0);
+    expect(title(el)).toBe("Ready 7 min");
+  });
 });
