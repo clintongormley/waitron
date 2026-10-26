@@ -42,16 +42,11 @@ describe("A669 boards station", () => {
       const unticked = el.shadowRoot!.querySelector('[data-item="unticked"]')!;
       expect(ticked.querySelector("[data-line-station]")!.textContent).toBe("Grill");
       expect(unticked.querySelector("[data-line-station]")!.textContent).toBe("Bar");
-      expect(
-        ticked
-          .closest(view === "rail" ? ".ticket" : ".cell")!
-          .querySelector("[data-allergy-marker]"),
-      ).not.toBeNull();
-      expect(
-        unticked
-          .closest(view === "rail" ? ".ticket" : ".cell")!
-          .querySelector("[data-allergy-marker]"),
-      ).toBeNull();
+      expect(ticked.closest(".ticket")!.querySelector("[data-allergy-marker]")).not.toBeNull();
+      expect(unticked.closest(".ticket")!.querySelector("[data-allergy-marker]")).toBeNull();
+      if (view === "kanban") {
+        expect(ticked.closest("[data-card]")).not.toBe(unticked.closest("[data-card]"));
+      }
     },
   );
 
@@ -118,13 +113,9 @@ describe("A669 boards station", () => {
         expect(markers).toHaveLength(1);
         expect(markers[0]!.getAttribute("aria-label")).toBe(t("kitchen_allergy.marker"));
         if (view === "kanban") {
-          expect(line.querySelector(".number [data-allergy-marker]")).not.toBeNull();
           expect(
-            el
-              .shadowRoot!.querySelector('[data-item="unticked"]')!
-              .closest(".cell")!
-              .querySelector("[data-allergy-marker]"),
-          ).toBeNull();
+            line.closest("[data-card]")!.querySelector(".ticket-head [data-allergy-marker]"),
+          ).not.toBeNull();
         }
         group.items[0]!.allergy = null;
         el.groups = [{ ...group }];

@@ -217,22 +217,6 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(0);
   });
 
-  it("kanban is the default view: three state columns, each holding its state's lines", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      stationId: "st-1",
-    });
-    expect(
-      el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]'),
-    ).not.toBeNull();
-    expect(
-      el.shadowRoot!.querySelector('[data-column="preparing"] [data-item="ti-2"]'),
-    ).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-column="ready"] [data-item="ti-3"]')).not.toBeNull();
-    const queuedCol = el.shadowRoot!.querySelector('[data-column="queued"]')!;
-    expect(queuedCol.textContent).toContain(t("station.state.queued"));
-  });
-
   it("rail view renders one ticket card per order with its number and label", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
@@ -349,7 +333,7 @@ describe("till-station-queue", () => {
       ["es-ES", [28], "#27 (antes 28)"],
       ["en-GB", [28, 30], "#27 (was 28, 30)"],
     ])(
-      "follow the number on the ticket head and on each kanban cell (%s, %j)",
+      "follow the number on the ticket head and on the board card's head (%s, %j)",
       async (locale, formerNumbers, text) => {
         const previousLocale = currentLocale();
         setLocale(locale);
@@ -365,10 +349,9 @@ describe("till-station-queue", () => {
             view: "kanban",
             stationId: "st-1",
           });
-          for (const id of ["ti-1", "ti-2"])
-            expect(flat(kanban.el.shadowRoot!.querySelector(`[data-item="${id}"] .number`)!)).toBe(
-              text,
-            );
+          const heads = kanban.el.shadowRoot!.querySelectorAll("[data-card] .ticket-head .number");
+          expect([...heads].map(flat)).toEqual([text]);
+          expect(kanban.el.shadowRoot!.querySelector("[data-item] .number")).toBeNull();
         } finally {
           setLocale(previousLocale);
         }
@@ -387,14 +370,14 @@ describe("till-station-queue", () => {
         view: "kanban",
         stationId: "st-1",
       });
-      expect(flat(kanban.el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!)).toBe("#27");
+      expect(flat(kanban.el.shadowRoot!.querySelector("[data-card] .ticket-head .number")!)).toBe(
+        "#27",
+      );
     });
 
     it.each([
       [390, undefined],
       [390, [28, 30]],
-      [1024, undefined],
-      [1024, [28, 30]],
     ])(
       "leave a kanban cell's dish name uncut at %s px wide (former numbers %j)",
       async (width, formerNumbers) => {
@@ -410,12 +393,6 @@ describe("till-station-queue", () => {
           expect(flat(name)).toBe("2× Paella");
           expect(name.clientWidth).toBeGreaterThan(0);
           expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
-          if (width === 1024) {
-            const tag = el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!;
-            expect(tag.getBoundingClientRect().top).toBeLessThan(
-              name.getBoundingClientRect().bottom,
-            );
-          }
         } finally {
           await page.viewport(previous.width, previous.height);
         }
@@ -1075,14 +1052,14 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-forgotten")).toBe(true);
   });
 
-  it("kanban: the age accent is also applied to each cell (today only the rail ticket carried it)", async () => {
+  it("board: the age accent is on the dish's card", async () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      now, // default view: kanban
+      now, // default view: the board
     });
-    const cell = el.shadowRoot!.querySelector('[data-item="ti-1"]')!.closest(".cell")!;
-    expect(cell.classList.contains("age-overdue")).toBe(true);
+    const card = el.shadowRoot!.querySelector('[data-item="ti-1"]')!.closest("[data-card]")!;
+    expect(card.classList.contains("age-overdue")).toBe(true);
   });
 
   it("the header shows a legible overdue+forgotten count badge — a non-colour tell, not just borders", async () => {
@@ -1142,7 +1119,7 @@ describe("till-station-queue", () => {
         reducedMotion: false,
       });
       const flashing = el.shadowRoot!.querySelector(
-        view === "rail" ? ".ticket.age-forgotten" : ".cell.age-forgotten",
+        view === "rail" ? ".ticket.age-forgotten" : "[data-card].age-forgotten",
       )!;
       expect(getComputedStyle(flashing).animationName).toBe("age-forgotten-flash");
       expect(getComputedStyle(flashing).animationDuration).toBe("1s");
@@ -2392,25 +2369,22 @@ describe("till-station-queue — a merged queue's station labels", () => {
       },
     );
 
-    it("kanban: each bumpable cell of the ticket-mode order shows the mark, no other cell", async () => {
+    it("board: the ticket-mode card shows the mark once and the line-mode card none", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: mixed,
         stationNames,
         view: "kanban",
       });
-      const cell = (itemId: string) =>
-        el.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest(".cell")!;
-      for (const itemId of ["ti-1", "ti-2"]) {
-        const marks = cell(itemId).querySelectorAll(mark);
-        expect(marks).toHaveLength(1);
-        expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
-        expect(readable(marks[0]!)).toBe(true);
-      }
-      expect(readable(cell("ti-1").querySelector(".visually-hidden")!)).toBe(false);
-      // A ready dish has no bump, so nothing to warn about.
-      expect(cell("ti-5").querySelector(mark)).toBeNull();
-      expect(cell("ti-4").querySelector(mark)).toBeNull();
-      expect(el.shadowRoot!.querySelectorAll(mark)).toHaveLength(2);
+      const card = (itemId: string) =>
+        el.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest("[data-card]")!;
+      const marks = card("ti-1").querySelectorAll(mark);
+      expect(marks).toHaveLength(1);
+      expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
+      expect(readable(marks[0]!)).toBe(true);
+      expect(readable(card("ti-1").querySelector(".visually-hidden")!)).toBe(false);
+      expect(card("ti-5")).toBe(card("ti-1"));
+      expect(card("ti-4").querySelector(mark)).toBeNull();
+      expect(el.shadowRoot!.querySelectorAll(mark)).toHaveLength(1);
       tap(el);
     });
 
@@ -2847,18 +2821,12 @@ describe("till-station-queue — a dish sent after its period", () => {
     expect(el.shadowRoot!.querySelector("[data-after-period]")).toBeNull();
   });
 
-  it("board: labels a marked dish's cell, and not an unmarked one's", async () => {
+  it("board: marks a marked dish within its card, and not an unmarked one", async () => {
     const el = await mount([line("tortilla", starters, "Lunch"), line("bread", starters)], {
       view: "kanban",
     });
-    const mark = (id: string) =>
-      el
-        .shadowRoot!.querySelector(`[data-item="${id}"]`)!
-        .closest(".cell")!
-        .querySelector("[data-after-period]")
-        ?.textContent?.trim();
-    expect(mark("tortilla")).toBe("After Lunch — agreed");
-    expect(mark("bread")).toBeUndefined();
+    expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(1);
+    expect(rows(el)).toEqual([["After Lunch — agreed", "tortilla", "bread"]]);
   });
 
   it("board: words the mark in Spanish", async () => {
@@ -2868,9 +2836,9 @@ describe("till-station-queue — a dish sent after its period", () => {
       const el = await mount([line("tortilla", starters, "Lunch $&")], { view: "kanban" });
       const expected = t("station.after_period").replace("{period}", () => "Lunch $&");
       expect(expected).not.toContain("After");
-      expect(el.shadowRoot!.querySelector(".cell [data-after-period]")!.textContent!.trim()).toBe(
-        expected,
-      );
+      expect(
+        el.shadowRoot!.querySelector("[data-card] [data-after-period]")!.textContent!.trim(),
+      ).toBe(expected);
     } finally {
       setLocale(previous);
     }
@@ -2886,6 +2854,185 @@ describe("till-station-queue — a dish sent after its period", () => {
       expect(rows(el)).toEqual([[expected, "tortilla"]]);
     } finally {
       setLocale(previous);
+    }
+  });
+});
+
+describe("the board's cards", () => {
+  const sent = (id: string, position: number, state: "held" | "fired" = "fired") => ({
+    id,
+    position,
+    displayNumber: position,
+    numberPartyId: "pa-1",
+    state,
+  });
+  const dish = (
+    id: string,
+    firedAt: string | null,
+    extra: Partial<StationQueueItem> = {},
+  ): StationQueueItem => ({
+    ...groupA.items[0]!,
+    id,
+    workingOrderLineId: `wol-${id}`,
+    name: `Dish ${id}`,
+    firedAt,
+    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+    ...extra,
+  });
+  const bill = (
+    orderId: string,
+    orderNumber: number,
+    items: StationQueueItem[],
+  ): StationQueueGroup => ({
+    ...groupA,
+    orderId,
+    orderNumber,
+    label: "Table 7",
+    party: { id: "pa-1", revision: 1 },
+    items,
+  });
+  const cardsIn = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>("[data-card]")];
+  const dishesOn = (card: Element) =>
+    [...card.querySelectorAll<HTMLElement>("[data-item]")].map((node) => node.dataset.item);
+  const flat = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+  const column = (el: TillStationQueue, state: string) =>
+    el.shadowRoot!.querySelector(`[data-column="${state}"]`)!;
+
+  it("draws three columns of cards, each in its least advanced dish's column", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    expect(column(el, "queued").querySelector(".column-title")!.textContent).toBe(
+      t("station.state.queued"),
+    );
+    const waiting = cardsIn(column(el, "queued"));
+    expect(waiting.map((card) => card.dataset.order)).toEqual(["5"]);
+    expect(dishesOn(waiting[0]!)).toEqual(["ti-1", "ti-2"]);
+    expect(waiting[0]!.dataset.cardGroup).toBe("none");
+    expect(cardsIn(column(el, "preparing"))).toHaveLength(0);
+    const ready = cardsIn(column(el, "ready"));
+    expect(ready.map((card) => card.dataset.order)).toEqual(["6"]);
+    expect(dishesOn(ready[0]!)).toEqual(["ti-3"]);
+  });
+
+  it("gives a party one card per sent group and the dishes with no group their own, oldest first", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("late", "2026-08-17T10:42:00.000Z", { group: sent("g-2", 2) }),
+          dish("first", "2026-08-17T10:00:00.000Z", { group: sent("g-1", 1) }),
+          dish("moved", "2026-08-17T10:20:00.000Z"),
+        ]),
+      ],
+      stationId: "st-1",
+      now: Date.parse("2026-08-17T10:45:00.000Z"),
+      reducedMotion: true,
+    });
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-1", "none", "g-2"]);
+    expect(cards.map(dishesOn)).toEqual([["first"], ["moved"], ["late"]]);
+    expect(cards.map((card) => flat(card.querySelector(".ticket-head .age")!))).toEqual([
+      `45 ${t("station.min")}`,
+      `25 ${t("station.min")}`,
+      `3 ${t("station.min")}`,
+    ]);
+    expect(cards[0]!.classList.contains("age-forgotten")).toBe(true);
+    expect(cards[2]!.classList.contains("age-fresh")).toBe(true);
+    expect(flat(cards[0]!.querySelector(".ticket-head")!)).toContain(
+      t("table.group_n").replace("{n}", "1"),
+    );
+    expect(flat(cards[2]!.querySelector(".ticket-head")!)).toContain(
+      t("table.group_n").replace("{n}", "2"),
+    );
+  });
+
+  it("draws one card for a group sent across two bills, with both bills' numbers", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 12, [
+          dish("bill-1-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+        bill("wo-2", 13, [
+          dish("bill-2-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+      ],
+      stationId: "st-1",
+      canMove: true,
+    });
+    const cards = cardsIn(el.shadowRoot!);
+    expect(cards).toHaveLength(1);
+    const [card] = cards;
+    expect(card!.dataset.order).toBe("12");
+    expect(card!.dataset.cardGroup).toBe("g-2");
+    expect([...card!.querySelectorAll(".ticket-head .number")].map(flat)).toEqual(["#12", "#13"]);
+    expect([...card!.querySelectorAll(".ticket-head .label")].map(flat)).toEqual(["Table 7"]);
+    expect(dishesOn(card!)).toEqual(["bill-1-dish", "bill-2-dish"]);
+    const label = (id: string) =>
+      card!.querySelector(`button[data-item="${id}"] .visually-hidden`)!.textContent;
+    expect(label("bill-1-dish")).toBe(`${t("station.advance")} #12`);
+    expect(label("bill-2-dish")).toBe(`${t("station.advance")} #13`);
+    const moved = vi.fn();
+    el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
+    card!.querySelector<HTMLElement>('[data-move-station="bill-2-dish"]')!.click();
+    expect(moved).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ workingOrderId: "wo-2", lineId: "wol-bill-2-dish" }),
+    );
+  });
+
+  it("draws a held group's card dashed in Waiting, with no minutes", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("held-1", null, { group: sent("g-3", 3, "held") }),
+          dish("held-2", null, { group: sent("g-3", 3, "held") }),
+          dish("fired", "2026-08-17T10:00:00.000Z", { group: sent("g-4", 4) }),
+          dish("kept-back", null, { group: sent("g-4", 4) }),
+        ]),
+      ],
+      stationId: "st-1",
+      now: Date.parse("2026-08-17T10:07:00.000Z"),
+    });
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-4", "g-3"]);
+    const [mixed, held] = cards;
+    expect(held!.classList.contains("held")).toBe(true);
+    expect(getComputedStyle(held!).borderTopStyle).toBe("dashed");
+    expect(held!.querySelector(".age")).toBeNull();
+    expect([...held!.classList].some((name) => name.startsWith("age-"))).toBe(false);
+    expect(flat(held!.querySelector(".ticket-head")!)).toContain(t("station.group_held"));
+    // The control: a card with one dish fired is timed by it and drawn solid.
+    expect(mixed!.classList.contains("held")).toBe(false);
+    expect(getComputedStyle(mixed!).borderTopStyle).toBe("solid");
+    expect(flat(mixed!.querySelector(".ticket-head .age")!)).toBe(`7 ${t("station.min")}`);
+  });
+
+  it("keeps a long dish name whole inside its card at 1024 px", async () => {
+    const previous = { width: innerWidth, height: innerHeight };
+    await page.viewport(1024, 844);
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          {
+            ...groupA,
+            orderNumber: 27,
+            formerNumbers: [28, 30],
+            label: "Table 91",
+            items: [{ ...groupA.items[0]!, name: "Grilled octopus with paprika" }],
+          },
+        ],
+        stationId: "st-1",
+      });
+      const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
+      expect(flat(name)).toBe("2× Grilled octopus with paprika");
+      expect(name.clientWidth).toBeGreaterThan(0);
+      expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+      const box = name.getBoundingClientRect();
+      const card = name.closest("[data-card]")!.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(card.left);
+      expect(box.right).toBeLessThanOrEqual(card.right);
+    } finally {
+      await page.viewport(previous.width, previous.height);
     }
   });
 });

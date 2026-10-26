@@ -16,7 +16,7 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
-import type { MergedQueueGroup } from "../state/kitchen-cards.js";
+import { type KitchenCard, type MergedQueueGroup, kitchenCards } from "../state/kitchen-cards.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -53,11 +53,6 @@ const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
 
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
-interface FlatItem {
-  item: StationQueueItem;
-  group: StationQueueGroup;
-}
-
 interface CourseSection {
   course: StationQueueCourse | null;
   items: StationQueueItem[];
@@ -80,11 +75,12 @@ function afterPeriodWords(period: string): string {
 }
 
 /**
- * One station's ticket items grouped by order, shown as a kanban board (a column per kitchen state) or a
- * ticket rail (a card per order). A pure view: the container owns {@link groups} and turns the events
+ * One station's ticket items, shown as a board (a column per kitchen state, a card per sent group) or
+ * a ticket rail (a card per order). A pure view: the container owns {@link groups} and turns the events
  * this emits into API calls.
  *
- * An order is aged by its oldest line against its own station's thresholds. The age accent is a left
+ * A board card is aged by its oldest fired dish, a rail card by its order's oldest line, each against
+ * its own station's thresholds. The age accent is a left
  * border, never a text background, so its colour cannot fail contrast; a `forgotten` border flashes
  * unless reduced motion is asked for, and the header's overdue count is the signal that is not colour.
  */
@@ -261,8 +257,7 @@ export class TillStationQueue extends LitElement {
         align-self: stretch;
       }
 
-      /* The dish row: qty× name (left) and the lens-specific secondary element (right, or under the
-         name in a kanban cell too narrow for both). */
+      /* The dish row: qty× name (left) and, on the rail, its state (right). */
       .line-main {
         display: flex;
         align-items: center;
@@ -411,26 +406,15 @@ export class TillStationQueue extends LitElement {
         border-left-color: var(--wt-color-danger);
       }
 
-      /* KANBAN age accent — the cell wrapper's OWN left border, nested outside the inner .line's
-         kitchen-STATE border (queued/preparing/ready) so the two colours never overwrite each other —
-         the same outer/inner nesting the rail's .ticket/.line pair already uses. */
-      .cell {
-        border-left: var(--wt-space-1) solid var(--wt-color-border);
+      /* A board card in a column fills it. */
+      .column .ticket {
         min-width: 0;
       }
 
-      /* A narrow column moves the order tag under the dish rather than squeezing the name. */
-      .cell .line-main {
-        flex-wrap: wrap;
-      }
-
-      .cell.age-warm {
-        border-left-color: var(--wt-color-primary);
-      }
-
-      .cell.age-overdue,
-      .cell.age-forgotten {
-        border-left-color: var(--wt-color-danger);
+      /* Every dish held: dashed, as a held line is, with no age accent. */
+      .ticket.held {
+        border-style: dashed;
+        border-left-style: solid;
       }
 
       /* The FORGOTTEN flash (design §7.1/§2): a repeating fade of the left border, never a colour/motion
@@ -438,8 +422,7 @@ export class TillStationQueue extends LitElement {
          motion (#prefersReducedMotion), so an assistive-motion setting renders the steady red border
          above with no @keyframes at all. The @media guard is a second, CSS-only line of defence for
          the same preference (belt-and-suspenders, house a11y rule). */
-      .ticket.age-forgotten.flash,
-      .cell.age-forgotten.flash {
+      .ticket.age-forgotten.flash {
         animation: age-forgotten-flash var(--wt-duration-pulse-fast) ease-in-out infinite;
       }
 
@@ -450,8 +433,7 @@ export class TillStationQueue extends LitElement {
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .ticket.age-forgotten.flash,
-        .cell.age-forgotten.flash {
+        .ticket.age-forgotten.flash {
           animation: none;
         }
       }
@@ -503,10 +485,6 @@ export class TillStationQueue extends LitElement {
         margin: 0;
       }
 
-      .cell .after-period {
-        margin: 0 0 var(--wt-space-1);
-      }
-
       .print-problems {
         display: block;
         margin: 0 0 var(--wt-space-2);
@@ -521,10 +499,6 @@ export class TillStationQueue extends LitElement {
         color: var(--wt-color-text);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .cell .whole-ticket {
-        margin: 0 0 var(--wt-space-1) var(--wt-space-2);
       }
 
       .collect {
@@ -715,9 +689,9 @@ export class TillStationQueue extends LitElement {
   /** Item order WITHIN a course is preserved (the server already ordered by `queued_at, line_no`). A
    * missing/undefined course is treated as the null course, so an older/partial payload still groups
    * cleanly. */
-  #courseSections(group: StationQueueGroup): CourseSection[] {
+  #courseSections(items: readonly StationQueueItem[]): CourseSection[] {
     const byCourse = new Map<string | null, CourseSection>();
-    for (const item of group.items) {
+    for (const item of items) {
       const course = item.course ?? null;
       const key = course?.id ?? null;
       let section = byCourse.get(key);
@@ -757,8 +731,8 @@ export class TillStationQueue extends LitElement {
     return classifyBand(Date.parse(group.queuedAt), this.#clockNow(), group.thresholds);
   }
 
-  #elapsedMinutes(queuedAt: string): number {
-    return Math.max(0, Math.floor((this.#clockNow() - Date.parse(queuedAt)) / 60000));
+  #elapsedMinutes(since: number): number {
+    return Math.max(0, Math.floor((this.#clockNow() - since) / 60000));
   }
 
   #prefersReducedMotion(): boolean {
@@ -789,7 +763,7 @@ export class TillStationQueue extends LitElement {
       return html`<p class="empty">${t("station.empty")}</p>`;
     }
     return html`${this.#header()}${
-      this.view === "rail" ? this.#rail() : html`${this.#printProblems()}${this.#kanban()}`
+      this.view === "rail" ? this.#rail() : html`${this.#printProblems()}${this.#board()}`
     }`;
   }
 
@@ -891,7 +865,9 @@ export class TillStationQueue extends LitElement {
             <span class="number">${orderNumber(group.orderNumber, group.formerNumbers)}</span>
             ${kitchenAllergyMarker(group.items.some((item) => item.allergy !== null))}
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
-            <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
+            <span class="age"
+              >${this.#elapsedMinutes(Date.parse(group.queuedAt))} ${t("station.min")}</span
+            >
           </div>
           ${group.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(group) : nothing}
           ${this.#kitchenNote(group)}
@@ -902,7 +878,9 @@ export class TillStationQueue extends LitElement {
           }
           ${
             group.party === undefined
-              ? this.#courseSections(group).map((section) => this.#courseSection(group, section))
+              ? this.#courseSections(group.items).map((section) =>
+                  this.#courseSection(section, (item) => this.#line(group, item)),
+                )
               : this.#groupSections(group).map((section) => this.#groupSection(group, section))
           }
           ${this.#elsewhere(group)} ${this.#collectAction(group)} ${this.#reprintAction(group)}
@@ -930,17 +908,23 @@ export class TillStationQueue extends LitElement {
     </section>`;
   }
 
-  #courseSection(group: StationQueueGroup, section: CourseSection): TemplateResult {
+  #courseSection(
+    section: CourseSection,
+    row: (item: StationQueueItem) => TemplateResult,
+  ): TemplateResult {
     return html`<div class="course" data-course=${section.course?.id ?? "none"}>
       ${section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
       <ul class="lines">
-        ${this.#sectionLines(group, section.items)}
+        ${this.#sectionLines(section.items, row)}
       </ul>
     </div>`;
   }
 
   /** A mark row goes above each run of consecutive lines agreed after the same period, within one head. */
-  #sectionLines(group: StationQueueGroup, items: StationQueueItem[]): TemplateResult[] {
+  #sectionLines(
+    items: readonly StationQueueItem[],
+    row: (item: StationQueueItem) => TemplateResult,
+  ): TemplateResult[] {
     return items.map((item, index) => {
       const period = item.afterPeriod;
       const mark =
@@ -948,7 +932,7 @@ export class TillStationQueue extends LitElement {
           ? html`<li class="after-period" data-after-period>${afterPeriodWords(period)}</li>`
           : nothing;
       return html`${mark}
-        <li>${this.#line(group, item)}</li>`;
+        <li>${row(item)}</li>`;
     });
   }
 
@@ -969,7 +953,7 @@ export class TillStationQueue extends LitElement {
             </div>`
       }
       <ul class="lines">
-        ${this.#sectionLines(group, section.items)}
+        ${this.#sectionLines(section.items, (item) => this.#line(group, item))}
       </ul>
     </div>`;
   }
@@ -1015,19 +999,67 @@ export class TillStationQueue extends LitElement {
     </wt-button>`;
   }
 
-  #kanban(): TemplateResult {
-    const flat: FlatItem[] = this.groups.flatMap((group) =>
-      group.items.map((item) => ({ item, group })),
-    );
+  #board(): TemplateResult {
+    const cards = kitchenCards(this.groups);
     return html`<div class="kanban">
-      ${COLUMNS.map((state) => {
-        const cells = flat.filter((f) => f.item.state === state);
-        return html`<section class="column column-${state}" data-column=${state}>
-          <h2 class="column-title">${t(`station.state.${state}` as const)}</h2>
-          ${cells.map(({ group, item }) => this.#kanbanCell(group, item))}
-        </section>`;
-      })}
+      ${COLUMNS.map(
+        (state) =>
+          html`<section class="column column-${state}" data-column=${state}>
+            <h2 class="column-title">${t(`station.state.${state}` as const)}</h2>
+            ${cards.filter((card) => card.column === state).map((card) => this.#card(card))}
+          </section>`,
+      )}
     </div>`;
+  }
+
+  /** A card with no fired dish is held: dashed, untimed (D3). */
+  #card(card: KitchenCard): TemplateResult {
+    const [first] = card.orders as [MergedQueueGroup, ...MergedQueueGroup[]];
+    const { since, group } = card;
+    // Every bill on one card is one station's, so the first carries its thresholds.
+    const accent =
+      since === null
+        ? "held"
+        : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
+    const labels = [...new Set(card.orders.map((order) => order.label).filter((label) => !!label))];
+    const row = (item: StationQueueItem) => this.#renderLine(card.orderOf.get(item.id)!, item);
+    return html`<article
+      class="ticket ${accent}"
+      data-card=${card.key}
+      data-order=${first.orderNumber}
+      data-card-group=${group?.id ?? "none"}
+    >
+      <div class="ticket-head">
+        ${card.orders.map(
+          (order) =>
+            html`<span class="number"
+              >${orderNumber(order.orderNumber, order.formerNumbers)}</span
+            >`,
+        )}
+        ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
+        ${labels.map((label) => html`<span class="label">${label}</span>`)}
+        ${group === null ? nothing : html`<span class="group-name">${groupName(group)}</span>`}
+        ${
+          group?.state === "held"
+            ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
+            : nothing
+        }
+        ${
+          since === null
+            ? nothing
+            : html`<span class="age">${this.#elapsedMinutes(since)} ${t("station.min")}</span>`
+        }
+      </div>
+      ${card.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(first) : nothing}
+      ${card.orders.map((order) => this.#kitchenNote(order))}
+      ${
+        group === null
+          ? this.#courseSections(card.items).map((section) => this.#courseSection(section, row))
+          : html`<ul class="lines">
+              ${this.#sectionLines(card.items, row)}
+            </ul>`
+      }
+    </article>`;
   }
 
   #kitchenNote(group: StationQueueGroup): TemplateResult | typeof nothing {
@@ -1036,19 +1068,6 @@ export class TillStationQueue extends LitElement {
           ${t("kitchen_note.heading")}: ${group.kitchenNote}
         </p>`
       : nothing;
-  }
-
-  #kanbanCell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
-    const band = this.#band(group);
-    return html`<div class="cell ${this.#accentClasses(band)}">
-      ${this.#kitchenNote(group)}${this.#bumpable(item) ? this.#wholeTicket(group) : nothing}${
-        item.afterPeriod === undefined
-          ? nothing
-          : html`<p class="after-period" data-after-period>
-              ${afterPeriodWords(item.afterPeriod)}
-            </p>`
-      }${this.#cell(group, item)}
-    </div>`;
   }
 
   #wholeTicket(group: StationQueueGroup): TemplateResult | typeof nothing {
@@ -1067,18 +1086,10 @@ export class TillStationQueue extends LitElement {
     return this.#renderLine(group, item, state);
   }
 
-  #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
-    const tag = html`<span class="number"
-      >${orderNumber(group.orderNumber, group.formerNumbers)}${group.label ? html` · ${group.label}` : nothing}
-      ${kitchenAllergyMarker(item.allergy !== null)}</span
-    >`;
-    return this.#renderLine(group, item, tag);
-  }
-
   #renderLine(
     group: MergedQueueGroup,
     item: StationQueueItem,
-    secondary: TemplateResult,
+    secondary: TemplateResult | typeof nothing = nothing,
   ): TemplateResult {
     const station =
       group.stationId === undefined ? undefined : this.stationNames?.get(group.stationId);
