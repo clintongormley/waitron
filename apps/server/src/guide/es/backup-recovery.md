@@ -18,6 +18,21 @@ contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
 
 Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
+Mientras hay una recuperación desde una copia en curso en otro dispositivo, la página de reparación
+lo indica, con cuándo empezó y cuándo tuvo actividad por última vez, y no ofrece nada más hasta que
+se detenga, para que dos dispositivos nunca cambien esta configuración a la vez. Una recuperación
+cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco minutos
+siguientes a su última actividad. La página lo vuelve a comprobar sola.
+
+Si una recuperación desde una copia empezó y no terminó, la página de reparación lo indica, y
+**Empezar de nuevo** la borra. Si esa recuperación usaba una copia de Cloud, su aprobación en
+Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no
+puede aprobar otra recuperación para el local de este equipo. Un dispositivo que todavía tenga
+abierta la recuperación borrada indica que se descartó.
+
+Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
+equipo se está reiniciando, espera a que responda.
+
 ## Elige tu copia {#source}
 
 Elige **Archivo de copia**, **Copia del bucket** o **Copia de Cloud** y el entorno correspondiente.

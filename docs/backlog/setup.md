@@ -411,18 +411,6 @@ that every node holds the current note
 ([replication-cloud.md](replication-cloud.md#replication-membership--failover--residuals-afterwards))
 depends on this.
 
-## Starting a backup recovery and giving it up blocks Start again for good
-
-Left open by A1042 (owner, 2026-10-25: point 5 answered B). Start again is refused while any
-backup-recovery journal from the repair page's Recover from backup (A731) exists; with the venue database missing, before a
-recovery starts, the page warns of this under Recover from backup. The journal A731 writes when a backup is prepared
-(`first-setup-resolutions/backup-recovery/` in the box's folders) is never deleted; its restore target holds a
-`venue.lock`, which must never be unlinked (`packages/store/src/venue-lock.ts`); and A731 refuses
-any other backup into that recovery with `setup.attempt_conflict`, run on 2026-10-25 (A1042 plan,
-"Task 0 results", (m)). So a person who starts a recovery and gives up can only finish a recovery
-with that same backup, or have Waitron reinstalled. A way out needs A731 to learn an abandoned
-recovery that its entry treats as absent while the folder and its lock stay.
-
 ## The first-setup record store still accepts the `retire` and `select-workspace` actions and `nextWorkspace`, which nothing writes since A1042
 
 Left open by A1042 (D4). `packages/provisioning/src/first-setup-resolution.ts` still declares and
@@ -437,6 +425,88 @@ again the heading still reads "First setup was interrupted" above "The old attem
 Reconnect to continue."; two "Start again" buttons are drawn at once, the one that opens the
 confirmation and the one that confirms; and Continue sits tight against the password field at
 phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
+
+## Close a discarded recovery's Cloud approval from the box
+
+Left open by A1042. Show the saved link and code beside the repair page's stopped line, so the
+person can close the approval in Waitron Cloud. Today the box shows that link and code only on its
+Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`), and the box's Cloud
+client has no action that closes an approval (`apps/server/src/cloud-recovery.ts`: `start`,
+`status`, `info`, `read`, `restored`). Cloud closes the approval by itself an hour after it was
+given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d6:
+`packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
+`packages/backups/src/recovery.ts`, `recovery_active`).
+
+## A full disk while a backup recovery fills it is a dead end for the person
+
+Left open by A1042. What the box does today:
+
+- The box empties a discarded backup recovery only while holding its venue folders' locks
+  (CLAUDE.md §3; `emptyAbandonedBackupRecovery`,
+  `packages/provisioning/src/first-setup-backup-discard.ts`). Taking a lock writes a file, so on
+  a full disk it is refused (`errcode` 14), and the discarded recovery's restored database stays on
+  disk.
+- **At the start:** below the free-space floor, the start deletes rotated logs numbered 2 or higher
+  and crash reports older than 7 days (`apps/server/src/start-space.ts`, `freeSpaceAtStart`).
+  - If that frees a little room, the locks are taken and the discarded recovery is emptied.
+    Measured by A1042's U7d on a 32 MB HFS+ test volume filled to 0 bytes free: freeing 1 MiB (one
+    rotated log, or a filler file) was enough, and emptying a 4 MiB restored database left
+    5,271,552 bytes free (`apps/server/src/start-full-disk.e2e.test.ts`).
+  - If it frees nothing, the emptying is logged `setup.recovery_cleanup_refused` with
+    `reason: "storage.disk_full"` and the start serves the full-disk page. That page tells the
+    person to ask whoever installed the box to free some space, against the 2026-10-25 rule never to
+    send the person to somebody else. It also says "The box has deleted what it could make again",
+    which is untrue while the discarded database is still there (`apps/server/src/recovery-surface.ts`,
+    `storage.disk_full`).
+- **At Start again, with the disk already full:** Start again and its summary answer
+  `500 server.internal` at the turn's own lock, before any step (measured by the A1042 plan's
+  fourth-revision check, through the repair host's own lock and the real error boundary). The page
+  draws "Reconnect to check the saved result. Do not repeat activation." Every recovery step runs
+  in the same turn (`apps/server/src/first-setup-backup-recovery.ts`, `turn`); I believe each answers
+  the same way (read, not run), and that Start again did the same before A1042 (read, not run).
+- **A recovery not yet discarded that fills the disk** (a restore that runs out of room part-way)
+  gets no clean-up at the start: the start resolves the repair page and skips the space clean-up
+  (`apps/server/src/node-entry.ts`, `backupEntry.kind === "repair"`, from #2043). The person meets
+  the 500 above and cannot discard it.
+- **Start again on a disk that fills between its `abandoned` record and the emptying** answers
+  "Start again has not finished. Reload this page to see what is left to do. If the box is
+  restarting, wait until it answers." The box restarts by itself, and the next start tries the
+  emptying again; on a disk still full, that start serves the full-disk page above.
+
+Follow-up: A1117, as the owner chose on 2026-10-26 ("A1042 full disk: A"): on a full disk the box
+frees a discarded recovery's copy and keeps the folder-lock rule, and the repair and full-disk pages
+stop sending the person elsewhere.
+
+## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
+
+Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers "Start again has not finished. Reload this page to see
+what is left to do. If the box is restarting, wait until it answers." and restarts the box. The
+next start logs `setup.recovery_cleanup_refused`, leaves the files, and brings the repair page back,
+so the person can only press Start again again. Run by A1042's U7d review with the restored
+database made undeletable (`chflags uchg`), through the real route and the next start: each press
+restarted the box once, each start restarted it zero times, and nothing kept was deleted. Follow-up: A1098, the choice to
+keep or move aside files the box did not create.
+
+## A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery waits
+
+Left open by A1042. While a backup recovery is running, a Waitron Cloud wait included, the box
+refuses the repair page's writes and `/setup-api/first-setup/resume`, `abandon` and `recover`
+(`firstSetupOwnerWriteFence`, `apps/server/src/setup-first-fiscal-api.ts`). `/setup-api/provision`
+is not on that list and does not check the recovery (`apps/server/src/setup-api.ts`), so a tab that
+signed in before the recovery started could still send activation while a Waitron Cloud recovery
+waits for approval. Read, not run.
+
+## A recovery that Start again recorded as discarded can still be resumed after a power cut
+
+Left open by A1042. Start again writes its confirmation record before the recovery's `abandoned`
+record (`apps/server/src/first-setup-resolution.ts`, `startAgainFirstSetup`). A cut between the two
+leaves the journal at `prepared` or later. After the restart, a hand-made `open` or `resume` for
+that recovery can take it to `selected` beside a confirmation record that says it was discarded:
+neither reads the confirmation records (`apps/server/src/first-setup-backup-recovery.ts`; read, not
+run). No page offers this. Follow-up: `open` and `resume` refuse a recovery that a confirmation
+record says was discarded. At this commit the record's `shown.recovery` holds the recovery's start
+time, last activity and series name, not its id
+(`packages/provisioning/src/first-setup-start-again-confirmation.ts`, `StartAgainRecoveryShown`).
 
 ## Decisions and deliberate limits
 
@@ -469,6 +539,11 @@ the start (`setup.workspace_unsupported`), and the page asks for Waitron to be r
 - **Q5:** A950's upgrade rollback must keep the newer note; an ordinary upgrade never writes it.
 - **Q6:** practice setups — Demo, Preparation, Live on a development box, and the readiness test
   run — stay outside the note, as they stay outside every history check.
+
+**DECIDED (owner, 2026-10-25 14:35): an unfinished backup recovery is disposable.** Start again
+discards it once it has stopped, keeping its lock files (the `abandoned` tombstone: the recovery's
+journal records and its restored copy's lock files stay, and the rest is deleted;
+`packages/provisioning/src/first-setup-backup-discard.ts`). A1042.
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack

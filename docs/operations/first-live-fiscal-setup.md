@@ -100,8 +100,20 @@ started or finished activation — and offers **Recover from backup** beside **S
 again then asks you to tick "Nothing was filed to AEAT and nothing was sold."; before it deletes
 anything, the box records who confirmed, when, and what the page showed. If the attempt's
 recovery-key record is damaged, the page also says "This setup's recovery-key record is damaged
-and cannot be read." above what Start again deletes, and you can still choose **Cancel**. Once a
-backup recovery has started, Start again is no longer offered.
+and cannot be read." above what Start again deletes, and you can still choose **Cancel**.
+
+While a backup recovery is running on another device, the repair page says so, with when it
+started and when it was last active, and offers nothing until it stops. It counts as running while
+one of its steps is in progress and for five minutes after its last activity. Once a backup
+recovery has started, Start again is offered only after it has stopped: the page then says the
+recovery started and did not finish and that Start again deletes it, and offers no **Recover from
+backup** beside it. For a Waitron Cloud copy it adds that the approval in Waitron Cloud closes by
+itself within an hour of when it was given, and that until then Cloud cannot approve a new
+recovery for this box's venue. Start again keeps the discarded recovery's journal records and its
+lock files, and deletes the rest. If a file cannot be deleted, or the disk fills first, the page says "Start again has not
+finished. Reload this page to see what is left to do. If the box is restarting, wait until it
+answers.", the box restarts, and the next start tries the deletion again. A recovery whose records cannot be read is reported as such, and
+Start again is not offered beside it.
 
 For an authenticated archive, bucket or supported Cloud copy, choose **Recover from backup**
 and follow the [repair recovery procedure](hour-recovery.md#recover-while-first-setup-is-blocked).

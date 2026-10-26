@@ -18,6 +18,19 @@ device that allows it. Enter passwords and recovery keys only after HTTPS opens 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.
 
+While a recovery from backup is running on another device, the repair page says so, with when it
+started and when it was last active, and offers nothing else until it stops, so that two devices
+never change this setup at the same time. A recovery counts as running while one of its steps is in
+progress and for five minutes after its last activity. The page checks again by itself.
+
+If a recovery from backup started and did not finish, the repair page says so, and **Start again**
+deletes it. If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes by
+itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery
+for this box's venue. A device that still has the deleted recovery open says it was discarded.
+
+If the page says that Start again has not finished, reload it to see what is left to do. If the box
+is restarting, wait until it answers.
+
 ## Choose your copy {#source}
 
 Choose **Backup file**, **Bucket copy** or **Cloud copy** and the matching environment.

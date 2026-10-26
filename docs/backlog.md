@@ -446,10 +446,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   forgets that setup's series name. Left open by A1042 (owner, 2026-10-25).
   [Detail](backlog/setup.md#move-the-start-again-note-whenever-a-series-name-is-put-into-use-and-when-a-plain-reset-ends-an-unfinished-setup)
 
-- **Starting a backup recovery and giving it up blocks Start again for good.** A731's recovery journal
-  is never deleted, and A731 refuses any other backup into that recovery. Left open by A1042 (owner, 2026-10-25).
-  [Detail](backlog/setup.md#starting-a-backup-recovery-and-giving-it-up-blocks-start-again-for-good)
-
 - **The first-setup record store still accepts the `retire` and `select-workspace` actions and
   `nextWorkspace`, which nothing writes since A1042.**
   [Detail](backlog/setup.md#the-first-setup-record-store-still-accepts-the-retire-and-select-workspace-actions-and-nextworkspace-which-nothing-writes-since-a1042)
@@ -457,6 +453,30 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The repair page's Start again oddities from #1752** — a stale heading after Start again, two
   "Start again" buttons, and Continue tight against the password field at phone width.
   [Detail](backlog/setup.md#the-repair-pages-start-again-oddities-from-1752)
+
+- **Close a discarded recovery's Cloud approval from the box.** Show the saved link and code beside
+  the repair page's stopped line; the approval otherwise stays open up to an hour. Left open by A1042.
+  [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
+
+- **A full disk while a backup recovery fills it is a dead end for the person.** The box empties a
+  discarded recovery only under its folders' locks, which a full disk refuses; the full-disk page
+  then sends the person elsewhere. Follow-up: A1117. Left open by A1042.
+  [Detail](backlog/setup.md#a-full-disk-while-a-backup-recovery-fills-it-is-a-dead-end-for-the-person)
+
+- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
+  again.** Each press answers "Start again has not finished" and restarts the box. Follow-up: A1098.
+  Left open by A1042.
+  [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
+
+- **A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery
+  waits.** `/setup-api/provision` is outside the recovery's write fence. Read, not run. Left open by
+  A1042.
+  [Detail](backlog/setup.md#a-stale-signed-in-setup-tabs-activation-request-is-not-refused-while-a-waitron-cloud-recovery-waits)
+
+- **A recovery that Start again recorded as discarded can still be resumed after a power cut.** A
+  hand-made `open` or `resume` after a cut before the `abandoned` record; no page offers it. Left
+  open by A1042.
+  [Detail](backlog/setup.md#a-recovery-that-start-again-recorded-as-discarded-can-still-be-resumed-after-a-power-cut)
 
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.

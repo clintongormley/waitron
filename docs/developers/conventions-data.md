@@ -2967,6 +2967,9 @@ printed:
   journal, and then trying from another process printed `acquired` both times: the new file is a
   different lock, taken beside the holder. `apps/server/src/db-wipe.ts` records the same for
   `migrations.lock`.
+- The state folder can hold discarded backup-recovery tombstones
+  (`first-setup-resolutions/backup-recovery/<id>/`); emptying one keeps the lock files of its
+  restored copy, which are never removed (`packages/provisioning/src/first-setup-backup-discard.ts`).
 - A `venue.lock` that is a DIRECTORY is refused by the constructor with errcode 14, `unable to open
   database file`, which the lock passes on as it came rather than reporting it as in use.
 
