@@ -47,7 +47,7 @@
   /* How long a row takes to slide into its new place while a list is reordered by dragging (ReorderController). */
   --wt-duration-move: 150ms;
   --wt-duration-disclosure: 900ms;
-  /* One cycle of a pulse: slow for Overdue, Time to fire, the till bar's Waiting tab and the Ready bar's warning; fast for Forgotten. */
+  /* One cycle of a pulse: slow for Overdue, Time to fire, the till bar's Waiting tab and the Ready bar's warning; fast for Forgotten, on the floor, the pass and a kitchen card. */
   --wt-duration-pulse-slow: 2000ms;
   --wt-duration-pulse-fast: 1000ms;
 

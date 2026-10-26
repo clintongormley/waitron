@@ -184,8 +184,7 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* Age accents on the card's left edge — a data-driven colour, never behind text (a11y). Three
-         escalating bands (KDS order-timing alerts, design §7.2), the SAME scheme
-         till-station-queue's rail card uses: warm (amber-ish primary), overdue (red), forgotten
+         escalating bands (KDS order-timing alerts, design §7.2): warm (amber-ish primary), overdue (red), forgotten
          (red + a repeating flash, .flash below). 'fresh' gets no override — it keeps the base
          .order border colour. */
       .order.age-warm {
@@ -201,8 +200,7 @@ export class TillExpoScreen extends LitElement {
          colour/motion change behind text — .flash is applied only when the OS/browser has NOT asked
          for reduced motion (#prefersReducedMotion), so an assistive-motion setting renders the steady
          red border above with no @keyframes at all. The @media guard is a second, CSS-only line of
-         defence for the same preference (belt-and-suspenders, house a11y rule) — mirrors
-         till-station-queue's identical treatment of its .ticket/.cell. */
+         defence for the same preference (belt-and-suspenders, house a11y rule). */
       .order.age-forgotten.flash {
         animation: age-forgotten-flash var(--wt-duration-pulse-fast) ease-in-out infinite;
       }
@@ -220,8 +218,7 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* The pass-wide overdue+forgotten count badge (design §7.2) — a non-colour tell ("2 overdue")
-         so the escalation is legible without relying on the border colour alone (a11y), mirroring
-         till-station-queue's identical header badge. */
+         so the escalation is legible without relying on the border colour alone (a11y). */
       .overdue-count {
         margin: 0;
         padding: var(--wt-space-1) var(--wt-space-3);

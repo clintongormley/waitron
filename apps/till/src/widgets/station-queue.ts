@@ -10,13 +10,19 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
-import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
+import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
-import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
-import { type KitchenCard, type MergedQueueGroup, kitchenCards } from "../state/kitchen-cards.js";
+import { dishLine, snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+import {
+  type KitchenCard,
+  type MergedQueueGroup,
+  kitchenCards,
+  lateCards,
+  thousandthsToMake,
+} from "../state/kitchen-cards.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -72,9 +78,9 @@ function afterPeriodWords(period: string): string {
  * One station's ticket items, shown as a board: a column per kitchen state, a card per sent group. A
  * pure view: the container owns {@link groups} and turns the events this emits into API calls.
  *
- * A card is aged by its oldest fired dish, against its own station's thresholds. The age accent is a left
- * border, never a text background, so its colour cannot fail contrast; a `forgotten` border flashes
- * unless reduced motion is asked for, and the header's overdue count is the signal that is not colour.
+ * A card is aged by its oldest fired dish, against its own station's thresholds. The age band is a top
+ * border, never a text background; a `forgotten` band pulses unless reduced motion is asked for. The
+ * minutes on each card and the header's late count say it without colour.
  */
 @customElement("till-station-queue")
 export class TillStationQueue extends LitElement {
@@ -133,8 +139,7 @@ export class TillStationQueue extends LitElement {
         min-width: 12rem;
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
-        /* The age accent lives on the left edge (coloured by bucket below), never behind text. */
-        border-left: var(--wt-space-1) solid var(--wt-color-border);
+        border-top: var(--wt-space-1) solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
       }
@@ -347,7 +352,7 @@ export class TillStationQueue extends LitElement {
          background and fail the color-contrast sweep). It renders as an inert span, so there is no bump. */
       .line.held {
         border-style: dashed;
-        border-left-style: solid;
+        border-top-style: solid;
         color: var(--wt-color-text-muted);
       }
 
@@ -378,17 +383,18 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* Age accents on the card's left edge — a data-driven colour, never behind text (a11y).
-         Three escalating bands (KDS order-timing alerts, design §7.1): warm (amber-ish primary),
-         overdue (red), forgotten (red + a repeating flash, .flash below). 'fresh' gets no override —
-         it keeps the base .ticket border colour. */
+      /* The age band along the card's top, never behind text (D7). */
+      .ticket.age-fresh {
+        border-top-color: var(--wt-color-success);
+      }
+
       .ticket.age-warm {
-        border-left-color: var(--wt-color-primary);
+        border-top-color: var(--wt-color-warning);
       }
 
       .ticket.age-overdue,
       .ticket.age-forgotten {
-        border-left-color: var(--wt-color-danger);
+        border-color: var(--wt-color-danger);
       }
 
       /* A board card in a column fills it. */
@@ -396,24 +402,20 @@ export class TillStationQueue extends LitElement {
         min-width: 0;
       }
 
-      /* Every dish held: dashed, as a held line is, with no age accent. */
+      /* Every dish held: dashed, as a held line is, with no age band. */
       .ticket.held {
         border-style: dashed;
-        border-left-style: solid;
       }
 
-      /* The FORGOTTEN flash (design §7.1/§2): a repeating fade of the left border, never a colour/motion
-         change behind text — .flash is applied only when the OS/browser has NOT asked for reduced
-         motion (#prefersReducedMotion), so an assistive-motion setting renders the steady red border
-         above with no @keyframes at all. The @media guard is a second, CSS-only line of defence for
-         the same preference (belt-and-suspenders, house a11y rule). */
+      /* .flash is set only while reduced motion is not asked for; the @media rule also stops a card
+         drawn before the preference changed. */
       .ticket.age-forgotten.flash {
         animation: age-forgotten-flash var(--wt-duration-pulse-fast) ease-in-out infinite;
       }
 
       @keyframes age-forgotten-flash {
         50% {
-          border-left-color: transparent;
+          border-color: var(--wt-color-danger-pulse-dim);
         }
       }
 
@@ -423,16 +425,11 @@ export class TillStationQueue extends LitElement {
         }
       }
 
-      /* The header's overdue+forgotten count badge (design §7.1) — a non-colour tell ("3 overdue") so
-         the escalation is legible without relying on the border colour alone (a11y). */
-      .overdue-count {
+      .kitchen-counts {
         margin: 0 0 var(--wt-space-2);
-        padding: var(--wt-space-1) var(--wt-space-3);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-danger);
-        color: var(--wt-color-on-danger);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
-        display: inline-block;
       }
 
       .course {
@@ -689,10 +686,6 @@ export class TillStationQueue extends LitElement {
     return this.now ?? this.#clock.now;
   }
 
-  #band(group: StationQueueGroup): TimingBand {
-    return classifyBand(Date.parse(group.queuedAt), this.#clockNow(), group.thresholds);
-  }
-
   #elapsedMinutes(since: number): number {
     return Math.max(0, Math.floor((this.#clockNow() - since) / 60000));
   }
@@ -706,14 +699,17 @@ export class TillStationQueue extends LitElement {
     return `age-${band}${flash ? " flash" : ""}`;
   }
 
-  #overdueCount(): number {
-    return this.groups.filter((group) => BAND_RANK[this.#band(group)] >= BAND_RANK.overdue).length;
-  }
-
-  #header(): TemplateResult | typeof nothing {
-    const count = this.#overdueCount();
-    if (count === 0) return nothing;
-    return html`<p class="overdue-count">${count} ${t("station.overdue_count")}</p>`;
+  /** "5 dishes to make · 1 late", over every card on this queue (D9). */
+  #header(cards: readonly KitchenCard[]): TemplateResult | typeof nothing {
+    const toMake = thousandthsToMake(cards);
+    const late = lateCards(cards, this.#clockNow());
+    if (toMake === 0 && late === 0) return nothing;
+    const dishes =
+      toMake === 1000
+        ? t("station.to_make_one")
+        : t("station.to_make").replace("{n}", trimQuantity(thousandthsToDecimal(toMake)));
+    const lateWords = late === 0 ? "" : ` · ${t("station.late").replace("{n}", String(late))}`;
+    return html`<p class="kitchen-counts" data-kitchen-counts>${dishes}${lateWords}</p>`;
   }
 
   override render() {
@@ -724,7 +720,8 @@ export class TillStationQueue extends LitElement {
     if (this.groups.length === 0) {
       return html`<p class="empty">${t("station.empty")}</p>`;
     }
-    return html`${this.#header()}${this.#board()}`;
+    const cards = kitchenCards(this.groups);
+    return html`${this.#header(cards)}${this.#board(cards)}`;
   }
 
   #notices(): TemplateResult | typeof nothing {
@@ -890,8 +887,7 @@ export class TillStationQueue extends LitElement {
     </wt-button>`;
   }
 
-  #board(): TemplateResult {
-    const cards = kitchenCards(this.groups);
+  #board(cards: readonly KitchenCard[]): TemplateResult {
     return html`<div class="kanban">
       ${COLUMNS.map(
         (state) =>

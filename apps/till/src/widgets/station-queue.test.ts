@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
@@ -1066,39 +1066,6 @@ describe("till-station-queue", () => {
     expect(card.classList.contains("age-overdue")).toBe(true);
   });
 
-  it("the header shows a legible overdue+forgotten count badge — a non-colour tell, not just borders", async () => {
-    // groupA is 12 min old (overdue), groupB is 7 min old (warm) — one group has escalated.
-    const now = Date.parse("2026-08-17T10:12:00.000Z");
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      view: "rail",
-      now,
-    });
-    const badge = el.shadowRoot!.querySelector(".overdue-count")!;
-    expect(badge.textContent).toContain("1");
-    expect(badge.textContent).toContain(t("station.overdue_count"));
-  });
-
-  it("the header shows no badge at all when nothing has escalated to overdue", async () => {
-    const now = Date.parse("2026-08-17T10:01:00.000Z"); // both groups fresh/near-fresh
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [groupA],
-      view: "rail",
-      now,
-    });
-    expect(el.shadowRoot!.querySelector(".overdue-count")).toBeNull();
-  });
-
-  it("the header counts BOTH overdue and forgotten groups (band rank ≥ overdue)", async () => {
-    const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten, B: 11 min → overdue
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      view: "rail",
-      now,
-    });
-    expect(el.shadowRoot!.querySelector(".overdue-count")!.textContent).toContain("2");
-  });
-
   it("forgotten flashes by default (motion allowed) — the flash class rides alongside the steady accent", async () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -1111,26 +1078,6 @@ describe("till-station-queue", () => {
     expect(ticket.classList.contains("age-forgotten")).toBe(true);
     expect(ticket.classList.contains("flash")).toBe(true);
   });
-
-  it.each(["rail", "kanban"] as const)(
-    "flashes a forgotten ticket at the fast pulse token, 1 s by default (%s)",
-    async (view) => {
-      const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [groupA],
-        view,
-        now,
-        reducedMotion: false,
-      });
-      const flashing = el.shadowRoot!.querySelector(
-        view === "rail" ? ".ticket.age-forgotten" : "[data-card].age-forgotten",
-      )!;
-      expect(getComputedStyle(flashing).animationName).toBe("age-forgotten-flash");
-      expect(getComputedStyle(flashing).animationDuration).toBe("1s");
-      el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
-      expect(getComputedStyle(flashing).animationDuration).toBe("3s");
-    },
-  );
 
   it("reduced motion: a forgotten ticket renders the steady-red class with NO flash/animation class", async () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
@@ -3246,5 +3193,215 @@ describe("the board's cards", () => {
     } finally {
       await page.viewport(previous.width, previous.height);
     }
+  });
+});
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateReducedMotion: (reduced: boolean) => Promise<void>;
+  }
+}
+
+const ageAt = (minute: number) => `2026-08-17T10:${String(minute).padStart(2, "0")}:00.000Z`;
+const AGE_NOW = Date.parse(ageAt(20));
+
+function ageDish(
+  id: string,
+  minute: number,
+  overrides: Partial<StationQueueItem> = {},
+): StationQueueItem {
+  return {
+    allergy: null,
+    id,
+    workingOrderLineId: `line-${id}`,
+    state: "queued",
+    name: "Octopus",
+    quantity: "1.000",
+    course: null,
+    firedAt: ageAt(minute),
+    queuedAt: ageAt(minute),
+    ...overrides,
+  };
+}
+
+function ageBill(
+  orderNumber: number,
+  items: StationQueueItem[],
+  overrides: Partial<StationQueueGroup & { stationId: string }> = {},
+): StationQueueGroup & { stationId?: string } {
+  return {
+    kitchenNote: null,
+    orderId: `wo-${orderNumber}`,
+    orderNumber,
+    label: `Table ${orderNumber}`,
+    queuedAt: items[0]!.queuedAt,
+    status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
+    items,
+    ...overrides,
+  };
+}
+
+// At 10:20: 2, 7, 12 and 20 minutes old, and one never fired.
+const fresh = ageBill(1, [ageDish("fresh", 18)]);
+const warm = ageBill(2, [ageDish("warm", 13)]);
+const overdue = ageBill(3, [ageDish("overdue", 8)]);
+const forgotten = ageBill(4, [ageDish("forgotten", 0)]);
+const heldBill = ageBill(5, [ageDish("held", 0, { firedAt: null })]);
+
+const cardOf = (el: TillStationQueue, orderNumber: number) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-card][data-order="${orderNumber}"]`)!;
+
+const paint = (el: TillStationQueue) => {
+  el.style.setProperty("--wt-color-success", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+  el.style.setProperty("--wt-color-danger", "rgb(7, 8, 9)");
+  el.style.setProperty("--wt-color-danger-pulse-dim", "rgb(10, 11, 12)");
+  el.style.setProperty("--wt-color-border", "rgb(13, 14, 15)");
+};
+
+describe("till-station-queue: a card's age band", () => {
+  afterEach(() => commands.emulateReducedMotion(false));
+
+  it("a card's band is green, then amber, then red as it ages", async () => {
+    await commands.emulateReducedMotion(false);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [fresh, warm, overdue, heldBill],
+      stationId: "st-1",
+      now: AGE_NOW,
+      reducedMotion: false,
+    });
+    paint(el);
+    expect(getComputedStyle(cardOf(el, 1)).borderTopColor).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(cardOf(el, 1)).borderLeftColor).toBe("rgb(13, 14, 15)");
+    expect(getComputedStyle(cardOf(el, 2)).borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(cardOf(el, 2)).borderLeftColor).toBe("rgb(13, 14, 15)");
+    expect(getComputedStyle(cardOf(el, 3)).borderTopColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(cardOf(el, 3)).borderLeftColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(cardOf(el, 5)).borderTopColor).toBe("rgb(13, 14, 15)");
+  });
+
+  it("a forgotten card's band pulses to the dim red at the fast pulse token", async () => {
+    await commands.emulateReducedMotion(false);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [forgotten],
+      stationId: "st-1",
+      now: AGE_NOW,
+      reducedMotion: false,
+    });
+    paint(el);
+    const card = cardOf(el, 4);
+    expect(getComputedStyle(card).animationName).toBe("age-forgotten-flash");
+    expect(getComputedStyle(card).animationDuration).toBe("1s");
+    const [animation] = card.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 500;
+    expect(getComputedStyle(card).borderTopColor).toBe("rgb(10, 11, 12)");
+    expect(getComputedStyle(card).borderLeftColor).toBe("rgb(10, 11, 12)");
+    animation!.currentTime = 0;
+    expect(getComputedStyle(card).borderTopColor).toBe("rgb(7, 8, 9)");
+    el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
+    expect(getComputedStyle(card).animationDuration).toBe("3s");
+  });
+
+  it("under reduced motion a forgotten card holds still and stays red", async () => {
+    const still = (el: TillStationQueue) => {
+      paint(el);
+      const card = cardOf(el, 4);
+      expect(getComputedStyle(card).animationName).toBe("none");
+      expect(getComputedStyle(card).borderTopColor).toBe("rgb(7, 8, 9)");
+    };
+    const mount = async (reducedMotion: boolean | undefined) =>
+      (
+        await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [forgotten],
+          stationId: "st-1",
+          now: AGE_NOW,
+          reducedMotion,
+        })
+      ).el;
+    await commands.emulateReducedMotion(false);
+    still(await mount(true));
+    cleanupWidgets();
+    await commands.emulateReducedMotion(true);
+    still(await mount(undefined));
+    cleanupWidgets();
+    // Turned on after the card was drawn, with no redraw: the stylesheet's own gate stops it.
+    await commands.emulateReducedMotion(false);
+    const drawn = await mount(undefined);
+    expect(getComputedStyle(cardOf(drawn, 4)).animationName).toBe("age-forgotten-flash");
+    await commands.emulateReducedMotion(true);
+    still(drawn);
+  });
+});
+
+describe("till-station-queue: the dishes-to-make line", () => {
+  const counts = (el: TillStationQueue) =>
+    el.shadowRoot!.querySelectorAll<HTMLElement>("[data-kitchen-counts]");
+  const line = (el: TillStationQueue) => {
+    const [only, ...rest] = counts(el);
+    expect(rest).toHaveLength(0);
+    return only?.textContent!.replace(/\s+/g, " ").trim();
+  };
+
+  // 2 + 1.5 (counted in Each) + 1 (a weighed dish) on a fresh card; nothing held or Ready counts.
+  const mixed = ageBill(6, [
+    ageDish("plain", 18, { quantity: "2.000" }),
+    ageDish("each", 18, {
+      quantity: "1.500",
+      unitName: { "en-GB": "each" },
+      soldInEach: true,
+      state: "preparing",
+    }),
+    ageDish("weighed", 18, { quantity: "0.350", unitName: { "en-GB": "kg" } }),
+    ageDish("held-dish", 18, { quantity: "3.000", firedAt: null }),
+    ageDish("ready", 18, { state: "ready" }),
+  ]);
+
+  it("the header says how many dishes are to make and how many cards are late", async () => {
+    const board = { groups: [mixed, overdue], stationId: "st-1", now: AGE_NOW };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", board);
+    expect(counts(el)[0]!.classList.contains("kitchen-counts")).toBe(true);
+    expect(line(el)).toBe("5.5 dishes to make · 1 late");
+    cleanupWidgets();
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanishBoard = await mountWidget<TillStationQueue>("till-station-queue", board);
+      const spanish = `${t("station.to_make").replace("{n}", "5.5")} · ${t("station.late").replace("{n}", "1")}`;
+      expect(spanish).not.toBe("5.5 dishes to make · 1 late");
+      expect(line(spanishBoard.el)).toBe(spanish);
+    } finally {
+      setLocale(before);
+    }
+    cleanupWidgets();
+
+    const one = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [fresh],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(line(one.el)).toBe("1 dish to make");
+    cleanupWidgets();
+
+    // Late only counts a card with something to make: an old card all Ready is not late.
+    const nothing = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [ageBill(7, [ageDish("done", 0, { state: "ready" })]), heldBill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(counts(nothing.el)).toHaveLength(0);
+  });
+
+  it("a merged queue has one header line for every station", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        ageBill(8, [ageDish("grill", 18, { quantity: "2.000" })], { stationId: "st-grill" }),
+        ageBill(8, [ageDish("fryer", 8)], { stationId: "st-fryer" }),
+      ],
+      now: AGE_NOW,
+    });
+    expect(line(el)).toBe("3 dishes to make · 1 late");
   });
 });

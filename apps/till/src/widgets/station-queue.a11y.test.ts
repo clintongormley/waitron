@@ -5,9 +5,8 @@ import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
-// The shipped DB defaults. No fixture injects `now`, so every ticket ages off the REAL wall clock
-// against its fixed `queuedAt` and renders `forgotten`, and the header's overdue-count badge appears
-// too; the sweep below covers exactly that state.
+// The shipped DB defaults. Unless a case injects `now`, every card ages off the REAL wall clock
+// against its fixed `queuedAt` and renders `forgotten`.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
@@ -638,4 +637,41 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
       await expectNoA11yViolations(host);
     },
   );
+
+  it("a board with a fresh, warm, overdue, forgotten and held card and the header line has no violations", async () => {
+    const at = (minute: number) => `2026-08-17T10:${String(minute).padStart(2, "0")}:00.000Z`;
+    const card = (orderNumber: number, minute: number, fired = true): StationQueueGroup => ({
+      ...groups[0]!,
+      orderId: `wo-age-${orderNumber}`,
+      orderNumber,
+      label: `Table ${orderNumber}`,
+      queuedAt: at(minute),
+      items: [
+        {
+          ...groups[0]!.items[0]!,
+          id: `ti-age-${orderNumber}`,
+          name: "Octopus",
+          firedAt: fired ? at(minute) : null,
+          queuedAt: at(minute),
+        },
+      ],
+    });
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [card(1, 18), card(2, 13), card(3, 8), card(4, 0), card(5, 0, false)],
+        stationId: "st-1",
+        now: Date.parse(at(20)),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    for (const band of ["fresh", "warm", "overdue", "forgotten", "held"]) {
+      expect(
+        el.shadowRoot!.querySelector(`[data-card].${band === "held" ? "held" : `age-${band}`}`),
+      ).not.toBeNull();
+    }
+    expect(el.shadowRoot!.querySelector("[data-kitchen-counts]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });
