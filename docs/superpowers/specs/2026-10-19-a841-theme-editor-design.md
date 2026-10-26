@@ -2727,6 +2727,16 @@ permission-gated write (CLAUDE.md's risk triggers).
   2026-10-25, slice 9 plan D2): when the stored `logo` key holds no usable name, the receipt still
   prints the department's phone and texts, and prints no logo at all, not even the venue's. Not
   taken: the empty receipt, which would drop fields that were never in doubt.
+- **"Prints blank" means zero black dots** (lane A ruling 2026-10-25, slice 9 plan D9) in the
+  80 mm picture: a near-white logo that prints a faint scatter is not blank, and the picture shows
+  the scatter. Not taken: a threshold, which would need a number this design never chose.
+- **"How it prints" is drawn by a read route from the draft's image** (lane A ruling 2026-10-25,
+  slice 9 plan D8): `GET /management-api/theme-logo-print`, under `venue.view`, draws the image the
+  editor holds as an 80 mm receipt prints it. Not taken: drawing the saved `printedLogo`, which an
+  unsaved logo does not have yet.
+- **"How it prints" follows a reframe in the image library** (lane A ruling 2026-10-25, slice 9
+  plan D10): it asks again when the main image's `display` address changes. Not taken: following
+  the image's name only, which would keep showing the old framing.
 
 ## 17. Risks
 
