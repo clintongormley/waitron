@@ -2134,6 +2134,7 @@ async function bootServer(
       venueLocale,
       privacyNoticeUrl: config.privacyNoticeUrl,
       onMirror: () => holders.mode.current === "mirror",
+      now,
     },
     log,
   );

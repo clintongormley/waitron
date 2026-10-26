@@ -78,9 +78,10 @@ export async function findInvoiceCustomerSales(
         total: centsToDecimal(row.total),
       });
   }
-  return found.sort(
-    (a, b) => a.issuedAt.localeCompare(b.issuedAt) || a.saleId.localeCompare(b.saleId),
-  );
+  return found.sort((a, b) => {
+    if (a.issuedAt !== b.issuedAt) return a.issuedAt < b.issuedAt ? -1 : 1;
+    return a.saleId < b.saleId ? -1 : 1;
+  });
 }
 
 export interface InvoiceCustomerFilesDeps {
@@ -113,7 +114,12 @@ interface InvoiceRead {
   pdf: string;
   document: ReceiptDocumentInput;
   taxRecord: boolean;
-  emails: { to: string; requestedAt: string; status: string; sentAt: string | null }[];
+  emails: {
+    to: string;
+    requestedAt: string;
+    status: (typeof invoiceDeliveries.$inferSelect)["status"];
+    sentAt: string | null;
+  }[];
 }
 
 /** Decision 6's invoice turns, then the PDFs outside any turn, with `nextTurn()` after each.
@@ -172,7 +178,7 @@ export async function buildInvoiceCustomerFiles(
               to: row.recipient!,
               requestedAt: row.createdAt,
               status: row.status,
-              sentAt: row.status === "sent" ? row.completedAt : null,
+              sentAt: row.completedAt,
             })),
           };
         }),

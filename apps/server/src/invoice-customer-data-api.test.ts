@@ -130,14 +130,22 @@ describe("the invoice customer search", () => {
   it("finds the company that shares Jordi's surname alone", async () => {
     const response = await ask(withTaxId(SEARCH, "B76543214"), fixture.venue.adminDashboard);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      taxId: string;
-      invoices: { invoice: string; name: string }[];
-    };
-    expect(body.taxId).toBe("B76543214");
-    expect(body.invoices.map((invoice) => [invoice.invoice, invoice.name])).toEqual([
-      ["FF/2", "Puig Electrical Ltd"],
-    ]);
+    const [issued] = await suite.db.withWriteLock(async () =>
+      suite.db.all<{ issued_at: string }>(
+        sql`select issued_at from sales where id = ${fixture.sales.p1}`,
+      ),
+    );
+    expect(await response.json()).toEqual({
+      taxId: "B76543214",
+      invoices: [
+        {
+          invoice: "FF/2",
+          issuedAt: issued!.issued_at,
+          name: "Puig Electrical Ltd",
+          total: "310.07",
+        },
+      ],
+    });
   });
 
   it("answers an unknown number with no invoices", async () => {

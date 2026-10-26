@@ -306,7 +306,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    // An invoice naming a customer, for the invoice-customer search and download.
     await db.insert(sales).values({
       source: "device",
       deviceId,
@@ -323,7 +322,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       fiscalState: "not_applicable",
       workingOrderId: null,
       counterpartyTaxId: "12345678Z",
-      counterpartyLegalName: "Jordi Customer SL",
+      counterpartyLegalName: "Jordi Customer Ltd",
       counterpartyCountryCode: "ES",
       counterpartyAddress: "8 Customer Street, Madrid",
     });
@@ -594,7 +593,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         {
           invoice: "FD/318",
           issuedAt: "2026-10-20T09:00:00.000Z",
-          name: "Jordi Customer SL",
+          name: "Jordi Customer Ltd",
           total: "50.00",
         },
       ],

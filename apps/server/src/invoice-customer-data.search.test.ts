@@ -122,7 +122,7 @@ describe("findInvoiceCustomerSales", () => {
   describe("the statement", () => {
     it("scans with no ORDER BY, then reads the matches by key in chunks", async () => {
       const recorded = await suite.db.withWriteLock(async () => {
-        const { recording, statements } = planningEveryStatement(suite.db);
+        const { recording, statements } = recordingEveryStatement(suite.db);
         const found = await findInvoiceCustomerSales(recording, "12345678Z", { chunk: 2 });
         return { found: found.length, statements: statements.map((s) => s.sql) };
       });
@@ -136,7 +136,7 @@ describe("findInvoiceCustomerSales", () => {
 
     it("reads at most 500 ids a statement by default", async () => {
       const recorded = await suite.db.withWriteLock(async () => {
-        const { recording, statements } = planningEveryStatement(suite.db);
+        const { recording, statements } = recordingEveryStatement(suite.db);
         await findInvoiceCustomerSales(recording, "12345678Z");
         return statements.map((s) => s.sql);
       });
@@ -158,12 +158,9 @@ interface DrizzleSession {
   prepareQuery(query: CompiledStatement, ...rest: unknown[]): { all(): unknown };
 }
 
-/**
- * `tx` with every statement drizzle compiles on it recorded, each with its query plan read through
- * the same session (as `packages/workforce/src/personal-data.test.ts` records its own).
- */
-function planningEveryStatement(tx: Transaction) {
-  const statements: { sql: string; plan: () => string[] }[] = [];
+/** `tx` with the SQL of every statement drizzle compiles on it recorded. */
+function recordingEveryStatement(tx: Transaction) {
+  const statements: { sql: string }[] = [];
   const recording = new Proxy(tx, {
     get: (target, key, receiver) => {
       const value: unknown = Reflect.get(target, key, receiver);
@@ -173,19 +170,7 @@ function planningEveryStatement(tx: Transaction) {
         get: (inner, innerKey, innerReceiver) =>
           innerKey === "prepareQuery"
             ? (query: CompiledStatement, ...rest: unknown[]) => {
-                statements.push({
-                  sql: query.sql,
-                  plan: () =>
-                    (
-                      inner
-                        .prepareQuery(
-                          { sql: `explain query plan ${query.sql}`, params: query.params },
-                          undefined,
-                          "all",
-                        )
-                        .all() as { detail: string }[]
-                    ).map((row) => row.detail),
-                });
+                statements.push({ sql: query.sql });
                 return inner.prepareQuery(query, ...rest);
               }
             : Reflect.get(inner, innerKey, innerReceiver),
