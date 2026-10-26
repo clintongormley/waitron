@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -443,6 +444,45 @@ it("reads a folder that still holds anything outside the keep set as not emptied
   await mkdir(join(f.base, "evidence"));
   expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(false);
 });
+
+it("throws a failure to read the venue folder's emptied recovery folder unchanged, and keeps that folder", async () => {
+  const f = await abandoned();
+  const folder = dirname(venuePointer(f));
+  try {
+    await expect(
+      provision.emptyAbandonedBackupRecovery(
+        f.anchor,
+        recoveryId,
+        lockVenueDatabase,
+        async (path, kind) => {
+          await (kind === "file" ? unlink(path) : rmdir(path));
+          if (path === venuePointer(f)) await chmod(folder, 0o000);
+        },
+      ),
+    ).rejects.toMatchObject({ code: "EACCES", path: folder });
+  } finally {
+    await chmod(folder, 0o700);
+  }
+  expect(await exists(folder)).toBe(true);
+  expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
+});
+
+it.each([false, true])(
+  "reads a folder holding only records and locks as not emptied unless its last record is abandoned (one folder: %s)",
+  async (shared) => {
+    const f = await abandoned(shared);
+    await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+    expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
+    const last = join(f.base, "000003.json");
+    const saved = await readFile(last, "utf8");
+    await rm(last);
+    expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(false);
+    await writeFile(last, "{}");
+    expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(false);
+    await writeFile(last, saved);
+    expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
+  },
+);
 
 it("empties a recovery whose venue and state folders are one folder, keeping the one pointer", async () => {
   const f = await abandoned(true);

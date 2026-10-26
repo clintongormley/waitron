@@ -14,6 +14,7 @@ type Lock = (directory: string) => Promise<{ release(): void }>;
 
 const NAMESPACE = join("first-setup-resolutions", "backup-recovery");
 const RECORD = /^\d+\.json$/;
+const LIMIT = 131072;
 // never unlinked: CLAUDE.md §3; a lock taken beside its holder is no lock. A held lock has a
 // `-journal` beside it, and the holder file is written through `.partial`.
 const KEPT_IN_TARGET =
@@ -96,7 +97,7 @@ async function venuePointerNames(anchor: FirstSetupRoots, recoveryId: string): P
   if (anchor.venueDir === anchor.stateDir) return false;
   const pointer = await readDurableHostJson(
     join(anchor.venueDir, NAMESPACE, "current.json"),
-    131072,
+    LIMIT,
   );
   if (pointer === null) return false;
   const named =
@@ -112,7 +113,7 @@ async function venuePointerNames(anchor: FirstSetupRoots, recoveryId: string): P
 
 /**
  * True only when the recovery's folder holds nothing but its records and its target's lock files,
- * and the venue folder's pointer no longer names it.
+ * its last record is abandoned, and the venue folder's pointer no longer names it.
  */
 export async function isEmptiedTombstone(
   anchor: FirstSetupRoots,
@@ -122,7 +123,12 @@ export async function isEmptiedTombstone(
   const base = join(roots.stateDir, NAMESPACE, recoveryId);
   const left = await removals(base);
   if (left === null || left.length !== 0) return false;
-  if (!(await readdir(base)).some((name) => RECORD.test(name))) return false;
+  const records = (await readdir(base)).filter((name) => RECORD.test(name)).sort();
+  if (records.length === 0) return false;
+  const last = (await readDurableHostJson(join(base, records.at(-1)!), LIMIT)) as {
+    phase?: unknown;
+  } | null;
+  if (last?.phase !== "abandoned") return false;
   return !(await venuePointerNames(roots, recoveryId));
 }
 
