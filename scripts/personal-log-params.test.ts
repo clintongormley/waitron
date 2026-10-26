@@ -6,15 +6,19 @@
  * nothing about a person passes; it judges only keys written in a registry's text, so a throw site
  * that spreads an object can carry keys its registry type does not name (`{ ...prepared.venue }`,
  * `apps/server/src/restore-request.ts:280` and `apps/server/src/restore-stream.ts:378`: if
- * `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`, gained an `ownerEmail`, the answer and
- * the log line would carry it and this guard would stay green); it does not read a quoted key
+ * `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`, gained an `ownerEmail`, the answer
+ * and the log line would carry it and this guard would stay green); it does not read a quoted key
  * inside an entry (`"guestName": string`); a `NOT_PERSONAL` entry `code.key` approves that key at
- * every depth of its code, not only where it was reviewed; it never reads free text; and it
- * judges a named type in a registry only by its name, against `REVIEWED_TYPES`, so a person-named
- * key added later inside a type already reviewed passes. Of a log call's fields it reads only an
- * object literal written as the third argument, so it sees no spread or variable passed as the
- * fields; and it does not see `packages/store/src/venue-liveness.ts:174-179`, which writes
- * `waitron.log` without a `Logger`.
+ * every depth of its code, not only where it was reviewed; it never reads free text; and it judges
+ * a named type in a registry only by its name, against `REVIEWED_TYPES`, so a person-named key
+ * added later inside a type already reviewed passes, and reads only capitalised names, so a type
+ * referred to by a lowercase name (`(typeof personFields)[number]`, a lowercase alias) is never
+ * checked. Of a log call's fields it reads only an object literal written as the third argument of
+ * a call whose level is a literal, so it skips a call whose level is computed
+ * (`apps/server/src/health.ts:119`, `apps/server/src/pass.ts:209`), sees no spread or variable
+ * passed as the fields, and reads no quoted or computed key in them (`"guestName": g`,
+ * `[GUEST_KEY]: g`); and it does not see `packages/store/src/venue-liveness.ts:174-179`, which
+ * writes `waitron.log` without a `Logger`.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
