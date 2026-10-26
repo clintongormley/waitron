@@ -555,6 +555,33 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(selected(el)).toEqual(["T4"]);
   });
 
+  it("selects T4 again, and its button opens nothing, after T9's open fails", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa4With("p1"), table("t9", "T9", mesa9WithAnas.party, "z2")]),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1", "z2"])),
+      listZoneOffers: vi.fn(async (zoneId: string) => {
+        if (zoneId === "z2") throw new TypeError("Failed to fetch");
+        return { ...catalogue("v1"), context: { ...catalogue("v1").context, zoneId } };
+      }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    barButton(el, "t9").click();
+    await flush(el, 6);
+    expect(api.listZoneOffers).toHaveBeenLastCalledWith("z2");
+    expect(tableOrder(el)?.checkVisibility()).toBe(true);
+    expect(bar(el)).toEqual(["Floor", "[✎ T4]", "✎ T9"]);
+
+    const offerReads = api.listZoneOffers!.mock.calls.length;
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(offerReads);
+    expect(bar(el)).toEqual(["Floor", "[✎ T4]", "✎ T9"]);
+  });
+
   it("does nothing when the open table's own button is tapped", async () => {
     const { el } = await mountApp();
     await openMesa(el);

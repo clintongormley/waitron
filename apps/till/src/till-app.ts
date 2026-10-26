@@ -5592,13 +5592,20 @@ export class TillApp extends LitElement {
     return this.drill?.kind === "table-order" || this.#activeTab() === this.#tableOrderTabKey();
   }
 
-  /** The URL is written only once the open completes, so a failed open leaves no history entry. */
-  #showOrderScreen(): void {
+  /** The URL is written only once the open completes, so a failed open leaves no history entry.
+   * `openingTableId` is the table the bar marks while it loads; a resume after sign-in marks none. */
+  #showOrderScreen(openingTableId?: string): void {
     this.#openedFrom = this.activeTabKey;
     const orderTabKey = this.#tableOrderTabKey();
     if (orderTabKey !== undefined) this.activeTabKey = this.#resolveScreen(orderTabKey);
     else this.#pushDrill({ kind: "table-order" });
     this.tableOpening = true;
+    this.openingTableId = openingTableId;
+  }
+
+  #endTableOpening(): void {
+    this.tableOpening = false;
+    this.openingTableId = undefined;
   }
 
   /** Both callers' `left()` reads `#orderVisit`, which every newer open moves, so it also stops an
@@ -10715,10 +10722,7 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
-    if (showAtOnce) {
-      this.#showOrderScreen();
-      this.openingTableId = tableId;
-    }
+    if (showAtOnce) this.#showOrderScreen(tableId);
     try {
       const leaving = this.#draftSync;
       if (
@@ -10741,10 +10745,7 @@ export class TillApp extends LitElement {
     } finally {
       unlock?.();
       this.#tableOpensPending--;
-      if (offerRequest === this.#tableOfferRequest) {
-        this.tableOpening = false;
-        this.openingTableId = undefined;
-      }
+      if (offerRequest === this.#tableOfferRequest) this.#endTableOpening();
     }
   }
 
@@ -10960,7 +10961,7 @@ export class TillApp extends LitElement {
       }
       void this.#loadStations();
     } finally {
-      if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
+      if (offerRequest === this.#tableOfferRequest) this.#endTableOpening();
     }
   }
 
@@ -18249,8 +18250,7 @@ export class TillApp extends LitElement {
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
-    this.tableOpening = false;
-    this.openingTableId = undefined;
+    this.#endTableOpening();
     this.floorReturnZoneId = undefined;
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
