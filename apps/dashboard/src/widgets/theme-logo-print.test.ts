@@ -265,3 +265,20 @@ it("Spanish", async () => {
     es["appearance.logo_print_blank"],
   );
 });
+
+it("the paper box has a hairline edge in the border colour", async () => {
+  getThemeLogoPrint.mockResolvedValue(BLANK);
+  const el = await mount(libraryName());
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
+  const paper = q(el, '[data-test="logo-print"] .paper')!;
+  const style = getComputedStyle(paper);
+  expect(style.borderTopWidth).toBe("1px");
+  expect(style.borderTopStyle).toBe("solid");
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-border)";
+  paper.append(probe);
+  const token = getComputedStyle(probe).color;
+  probe.remove();
+  expect(token).not.toBe(getComputedStyle(paper).color);
+  expect(style.borderTopColor).toBe(token);
+});

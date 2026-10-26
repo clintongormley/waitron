@@ -38,6 +38,7 @@ export class DashboardThemeLogoPrint extends LitElement {
         box-sizing: content-box;
         width: calc(var(--wt-space-6) * 6);
         padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
       }
       .paper img {
         display: block;
