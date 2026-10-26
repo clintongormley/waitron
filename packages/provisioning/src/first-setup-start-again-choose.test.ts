@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -10,10 +11,20 @@ import {
   startAgainAttempt,
   type StartAgainAttempt,
 } from "../test/start-again-attempt.js";
-import { writeStartAgainChoice } from "./first-setup-start-again-choice.js";
+import {
+  readStartAgainChoices,
+  START_AGAIN_CHOICES_DIR,
+  writeStartAgainChoice,
+} from "./first-setup-start-again-choice.js";
 import { chooseStartAgainLeftovers } from "./first-setup-start-again-choose.js";
 import { START_AGAIN_GUESSES_FILE } from "./first-setup-start-again-guesses.js";
+import {
+  START_AGAIN_CONFIRMATIONS_DIR,
+  writeStartAgainConfirmation,
+} from "./first-setup-start-again-confirmation.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
+import { readStartAgainNote } from "./first-setup-start-again-note.js";
+import type { SetAsideIo } from "./first-setup-start-again-set-aside.js";
 
 /** Runs once after the next survey, standing in for a change between the survey and what follows. */
 let afterSurvey: (() => Promise<void>) | undefined;
@@ -51,11 +62,13 @@ const MINUTE = 60_000;
 const WRONG = "not-the-password";
 // Taking a venue lock makes venue.lock if it is absent, and writes the other two, which its
 // release deletes, whoever asks for the lock.
-const LOCK_OWNED = /^(venue\.lock|venue\.holder\.json|venue\.lock-journal)/;
+const LOCK_OWNED = /^(venue\.lock|venue\.holder\.json|venue\.lock-journal)$/;
 
 /** A Start again a cut left, with a venue.db the box did not create: a survey of kind `choice`. */
-async function found(): Promise<StartAgainAttempt & { listed: string }> {
-  const attempt = await startAgainAttempt(await scratch());
+async function found(
+  options: Parameters<typeof startAgainAttempt>[1] = {},
+): Promise<StartAgainAttempt & { listed: string }> {
+  const attempt = await startAgainAttempt(await scratch(), options);
   await writeFile(join(attempt.roots.venueDir, "venue.db"), "found database");
   const survey = await surveyStartAgainLeftovers(attempt.roots);
   if (survey?.kind !== "choice") throw new Error(`expected choice, got ${JSON.stringify(survey)}`);
@@ -67,7 +80,8 @@ async function folders(roots: StartAgainAttempt["roots"]) {
   const out: Record<string, string> = {};
   const visit = async (root: string, relative: string) => {
     for (const name of (await readdir(join(root, relative))).sort()) {
-      if (LOCK_OWNED.test(name) || (relative === "" && name === START_AGAIN_GUESSES_FILE)) continue;
+      if (relative === "" && root === roots.venueDir && LOCK_OWNED.test(name)) continue;
+      if (relative === "" && root === roots.stateDir && name === START_AGAIN_GUESSES_FILE) continue;
       const path = relative === "" ? name : `${relative}/${name}`;
       const info = await lstat(join(root, path), { bigint: true });
       if (info.isDirectory()) {
@@ -416,14 +430,260 @@ it("two tries sent at once are counted one after the other", async () => {
       verify,
     });
   const [right, wrong] = await Promise.allSettled([send(START_AGAIN_ADMIN_PASSWORD), send(WRONG)]);
-  expect(wrong).toMatchObject({ status: "rejected", reason: { code: "setup.owner_required" } });
-  expect(right.status === "rejected" && (right.reason as { code?: string }).code).not.toBe(
-    "setup.owner_required",
-  );
+  expect(right).toEqual({ status: "fulfilled", value: { choice: "keep" } });
   expect(overlapped).toBe(false);
-  // Either may go first. Whichever did, its whole try ended before the other's guess was counted:
-  // the correct try's reset never wipes a wrong guess counted after it.
-  expect(await counter(f.roots.stateDir)).toMatchObject({
-    failures: order[0] === START_AGAIN_ADMIN_PASSWORD ? 1 : 0,
+  // Either may go first. A wrong try that went first is counted and then reset by the correct
+  // one; one that came after the Keep is refused as kept before its guess is counted.
+  if (order[0] === WRONG) {
+    expect(order).toEqual([WRONG, START_AGAIN_ADMIN_PASSWORD]);
+    expect(wrong).toMatchObject({ status: "rejected", reason: { code: "setup.owner_required" } });
+  } else {
+    expect(order).toEqual([START_AGAIN_ADMIN_PASSWORD]);
+    expect(wrong).toMatchObject({ status: "rejected", reason: { code: "setup.start_again_kept" } });
+  }
+  expect(await counter(f.roots.stateDir)).toMatchObject({ failures: 0, waitUntil: null });
+});
+
+const PROBE = ".first-setup-set-aside-probe-";
+const realIo: SetAsideIo = { lstat: fs.lstat, mkdir: fs.mkdir, rmdir: fs.rmdir, rename: fs.rename };
+const errno = (code: string) => Object.assign(new Error(code), { code });
+const choose = (
+  f: StartAgainAttempt & { listed: string },
+  choice: "keep" | "move",
+  options: { io?: SetAsideIo; password?: string } = {},
+) =>
+  chooseStartAgainLeftovers({
+    roots: f.roots,
+    password: options.password ?? START_AGAIN_ADMIN_PASSWORD,
+    choice,
+    listed: f.listed,
+    now: () => new Date(T0),
+    ...(options.io && { io: options.io }),
   });
+const choiceSurvey = async (f: StartAgainAttempt) => {
+  const survey = await surveyStartAgainLeftovers(f.roots);
+  if (survey?.kind !== "choice") throw new Error("expected choice");
+  return survey;
+};
+const recordsOf = async (f: StartAgainAttempt) =>
+  readStartAgainChoices(f.roots.stateDir, {
+    attemptId: f.attemptId,
+    frozenDigest: f.frozenDigest,
+  });
+const withoutChoices = (snapshot: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(snapshot).filter(([key]) => !key.includes(`:${START_AGAIN_CHOICES_DIR}`)),
+  );
+const absent = (path: string) => expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+
+it("Keep writes one record with who, when, what and which files, and moves nothing", async () => {
+  const f = await found();
+  const survey = await choiceSurvey(f);
+  const before = await folders(f.roots);
+  const state = JSON.parse(await readFile(join(f.roots.stateDir, "first-setup.json"), "utf8"));
+
+  expect(await choose(f, "keep")).toEqual({ choice: "keep" });
+
+  const records = await recordsOf(f);
+  expect(records).toEqual([
+    {
+      version: 1,
+      at: new Date(T0).toISOString(),
+      attemptId: f.attemptId.toLowerCase(),
+      frozenDigest: f.frozenDigest,
+      markerSha256: survey.markerSha256,
+      choice: "keep",
+      administrator: { administratorId: f.administratorId, ...START_AGAIN_ADMIN },
+      ownerGeneration: state.ownerGeneration,
+      listed: { digest: survey.digest, units: survey.units },
+      setAside: null,
+      noteFloorMs: null,
+    },
+  ]);
+  const after = await folders(f.roots);
+  expect(withoutChoices(after)).toEqual(before);
+  expect(
+    Object.keys(after).filter((key) => key.includes(`:${START_AGAIN_CHOICES_DIR}`)),
+  ).toHaveLength(2);
+});
+
+it("after Keep, a later Move is refused setup.start_again_kept and moves nothing", async () => {
+  const f = await found();
+  await choose(f, "keep");
+  const before = await folders(f.roots);
+  await expect(choose(f, "move")).rejects.toMatchObject({ code: "setup.start_again_kept" });
+  expect(await folders(f.roots)).toEqual(before);
+  expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["keep"]);
+});
+
+it("Move writes the record before the first rename, and raises the note to the moved files' floor before it", async () => {
+  const f = await found({
+    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
+  });
+  const survey = await choiceSurvey(f);
+  expect(survey.noteFloorMs).not.toBeNull();
+  expect(survey.noteFloorMs!).toBeGreaterThan(T0 - 60 * MINUTE);
+  const seen: { records: string[]; note: unknown }[] = [];
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      if (!from.includes(PROBE) && seen.length === 0)
+        seen.push({
+          records: await readdir(join(f.roots.stateDir, START_AGAIN_CHOICES_DIR)),
+          note: await readStartAgainNote(f.roots.stateDir),
+        });
+      await fs.rename(from, to);
+    },
+  };
+
+  await choose(f, "move", { io });
+
+  expect(seen).toHaveLength(1);
+  expect(seen[0]!.records).toHaveLength(1);
+  expect(seen[0]!.note).toEqual({
+    version: 1,
+    floorMs: survey.noteFloorMs,
+    lastName: "AB123",
+    module: "probe",
+  });
+  const [record] = await recordsOf(f);
+  expect(record).toMatchObject({ choice: "move", noteFloorMs: survey.noteFloorMs });
+});
+
+it("Move then finishes Start again: the marker and the marked files are gone, the moved files are at the destination unchanged, and A1042's confirmation records are byte-identical", async () => {
+  const f = await found();
+  await writeStartAgainConfirmation(f.roots.stateDir, {
+    at: new Date(T0 - 2 * MINUTE).toISOString(),
+    attemptId: f.attemptId,
+    database: "missing",
+    administrator: { ...START_AGAIN_ADMIN },
+    ownerGeneration: 1,
+    shown: { reached: "claimed", lastName: null },
+  });
+  const confirmations = join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR);
+  const confirmationBytes = async () =>
+    Promise.all(
+      (await readdir(confirmations)).sort().map(async (name) => ({
+        name,
+        bytes: (await readFile(join(confirmations, name))).toString("base64"),
+      })),
+    );
+  const confirmed = await confirmationBytes();
+  const moved = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
+
+  const result = await choose(f, "move");
+
+  const [record] = await recordsOf(f);
+  expect(result).toEqual({ choice: "move", setAside: record!.setAside });
+  await absent(join(f.roots.venueDir, "first-setup-deleting.json"));
+  await absent(join(f.roots.venueDir, "first-setup-claim.json"));
+  await absent(join(f.roots.stateDir, "first-setup.json"));
+  await absent(join(f.roots.venueDir, "venue.db"));
+  const at = join(f.roots.stateDir, record!.setAside!.venue, "venue.db");
+  const there = await lstat(at, { bigint: true });
+  expect([there.ino, there.size, there.mtimeNs]).toEqual([moved.ino, moved.size, moved.mtimeNs]);
+  expect(await readFile(at, "utf8")).toBe("found database");
+  expect(await confirmationBytes()).toEqual(confirmed);
+  expect(confirmed).toHaveLength(1);
+});
+
+it("another mount point: the probe refuses setup.start_again_set_aside_unavailable, no record is written, and a Keep after it succeeds", async () => {
+  const f = await found();
+  const before = await folders(f.roots);
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      if (from.includes(PROBE)) throw errno("EXDEV");
+      await fs.rename(from, to);
+    },
+  };
+  await expect(choose(f, "move", { io })).rejects.toMatchObject({
+    code: "setup.start_again_set_aside_unavailable",
+  });
+  expect(await recordsOf(f)).toEqual([]);
+  expect(await folders(f.roots)).toEqual(before);
+
+  expect(await choose(f, "keep")).toEqual({ choice: "keep" });
+  expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["keep"]);
+});
+
+it("a record that cannot be written refuses setup.attempt_invalid and moves nothing", async () => {
+  const f = await found();
+  const elsewhere = await scratch();
+  // A folder the record writer refuses to write through: a link in place of the choices folder.
+  await symlink(elsewhere, join(f.roots.stateDir, START_AGAIN_CHOICES_DIR));
+  const source = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
+  const renamed: string[] = [];
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      if (!from.includes(PROBE)) renamed.push(from);
+      await fs.rename(from, to);
+    },
+  };
+
+  await expect(choose(f, "move", { io })).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+
+  expect(renamed).toEqual([]);
+  expect(await readdir(elsewhere)).toEqual([]);
+  const still = await lstat(join(f.roots.venueDir, "venue.db"), { bigint: true });
+  expect([still.ino, still.size, still.mtimeNs]).toEqual([source.ino, source.size, source.mtimeNs]);
+  expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+  await expect(lstat(join(f.roots.venueDir, "first-setup-deleting.json"))).resolves.toBeDefined();
+});
+
+it("no log call and no thrown error carries the administrator's name or email", async () => {
+  const spies = (["log", "info", "warn", "error", "debug"] as const).map((method) =>
+    vi.spyOn(console, method).mockImplementation(() => undefined),
+  );
+  try {
+    const errors: unknown[] = [];
+    const caught = (promise: Promise<unknown>) =>
+      promise.then(
+        () => undefined,
+        (error: unknown) => errors.push(error),
+      );
+    const f = await found();
+    await caught(choose(f, "move", { password: WRONG }));
+    await caught(
+      choose(f, "move", {
+        io: {
+          ...realIo,
+          rename: async () => {
+            throw errno("EXDEV");
+          },
+        },
+      }),
+    );
+    const g = await found();
+    await symlink(await scratch(), join(g.roots.stateDir, START_AGAIN_CHOICES_DIR));
+    await caught(choose(g, "keep"));
+    await caught(choose(f, "keep"));
+    await caught(choose(f, "move"));
+    const h = await found();
+    await caught(choose(h, "move"));
+    await caught(choose(h, "move"));
+    expect(errors.map((error) => (error as { code?: string }).code)).toEqual([
+      "setup.owner_required",
+      "setup.start_again_set_aside_unavailable",
+      "setup.attempt_invalid",
+      "setup.start_again_kept",
+      "setup.not_ready",
+    ]);
+    const said = JSON.stringify([
+      ...errors.map((error) => ({
+        ...(error as object),
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        // Not enumerable, and the one detail the server logs.
+        reason: (error as { reason?: string }).reason,
+        cause: String((error as Error).cause),
+      })),
+      ...spies.flatMap((spy) => spy.mock.calls),
+    ]);
+    for (const personal of [START_AGAIN_ADMIN.displayName, START_AGAIN_ADMIN.email])
+      expect(said).not.toContain(personal);
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
 });

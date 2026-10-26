@@ -5,13 +5,24 @@ import { verifyPassword } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { inTurn } from "./attempt-turns.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
-import { readStartAgainChoices } from "./first-setup-start-again-choice.js";
+import {
+  readStartAgainChoices,
+  startAgainChoiceStem,
+  writeStartAgainChoice,
+  type StartAgainChoiceRecord,
+} from "./first-setup-start-again-choice.js";
+import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { beginStartAgainGuess } from "./first-setup-start-again-guesses.js";
 import {
   surveyStartAgainLeftovers,
   type StartAgainSurvey,
 } from "./first-setup-start-again-leftovers.js";
-import type { SetAsideIo } from "./first-setup-start-again-set-aside.js";
+import {
+  moveStartAgainUnits,
+  prepareSetAside,
+  setAsideDestinations,
+  type SetAsideIo,
+} from "./first-setup-start-again-set-aside.js";
 import { parseState, type FirstSetupState } from "./first-setup-state.js";
 import "./errors.js";
 
@@ -42,7 +53,9 @@ async function setupRecord(roots: Roots, survey: Choice): Promise<FirstSetupStat
 /**
  * The recovery page's Keep or Move after a cut-off Start again. Refuses a page whose list is no
  * longer the box's before counting a guess; counts the guess before checking the password; then,
- * under the venue lock, refuses unless the box still shows the list the page showed.
+ * under the venue lock, refuses unless the box still shows the list the page showed. Keep records
+ * the choice. Move probes the renames, records the choice, raises the note, moves the units aside
+ * and finishes Start again.
  */
 export async function chooseStartAgainLeftovers(input: {
   roots: Roots;
@@ -73,8 +86,39 @@ export async function chooseStartAgainLeftovers(input: {
       if (locked === null || locked.kind !== "choice" || locked.digest !== input.listed)
         throw new AppError("setup.start_again_files_changed", {});
       await assertNotKept(roots.stateDir, locked);
-      // Task 5b replaces this refusal: the rename probe, the choice record, the note, Keep and Move.
-      throw new Error("chooseStartAgainLeftovers: Keep and Move are not built yet (A1098 Task 5b)");
+      const record: Omit<StartAgainChoiceRecord, "version"> = {
+        at: input.now().toISOString(),
+        attemptId: locked.attemptId,
+        frozenDigest: locked.frozenDigest,
+        markerSha256: locked.markerSha256,
+        choice: "keep",
+        administrator: {
+          administratorId: state.frozen.administratorId,
+          displayName: state.frozen.request.admin.displayName,
+          email: state.frozen.request.admin.email,
+        },
+        ownerGeneration: state.ownerGeneration,
+        listed: { digest: locked.digest, units: locked.units },
+        setAside: null,
+        noteFloorMs: null,
+      };
+      if (input.choice === "keep") {
+        await writeStartAgainChoice(roots.stateDir, record);
+        return { choice: "keep" };
+      }
+      const stem = startAgainChoiceStem(record);
+      const setAside = await setAsideDestinations(roots, stem, input.io);
+      await prepareSetAside(roots, locked.units, setAside, input.io);
+      const move = {
+        ...record,
+        choice: "move",
+        setAside,
+        noteFloorMs: locked.noteFloorMs,
+      } as const;
+      await writeStartAgainChoice(roots.stateDir, move);
+      await moveStartAgainUnits(roots, { version: 1, ...move }, input.io);
+      await finishStartAgainDeletion(roots);
+      return { choice: "move", setAside };
     } finally {
       hold.release();
     }
