@@ -67,6 +67,7 @@ export type StationInput = {
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
+  readyWarningAfterMinutes: number;
   colour: StationColour;
 };
 export class PrepStationsApi {

@@ -634,30 +634,112 @@ it("creates a station from the modal with the chosen thresholds", async () => {
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
     colour: "red",
   });
 });
 it.each([
-  ["en", ["Waiting after (min)", "Overdue after (min)", "Forgotten after (min)"]],
+  [
+    "en",
+    [
+      "Waiting after (min)",
+      "Overdue after (min)",
+      "Forgotten after (min)",
+      "Ready warning after (min)",
+    ],
+  ],
   [
     "es",
-    ["Esperando a partir de (min)", "Con retraso a partir de (min)", "Olvidado a partir de (min)"],
+    [
+      "Esperando a partir de (min)",
+      "Con retraso a partir de (min)",
+      "Olvidado a partir de (min)",
+      "Listo sin recoger a partir de (min)",
+    ],
   ],
 ] as const)(
-  "Add station reads Waiting after, Overdue after and Forgotten after, in %s",
+  "Add station reads Waiting after, Overdue after, Forgotten after and Ready warning after, in %s",
   async (locale, labels) => {
     setLocale(locale);
     const el = await mount(api());
     q(el, '[data-test="new-station"]')!.click();
     await settle(el);
     expect(
-      ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
+      [
+        "warmAfterMinutes",
+        "overdueAfterMinutes",
+        "forgottenAfterMinutes",
+        "readyWarningAfterMinutes",
+      ].map(
         (name) =>
           el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
             `wt-modal wt-input[name="${name}"]`,
           )!.label,
       ),
     ).toEqual(labels);
+  },
+);
+it("Add station offers Ready warning after (min) at 3, after Forgotten after and before Printers, and sends a typed 6", async () => {
+  setLocale("en");
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const ready = q(
+    el,
+    'wt-modal wt-input[name="readyWarningAfterMinutes"]',
+  ) as HTMLElementTagNameMap["wt-input"];
+  expect(ready.label).toBe("Ready warning after (min)");
+  expect(ready.value).toBe("3");
+  expect(ready.required).toBe(true);
+  expect(ready.type).toBe("number");
+  expect(ready.placeholder).toBe("");
+  expect(ready.hint).toBe("");
+  expect(
+    q(
+      el,
+      'wt-modal .form > div:has(wt-input[name="forgottenAfterMinutes"]) + div:has(wt-input[name="readyWarningAfterMinutes"]) + wt-combobox[name="printerIds"]',
+    ),
+  ).not.toBeNull();
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  ready.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "6" } }));
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 6,
+    colour: "red",
+  });
+});
+it.each(["0", "2147483648"])(
+  "Add station marks a ready warning of %s and creates nothing",
+  async (value) => {
+    setLocale("en");
+    const a = api();
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    q(el, '[data-test="name"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+    );
+    q(el, '[data-test="readyWarningAfterMinutes"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await settle(el);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-field-error="readyWarningAfterMinutes"]')?.textContent).toBe(
+      "Use whole minutes, at least 1.",
+    );
+    for (const field of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"])
+      expect(q(el, `[data-field-error="${field}"]`)).toBeNull();
+    expect(a.createStation).not.toHaveBeenCalled();
   },
 );
 const addPicker = (el: PrepStationsScreen) =>
@@ -712,6 +794,7 @@ it("a new station starts on the first colour no station has, and is created with
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
     colour: "cyan",
   });
 });
@@ -1134,6 +1217,7 @@ it("creates a station with its name and thresholds when Enter is pressed in Name
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
     colour: "red",
   });
   expect(a.updateStation).not.toHaveBeenCalled();
@@ -4680,6 +4764,7 @@ describe("The station editor", () => {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      readyWarningAfterMinutes: 3,
       colour: "red",
       printerIds: ["next"],
     });
@@ -5048,6 +5133,7 @@ it.each(["en", "es"] as const)("A725 Add station uses the shared popup in %s", a
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
   });
 });
 
@@ -5078,6 +5164,7 @@ it("A725 Add station ignores a colour outside the station palette", async () => 
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
   });
 });
 
@@ -5119,6 +5206,7 @@ it("A725 ignores a colour event from a closed Add station opening", async () => 
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
   });
 });
 
@@ -5154,6 +5242,7 @@ it("A725 holds the colour popup closed while Add station is saving", async () =>
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
   });
 });
 
@@ -5236,5 +5325,6 @@ it("A725 Add station has no manual order field and sends no retired key", async 
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    readyWarningAfterMinutes: 3,
   });
 });

@@ -229,6 +229,7 @@ for (const rename of [false, true]) {
               warmAfterMinutes: 5,
               overdueAfterMinutes: 10,
               forgottenAfterMinutes: 15,
+              readyWarningAfterMinutes: 3,
               colour: "red",
             },
           ],
