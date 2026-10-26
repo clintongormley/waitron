@@ -2942,6 +2942,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   no logo; the till's ticket view and a department's Receipts preview follow the same rule.
   Next: 9b, 11, 12 and 14.
 
+- **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
+  A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
+  and a handheld's ☰ menu show the sign-in screens' "Powered by" line (A1096). A cash register's ☰
+  menu gains the same line, under Log out, once its bar draws the logo (slice 14); until then the
+  bar shows Waitron's word. Mock-up: `t2-till-menu-light.png` and `-dark` in
+  [mockups/a1096-powered-by/](backlog/mockups/a1096-powered-by/). Test it as the handheld's is
+  tested: shown exactly while a logo is in use, English and Spanish, both themes, an axe check.
+
 - **The theme delete dialog does not say the tills' text changes size (A841 slice 10a's review,
   #2045).** Deleting the theme in use puts Waitron's theme, at 100%, on every screen; the switch
   dialog says "Text on the tills changes size too." when the size changes, the delete dialog says
