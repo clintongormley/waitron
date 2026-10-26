@@ -208,15 +208,17 @@ by the answers):
   has no dashboard entry point of its own: S1a's setting gets a "?" to
   `data-protection#staff-notice`, and S1b updates that page's `staff-notice` and `full-notice`
   sections once the setting exists.
-- **Reset login may reset nothing when pressed twice within a minute** (seen by reading only, while
-  planning S6; not run). The route checks the invitation cooldown before it resets anything
+- **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
+  confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
+  `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
+  unchanged and no email sent). The route checks the invitation cooldown before it resets anything
   (`apps/server/src/management-api.ts`, the `reset-login` route: `acceptInvitation(personId)` returns
   early with `invitationSent: false`), and the cooldown is 60 seconds per person
-  (`apps/server/src/account-rate-limit.ts`). If that reading is right, a second press within a minute
-  of an invitation, a reset or a re-enable leaves the PIN, password, two-factor secret, passkeys and
+  (`apps/server/src/account-rate-limit.ts`). So a press within a minute of an invitation, a reset or
+  **Enable and send invitation** for the same person leaves the PIN, password, two-factor secret, passkeys and
   open sign-ins in place, which matters when the reset answers a stolen account (the guide's breach
-  section). Next action: a failing route test first, then reset before the cooldown or say on screen
-  that nothing was reset.
+  section, which for now tells the manager to choose it again after a minute). Next action: a failing
+  route test first, then reset before the cooldown, and drop the guide's workaround sentence.
 - **What a lost recovery kit exposes beyond the database copy** (unverified). The guide's breach
   section says the kit opens the bucket copy and the "passwords and keys stored in it". Whether that
   includes each person's two-factor secret, through a key derived from one sealed in the bucket copy
