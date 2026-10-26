@@ -16,6 +16,7 @@ declare module "@waitron/shared" {
     "backup.archive_invalid": { reason: string };
     "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     "email.settings_invalid": { field: string };
+    "venue.detail_invalid": { field: string; reason: string };
     "setup.provisioning_secret_required": { module: string };
     "setup.fiscal_test_required": { module: string };
     "setup.email_required": { field: "email" };

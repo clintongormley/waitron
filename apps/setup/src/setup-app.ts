@@ -49,6 +49,7 @@ import type {
   AdoptBody,
   ApiError,
   ConfigurationPreview,
+  LocationDraft,
   ProvisionBody,
   ResetCredential,
   SetupApi,
@@ -194,6 +195,27 @@ const TAXPAYER_FIELDS = [
   "fullSeriesCode",
   "rectificativeSeriesCode",
 ] as const;
+
+/** The claim refuses a location carrying any other key (`apps/server/src/setup-first-fiscal-api.ts`, `exact(raw.location`). */
+const CLAIM_LOCATION_FIELDS = [
+  "name",
+  "fiscalTerritory",
+  "invoiceLocales",
+  "operationDescription",
+  "addressLine1",
+  "addressLine2",
+  "postalCode",
+  "city",
+  "province",
+  "timeZone",
+  "dayCutover",
+] as const satisfies readonly (keyof LocationDraft)[];
+const claimLocationFieldsComplete: [
+  Exclude<keyof LocationDraft, (typeof CLAIM_LOCATION_FIELDS)[number]>,
+] extends [never]
+  ? true
+  : never = true;
+void claimLocationFieldsComplete;
 
 const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.owner_required": "shell.first_setup.owner_required",
@@ -409,6 +431,17 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
 
 const isName = (value: unknown): value is string => typeof value === "string" && value !== "";
 
+const PRIVACY_CONTACT_MESSAGES: Record<string, { invalid: StringKey; tooLong: StringKey }> = {
+  privacyNoticeUrl: {
+    invalid: "shell.configuration.privacy_notice_url_invalid",
+    tooLong: "shell.configuration.privacy_notice_url_too_long",
+  },
+  privacyEmail: {
+    invalid: "shell.configuration.privacy_email_invalid",
+    tooLong: "shell.configuration.privacy_email_too_long",
+  },
+};
+
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
@@ -420,6 +453,13 @@ function describeConfigurationRefusal(error: unknown): Message {
       (params.field.startsWith("module:") && params.field.length > "module:".length))
   ) {
     return say("shell.configuration.incompatible_version");
+  }
+  if (code === "venue.detail_invalid" && typeof params?.field === "string") {
+    const privacy = Object.hasOwn(PRIVACY_CONTACT_MESSAGES, params.field)
+      ? PRIVACY_CONTACT_MESSAGES[params.field]
+      : undefined;
+    if (privacy !== undefined)
+      return say(params.reason === "length" ? privacy.tooLong : privacy.invalid);
   }
   const key = typeof code === "string" ? CONFIGURATION_NAME_MESSAGES[code] : undefined;
   const name = params?.name;
@@ -2109,9 +2149,10 @@ export class SetupApp extends LitElement {
       );
       if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
         return;
-      const location = Object.fromEntries(
-        Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
-      ) as ProvisionBody["venue"]["location"];
+      const exported = preview.venue.location;
+      const location: Partial<LocationDraft> = Object.fromEntries(
+        CLAIM_LOCATION_FIELDS.filter((key) => key in exported).map((key) => [key, exported[key]]),
+      );
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
         venue: { ...preview.venue, location },

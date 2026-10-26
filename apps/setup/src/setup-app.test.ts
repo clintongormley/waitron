@@ -12,6 +12,7 @@ import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { shellEn, shellEs } from "./i18n/strings/shell.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -601,6 +602,8 @@ describe("setup-app", () => {
           province: "Madrid",
           timeZone: "Europe/Madrid",
           dayCutover: "06:00",
+          fireControl: "waiter",
+          catalogueId: "catalogue",
         },
         seriesCode: "F",
         rectificativeSeriesCode: "R",
@@ -3037,6 +3040,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     ["setup.request_invalid", 12],
     ["setup.request_invalid", undefined],
     ["backup.artifact_invalid", "module:core"],
+    ["venue.detail_invalid", "legalName"],
   ])("keeps other configuration refusals generic (%s, %s)", async (code, field) => {
     const el = await mountSetupApp(
       stubApi({
@@ -3049,6 +3053,43 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       "The configuration export could not be opened. Check the file and passphrase.",
     );
   });
+
+  it.each([
+    ["en-GB", "privacyNoticeUrl", "web_address", "shell.configuration.privacy_notice_url_invalid"],
+    ["en-GB", "privacyNoticeUrl", "length", "shell.configuration.privacy_notice_url_too_long"],
+    ["en-GB", "privacyEmail", "email", "shell.configuration.privacy_email_invalid"],
+    ["en-GB", "privacyEmail", "length", "shell.configuration.privacy_email_too_long"],
+    ["en-GB", "privacyEmail", undefined, "shell.configuration.privacy_email_invalid"],
+    ["es-ES", "privacyNoticeUrl", "web_address", "shell.configuration.privacy_notice_url_invalid"],
+    ["es-ES", "privacyNoticeUrl", "length", "shell.configuration.privacy_notice_url_too_long"],
+    ["es-ES", "privacyEmail", "email", "shell.configuration.privacy_email_invalid"],
+    ["es-ES", "privacyEmail", "length", "shell.configuration.privacy_email_too_long"],
+  ] as const)(
+    "explains a refused privacy contact in a configuration export (%s, %s, %s)",
+    async (locale, field, reason, key) => {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi.fn().mockRejectedValue({
+              code: "venue.detail_invalid",
+              params: { field, reason },
+              status: 400,
+            }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+          (locale === "es-ES" ? shellEs : shellEn)[key],
+        );
+        expect(readDraft(el).configurationImport).toBeUndefined();
+        expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
 
   it.each([
     [

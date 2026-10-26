@@ -6,6 +6,7 @@ import {
   cutoverForBusinessDay,
   firstUnusedStationColour,
   isStationColour,
+  PRIVACY_CONTACT_FIELDS,
 } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
@@ -14,6 +15,11 @@ import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 import { readLocationClock } from "@waitron/reporting";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
+import {
+  privacyContactChecked,
+  savePrivacyContact,
+  type PrivacyContact,
+} from "./privacy-contact.js";
 
 const ENTRY = "configuration.json";
 
@@ -79,6 +85,8 @@ export async function buildConfigurationBundle(
       taxId: string;
       legalName: string;
       taxpayerDomicile: string | null;
+      privacyNoticeUrl: string | null;
+      privacyEmail: string | null;
       seriesCode: string | null;
       fullSeriesCode: string | null;
       rectificativeSeriesCode: string | null;
@@ -87,6 +95,7 @@ export async function buildConfigurationBundle(
     select
       t.country, t.tax_id as "taxId", t.legal_name as "legalName",
       t.taxpayer_domicile as "taxpayerDomicile",
+      t.privacy_notice_url as "privacyNoticeUrl", t.privacy_email as "privacyEmail",
       l.id, l.name, l.invoice_locales as "invoiceLocales",
       l.operation_description as "operationDescription", l.fiscal_territory as "fiscalTerritory",
       l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
@@ -116,6 +125,8 @@ export async function buildConfigurationBundle(
     taxId,
     legalName,
     taxpayerDomicile,
+    privacyNoticeUrl,
+    privacyEmail,
     seriesCode,
     fullSeriesCode,
     rectificativeSeriesCode,
@@ -133,7 +144,7 @@ export async function buildConfigurationBundle(
   };
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 8,
+    version: 9,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -146,6 +157,7 @@ export async function buildConfigurationBundle(
       fullSeriesCode,
       rectificativeSeriesCode,
     },
+    privacyContact: { privacyNoticeUrl, privacyEmail },
     modules: moduleVersions,
     ...transferred,
   };
@@ -166,10 +178,11 @@ export async function applyPreparedLocation(
 }
 
 export interface ConfigurationBundle {
-  version: 8;
+  version: 9;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
+  privacyContact: PrivacyContact;
   modules: Record<string, number>;
   tables: Record<string, Array<Record<string, unknown>>>;
   reconnect: string[];
@@ -477,10 +490,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 8) {
+  if (typeof value.version === "number" && value.version > 9) {
     throw new AppError("setup.request_invalid", { field: "version" });
   }
-  if (value.version !== 8) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 9) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const location = isRecord(venue) ? venue.location : undefined;
   if (
@@ -531,6 +544,15 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     location.invoiceLocales.some((locale) => typeof locale !== "string") ||
     ["addressLine1", "addressLine2", "postalCode", "city", "province", "catalogueId"].some(
       (field) => location[field] !== null && typeof location[field] !== "string",
+    )
+  ) {
+    throw new AppError("setup.request_invalid", { field: "artifact" });
+  }
+  const privacyContact = value.privacyContact;
+  if (
+    !isRecord(privacyContact) ||
+    PRIVACY_CONTACT_FIELDS.some(
+      (field) => privacyContact[field] !== null && typeof privacyContact[field] !== "string",
     )
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
@@ -599,6 +621,10 @@ export function validateConfigurationBundle(
     }
   }
   checkedRows(bundle, modules);
+  for (const field of PRIVACY_CONTACT_FIELDS) {
+    const value = bundle.privacyContact[field];
+    if (typeof value === "string") privacyContactChecked(field, value);
+  }
   const exported = {
     createdAt: new Date(bundle.createdAt),
     timeZone: bundle.venue.location.timeZone,
@@ -767,6 +793,15 @@ export async function importConfigurationTables(
       bundle.venue.location.catalogueId === null
         ? null
         : (idMap.get(bundle.venue.location.catalogueId) ?? bundle.venue.location.catalogueId),
+  });
+  const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
+  await savePrivacyContact(tx, {
+    privacyNoticeUrl:
+      privacyNoticeUrl === null
+        ? null
+        : privacyContactChecked("privacyNoticeUrl", privacyNoticeUrl),
+    privacyEmail:
+      privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
   });
   for (const module of modules) {
     const contribution = module.configurationTransfer;

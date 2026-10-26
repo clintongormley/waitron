@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 8,
+  version: 9,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -74,6 +74,7 @@ const bundle: ConfigurationBundle = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
+  privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1" }] },
   reconnect: ["printers"],
@@ -175,8 +176,10 @@ describe("staged configuration import", () => {
       },
     ],
     ["A756 pre-station-changes export without it", { version: 7 }],
+    ["A980 pre-privacy-contact export with the key", { version: 8 }],
+    ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
     ["old version", { version: 1 }],
-    ["future version", { version: 9 }],
+    ["future version", { version: 10 }],
     [
       "retired drawer value",
       {
@@ -369,6 +372,52 @@ describe("staged configuration import", () => {
     for (const name of names)
       expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
   });
+
+  it.each([
+    ["privacyNoticeUrl", "example.com/privacy", "web_address"],
+    ["privacyEmail", "privacy@example", "email"],
+  ] as const)(
+    "refuses a current bundle whose %s is %j before replacing staged files",
+    async (field, value, reason) => {
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+      dirs.push(stateDir);
+      const names = [
+        "configuration-import.artifact",
+        "configuration-import.key",
+        "configuration-import.json",
+      ];
+      for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
+      const candidate: ConfigurationBundle = {
+        ...bundle,
+        privacyContact: { ...bundle.privacyContact, [field]: value },
+      };
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          stageConfiguration: (artifact, passphrase) =>
+            stageConfigurationImport(stateDir, ring, artifact, passphrase, validate),
+        },
+        () => {},
+      );
+      const response = await app.request("/setup-api/configuration", {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-export-passphrase": "a strong passphrase",
+        },
+        body: new Uint8Array(encodeConfigurationBundle(candidate, "a strong passphrase")).buffer,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "venue.detail_invalid", params: { field, reason } },
+      });
+      expect((await readdir(stateDir)).sort()).toEqual([...names].sort());
+      for (const name of names)
+        expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
+    },
+  );
 
   it("validates before staging and retains owner-only payloads until explicit cleanup", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));

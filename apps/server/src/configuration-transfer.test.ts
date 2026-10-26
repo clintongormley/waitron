@@ -399,7 +399,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 8,
+  version: 9,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -427,6 +427,7 @@ const bundle: ConfigurationBundle = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
+  privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1", name: "Café" }] },
   reconnect: ["printers"],
@@ -5404,7 +5405,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(8);
+  expect(exported.version).toBe(9);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

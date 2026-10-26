@@ -901,7 +901,8 @@ Real code does write all five, legitimately: the setup-mode provision route reac
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
 `packages/provisioning/src/privacy-contact.ts`, which updates `privacy_notice_url` and
-`privacy_email` alone. Each does it by calling into one of the
+`privacy_email` alone; a configuration import reaches the same writer for those two columns
+(A980 S1a2). Each does it by calling into one of the
 files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
@@ -1639,10 +1640,37 @@ while checking this reset-only release.
 A725 (format 4), A757 slice 2 (format 5, 2026-10-19, when it dropped `table_service_statuses`),
 A841 slice 2 (format 6, 2026-10-21, when it replaced `tenant_themes` with `custom_themes`), A756
 PR 5 (format 7, 2026-10-23, when it dropped `kitchen_timing_defaults` and `kitchen_station_timing`
-and the station's own minutes joined the copy) and A756 PR 8 (format 8, 2026-10-24, when it
-dropped `service_settings`) moved the format for the same reason;
-`configuration-transfer.test.ts` now pins format 8, and older files are refused as
+and the station's own minutes joined the copy), A756 PR 8 (format 8, 2026-10-24, when it
+dropped `service_settings`) and A980 S1a2 (format 9, 2026-10-26, when the copy gained the venue's
+privacy contact as the required top-level `privacyContact` key) moved the format for the same
+reason; `configuration-transfer.test.ts` now pins format 9, and older files are refused as
 `setup.configuration_outdated`.
+
+### A configuration bundle value that is not a setup field stays out of the venue's own keys
+
+The setup app sends the setup preview's `venue` back in the first-setup claim, whole except for its
+`location`, which it copies by `LocationDraft`'s fields (`CLAIM_LOCATION_FIELDS`,
+`apps/setup/src/setup-app.ts`). The claim refuses any venue or location key it does not list
+(`exact(...)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup
+field lives outside `venue`'s own keys, as `privacyContact` does. `venue.location` already carries
+three such values, `id`, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
+and they are safe only because the setup app filters the location. Cost: from #1752 to A980 S1a2
+every Live setup from an export on a production box was refused at the claim, because the setup app,
+which dropped only `id`, copied the other two into it (probes 2 to 4 of the
+[S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
+the tests that set up a production box from an export
+(`apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows, and
+`apps/server/src/first-fiscal-hour-import.e2e.test.ts`'s `production` rows through
+`apps/server/test/owned-hour-setup.ts`) sent the claim a hand-written venue, never the preview's.
+
+Two guards, both weaker than the rule. The `claimFrom: "preview"` row in
+`apps/server/src/first-fiscal-setup.e2e.test.ts` sends the whole preview venue through a production
+claim, but cuts the location down by the test's own `request.location` keys, not by
+`LocationDraft`'s, so it would pass if the setup app copied `fireControl` again. Only
+`apps/setup/src/setup-app-first-fiscal.test.ts`'s "claims a staged preview's venue with only the
+location fields the claim accepts" catches that, against a stubbed server. Both cover one export
+shape. Nothing checks `CLAIM_LOCATION_FIELDS` against the claim's own `exact(raw.location, …)` list:
+the compile-time check ties it to `LocationDraft` alone, a hand copy of the server's shape.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 

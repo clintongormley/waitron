@@ -5425,7 +5425,7 @@ preferences and restored URLs retain their capability checks.
 
 A menu's Device Home Page, receipt configuration, custom themes and the floor-plan editor remain
 independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
-device's `formFactor`. Configuration exports use format 8; an older export is refused as outdated,
+device's `formFactor`. Configuration exports use format 9; an older export is refused as outdated,
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.

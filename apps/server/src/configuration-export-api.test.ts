@@ -107,6 +107,7 @@ describe("configuration export API", () => {
     );
     expect(decoded.venue.legalName).toBe("Prepared Export SL");
     expect(decoded.venue.taxpayerDomicile).toBeNull();
+    expect(decoded.privacyContact).toEqual({ privacyNoticeUrl: null, privacyEmail: null });
     expect(decoded.tables).not.toHaveProperty("sales");
   });
 

@@ -444,6 +444,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
+- **A box on an older configuration format blames the export when it is the box that is out of
+  date.** Word the too-new case on its own. Found by A980 S1a2's plan review.
+  [Detail](backlog/setup.md#a-box-on-an-older-configuration-format-blames-the-export-when-it-is-the-box-that-is-out-of-date)
+
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
@@ -5233,6 +5237,10 @@ For package distribution and the four-minute target, use the
   reduce its repeated setup while preserving its restart assertions.
   [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
 
+- **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
+  The later rows never run; the run still exits 1. Cause not found.
+  [Detail](backlog/ci.md#one-failing-success-branch-check-in-the-first-fiscal-setup-end-to-end-file-ends-its-worker)
+
 - **A backlog detail link still names the old five-handler heading.**
   [Detail](backlog/ci.md#a-backlog-detail-link-still-names-the-old-five-handler-heading).
 
@@ -5243,7 +5251,12 @@ values rather than PIN substrings inside random IDs. See the
 - **Tests that read a built command's error output fail under Claude Code.** The command's stderr
   begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
   seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
-  plan, E8 and E13). Found while planning A798-B slice 8.
+  plan, E8 and E13). Found while planning A798-B slice 8. On 2026-10-26, during A980 S1a2,
+  `packages/provisioning/src/first-setup-command-import.test.ts`'s case "the actual relocated command
+  resumes a retained import and publishes it once" failed this way (its child's stderr held
+  `<claude-code-hint …/>` where the case expects it empty) and passed under
+  `env -i HOME PATH TMPDIR`; it fails the same way on `27ae35c09` and `d23e32966`. Next action: find
+  which inherited variable lets the hint through and clear it in the cases' child environment.
 
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
   tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
@@ -6164,9 +6177,10 @@ holds the data map, the controller and processor split and the builds-versus-ven
 revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
 [build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
 details deleted at deactivation), S2a1 (the server route for a person's own data download),
-S2a2 (its README, the Profile page's Download button and the Users guide section) and S1a (the
-dashboard setting for the privacy notice page and privacy email, which nothing else reads yet) are
-built.
+S2a2 (its README, the Profile page's Download button and the Users guide section), S1a (the
+dashboard setting for the privacy notice page and privacy email, which nothing else shows yet) and
+S1a2 (the configuration export carries the privacy contact, and a production box can be set up from
+an export again) are built.
 The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---

@@ -357,6 +357,8 @@ Read, not run: everything else cited by `file:line` below.
     move; the guide section says it (Task 8), and the backlog line for owner decision B records it
     (Task 10). Owner decision B.
 
+    _2026-10-26: S1a2 carries them ([its plan](2026-10-26-a980-s1a2-export-privacy-contact.md))._
+
 11. **No log line, and no value in an error.** The routes log nothing of their own; refusals carry
     only `field` and `reason`, whose names are not on `PERSONAL_LOG_KEYS`
     (`apps/server/src/log-personal-data.ts:33-46`) and match none of the root guard's person words

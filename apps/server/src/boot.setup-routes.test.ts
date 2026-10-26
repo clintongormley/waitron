@@ -23,6 +23,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
+import { savePrivacyContact } from "@waitron/provisioning";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -1458,9 +1459,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         },
         { environment: "preproduction", venue: hashedVenueRequest(TAX_ID) },
       );
-      await withTransaction(source.store.venue, (tx) =>
-        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] }),
-      );
+      await withTransaction(source.store.venue, async (tx) => {
+        await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] });
+        await savePrivacyContact(tx, {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        });
+      });
       const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
       const artifact = encodeConfigurationBundle(
         await buildConfigurationBundle(
@@ -1537,6 +1542,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         readContentLanguages(tx, "es"),
       );
       expect(imported).toEqual({ defaultLanguage: "es", languages: ["es", "fr"] });
+      expect(
+        target.store.venue.all(sql`select privacy_notice_url, privacy_email from tenants`),
+      ).toEqual([
+        { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
+      ]);
     } finally {
       await source.store.close();
       await target.store.close();
@@ -1564,9 +1574,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         },
         { environment: "preproduction", venue: hashedVenueRequest(OLD_TAX_ID) },
       );
-      await withTransaction(source.store.venue, (tx) =>
-        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] }),
-      );
+      await withTransaction(source.store.venue, async (tx) => {
+        await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] });
+        await savePrivacyContact(tx, {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        });
+      });
       await source.store.venue.execute(
         sql`update locations set invoice_locales = '["es-ES","en-GB"]'`,
       );
@@ -1644,6 +1658,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           legal_name: "Nueva Empresa SL",
           taxpayer_domicile: "Calle Nueva 3, 28013 Madrid",
         },
+      ]);
+      expect(
+        target.store.venue.all(sql`select privacy_notice_url, privacy_email from tenants`),
+      ).toEqual([
+        { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
       ]);
       expect(
         target.store.venue.all(

@@ -33,6 +33,7 @@ import {
   validateConfigurationBundle,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
+import { savePrivacyContact } from "./privacy-contact.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
@@ -104,6 +105,10 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
       vatClass: "general",
     });
     await tx.update(invoiceSeries).set({ nextNumber: 23 });
+    await savePrivacyContact(tx, {
+      privacyNoticeUrl: "https://example.com/privacy",
+      privacyEmail: "privacy@example.com",
+    });
   });
   const bundle = await buildConfigurationBundle(
     source.db,
@@ -181,6 +186,15 @@ it.each([false, true])(
     ]);
     expect((await target.db.execute("select tax_id as taxId from tenants")).rows).toEqual([
       { taxId: newTaxpayer ? "B12345674" : "50000000R" },
+    ]);
+    expect(
+      (
+        await target.db.execute(
+          "select privacy_notice_url as privacyNoticeUrl, privacy_email as privacyEmail from tenants",
+        )
+      ).rows,
+    ).toEqual([
+      { privacyNoticeUrl: "https://example.com/privacy", privacyEmail: "privacy@example.com" },
     ]);
     expect(
       (
