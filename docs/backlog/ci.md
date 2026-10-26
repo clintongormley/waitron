@@ -849,3 +849,15 @@ and A419's dashboard stall separate; no shared cause is established.
 ## A1089 merge read-back: server coverage upload timed out
 
 - **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
+
+## The joined-table reset test received a revision refusal
+
+On A1114's post-merge run [40266252596](https://github.com/clintongormley/waitron/actions/runs/40266252596/job/121389422199)
+at `25033c17fe3415c2b665527e1d480b224874ccc5`, server shard 11 failed
+`src/floor-today-reset-table.test.ts:1371`, “Counter 6 free, guests at Counter 5 between it and
+the tables still joined: refused naming Counter 5, nothing written”. The response was HTTP 409
+with `floor_today.out_of_date` and revision 6; the assertion expected HTTP 409 with
+`table.place_taken` and the standing/table ids. The shard reported 1,973 passing tests and one failure.
+
+The cause is unknown. Retain the job log and reproduce the revision mismatch before changing
+its fixture, refusal assertion or deadline. A later passing run does not explain this failure.
