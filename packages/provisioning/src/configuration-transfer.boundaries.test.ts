@@ -102,6 +102,7 @@ it.each([
 it.each([
   {},
   { version: 2 },
+  { ...configurationBundle(), version: 8 },
   {
     ...configurationBundle(),
     venue: {

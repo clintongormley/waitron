@@ -444,6 +444,7 @@ the handover.
 | Where | Rows | Task |
 | --- | --- | --- |
 | `apps/server/src/first-fiscal-setup.e2e.test.ts:129-137` | one, `{ …, claimFrom: "preview" }` (decision 13) | 2 |
+| `packages/provisioning/src/configuration-transfer.boundaries.test.ts` ("refuses an obsolete configuration format") | one, `{ ...configurationBundle(), version: 8 }` (added 2026-10-26 in Task 8's fix round) | 8 |
 
 **One renaming**: the same table's title template (`first-fiscal-setup.e2e.test.ts:138`) gains
 `, claim from $claimFrom`, so the new row's name differs from the first row's; every existing row's

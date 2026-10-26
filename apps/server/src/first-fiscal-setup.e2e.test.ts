@@ -243,7 +243,7 @@ it.each([
         ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
       };
       if (claimFrom === "preview") {
-        // Built as the setup app builds it, so a key a later export adds to `venue` reaches the claim.
+        // The whole preview venue, as the setup app sends it; the location is cut to the request's keys.
         const preview = stagedBody.venue;
         expect(preview.location).toHaveProperty("fireControl");
         expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
