@@ -12,6 +12,7 @@ import {
   saveCustomTheme,
   setThemeInUse,
   type ReceiptLogoRasters,
+  type StoredLogoRaster,
   type StoredTheme,
 } from "@waitron/layouts";
 import {
@@ -21,18 +22,17 @@ import {
   requireNullableString,
   requireString,
 } from "@waitron/server-kit";
-import {
-  imageExists,
-  readCurrentImageMetadata,
-  readImageBytes,
-  renderRendition,
-  renditionUrl,
-} from "@waitron/media";
-import { safeWidthDots } from "@waitron/printing";
+import { readCurrentImageMetadata } from "@waitron/media";
+import { safeWidthDots, type MonoRaster } from "@waitron/printing";
 import { AppError, MEDIA_FILENAME } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
-import { countBlackDots, createLogoCache, drawPreviewLogo } from "./receipt-logo.js";
+import {
+  countBlackDots,
+  createLogoCache,
+  drawLibraryLogo,
+  previewLogoAddress,
+} from "./receipt-logo.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 import { printedLogoFor, recheckThemeLogo, snapshotThemeLogo } from "./theme-logo.js";
 import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
@@ -72,14 +72,11 @@ export function themeAnswerOf(stored: StoredTheme): ThemeAnswer {
 }
 
 export interface ThemeLogoPrint {
-  /** The paper's printable dots across: `safeWidthDots("80mm")`. */
   readonly paperDots: number;
-  /** The 80 mm picture, stored form; `null` when the image is gone or will not decode. */
-  readonly picture: {
-    readonly widthDots: number;
-    readonly heightDots: number;
-    readonly data: string;
-  } | null;
+  /** The display rendition `picture` was drawn from; `null` when the library has no such image. */
+  readonly address: string | null;
+  /** The 80 mm picture; `null` when the image is gone or will not decode. */
+  readonly picture: StoredLogoRaster | null;
   /** Set dots in `picture`; 0 means the logo prints blank. */
   readonly blackDots: number;
 }
@@ -139,6 +136,16 @@ async function saveWithLogo<T>(
 
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
   const logoCache = createLogoCache();
+  // Keyed on the cache's own raster objects, so a cached picture is encoded and counted once.
+  const printed = new WeakMap<MonoRaster, Pick<ThemeLogoPrint, "picture" | "blackDots">>();
+  const printedOf = (raster: MonoRaster) => {
+    let known = printed.get(raster);
+    if (known === undefined) {
+      known = { picture: encodeLogoRaster(raster), blackDots: countBlackDots(raster) };
+      printed.set(raster, known);
+    }
+    return known;
+  };
 
   // Deliberately unauthenticated: the answer is the theme in use's stylesheet, its hash and its
   // logo's public rendition addresses, and carries no secrets.
@@ -170,24 +177,11 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
       });
       // Drawn outside the transaction: sharp must not run holding the write lock.
       const raster =
-        current === null
-          ? null
-          : await drawPreviewLogo(
-              logoCache,
-              renditionUrl(current.sourceFilename, "display", current.framing),
-              "80mm",
-              {
-                exists: () => imageExists(deps.db, image),
-                bytes: async () => {
-                  const source = await readImageBytes(deps.db, current.sourceFilename);
-                  return source ? renderRendition(source.bytes, "display", current.framing) : null;
-                },
-              },
-            );
+        current === null ? null : await drawLibraryLogo(deps.db, logoCache, image, current, "80mm");
       const answer: ThemeLogoPrint = {
         paperDots: safeWidthDots("80mm"),
-        picture: raster === null ? null : encodeLogoRaster(raster),
-        blackDots: raster === null ? 0 : countBlackDots(raster),
+        address: current === null ? null : previewLogoAddress(current),
+        ...(raster === null ? { picture: null, blackDots: 0 } : printedOf(raster)),
       };
       return c.json(answer, 200);
     }),

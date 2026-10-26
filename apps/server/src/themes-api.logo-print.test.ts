@@ -6,12 +6,19 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  persons,
+  startManagementSession,
+  withPassiveManagementRead,
+} from "@waitron/identity";
+import * as layouts from "@waitron/layouts";
 import * as media from "@waitron/media";
 import {
   MEDIA_MIGRATIONS,
   prepareImage,
   readCurrentImage,
+  readPresentations,
   renderRendition,
   saveImage,
   uploadImage,
@@ -19,6 +26,7 @@ import {
 } from "@waitron/media";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import * as logoModule from "./receipt-logo.js";
 import { countBlackDots, drawLogoRasters } from "./receipt-logo.js";
 import { mountThemesApi, type ThemeLogoPrint } from "./themes-api.js";
 import { forgetVenueTheme } from "./venue-theme.js";
@@ -48,7 +56,7 @@ async function splitPicture(): Promise<PreparedImage> {
   );
 }
 
-/** A white circle on a see-through background, as probe P2 drew it. */
+/** A white circle on a see-through background. */
 async function whiteCircle(): Promise<PreparedImage> {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><circle cx="200" cy="200" r="180" fill="#ffffff"/></svg>`;
   return prepared(await sharp(Buffer.from(svg)).png().toBuffer());
@@ -118,6 +126,30 @@ const refusal = (code: string, params: Record<string, unknown> = {}) => ({
   error: { code, params },
 });
 
+/** The address the image library's presentation gives as the image's `display`. */
+async function displayAddress(image: string): Promise<string> {
+  const shown = await withTransaction(suite.db, (tx) => readPresentations(tx, [image]));
+  return shown[image]!.display;
+}
+
+async function reframe(image: string): Promise<void> {
+  const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, image));
+  await withTransaction(suite.db, (tx) =>
+    saveImage(
+      tx,
+      current!.imageId,
+      {
+        names: { en: "Logo" },
+        expectedRevision: current!.revision,
+        framing: { x: 3000, y: 5000, zoom: 200 },
+      },
+      null,
+      undefined,
+      "en",
+    ),
+  );
+}
+
 async function rows(): Promise<unknown[]> {
   const imageRows = await suite.db.execute(sql`select * from media_images order by id`);
   const themes = await suite.db.execute(sql`select * from custom_themes order by id`);
@@ -143,6 +175,16 @@ describe("GET /management-api/theme-logo-print", () => {
       }),
     );
     expect(body.blackDots).toBeGreaterThan(0);
+  });
+
+  it("names the address it drew from as the library's presentation names it, before and after a reframe", async () => {
+    const hono = app();
+    const before = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
+    expect(before.address).toBe(await displayAddress(A));
+    await reframe(A);
+    const after = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
+    expect(after.address).toBe(await displayAddress(A));
+    expect(after.address).not.toBe(before.address);
   });
 
   it("a white logo on a see-through background prints blank", async () => {
@@ -184,7 +226,12 @@ describe("GET /management-api/theme-logo-print", () => {
   it("an image the library does not have draws nothing", async () => {
     const res = await ask(`image=${"c".repeat(64)}.png`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ paperDots: 504, picture: null, blackDots: 0 });
+    expect(await res.json()).toEqual({
+      paperDots: 504,
+      address: null,
+      picture: null,
+      blackDots: 0,
+    });
   });
 
   it("an image whose source bytes are gone draws nothing", async () => {
@@ -192,7 +239,12 @@ describe("GET /management-api/theme-logo-print", () => {
     await suite.db.execute(sql`delete from media_image_blobs`);
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ paperDots: 504, picture: null, blackDots: 0 });
+    expect(await res.json()).toEqual({
+      paperDots: 504,
+      address: await displayAddress(A),
+      picture: null,
+      blackDots: 0,
+    });
   });
 
   it("an image whose source bytes do not decode draws nothing", async () => {
@@ -200,7 +252,12 @@ describe("GET /management-api/theme-logo-print", () => {
     await suite.db.execute(sql`update media_image_blobs set bytes = ${new Uint8Array([1, 2, 3])}`);
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ paperDots: 504, picture: null, blackDots: 0 });
+    expect(await res.json()).toEqual({
+      paperDots: 504,
+      address: await displayAddress(A),
+      picture: null,
+      blackDots: 0,
+    });
   });
 
   it("asking again draws nothing more; a reframe draws again", async () => {
@@ -210,29 +267,38 @@ describe("GET /management-api/theme-logo-print", () => {
     await askOn(hono, `image=${A}`);
     expect(decode).toHaveBeenCalledTimes(1);
 
-    const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, A));
-    await withTransaction(suite.db, (tx) =>
-      saveImage(
-        tx,
-        current!.imageId,
-        {
-          names: { en: "Logo" },
-          expectedRevision: current!.revision,
-          framing: { x: 3000, y: 5000, zoom: 200 },
-        },
-        null,
-        undefined,
-        "en",
-      ),
-    );
+    await reframe(A);
     const again = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
     expect(decode).toHaveBeenCalledTimes(2);
     expect(again.picture!.data).not.toBe(first.picture!.data);
   });
 
-  it("writes nothing", async () => {
+  it("asking again encodes and counts nothing more", async () => {
+    const hono = app();
+    const first = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
+    const encode = vi.spyOn(layouts, "encodeLogoRaster");
+    const count = vi.spyOn(logoModule, "countBlackDots");
+    const again = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
+    expect(again).toEqual(first);
+    expect(encode).not.toHaveBeenCalled();
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it("changes no image or theme row", async () => {
     const before = await rows();
     expect((await ask(`image=${A}`)).status).toBe(200);
     expect(await rows()).toEqual(before);
+  });
+
+  it("a passive ask, as the dashboard sends it, leaves the session's last activity alone", async () => {
+    const earlier = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const lastSeen = async () =>
+      (await suite.db.execute(sql`select last_seen_at from management_sessions`)).rows;
+    await suite.db.execute(sql`update management_sessions set last_seen_at = ${earlier}`);
+    const before = await lastSeen();
+    expect((await withPassiveManagementRead(() => ask(`image=${A}`))).status).toBe(200);
+    expect(await lastSeen()).toEqual(before);
+    expect((await ask(`image=${A}`)).status).toBe(200);
+    expect(await lastSeen()).not.toEqual(before);
   });
 });

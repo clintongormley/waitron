@@ -13,13 +13,7 @@ import {
 import { departments } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
 import { resolveDevicePrinterIds, type ReceiptConfig } from "@waitron/layouts";
-import {
-  imageExists,
-  readImageBytes,
-  readCurrentImageMetadata,
-  renditionUrl,
-  renderRendition,
-} from "@waitron/media";
+import { readCurrentImageMetadata } from "@waitron/media";
 import { textGrid, type EscSetting, type MonoRaster, type PaperWidth } from "@waitron/printing";
 import {
   createErrorBoundary,
@@ -37,7 +31,7 @@ import {
   type PrintPreviewBlock,
 } from "./print-job-preview.js";
 import { drawReceipt } from "./receipt-ticket.js";
-import { createLogoCache, drawPreviewLogo, type LogoCache } from "./receipt-logo.js";
+import { createLogoCache, drawLibraryLogo, type LogoCache } from "./receipt-logo.js";
 import { sampleSale } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
 import { readReceiptAddress } from "./venue-address.js";
@@ -256,18 +250,7 @@ async function renderDraftPreview(
       : (savedLogo ??
         (current === null
           ? null
-          : await drawPreviewLogo(
-              logoCache,
-              renditionUrl(current.sourceFilename, "display", current.framing),
-              printer.paperWidth,
-              {
-                exists: () => imageExists(deps.db, filename),
-                bytes: async () => {
-                  const source = await readImageBytes(deps.db, current.sourceFilename);
-                  return source ? renderRendition(source.bytes, "display", current.framing) : null;
-                },
-              },
-            )));
+          : await drawLibraryLogo(deps.db, logoCache, filename, current, printer.paperWidth)));
   const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
   const job = (trim: ReceiptConfig, venueAddress = address, picture = logo) =>
     drawReceipt({
