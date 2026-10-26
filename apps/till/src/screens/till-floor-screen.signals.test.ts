@@ -82,8 +82,7 @@ const ready = (...byStation: [string, string, number][]): TableSignal => ({
   })),
 });
 
-/** Mesa 2: bar drinks ready, its held group due to fire, and the bill asked for. */
-const mesa2 = table({
+const table2 = table({
   readyToServe: 1,
   party: party({ reminder: { groupId: "g2", dueAt: past } }),
   signals: [
@@ -130,7 +129,7 @@ afterEach(cleanupWidgets);
 
 describe("till-floor-screen: the signals at a table", () => {
   it("shows ready drinks, time to fire and the bill request side by side on the card", async () => {
-    const el = await mountFloor([mesa2]);
+    const el = await mountFloor([table2]);
     const badges = card(el, "t2").querySelector(".badges")!;
     expect(chips(badges)).toEqual(["Bill requested", "Bar: 3 ready"]);
     expect(badges.querySelector("[data-fire-due]")!.textContent!.trim()).toBe("Time to fire");
@@ -138,7 +137,7 @@ describe("till-floor-screen: the signals at a table", () => {
 
   it("shows the same chips on an unplaced table's token in the map's tray", async () => {
     const placed = table({ id: "t9", label: "9", party: null, today: today() });
-    const el = await mountFloor([placed, mesa2]);
+    const el = await mountFloor([placed, table2]);
     const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       '[data-tray-table="t2"] wt-table-token',
     )!;
@@ -237,13 +236,12 @@ describe("till-floor-screen: the signals at a table", () => {
 });
 
 describe("till-floor-screen: what each station has ready", () => {
-  const mesa8 = table({
+  const table8 = table({
     id: "t8",
     label: "Mesa 8",
     party: party({ id: "v8", displayName: "Mesa 8", tableIds: ["t8"] }),
     signals: [ready(["bar", "Bar", 1], ["kitchen", "Kitchen", 2])],
   });
-  /** One party at two joined tables: both carry its signals. */
   const joined = (id: string, label: string) =>
     table({
       id,
@@ -253,7 +251,7 @@ describe("till-floor-screen: what each station has ready", () => {
     });
   const floor = [
     table({ signals: [ready(["bar", "Bar", 3])] }),
-    mesa8,
+    table8,
     joined("t5", "Mesa 5"),
     joined("t6", "Mesa 6"),
     table({ id: "t9", label: "Mesa 9", party: null, state: "free", signals: [] }),
@@ -273,7 +271,7 @@ describe("till-floor-screen: what each station has ready", () => {
   });
 
   it("covers tables in every zone, not only the zone on screen", async () => {
-    const elsewhere = { ...mesa8, zoneId: "z2" };
+    const elsewhere = { ...table8, zoneId: "z2" };
     const el = await mountFloor([table({ signals: [ready(["bar", "Bar", 3])] }), elsewhere], {
       zones: [
         {
