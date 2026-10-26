@@ -534,7 +534,7 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
   naming sites remain in the till's draft, party and widget suites and other server suites,
-  including catalogue, bill-splitting and station-queue tests. String-selected product keys stay with their
+  including catalogue and station-queue tests. String-selected product keys stay with their
   fixture text under A976, as do the service-period menu keys.
   Developer/demo script names remain A975's. Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still

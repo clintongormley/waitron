@@ -1489,6 +1489,11 @@ whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
 
+- **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the moved row its own
+  ticket item and reduces the original ticket quantity by that part. A dish the kitchen has
+  started may still be split. Moving sent work to another table is allowed and tells the kitchen.
+  These decisions remain covered in `apps/server/src/split-bill.test.ts`.
+
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration

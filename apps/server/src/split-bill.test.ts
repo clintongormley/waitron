@@ -55,9 +55,6 @@ import { moveGuests } from "./testing/table-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
-// What this suite proves: the check being table-less, and the line partition — plain row state. The
-// FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the split-bill fiscal
-// suite's.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -70,10 +67,8 @@ beforeAll(() => {
 
 interface Seeded {
   cfg: DeviceRequestConfig;
-  /** "Agua" — each, 1.50 gross, general(21%). */
-  aguaId: string;
-  /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
-  jamonId: string;
+  waterId: string;
+  hamId: string;
   tableId: string;
   tableId2: string;
 }
@@ -102,18 +97,18 @@ async function setupVenue(): Promise<Seeded> {
   } satisfies TillConfig);
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const agua = await createProduct(tx, {
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const jamon = await createProduct(tx, {
+    const ham = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Jamón",
       pricingUnit: "weight",
       unitPrice: "24.90",
@@ -125,8 +120,8 @@ async function setupVenue(): Promise<Seeded> {
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
     const t2 = await createTable(tx, cfg, { label: "T2", zoneId: offers.zoneId });
     return {
-      aguaId: agua.id,
-      jamonId: jamon.id,
+      waterId: water.id,
+      hamId: ham.id,
       tableId: t1.id,
       tableId2: t2.id,
     };
@@ -193,18 +188,17 @@ describe("receipt order grouping", () => {
 
 describe("splitBill", () => {
   it("spins selected items onto a NEW open bill of the party", async () => {
-    const { cfg, aguaId, jamonId, tableId } = await setupVenue();
+    const { cfg, waterId, hamId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTabWith(tx, cfg, {
         tableId,
         lines: [
-          { productId: aguaId, quantity: "3" },
-          { productId: jamonId, quantity: "0.300" },
+          { productId: waterId, quantity: "3" },
+          { productId: hamId, quantity: "0.300" },
         ],
       }),
     );
 
-    // Move 1 of the 3 aguas (partial split of line 1) + the whole jamón (line 2) onto a check.
     const { billId: checkId } = await asApp(cfg, (tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }]),
     );
@@ -250,15 +244,11 @@ describe("splitBill", () => {
       deviceId: cfg.origin.deviceId,
       locationId: cfg.locationId,
     });
-    // WHOLE lines are moved first, THEN partial splits — not the transfers-array order.
-    // Read straight off the column, so each quantity is a count of whole THOUSANDTHS: 300 is the
-    // 0.300 kg of jamón and 1000 is one agua.
     expect(state.checkLines).toEqual([
-      { productId: jamonId, quantity: 300 },
-      { productId: aguaId, quantity: 1000 },
+      { productId: hamId, quantity: 300 },
+      { productId: waterId, quantity: 1000 },
     ]);
-    // …and the origin holds only the remainder (quantity conserved: 3 − 1 = 2 aguas; jamón moved whole).
-    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: 2000 }]);
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: waterId, quantity: 2000 }]);
   });
 
   it("refuses to split off a check from a non-open tab (tab.not_open)", async () => {
@@ -272,12 +262,10 @@ describe("splitBill", () => {
   });
 
   it("rejects a batch repeating a lineNo (tab.transfer_duplicate_line), minting nothing and conserving quantity", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: waterId, quantity: "3" }] }),
     );
-    // Two partial "1"s off the SAME line 1 would make 4 aguas from an original 3. Refused UP FRONT,
-    // before the check is minted.
     await expect(
       asApp(cfg, (tx) =>
         splitPartyBill(tx, cfg, tabId, [
@@ -300,17 +288,15 @@ describe("splitBill", () => {
       const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
-    // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to two). Read
-    // straight off the column, so 3000 is those three units as a count of thousandths.
-    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: 3000 }]);
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: waterId, quantity: 3000 }]);
     // No stray check minted — only the origin tab exists.
     expect(state.orderCount).toBe(1);
   });
 
   it("inherits TS-4's move guards (tab.transfer_quantity_invalid, tab.line_not_found)", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: waterId, quantity: "2" }] }),
     );
     await expect(
       asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "5" }])),
@@ -321,9 +307,9 @@ describe("splitBill", () => {
   });
 
   it("refuses an EMPTY transfers array (sale.empty_basket), minting nothing", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: waterId, quantity: "3" }] }),
     );
     // Refused before anything is minted, or the call would leave an orphan check: a table-less
     // `open` working order with zero lines and a consumed order_number.
@@ -344,19 +330,18 @@ describe("splitBill", () => {
       const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
-    // Origin untouched — still the whole agua×3, as a count of thousandths off the column.
-    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: 3000 }]);
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: waterId, quantity: 3000 }]);
     // No orphan check minted — only the origin tab exists.
     expect(state.orderCount).toBe(1);
   });
 });
 
 it("retains the frozen options answers and the frozen names when a dish quantity is split onto a check", async () => {
-  const { cfg, aguaId, tableId } = await setupVenue();
+  const { cfg, waterId, tableId } = await setupVenue();
   await asApp(cfg, async (tx) => {
     const { tabId } = await openTabWith(tx, cfg, {
       tableId,
-      lines: [{ productId: aguaId, quantity: "3" }],
+      lines: [{ productId: waterId, quantity: "3" }],
     });
     // A frozen options answer is keyed by CONTENT language, which is what the order path widens the
     // list's and label's plain staff names under (`buildLineExtras`, modifier-selection.ts).
@@ -505,12 +490,11 @@ async function queueAt(cfg: OriginConfig, stationId: string) {
   );
 }
 
-/** A tab at each of the venue's two tables, the first holding one round of Agua. */
 async function twoTabs(
   seeded: Seeded,
   round: { quantity: string; hold?: boolean },
 ): Promise<{ from: string; to: string }> {
-  const { cfg, aguaId, tableId } = seeded;
+  const { cfg, waterId, tableId } = seeded;
   const { tabId: from, partyId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
   const to = randomUUID();
   await asApp(cfg, async (tx) => {
@@ -523,7 +507,7 @@ async function twoTabs(
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, from, [
       {
-        menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId),
+        menuItemId: offersByCfg.get(cfg)!.offerFor(waterId),
         quantity: round.quantity,
         ...(round.hold === true ? { hold: true } : {}),
       },
@@ -532,10 +516,6 @@ async function twoTabs(
   return { from, to };
 }
 
-/**
- * The chosen part of `from`'s bill split onto a new bill that moves to the free Mesa T2, as items
- * reach another party (decision 11); answers that bill.
- */
 async function splitToT2(
   seeded: Seeded,
   from: string,
@@ -562,14 +542,9 @@ async function splitToT2(
   return billId;
 }
 
-/**
- * The owner's decision of 2026-09-26, overturning plan D10 where they conflict: a partial split gives
- * the moved row its own ticket item, copied from the original, whose own quantity drops by the part
- * moved; and a line the kitchen has started may be split.
- */
 describe("splitting a line the kitchen has", () => {
   it("gives the split row a ticket of its own, copied from the original, and takes the part moved off the original's", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
@@ -578,7 +553,7 @@ describe("splitting a line the kitchen has", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
-          menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId),
+          menuItemId: offersByCfg.get(cfg)!.offerFor(waterId),
           quantity: "3",
           courseId: course.id,
           note: "sin hielo",
@@ -629,12 +604,12 @@ describe("splitting a line the kitchen has", () => {
   });
 
   it("takes the part moved off the line's quantity where the original ticket states none", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "3" },
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "3" },
       ]),
     );
     const [line] = await linesWithTickets(tabId);
@@ -652,12 +627,12 @@ describe("splitting a line the kitchen has", () => {
   it.each(["preparing", "ready"] as const)(
     "splits a %s line, the split row's ticket in the same state, and still refuses an edit of either row",
     async (state) => {
-      const { cfg, aguaId, tableId } = await setupVenue();
+      const { cfg, waterId, tableId } = await setupVenue();
       await withKitchen(cfg);
       const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
       await asApp(cfg, (tx) =>
         addTabRound(tx, cfg, tabId, [
-          { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+          { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
         ]),
       );
       const [line] = await linesWithTickets(tabId);
@@ -695,12 +670,12 @@ describe("splitting a line the kitchen has", () => {
   );
 
   it("moves a whole line the kitchen has started with its ticket", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
       ]),
     );
     const [line] = await linesWithTickets(tabId);
@@ -826,13 +801,13 @@ describe("splitting a line the kitchen has", () => {
   });
 
   it("names the origin's table on the slip voiding the part moved to a check", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "3" },
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "3" },
       ]),
     );
     const [ticket] = await printedBy(printerId);
@@ -855,12 +830,12 @@ describe("splitting a line the kitchen has", () => {
   });
 
   it("names the origin's table for the check on the pass board", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
       ]),
     );
     const { billId: checkId } = await asApp(cfg, (tx) =>
@@ -878,10 +853,10 @@ describe("splitting a line the kitchen has", () => {
   });
 
   it("splits a line the kitchen does not have without making a ticket", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
     const { tabId } = await asApp(cfg, (tx) =>
-      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: waterId, quantity: "3" }] }),
     );
 
     const { billId: checkId } = await asApp(cfg, (tx) =>
@@ -901,9 +876,9 @@ describe("splitting held kitchen work onto a check", () => {
   ] as const)(
     "refuses to move a held line of no group (%s) onto a check, moving nothing, and still splits a fired one",
     async (_, quantity) => {
-      const { cfg, aguaId, tableId } = await setupVenue();
+      const { cfg, waterId, tableId } = await setupVenue();
       await withKitchen(cfg);
-      const offer = offersByCfg.get(cfg)!.offerFor(aguaId);
+      const offer = offersByCfg.get(cfg)!.offerFor(waterId);
       const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
       await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
       await asApp(cfg, (tx) =>
@@ -974,19 +949,15 @@ function movedSlip(from: string, to: string, orderNumber: string, item: string):
   ];
 }
 
-/**
- * The owner's decision of 2026-09-26 (lane C questions, menus Task 7b item 4): moving sent work to
- * another table is allowed, and the kitchen is told.
- */
 describe("moving sent work to another table tells the kitchen", () => {
   it("tells the kitchen, when a check merges back into the tab it was split from, that its dishes are on another order", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, waterId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
       ]),
     );
     const { billId: checkId } = await asApp(cfg, (tx) =>
@@ -1027,10 +998,10 @@ describe("moving sent work to another table tells the kitchen", () => {
   });
 
   it("records a moved notice and slip for each sent item of a party moved to another table, and none for held work", async () => {
-    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const { cfg, waterId, tableId, tableId2 } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
-    const offer = offersByCfg.get(cfg)!.offerFor(aguaId);
+    const offer = offersByCfg.get(cfg)!.offerFor(waterId);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
     await asApp(cfg, (tx) =>
