@@ -104,7 +104,7 @@ describe("findInvoiceCustomerSales", () => {
     expect(await search("01234567L")).toEqual([]);
   });
 
-  it("normalises the stored number as well as the searched one", async () => {
+  it("normalises each stored number before comparing it", async () => {
     const [j1] = await suite.db.select().from(sales).where(eq(sales.id, fixture.sales.j1));
     const raw = randomUUID();
     await suite.db.withWriteLock(() =>

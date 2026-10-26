@@ -132,11 +132,8 @@ by the answers):
   The adjustments part (S2d) reads in the first turn. Measure that read and the whole first turn
   on a box.
   The invoice customer's search and download (S3) read in a search turn, a first turn and one turn
-  per invoice. S3 decision 7's stop rules, on the developer's Mac: a 250 ms median for the search
-  turn and the first turn, a 50 ms median for an invoice turn with no single one over 250 ms, and
-  250 ms for the longest stall of the event loop across a download. Repeat them, the ZIP's size
-  and the whole download's time on a box. A bar crossed there goes to the owner with decision 7's
-  options.
+  per invoice. Repeat the S3 plan's decision 7 measurements on a box, against its stop rules, with
+  the ZIP's size and the whole download's time.
 - **Reduce the first snapshot turn's cost for a person heavy in two histories.** The
   [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md#decisions-this-plan-makes-that-the-spec-does-not),
   decision 13, sets a 250 ms median stop rule for its Mac fixture with heavy working-time and

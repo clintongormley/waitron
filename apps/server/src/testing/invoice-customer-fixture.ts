@@ -144,6 +144,12 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
     return saleId;
   }
 
+  const sentReport = (at: string) => ({
+    completedAt: at,
+    reportedOutcome: "sent" as const,
+    reportedAt: at,
+  });
+
   async function emails(saleId: string, sent: readonly Email[]): Promise<void> {
     await inTx(venue, async (tx) => {
       for (const [index, email] of sent.entries()) {
@@ -158,8 +164,9 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
           recipient: email.recipient,
           personId: venue.operatorId,
           createdAt: at,
-          // A minute after the request, so a reader giving one for the other is seen.
-          ...(email.status === "sent" && { completedAt: clock.now().instant.toISOString() }),
+          // A minute after the request, so a reader giving one for the other is seen. An email
+          // becomes sent only through its report, which records the outcome in the same write.
+          ...(email.status === "sent" && sentReport(clock.now().instant.toISOString())),
         });
       }
     });
@@ -277,8 +284,8 @@ export async function expectedJordiFile(fixture: InvoiceCustomerVenue) {
             requestedAt: one.requestedAt[0],
             status: "sent",
             sentAt: one.completedAt[0],
-            reportedOutcome: null,
-            reportedAt: null,
+            reportedOutcome: "sent",
+            reportedAt: one.completedAt[0],
           },
         ],
       },
@@ -306,8 +313,8 @@ export async function expectedJordiFile(fixture: InvoiceCustomerVenue) {
             requestedAt: two.requestedAt[1],
             status: "sent",
             sentAt: two.completedAt[1],
-            reportedOutcome: null,
-            reportedAt: null,
+            reportedOutcome: "sent",
+            reportedAt: two.completedAt[1],
           },
         ],
       },

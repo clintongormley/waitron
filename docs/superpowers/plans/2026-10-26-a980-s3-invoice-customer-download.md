@@ -6,7 +6,10 @@ dashboard; lane B's `questions.md`, "OWNER DECISION (2026-10-26 ~04:25 CET)"), s
 refusal on a mirror is permanent; wording below that waits for A1111 is superseded. **2026-10-26 finish review:** Download sends
 the text Find sent, not the normalised number the search answered with (decision 2), because
 normalising a normalised number again can change it; and the download checks the caller again
-after the ZIP is built (decisions 6 and 13). The reviews, the claim check and the runner's rulings are in
+after the ZIP is built (decisions 6 and 13). `findInvoiceCustomerSales` takes the number already
+normalised (Task 2); each email in `invoices.json` also carries `reportedOutcome` and `reportedAt`
+(decision 8); and the README's `holds` line reads as in `apps/server/src/i18n/personal-data-readme.ts`,
+not as Task 5's table gives it. The reviews, the claim check and the runner's rulings are in
 `/Users/clintongormley/waitron-campaign-b/a980-s3-plan-review/` (`round1-review.md`,
 `round1-claims.md`, `round1-rulings.md`, `round3-review.md`, `round3-rulings.md`). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §2.2 (the

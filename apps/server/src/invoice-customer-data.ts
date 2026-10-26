@@ -32,7 +32,7 @@ export interface InvoiceCustomerSale {
 
 /** Decision 6's search: one statement over the sales naming a customer, filtered by
  * `normaliseInvoiceTaxId` of each stored number, then their columns by key. `taxId` is already
- * normalised: normalising removes only one leading "ES", so a second pass would change it. Call it
+ * normalised: normalising removes only one leading "ES", so a second pass can change it. Call it
  * inside a write-lock turn. */
 export async function findInvoiceCustomerSales(
   tx: Transaction,
