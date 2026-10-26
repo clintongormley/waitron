@@ -134,9 +134,10 @@ it.each([
   { newTaxpayer: false, change: "replacement", launch: "direct" },
   { newTaxpayer: false, change: "missing", launch: "direct" },
   { newTaxpayer: false, change: "none", launch: "direct", readinessAfterImport: true },
+  { newTaxpayer: false, change: "none", launch: "direct", claimFrom: "preview" },
 ])(
-  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport",
-  async ({ newTaxpayer, change, launch, readinessAfterImport }) => {
+  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport, claim from $claimFrom",
+  async ({ newTaxpayer, change, launch, readinessAfterImport, claimFrom }) => {
     const artifact = await configurationArtifact();
     const root = await mkdtemp(join(tmpdir(), "first-fiscal-joint-"));
     dirs.push(root);
@@ -228,14 +229,28 @@ it.each([
         },
         body: new Uint8Array(artifact).buffer,
       } as RequestInit);
-      expect({ status: staged.status, body: await staged.json() }).toMatchObject({
+      const stagedBody = await staged.json();
+      expect({ status: staged.status, body: stagedBody }).toMatchObject({
         status: 200,
         body: { counts: { products: 1 } },
       });
-      const venue = {
+      let venue: typeof request = {
         ...request,
         ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
       };
+      if (claimFrom === "preview") {
+        // Built as the setup app builds it, so a key a later export adds to `venue` reaches the claim.
+        const preview = stagedBody.venue;
+        expect(preview.location).toHaveProperty("fireControl");
+        expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
+        venue = {
+          ...preview,
+          location: Object.fromEntries(
+            Object.keys(request.location).map((key) => [key, preview.location[key]]),
+          ),
+          admin: request.admin,
+        };
+      }
       if (launch === "direct" && !newTaxpayer && change === "none") {
         for (const [candidate, newTaxpayer, field] of [
           [request, true, "taxId"],
