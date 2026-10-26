@@ -196,6 +196,16 @@ export {
   type StartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
 export {
+  START_AGAIN_ENTRY_LIMIT,
+  START_AGAIN_FLOOR_MARGIN_MS,
+  classifyStartAgainRefusal,
+  startAgainSetAsideFloorMs,
+  surveyStartAgainLeftovers,
+  type StartAgainEntry,
+  type StartAgainSurvey,
+  type StartAgainUnit,
+} from "./first-setup-start-again-leftovers.js";
+export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,
