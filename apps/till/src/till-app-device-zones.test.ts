@@ -15,13 +15,14 @@ import {
   servedMenus,
   toggleFloorView,
 } from "./widgets/test-helpers.js";
-import { billOptions, listPage } from "../test/find-bill-fixtures.js";
+import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillApi, FloorZone, ZoneOfferCatalogue } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import { ServerRouter } from "./api/server-router.js";
 import { SessionActivity } from "./session-activity.js";
 import { TillApp } from "./till-app.js";
 
@@ -1549,6 +1550,252 @@ describe("a handheld's zones", () => {
     const store = screen()!.draftStore!;
     store.addProduct(screen()!.products[0]!, "1");
     expect(store.lines).toHaveLength(0);
+  });
+
+  describe("Floor after a table", () => {
+    const all = ["bar", "room", "garden"];
+    const gardenTable = () => {
+      const table = tableIn("table-garden", "garden");
+      return {
+        ...table,
+        party: {
+          ...table.party,
+          unsentDrafts: [
+            {
+              billId: table.party.mainBillId,
+              billNumber: 1,
+              ownerId: "person",
+              ownerName: "Ana",
+              lineCount: 1,
+              savedAt: "2026-10-26T12:00:00Z",
+            },
+          ],
+        },
+      };
+    };
+    async function mountTables(
+      chosen: DeviceZoneSelection,
+      formFactor = "phone-portrait",
+      over: Record<string, unknown> = {},
+    ) {
+      const garden = gardenTable();
+      const drafts = draftServer(() => ({
+        tabId: garden.party.mainBillId,
+        revision: 1,
+        groups: [],
+      }));
+      drafts.bills.add(garden.party.mainBillId);
+      const mounted = await mountHandheld(chosen, formFactor, {
+        getTablesState: vi.fn().mockResolvedValue([tableIn("table-room", "room"), garden]),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        listDrafts: drafts.listDrafts,
+        saveDraft: drafts.saveDraft,
+        submitDraft: drafts.submitDraft,
+        ...over,
+      });
+      await vi.waitFor(() => expect(floor(mounted.el)?.tables).toHaveLength(2));
+      return mounted;
+    }
+    const orderScreen = (el: TillApp) => el.shadowRoot!.querySelector("till-table-order-screen");
+    async function showZone(el: TillApp, zoneId: string) {
+      await floorZoneIds(el);
+      floor(el).shadowRoot!.querySelector<HTMLElement>(`.tabs [data-zone="${zoneId}"]`)!.click();
+      await vi.waitFor(() => expect(activeTab(el)).resolves.toBe(zoneId));
+    }
+    async function openFromBar(el: TillApp, tableId: string) {
+      const button = () =>
+        shell(el).shadowRoot!.querySelector<HTMLElement>(`[data-bar-table="${tableId}"]`);
+      await vi.waitFor(() => expect(button()).not.toBeNull());
+      button()!.click();
+      await vi.waitFor(() => expect(orderScreen(el)?.draftStore).toBeTruthy());
+      await el.updateComplete;
+    }
+    async function tapFloor(el: TillApp) {
+      await userEvent.click(
+        [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+          (tab) => tab.textContent!.trim() === "Floor",
+        )!,
+      );
+      await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+    }
+    async function signIn(el: TillApp, personId: string, displayName: string) {
+      el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
+        new CustomEvent("logged-in", {
+          detail: { personId, displayName, permissions: [], locale: "en-GB" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await vi.waitFor(() => expect(shell(el)).not.toBeNull());
+    }
+    async function signOut(el: TillApp) {
+      shell(el).dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
+      );
+    }
+
+    it("opens the Floor on the zone of the table just left, not the zone viewed before", async () => {
+      const { el } = await mountTables(selection(all, "room", false));
+      await showZone(el, "room");
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+      expect(location.pathname).toBe("/tabs/floor/zone/garden");
+    });
+
+    it("beats a saved Opens first once a table has been opened", async () => {
+      const { el } = await mountTables(selection(all, "room"));
+      expect(await activeTab(el)).toBe("room");
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+    });
+
+    it("opens a finished table's zone", async () => {
+      const finishTable = vi.fn().mockResolvedValue({ state: "closed" });
+      const { el } = await mountTables(selection(all, "room"), "phone-portrait", { finishTable });
+      await openFromBar(el, "table-garden");
+      orderScreen(el)!.dispatchEvent(
+        new CustomEvent("finish-table", { detail: {}, bubbles: true, composed: true }),
+      );
+      await vi.waitFor(() => expect(finishTable).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+      expect(await activeTab(el)).toBe("garden");
+    });
+
+    it("opens as before when the Floor does not show that zone", async () => {
+      const garden = gardenTable();
+      const row = billRow({
+        workingOrderId: garden.party.mainBillId,
+        partyId: garden.party.id,
+        zoneId: "garden",
+      });
+      const { el } = await mountTables(selection(["bar", "room"], "room"), "phone-portrait", {
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage([row])),
+        getFindBill: vi.fn().mockResolvedValue(row),
+      });
+      expect(await activeTab(el)).toBe("room");
+      shell(el).dispatchEvent(new CustomEvent("find-bill", { bubbles: true, composed: true }));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull(),
+      );
+      el.shadowRoot!.querySelector("till-find-bill-screen")!.dispatchEvent(
+        new CustomEvent("find-bill-open", { detail: { row }, bubbles: true, composed: true }),
+      );
+      await vi.waitFor(() => expect(orderScreen(el)?.draftStore).toBeTruthy());
+      await el.updateComplete;
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("room");
+      expect(location.pathname).not.toContain("garden");
+    });
+
+    it("forgets the zone at sign-out, for the next person and the same one", async () => {
+      const { el } = await mountTables(selection(all, "room"));
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+      await signOut(el);
+      await signIn(el, "sam", "Sam");
+      expect(await activeTab(el)).toBe("room");
+      await signOut(el);
+      await signIn(el, "person", "Ana");
+      expect(await activeTab(el)).toBe("room");
+    });
+
+    it("opens on the table's zone when the zone choice could not be read", async () => {
+      const { el } = await mountTables(selection(all, "room"), "phone-portrait", {
+        getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      await showZone(el, "room");
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+    });
+
+    it("keeps the zone before when the table opened has none", async () => {
+      const { el, api } = await mountTables(selection(all, "room"));
+      api.getTablesState.mockResolvedValue([
+        { ...tableIn("table-room", "room"), zoneId: null },
+        gardenTable(),
+      ]);
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+      await vi.waitFor(() => expect(floor(el).tables[0]!.zoneId).toBeNull());
+      floor(el).dispatchEvent(
+        new CustomEvent("open-table", {
+          detail: { tableId: "table-room", seated: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await vi.waitFor(() => expect(orderScreen(el)).not.toBeNull());
+      await el.updateComplete;
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+    });
+
+    it("forgets the zone when the till switches server", async () => {
+      const data = new Map<string, string>();
+      const router = new ServerRouter({
+        origin: "https://box.deli.test",
+        fetchImpl: vi.fn(async () => {
+          throw new TypeError("Failed to fetch");
+        }) as unknown as typeof fetch,
+        storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
+      });
+      const { el } = await mountTables(selection(all, "room"));
+      el.router = router;
+      await el.updateComplete;
+      await openFromBar(el, "table-garden");
+      await tapFloor(el);
+      expect(await activeTab(el)).toBe("garden");
+      router.dispatchEvent(
+        new CustomEvent("server-changed", {
+          detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
+        }),
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
+      );
+      await signIn(el, "person", "Ana");
+      expect(await activeTab(el)).toBe("room");
+    });
+
+    it("a till's Floor does not move when a table opens over it", async () => {
+      const { el } = await mountTables(selection(all, "room"), "till");
+      const select = (screen: string) =>
+        shell(el).dispatchEvent(
+          new CustomEvent("screen-select", { detail: { screen }, bubbles: true, composed: true }),
+        );
+      select("floor");
+      expect(await activeTab(el)).toBe("room");
+      floor(el).dispatchEvent(
+        new CustomEvent("open-table", {
+          detail: { tableId: "table-garden", seated: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await vi.waitFor(() => expect(orderScreen(el)?.draftStore).toBeTruthy());
+      await el.updateComplete;
+      expect(floor(el).isConnected).toBe(true);
+      expect(await activeTab(el)).toBe("room");
+      orderScreen(el)!.dispatchEvent(
+        new CustomEvent("back-to-floor", { bubbles: true, composed: true }),
+      );
+      await vi.waitFor(() => expect(orderScreen(el)).toBeNull());
+      expect(await activeTab(el)).toBe("room");
+      select("counter");
+      await vi.waitFor(() => expect(floor(el)).toBeNull());
+      select("floor");
+      expect(await activeTab(el)).toBe("room");
+      expect(location.pathname).not.toContain("garden");
+    });
   });
 
   describe("live", () => {

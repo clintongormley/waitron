@@ -1914,7 +1914,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
         .shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab");
     await userEvent.click(primary()[0]!);
     await flush(el);
-    expect(location.pathname).toBe("/tabs/floor");
+    expect(location.pathname).toBe("/tabs/floor/zone/zone-counter");
     const toOrder = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );
@@ -1928,7 +1928,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     history.forward();
     await forward;
     await flush(el);
-    expect(location.pathname).toBe("/tabs/floor");
+    expect(location.pathname).toBe("/tabs/floor/zone/zone-counter");
     const back = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );

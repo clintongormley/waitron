@@ -2139,6 +2139,7 @@ export class TillApp extends LitElement {
     this.operatorName = "";
     this.#loginPending = false;
     this.permissions = [];
+    this.floorReturnZoneId = undefined;
     this.#endOperatorSession();
     this.#dropDraft();
     this.#dropLeavingDrafts();
@@ -2454,6 +2455,8 @@ export class TillApp extends LitElement {
   @state() private tableOpening = false;
   /** D13: the table {@link #openTableFromEvent} is opening, highlighted on the bar while it loads. */
   @state() private openingTableId?: string;
+  /** D12: the zone of the table a handheld last held; its Floor opens there while it shows it. */
+  @state() private floorReturnZoneId?: string;
   /** The last floor read that answered: a failed {@link #reloadTables} empties `tables`, not the bar. */
   @state() private barFloor: TableState[] = [];
   /** Kept while its contents are unchanged: a new array makes the shell step back and refit. */
@@ -3479,14 +3482,26 @@ export class TillApp extends LitElement {
 
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
     this.activeTabKey = this.#resolveScreen(key ?? null);
+    const returnZone = this.activeTabKey === "floor" ? this.#floorReturnZone() : undefined;
     if (key !== undefined)
       this.#writeUrl(
         {
           "till-tab": this.activeTabKey ?? null,
+          ...(returnZone === undefined ? {} : { "till-zone": returnZone }),
           ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
         },
         replace,
       );
+  }
+
+  /** D12: {@link floorReturnZoneId} while the Floor shows that zone. */
+  #floorReturnZone(): string | undefined {
+    const zoneId = this.floorReturnZoneId;
+    const navigation = this.#deviceNavigation();
+    return zoneId !== undefined &&
+      (navigation?.floorZoneIds ?? this.zones.map((zone) => zone.id)).includes(zoneId)
+      ? zoneId
+      : undefined;
   }
 
   #allowsDestination(destination: TillDestination): boolean {
@@ -4104,6 +4119,14 @@ export class TillApp extends LitElement {
       this.#syncDepartmentTransfers();
     if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
       this.#affordanceList = this.#affordances();
+    if (
+      changed.has("activeTableId") &&
+      this.activeTableId !== undefined &&
+      this.formFactor !== "till"
+    ) {
+      const zoneId = this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId;
+      if (zoneId) this.floorReturnZoneId = zoneId;
+    }
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
     if (changed.has("frontDoor")) this.#decideReload();
@@ -18156,6 +18179,7 @@ export class TillApp extends LitElement {
     this.drill = undefined;
     this.tableOpening = false;
     this.openingTableId = undefined;
+    this.floorReturnZoneId = undefined;
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
@@ -18341,7 +18365,7 @@ export class TillApp extends LitElement {
         }
         .selectedZoneId=${
           this.formFactor !== "till"
-            ? (navigation?.startingZoneId ?? undefined)
+            ? (this.#floorReturnZone() ?? navigation?.startingZoneId ?? undefined)
             : navigation?.floorZoneIds.includes(this.deviceZoneSelection?.startingZoneId ?? "")
               ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
               : undefined
