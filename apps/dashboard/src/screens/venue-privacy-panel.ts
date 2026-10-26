@@ -100,7 +100,10 @@ export class VenuePrivacyPanel extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
-  #writes = 0;
+  /** Each read and each save answer takes the next place when it begins (an answer when it
+   * arrives); the card shows a value only if its place is later than the one it shows. */
+  #places = 0;
+  #shownPlace = 0;
   #loadedBefore = false;
   readonly #queries = new QueryController(
     this,
@@ -130,7 +133,6 @@ export class VenuePrivacyPanel extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
-    this.submitting = false;
     super.disconnectedCallback();
   }
   override willUpdate(changed: PropertyValues<this>): void {
@@ -221,18 +223,17 @@ export class VenuePrivacyPanel extends LitElement {
       await this.#focusInvalid();
       return;
     }
-    const generation = this.#generation;
-    const scope = this.#scope;
+    const draft = this.draft;
     this.submitting = true;
     try {
       const answer = await this.api.putVenuePrivacy(changes(this.#expected, this.draft));
-      if (generation !== this.#generation) return;
-      this.#writes++;
+      this.#shownPlace = ++this.#places;
       this.model = answer;
-      if (scope === this.#scope) this.#cancel();
+      if (draft === this.draft) this.#cancel();
       else this.#adopt(answer);
+      if (this.isConnected) void this.#reread();
     } catch (error) {
-      if (generation !== this.#generation || scope !== this.#scope) return;
+      if (draft !== this.draft) return;
       const code = codeOf(error);
       const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
       const field = PRIVACY_CONTACT_FIELDS.find((name) => name === params?.field);
@@ -248,7 +249,25 @@ export class VenuePrivacyPanel extends LitElement {
         await this.#focusInvalid();
       } else this.actionError = codeMessage(code);
     } finally {
-      if (generation === this.#generation) this.submitting = false;
+      this.submitting = false;
+    }
+  }
+  #show(place: number, value: VenuePrivacy): void {
+    if (place <= this.#shownPlace) return;
+    this.#shownPlace = place;
+    this.model = value;
+    this.readError = "";
+    this.#adopt(value);
+  }
+  async #reread(): Promise<void> {
+    const generation = this.#generation;
+    const place = ++this.#places;
+    try {
+      const value = await (this.api.background ?? this.api).getVenuePrivacy();
+      if (generation === this.#generation) this.#show(place, value);
+    } catch (error) {
+      if (generation === this.#generation && place > this.#shownPlace)
+        this.readError = codeMessage(codeOf(error));
     }
   }
   #field(field: Field, errors: Errors) {
@@ -325,15 +344,12 @@ export class VenuePrivacyPanel extends LitElement {
           ...query,
           key: `${query.key}:venue-privacy-panel`,
           read: async () => {
-            const writes = this.#writes;
-            return { writes, value: await query.read() };
+            const place = ++this.#places;
+            return { place, value: await query.read() };
           },
         },
-        ({ writes, value }) => {
-          if (generation !== this.#generation || writes !== this.#writes) return;
-          this.model = value;
-          this.readError = "";
-          this.#adopt(value);
+        ({ place, value }) => {
+          if (generation === this.#generation) this.#show(place, value);
         },
       )
       .catch(() => {});

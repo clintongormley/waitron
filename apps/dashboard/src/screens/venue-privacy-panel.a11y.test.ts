@@ -63,3 +63,51 @@ it.each(cases)("Privacy card: $locale / $theme", async ({ theme, locale }) => {
     host.remove();
   }
 });
+
+const LONG: VenuePrivacy = {
+  privacyNoticeUrl: "https://example.com/" + "a".repeat(480),
+  privacyEmail: "a@" + "b".repeat(249) + ".es",
+};
+
+it.each(cases)(
+  "Privacy card with the longest values and a read failure at phone width: $locale / $theme",
+  async ({ theme, locale }) => {
+    setLocale(locale);
+    await page.viewport(390, 900);
+    try {
+      for (const state of ["long-view", "long-edit", "read-error"] as const) {
+        const api = {
+          liveData: new LiveData(),
+          getVenuePrivacy: async () => {
+            if (state === "read-error") throw { code: "management.failed" };
+            return structuredClone(LONG);
+          },
+        } as unknown as DashboardApi;
+        const { el, host } = await mountWidget<VenuePrivacyPanel>(
+          "dashboard-venue-privacy-panel",
+          { api },
+          theme,
+        );
+        const root = el.shadowRoot!;
+        const marker = state === "read-error" ? "[data-test=read-error]" : "[data-test=edit]";
+        await expect.poll(() => root.querySelector(marker)).toBeTruthy();
+        if (state === "long-view")
+          expect(root.querySelector("[data-test=saved-privacyNoticeUrl]")!.textContent).toBe(
+            LONG.privacyNoticeUrl,
+          );
+        if (state === "long-edit") {
+          root.querySelector<HTMLElement>("[data-test=edit]")!.click();
+          await expect
+            .poll(() => root.querySelector<WtInput>("wt-input[name=privacyNoticeUrl]")?.value)
+            .toBe(LONG.privacyNoticeUrl);
+        }
+        await expectNoA11yViolations(host);
+        expect(el.scrollWidth).toBeLessThanOrEqual(390);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+        host.remove();
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);

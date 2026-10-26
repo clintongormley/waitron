@@ -3,7 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setHelpMode, type WtButton, type WtInput } from "@waitron/ui";
 import type { DashboardApi, VenuePrivacy } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
@@ -150,10 +154,10 @@ it("spaces typed around the stored web page keep Save quiet", async () => {
 
 it("Save sends only the changed field, closes the form and shows the answer", async () => {
   const r = rig(STORED);
-  r.api.putVenuePrivacy.mockImplementationOnce(async () => ({
-    ...STORED,
-    privacyNoticeUrl: "https://example.com/answered",
-  }));
+  r.api.putVenuePrivacy.mockImplementationOnce(async () => {
+    r.state.stored = { ...STORED, privacyNoticeUrl: "https://example.com/answered" };
+    return structuredClone(r.state.stored);
+  });
   const el = await mount(r.api);
   await edit(el);
   await type(el, "privacyNoticeUrl", "https://example.com/new");
@@ -467,4 +471,280 @@ it("during an edit a changed draft keeps what was typed when a live read arrives
   await expect
     .poll(() => r.api.putVenuePrivacy.mock.calls)
     .toEqual([[{ privacyEmail: "typed@example.com" }]]);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+const savedEmail = (el: Panel) => text(q(el, "[data-test=saved-privacyEmail]"));
+
+function withBackground(stored: VenuePrivacy = STORED) {
+  const r = rig(stored);
+  const background = { getVenuePrivacy: vi.fn(async () => structuredClone(r.state.stored)) };
+  Object.assign(r.api, { background });
+  return { ...r, background };
+}
+
+it("shows a read failure with Retry, and Retry recovers", async () => {
+  const r = rig(STORED);
+  r.api.getVenuePrivacy.mockRejectedValueOnce({ code: "server.unavailable" });
+  const { el } = await mountWidget<Panel>("dashboard-venue-privacy-panel", { api: r.api });
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(q(el, "[data-test=read-error]")!.getAttribute("role")).toBe("alert");
+  expect(text(q(el, "[data-test=read-error]"))).toBe(codeMessage("server.unavailable"));
+  expect(q(el, "section.settings-card dl")).toBeNull();
+  const retry = q(el, "[data-test=retry]") as HTMLElement;
+  expect(text(retry)).toBe("Retry");
+  retry.click();
+  await expect.poll(() => savedEmail(el)).toBe("privacy@example.com");
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+  expect(q(el, "[data-test=retry]")).toBeNull();
+});
+
+it("reads through the background client once the card has read before, after reconnecting", async () => {
+  const r = withBackground();
+  const el = await mount(r.api);
+  expect(r.api.getVenuePrivacy).toHaveBeenCalledTimes(1);
+  expect(r.background.getVenuePrivacy).not.toHaveBeenCalled();
+  const parent = el.parentNode!;
+  el.remove();
+  parent.appendChild(el);
+  await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(1);
+  expect(r.api.getVenuePrivacy).toHaveBeenCalledTimes(1);
+});
+
+it("Retry reads through the background client, as every read after the first does", async () => {
+  const r = withBackground();
+  r.api.getVenuePrivacy.mockRejectedValueOnce({ code: "server.unavailable" });
+  const { el } = await mountWidget<Panel>("dashboard-venue-privacy-panel", { api: r.api });
+  await expect.poll(() => q(el, "[data-test=retry]")).toBeTruthy();
+  (q(el, "[data-test=retry]") as HTMLElement).click();
+  await expect.poll(() => savedEmail(el)).toBe("privacy@example.com");
+  expect(r.api.getVenuePrivacy).toHaveBeenCalledTimes(1);
+  expect(r.background.getVenuePrivacy).toHaveBeenCalledTimes(1);
+});
+
+it("a read begun before a successful save does not put back the old email", async () => {
+  const r = rig(STORED);
+  const el = await mount(r.api);
+  const stale = deferred<VenuePrivacy>();
+  r.api.getVenuePrivacy.mockImplementationOnce(() => stale.promise);
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(2);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  await save(el);
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(savedEmail(el)).toBe("new@example.com");
+  stale.resolve(structuredClone(STORED));
+  await stale.promise;
+  await frame();
+  await flush(el);
+  expect(savedEmail(el)).toBe("new@example.com");
+});
+
+it("a save answer that arrives after a newer live value ends on the newer value", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "first@example.com");
+  await save(el);
+  const reads = r.api.getVenuePrivacy.mock.calls.length;
+  r.state.stored = { ...STORED, privacyEmail: "second@example.com" };
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
+  await frame();
+  await flush(el);
+  pending.resolve({ ...STORED, privacyEmail: "first@example.com" });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await expect.poll(() => savedEmail(el)).toBe("second@example.com");
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+});
+
+it("a live read begun during the save that answers after it does not leave the save's answer showing", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "first@example.com");
+  await save(el);
+  const late = deferred<VenuePrivacy>();
+  r.api.getVenuePrivacy.mockImplementationOnce(() => late.promise);
+  const reads = r.api.getVenuePrivacy.mock.calls.length;
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
+  r.state.stored = { ...STORED, privacyEmail: "second@example.com" };
+  pending.resolve({ ...STORED, privacyEmail: "first@example.com" });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  late.resolve({ ...STORED, privacyEmail: "second@example.com" });
+  await late.promise;
+  await frame();
+  await flush(el);
+  await expect.poll(() => savedEmail(el)).toBe("second@example.com");
+  expect(q(el, "form")).toBeNull();
+});
+
+it("after a successful save the card reads the stored pair again through the background client", async () => {
+  const r = withBackground();
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  await save(el);
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(1);
+  expect(r.api.getVenuePrivacy).toHaveBeenCalledTimes(1);
+  expect(savedEmail(el)).toBe("new@example.com");
+});
+
+it("a failed read after a successful save is a read failure, and the editor stays closed", async () => {
+  const r = withBackground();
+  r.background.getVenuePrivacy.mockRejectedValueOnce({ code: "server.unavailable" });
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  await save(el);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(text(q(el, "[data-test=read-error]"))).toBe(codeMessage("server.unavailable"));
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeTruthy();
+  expect(savedEmail(el)).toBe("new@example.com");
+  expect(r.api.putVenuePrivacy).toHaveBeenCalledTimes(1);
+  (q(el, "[data-test=retry]") as HTMLElement).click();
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeNull();
+  expect(savedEmail(el)).toBe("new@example.com");
+});
+
+it("reconnecting while a save is in flight keeps Save disabled, so a second click sends nothing", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  await save(el);
+  await reattachAfterDetachedUpdate(el);
+  await flush(el);
+  expect(saveButton(el).loading).toBe(true);
+  expect(saveButton(el).disabled).toBe(true);
+  saveButton(el).click();
+  await flush(el);
+  expect(r.api.putVenuePrivacy).toHaveBeenCalledTimes(1);
+  r.state.stored = { ...STORED, privacyEmail: "new@example.com" };
+  pending.resolve({ ...STORED, privacyEmail: "new@example.com" });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(q(el, "form")).toBeNull();
+  expect(savedEmail(el)).toBe("new@example.com");
+  expect(r.api.putVenuePrivacy).toHaveBeenCalledTimes(1);
+});
+
+it("a save in flight when the card turns read-only shows its answer once it succeeds", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  expect(q(el, "form")).toBeNull();
+  const reread = deferred<VenuePrivacy>();
+  r.api.getVenuePrivacy.mockImplementationOnce(() => reread.promise);
+  pending.resolve({ ...STORED, privacyEmail: "new@example.com" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(savedEmail(el)).toBe("new@example.com");
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeNull();
+  reread.resolve({ ...STORED, privacyEmail: "new@example.com" });
+});
+
+it("a save that succeeds after the card turned read-only and back leaves the new clean draft open on its answer", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  el.readOnly = false;
+  await flush(el);
+  await edit(el);
+  expect(input(el, "privacyEmail")!.value).toBe("privacy@example.com");
+  const reread = deferred<VenuePrivacy>();
+  r.api.getVenuePrivacy.mockImplementationOnce(() => reread.promise);
+  pending.resolve({ ...STORED, privacyEmail: "new@example.com" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(q(el, "form")).not.toBeNull();
+  expect(input(el, "privacyEmail")!.value).toBe("new@example.com");
+  expect(saveButton(el).disabled).toBe(true);
+  expect(saveButton(el).loading).toBe(false);
+  reread.resolve({ ...STORED, privacyEmail: "new@example.com" });
+});
+
+it("a refusal that arrives after reconnecting during the save goes under its field in the resumed draft", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  await save(el);
+  await reattachAfterDetachedUpdate(el);
+  pending.reject({
+    code: "venue.detail_invalid",
+    params: { field: "privacyEmail", reason: "email" },
+  });
+  await pending.promise.catch(() => {});
+  await frame();
+  await flush(el);
+  expect(input(el, "privacyEmail")!.value).toBe("new@example.com");
+  expect(input(el, "privacyEmail")!.error).toBe(t("venue_privacy.email_invalid"));
+  expect(saveButton(el).loading).toBe(false);
+  expect(saveButton(el).disabled).toBe(false);
+});
+
+it("a refusal that arrives after the card turned read-only and back leaves the new draft alone", async () => {
+  const r = rig(STORED);
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "new@example.com");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  el.readOnly = false;
+  await flush(el);
+  await edit(el);
+  pending.reject({
+    code: "venue.detail_invalid",
+    params: { field: "privacyEmail", reason: "email" },
+  });
+  await pending.promise.catch(() => {});
+  await frame();
+  await flush(el);
+  expect(input(el, "privacyEmail")!.value).toBe("privacy@example.com");
+  expect(input(el, "privacyEmail")!.error).toBe("");
+  expect(bottom(el)).toBe("");
+  expect(saveButton(el).loading).toBe(false);
 });
