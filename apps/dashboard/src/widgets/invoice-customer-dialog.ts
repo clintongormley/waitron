@@ -2,7 +2,13 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
-import { baseStyles, submitOnEnter, type DataTableColumn, type WtDialog } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  type DataTableColumn,
+  type WtDialog,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -13,7 +19,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { countOf } from "./count-text.js";
-import { invoiceTaxIdProblem } from "./invoice-tax-id.js";
+import { invoiceTaxIdProblem, normaliseInvoiceTaxId } from "./invoice-tax-id.js";
 
 type FoundInvoice = InvoiceCustomerSearchDto["invoices"][number];
 
@@ -48,6 +54,8 @@ export class InvoiceCustomerDialog extends LitElement {
   @state() private found: InvoiceCustomerSearchDto | null = null;
   @state() private fieldRefusal = "";
   @state() private actionError = "";
+  /** The form says nothing about the field until Find is first pressed. */
+  @state() private attempted = false;
   /** Bumped by every edit and close, so an answer to an earlier number is dropped. */
   #generation = 0;
 
@@ -58,6 +66,7 @@ export class InvoiceCustomerDialog extends LitElement {
     this.found = null;
     this.fieldRefusal = "";
     this.actionError = "";
+    this.attempted = false;
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -79,14 +88,24 @@ export class InvoiceCustomerDialog extends LitElement {
     this.actionError = "";
   }
 
+  /** Nothing but ignored characters and a leading ES: the dialog is still waiting for a number. */
+  #awaitingInput(): boolean {
+    return normaliseInvoiceTaxId(this.taxId) === "";
+  }
+
   #ownProblem(): string {
-    if (this.taxId === "") return "";
     const problem = invoiceTaxIdProblem(this.taxId);
     return problem === null ? "" : t(problem);
   }
 
   async #find(): Promise<void> {
-    if (this.searching || this.taxId === "" || this.#ownProblem() !== "") return;
+    if (this.searching || this.#awaitingInput()) return;
+    this.attempted = true;
+    if (this.#ownProblem() !== "") {
+      await this.updateComplete;
+      focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
     const generation = ++this.#generation;
     this.searching = true;
     this.found = null;
@@ -152,8 +171,9 @@ export class InvoiceCustomerDialog extends LitElement {
   }
 
   override render() {
-    const problem = this.#ownProblem() || this.fieldRefusal;
-    const ready = this.taxId !== "" && this.#ownProblem() === "";
+    const ownProblem = this.attempted && !this.#awaitingInput() ? this.#ownProblem() : "";
+    const problem = ownProblem || this.fieldRefusal;
+    const ready = !this.#awaitingInput() && ownProblem === "";
     const bottom = problem ? t("form.fix_fields") : "";
     const dialog = () => this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
     return html`<wt-dialog

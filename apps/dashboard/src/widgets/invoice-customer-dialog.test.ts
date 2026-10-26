@@ -18,26 +18,27 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
+// In neither date nor invoice-number order, so a re-sort of either kind changes the rows.
 const THREE: InvoiceCustomerSearchDto = {
   taxId: "12345678Z",
   invoices: [
     {
-      invoice: "F1-2026-0003",
+      invoice: "F1-2026-0011",
+      issuedAt: "2026-09-30T09:05:00.000Z",
+      name: "Jordi Puig",
+      total: "7.05",
+    },
+    {
+      invoice: "F1-2026-0020",
       issuedAt: "2026-03-02T10:15:00.000Z",
       name: "Jordi Puig",
       total: "12.50",
     },
     {
-      invoice: "F1-2026-0011",
+      invoice: "F1-2026-0003",
       issuedAt: "2026-05-19T18:40:00.000Z",
       name: "Puig Electrical Ltd",
       total: "240.00",
-    },
-    {
-      invoice: "F1-2026-0020",
-      issuedAt: "2026-09-30T09:05:00.000Z",
-      name: "Jordi Puig",
-      total: "7.05",
     },
   ],
 };
@@ -81,6 +82,11 @@ async function press(el: InvoiceCustomerDialog): Promise<void> {
   await el.updateComplete;
 }
 
+async function bottomLine(el: InvoiceCustomerDialog): Promise<Element | null> {
+  await el.updateComplete;
+  return formMessageOf(el.shadowRoot!.querySelector<WtFormActions>("wt-form-actions")!);
+}
+
 async function rows(el: InvoiceCustomerDialog): Promise<string[][]> {
   const table = el.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table");
   if (!table) return [];
@@ -112,14 +118,39 @@ describe.each([
     expect(findButton(el).variant).toBe("primary");
   });
 
-  it("marks an invalid value under the field, says so above the buttons and keeps Find disabled", async () => {
-    const { el } = await mount(async () => THREE);
+  it.each(["ES", "es", " "])(
+    "says nothing and keeps Find quiet while the field holds only %j",
+    async (typed) => {
+      const { el } = await mount(async () => THREE);
+      await type(el, typed);
+      expect(taxField(el).error).toBe("");
+      expect(await bottomLine(el)).toBeNull();
+      expect(findButton(el).disabled).toBe(true);
+      expect(findButton(el).variant).toBe("secondary");
+    },
+  );
+
+  it("marks an invalid value only once Find is pressed, sends nothing, and clears the mark once fixed", async () => {
+    const { el, find } = await mount(async () => THREE);
     await type(el, "12/34");
+    expect(taxField(el).error).toBe("");
+    expect(await bottomLine(el)).toBeNull();
+    expect(findButton(el).disabled).toBe(false);
+    expect(findButton(el).variant).toBe("primary");
+    await press(el);
     expect(taxField(el).error).toBe(words["invoice_customer.tax_id_invalid"]);
-    const message = await formMessageOf(
-      el.shadowRoot!.querySelector<WtFormActions>("wt-form-actions")!,
-    );
-    expect(message?.textContent?.trim()).toBe(words["form.fix_fields"]);
+    expect((await bottomLine(el))?.textContent?.trim()).toBe(words["form.fix_fields"]);
+    expect(find).not.toHaveBeenCalled();
+    await expect.poll(() => taxField(el).shadowRoot!.activeElement?.tagName).toBe("INPUT");
+    expect(findButton(el).disabled).toBe(true);
+    expect(findButton(el).variant).toBe("secondary");
+    await type(el, "12345678Z");
+    expect(taxField(el).error).toBe("");
+    expect(await bottomLine(el)).toBeNull();
+    expect(findButton(el).disabled).toBe(false);
+    expect(findButton(el).variant).toBe("primary");
+    await type(el, "1234/");
+    expect(taxField(el).error).toBe(words["invoice_customer.tax_id_invalid"]);
     expect(findButton(el).disabled).toBe(true);
   });
 
@@ -208,6 +239,7 @@ describe.each([
     await type(el, "12345678Z");
     await press(el);
     await expect.poll(() => taxField(el).error).toBe(words["invoice_customer.tax_id_invalid"]);
+    expect((await bottomLine(el))?.textContent?.trim()).toBe(words["form.fix_fields"]);
     expect(findButton(el).disabled).toBe(false);
   });
 });

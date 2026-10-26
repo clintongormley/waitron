@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { invoiceTaxIdProblem, normaliseInvoiceTaxId } from "./invoice-tax-id.js";
 
-// Copied verbatim from apps/server/src/invoice-customer-tax-id.test.ts, so the two copies of the
-// rule cannot drift without one of these tests failing.
+// Copied verbatim from apps/server/src/invoice-customer-tax-id.test.ts; change both together.
 const ACCEPT: [string, string][] = [
   ["es 12345678z", "12345678Z"],
   ["ES12345678Z", "12345678Z"],

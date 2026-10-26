@@ -5358,7 +5358,7 @@ export const es: Record<StringKey, string> = {
   "invoice_customer.count": "{count} facturas completas llevan este NIF.",
   "invoice_customer.count_one": "1 factura completa lleva este NIF.",
   "invoice_customer.col.invoice": "Factura",
-  "invoice_customer.col.issued": "Emitida",
+  "invoice_customer.col.issued": "Emisión",
   "invoice_customer.col.name": "Nombre en la factura",
   "invoice_customer.col.total": "Total",
   "invoice_customer.preparing": "Preparando una copia de los datos del cliente…",

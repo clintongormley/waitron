@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, InvoiceCustomerSearchDto } from "../api/client.js";
@@ -38,7 +39,8 @@ const THREE: InvoiceCustomerSearchDto = {
 };
 
 async function type(el: InvoiceCustomerDialog, value: string): Promise<void> {
-  const field = el.shadowRoot!.querySelector("wt-input[name=taxId]")!;
+  const field = el.shadowRoot!.querySelector<WtInput>("wt-input[name=taxId]")!;
+  await field.updateComplete;
   const input = field.shadowRoot!.querySelector("input")!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -62,6 +64,7 @@ describe.each(["light", "dark"] as const)("invoice customer dialog accessibility
     await expectNoA11yViolations(host);
 
     await type(el, "12/34");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=find]")!.click();
     await expect.poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
     await expectNoA11yViolations(host);
 
