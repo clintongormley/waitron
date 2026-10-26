@@ -259,6 +259,11 @@ export interface ThemeLogoPrint {
 }
 ```
 
+(2026-10-27, from the slice's review: the answer also carries `address`, the `display` rendition
+address it drew from, and the widget compares it with the address the library gives; "writes
+nothing" holds for image and theme rows, while an ask that is not passive records the session's
+last activity through `authorizeManager`; the dashboard's ask is passive.)
+
 It draws the draft's image, not the stored `printedLogo`: the draft's logo may be unsaved, and the
 same `drawLogo` makes both pictures (`receipt-logo.ts:13-17,25,78`).
 

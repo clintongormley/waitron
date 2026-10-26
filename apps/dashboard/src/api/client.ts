@@ -2247,6 +2247,8 @@ export interface ThemeList {
 export interface ThemeLogoPrint {
   /** The paper's printable dots across. */
   readonly paperDots: number;
+  /** The `display` address `picture` was drawn from; `null` when the library has no such image. */
+  readonly address: string | null;
   /** The 80 mm picture; `null` when the image is gone or will not decode. */
   readonly picture: {
     readonly widthDots: number;

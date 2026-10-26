@@ -16,9 +16,12 @@ type Shown =
   | { kind: "none" }
   | { kind: "shown"; url: string; width: string; blank: boolean };
 
-/** How the theme's logo prints on an 80 mm receipt, redrawn when the library reframes it. */
+/**
+ * How the theme's logo prints on an 80 mm receipt, redrawn when the library reframes it, and not
+ * drawn while the library no longer holds it.
+ */
 @customElement("dashboard-theme-logo-print")
-export class DashboardThemeLogoPrint extends LitElement {
+export class ThemeLogoPrintFigure extends LitElement {
   static override styles = [
     baseStyles,
     fixLineStyles,
@@ -69,8 +72,15 @@ export class DashboardThemeLogoPrint extends LitElement {
   #generation = 0;
   #watched: string | null = null;
   #stopWatching: (() => void) | undefined;
-  /** The image's last heard display address; a different one means it was reframed. */
-  #address: string | undefined;
+  /** The image's `display` address as last heard: `undefined` before the first, `null` once gone. */
+  #heard: string | null | undefined;
+  /**
+   * What was heard when the latest ask began. An answer drawn from another address is asked for
+   * again only once something newer than this is heard, so two spellings of one address cannot loop.
+   */
+  #basis: string | null | undefined;
+  /** The address the shown answer was drawn from. */
+  #drawnFrom: string | null | undefined;
 
   constructor() {
     super();
@@ -89,59 +99,69 @@ export class DashboardThemeLogoPrint extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("image")) {
-      this.#address = undefined;
+      this.#heard = undefined;
       this.#watch();
-      this.#ask();
+      void this.#ask();
     }
   }
 
   /** Holds one watch on the current image while connected, and none otherwise. */
   #watch(): void {
     const wanted = this.isConnected ? this.image : null;
-    if (wanted === this.#watched && (wanted === null || this.#stopWatching)) return;
+    if (wanted === this.#watched) return;
     this.#stopWatching?.();
     this.#stopWatching = undefined;
     this.#watched = wanted;
-    if (wanted === null) return;
-    this.#stopWatching = watchMediaImage(wanted, "display", (address) => {
-      if (address === undefined) return;
-      const known = this.#address;
-      this.#address = address;
-      if (known !== undefined && known !== address) this.#ask();
-    });
+    if (wanted !== null)
+      this.#stopWatching = watchMediaImage(wanted, "display", (address) => this.#hear(address));
   }
 
-  #ask(): void {
+  #hear(address: string | undefined): void {
+    const previous = this.#heard;
+    if (address === undefined) {
+      this.#heard = null;
+      this.#generation++;
+      this.shown = { kind: "none" };
+      return;
+    }
+    this.#heard = address;
+    if (this.shown.kind === "asking") return;
+    if (previous === null) void this.#ask();
+    else if (this.shown.kind === "failed") {
+      if (typeof previous === "string" && previous !== address) void this.#ask();
+    } else if (address !== this.#drawnFrom && address !== this.#basis) void this.#ask();
+  }
+
+  async #ask(): Promise<void> {
     const generation = ++this.#generation;
     const image = this.image;
     if (image === null) {
       this.shown = { kind: "none" };
       return;
     }
+    const basis = this.#heard;
+    this.#basis = basis;
     this.shown = { kind: "asking" };
-    let asked: Promise<ThemeLogoPrint>;
+    let print: ThemeLogoPrint;
     try {
-      asked = this.api.getThemeLogoPrint(image);
-    } catch (error) {
-      asked = Promise.reject(error);
+      print = await this.api.getThemeLogoPrint(image);
+    } catch {
+      if (generation === this.#generation) this.shown = { kind: "failed" };
+      return;
     }
-    asked.then(
-      (print) => {
-        if (generation !== this.#generation) return;
-        this.shown =
-          print.picture === null
-            ? { kind: "none" }
-            : {
-                kind: "shown",
-                url: rasterUrl(print.picture),
-                width: `${(print.picture.widthDots / print.paperDots) * 100}%`,
-                blank: print.blackDots === 0,
-              };
-      },
-      () => {
-        if (generation === this.#generation) this.shown = { kind: "failed" };
-      },
-    );
+    if (generation !== this.#generation) return;
+    this.#drawnFrom = print.address;
+    this.shown =
+      print.picture === null
+        ? { kind: "none" }
+        : {
+            kind: "shown",
+            url: rasterUrl(print.picture),
+            width: `${(print.picture.widthDots / print.paperDots) * 100}%`,
+            blank: print.blackDots === 0,
+          };
+    const heard = this.#heard;
+    if (typeof heard === "string" && heard !== print.address && heard !== basis) void this.#ask();
   }
 
   override render() {
@@ -150,7 +170,7 @@ export class DashboardThemeLogoPrint extends LitElement {
     if (shown.kind === "failed")
       return html`<p class="failed" data-test="logo-print-failed">
         <span>${t("appearance.logo_print_failed")}</span>
-        <wt-button variant="secondary" @click=${() => this.#ask()}
+        <wt-button variant="secondary" @click=${() => void this.#ask()}
           >${t("appearance.logo_print_retry")}</wt-button
         >
       </p>`;
@@ -177,6 +197,6 @@ export class DashboardThemeLogoPrint extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-theme-logo-print": DashboardThemeLogoPrint;
+    "dashboard-theme-logo-print": ThemeLogoPrintFigure;
   }
 }

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
-import { DashboardApi, type BackupApplyBody, type ProductEditorInput } from "./client.js";
+import {
+  DashboardApi,
+  type BackupApplyBody,
+  type ProductEditorInput,
+  type ThemeLogoPrint,
+} from "./client.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -560,8 +565,9 @@ describe("DashboardApi routes", () => {
   });
 
   it("asks how a theme logo prints, passively", async () => {
-    const answer = {
+    const answer: ThemeLogoPrint = {
       paperDots: 576,
+      address: "/media/renditions/v1/a.webp/display/5000-5000-100.webp",
       picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
       blackDots: 8,
     };

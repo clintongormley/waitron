@@ -1,4 +1,4 @@
-import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
+import { mediaTestReference, mediaTestRendition } from "@waitron/ui/src/test-helpers.js";
 import type { ThemeLogo } from "@waitron/ui-core/theme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -16,6 +16,7 @@ const NEW = mediaTestReference("new.png");
 
 const BLACK: ThemeLogoPrint = {
   paperDots: 504,
+  address: mediaTestRendition(LIGHT, "display"),
   picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
   blackDots: 8,
 };

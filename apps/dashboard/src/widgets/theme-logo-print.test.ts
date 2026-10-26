@@ -4,19 +4,8 @@ import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
 import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import type { DashboardThemeLogoPrint } from "./theme-logo-print.js";
+import type { ThemeLogoPrintFigure } from "./theme-logo-print.js";
 import "./theme-logo-print.js";
-
-const BLACK: ThemeLogoPrint = {
-  paperDots: 504,
-  picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
-  blackDots: 8,
-};
-const BLANK: ThemeLogoPrint = {
-  paperDots: 504,
-  picture: { widthDots: 16, heightDots: 1, data: "AAA=" },
-  blackDots: 0,
-};
 
 let sequence = 0;
 /** A fresh library name per call, so the image watcher's module-wide memory never carries over. */
@@ -34,6 +23,31 @@ function presentation(version: string) {
     display: `/media/${version}-display.webp`,
   };
 }
+/** What the server answers for a picture drawn from `version`'s display address. */
+function drawn(version: string, blackDots: number): ThemeLogoPrint {
+  return {
+    paperDots: 504,
+    address: presentation(version).display,
+    picture: { widthDots: 16, heightDots: 1, data: blackDots === 0 ? "AAA=" : "8A8=" },
+    blackDots,
+  };
+}
+const BLACK = drawn("1", 8);
+const BLANK = drawn("1", 0);
+const NO_PICTURE: ThemeLogoPrint = { paperDots: 504, address: null, picture: null, blackDots: 0 };
+
+/** Answers every image asked for as `version`, as the library does for an image it holds. */
+function everyImageAs(version: string) {
+  return async (input: RequestInfo | URL) => {
+    const asked = new URL(String(input), location.origin).searchParams.get("references") ?? "";
+    return reply(
+      Object.fromEntries(asked.split(",").map((image) => [image, presentation(version)])),
+    );
+  };
+}
+/** Lets every library lookup already sent deliver what it heard. */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 function reply(images: Record<string, ReturnType<typeof presentation>>) {
   return new Response(JSON.stringify({ images }), {
     headers: { "Content-Type": "application/json" },
@@ -44,7 +58,7 @@ let network: ReturnType<typeof vi.fn<typeof fetch>>;
 let getThemeLogoPrint: ReturnType<typeof vi.fn<(image: string) => Promise<ThemeLogoPrint>>>;
 
 beforeEach(() => {
-  network = vi.fn<typeof fetch>().mockImplementation(async () => reply({}));
+  network = vi.fn<typeof fetch>().mockImplementation(everyImageAs("1"));
   vi.stubGlobal("fetch", network);
   getThemeLogoPrint = vi.fn<(image: string) => Promise<ThemeLogoPrint>>();
 });
@@ -60,14 +74,14 @@ function api(): DashboardApi {
 }
 
 async function mount(image: string | null) {
-  const { el } = await mountWidget<DashboardThemeLogoPrint>("dashboard-theme-logo-print", {
+  const { el } = await mountWidget<ThemeLogoPrintFigure>("dashboard-theme-logo-print", {
     api: api(),
     image,
   });
   return el;
 }
 
-const q = (el: DashboardThemeLogoPrint, selector: string) =>
+const q = (el: ThemeLogoPrintFigure, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
 it("asks nothing and draws nothing without an image", async () => {
@@ -113,7 +127,8 @@ it("says when the logo prints blank", async () => {
 });
 
 it("draws nothing for an image the library does not have", async () => {
-  getThemeLogoPrint.mockResolvedValue({ paperDots: 504, picture: null, blackDots: 0 });
+  network.mockImplementation(async () => reply({}));
+  getThemeLogoPrint.mockResolvedValue(NO_PICTURE);
   const el = await mount(libraryName());
   await vi.waitFor(() => expect(q(el, '[data-test="logo-print"]')).toBeNull());
   expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
@@ -160,7 +175,7 @@ it("an answer for an image no longer held is dropped", async () => {
   answerB(BLACK);
   await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
   answerA(BLANK);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   await el.updateComplete;
   expect(q(el, '[data-test="logo-print-blank"]')).toBeNull();
   expect(getThemeLogoPrint.mock.calls).toEqual([[a], [b]]);
@@ -177,7 +192,7 @@ it("a refusal for an image no longer held is dropped", async () => {
   el.image = b;
   await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
   refuseA(new Error("offline"));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   await el.updateComplete;
   expect(q(el, '[data-test="logo-print-failed"]')).toBeNull();
   expect(q(el, '[data-test="logo-print"] img')).not.toBeNull();
@@ -187,9 +202,6 @@ it("a refusal for an image no longer held is dropped", async () => {
 it("changing the image ends the old image's watch", async () => {
   const a = libraryName();
   const b = libraryName();
-  network.mockImplementation(async () =>
-    reply({ [a]: presentation("a1"), [b]: presentation("b1") }),
-  );
   getThemeLogoPrint.mockResolvedValue(BLACK);
   const el = await mount(a);
   await vi.waitFor(() => expect(network).toHaveBeenCalled());
@@ -199,16 +211,14 @@ it("changing the image ends the old image's watch", async () => {
       true,
     ),
   );
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   expect(getThemeLogoPrint.mock.calls).toEqual([[a], [b]]);
 
-  network.mockImplementation(async () =>
-    reply({ [a]: presentation("a2"), [b]: presentation("b1") }),
-  );
+  network.mockImplementation(async () => reply({ [a]: presentation("2"), [b]: presentation("1") }));
   const before = network.mock.calls.length;
   invalidateMediaImages();
   await vi.waitFor(() => expect(network.mock.calls.length).toBeGreaterThan(before));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   const asked = decodeURIComponent(String(network.mock.calls.at(-1)![0]));
   expect(asked).toContain(b);
   expect(asked).not.toContain(a);
@@ -217,13 +227,12 @@ it("changing the image ends the old image's watch", async () => {
 
 it("asks again when the image changes under the same name", async () => {
   const a = libraryName();
-  network.mockImplementation(async () => reply({ [a]: presentation("1") }));
   getThemeLogoPrint.mockResolvedValue(BLACK);
   const el = await mount(a);
   await vi.waitFor(() => expect(network).toHaveBeenCalled());
   await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
   // Let the first address's arrival settle: it must ask nothing more.
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
 
   network.mockImplementation(async () => reply({ [a]: presentation("2") }));
@@ -236,13 +245,12 @@ it("asks again when the image changes under the same name", async () => {
   const again = network.mock.calls.length;
   invalidateMediaImages();
   await vi.waitFor(() => expect(network.mock.calls.length).toBeGreaterThan(again));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   expect(getThemeLogoPrint).toHaveBeenCalledTimes(2);
 });
 
 it("stops watching the image once it leaves the page", async () => {
   const a = libraryName();
-  network.mockImplementation(async () => reply({ [a]: presentation("1") }));
   getThemeLogoPrint.mockResolvedValue(BLACK);
   const el = await mount(a);
   await vi.waitFor(() => expect(network).toHaveBeenCalled());
@@ -250,9 +258,133 @@ it("stops watching the image once it leaves the page", async () => {
   network.mockImplementation(async () => reply({ [a]: presentation("2") }));
   const before = network.mock.calls.length;
   invalidateMediaImages();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settled();
   expect(network.mock.calls.length).toBe(before);
   expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
+});
+
+it("a reframe heard before the first lookup answered asks again", async () => {
+  const a = libraryName();
+  let firstLookup!: (value: Response) => void;
+  network.mockImplementationOnce(() => new Promise((resolve) => (firstLookup = resolve)));
+  getThemeLogoPrint.mockResolvedValueOnce(BLACK).mockResolvedValue(drawn("2", 0));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+  await vi.waitFor(() => expect(firstLookup).toBeDefined());
+  firstLookup(reply({ [a]: presentation("2") }));
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [a]]);
+
+  network.mockImplementation(everyImageAs("2"));
+  const before = network.mock.calls.length;
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(network.mock.calls.length).toBeGreaterThan(before));
+  await settled();
+  expect(getThemeLogoPrint).toHaveBeenCalledTimes(2);
+});
+
+it("a reframe heard while asking asks again once the answer arrives", async () => {
+  const a = libraryName();
+  let answer!: (value: ThemeLogoPrint) => void;
+  getThemeLogoPrint
+    .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    .mockResolvedValue(drawn("2", 0));
+  network.mockImplementation(everyImageAs("2"));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await settled();
+  expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
+  answer(BLACK);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [a]]);
+});
+
+it("an answer drawn from an address not yet heard asks no more until that address is heard", async () => {
+  const a = libraryName();
+  getThemeLogoPrint.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(drawn("2", 8));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-failed"]')).not.toBeNull());
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await settled();
+  q(el, '[data-test="logo-print-failed"] wt-button')!.click();
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+
+  for (const version of ["1", "2", "2"]) {
+    network.mockImplementation(everyImageAs(version));
+    const before = network.mock.calls.length;
+    invalidateMediaImages();
+    await vi.waitFor(() => expect(network.mock.calls.length).toBeGreaterThan(before));
+    await settled();
+  }
+  expect(getThemeLogoPrint).toHaveBeenCalledTimes(2);
+  expect(q(el, '[data-test="logo-print"] img')).not.toBeNull();
+});
+
+it("a reframe after a failed ask asks again", async () => {
+  const a = libraryName();
+  getThemeLogoPrint.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(drawn("2", 8));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-failed"]')).not.toBeNull());
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await settled();
+  expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
+
+  network.mockImplementation(everyImageAs("2"));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [a]]);
+});
+
+it("an image deleted from the library draws nothing, and asks afresh when it comes back", async () => {
+  const a = libraryName();
+  getThemeLogoPrint.mockResolvedValue(BLANK);
+  const el = await mount(a);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await settled();
+
+  network.mockImplementation(async () => reply({}));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"]')).toBeNull());
+  expect(q(el, '[data-test="logo-print-blank"]')).toBeNull();
+  expect(q(el, '[data-test="logo-print-failed"]')).toBeNull();
+  expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
+
+  network.mockImplementation(everyImageAs("1"));
+  getThemeLogoPrint.mockResolvedValue(BLACK);
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [a]]);
+  expect(q(el, '[data-test="logo-print-blank"]')).toBeNull();
+});
+
+it("an answer that arrives after the image was deleted is dropped", async () => {
+  const a = libraryName();
+  let answer!: (value: ThemeLogoPrint) => void;
+  getThemeLogoPrint.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+  network.mockImplementation(async () => reply({}));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"]')).toBeNull());
+  answer(BLACK);
+  await settled();
+  await el.updateComplete;
+  expect(q(el, '[data-test="logo-print"]')).toBeNull();
+});
+
+it("put back on the page after a reframe, asks again", async () => {
+  const a = libraryName();
+  getThemeLogoPrint.mockResolvedValueOnce(BLACK).mockResolvedValue(drawn("2", 0));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await settled();
+  const parent = el.parentElement!;
+  el.remove();
+  network.mockImplementation(everyImageAs("2"));
+  parent.append(el);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
+  expect(getThemeLogoPrint.mock.calls).toEqual([[a], [a]]);
 });
 
 it("Spanish", async () => {

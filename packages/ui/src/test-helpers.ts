@@ -182,6 +182,11 @@ export function mediaTestReference(label: string): string {
   return `${hex.padEnd(64, "0")}.${label.slice(dot + 1)}`;
 }
 
+/** The rendition address `useMediaPresentations` answers for `source`'s `shape`. */
+export function mediaTestRendition(source: string, shape: "square" | "till" | "display"): string {
+  return `/media/renditions/v1/${source}/${shape}/7500-2500-200.webp`;
+}
+
 /** Supplies the public metadata boundary while keeping the real image directive mounted. */
 export function useMediaPresentations() {
   const replacements = new Map<string, string>();
@@ -203,9 +208,9 @@ export function useMediaPresentations() {
                 id: reference,
                 revision: replacements.has(reference) ? 2 : 1,
                 source: `/media/${source}`,
-                square: `/media/renditions/v1/${source}/square/7500-2500-200.webp`,
-                till: `/media/renditions/v1/${source}/till/7500-2500-200.webp`,
-                display: `/media/renditions/v1/${source}/display/7500-2500-200.webp`,
+                square: mediaTestRendition(source, "square"),
+                till: mediaTestRendition(source, "till"),
+                display: mediaTestRendition(source, "display"),
               },
             ];
           }),

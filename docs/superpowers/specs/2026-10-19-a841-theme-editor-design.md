@@ -2736,7 +2736,10 @@ permission-gated write (CLAUDE.md's risk triggers).
   unsaved logo does not have yet.
 - **"How it prints" follows a reframe in the image library** (lane A ruling 2026-10-25, slice 9
   plan D10): it asks again when the main image's `display` address changes. Not taken: following
-  the image's name only, which would keep showing the old framing.
+  the image's name only, which would keep showing the old framing. Since 2026-10-27 (the slice's
+  review) the route's answer names the `display` address it drew from, and the picture asks again
+  whenever the address the library gives differs from it, so a reframe heard before the first
+  lookup is followed too; and while the library no longer holds the image the picture is not drawn.
 
 ## 17. Risks
 

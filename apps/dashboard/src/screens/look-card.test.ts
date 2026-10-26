@@ -5,6 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import {
   formMessageOf,
   mediaTestReference,
+  mediaTestRendition,
   useMediaPresentations,
 } from "@waitron/ui/src/test-helpers.js";
 import {
@@ -425,11 +426,12 @@ describe("the saved card's Logo row", () => {
 });
 
 type Choices = ThemeChoices;
-const BLACK_PRINT: ThemeLogoPrint = {
+const blackPrint = (image: string): ThemeLogoPrint => ({
   paperDots: 504,
+  address: mediaTestRendition(image, "display"),
   picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
   blackDots: 8,
-};
+});
 const saved = (id: string, name: string, choices: Choices) => theme(id, name, choices);
 
 function editRig(list: ThemeList) {
@@ -438,7 +440,7 @@ function editRig(list: ThemeList) {
     return saved(id, name, choices);
   });
   const imageLibraryRequest = vi.fn();
-  const getThemeLogoPrint = vi.fn(async (_image: string) => BLACK_PRINT);
+  const getThemeLogoPrint = vi.fn(async (image: string) => blackPrint(image));
   return {
     api: { saveTheme, imageLibraryRequest, getThemeLogoPrint } as unknown as DashboardApi & {
       saveTheme: typeof saveTheme;

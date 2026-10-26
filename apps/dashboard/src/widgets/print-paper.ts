@@ -1,5 +1,10 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import type { BlockRange, PrintJobPreview, PrintPreviewBlock } from "../api/client.js";
+import type {
+  BlockRange,
+  PrintJobPreview,
+  PrintPreviewBlock,
+  ThemeLogoPrint,
+} from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 type ImageBlock = Extract<PrintPreviewBlock, { kind: "image" }>;
@@ -106,11 +111,7 @@ function bitmapUrl(run: ImageRun): string {
 }
 
 /** One printed raster as a PNG data URL. */
-export function rasterUrl(picture: {
-  widthDots: number;
-  heightDots: number;
-  data: string;
-}): string {
+export function rasterUrl(picture: NonNullable<ThemeLogoPrint["picture"]>): string {
   return stackedUrl(picture.widthDots, picture.heightDots, [
     { height: picture.heightDots, data: picture.data },
   ]);
