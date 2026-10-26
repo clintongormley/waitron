@@ -63,24 +63,38 @@ export function readyTables(
   tables: readonly TableState[],
   zoneIds: ReadonlySet<string>,
 ): ReadyTable[] {
-  const parties = new Map<string, { entry: ReadyTable; names: string[] }>();
+  return groupTables(tables, (table) => {
+    const party = table.party;
+    if (party === null || table.zoneId === null || !zoneIds.has(table.zoneId)) return null;
+    const ready = signalOf(table.signals, "ready");
+    if (ready === undefined) return null;
+    const count = ready.byStation.reduce((sum, station) => sum + station.count, 0);
+    return { key: party.id, value: { partyId: party.id, count } };
+  }).map(({ value, table, name }) => ({ ...value, tableId: table.id, name }));
+}
+
+/**
+ * The tables `pick` keeps, one group per key in the order the floor first lists a kept table of
+ * it: the first kept table, its picked value, and the kept tables' tight names, distinct, joined
+ * with "+".
+ */
+export function groupTables<V>(
+  tables: readonly TableState[],
+  pick: (table: TableState) => { key: string; value: V } | null,
+): { value: V; table: TableState; name: string }[] {
+  const groups = new Map<string, { value: V; table: TableState; names: string[] }>();
   const joins = joinMembersById(tables);
   for (const table of tables) {
-    const party = table.party;
-    if (party === null || table.zoneId === null || !zoneIds.has(table.zoneId)) continue;
-    const ready = signalOf(table.signals, "ready");
-    if (ready === undefined) continue;
+    const picked = pick(table);
+    if (picked === null) continue;
     const name = tightName(table, joins);
-    const known = parties.get(party.id);
-    if (known !== undefined) {
-      if (!known.names.includes(name)) known.names.push(name);
-      continue;
-    }
-    const count = ready.byStation.reduce((sum, station) => sum + station.count, 0);
-    parties.set(party.id, {
-      entry: { partyId: party.id, tableId: table.id, name, count },
-      names: [name],
-    });
+    const known = groups.get(picked.key);
+    if (known === undefined) groups.set(picked.key, { value: picked.value, table, names: [name] });
+    else if (!known.names.includes(name)) known.names.push(name);
   }
-  return [...parties.values()].map(({ entry, names }) => ({ ...entry, name: names.join("+") }));
+  return [...groups.values()].map(({ value, table, names }) => ({
+    value,
+    table,
+    name: names.join("+"),
+  }));
 }
