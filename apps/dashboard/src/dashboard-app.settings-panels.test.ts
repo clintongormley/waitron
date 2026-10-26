@@ -155,11 +155,15 @@ it("puts a module's panels on their tab by their stated order, the core panels c
     "venue.view",
   ]);
   const details = page(el).shadowRoot!.querySelector('[slot="venue-details"]')!;
-  const core = ["DASHBOARD-VENUE-DETAILS-PANEL", "DASHBOARD-VENUE-DEFAULTS-PANEL"];
+  const core = [
+    "DASHBOARD-VENUE-DETAILS-PANEL",
+    "DASHBOARD-VENUE-DEFAULTS-PANEL",
+    "DASHBOARD-VENUE-PRIVACY-PANEL",
+  ];
   const children = [...details.children].map((child) =>
     core.includes(child.tagName) ? "core" : (child as HTMLElement).dataset.test,
   );
-  expect(children).toEqual(["panel-early", "core", "core", "panel-late"]);
+  expect(children).toEqual(["panel-early", "core", "core", "core", "panel-late"]);
 });
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
