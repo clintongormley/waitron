@@ -254,6 +254,16 @@ describe("scopeForPaths", () => {
       });
     });
 
+    it("selects the server whose coverage merge downloads reports with the root helper", () => {
+      expect(
+        scopeForPaths(["scripts/download-coverage-blobs.mjs"], workspace(consumers)),
+      ).toMatchObject({
+        kind: "packages",
+        packages: ["@waitron/server"],
+        root: true,
+      });
+    });
+
     it("selects the browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
       expect(
         scopeForPaths(["scripts/vitest-shard-coverage-merge.mjs"], workspace(consumers)),
@@ -770,6 +780,12 @@ describe("the CLI", () => {
 
   it("selects the server, whose Vitest config loads scripts/vitest-duration-sequencer.mjs", () => {
     expect(run("scripts/vitest-duration-sequencer.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+    );
+  });
+
+  it("selects the real server coverage download consumer", () => {
+    expect(run("scripts/download-coverage-blobs.mjs\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
     );
   });

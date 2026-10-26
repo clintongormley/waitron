@@ -986,7 +986,7 @@ from `GLOBAL_ROOT_FILES`, a file there is no such reporter, or one is also in
 text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
 is invisible to it, and a comment spelling the path counts as a reference; in ci.yml, and no other
 workflow, only a line starting `node scripts/…` counts, in a job that tests a member through one
-quoted `pnpm --filter "<name>" test:shard` or `test:coverage` — so a script fed from a pipe does
+quoted `pnpm --filter "<name>" test:shard`, `test:coverage` or `test:merge` — so a script fed from a pipe does
 not count, and a step an `if:` switches off does; a reporter counts only in a `--reporter=` flag
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
@@ -3321,7 +3321,8 @@ The server merge uses `scripts/download-coverage-blobs.mjs`. It lists the curren
 through GitHub's REST API, keeps the highest-id copy of each name, checks the archive digest and extracts each expected report with the
 host's `unzip`. The job grants `actions: read` alongside `contents: read`; the token goes only to
 the API requests, not to the storage URL. A refused response's body is cancelled before the helper
-throws. Other download sites still use `actions/download-artifact`.
+throws. Its server consumer entry in `ROOT_SCOPE_CONSUMERS` selects the server jobs when this helper
+changes; the consumer guard recognises `test:merge` jobs as well as test shards. Other download sites still use `actions/download-artifact`.
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
 read workflow text, never execute a workflow. They check the action and helper forms, matching
