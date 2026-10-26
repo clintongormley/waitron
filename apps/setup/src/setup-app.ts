@@ -49,6 +49,7 @@ import type {
   AdoptBody,
   ApiError,
   ConfigurationPreview,
+  LocationDraft,
   ProvisionBody,
   ResetCredential,
   SetupApi,
@@ -194,6 +195,27 @@ const TAXPAYER_FIELDS = [
   "fullSeriesCode",
   "rectificativeSeriesCode",
 ] as const;
+
+/** The claim refuses a location carrying any other key (`apps/server/src/setup-first-fiscal-api.ts`, `exact(raw.location`). */
+const CLAIM_LOCATION_FIELDS = [
+  "name",
+  "fiscalTerritory",
+  "invoiceLocales",
+  "operationDescription",
+  "addressLine1",
+  "addressLine2",
+  "postalCode",
+  "city",
+  "province",
+  "timeZone",
+  "dayCutover",
+] as const satisfies readonly (keyof LocationDraft)[];
+const claimLocationFieldsComplete: [
+  Exclude<keyof LocationDraft, (typeof CLAIM_LOCATION_FIELDS)[number]>,
+] extends [never]
+  ? true
+  : never = true;
+void claimLocationFieldsComplete;
 
 const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.owner_required": "shell.first_setup.owner_required",
@@ -2109,9 +2131,10 @@ export class SetupApp extends LitElement {
       );
       if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
         return;
-      const location = Object.fromEntries(
-        Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
-      ) as ProvisionBody["venue"]["location"];
+      const exported = preview.venue.location;
+      const location: Partial<LocationDraft> = Object.fromEntries(
+        CLAIM_LOCATION_FIELDS.filter((key) => key in exported).map((key) => [key, exported[key]]),
+      );
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
         venue: { ...preview.venue, location },

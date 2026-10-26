@@ -601,6 +601,8 @@ describe("setup-app", () => {
           province: "Madrid",
           timeZone: "Europe/Madrid",
           dayCutover: "06:00",
+          fireControl: "waiter",
+          catalogueId: "catalogue",
         },
         seriesCode: "F",
         rectificativeSeriesCode: "R",

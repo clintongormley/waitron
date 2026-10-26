@@ -691,3 +691,40 @@ it("tests email as the current owner without sending a replacement administrator
     )
     .toBe(false);
 });
+it("claims a staged preview's venue with only the location fields the claim accepts", async () => {
+  const { admin, ...exported } = venue;
+  const preview = {
+    venue: {
+      ...exported,
+      location: {
+        ...venue.location,
+        id: "source-location",
+        fireControl: "waiter",
+        catalogueId: "catalogue",
+        dayCutover: "05:00:00",
+      },
+    },
+    counts: { products: 4 },
+    reconnect: [],
+  };
+  const { app, api, requests } = await mount();
+  api.stageConfiguration = () => Promise.resolve(preview);
+  await screen(app, "mode");
+  emit(app, "setup-patch", { patch: { mode: "live" } });
+  emit(app, "configuration-requested", {
+    request: { artifact: new File(["encrypted"], "prepared.waitron-config"), passphrase: "pass" },
+  });
+  const choice = await screen(app, "configuration-preview");
+  choice.shadowRoot!.querySelector<HTMLElement>("wt-choice-row[data-test=same-tax-id]")!.click();
+  await screen(app, "admin");
+  emit(app, "setup-patch", { patch: { venue: { admin } } });
+  emit(app, "setup-goto", { screen: "venue" });
+  const venueScreen = await screen(app, "venue");
+  venueScreen.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=next]")!.click();
+  await expect.poll(() => requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
+  const claim = requests.find((r) => r.path.endsWith("/claim"))!.body as {
+    venue: { location: Record<string, unknown> };
+  };
+  expect(Object.keys(claim.venue.location).sort()).toEqual(Object.keys(venue.location).sort());
+  expect(claim.venue.location.dayCutover).toBe("05:00:00");
+});
