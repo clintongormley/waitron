@@ -134,6 +134,13 @@ oscuras muestran en lugar de la principal. Hasta que añadas una, la pista dice 
 pantallas oscuras muestran tu logotipo sobre una placa clara.» La versión para pantallas oscuras
 tiene sus propios Sustituir y Quitar.
 
+Bajo el logotipo, una imagen pequeña muestra cómo se imprime en los tickets de los departamentos sin
+logotipo de ticket propio: el logotipo principal en los puntos negros de una impresora de tickets de
+80 mm. Consulta [En los tickets y las facturas](appearance.md#logo-receipts). Cuando el logotipo no
+imprimiría ningún punto, como ocurre con un logotipo blanco sobre fondo transparente, a su lado
+aparece «Este logotipo se imprime en blanco en los recibos.»: elige una imagen más oscura o da a los
+departamentos un logotipo de ticket propio.
+
 La vista previa muestra el logotipo en la franja superior de cada versión, seguido de la razón
 social del local: el logotipo principal en la versión clara y, en la versión oscura, la versión para
 pantallas oscuras o el logotipo principal sobre su placa clara. Sin logotipo, la franja muestra el

@@ -2,7 +2,7 @@ import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import type { ThemeLogo } from "@waitron/ui-core/theme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
 import { en, es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -14,7 +14,17 @@ const LIGHT = mediaTestReference("lucia.png");
 const DARK = mediaTestReference("lucia-dark.png");
 const NEW = mediaTestReference("new.png");
 
-const api = () => ({ imageLibraryRequest: vi.fn() }) as unknown as DashboardApi;
+const BLACK: ThemeLogoPrint = {
+  paperDots: 504,
+  picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+  blackDots: 8,
+};
+
+const api = () =>
+  ({
+    imageLibraryRequest: vi.fn(),
+    getThemeLogoPrint: vi.fn(async () => BLACK),
+  }) as unknown as DashboardApi;
 
 afterEach(() => {
   cleanupWidgets();
@@ -35,6 +45,8 @@ const q = <T extends Element = HTMLElement>(el: ThemeLogoField, selector: string
 const main = (el: ThemeLogoField) =>
   q<ImageUpload>(el, 'dashboard-image-upload[name="logo.light"]');
 const dark = (el: ThemeLogoField) => q<ImageUpload>(el, 'dashboard-image-upload[name="logo.dark"]');
+const printed = (el: ThemeLogoField) =>
+  q<HTMLElementTagNameMap["dashboard-theme-logo-print"]>(el, "dashboard-theme-logo-print");
 const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim();
 
 function changes(el: ThemeLogoField) {
@@ -202,5 +214,31 @@ describe("dashboard-theme-logo-field", () => {
       expect(upload.api).toBe(given);
       expect(upload.draftParent).toBe(parent);
     }
+  });
+
+  it("shows how the main logo prints after the dark-screens field", async () => {
+    const given = api();
+    const el = await field({ logo: { light: LIGHT }, api: given });
+    const print = printed(el)!;
+    expect(print.previousElementSibling).toBe(q(el, '[data-test="logo-dark"]'));
+    expect(print.image).toBe(LIGHT);
+    expect(print.api).toBe(given);
+  });
+
+  it("shows none without a logo", async () => {
+    const el = await field();
+    expect(printed(el)).toBeNull();
+  });
+
+  it("follows the main image, not the dark one", async () => {
+    const el = await field({ logo: { light: LIGHT } });
+    el.logo = { light: NEW };
+    await el.updateComplete;
+    expect(printed(el)!.image).toBe(NEW);
+    el.logo = { light: LIGHT };
+    await el.updateComplete;
+    el.logo = { light: LIGHT, dark: DARK };
+    await el.updateComplete;
+    expect(printed(el)!.image).toBe(LIGHT);
   });
 });
