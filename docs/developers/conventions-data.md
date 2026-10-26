@@ -3562,7 +3562,9 @@ after a second clock on another machine agrees within 30 seconds
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). The minute is strictly later than every name in the history it can read
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
-the surviving database") and begins no earlier than the backup's newest record or creation time
+the surviving database"), later than the name the box's start-again note keeps
+(`apps/server/src/hour-recovery-host.test.ts`, "a restore with the clock set back behind the
+start-again note is refused, not given a repeated name") and begins no earlier than the backup's newest record or creation time
 (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"), and is taken 90 to 150
 seconds after the clock check (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore
 waits until a minute start 90 to 150 seconds after its check"). It retains recovered invoices
@@ -4637,7 +4639,12 @@ unverifiable under the other environment.
 reimaged box, destructive for a working one. A setup, restore, re-registration or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after a check
 against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
-every name in the history it can read; a setup or restore waits 90 to 150 seconds first. The one
+every name in the history it can read and than the name the start-again note keeps
+(`first-setup-start-again.json` in the state folder, which only `waitron.sh reset --all` removes;
+owner, 2026-10-24, A1042); a setup or restore waits 90 to 150 seconds first. Guard for the note:
+`scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
+note as text, so a path built from pieces escapes it, and it never sees code that empties the whole
+state folder without naming the file. The one
 exception is the preproduction throwaway, which names with no second clock and no history check
 and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
 `packages/fiscal-verifactu/src/hour-clock.test.ts` and

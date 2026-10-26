@@ -91,7 +91,7 @@ A key that opens the backup does not bypass the history and clock checks. If a c
 resolve its cause and try again. Do not delete the retained attempt's files by hand or edit its
 recovery records.
 
-## Continue after an interruption {#resume}
+## If a recovery is interrupted {#resume}
 
 While the recovery page stays open, continue where you left off. The recovery stops if the box
 restarts, or if 15 minutes pass without a recovery step, even with the page open. Leaving the page

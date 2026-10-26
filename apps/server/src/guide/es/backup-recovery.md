@@ -97,7 +97,7 @@ Una clave que abre la copia no evita las comprobaciones del historial y del relo
 lo impide, resuelve la causa e inténtalo de nuevo. No borres a mano los archivos del intento
 conservado ni edites sus registros de recuperación.
 
-## Continúa después de una interrupción {#resume}
+## Si una recuperación se interrumpe {#resume}
 
 Mientras la página de recuperación siga abierta, continúa donde lo dejaste. La recuperación se
 detiene si el equipo se reinicia o si pasan 15 minutos sin ningún paso de recuperación, aunque la
