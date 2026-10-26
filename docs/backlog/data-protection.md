@@ -206,8 +206,9 @@ by the answers):
   (`tenants.privacy_notice_url`, `tenants.privacy_email`, saved from the **Privacy** card on
   **Venue settings → Venue details**; the
   [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)), and the
-  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Until S1b, only the Privacy card's own read uses the stored values; the emails, the
-  sign-in page, the profile page and the downloads still take the environment setting. The
+  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Until S1b, nothing but the Privacy card
+  shows the stored values (the configuration export also reads them, to carry them); the emails,
+  the sign-in page, the profile page and the downloads still take the environment setting. The
   readers, as of 2026-10-26:
   - `apps/server/src/boot.ts:2019`, into `mountManagementApi`, which passes the link to the
     invitation and reset emails (`apps/server/src/management-api.ts:194`) and answers it on

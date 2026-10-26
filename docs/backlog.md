@@ -5230,14 +5230,6 @@ For package distribution and the four-minute target, use the
   reduce its repeated setup while preserving its restart assertions.
   [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
 
-- **A provisioning command test fails when run from an AI agent.** In
-  `packages/provisioning/src/first-setup-command-import.test.ts`, the case "the actual relocated
-  command resumes a retained import and publishes it once" expects the child process's stderr to be
-  empty, and under Claude Code a `<claude-code-hint …/>` line reaches it, so the case fails; under
-  `env -i HOME PATH TMPDIR` it passes (both run on 2026-10-26 during A980 S1a2). It fails the same
-  way on `27ae35c09` and `d23e32966`, before that branch changed the file. Next action: find which
-  inherited variable lets the hint through and clear it in the case's child environment.
-
 - **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
   In `apps/server/src/first-fiscal-setup.e2e.test.ts`, a failure inside a row's success branch makes
   the Vitest worker exit ("Worker exited unexpectedly"), so the later rows never run and the run
@@ -5254,7 +5246,12 @@ values rather than PIN substrings inside random IDs. See the
 - **Tests that read a built command's error output fail under Claude Code.** The command's stderr
   begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
   seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
-  plan, E8 and E13). Found while planning A798-B slice 8.
+  plan, E8 and E13). Found while planning A798-B slice 8. On 2026-10-26, during A980 S1a2,
+  `packages/provisioning/src/first-setup-command-import.test.ts`'s case "the actual relocated command
+  resumes a retained import and publishes it once" failed this way (its child's stderr held
+  `<claude-code-hint …/>` where the case expects it empty) and passed under
+  `env -i HOME PATH TMPDIR`; it fails the same way on `27ae35c09` and `d23e32966`. Next action: find
+  which inherited variable lets the hint through and clear it in the cases' child environment.
 
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
   tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
@@ -6176,7 +6173,7 @@ revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
 [build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
 details deleted at deactivation), S2a1 (the server route for a person's own data download),
 S2a2 (its README, the Profile page's Download button and the Users guide section), S1a (the
-dashboard setting for the privacy notice page and privacy email, which nothing else reads yet) and
+dashboard setting for the privacy notice page and privacy email, which nothing else shows yet) and
 S1a2 (the configuration export carries the privacy contact, and a production box can be set up from
 an export again) are built.
 The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.

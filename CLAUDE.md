@@ -379,14 +379,11 @@ called weaker than its name, the topic file lists what it does not see.
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,
   weaker than its name (it reads text) — shrink its allowlist, never grow it.
   `@waitron/dashboard-modules` is the browser-side twin.
-- **A configuration bundle value that is not a setup field lives outside the bundle's `venue`**:
-  the setup app sends the preview's venue back in the first-setup claim, which refuses keys it does
-  not list, and copies the preview's location by `LocationDraft`'s fields. Cost: from #1752 to A980
-  S1a2 no production box could be set up from an export. Guard: the production-path row in
-  `apps/server/src/first-fiscal-setup.e2e.test.ts` and the preview case in
-  `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape, and the
-  row cuts the location down by the test's own key list, not `LocationDraft`.
-  [Detail](docs/developers/conventions-data.md).
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
+  setup app copies `venue.location` by `LocationDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
+  production box could be set up from an export. Guard: the preview row in
+  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
+  weaker than the rule: one export shape. [Detail](docs/developers/conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
 - **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
   needing packages from both ends of a loop goes in a package nothing depends on. Guard:
   `scripts/workspace-cycles.test.ts` — it reads each `package.json`, not pnpm's own graph.

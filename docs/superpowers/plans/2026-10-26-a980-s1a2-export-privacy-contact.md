@@ -27,6 +27,12 @@ wrong while building; they stand as written, corrected here:
   `provision` from `boot.ts:1342`, the same one the development route calls.
   `packages/provisioning/src/first-setup-command-deployment.ts:328` is the `waitron-provision`
   command's, covered by Task 5's command rows in `first-setup-command-import.test.ts`.
+- _2026-10-26: Task 8 step 2's last clause was false._ "The tests that imported an export all went
+  through the development route or called the owner runtime directly": on `27ae35c09`,
+  `apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows ran under `WAITRON_ENV`
+  `production`, staged an export and posted the claim with `configurationImport: true`, but sent a
+  venue built from the test's own `request`, never the preview's. `conventions-data.md` says that
+  instead.
 
 **This branch also fixes an earlier defect (Task 1): no production box can be set up from a
 configuration export today.** The setup app copies two location keys from every real export's

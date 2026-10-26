@@ -1646,13 +1646,19 @@ privacy contact as the required top-level `privacyContact` key) moved the format
 reason; `configuration-transfer.test.ts` now pins format 9, and older files are refused as
 `setup.configuration_outdated`.
 
-The setup preview's `venue` is sent back by the setup app in the first-setup claim, which refuses
-any venue or location key it does not list (`apps/server/src/setup-first-fiscal-api.ts`). So a
-bundle value that is not a setup field lives outside `venue`, and the setup app copies the
-preview's location by `LocationDraft`'s fields (`apps/setup/src/setup-app.ts`). Cost: from #1752 to
-A980 S1a2 every Live setup from an export on a production box was refused at the claim, because the
-copy also carried `fireControl` and `catalogueId`; the tests that imported an export all went
-through the development route or called the owner runtime directly.
+### A configuration bundle value that is not a setup field stays out of the venue's own keys
+
+The setup app sends the setup preview's `venue` back in the first-setup claim, whole except for its
+`location`, which it copies by `LocationDraft`'s fields (`CLAIM_LOCATION_FIELDS`,
+`apps/setup/src/setup-app.ts`). The claim refuses any venue or location key it does not list
+(`exact(...)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup
+field lives outside `venue`'s own keys, as `privacyContact` does. `venue.location` already carries
+two such values, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
+and they are safe only because the setup app filters the location. Cost: from #1752 to A980 S1a2
+every Live setup from an export on a production box was refused at the claim, because the setup app
+copied those two keys into it; the test that set up a production box from an export
+(`apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows) sent the claim a
+hand-written venue, never the preview's.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 

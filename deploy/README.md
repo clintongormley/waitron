@@ -444,7 +444,8 @@ on a fresh database. Its menus, layouts, staff and settings can come from the ol
    its passphrase. On Whose restaurant is this?, choose New tax ID, then enter the new taxpayer's
    tax ID, legal name, registered business address, invoice series and AEAT certificate.
 5. Once it is running, check what came over that may still name the old business: the receipt
-   header, footer, logo, phone and email (the venue's and each department's), and the staff. Staff
+   header, footer, logo, phone and email (the venue's and each department's), the privacy notice
+   web page and privacy email (Venue settings → Venue details → Privacy), and the staff. Staff
    arrive suspended, with no PIN or password.
 
 The country must match: an export cannot be imported into a venue in another country. How long the
