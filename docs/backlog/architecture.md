@@ -65,7 +65,7 @@ their full text.
 
 ## Copies of the patterns A105 and C27 replaced
 
-- **Copies of the patterns A105 and C27 replaced — OPEN.** The same two SQL patterns (the
+**OPEN.** The same two SQL patterns (the
   block-comment one A105 replaced, and `/--.*$/`, the one C27 replaced) are copied in
   `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL;
   `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the till's locale (CodeQL did
@@ -81,7 +81,7 @@ their full text.
 
 ## The two SQL scanners named `stripSql` blank block comments before `--` comments
 
-- **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split
+**OPEN (split
   from A95).** `scripts/module-graph-honesty.test.ts` and
   `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/` before
   `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not run;
@@ -105,7 +105,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## Small renames and dead exports the sweep found and could not make
 
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and #1039).**
+**OPEN (T2, 2026-09-23; narrowed by A92 and #1039).**
   Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
   because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`)
   ran it by that name. PF8 landed as #1088; rename the file and its references in the next T2
@@ -119,7 +119,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## Prune the comments, one package per pull request
 
-- **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
+**IN PROGRESS (owner decision 2026-09-23).**
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). Every pruning pull request passes `scripts/comments-only.mjs <base>`; its header states what
   it refuses and misses. The fiscal packages go under the same gates as any other fiscal change: the
@@ -239,7 +239,7 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 
 ## Comments and test titles still cite sections of specs that were deleted
 
-**Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
+**OPEN (2026-09-26).**
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
 was fixed only for the last 28 documents. Find the rest with
@@ -253,37 +253,9 @@ deleted document. **Next action:** fold into the comment-pruning sweeps: re-poin
 each to the pull request that built the work, or drop the tag. A test title is not a comment, so
 changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
 
-## Three shapes the read connection does not cover
-
-**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3, PR #493).** A
-transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
-Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
-A write issued from outside a running body while one is open is re-run on the writer, where it joins
-that transaction if it is still open and commits or rolls back with it, which is what one connection
-did; in the moment after the queue's `commit` and before the body has ended, none is open and the
-write commits by itself. Nothing refuses it. And `readOnly: true` refuses a write to the database
-FILE, not every write: measured 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a
-connection, so a temporary table written from outside a running body would land on the reader and
-stay there — and the same holds for an `ATTACH` of a file that exists (one of a missing file is
-refused, errcode 14 — measured by #568) and for any connection-scoped pragma, because all three
-change a CONNECTION rather than the file, so nothing refuses them and nothing routes them back. A
-temporary table and an `ATTACH` have no site in this tree (searched 2026-09-23). The two
-connection-scoped pragmas that run on a request path, both `pragma defer_foreign_keys = on`, are
-each issued INSIDE a running transaction body, which is exactly where the routing sends a statement
-to the writer: `apps/server/src/configuration-transfer.ts`'s import issues it inside the
-provisioning transaction's body, and `writeAndRemoveDecoyAction`
-(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
-(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
-reader would serve them if a body happened to be running, and none of those suites runs one.
-**Next action:** none needed while that holds; a temporary table, an attachment or a connection
-pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for
-that does not exist. Also left by #493's review: the case pinning the adapter half of the window fix
-lives in `packages/store/src/index.test.ts`, not beside the file it reverts
-(`packages/store/src/node-sqlite-adapter.ts`).
-
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE
 
-**Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
+**OPEN (found
 2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
 inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
 Plain GETs are among its callers — `GET /api/box/status`, the unauthenticated content-languages route, and two
@@ -295,7 +267,7 @@ all.
 
 ## Three copies of one SQL identifier validator and two cause-chain walkers
 
-**Three copies of one SQL identifier validator and two cause-chain walkers — OPEN (found
+**OPEN (found
 2026-09-23, task F1's review wave).** W8 replaced the probes in
 `packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
 `packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
@@ -313,8 +285,7 @@ which depends on nothing, so that edge closes no loop.
 
 ## Files that still spell the store's file names themselves
 
-**Files that still spell the store's file names themselves (left by #757, which exported them
-from `@waitron/store`).** Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
+Left by #757, which exported them from `@waitron/store`. Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
 (a staging file outside the venue folder), `packages/stream/src/litestream.ts` and
 `packages/stream/src/restore.ts` (`@waitron/stream` does not depend on the store),
 `deploy/waitron.sh` (a `node -e` snippet run in the app image, whose `/app/node_modules` holds only
@@ -371,8 +342,7 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
 
-- **These index and key names still read `tenant`, and the columns they name are gone:**
-  `print_agents_tenant_node_key`,
+`print_agents_tenant_node_key`,
   `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
   `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
   `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
@@ -386,8 +356,7 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## `server.credential_unusable` names an unusable credential, although `server.*` is reserved for facts about the process itself
 
-- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
-  facts about the process itself.** It is thrown for AEAT's certificate
+It is thrown for AEAT's certificate
   (`packages/fiscal-verifactu/src/aeat-transport.ts`), for Stripe's secret key and webhook secret
   (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and for the email and
   machine-key credentials (`credentialField`, `apps/server/src/credentials.ts`); both
@@ -426,7 +395,7 @@ On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run 
 
 ## A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule
 
-**A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** — OPEN,
+OPEN,
 low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to
 A394-4 landed as #1441, #1444, #1447 and #1455.) Read, not run: of 49 boundaries, 96 status rows
 break the rule (`docs/developers/conventions-data.md`); 17 defects answer 500 or success for a
@@ -537,9 +506,7 @@ until A977).
   String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
   Developer/demo script names remain A975's. Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
-  treats an inherited property such as `constructor` as a language entry. A974's review lookup
-  now accepts only the registry's own keys; its three inherited-name cases failed with blank
-  labels before that guard and passed after it. Qualify the selection path with country-pack
+  treats an inherited property such as `constructor` as a language entry. Qualify the selection path with country-pack
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A975 — remaining demo scripts.** The `*-demo.ts` scripts still carry non-English sample
@@ -605,83 +572,80 @@ In A435 step 5's second run-it review, deleting the `working_orders` location `e
 
 ## Loose ends left by A435's printer, reader and device delete (steps 2 to 4)
 
-- **Loose ends left by A435's printer, reader and device delete (steps 2 to 4).**
-  - The till's status for an original whose printer was deleted uses the error code's sentence
-    ("…this job will not be retried."), where its neighbours speak of "the original". Owner to
-    choose the wording.
-  - The Spanish for `printer.deleted` breaks its twin's pattern: "por lo que no se volverá a
-    intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
-    intentar".
-  - Shorter printer-delete copy was offered to the owner during the build: for the till's
-    deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
-    shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
-    detiene"), and one dialog line per inherited default.
-  - `refuseDeletedPrinters` lives in `@waitron/layouts` though `@waitron/printing` holds the
-    printer functions and `printer.not_found`'s registry.
-  - `deletePrinter` writes the device choices, profile lists and holders that layouts owns; one
-    layouts function could clear them.
-  - Several printer queries that already require an active printer or a live job also filter
-    `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
-    the copies.
-  - The devices and payments screens copy the printers screen's delete-dialog logic
-    (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
-    Pull it into one shared piece, with the `names` helper that `printer-delete-copy.ts`,
-    `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the `line` helper the
-    first two share. Left open by A435 step 4 (#1519) and step 3.
+- The till's status for an original whose printer was deleted uses the error code's sentence
+  ("…this job will not be retried."), where its neighbours speak of "the original". Owner to
+  choose the wording.
+- The Spanish for `printer.deleted` breaks its twin's pattern: "por lo que no se volverá a
+  intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
+  intentar".
+- Shorter printer-delete copy was offered to the owner during the build: for the till's
+  deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
+  shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
+  detiene"), and one dialog line per inherited default.
+- `refuseDeletedPrinters` lives in `@waitron/layouts` though `@waitron/printing` holds the
+  printer functions and `printer.not_found`'s registry.
+- `deletePrinter` writes the device choices, profile lists and holders that layouts owns; one
+  layouts function could clear them.
+- Several printer queries that already require an active printer or a live job also filter
+  `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
+  the copies.
+- The devices and payments screens copy the printers screen's delete-dialog logic
+  (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
+  Pull it into one shared piece, with the `names` helper that `printer-delete-copy.ts`,
+  `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the `line` helper the
+  first two share. Left open by A435 step 4 (#1519) and step 3.
 
 ## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
 
-- **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
-  - "A device that is not deleted" is written by hand as `isNull(devices.deletedAt)` in several
-    files; one named check would keep a new query from forgetting it. Step 4 (#1519).
-  - A Stripe reader's delete confirmation does not say the reader stays registered at Stripe, which
-    a SumUp reader's does while SumUp is not connected. Step 3b.
-  - The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
-    device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
-    has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
-    (#1520), whose plan kept the existing sentence.
+- "A device that is not deleted" is written by hand as `isNull(devices.deletedAt)` in several
+  files; one named check would keep a new query from forgetting it. Step 4 (#1519).
+- A Stripe reader's delete confirmation does not say the reader stays registered at Stripe, which
+  a SumUp reader's does while SumUp is not connected. Step 3b.
+- The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
+  device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
+  has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
+  (#1520), whose plan kept the existing sentence.
 
 ## Loose ends left by A394-3 (#1447)
 
-- **Loose ends left by A394-3 (#1447).**
-  - `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an
-    unknown location.
-  - A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22,
-    while the course route answers 404.
-  - The two location routes' body menu id keeps 404 until A394-11.
-  - Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
-    PATH location answers `location.not_found`. If workforce moves to the new code, declare it in
-    `packages/db/src/errors.ts`.
+- `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an
+  unknown location.
+- A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22,
+  while the course route answers 404.
+- The two location routes' body menu id keeps 404 until A394-11.
+- Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
+  PATH location answers `location.not_found`. If workforce moves to the new code, declare it in
+  `packages/db/src/errors.ts`.
 
 ## Loose ends left by A483 (#1544)
 
-- **Loose ends left by A483 (#1544).** OPEN.
-  - **A switched-off module's append-only tables are neither re-protected nor checked.** A start
-    migrates, re-protects and checks only the modules switched on.
-    [Detail](architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
-  - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
-    `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
-    `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses
-    Retry. **Next action:** decide whether Waitron ships that as an operator command.
-  - **The append-only check does not read `PRAGMA recursive_triggers`.** With the pragma off,
-    `INSERT OR REPLACE` rewrites an append-only row without touching a trigger (measured,
-    `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts` reads only the
-    triggers' stored text. Whether anything on a running server can turn the pragma off is
-    unmeasured.
+OPEN.
+
+- **A switched-off module's append-only tables are neither re-protected nor checked.** A start
+  migrates, re-protects and checks only the modules switched on.
+  [Detail](architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
+- **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
+  `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
+  `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses
+  Retry. **Next action:** decide whether Waitron ships that as an operator command.
+- **The append-only check does not read `PRAGMA recursive_triggers`.** With the pragma off,
+  `INSERT OR REPLACE` rewrites an append-only row without touching a trigger (measured,
+  `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts` reads only the
+  triggers' stored text. Whether anything on a running server can turn the pragma off is
+  unmeasured.
 
 ## Loose ends left by the tenant-column removal (#378, 2026-09-16)
 
-- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
-  - **These index and key names still read `tenant`, and the columns they name are gone.** This is
-    its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in
-    production error translation, so renaming them changes behaviour and wants its own failing
-    tests first.
-    [Detail](architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
-  - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved
-    for facts about the process itself.** **Next action:** choose a prefix (`credentials.missing`
-    is the nearest sibling) and rename it in one change, checking the prefix matchers
-    `docs/developers/conventions-data.md` lists.
-    [Detail](architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
+- **These index and key names still read `tenant`, and the columns they name are gone.** This is
+  its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in
+  production error translation, so renaming them changes behaviour and wants its own failing
+  tests first.
+  [Detail](architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
+- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved
+  for facts about the process itself.** **Next action:** choose a prefix (`credentials.missing`
+  is the nearest sibling) and rename it in one change, checking the prefix matchers
+  `docs/developers/conventions-data.md` lists.
+  [Detail](architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
 
 ## The `authorized_by` comment on `drawer_opens` says only a manual open sets it
 
@@ -722,3 +686,31 @@ the go-live deletion; future design commands are not current operating instructi
   `10000` literals — four sit in check constraints, where only `sql.raw(String(n))` renders the
   number, and a constant that works only through `sql.raw` is a trap for the next tidy-up (P6,
   #529).
+
+### Three shapes the read connection does not cover
+
+**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3, PR #493).** A
+transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
+Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
+A write issued from outside a running body while one is open is re-run on the writer, where it joins
+that transaction if it is still open and commits or rolls back with it, which is what one connection
+did; in the moment after the queue's `commit` and before the body has ended, none is open and the
+write commits by itself. Nothing refuses it. And `readOnly: true` refuses a write to the database
+FILE, not every write: measured 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a
+connection, so a temporary table written from outside a running body would land on the reader and
+stay there — and the same holds for an `ATTACH` of a file that exists (one of a missing file is
+refused, errcode 14 — measured by #568) and for any connection-scoped pragma, because all three
+change a CONNECTION rather than the file, so nothing refuses them and nothing routes them back. A
+temporary table and an `ATTACH` have no site in this tree (searched 2026-09-23). The two
+connection-scoped pragmas that run on a request path, both `pragma defer_foreign_keys = on`, are
+each issued INSIDE a running transaction body, which is exactly where the routing sends a statement
+to the writer: `apps/server/src/configuration-transfer.ts`'s import issues it inside the
+provisioning transaction's body, and `writeAndRemoveDecoyAction`
+(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
+(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
+reader would serve them if a body happened to be running, and none of those suites runs one.
+**Next action:** none needed while that holds; a temporary table, an attachment or a connection
+pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for
+that does not exist. Also left by #493's review: the case pinning the adapter half of the window fix
+lives in `packages/store/src/index.test.ts`, not beside the file it reverts
+(`packages/store/src/node-sqlite-adapter.ts`).

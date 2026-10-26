@@ -5828,7 +5828,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
 
 - **Three shapes the read connection does not cover** — OPEN (stated 2026-09-23, task N3, PR #493).
-  [Detail](backlog/architecture.md#three-shapes-the-read-connection-does-not-cover)
+  [Limits](backlog/architecture.md#three-shapes-the-read-connection-does-not-cover)
 
 - **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN.
   **Next action:** decide whether a read-only body should take the lock at all.
