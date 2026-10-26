@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import {
-  croquetas,
+  croquettes,
   current,
   currentGroup,
   flan,
@@ -40,7 +40,7 @@ describe.each(["en", "es"] as const)("Sent dish facts in %s", (locale) => {
             groups: [orderGroup("g1", 1, "fired"), orderGroup("g3", 3, "held")],
             currentOrders: current({
               groups: [
-                currentGroup("g1", 1, "fired", [croquetas], { sentAt }),
+                currentGroup("g1", 1, "fired", [croquettes], { sentAt }),
                 currentGroup("g3", 3, "held", [{ ...flan, note: "no sugar" }]),
               ],
               ungrouped: [],

@@ -39,13 +39,7 @@ export function row(
   } satisfies CurrentOrderRow;
 }
 
-// Group 1: Croquetas ×4 half served, a Salad served, and ready Beer and Bravas. Bravas carries a
-// legacy dispatch stamp; both remain ready. Fired by Luis. Group 2: a Steak needing no preparation,
-// a Fish a station is preparing,
-// and a Pulpo at a station that records nothing, on another bill of the party, fired by someone the
-// server has no name for. Group 3 was held by Ana and its reminder is due. Group 4 was held by someone
-// the server has no name for. A Coffee sits in no group.
-export const croquetas = row("l-croq", "Croquetas", "4.000", { servedQuantity: "2.000" });
+export const croquettes = row("l-croq", "Croquetas", "4.000", { servedQuantity: "2.000" });
 export const salad = row("l-salad", "Salad", "1.000", {
   servedQuantity: "1.000",
   servedAt: "2026-09-28T20:05:00.000Z",
@@ -53,7 +47,7 @@ export const salad = row("l-salad", "Salad", "1.000", {
 export const beer = row("l-beer", "Beer", "1.000", {
   kitchen: { stationId: null, movable: false, state: "ready", firedAt: fired },
 });
-export const bravas = row("l-bravas", "Bravas", "1.000", {
+export const spicyPotatoes = row("l-bravas", "Bravas", "1.000", {
   kitchen: {
     stationId: null,
     movable: false,
@@ -66,7 +60,7 @@ export const steak = row("l-steak", "Steak", "1.000", { kitchen: null });
 export const fish = row("l-fish", "Fish", "1.000", {
   kitchen: { stationId: null, movable: false, state: "preparing", firedAt: fired },
 });
-export const pulpo = row("l-pulpo", "Pulpo", "1.000", { workingOrderId: "wo-check" });
+export const octopus = row("l-pulpo", "Pulpo", "1.000", { workingOrderId: "wo-check" });
 export const flan = row("l-flan", "Flan", "2.000", {
   released: false,
   kitchen: { stationId: null, movable: false, state: "queued", firedAt: null },
@@ -82,7 +76,7 @@ export const flan = row("l-flan", "Flan", "2.000", {
     },
   ],
 });
-export const tarta = row("l-tarta", "Tarta", "1.000", {
+export const cake = row("l-tarta", "Tarta", "1.000", {
   released: false,
   kitchen: { stationId: null, movable: false, state: "queued", firedAt: null },
 });
@@ -145,10 +139,10 @@ export function current(over: Partial<CurrentOrders> = {}): CurrentOrders {
     revision: 7,
     reminder: { groupId: "g3", dueAt: "2026-09-28T20:15:00.000Z" },
     groups: [
-      currentGroup("g1", 1, "fired", [croquetas, salad, beer, bravas]),
-      currentGroup("g2", 2, "fired", [steak, fish, pulpo], { sentBy: null }),
+      currentGroup("g1", 1, "fired", [croquettes, salad, beer, spicyPotatoes]),
+      currentGroup("g2", 2, "fired", [steak, fish, octopus], { sentBy: null }),
       currentGroup("g3", 3, "held", [flan]),
-      currentGroup("g4", 4, "held", [tarta], { sentAt: laterHeldAt, sentBy: null }),
+      currentGroup("g4", 4, "held", [cake], { sentAt: laterHeldAt, sentBy: null }),
     ],
     ungrouped: [coffee],
     ...over,

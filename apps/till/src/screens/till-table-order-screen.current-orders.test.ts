@@ -15,7 +15,7 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TabLine, PartyBill } from "../api/client.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
-  croquetas,
+  croquettes,
   current,
   currentGroup,
   fired,
@@ -30,7 +30,7 @@ import {
   salad,
   snoozed,
   steak,
-  tarta,
+  cake,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
@@ -389,10 +389,10 @@ describe("Current orders and Sent service", () => {
     const { el } = await mountSent({
       currentOrders: current({
         groups: [
-          currentGroup("g1", 1, "fired", [croquetas, salad]),
+          currentGroup("g1", 1, "fired", [croquettes, salad]),
           currentGroup("g2", 2, "fired", [salad]),
           currentGroup("g3", 3, "fired", [steak, withheld]),
-          currentGroup("g4", 4, "held", [tarta]),
+          currentGroup("g4", 4, "held", [cake]),
         ],
       }),
       groups: [
