@@ -164,6 +164,17 @@ it.each(GUIDE_LANGUAGES)(
   },
 );
 
+it.each(GUIDE_LANGUAGES)(
+  "the staff guide's own-data section in %s names adjustments.json",
+  (lang) => {
+    const html = rendered(lang, "staff")!.html;
+    const start = html.indexOf('<section id="own-data"');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const section = html.slice(start, html.indexOf("</section>", start));
+    expect(section).toContain("adjustments.json");
+  },
+);
+
 it.each(GUIDE_LANGUAGES)("serves the till notices guide in %s with its sections", (lang) => {
   expect(GUIDE_PAGES).toContain("till-notices");
   const markdown = readGuide(root, lang, "till-notices");

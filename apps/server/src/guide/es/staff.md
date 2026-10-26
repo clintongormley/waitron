@@ -39,7 +39,9 @@ la copia también puede contener tus datos de contrato, tus turnos, tus ausencia
 personal y las preguntas sobre tus fichajes en archivos `.json`, y tu registro de jornada en PDF y
 en una hoja de cálculo `.csv`. Puede haber también un `actions.json`: las ventas completas ya
 registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado
-registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste.
+registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste. Puede haber también un
+`adjustments.json`: las cancelaciones y los descuentos de una cuenta que hiciste indicando un
+motivo, o que autorizaste para otra persona.
 
 Un `README.txt` explica cada archivo, quién más recibe los datos, cuánto tiempo se guardan y tus
 derechos. La copia nunca contiene secretos como tu PIN o tu contraseña. Para cualquier otra cosa

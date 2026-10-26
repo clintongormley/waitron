@@ -35,7 +35,9 @@ files. If the venue plans staff or records working time in Waitron, the download
 your employment details, rota, absences, staff roles and attendance questions as `.json` files,
 and your working-time record as a PDF and a `.csv` spreadsheet. There can be an `actions.json` too:
 the whole sales already recorded whose void you authorised, the refunds you asked for, authorised
-or recorded the outcome of, and the cash-drawer openings you made or authorised.
+or recorded the outcome of, and the cash-drawer openings you made or authorised. There can be an
+`adjustments.json` too: the voids, comps and discounts on a bill that you made giving a reason, or
+approved for someone else.
 
 A `README.txt` explains each file, who else receives the data, how long it is kept and your
 rights. The download never holds a secret such as your PIN or password. For anything else about

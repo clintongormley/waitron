@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi } from "../api/client.js";
 import type { ProfileScreen } from "./profile-screen.js";
@@ -286,7 +287,10 @@ describe("profile-screen copy of your data help", () => {
       expect(help.getAttribute("guide-href")).toBe("/help/en/staff#own-data");
       expect(help.getAttribute("aria-label")).toBe(t("profile.data_copy_help_label"));
       expect(help.getAttribute("guide-label")).toBe(t("profile.data_copy_help_guide"));
-      expect(help.textContent!.trim()).toBe(t("profile.data_copy_help"));
+      expect(help.textContent!.trim()).toBe(en["profile.data_copy_holds"]);
+      expect(help.textContent!.trim()).toContain(
+        "The voids, comps and discounts on a bill that you made giving a reason, or approved for someone else.",
+      );
     } finally {
       setLocale(previous);
     }
@@ -301,7 +305,7 @@ describe("profile-screen copy of your data help", () => {
       expect(help.getAttribute("guide-href")).toBe("/help/es/staff#own-data");
       expect(help.getAttribute("aria-label")).toBe(t("profile.data_copy_help_label"));
       expect(help.getAttribute("guide-label")).toBe(t("profile.data_copy_help_guide"));
-      expect(help.textContent!.trim()).toBe(t("profile.data_copy_help"));
+      expect(help.textContent!.trim()).toBe(es["profile.data_copy_holds"]);
     } finally {
       setLocale(previous);
     }
