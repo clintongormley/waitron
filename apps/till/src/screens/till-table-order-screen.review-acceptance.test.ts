@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations } from "../widgets/test-helpers.js";
-import { beer, flan, jamon, mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, ham, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 
 afterEach(async () => {
@@ -29,7 +29,7 @@ describe("phone Review counts dishes without changing their draft", () => {
                 { listId: "extras", productId: "sauce", name: "Sauce", quantity: 3, price: "0.25" },
               ],
             },
-            { product: jamon, quantity: "0.375" },
+            { product: ham, quantity: "0.375" },
             {
               product: { ...beer, id: "retired", name: "Recorded dish" },
               quantity: "2.000",
