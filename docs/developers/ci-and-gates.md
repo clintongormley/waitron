@@ -3359,3 +3359,113 @@ failed the real-workflow guard; restoring the files passed all 29 upload cases. 
 workflow suite passed 323 cases before the hosted probe. Parsing both final workflows and
 removing the added retry steps and first-attempt fields reproduced their original YAML values,
 including every original upload input and condition.
+
+
+## Root detail moved on 2026-10-26
+
+These excerpts retain the supporting detail and full guard limits from `CLAUDE.md` at
+`fa3e76787188a08a8367477202cb03e5840d1b7d` before A1114 shortened the root entries.
+They are source excerpts, not new experiments or changes to the rules.
+
+### `apps/server`'s shards are packed by a committed duration table (`apps/server/test-durations.json`, read by `scripts/vitest-duration-sequencer.mjs`), not by Vitest's hash split.
+
+**`apps/server`'s shards are packed by a committed duration table
+(`apps/server/test-durations.json`, read by `scripts/vitest-duration-sequencer.mjs`), not by
+Vitest's hash split.** A file missing from the table is packed at the table's mean and started
+first in its shard; refresh the table with `scripts/test-durations.mjs` when a server shard drifts
+past 4 minutes. Guard: `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name — it
+checks the packing over a walk of `apps/server`'s `*.test.ts` files, never a Vitest run, and never
+that the table is fresh. Receipt:
+[ci-and-gates.md](ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
+
+### Every CI test job — one shard of one package — should finish in about 4 minutes
+
+**Every CI test job — one shard of one package — should finish in about 4 minutes** (owner,
+2026-10-09 and 2026-10-11). Fix a job over it at the cause: a slow file, too few shards, slow
+setup; never by cutting a check. Guards, weaker than the rule: the reporter only warns;
+`scripts/ci-workflow.test.mjs` pins shard counts and 10-minute limits. Receipt:
+[ci-and-gates.md](ci-and-gates.md#every-ci-test-job-should-finish-in-about-4-minutes).
+
+### esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.
+
+**esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
+Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
+box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts` and
+bundle-smoke (weaker than their names: read text, with bundle-smoke limited to `dist/server.js`),
+and image-smoke's sharp step.
+Detail: [ci-and-gates.md](ci-and-gates.md).
+
+### Every workflow job carries `timeout-minutes`, except one that calls a reusable workflow, whose called jobs carry it
+
+**Every workflow job carries `timeout-minutes`, except one that calls a reusable workflow, whose
+called jobs carry it**; GitHub's default is six hours. Guard: the job-time-limit cases in
+`scripts/ci-workflow.test.mjs`, weaker than its name — it reads text, does not judge the number,
+and never reads a called workflow kept in another repository.
+
+### An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image runs under an outer `timeout`, and is retried when it stalls or exits non-zero
+
+**An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
+runs under an outer `timeout`, and is retried when it stalls or exits non-zero**. A workflow's
+`playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Guards: the
+apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs` and the apt-wait cases in
+`scripts/deploy-image-env.test.ts`, weaker than their names — they read text and do not check the
+retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run waitron.sh's retries
+under stubs. Receipt:
+[ci-and-gates.md](ci-and-gates.md#every-apt-wait-is-bounded).
+
+### Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`, three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit of its own.
+
+**Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`,
+three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit of
+its own.** Guards: the pnpm-setup cases in `scripts/ci-workflow.test.mjs`, weaker than their names
+— they read text — and `scripts/ci-setup-pnpm.test.mjs`. Receipt:
+[ci-and-gates.md](ci-and-gates.md#every-pnpm-setup-is-bounded).
+
+### Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes` with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a second attempt run only when the first failed.
+
+**Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes`
+with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a
+second attempt run only when the first failed.** Guard: the checkout cases in
+`scripts/ci-workflow.test.mjs`, weaker than their name — they read text and never run a workflow.
+Receipt: [ci-and-gates.md](ci-and-gates.md#every-checkout-is-bounded).
+
+### Adding a workspace package fails root guards until it is named in the shard lists
+
+**Adding a workspace package fails root guards until it is named in the shard lists**, and
+one of them CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
+and reads like a broken checkout. Receipt:
+[ci-and-gates.md](ci-and-gates.md#adding-a-workspace-package-breaks-the-root-guards-until-it-is-wired-in).
+
+### Every package whose vitest config enables browser mode runs in real headless Chromium
+
+**Every package whose vitest config enables browser mode runs in real headless Chromium**
+(`grep -l browser */*/vitest.config.ts` — two levels, not one — says which). Concurrency is
+decided by measured headroom (`memory_pressure | grep free`), never by a count: beside ANOTHER
+SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
+a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
+seat's PERMISSIONS, not on Codex.
+
+### A migration can fail on a box that already has a trigger naming what it changes.
+
+**A migration can fail on a box that already has a trigger naming what it changes.** A rebuild of
+a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`,
+weaker than its name — its rows are synthetic and counted, not compared, and it installs today's
+change-feed list, and today's append-only list less the tables the previous step lacked, at every
+step. Receipt:
+[ci-and-gates.md](ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
+
+### The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`), which picks `/dev/shm` when it exists, because every commit waits for the disk.
+
+**The upgrade test makes its scratch directory under `scratchParent()`
+(`scripts/scratch-dir.mjs`), which picks `/dev/shm` when it exists, because every commit waits for
+the disk.** Nothing guards it. Receipt:
+[ci-and-gates.md](ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
+
+### The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set `TMPDIR=/dev/shm`, in CI only.
+
+**The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
+`TMPDIR=/dev/shm`, in CI only.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it
+reads `ci.yml` as text and never reads the steps' test files. Receipts:
+[testing-guide.md](testing-guide.md), "In CI their temporary files are in memory",
+and
+[ci-and-gates.md](ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).

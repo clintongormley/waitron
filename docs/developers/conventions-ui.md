@@ -1820,3 +1820,109 @@ Cost: a shifted, clipped 58mm receipt.
 ### The print agent runs under `deploy/apparmor/waitron-print-agent`, named through `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a `bluetoothctl` call that sends a bus message the profile does not list is refused until the profile gains a rule for it
 
 Cost: the agent silently listed no Bluetooth printers on the owner's box.
+
+
+## Root detail moved on 2026-10-26
+
+These excerpts retain the supporting detail and full guard limits from `CLAUDE.md` at
+`fa3e76787188a08a8367477202cb03e5840d1b7d` before A1114 shortened the root entries.
+They are source excerpts, not new experiments or changes to the rules.
+
+### New or changed forms use the shared UI contract in [design-system.md](design-system.md) → Forms.
+
+**New or changed forms use the shared UI contract in [design-system.md](design-system.md) → Forms.**
+Required fields visibly marked; an invalid submission explains itself beside every bad field and in
+one localized message at the bottom of the form, on its own line above the buttons, and the action
+stays disabled until the fields are fixed — no summary at the top. A refusal from a request never
+disables the action by itself, and one that names a shown field says so under that field (owner,
+2026-09-29). A form that saves opens with its action quiet and disabled until its draft changes,
+through `draftScopeFor` and `saveActionState` plus an early return in its save handler (owner,
+2026-10-07, A331); the forms that follow it are listed in design-system.md, and nothing guards it
+across screens. A button that is not a save is drawn quiet while it waits for a choice, a
+selection or a load, or while its row's own state rules it out, and in its own colour once it can
+act or while its own request is sent (owner, 2026-10-08, A416 and A427); its exceptions are in design-system.md → Forms, and nothing guards it
+across screens. A field's hint is its placeholder. A short explanation is a hint, not a "?"
+button (owner, 2026-10-03); nothing guards that across screens (backlog A237). Every input has a
+semantic `name`, never a generated widget id. The owner's other dated decisions, and the sign-in
+exception, are in [conventions-ui.md](conventions-ui.md).
+
+### The user guides live in `apps/server/src/guide/<language>/`, and the box serves them at `/help/<language>/<page>`.
+
+**The user guides live in `apps/server/src/guide/<language>/`, and the box serves them at
+`/help/<language>/<page>`.** A change to a screen updates its guide in English and, where a twin
+exists, Spanish; every section heading carries a `{#id}` both languages share, and a link from the
+dashboard goes through `apps/dashboard/src/help-guide.ts`, one from the till through
+`apps/till/src/help-guide.ts`. Guards: `apps/server/src/guide-content.test.ts`
+and `scripts/guide-links.test.ts`, both weaker than their names — the first checks that the guides
+render and that their ids, links and twins' ids match, never that a guide or its twin says what
+the screen does or was updated with it; the second's check that only `help-guide.ts` writes a
+guide path reads only `apps/dashboard/src` and `apps/till/src`, as text. See
+[conventions-ui.md](conventions-ui.md).
+
+### A login's refusal never says whether the account exists
+
+**A login's refusal never says whether the account exists** (owner, 2026-09-30): an unknown,
+suspended or pending account, a wrong password, PIN or code and, on a till's PIN sign-in, a person
+the device's profile does not admit all answer one code
+(`password.invalid` or `pin.invalid`) after the same hashing work, shown as one sentence, marking
+no field on a sign-in form — only a missing or malformed value is marked there; identity's
+refusals carry the real cause as a log-only `reason`. One owner-approved exception:
+`passkey.not_registered`. Guards: the one-answer cases in identity's login suites and the route
+suites [conventions-ui.md](conventions-ui.md) names, weaker than the set looks — a new sign-in route is seen by none.
+
+### A device's profile and the signed-in person must both allow what a till does.
+
+**A device's profile and the signed-in person must both allow what a till does.** A till route
+that orders, takes a payment, prepares, hands over, prints or opens the drawer checks the
+profile's action beside the person's permission, except the routes the map atop
+`apps/server/src/till-api.profile-actions.test.ts` leaves unchecked by decision; the profile's
+zones bound where it serves, and its admission list who may sign in. A new till route adds a row
+to that map and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
+refusing case — weaker than that sounds: both route maps are comments.
+
+### A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`
+
+**A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
+menu stays on a phone's screen (owner decision, A155). Guard: `scripts/pinned-actions-column.test.ts`,
+weaker than its name — it knows a menu column only by the literal `key: "actions"`, so every
+object with that key is held to the rule and a data column must take another key. See
+[design-system.md](design-system.md).
+
+### Every colour, spacing, radius and font reads a `--wt-*` token
+
+**Every colour, spacing, radius and font reads a `--wt-*` token**, and the name read must be
+declared. No hex, no named colours, no `rem`/`em`. Guards: `packages/ui/src/no-hardcoded-chrome.test.ts`
+(scans `packages/ui` alone; the rule covers any component or view) and
+`scripts/style-token-names.test.ts`, weaker than its name — it reads text and matches a read
+against declarations anywhere in the tree.
+
+### Printing never opens the cash drawer, and a device opens it only when its profile allows it.
+
+**Printing never opens the cash drawer, and a device opens it only when its profile allows it.** A
+cash payment, or a card hand-keyed on a machine Waitron does not talk to, enqueues a separate
+audited `drawer` job; receipt jobs are `document` jobs and contain no drawer command. A card on a
+connected machine opens nothing. A device opens the drawer of its own drawer choice, else its
+profile's default drawer, not by following its receipt printer, and only when its profile has
+`open-cash-drawer` and that printer is active and has a drawer (`drawerPrinter` and
+`resolveDrawerPrinter`, `apps/server/src/receipt-print.ts`). `take-cash` decides whether a device
+takes cash at all (`assertTakesCash`, `apps/server/src/device-session.ts`, refusing
+`device.cash_not_allowed`). The manual open needs a session on an active device, the profile's
+`open-cash-drawer`, and always `cash.drawer` or the PIN of someone holding it, and opens the same
+drawer the automatic paths would; the one exception is the dashboard's "Test open drawer"
+calibration. Drawer jobs cannot be manually resent. Guards, weaker than the rule: the drawer, cash, refund, calibration and resend suites
+listed in the detail cover only named routes or functions; nothing stops a new route queuing a
+`drawer` job without `drawerPrinter` or taking cash without `assertTakesCash`. Detail:
+[conventions-ui.md](conventions-ui.md#a-device-opens-the-drawer-when-its-profile-allows-it-a-handheld-does-what-a-till-does).
+
+### Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a fixture gives the three DIFFERENT text
+
+**Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
+fixture gives the three DIFFERENT text**, or the test passes whether the surface reads the right
+name or the wrong one. Which surface reads which: [products.md](products.md).
+
+### Dashboard subscription names travel with their server sources.
+
+**Dashboard subscription names travel with their server sources.** A rejected subscription closes
+the whole tab's stream, so a misspelled name breaks other screens too. Guard:
+`scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or
+disabled-module combinations.

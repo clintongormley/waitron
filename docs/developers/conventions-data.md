@@ -4368,3 +4368,268 @@ Cost: #1036 restored two edited files byte for byte.
 ### While the box's clock reads more than a minute earlier than the latest fiscal record, no record is written and no route takes or gives back new money
 
 Cost: before the route checks, a probe charged a card on a clock a day behind (A798-B slice 8 plan, E10).
+
+
+## Root detail moved on 2026-10-26
+
+These excerpts retain the supporting detail and full guard limits from `CLAUDE.md` at
+`fa3e76787188a08a8367477202cb03e5840d1b7d` before A1114 shortened the root entries.
+They are source excerpts, not new experiments or changes to the rules.
+
+### Error codes name the DOMAIN CONCEPT, never the throwing package
+
+**Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
+`db.series_not_found`. **Before a venue is live, a code may be renamed or deleted freely; once one
+is live, either is a migration** (owner decision 2026-09-26). Either way it is one change in which
+every copy in the tree moves or goes; once live, stored copies are rewritten too and a reader
+outside this repository accepts both names until both sides are deployed. Stored copies and prefix
+matchers, which a grep for the code cannot find, are listed in
+[conventions-data.md](conventions-data.md).
+`server.*` is reserved for facts about the process itself. Every file that throws a code imports its registry.
+
+### General code is English only
+
+**General code is English only** (owner, 2026-09-07 and 2026-10-19): no Spanish, Catalan or other
+non-English text in any general package or app — not in a literal, comment, identifier, file name,
+seed or starter content, or test. It belongs only in `packages/fiscal-verifactu`, AEAT's
+wire-protocol names, translation files (such as a module's `dashboard/strings.ts`, an app's
+`apps/<app>/src/i18n/`, and the guides under `apps/server/src/guide/<language>/`), and the
+packages written for Spain (`country-es`, `workforce-es`, `reporting`'s modelo 303), which hold
+text official only in Spain, Spanish-specific terms, and Spain-only printed text in Spain's
+official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and
+demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
+Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
+Starter content a module writes into a new venue is English, translated when the box is set up; a
+test of a non-English screen reads its expected text from the strings file. A Spanish domain term
+has one declaring home, its module's vocabulary; a fiscal term never goes in the base list. Guard:
+`scripts/english-only.test.ts`, weaker than its name — it refuses only listed words, scans only
+the packages `GENERIC_PACKAGES` names and never `apps/*`, so review greps the diff. Detail:
+[conventions-data.md](conventions-data.md).
+
+### Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.
+
+**Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.**
+Write-path functions take a `tx: Transaction` and never open their own; a route handler opens
+exactly one `withTransaction` per request. This is a convention, not a compiler guarantee. A
+secret check should be the exception: it takes the `Database` and derives its key with no
+transaction open (identity's `checkPin`, `checkManagerPassword`,
+`checkOwnPassword`), and a new route that forgets the early check, or forgets to take turns
+(`inTurn`, `apps/server/src/attempt-turns.ts`), derives
+under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
+transactions is a commented decision, never a default.** **Queries on one transaction are awaited
+in turn, never `Promise.all`.** No guard enforces it.
+
+### A housekeeping write on a read path must not take the read down on a full disk.
+
+**A housekeeping write on a read path must not take the read down on a full disk.** The last-seen
+stamp gives way to a full disk (`readDeviceProof`, `requireSession`, and the session checks of the
+Box status routes in `box-health-api.ts` and the bell's reads in `alerts-api.ts`); a read that
+must answer while a change waits reads in `withWriteLock` turns with no drain, as the equipment
+and Box status reads do, and the bell's reads after a full-disk refusal — a stated exception to
+one `withTransaction` per route. Guard: the full-disk cases in
+`apps/server/src/start-full-disk.e2e.test.ts`, weaker than the rule — they cover the routes they
+name. Receipt:
+[conventions-data.md](conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write).
+
+### A statement this engine refuses backs out ITSELF, not the transaction around it — except a full disk, which sometimes ends the whole transaction
+
+**A statement this engine refuses backs out ITSELF, not the transaction around it — except a full
+disk, which sometimes ends the whole transaction** (as `RAISE(ROLLBACK)`, `INSERT OR ROLLBACK` and
+`ON CONFLICT ROLLBACK` always do), **and a `RAISE(FAIL)`, `INSERT OR FAIL` or `ON CONFLICT FAIL`,
+which keep the rows their statement wrote before it** (no product code uses any of the six). So,
+apart from those exceptions, catching a refusal and carrying on in the same `tx` is safe. A full
+disk answers `storage.disk_full`, and after one that ended the transaction the store refuses every
+later statement in that body — inside the write queue; a transaction opened outside it in between
+defeats this. **A TEST still catches such a refusal OUTSIDE the transaction**, around the whole
+`withTransaction`, and no guard enforces that. Guard: `packages/store/src/disk-full.test.ts` and
+`write-queue.test.ts`, weaker than their names — a page limit, not a real disk, and both at-commit
+cases are a stand-in. Receipt:
+[conventions-data.md](conventions-data.md#a-refused-statement-does-not-abort-the-transaction-here-and-all-a-savepoint-still-buys-is-confinement-of-a-losing-attempts-own-writes).
+
+### A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.
+
+**A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
+`ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
+too. Nothing guards it.
+
+### A full disk is not one error code
+
+**A full disk is not one error code**: measured 13, 14, 4874 and the system's `ENOSPC`, by
+filesystem and by step, and 14 also comes from a missing folder; the start names one with
+`fullDiskFailure` (`apps/server/src/boot-failure.ts`) — 13 always, the others only under 16 MiB
+free. Guard: its cases in `apps/server/src/boot-failure.test.ts`, weaker than the rule — stubbed
+errors, and no real-disk case reaches `ENOSPC`. Receipt:
+[conventions-data.md](conventions-data.md#a-full-disk-is-not-one-error-code).
+
+### One process owns a venue folder at a time.
+
+**One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` and refuses a
+second PROCESS (`provisioning.database_in_use`); opens inside one process share the hold. A tool
+documented to run beside the server passes `exclusive: false`; a command that changes the
+folder's files takes `lockVenueDatabase` before its first change. Never unlink `venue.lock` or
+`recovery.lock`; every change to `recovery.json` goes through `updateRecoveryState`. Guards:
+`packages/store/src/venue-lock.test.ts` and `apps/server/src/recovery-race.test.ts`, weaker than
+their names — each proves the lock, not that every caller takes it. The Litestream child, the
+holder file and the watchdog are in [conventions-data.md](conventions-data.md).
+
+### A duty `bootServer` starts pushes its stop onto `undoOnFailure` as soon as it exists, before the next step that can throw
+
+**A duty `bootServer` starts pushes its stop onto `undoOnFailure` as soon as it exists, before
+the next step that can throw** (`apps/server/src/boot.ts`), or a failed start leaves it running on
+a store the unwind has just closed. The landing listener, started last, is the one step not on the
+list. Guard: `apps/server/src/boot.failed-start.test.ts`, weaker
+than its name — it covers only the duties it names.
+
+### `packages/db/src/schema/columns.ts` is the only file that names the engine's column and table types.
+
+**`packages/db/src/schema/columns.ts` is the only file that names the engine's column and table
+types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `text()`
+or `integer()` straight from `drizzle-orm/sqlite-core`. One scoped exception: `text` in
+`packages/fiscal-verifactu/src/schema/registros.ts`. Guard: `scripts/column-vocabulary.test.ts`,
+weaker than its name — it reads the import line as text and forbids only the builders the
+vocabulary itself imports, so `blob` passes anywhere.
+
+### A money column holds a count of whole cents, and the conversion happens AT THE ROW
+
+**A money column holds a count of whole cents, and the conversion happens AT THE ROW**
+(`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
+for a raw-SQL read, which casts `cast(x as text)`). Above the row every amount stays the exact `Decimal`; a money
+total summed out of JSON is summed in JavaScript at the money scale. **Nothing guards the boundary
+itself, and there is no LOUD form of getting it wrong**. Guards, both narrower than their names:
+`packages/db/src/schema/columns.test.ts` and `packages/shared/src/conventions.test.ts`.
+
+### A quantity column counts whole thousandths and a rate column whole basis points; neither is the money scale
+
+**A quantity column counts whole thousandths and a rate column whole basis points; neither is the
+money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`). A blanket "every numeric
+becomes cents" does not EMPTY a quantity, it misreads one. The converters hold the bound, because
+an integer column does not; the raw quantity reader reads totals, so like the money one it bounds
+only at what a number counts exactly. A rate's CHECK constraint is written
+against 10000. Guard: the shared schema-conformance suite,
+`packages/db/src/testing/schema-conformance.ts`, which a migration set opts into — a set with none
+is unguarded.
+
+### A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION` list, and a table that must never be corrected is declared with `appendOnly()` instead of `classify()`
+
+**A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
+list, and a table that must never be corrected is declared with `appendOnly()` instead of
+`classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair,
+but only from a `migrationOptionsFor(...)` result; a plain options array gets none of those
+triggers, silently. **The CLASS is not the trigger set.** A trigger cannot refuse `DROP TABLE`.
+A release that marks an EXISTING table `appendOnly()` says so in its PR description: a box's
+first start on it can raise `append_only.triggers_restored`.
+Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` and
+`scripts/apply-migrations-callers.test.ts`, the last weaker than its name — it checks the call's
+shape, not the sets handed to it.
+
+### A streamed `venue.db` holds two tables no migration created, and its folder a directory no store opened
+
+**A streamed `venue.db` holds two tables no migration created, and its folder a directory no
+store opened** (Litestream's `_litestream_seq`, `_litestream_lock` and `.venue.db-litestream/`).
+Code that lists a live or restored database's tables, or that empties, copies or restores the
+venue folder, must expect them; no guard finds a new site that does not.
+
+### Anything that works as a live login is stored as a hash, because a primary streams the whole database to the owner's bucket once one is set up
+
+**Anything that works as a live login is stored as a hash, because a primary streams the whole
+database to the owner's bucket once one is set up** (`hashSessionToken`, `@waitron/identity`).
+Guards, weaker than the rule: the "what a copy of the database holds" cases in
+`apps/server/src/me-api.test.ts` and `apps/server/src/till-api.test.ts` present the row's id
+alone, and only the dashboard's stored hash is tried as a token
+(`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
+
+### A module depends on another migration set when its SQL `REFERENCES` one of that set's tables, puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one at top level — and its descriptor's `requires` must name it.
+
+**A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
+puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one
+at top level — and its descriptor's `requires` must name it.** The engine will not catch a
+missing body target. Guard: `scripts/module-graph-honesty.test.ts`, weaker than its name — it
+reads SQL as TEXT and recognizes a fixed set of statement shapes.
+
+### A constraint that lives only in hand-written migration SQL is one regeneration away from gone, and nothing else in the tree notices.
+
+**A constraint that lives only in hand-written migration SQL is one regeneration away from gone,
+and nothing else in the tree notices.** Declare every foreign key and every unique index in the
+TypeScript schema; where one genuinely cannot be declared, say at the column what it cost and
+where the refusal moved to. Guard: `scripts/schema-constraints.test.ts`, weaker than its name — it
+reads the built schema rather than trying an offending insert, and matches a unique index by NAME.
+
+### Drizzle picks what to apply from `max(created_at)` alone
+
+**Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
+so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
+`scripts/journal-monotonic.test.ts`, which bites only on a set with more than one entry. A drizzle
+bump starts with `grep -rn 'dialect.js'`.
+
+### The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door.
+
+**The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating
+path does, and `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
+`provisioning.database_ahead`. Every other migrating path runs
+without the check; the full list is in [conventions-data.md](conventions-data.md).
+
+### `registros_facturacion` is immutable
+
+**`registros_facturacion` is immutable**: it is declared `appendOnly()`
+(`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
+trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
+wrong. That trigger pair is the WHOLE of the enforcement — the engine has no permissions, and a
+`DROP TABLE` is refused by nothing at all. A start (after migrating, which puts back a dropped
+trigger whose table is still there) and a 10 s check while trading refuse to trade on a missing
+or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
+only, and only the tables the start migrated.
+
+### While the box's clock reads more than a minute earlier than the latest fiscal record, no record is written and no route takes or gives back new money, unless a confirmation of the clock covers the reading (below).
+
+**While the box's clock reads more than a minute earlier than the latest fiscal record, no record
+is written and no route takes or gives back new money, unless a confirmation of the clock covers
+the reading (below).** The append refuses on its own
+(`clock.behind_chain`, `packages/fiscal-verifactu/src/chain.ts`); a money route calls the fiscal
+seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
+and both refund recovery loops pause. A card refund's send and outcome are judged again in the
+transaction that dates them, after any provider wait. A payment whose money has already moved is
+still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
+`apps/server/src/payments-api.clock-behind.test.ts` and
+`packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover the
+routes they name; a new money route is seen by none. Receipt:
+[conventions-data.md](conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
+**A confirmation of the clock (`clock_confirmations`: AEAT's time, two agreeing devices from two
+addresses, or an administrator's own device, never one on the box outside development) lifts it
+for one step back**, with no limit on the gap; once a record is written under it every reading is
+held to the minute against the latest time written since. Guards:
+`packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
+`packages/fiscal-verifactu/src/clock-confirmation.test.ts` and
+`apps/server/src/clock-confirm.route.test.ts`, weaker than the rule — they cover the readings and
+requests they name. Receipt:
+[conventions-data.md](conventions-data.md#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back).
+
+### Never put our own metadata into a hash.
+
+**Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
+records differing only in it hash identically. In `computeHuella` it would make every chain
+unverifiable under the other environment.
+
+### Re-registering a filing node starts a new chain under a new installation name.
+
+**Re-registering a filing node starts a new chain under a new installation name.** Correct for a
+reimaged box, destructive for a working one. A setup, restore, re-registration or promotion names
+its installation from the box's clock — five symbols for the UTC minute — only after a check
+against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
+every name in the history it can read; a setup or restore waits 90 to 150 seconds first. The one
+exception is the preproduction throwaway, which names with no second clock and no history check
+and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
+`packages/fiscal-verifactu/src/hour-clock.test.ts` and
+`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, the last weaker than its
+name. One restore takes one source, never both. The working-time chain continues from the
+backup's head. Guard: `packages/workforce/src/restore-continuation.test.ts`. Who takes the
+throwaway, what the last guard misses, and the restore's key and source rules:
+[conventions-data.md](conventions-data.md).
+
+### On a node that files, every start puts each sale left "being sent" back to waiting before its first filing pass
+
+**On a node that files, every start puts each sale left "being sent" back to waiting before its
+first filing pass** (`resetInFlightClaims`, `packages/fiscal-verifactu/src/drain.ts`) — safe only
+while no second process files from the database: the server opens the folder exclusively, and the
+tools that open it with `exclusive: false` file nothing. Guards: `apps/server/src/restart-reset.test.ts`
+and a case in `apps/server/src/boot.test.ts`, weaker than the rule — nothing checks that a
+non-exclusive tool never files. Detail: [conventions-data.md](conventions-data.md).
