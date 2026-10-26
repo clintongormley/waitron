@@ -349,7 +349,7 @@ it("opens on the station's own minutes, each required, with no placeholder and n
   expect(TIMINGS.map((name) => timingField(el, name).value)).toEqual(["5", "12", "15"]);
   expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["", "", ""]);
   expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
-    "Warm",
+    "Waiting",
     "Overdue",
     "Forgotten",
   ]);
@@ -368,7 +368,7 @@ it("a cleared minutes field is marked beside it and at the bottom and sends noth
   await save(el);
   expect(seen).toEqual([]);
   expect(timingField(el, "warmAfterMinutes").error).toBe(
-    "Use whole minutes with warm < overdue < forgotten.",
+    "Use whole minutes with waiting < overdue < forgotten.",
   );
   expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
   expect(saveButton(el).disabled).toBe(true);
@@ -403,7 +403,7 @@ it("sends a rename and a timing in one save", async () => {
 });
 
 it.each(["0", "1.5", "abc", "2147483648"])(
-  "marks Warm for %s, explains it at the bottom, sends nothing and focuses it",
+  "marks Waiting for %s, explains it at the bottom, sends nothing and focuses it",
   async (value) => {
     const el = await mount();
     const seen = saves(el);
@@ -411,7 +411,7 @@ it.each(["0", "1.5", "abc", "2147483648"])(
     await save(el);
     expect(seen).toEqual([]);
     expect(timingField(el, "warmAfterMinutes").error).toBe(
-      "Use whole minutes with warm < overdue < forgotten.",
+      "Use whole minutes with waiting < overdue < forgotten.",
     );
     expect(timingField(el, "overdueAfterMinutes").error).toBe("");
     expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
@@ -435,7 +435,7 @@ it("holds the timings in order against the station's own minutes", async () => {
   expect(seen).toEqual([]);
   expect(timingField(warm, "warmAfterMinutes").error).toBe("");
   expect(timingField(warm, "overdueAfterMinutes").error).toBe(
-    "Use whole minutes with warm < overdue < forgotten.",
+    "Use whole minutes with waiting < overdue < forgotten.",
   );
 
   const forgotten = await mount();
@@ -443,7 +443,7 @@ it("holds the timings in order against the station's own minutes", async () => {
   await save(forgotten);
   expect(timingField(forgotten, "overdueAfterMinutes").error).toBe("");
   expect(timingField(forgotten, "forgottenAfterMinutes").error).toBe(
-    "Use whole minutes with warm < overdue < forgotten.",
+    "Use whole minutes with waiting < overdue < forgotten.",
   );
 });
 
@@ -455,7 +455,9 @@ it.each([
   await setTiming(el, "warmAfterMinutes", "3");
   el.refusal = { code, params: { field } };
   await el.updateComplete;
-  expect(timingField(el, field).error).toBe("Use whole minutes with warm < overdue < forgotten.");
+  expect(timingField(el, field).error).toBe(
+    "Use whole minutes with waiting < overdue < forgotten.",
+  );
   expect(nameField(el).error).toBe("");
   expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
   expect($<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!.disabled).toBe(
@@ -475,14 +477,14 @@ it("puts a connection failure at the bottom only, marking no timing", async () =
 it("reads the timings in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
-    "En demora",
-    "Retrasado",
+    "Esperando",
+    "Con retraso",
     "Olvidado",
   ]);
   await setTiming(el, "warmAfterMinutes", "0");
   await save(el);
   expect(timingField(el, "warmAfterMinutes").error).toBe(
-    "Usa minutos enteros con aviso < atraso < olvido.",
+    "Usa minutos enteros con esperando < con retraso < olvidado.",
   );
   expect(timingField(el, "warmAfterMinutes").hint).toBe("");
 });
@@ -498,7 +500,7 @@ it("explains timings out of order in Spanish beside the field and at the bottom,
   expect(seen).toEqual([]);
   expect(timingField(el, "warmAfterMinutes").error).toBe("");
   expect(timingField(el, "overdueAfterMinutes").error).toBe(
-    "Usa minutos enteros con aviso < atraso < olvido.",
+    "Usa minutos enteros con esperando < con retraso < olvidado.",
   );
   expect(formMessage(el)).toBe("Corrige los campos marcados para continuar.");
   const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
@@ -885,7 +887,9 @@ it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", 
       expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
     }
     expect(fields.map((field) => field.label)).toEqual(
-      locale === "en" ? ["Warm", "Overdue", "Forgotten"] : ["En demora", "Retrasado", "Olvidado"],
+      locale === "en"
+        ? ["Waiting", "Overdue", "Forgotten"]
+        : ["Esperando", "Con retraso", "Olvidado"],
     );
     const group = $(el, "fieldset[data-test=moved-slips-group]");
     expect(group).not.toBeNull();

@@ -636,6 +636,29 @@ it("creates a station from the modal with the chosen thresholds", async () => {
     colour: "red",
   });
 });
+it.each([
+  ["en", ["Waiting after (min)", "Overdue after (min)", "Forgotten after (min)"]],
+  [
+    "es",
+    ["Esperando a partir de (min)", "Con retraso a partir de (min)", "Olvidado a partir de (min)"],
+  ],
+] as const)(
+  "Add station reads Waiting after, Overdue after and Forgotten after, in %s",
+  async (locale, labels) => {
+    setLocale(locale);
+    const el = await mount(api());
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    expect(
+      ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
+        (name) =>
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+            `wt-modal wt-input[name="${name}"]`,
+          )!.label,
+      ),
+    ).toEqual(labels);
+  },
+);
 const addPicker = (el: PrepStationsScreen) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
     "wt-modal wt-colour-chooser",
@@ -858,7 +881,7 @@ it("puts a timing refusal from the editor's save under the field it names and ke
   expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { overdueAfterMinutes: 12 });
   await vi.waitFor(() =>
     expect(timingField(el, "overdueAfterMinutes").error).toBe(
-      "Use whole minutes with warm < overdue < forgotten.",
+      "Use whole minutes with waiting < overdue < forgotten.",
     ),
   );
   expect(timingField(el, "warmAfterMinutes").error).toBe("");
