@@ -700,6 +700,18 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(tableOrder(el)?.party?.id).toBe("v-new");
   });
 
+  it("gives a party seated at T4 since no ✎ for the dishes Ana added to the party that left", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    expect(bar(el)).toEqual(["Floor", "[✎ T4]"]);
+    const since = party({ id: "v-new", mainBillId: "wo-new", unsentDrafts: [] });
+    api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
+    await toFloor(el);
+    expect(floor(el)?.tables[0]?.party?.id).toBe("v-new");
+    expect(bar(el)).toEqual(["[Floor]"]);
+  });
+
   it("selects Floor on the Order screen with no table", async () => {
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),

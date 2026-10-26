@@ -23,8 +23,8 @@ type Held = LocalBill & { onScreen: boolean };
 /** D4: a local bill's lines count, never its store's lock. */
 const localUnsent = (bill: LocalBill): boolean => bill.lines > 0 && !bill.takenByOther;
 
-/** The party whose button the held bill joins: its own while the read lists it, else an open party
- * the read seats at the held table since. */
+/** The party whose button stands for the held table: its own while the read lists it, else an open
+ * party the read seats at the held table since. */
 function heldPartyOf(held: Held | null, tables: readonly TableState[]): string | null {
   if (held === null) return null;
   if (held.partyId !== null && tables.some((table) => table.party?.id === held.partyId))
@@ -66,23 +66,25 @@ export function barTables(
     return [...answers.values()].some(Boolean);
   };
 
-  return groupTables<{ party: TableParty | null; mine: Held | null }>(tables, (table) => {
+  return groupTables<{ party: TableParty | null; here: Held | null }>(tables, (table) => {
     if (unlisted?.tableId === table.id) {
-      return { key: `table:${table.id}`, value: { party: null, mine: unlisted } };
+      return { key: `table:${table.id}`, value: { party: null, here: unlisted } };
     }
     const party = table.party;
     if (party?.state === "open") {
-      return { key: party.id, value: { party, mine: heldPartyId === party.id ? held : null } };
+      return { key: party.id, value: { party, here: heldPartyId === party.id ? held : null } };
     }
     return null;
-  }).flatMap(({ value: { party, mine }, table, name }) => {
+  }).flatMap(({ value: { party, here }, table, name }) => {
+    // A party seated at the held table since shares its place on screen, never its lines.
+    const mine = party === null || here?.partyId === party.id ? here : null;
     const unsent = unsentOf(party, mine);
-    const current = mine?.onScreen === true;
-    const seatsMine =
-      mine !== null &&
+    const current = here?.onScreen === true;
+    const seatsHeld =
+      here !== null &&
       (party === null ||
-        tables.some((each) => each.id === mine.tableId && each.party?.id === party.id));
-    const tableId = seatsMine ? mine.tableId : table.id;
+        tables.some((each) => each.id === here.tableId && each.party?.id === party.id));
+    const tableId = seatsHeld ? here.tableId : table.id;
     return unsent || current ? [{ tableId, name, unsent, current }] : [];
   });
 }

@@ -350,4 +350,16 @@ describe("barTables", () => {
       }),
     ).toEqual([{ tableId: "t4", name: "T4", unsent: true, current: false }]);
   });
+
+  it("gives the party seated at the held table since no ✎ for the held party's dishes", () => {
+    const old = {
+      ...bill({ partyId: "pOld", tableId: "t4", billId: "b1", lines: 2 }),
+      onScreen: false,
+    };
+    const since = [table(4, party("pNew")), table(5, party("pNew"))];
+    expect(barTables(since, "ana", { held: old, released: [] })).toEqual([]);
+    expect(barTables(since, "ana", { held: { ...old, onScreen: true }, released: [] })).toEqual([
+      { tableId: "t4", name: "T4+T5", unsent: false, current: true },
+    ]);
+  });
 });
