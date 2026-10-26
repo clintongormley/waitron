@@ -11249,7 +11249,14 @@ export class TillApp extends LitElement {
   /** D9: the held table's button returns to it as the Order tab did; any other opens its table as a
    * Floor tap does. Both close an open overlay first. */
   #onOpenBarTable(tableId: string): void {
-    if (tableId === this.activeTableId && (this.openingTableId ?? tableId) === tableId) {
+    const seated = this.barFloor.find((table) => table.id === tableId)?.party;
+    // An open party the read seats at the held table since is that button's party, not the held one.
+    const seatedSince = seated?.state === "open" && seated.id !== this.orderParty?.id;
+    if (
+      tableId === this.activeTableId &&
+      (this.openingTableId ?? tableId) === tableId &&
+      !seatedSince
+    ) {
       if (
         this.#activeTab() === this.#tableOrderTabKey() &&
         this.drill === undefined &&
