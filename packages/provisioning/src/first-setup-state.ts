@@ -8,6 +8,8 @@ import type { DeploymentEnvironment } from "@waitron/db";
 import type { VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
+import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
+import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import "./errors.js";
 
 export interface FirstSetupHold {
@@ -143,9 +145,11 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
-  "first-setup-start-again.json",
+  START_AGAIN_NOTE_FILE,
+  // Not START_AGAIN_MARKER_FILE: the deletion module imports this one through the backup
+  // workspace, so loading it first would read that name before it exists.
   "first-setup-deleting.json",
-  "first-setup-start-again-confirmations",
+  START_AGAIN_CONFIRMATIONS_DIR,
 ] as const;
 export function isFirstSetupHostPath(path: string): boolean {
   return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));
