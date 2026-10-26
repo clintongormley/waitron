@@ -109,12 +109,9 @@ Naming 0.45.3: `scripts/journal-monotonic.test.ts:12` and `docs/developers/conve
   `apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui` each carry an
   `optimizeDeps.include` list; only `apps/setup`'s comment still quotes Vite's warning — "Vite
   unexpectedly reloaded a test" — as the flake it fixes. Vite 8's migration guide says Rolldown "is
-  now used for dependency optimization instead of esbuild". Nobody re-checked that vite 8 still emits
-  that warning, or that the `include` lists are still the fix.
+  now used for dependency optimization instead of esbuild".
 
-A773-1 locally observed the reload warning followed by failed imports and no executed tests on
-2026-10-18. A later run with the optimizer cache populated passed; that does not measure an
-`include` fix. No `include` change or controlled cold-cache comparison was made, so the fix
+No `include` change or controlled cold-cache comparison was made, so the fix
 remains unmeasured.
 
 ## The till's QR pin compares the code against itself, not an authority
@@ -218,11 +215,7 @@ The Stripe 23 upgrade carries its installed licence separately in `deploy/third-
 Fix the general lookup to walk past manifests without package identity, retain workspace exclusion,
 and run it on CJS and ESM entry paths and other included packages.
 
-A1045 (#2039, 24 October 2026) reproduced the same omission for Nodemailer 10.1.4: passing
-its resolved CJS and ESM entries separately to `bundledNpmNotices` returned
-`No bundled npm packages.` for both. Its installed `LICENSE` is copied unchanged into
-`deploy/third-party/nodemailer/`; the 10.1.1 and 10.1.4 licence SHA-256 values both read
-`4f814dcacd2da618d62829ea1f6238701cf421f18a6b36c91c5d8212245e2c78`.
+Nodemailer's separate licence copy is in `deploy/third-party/nodemailer/`.
 Do not remove either separate licence copy before checking the emitted server notices through
 the actual build. Which other installed packages are affected remains unverified.
 
