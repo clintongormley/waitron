@@ -30,18 +30,18 @@ their full text.
 
 ## The payment slip was left alone
 
-- **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
-  «Cobrado») stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still
-  follow `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). It is not the
-  invoice, but art. 128-1.2.a also covers «els altres documents que hi facin referència o que
-  en derivin», so a Catalan venue's slip is arguably covered.
+Its words («JUSTIFICANTE DE PAGO», «Importe»,
+«Cobrado») stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still
+follow `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). It is not the
+invoice, but art. 128-1.2.a also covers «els altres documents que hi facin referència o que
+en derivin», so a Catalan venue's slip is arguably covered.
 
 ## The translations need a native or official check
 
-- **The translations need a native or official check.** Go live with the current words;
-  staff report anything that reads wrong (owner, 2026-10-21). A terminology review remains
-  future work, alongside the parked full-interface translations above. This is no longer a
-  condition for go-live.
+Go live with the current words;
+staff report anything that reads wrong (owner, 2026-10-21). A terminology review remains
+future work, alongside the parked full-interface translations above. This is no longer a
+condition for go-live.
 
 ## The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
 
@@ -126,13 +126,12 @@ Spanish variant badge "Se archivará al guardar", and the Spanish PIN reset conf
 
 ## Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen
 
-- **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
-  The dashboard's role name is «Encargado» (`roleName`, `apps/dashboard/src/i18n/domain.ts:11`,
-  shown in the **Users** table and filter), and the Appearance guide says **Encargado**
-  (`apps/server/src/guide/es/appearance.md`). The Users guide (`apps/server/src/guide/es/staff.md`),
-  the data download's README (`apps/server/src/i18n/personal-data-readme.ts`) and four of the
-  dashboard's bill-payment strings (`payments.bill.*` in `apps/dashboard/src/i18n/strings.ts`,
-  among them «PIN de gerente») say «gerente». Pick one word and use it everywhere.
+The dashboard's role name is «Encargado» (`roleName`, `apps/dashboard/src/i18n/domain.ts:11`,
+shown in the **Users** table and filter), and the Appearance guide says **Encargado**
+(`apps/server/src/guide/es/appearance.md`). The Users guide (`apps/server/src/guide/es/staff.md`),
+the data download's README (`apps/server/src/i18n/personal-data-readme.ts`) and four of the
+dashboard's bill-payment strings (`payments.bill.*` in `apps/dashboard/src/i18n/strings.ts`,
+among them «PIN de gerente») say «gerente». Pick one word and use it everywhere.
 
 ## Decisions and deliberate limits
 

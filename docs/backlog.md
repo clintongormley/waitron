@@ -4213,7 +4213,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
-  Pick one word and use it everywhere.
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 
 - **A1076. Spanish names the three late flags three ways**.
@@ -4226,15 +4225,13 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.**
   [Detail](backlog/languages.md#a886-dashboard-wording-disabled-product-menús-and-two-strings-nothing-reads)
 
-- **The dashboard's locale lookup reads inherited properties.** Check own locale keys, test the
-  English fallback and trace the callers.
+- **The dashboard's locale lookup reads inherited properties.**
   [Detail](backlog/languages.md#the-dashboards-locale-lookup-reads-inherited-properties)
 
 - **The recovery page's Spanish has not been read by a native speaker.**
 
 - **The adjustment-reason and venue delete windows still use older settings, work and loading
-  wording.** Compare them with the device window in both languages without changing their refusal
-  or impact details.
+  wording.**
   [Detail](backlog/languages.md#the-adjustment-reason-and-venue-delete-windows-still-use-older-wording)
 
 - **The file pickers' "Choose File / No file chosen" follow the browser's language**, not the
@@ -4253,8 +4250,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **The payment slip was left alone.** See A964 and A965.
   [Detail](backlog/languages.md#the-payment-slip-was-left-alone)
 
-- **The translations need a native or official check.** Go live with the current words; staff
-  report anything that reads wrong (owner, 2026-10-21).
+- **The translations need a native or official check.**
   [Detail](backlog/languages.md#the-translations-need-a-native-or-official-check)
 
 - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way,
