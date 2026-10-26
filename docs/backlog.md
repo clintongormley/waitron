@@ -4478,17 +4478,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 ### The box: backups, upgrades and recovery
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
-  Add a secure, owner-authenticated way to diagnose persistent certificate-file failures and
-  replace a separately supplied certificate, with in-place sign-in and a safe Stop. The public
-  page offers retry, read-only Check again and Stop, but cannot complete these repairs.
-  [Detail](backlog/box.md#authenticated-server-certificate-recovery).
+  [Detail](backlog/box.md#authenticated-server-certificate-recovery)
 
-- **A1089: diagnose and correct conflicting backup keys in the app.** The refusal explains that
-  the saved key is unconfirmed and asks you to keep both key records and stop changing keys.
-  Add authenticated inspection of the saved and effective configuration, explain each correction
-  and offer a safe Stop before applying it. Establish which key opens each backup without
-  replacing either key record merely because a save was refused.
-  [Correction](backlog/self-service-refusals.md#backup-key).
+- **A1089: diagnose and correct conflicting backup keys in the app.**
+  [Correction](backlog/self-service-refusals.md#backup-key)
 
 - **A1089: boot recovery must offer choices instead of an installer referral.** Recheck each
   cause and offer applicable restart, space, backup or reinstall choices, any needed authentication
@@ -4526,19 +4519,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   public page offers retry, Check again and Stop; repairing a damaged linked layout remains open.
   [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
-_Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
-
 - **Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.**
-  Wire Cloud to the boot-free `backup-verification.js` bundle and its generated owner inventory,
-  with worker threads denied (A1004 provides the copy-only lock scope), then negotiate recovery v2
-  before enabling the qualified caller.
   [Detail](backlog/box.md#cloud-backup-qualification-and-target-bound-recovery-integrate-the-released-waitron-verifier)
 
-- **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
-  2026-10-20 (revised after review rounds 1–3) and its three questions answered (where the name is
-  set, the certificate authority, the old name during a rename), but on 2026-10-25 the owner said
-  they are reconsidering whether the name should be changeable at all, so it is not scheduled; not
-  built.
+- **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED; not scheduled; not built.
   [Detail](backlog/box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
@@ -4556,9 +4540,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   start again (A798-B slice 2).
 
 - **Migrating a box drops the change-feed triggers one statement at a time, outside a
-  transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
-  `applyMigrations`) drops each `waitron_change_*` trigger on its own. A product change in
-  `packages/db`, so A751 (a test-only change) left it.
+  transaction.**
   [Detail](backlog/box.md#migrating-a-box-drops-the-change-feed-triggers-one-statement-at-a-time-outside-a-transaction)
 
 - **A branch install fetches compose and support files before resolving the image commit.**
@@ -4588,9 +4570,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#the-amazon-s3-rehearsal-runners-open-edges-a538-7)
 
 - **Loose ends left by the Amazon S3 rehearsal's cleanup and send check (A641, #1704).**
-  The rehearsal does not track the Litestream processes a restore starts
-  (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
-  running.
   [Detail](backlog/box.md#loose-ends-left-by-the-amazon-s3-rehearsals-cleanup-and-send-check-a641-1704)
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
@@ -4610,16 +4589,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   and the rest of the screen say "la copia en el bucket". From A538-6 (#1642); seen in A639's
   screenshots, not changed there.
 
-- **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
-  (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
-  the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
-  restore calls it damaged.
+- **A recovery kit can carry a recovery key its own restore refuses.**
   [Detail](backlog/box.md#a-recovery-kit-can-carry-a-recovery-key-its-own-restore-refuses)
 
 - **A restore that fails while writing the secrets has already replaced the venue database.**
-  `placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
-  hooks before `restoreSecrets`, so a full disk or a write error there leaves the archive's
-  database with the old box's secrets. Predates A538-5.
   [Detail](backlog/box.md#a-restore-that-fails-while-writing-the-secrets-has-already-replaced-the-venue-database)
 
 - **A backup destination that fails to build leaves archives reported as on.**
@@ -4643,12 +4616,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   neither captured nor excluded — the curated list went stale on `modules.json` already.
   [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
-- **Backup & restore — carry-forwards (B2)** — left open by the restore hook (SP-3d, #248) and the
-  dashboard wizard (#295). Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot
-  success-path integration test; scope the flat `resolvers` map by module when a second `nonDbState`
-  module lands; a `packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails
-  safe under GCM auth today); generalise archive entry routing off declared source ids when a second
-  non-DB source lands. [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
+- **Backup & restore — carry-forwards (B2)**
+  [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
 - **When a nightly report job exists, the backup slot should fire after it** — left open by the "backups off or stale" reminder (#371).
 
@@ -4682,10 +4651,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **A1016. Keep every box current and backed up, with no effort from the owner (owner,
   2026-10-22).** "Another super important part of the story especially for on prem is automated
   backups. We need to make it incredibly easy for users to upgrade, hopefully even automatically,
-  and to give them good reasons not to fall too far behind, so that we don't end up supporting
-  ancient buggy versions." Builds on the automatic upgrades entry below and on the off-box copy
-  that the setup tour offers but never requires.
-  [Detail](backlog/box.md#a1016-keep-every-box-current-and-backed-up)
+  and to give them good reasons not to fall too far behind, so that we don't end up supporting ancient buggy versions." Builds on the automatic upgrades entry below and on the off-box copy that the setup tour offers but never requires. [Detail](backlog/box.md#a1016-keep-every-box-current-and-backed-up)
 
 - **A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).**
   Belongs with A1016.
@@ -4706,48 +4672,19 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
-  it can still sell.** Design revision 7 (2026-10-24); every owner question answered except one the slice 9b outline
-  keeps for when 9b is planned. The build
-  follows the design's §8 slices:
-  [plan](superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
-  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
-  [mock-ups](backlog/mockups/a798-degraded-trading/README.md). The owner's four answers: no reserved
-  space on the disk, a warning and an email at 2 GB free; when a printer stops, every till and
-  handheld is told at two minutes; while the box's clock reads earlier than its last recorded
-  sale, every action that takes or gives back money, or would write a fiscal record, stops on every
-  device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the
-  defaults that answer left open are in §6); and payments restart only on fresh proof that the clock
-  is right. On 2026-10-24 the owner replaced that last answer's manager's restart, at most 24 hours
-  behind (question 4, 2026-10-20): payments restart by themselves, whatever the gap, once AEAT, two
-  devices from two network addresses or an administrator's own device confirms the clock, and the
-  sales a clock running ahead dated wrongly are listed for the owner and the tax adviser (design
-  §4.9). It adds a module seat for staff notices and one
-  migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
-  `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora on the Box status page: a manager has the records waiting after a failed send tried again at once, never before AEAT's wait between sends except a full batch, which AEAT's own rule lets go at once, and never releasing a chain held after repeated refusals; and the Tax agency row's last acceptance) landed in #2030; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration) landed in #2012; slice 10 (emails to the managers about the disk and a clock before 28-10-2024, `reader.offline`, the printer notice on every till, and `waitron.sh` switching on time synchronisation and deleting the images an upgrade replaced) landed in #2019; slice 9 (devices report their clock; `clock.disagrees` and `clock.unusable` in the bell; the box records when each clock stop began, and payments restart by themselves, with no cap and one step back per confirmation, once AEAT, two devices from two network addresses or an administrator's own device — never the box's own screen outside development — confirms the clock, each confirmation kept in `clock_confirmations`; the sales dated wrongly listed on the Box status page with `clock.records_misdated`, or that alert saying the box cannot tell; the bell alerts, the managers' emails and the disproof check; the clock-stop email) landed in #2025. Two slices from those answers are open, each its own later pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([outline](superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)); and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
-  [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24),
-  [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
-  and
-  [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
+  it can still sell.**
+  Design revision 7 (2026-10-24).
+  [Detail](backlog/box.md#a798-b-build-degraded-but-trading-what-the-box-does-and-tells-staff-when-a-part-fails-but-it-can-still-sell)
 
 - **AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply.**
-  Whether a certificate-authenticated `consultar` reply carries a `Date` header is not measured;
-  the `verifactu` repository's live workflow can measure it without filing. Left open by A798-B
-  slice 9 (#2025).
   [Detail](backlog/box.md#aeats-time-for-a-confirmation-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
 
 - **A clock set back before the mail server's certificate start may not be able to send the
   clock-stop email.** An inference from slice 10's plan P8, not measured. Left open by A798-B
   slice 9 (#2025).
 
-- **A device's or an administrator's time is self-reported.** Whatever their browser sends counts:
-  a scripted request can send any time, and "nobody types a time" is true of the screen only. In
-  slice 9 that can lift a stop, never set the clock. What limits it: devices must be enrolled and
-  come from two different network addresses; an administrator must be signed in and, outside
-  development, not on the box;
-  every confirmation is kept with its proof; the sales listed as dated wrongly go to the owner.
-  Slice 9b is to add an alert and an email for every clock change the box makes. Left open by
-  A798-B slice 9 (#2025).
+- **A device's or an administrator's time is self-reported.**
+  [Detail](backlog/box.md#a-devices-or-an-administrators-time-is-self-reported)
 
 - **A second confirmation naming the same record while the first's alerts are open records no
   second alert.** The bell keys an open alert by the named record's sale, so the second folds into
@@ -4758,24 +4695,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   mainland Spanish time, the bell can say the clock is before that day where the till does not.
   Left open by A798-B slice 9 (#2025).
 
-- **The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that
-  clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock
-  behind the latest sale — during a stop, and under a confirmation that lifted it — or while a
-  clock check whose stop has ended waits for its witness**, on a primary that files records. The
-  module reports no stop while the clock reads a date before 28-10-2024, so no HEAD is sent then.
-  Left open by A798-B slice 9 (#2025).
+- **The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock behind the latest sale — during a stop, and under a confirmation that lifted it — or while a clock check whose stop has ended waits for its witness**
+  [Detail](backlog/box.md#the-box-sends-aeats-qr-host-a-head-once-a-minute-by-its-steady-clock-on-every-look-when-that-clock-cannot-be-read-or-went-backwards-while-the-verifactu-module-reports-the-boxs-clock-behind-the-latest-sale--during-a-stop-and-under-a-confirmation-that-lifted-it--or-while-a-clock-check-whose-stop-has-ended-waits-for-its-witness)
 
 - **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so
   that a box waking from sleep is not taken for a clock jumping forward; the tests replace the file,
   and nobody has watched it across a real suspend or a setting of the wall clock on a Linux box
   (`docs/developers/conventions-data.md`, "A jump"). Left open by A798-B slice 9 (#2025).
 
-- **AEAT's time outranks the devices.** AEAT agreeing with the box restarts payments even if two
-  devices disagree (the bell still shows their `clock.disagrees`); AEAT disagreeing blocks the
-  devices and an administrator for the rest of the stop, even after a step of the clock that leaves
-  the stop on, since in slice 9 the box cannot set its clock. The disagreement is kept in memory,
-  so restarting the server forgets it. Slice 8's own ways out remain: the clock put right, or real
-  time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).
+- **AEAT's time outranks the devices.**
+  [Detail](backlog/box.md#aeats-time-outranks-the-devices)
 
 - **A confirmation under which no sale was recorded raises no 'disproved' alert** when its clock
   later proves wrong; the box logs it. Left open by A798-B slice 9 (#2025).
@@ -4796,12 +4725,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (owner FYI 13). Left open by A798-B slice 9 (#2025).
 
 - **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
-  go-live migration squash (A760).** Slice 9 kept the shipped append-only table rather than
-  rebuild or drop it; the backup check still checks its links to `nodes` and
-  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). First
-  move its latest-record query-plan case (`clock-stop-restarts.test.ts`, "reads the latest record
-  through the time index…") into `clock-behind.test.ts`, and update the pointer in
-  `docs/developers/conventions-data.md`. Left open by A798-B slice 9 (#2025).
+  go-live migration squash (A760).**
+  [Detail](backlog/box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-in-the-go-live-migration-squash-a760)
 
 - **A future cloud or proxied primary sees every request as the box's own**, so no device would
   count as a clock witness and no administrator could confirm its clock. Today a venue has one node
@@ -4845,11 +4770,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   should use `;` is the owner's decision. Left open by A1088.
   [Detail](backlog/box.md#the-advisers-file-is-comma-separated-in-both-languages)
 
-- **The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
-  print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
-  status condition did not change the plan; why SQLite scans is not established. The bell pays it
-  on every read; the till's printer notices share one read per ten seconds. Left open by A798-B
-  slice 10.
+- **The bell's printer check reads every print job.**
+  [Detail](backlog/box.md#the-bells-printer-check-reads-every-print-job)
 
 - **A card reader whose status the provider could not read raises nothing.** SumUp and Stripe
   answer `{ online: false, unreachable: true }` rather than throwing, so
@@ -4861,11 +4783,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   idle Solo does the same, the bell carries a standing `reader.offline` warning. For the owner to
   check against the reader. Left open by A798-B slice 10.
 
-- **The email about a clock set before 28 October 2024 rarely leaves the box.** With a date that
-  early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`, slice 10 plan P8),
-  so the email waits until the clock is fixed, when there is nothing left to say. A plain relay or
-  the practice box's local capture does receive it. For the owner to know. Left open by A798-B
-  slice 10.
+- **The email about a clock set before 28 October 2024 rarely leaves the box.**
+  [Detail](backlog/box.md#the-email-about-a-clock-set-before-28-october-2024-rarely-leaves-the-box)
 
 - **`waitron.sh` deletes only the images the box ran just before an upgrade.** Images left by
   upgrades before slice 10 and the mail capture's old images are not deleted, nor is Docker's build
@@ -4884,10 +4803,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   stop**, where the payment is what is not recorded. Left open by A798-B slice 8 (#2012).
 
 - **The till's card-charged sentence for the clock says "press Pay", which does not fit a bill's
-  card.** For a card taken from a bill's payment options (Whole bill, Pay items, Contribute, Split
-  equally), Pay answers `order.payment_in_flight` until the box records the pending payment itself
-  (probed during the build: a second card contribution on the charged bill was refused 409 and
-  charged nothing). A bill variant of the sentence is open. Left open by A798-B slice 8 (#2012).
+  card.**
+  [Detail](backlog/box.md#the-tills-card-charged-sentence-for-the-clock-says-press-pay-which-does-not-fit-a-bills-card)
 
 - **A collect refused with both times shows the payment sentence** ("Sale not recorded…",
   `clockBehindText` in `apps/till/src/widgets/find-bill-dialog.ts`), not the "Can't be recorded"
@@ -4902,24 +4819,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   for checking; the prints are a filed sale's receipt and reprint and the kitchen reprint, so during
   the stop a bill not filed before it cannot be printed. Left open by A798-B slice 8 (#2012).
 
-- **The Clock row says 'connect the box to the internet' where that may not help.** On a box that
-  does not keep its clock in step with internet time (since A798-B slice 10, `waitron.sh install`
-  switches synchronisation on where the system provides it, and says so where it cannot);
-  and on one that does, the same advice shows where the clock is right and the latest record's time
-  was wrong — neither half clears the stop. The `clock.unusable` email
-  (`apps/server/src/i18n/box-emails.ts`) also tells the managers to connect the box to the internet
-  first. Left open by A798-B slice 8 (#2012).
+- **The Clock row says 'connect the box to the internet' where that may not help.**
+  [Detail](backlog/box.md#the-clock-row-says-connect-the-box-to-the-internet-where-that-may-not-help)
 
 - **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
   top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
   rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
   Box status page" while on that page. Left open by A798-B slice 8 (#2012).
 
-- **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
-  'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
-  `apps/dashboard/src/i18n/strings.ts`); since A798-B slice 7 the Box status page is «Estado del
-  equipo» too (`nav.box_status`). The owner's picture 3 shows the first two. Not yet put to the
-  owner. Raised by A798-B slice 5's plan.
+- **'Equipo' names two things in the Spanish dashboard.**
+  [Detail](backlog/box.md#equipo-names-two-things-in-the-spanish-dashboard)
 
 - **The Tax agency row does not say since when sends have failed.** Picture 4 draws «los envíos
   fallan desde 17:31»; the row shows the last acceptance. The technical incident's open time could
@@ -4933,9 +4842,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   A798-B slice 7.
 
 - **On a box with card payments off, the card-reader battery check may raise
-  `alert.source_unavailable` on every bell read.** `batteryAlertSource` is registered whatever the
-  module and reads `card_readers`, which does not exist then; read, not run on a booted box. Left
-  open by A798-B slice 7.
+  `alert.source_unavailable` on every bell read.**
   [Detail](backlog/box.md#on-a-box-with-card-payments-off-the-card-reader-battery-check-may-raise-alertsource_unavailable-on-every-bell-read)
 
 - **Every start deletes a backup folder configured inside backup staging under a `backup-encrypt-`
@@ -4959,28 +4866,18 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Box status read and the bell's alert reads answer there; the shell's other reads at sign-in were
   not tried. Left open by A798-B slice 7.
 
-- **An alert source that writes would take the whole bell read down on a full disk.** The bell's
-  full-disk retry reads every source that runs in the request's transaction in one `withWriteLock`
-  turn with no drain, the arrangement M2 measured failing for notice sources
-  ([conventions-data.md](developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write));
-  the equipment read gives each notice source a turn of its own. No core alert source writes today
-  (convention review, 2026-10-22, a grep for `.insert(`, `.update(` and `.delete(`). Left open by
-  A798-B slice 7.
+- **An alert source that writes would take the whole bell read down on a full disk.**
+  [Detail](backlog/box.md#an-alert-source-that-writes-would-take-the-whole-bell-read-down-on-a-full-disk)
 
 - **The recovery page says the start "deleted what it could make again"; the Box status page says
   "files the box no longer needs".** One wording for the same set. Left open by A798-B slice 7.
 
 - **Till write surfaces other than the draft save, the unpaid departure and the station screen were
-  not checked for a full-disk refusal's words** (design §4.6 item 2). The draft save and the
-  departure already say 'Not saved…' (measured 2026-10-22); the station screen does since slice 6.
-  Audit the rest: catch sites in `apps/till/src` that do not fall back to `codeMessage(code)`. Left
-  open by A798-B slice 6 (#1977).
+  not checked for a full-disk refusal's words**
   [Detail](backlog/box.md#till-write-surfaces-not-checked-for-a-full-disk-refusals-words)
 
 - **On a full disk, a till read whose route opens a `withTransaction` is refused while a change
-  waits.** The drain is a write (measured 2026-10-22); the equipment read reads in turns and
-  answers, `GET /api/till` and session-checked reads do not. Left open by A798-B slice 6
-  (#1977).
+  waits.**
   [Detail](backlog/box.md#on-a-full-disk-a-till-read-whose-route-opens-a-withtransaction-is-refused-while-a-change-waits)
 
 - **A failed staff-notice check is seen in the log and as a note on the Box status page; the bell
@@ -5008,10 +4905,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#the-refund-guide-does-not-say-that-recording-a-separate-terminal-refund-is-refused-during-a-full-disk-stop)
 
 - **A transaction opened outside the write queue can let a body's writes after a full disk
-  commit.** The store's record of a transaction the engine ended belongs to the connection pair,
-  not the body, so an outside `db.transaction` clears it and the body's later writes are kept.
-  Left open by A798-B slice 1 (#1936); no product code is known to open
-  one. [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
+  commit.**
+  [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
 
 - **Transactions opened outside the write queue at the same time get a wrong error message.**
   Next step: decide whether the store should refuse a second outside transaction outright, or only
@@ -5046,9 +4941,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   boundary and a domain refusal, then test invalid values before they reach storage.
 
 - **`resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the
-  staging folder** — found by #658 while pruning comments. Still open, not fixed, by the owner's
-  choice: `unpackBundleToDir`'s walk and file write go by path, so a folder inside the destination
-  swapped for a symlink during the unpack is followed.
+  staging folder**
   [Detail](backlog/box.md#resolvesafeentrypath-appsserversrcstate-secretsts-is-unchanged-and-nothing-chmods-the-staging-folder)
 
 - **`apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say** — found by
@@ -5060,10 +4953,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   can round a value "past" a bound, which it cannot** — found by #653 while pruning comments.
   [Detail](backlog/box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
 
-- **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there** —
-  found by #561 while pruning comments. The same reason still stands in
-  `packages/provisioning/README.md` and in `docs/developers/conventions-data.md` (the paragraph on
-  `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`").
+- **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
   [Detail](backlog/box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
 
 - **`packages/provisioning/README.md` also says only `ES-common` is implemented** — found by #561
@@ -5079,10 +4969,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `backup.effective_mismatch` (read from the route, not run). Left open by SQLite slice 2 Task 2a
   (#557, a recovery key that does not need an archive destination).
 
-- **A too-short recovery key's refusals do not link to the button they name**, and with archives
-  on the one they name, "Change the recovery key", cannot finish, because showing the current key
-  refuses a too-short one. Left open by SQLite slice 2
-  Task 2a (#557, a recovery key that does not need an archive destination) and A538-6d.
+- **A too-short recovery key's refusals do not link to the button they name**
   [Detail](backlog/box.md#a-too-short-recovery-key-the-refusals-do-not-link-to-the-button-they-name-and-change-the-recovery-key-cannot-finish)
 
 - **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
@@ -5100,8 +4987,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
   destination).**
-  The status watcher does not retry its own failed mint (the mint is a POST, never passive
-  session activity), so the screen then offers no key until it is reopened.
   [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-2a-557-a-recovery-key-that-does-not-need-an-archive-destination)
 
 - **Loose ends left by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).**
@@ -5128,9 +5013,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   under Task 6 applies here too. Left open by SQLite slice 2.
 
 - **When the key rename and the put-back both fail, the new certificate is left beside the old key**
-  (the listener refuses the pair). Publishing the pair through one atomic switch (for example a
-  directory swapped by a single rename) would remove this case. Left open by SQLite slice 2 Task 9a
-  (#630, the first start after a restore).
   [Detail](backlog/box.md#when-the-key-rename-and-the-put-back-both-fail-the-new-certificate-is-left-beside-the-old-key)
 
 - **Loose ends left by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).**
@@ -5160,16 +5042,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error
   reports).**
-  The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
-  502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
-  code also covers a bad value in the recovery kit, where 400 is right.
   [Detail](backlog/box.md#loose-ends-left-by-668-686-a57-a60-and-723-the-pause-test-and-the-buckets-error-reports)
 
-- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** The owner approved
-  Cloud email or your own SMTP server; Cloud is optional. Build the local SMTP route from the
-  [reviewed plan](superpowers/plans/2026-10-22-a987-prepare-venue-email.md), from Cut B's diagnostic
-  screens onward. Cut A bounds account SMTP sends and shares safe diagnostics with the test and
-  reminder senders. Cloud and linked-Demo delivery wait for D102's released contract and joint tests.
+- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.**
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **Support an office SMTP server's own certificate authority — OPEN.** A987 keeps certificate
@@ -5179,9 +5054,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
-  review, 2026-10-22) — OPEN.** In setup mode, `POST /setup-api/email-test` checks no sign-in and
-  sends to the host, port and address the request names. Run 2026-10-22: answered 200 and the
-  message was delivered.
+  review, 2026-10-22) — OPEN.**
   [Detail](backlog/box.md#the-setup-wizards-email-test-connects-wherever-an-unauthenticated-caller-points-it-a987-review-2026-10-22--open)
 
 - **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
