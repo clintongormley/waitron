@@ -265,6 +265,12 @@ taken off) — still print the bare order number (`formatCorrectionSlip`,
   note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
   every field is full width. Left open by A756 PR 5.
 
+  Re-measured 2026-10-26 by A797 slice 6's LOOK, after the four minutes fields went two to a
+  row: Name, Colour, Printers, the dropdowns and the switches run x 329–905 (576 px); the minutes
+  grid, the held-work note and the other note run x 329–951 (622 px), so the right-hand column
+  (Overdue, Ready warning, x 644–951) is the part that sticks out. At 390 px everything runs
+  x 17–373. Still not traced why the fields stop at 576 px.
+
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
 Within one dish `ticket.already_started` is checked first, but across a

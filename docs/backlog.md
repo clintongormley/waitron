@@ -1457,6 +1457,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a band starts the clock at 0. Fix: a case with a non-zero `queuedAtMs`. Found in A797 slice 6's
   review; predates it.
 
+- **A1136. Add station's own check of a minutes field highlights nothing and puts its bottom line
+  inside the form.** With 0 typed in any minutes field (Waiting after tried as well as Ready
+  warning after) and Save tried, the field keeps its normal look with a red line under it, focus
+  stays put, and "Correct the highlighted fields to continue." sits inside the form (y 657 at
+  1280 px) rather than on its own line above the buttons (from y 766), against design-system.md →
+  Forms. The station editor does it right. Measured by A797 slice 6's LOOK
+  (`c3-add-zero-save-tried-*`); `git blame` dates `#saveStation`'s check to #1004 and #1325, before
+  that slice. A1134 is the server-refusal half.
+
 - **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields**
   [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-late-flags-row-and-held-work-note-are-wider-than-its-fields)
 
