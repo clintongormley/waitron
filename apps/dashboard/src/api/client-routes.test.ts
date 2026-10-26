@@ -559,6 +559,25 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("asks how a theme logo prints, passively", async () => {
+    const answer = {
+      paperDots: 576,
+      picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+      blackDots: 8,
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getThemeLogoPrint("a b.png")).resolves.toEqual(answer);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/theme-logo-print?image=a+b.png", "GET", undefined],
+    ]);
+    expect(
+      fetchImpl.mock.calls.map(([, init]) => new Headers(init.headers).get("x-waitron-live")),
+    ).toEqual(["1"]);
+  });
+
   it("keeps background POST previews active unless the preview explicitly requests passive activity", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
