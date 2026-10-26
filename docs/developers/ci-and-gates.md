@@ -633,7 +633,8 @@ blob joins the same merge. `test-dashboard` and `test-venue-service` are four-wa
 seven-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
 coverage bars are enforced in the merge job, not in a shard. Then the
 dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
-`test-payments-sumup`, `test-adjustments`, `test-staffing`), the unsharded browser jobs (`test-ui`, `test-setup`) and
+`test-payments-sumup`, `test-adjustments`, `test-staffing`), the dedicated Node coverage jobs
+(`test-identity`, `test-workforce`), the unsharded browser jobs (`test-ui`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
 `--shard` splits by FILE COUNT (except `apps/server`, packed by duration since A938: see "The server's
 shards: sixteen, packed by measured duration" below), so shard imbalance is the real limit, and `N` must never exceed a
@@ -1171,6 +1172,22 @@ and execute the aggregate refusal. All six local shards pass1,471 cases in73 fil
 merge retains the earlier full counts: S3725/3800, B2789/2884, F692/701 and L3333/3367.
 Individual local shard wall times range from57.75 to134.90seconds, with two processes at a
 time. The new layout still needs its own CI timing measurement.
+
+**Shared bin B, 2026-10-26 (A1116):** main run `40266252596`, job `121389421810`,
+took 375 seconds overall. The test step took 335 seconds after 37 seconds of setup.
+Its log reports 141.56 seconds for catalogue, 139.46 for identity and 137.85 for workforce;
+the longest file was catalogue's `menu-publication.test.ts`, at 28.3 seconds. The two-process
+bin accumulated several large package runs. That log does not identify a single slow operation
+inside those packages.
+
+Identity and Workforce now each run `test:coverage` on a dedicated runner. Both light bins
+exclude them; their own membership gates select the new jobs and `ci.needs` includes both.
+The remaining bins keep the two-process cap. Package tests, Vitest settings and coverage
+thresholds are unchanged. `scripts/changed-scope.test.mjs` checks each new gate independently,
+and `scripts/ci-workflow.test.mjs` checks their actual pnpm partition and executes the aggregate
+with each job failed. Its workflow checks read text; only hosted execution measures the new
+layout's runtime. Use the changes job's scope when reading a PR result: a root-only machinery
+change skips package jobs, while a manual workflow dispatch runs the full suite.
 
 Measured for A528 over the 42 successful `main` runs that ran the test jobs, up to run
 38177927525 (2026-10-11), minutes from the jobs API:

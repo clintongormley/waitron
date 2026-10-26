@@ -130,6 +130,8 @@ jobs:
       adjustments: ${{ steps.gates.outputs.adjustments }}
       staffing: ${{ steps.gates.outputs.staffing }}
       provisioning: ${{ steps.gates.outputs.provisioning }}
+      identity: ${{ steps.gates.outputs.identity }}
+      workforce: ${{ steps.gates.outputs.workforce }}
       light_a: ${{ steps.gates.outputs.light_a }}
       light_b: ${{ steps.gates.outputs.light_b }}
       shared: ${{ steps.gates.outputs.shared }}
@@ -2565,6 +2567,102 @@ jobs:
       - name: Merge the provisioning coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/provisioning" test:merge
 
+  test-identity:
+    timeout-minutes: 10
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        with:
+          fetch-depth: 0
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run the identity shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/identity" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/identity" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
+  test-workforce:
+    timeout-minutes: 10
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        with:
+          fetch-depth: 0
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run the workforce shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/workforce" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/workforce" test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
   # The remaining packages partition into two bins, with at most two package runners per bin.
   # Each subtracts OWN_SHARD_PACKAGES and the opposite bin from the changed scope;
   # inclusion would union the whole bin into a scoped run. The runnable guard rejects
@@ -2640,12 +2738,12 @@ jobs:
           set -- "$@" --filter "!@waitron/adjustments"
           set -- "$@" --filter "!@waitron/staffing"
           set -- "$@" --filter "!@waitron/provisioning"
+          set -- "$@" --filter "!@waitron/identity"
+          set -- "$@" --filter "!@waitron/workforce"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
           set -- "$@" --filter "!@waitron/country-gb"
           set -- "$@" --filter "!@waitron/country-packs"
           set -- "$@" --filter "!@waitron/dashboard-kit"
-          set -- "$@" --filter "!@waitron/identity"
-          set -- "$@" --filter "!@waitron/workforce"
           set -- "$@" --filter "!@waitron/credentials"
           set -- "$@" --filter "!@waitron/catalogue"
           set -- "$@" --filter "!@waitron/recipes"
@@ -2736,6 +2834,8 @@ jobs:
           set -- "$@" --filter "!@waitron/adjustments"
           set -- "$@" --filter "!@waitron/staffing"
           set -- "$@" --filter "!@waitron/provisioning"
+          set -- "$@" --filter "!@waitron/identity"
+          set -- "$@" --filter "!@waitron/workforce"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
           set -- "$@" --filter "!@waitron/country"
           set -- "$@" --filter "!@waitron/country-es"
@@ -2855,6 +2955,8 @@ jobs:
       - test-staffing
       - test-provisioning
       - test-provisioning-merge
+      - test-identity
+      - test-workforce
       - test-light-a
       - test-light-b
       - mutation-shared
