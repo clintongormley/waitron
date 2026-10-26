@@ -51,6 +51,8 @@ is disabled, open their row menu and choose **Download their data**. You get the
 person gets from **Copy of your data**, with its `README.txt` in the language the person chose,
 or the venue's language if they have not chosen one. Managers do not see this action. Waitron
 keeps no list of these requests, so note the request and your answer in the venue's own records.
+For the one-month answer time and the venue's other duties, see
+[Data protection](data-protection.md#who-does-what).
 
 ## Download an invoice customer's data {#invoice-customer-data}
 
@@ -62,7 +64,8 @@ data** to get a ZIP with a PDF copy of each invoice, an `invoices.json` file wit
 number and address on each and every address the box emailed it to or tried to, and a
 `README.txt` in the venue's language. Managers do not see this action. A booking holds no
 tax number, so this search does not find bookings. Waitron keeps no list of these requests, so
-note the request and your answer in the venue's own records.
+note the request and your answer in the venue's own records. For the one-month answer time and the
+venue's other duties, see [Data protection](data-protection.md#who-does-what).
 
 ## Delete a staff role {#delete-staff-role}
 

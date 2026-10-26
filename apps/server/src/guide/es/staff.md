@@ -56,6 +56,8 @@ menú de su fila y elige **Descargar sus datos**. Recibes los mismos archivos qu
 obtiene con **Copia de tus datos**, con su `README.txt` en el idioma que eligió la persona o, si
 no eligió ninguno, en el idioma del local. Los gerentes no ven esta acción. Waitron no guarda una
 lista de estas solicitudes, así que anota la solicitud y tu respuesta en los registros del local.
+El plazo de un mes para responder y las demás obligaciones del local están en
+[Protección de datos](data-protection.md#who-does-what).
 
 ## Descargar los datos de un cliente de factura {#invoice-customer-data}
 
@@ -68,7 +70,8 @@ pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada f
 a las que la caja la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
 gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
 Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
-registros del local.
+registros del local. El plazo de un mes para responder y las demás obligaciones del local están en
+[Protección de datos](data-protection.md#who-does-what).
 
 ## Eliminar un rol de personal {#delete-staff-role}
 
