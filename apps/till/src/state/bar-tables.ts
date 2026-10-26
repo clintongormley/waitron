@@ -18,14 +18,15 @@ export interface LocalBill {
   takenByOther: boolean;
 }
 
-type Held = LocalBill & { onScreen: boolean };
+/** The bill this device holds, and whether the order screen shows it. */
+export type HeldBill = LocalBill & { onScreen: boolean };
 
 /** D4: a local bill's lines count, never its store's lock. */
 const localUnsent = (bill: LocalBill): boolean => bill.lines > 0 && !bill.takenByOther;
 
 /** The party whose button stands for the held table: its own while the read lists it, else an open
  * party the read seats at the held table since. */
-function heldPartyOf(held: Held | null, tables: readonly TableState[]): string | null {
+function heldPartyOf(held: HeldBill | null, tables: readonly TableState[]): string | null {
   if (held === null) return null;
   if (held.partyId !== null && tables.some((table) => table.party?.id === held.partyId))
     return held.partyId;
@@ -44,7 +45,7 @@ export function barTables(
   tables: readonly TableState[],
   personId: string,
   /** Later records of one bill win over earlier ones. */
-  local: { held: Held | null; released: readonly LocalBill[] },
+  local: { held: HeldBill | null; released: readonly LocalBill[] },
 ): BarTable[] {
   if (personId === "") return [];
   const held = local.held;
@@ -66,7 +67,7 @@ export function barTables(
     return [...answers.values()].some(Boolean);
   };
 
-  return groupTables<{ party: TableParty | null; here: Held | null }>(tables, (table) => {
+  return groupTables<{ party: TableParty | null; here: HeldBill | null }>(tables, (table) => {
     if (unlisted?.tableId === table.id) {
       return { key: `table:${table.id}`, value: { party: null, here: unlisted } };
     }

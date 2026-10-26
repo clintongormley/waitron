@@ -305,7 +305,7 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { barTables, type BarTable, type LocalBill } from "./state/bar-tables.js";
+import { barTables, type BarTable, type HeldBill, type LocalBill } from "./state/bar-tables.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
 import type {
   AdjustmentAsk,
@@ -437,15 +437,19 @@ interface ReleasedBill {
   savedBefore?: number;
 }
 
-/** A released draft's bill for the bar (D4, D10), its table filled in by the caller. A failed save
- * reloads the store from the box and keeps this device's lines as the candidate. */
-function releasedBill(sync: DraftSync): Omit<LocalBill, "tableId"> {
-  const editorId = sync.edit?.editorId ?? null;
+/** A bill this device holds or released, for the bar (D4, D10): its store's lines, and whether
+ * someone else now edits it. A failed save reloads the store from the box and keeps this device's
+ * lines as the candidate. */
+function localBill(
+  ids: Pick<LocalBill, "partyId" | "tableId" | "billId">,
+  store: { readonly lines: readonly unknown[] } | null,
+  sync: DraftSync | undefined,
+): LocalBill {
+  const editorId = sync?.edit?.editorId ?? null;
   return {
-    partyId: sync.partyId,
-    billId: sync.billId,
-    lines: sync.store.lines.length || (sync.candidate?.lines.length ?? 0),
-    takenByOther: editorId !== null && editorId !== sync.personId,
+    ...ids,
+    lines: (store?.lines.length ?? 0) || (sync?.candidate?.lines.length ?? 0),
+    takenByOther: editorId !== null && editorId !== sync?.personId,
   };
 }
 
@@ -10610,7 +10614,10 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const tableId = this.activeTableId;
     if (tableId !== undefined)
-      this.#released.push({ sync, bill: { ...releasedBill(sync), tableId } });
+      this.#released.push({
+        sync,
+        bill: localBill({ partyId: sync.partyId, tableId, billId: sync.billId }, sync.store, sync),
+      });
     this.#leavingDrafts.set(
       sync,
       sync.flush().then((saved) => {
@@ -11224,24 +11231,18 @@ export class TillApp extends LitElement {
   }
 
   /** D4: the held table's bill, judged by its store's lines and whether another person took it. */
-  #heldBill(): Parameters<typeof barTables>[2]["held"] {
+  #heldBill(): HeldBill | null {
     const tableId = this.activeTableId;
     if (tableId === undefined) return null;
     const party = this.orderParty;
     const sync =
       party !== null && this.#draftSync?.partyId === party.id ? this.#draftSync : undefined;
-    const editorId = sync?.edit?.editorId ?? null;
     const store = this.#tableDraft();
-    const candidate = sync?.candidate ?? null;
     // Until its draft is read, the bill has no answer of its own and the floor read decides for it.
-    const known = store !== null || candidate !== null;
+    const known = store !== null || (sync?.candidate ?? null) !== null;
+    const billId = party === null || !known ? null : (this.activeTabId ?? null);
     return {
-      partyId: party?.id ?? null,
-      tableId,
-      billId: party === null || !known ? null : (this.activeTabId ?? null),
-      // A failed save reloads the store from the box and keeps this device's lines as the candidate.
-      lines: (store?.lines.length ?? 0) || (candidate?.lines.length ?? 0),
-      takenByOther: editorId !== null && editorId !== sync?.personId,
+      ...localBill({ partyId: party?.id ?? null, tableId, billId }, store, sync),
       onScreen: this.#orderScreenShown(),
     };
   }
