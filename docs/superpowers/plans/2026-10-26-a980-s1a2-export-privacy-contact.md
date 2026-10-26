@@ -1,8 +1,9 @@
 # A980 slice S1a2: a configuration export carries the venue's privacy notice page and privacy email
 
 **Status: plan, 2026-10-26, the fresh plan review folded in (1 Critical, 5 Important, 8 Minor,
-`~/waitron-campaign-b/a980-s1a2-plan-review.md`) under the driver's rulings of the same day. Nothing
-was built when this was written.** Branch `feat/a980-s1a2-export-privacy-contact`, from `main` at
+`~/waitron-campaign-b/a980-s1a2-plan-review.md`) under the driver's rulings of the same day, then
+its round-3 check (0 Critical, 2 Important, 7 Minor, `~/waitron-campaign-b/a980-s1a2-plan-round3.md`).
+Nothing was built when this was written.** Branch `feat/a980-s1a2-export-privacy-contact`, from `main` at
 `27ae35c09` (S1a landed there as #2106). Owner decision: answer **B** to the S1a plan ("OWNER ANSWER
 — A980 S1a plan defaults A–F", lane B's questions file, `:358-363`): a configuration export carries
 the privacy notice address and the privacy email, so "a new box set up from Bar Ejemplo's export
@@ -123,6 +124,16 @@ was removed with `git checkout` and `git status --short` then printed nothing.
    `git log -S"version: 8"` on `configuration-transfer.ts` printed only `251e256a4` (A756 PR 8);
    `docs/developers/conventions-data.md:1622-1645` lists every bump from 3 to 8. Decision 6 follows.
 
+6. **Round 3's probes** (`~/waitron-campaign-b/a980-s1a2-plan-round3.md`, "What I ran"), each a
+   throwaway: Task 2's row as first written passed and its control was refused 400 `body`; a row
+   copying the WHOLE preview venue (as the setup app does) passed, and the same row with
+   `privacyEmail` added to the venue was refused 400 `body` (probe 2), so Task 2 now copies the whole
+   venue; with the claim's location list widened to accept the two keys, the frozen request still
+   held only the eleven fields (probe 5), because `parseVenue` rebuilds the venue field by field; a
+   rollback case whose throwing hook first reads `readPrivacyContact(tx)` saw the two values with the
+   write in place and `null`s without it, while "the row afterwards equals `before`" held both ways
+   (probe 4), so Task 5 case 4 now asserts what the hook saw.
+
 Read, not run: everything else cited by `file:line` below, on this tree.
 
 ## Decisions this plan makes that the spec does not
@@ -136,10 +147,13 @@ Read, not run: everything else cited by `file:line` below, on this tree.
    check that it names every key, so a field added to the type and not to the list fails
    `typecheck`. Why the setup app and not the server: nothing is lost by dropping the two keys,
    because the import takes `fireControl` and `catalogueId` from the bundle itself, not from the
-   request (`applyPreparedLocation`, called at `configuration-transfer.ts:764-770`); and the claim's
-   exact key lists are its only shape check on a request that an unauthenticated browser sends and
-   the box freezes into `first-setup.json` (`first-setup-state.ts:220-255`). Making the claim accept
-   or strip unknown keys would trade that check for a fix one screen away. The venue level needs no
+   request (`applyPreparedLocation`, called at `configuration-transfer.ts:764-770`); and the claim
+   refuses a stray key outright, which #1752 chose (`setup-first-fiscal-api.ts:413-436`); accepting
+   or stripping one would turn that refusal into a silent drop. The strict lists are not what keeps
+   a stray key out of `first-setup.json`: `parseVenue` rebuilds the venue field by field
+   (`setup-api.ts:472-516`) and the claim freezes its output (`setup-first-fiscal-api.ts:457-466`),
+   besides checking each field's type and, in the claim, each value's length (`:442-455`); round 3's
+   probe 5 measured it. The venue level needs no
    change: the preview's venue keys (`PreparedVenue`, `configuration-transfer.ts:38-62`) are all on
    the claim's venue list, and decision 2 keeps the new values off it.
 
@@ -181,7 +195,9 @@ Read, not run: everything else cited by `file:line` below, on this tree.
    app's `ProvisionBody`. **So `setup-api.ts`, `venue-plan.ts`, `venue-apply.ts` and
    `first-setup-state.ts`, named by the overview's row as a starting guess, do not change.**
    - The write goes after `applyPreparedLocation` (`:764-770`) and before the modules' `afterImport`
-     hooks (`:771-774`), so a hook that throws rolls it back.
+     hooks (`:771-774`), so a hook already sees the stored values, and a hook that throws rolls the
+     write back with everything else. Task 5 case 4 checks both: its throwing hook reads the values
+     through the transaction first.
    - `configuration-transfer.ts` calls `savePrivacyContact`; it does not write `tenants` itself. The
      write-list guard judges the file whose text holds the write (`scripts/write-path-tables.test.ts:15-17`,
      `:27-28`), and that stays `privacy-contact.ts`, already on the list.
@@ -217,7 +233,11 @@ Read, not run: everything else cited by `file:line` below, on this tree.
    `value.version > 9` → `setup.request_invalid { field: "version" }`, `value.version !== 9` →
    `setup.configuration_outdated` (`configuration-transfer.ts:480-483`). Owner decision C. The
    reverse direction: a box running format 8 refuses a format-9 file as too new (`field: "version"`),
-   whose setup sentence already says to use a box on the current version (`shell.ts:139-140`).
+   with the existing incompatible-version message (`shell.ts:139-140`). That message says to export
+   again from a box on the current version, which does not fit this case (the file already came
+   from a current box; the receiving box is the older one). The same message also answers a module
+   version mismatch in either direction, so rewording it is more than a one-line change; Task 8
+   step 9 records it as a backlog point instead.
 
 7. **A value the card's rule refuses makes the whole import refuse, at staging, with the card's
    own code.** `validateConfigurationBundle` (`configuration-transfer.ts:587-611`) gains the check
@@ -404,6 +424,10 @@ the handover.
 | Where | Rows | Task |
 | --- | --- | --- |
 | `apps/server/src/first-fiscal-setup.e2e.test.ts:129-137` | one, `{ …, claimFrom: "preview" }` (decision 13) | 2 |
+
+**One renaming**: the same table's title template (`first-fiscal-setup.e2e.test.ts:138`) gains
+`, claim from $claimFrom`, so the new row's name differs from the first row's; every existing row's
+name gains ", claim from undefined", and no assertion changes (Task 2).
 | `apps/server/src/configuration-import.test.ts:96-256` (older formats) | two: format 8 with and without `privacyContact` | 4 |
 | `packages/provisioning/src/configuration-transfer.boundaries.test.ts:48-81` (malformed) | five, `privacyContact` malformed | 4 |
 | `apps/setup/src/setup-app.test.ts:3034-3051` (generic refusals) | one, `["venue.detail_invalid", "legalName"]` | 7 |
@@ -423,7 +447,9 @@ answer's body is read into a variable before the existing `toMatchObject`, so Ta
 - **The check is the card's** (decisions 7 and 8): one function on both paths; the route's suite
   unedited and green; refusals at staging leave staged files untouched; no value in a refusal.
 - **The write** (decision 3): through `savePrivacyContact` only; only the two columns; before the
-  `afterImport` hooks, so Task 5's rollback case sees a hook failure undo it.
+  `afterImport` hooks: Task 5 case 4's hook sees the stored values through the transaction, then
+  its failure leaves the row as it was; deleting the write or moving it after the hooks fails the
+  case.
 - **The format** (decision 6): the three changed checks, nothing else; format 8 refused as outdated.
 - **Docs**: every guide sentence against the code (Task 8's table), both languages; afterwards
   `git grep -n -i "does not carry them\|no los incluye\|only keeps them here\|solo los guarda aquí"`
@@ -437,8 +463,9 @@ before Task 1.
 
 1. `git grep -n "version: 8" -- 'packages/*/src/**' 'packages/*/test/**' 'apps/*/src/**'`: expected,
    `configuration-transfer.ts:136` and `:169`, and the three fixture literals in "Changed test
-   checks". `git grep -n "version: 9" -- packages/provisioning apps/server/src`: expected, the two
-   too-new rows only.
+   checks". `git grep -n "version: 9" -- 'packages/provisioning/**/configuration*' 'apps/server/src/configuration*'`:
+   expected, the two too-new rows only (a wider pathspec also finds QR-code versions in
+   `apps/server/src/qr-matrix.test.ts` and `test-page.ts`).
 2. `git grep -n "importConfigurationTables(" -- 'packages/*/src/**' 'apps/*/src/**' | /usr/bin/grep -v "\.test\.ts"`:
    expected, the definition and the two callers of decision 3.
 3. `git grep -n "privacy" -- packages/provisioning/src/configuration-transfer.ts packages/provisioning/src/configuration-import.ts`:
@@ -473,8 +500,10 @@ list typed against `LocationDraft`), `apps/setup/src/setup-app-first-fiscal.test
 4. Run the whole of `setup-app-first-fiscal.test.ts` and `setup-app.test.ts`: each its previous
    `Tests` count, plus 1 for the first, nothing failed.
 5. Omission control: copy "everything but `id`" again; the new case fails. Revert.
-6. `pnpm --filter @waitron/setup typecheck`; then add a key to `LocationDraft` in a scratch edit
-   and see `typecheck` fail on the list; revert.
+6. `pnpm --filter @waitron/setup typecheck`; then add an OPTIONAL key (`zzProbe?: string`) to
+   `LocationDraft` in a scratch edit and expect exactly one `error TS` line, on the line of
+   `CLAIM_LOCATION_FIELDS`'s check; revert. (A required key breaks six test fixtures before the list
+   is reached, round 3 probe 6, so both answers would look alike.)
 
 ## Task 2: a production-path row through the claim, ending in an imported venue
 
@@ -485,12 +514,18 @@ This row pins the server's half of decision 1; it passes as soon as it is writte
 server does not change. Its control is what makes it a test.
 
 1. Add `claimFrom?: "preview"` to the table's rows and the row
-   `{ newTaxpayer: false, change: "none", launch: "direct", claimFrom: "preview" }` (`:129-137`).
+   `{ newTaxpayer: false, change: "none", launch: "direct", claimFrom: "preview" }` (`:129-137`), and
+   `, claim from $claimFrom` to the title template (`:138`; the renaming in "Changed test checks").
    Read the staged answer's body into a variable before the existing `toMatchObject` (`:231-234`).
-   For this row, build the claim's venue as the fixed setup app does: the preview's venue fields
-   the claim lists, its location reduced to `Object.keys(request.location)` (the fixture request,
-   which the claim accepts), and the admin from `request`. First assert that the preview's location
-   has a `fireControl` property, so the row is fed what a real export gives.
+   For this row, build the claim's venue as the setup app does: the WHOLE preview venue, with only
+   its location cut down, `{ ...stagedBody.venue, location: <stagedBody.venue.location reduced to
+   Object.keys(request.location)>, admin: request.admin }`, so a key a later slice adds to the
+   export's `venue` reaches the claim here as it would from the setup app. Two preconditions first,
+   so a failure names its cause: the preview's location has a `fireControl` property (the row is fed
+   what a real export gives), and every key of the preview's venue is a key of `request` (the
+   fixture request holds exactly the claim's venue list). This row, being direct, Same tax ID and
+   unchanged, also runs the pre-claim refusal blocks (`:206-221`, `:239-258`) and the
+   `setup.email_required` check; harmless, and it adds time.
 2. Run `pnpm --filter @waitron/server exec vitest run src/first-fiscal-setup.e2e.test.ts`: the
    file's previous count plus 1, nothing failed; the new row reaches `provisioned: true` and the
    success branch's product and taxpayer reads (`:428-435`).
@@ -598,10 +633,12 @@ Files: `packages/provisioning/src/configuration-transfer.ts` (`importConfigurati
    3. the bundle's values written as `"  https://example.com/privacy  "` and the decomposed-accent
       email: stored trimmed and composed;
    4. **rollback**: one synthetic module, built as `moduleWith` builds one
-      (`configuration-transfer.boundaries.test.ts:30-36`) with `tables: []` and an `afterImport` that
-      throws `new Error("synthetic afterImport failure")`, the bundle's `modules` and the versions
-      naming it at 1; the transaction rejects with that error, and the row read afterwards equals
-      `before` (review I3);
+      (`configuration-transfer.boundaries.test.ts:30-36`) with `tables: []` and an `afterImport`
+      that first reads `readPrivacyContact(tx)` into a variable the test holds, then throws
+      `new Error("synthetic afterImport failure")`; the bundle's `modules` and the versions name it
+      at 1. Assert: the transaction rejects with that error; what the hook read equals the two
+      values (the write ran, before the hooks); and the row read afterwards equals `before` (the
+      rollback);
    5. **no taxpayer row**: a third `useVenueDb`, freshly migrated, with no venue; the import (target
       `{ locationId: "absent" }`) finishes, and `select count(*) as n from tenants` is `0` (review M1).
    Expected for the file once green: `Tests  13 passed (13)`.
@@ -609,16 +646,16 @@ Files: `packages/provisioning/src/configuration-transfer.ts` (`importConfigurati
      `:173-210` also expects `select privacy_notice_url as privacyNoticeUrl, privacy_email as privacyEmail from tenants`
      to equal one row holding the two values, for both `newTaxpayer` rows.
    Run `pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer.privacy-contact.test.ts src/first-setup-command-import.test.ts`;
-   watch cases 1 to 3 and both command rows fail. Cases 4 and 5 pass before the write exists; their
-   controls are in step 4.
+   watch cases 1 to 4 and both command rows fail (case 4 on what its hook read). Case 5 passes
+   before the write exists; its control is in step 4.
 2. Write it (decision 3): after `applyPreparedLocation` and before the `afterImport` loop, call
    `savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail })` with each field's
    `privacyContactChecked` value (a `null` stays `null`), ignoring its answer.
 3. Run both files again: `Tests  13 passed (13)` and the command file's previous count.
-4. Omission controls, each run and reverted: skip the write (cases 1 to 3 and the command rows
-   fail); write the bundle's raw strings (case 3 fails); write the privacy contact through
-   `suite.db` in a transaction of its own, committed before the import's (case 4 fails); throw when
-   `savePrivacyContact` answers `null` (case 5 fails).
+4. Omission controls, each run and reverted: skip the write (cases 1 to 4 and the command rows
+   fail); move the write after the `afterImport` loop (case 4 fails: its hook reads `null`s); write
+   the bundle's raw strings (case 3 fails); throw when `savePrivacyContact` answers `null` (case 5
+   fails).
 5. `pnpm --filter @waitron/provisioning typecheck`; at the root
    `pnpm exec vitest run scripts/write-path-tables.test.ts` (expected all pass).
 
@@ -728,10 +765,11 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
    Then `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`, at the root
    `pnpm exec vitest run scripts/guide-links.test.ts`, `pnpm exec prettier --file-info apps/server/src/guide/en/data-protection.md`,
    and `pnpm format:check`.
-2. `conventions-data.md`: at the end of the format history (`:1645`), "A980 S1a2 (format 9,
-   2026-10-26, when the copy gained the venue's privacy contact as the required top-level
-   `privacyContact` key) moved it for the same reason; `configuration-transfer.test.ts` now pins
-   format 9." Under it, a paragraph: "The setup preview's `venue` is sent back by the setup app in
+2. `conventions-data.md`: in the format history's last sentence (`:1639-1645`), edit in place:
+   the list of bumps gains "and A980 S1a2 (format 9, 2026-10-26, when the copy gained the venue's
+   privacy contact as the required top-level `privacyContact` key)", and "`configuration-transfer.test.ts`
+   now pins format 8" (`:1644`) becomes "format 9". The dated "A756 PR 8 (format 8, 2026-10-24, …)"
+   (`:1642`) stays. Under the paragraph, a new one: "The setup preview's `venue` is sent back by the setup app in
    the first-setup claim, which refuses any venue or location key it does not list
    (`apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup field lives
    outside `venue`, and the setup app copies the preview's location by `LocationDraft`'s fields
@@ -740,12 +778,14 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
    `catalogueId`; the tests that imported an export all went through the development route or called
    the owner runtime directly." `design-system.md:5410`: "format 8" becomes "format 9".
 3. `CLAUDE.md` §3, in the "Data, modules and migrations" list, one rule after the "composition
-   list" entry: "**A setup preview's venue goes back in the
-   first-setup claim, which refuses keys it does not list**: a bundle value that is not a setup
-   field lives outside `venue`, and the setup app copies the preview's location by `LocationDraft`'s
-   fields. Guard: the production-path row in `apps/server/src/first-fiscal-setup.e2e.test.ts` and
-   the preview case in `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one
-   export shape. [Detail](docs/developers/conventions-data.md)." Run
+   list" entry: "**A configuration bundle value that is not a setup field lives outside the bundle's
+   `venue`**: the setup app sends the preview's venue back in the first-setup claim, which refuses
+   keys it does not list, and copies the preview's location by `LocationDraft`'s fields. Cost: from
+   #1752 to A980 S1a2 no production box could be set up from an export. Guard: the production-path
+   row in `apps/server/src/first-fiscal-setup.e2e.test.ts` and the preview case in
+   `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape, and the
+   row cuts the location down by the test's own key list, not `LocationDraft`.
+   [Detail](docs/developers/conventions-data.md)." Run
    `pnpm exec vitest run scripts/claude-md-pointers.test.ts` and `pnpm format:check`.
 4. `docs/backlog/data-protection.md`: delete the **S1a2** point (`:231-244`), now finished. In the
    **S1b** point (`:205-230`) drop "Waits for S1a2 (the export point below)." and change its quoted
@@ -762,8 +802,16 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
 7. The S1a plan's decision 10 (`2026-10-26-a980-s1a-notice-settings.md:351`): a dated line under it,
    "_2026-10-26: S1a2 carries them ([its plan](2026-10-26-a980-s1a2-export-privacy-contact.md))._"
 8. `git grep -n -i "does not carry them\|no los incluye\|only keeps them here\|solo los guarda aquí\|format 8"`
-   over `apps`, `docs/developers` and `docs/backlog*`: expected, nothing; over `docs/superpowers`,
-   only dated records.
+   over `apps`, `docs/developers` and `docs/backlog*`: expected, only `conventions-data.md:1642`'s
+   dated "A756 PR 8 (format 8, 2026-10-24, …)"; over `docs/superpowers`, only dated records.
+9. `docs/backlog.md`, under "The setup wizard, onboarding and the demo venue" (`:425`), a short
+   entry: a box on an older configuration format given a newer export shows "This export is not
+   compatible with this Waitron version. Export it again from a box running the current
+   version, …" (`apps/setup/src/i18n/strings/shell.ts:139-140`), but the file already came from a
+   current box and it is the receiving box that needs updating; the same sentence answers module
+   version mismatches in both directions (`describeConfigurationRefusal`,
+   `apps/setup/src/setup-app.ts:412-428`), so the fix is to word the too-new case on its own.
+   Found by A980 S1a2's plan review.
 
 ## Root guards to run before `/finish-branch`
 
@@ -806,3 +854,21 @@ output for `provisioning`, `server` and `setup` before calling the branch green.
 - **M6** (probe 2 "likely"): replaced by the review's run receipts; Task 0 step 5 says it is done.
 - **M7** (which bundle Task 5 imports): the shared fixture, stated in Task 5 step 1.
 - **M8** (length named as a bad address): four sentences, by field and cause (decision 9, Task 7).
+
+Round 3 (`~/waitron-campaign-b/a980-s1a2-plan-round3.md`):
+
+- **I1** (Task 2's row filtered the venue): it now copies the whole preview venue, cutting only the
+  location, with a venue-keys precondition; the CLAUDE.md guard hedge names the test's own key list.
+- **I2** (vacuous rollback case): case 4's hook reads the values through the transaction before
+  throwing; the controls are deleting the write and moving it after the hooks.
+- **M1** (false reason in decision 1): replaced by "#1752 chose a refusal over a silent drop", with
+  the `parseVenue` receipt (round 3 probe 5).
+- **M2** (type control could not fail differently): an optional key, one expected error on the list.
+- **M3** (version grep too wide): narrowed to `configuration*` paths, with the QR hits named.
+- **M4** (stale "pins format 8"; the final grep): `:1644` edited in place; the grep expects only
+  `:1642`'s dated line.
+- **M5** (CLAUDE.md line lacked a rule and a cost): reworded as a rule with its cost and pointer.
+- **M6** (duplicate row name): the title gains `$claimFrom`, the renaming listed; the extra blocks
+  the row runs are named.
+- **M7** (too-new message does not fit): decision 6 narrowed; a one-line change does not suffice,
+  since the message also answers module mismatches, so Task 8 step 9 records a backlog point.
