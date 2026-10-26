@@ -68,6 +68,20 @@ function sameRow(a: Element, b: Element): boolean {
   return first.top < second.bottom && second.top < first.bottom;
 }
 
+/**
+ * The height Powered by's own row adds when it sits under the legal name. A logo in use brings the
+ * line into a signed-in banner, and on a narrow banner it wraps under the name whenever the two do
+ * not fit side by side, which depends on the fonts; the no-logo control has no such line. That row
+ * is allowed for, and nothing else: a logo that made its own row taller still fails.
+ */
+function poweredByRowBelowName(banner: HTMLElement): number {
+  const poweredBy = banner.querySelector(".banner-powered-by");
+  if (poweredBy === null) return 0;
+  const line = poweredBy.getBoundingClientRect();
+  const name = banner.querySelector(".venue")!.getBoundingClientRect();
+  return line.top >= name.bottom ? line.bottom - name.bottom : 0;
+}
+
 let width = 0;
 let height = 0;
 
@@ -116,7 +130,9 @@ async function check(
     expect(sameRow(logo, banner.querySelector("[data-test=theme-chooser]")!)).toBe(true);
     expect(sameRow(logo, banner.querySelector("[data-test=language-chooser]")!)).toBe(true);
   }
-  expect(banner.getBoundingClientRect().height).toBe(expectedHeight);
+  expect(banner.getBoundingClientRect().height - poweredByRowBelowName(banner)).toBe(
+    expectedHeight,
+  );
   expect(el.shadowRoot!.querySelector(".brand-logo")?.checkVisibility() ?? false).toBe(false);
 }
 
