@@ -4461,16 +4461,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### Purchasing, recipes, stock and reports
 
-_Formerly entries spread across the old sections._ Detail: [backlog/back-office.md](backlog/back-office.md).
-
-- **The recipe routes and the recipe screen are unreached.** Recipe authoring is gone from the
-  dashboard, and nothing replaces it as a surface; whoever reopens recipe depth decides first
-  whether recipe authoring returns as its own surface.
+- **The recipe routes and the recipe screen are unreached.**
   [Detail](backlog/back-office.md#the-recipe-routes-and-the-recipe-screen-are-unreached)
 
 - **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued.
-  Nobody has decided whether the form should be relaxed or the credit note should become its own
-  document type.
   [Detail](backlog/back-office.md#a-supplier-credit-note-cannot-be-entered-through-the-dashboard)
 
 - **Loose ends left by service Task 12 (#923, adjustment reports).** A weighed item cancelled in
@@ -4478,9 +4472,7 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
   can be a cent's share off.
   [Detail](backlog/back-office.md#loose-ends-left-by-service-task-12-923-adjustment-reports)
 
-- **Comments and test titles left open by #615** — read, not run. `mirror.bundle_fetch_failed`
-  was documented as logging its cause; nothing logs it (`mirror-bundle-fetch.ts` discards the
-  caught error). Whether it should is open.
+- **Comments and test titles left open by #615** — read, not run.
   [Detail](backlog/back-office.md#comments-and-test-titles-left-open-by-615)
 
 ### The box: backups, upgrades and recovery

@@ -35,9 +35,9 @@ Read, not run:
 
 ## A supplier credit note cannot be entered through the dashboard
 
-**A supplier credit note cannot be entered through the dashboard — OPEN, unqueued.** A negative
-gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
-design (see the supplier credit note decision below). The dashboard form's
+**OPEN, unqueued.** A negative gross total on the purchase-invoice routes is a supplier credit
+note and is accepted and stored by design (see the supplier credit note decision below). The
+dashboard form's
 `inRange(this.total, 0, Infinity)`
 (`apps/dashboard/src/widgets/purchase-form.ts`) refuses one, so the form refuses the very document
 the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
