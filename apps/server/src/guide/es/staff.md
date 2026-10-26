@@ -14,8 +14,10 @@ se aplica al rol y al estado de la cuenta.
 Como administrador, puedes añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
-nueva invitación. Deshabilitar una cuenta también borra su PIN, contraseña, llaves de acceso,
-verificación en dos pasos y vínculo con Google. Al volver a habilitarla se envía una nueva
+nueva invitación si el correo está configurado; si Waitron no lo permite o no cambia nada,
+consulta [Pérdidas habituales](data-protection.md#breach-losses). Deshabilitar una cuenta también
+borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, códigos de recuperación y
+vínculo con Google. Al volver a habilitarla se envía una nueva
 invitación. Los gerentes no ven estas acciones.
 
 Si Waitron no puede verificar tu passkey, puedes reintentarlo o elegir **Usar tu contraseña**

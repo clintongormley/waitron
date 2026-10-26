@@ -215,15 +215,12 @@ by the answers):
   (`apps/server/src/management-api.ts`, the `reset-login` route: `acceptInvitation(personId)` returns
   early with `invitationSent: false`), and the cooldown is 60 seconds per person
   (`apps/server/src/account-rate-limit.ts`). So a press within a minute of an invitation, a reset or
-  **Enable and send invitation** for the same person leaves the PIN, password, two-factor secret, passkeys and
+  **Enable and send invitation** for the same person leaves the PIN, password, two-factor secret, passkeys, recovery codes, Google link and
   open sign-ins in place, which matters when the reset answers a stolen account (the guide's breach
-  section, which for now tells the manager to choose it again after a minute). Next action: a failing
-  route test first, then reset before the cooldown, and drop the guide's workaround sentence.
-- **What a lost recovery kit exposes beyond the database copy** (unverified). The guide's breach
-  section says the kit opens the bucket copy and the "passwords and keys stored in it". Whether that
-  includes each person's two-factor secret, through a key derived from one sealed in the bucket copy
-  (`apps/server/src/account-key.ts`, `apps/server/src/state-secrets.ts`), was not checked.
-  Next action: trace it, and name the two-factor secrets on the page if they are exposed.
+  section, which for now tells an admin to choose it again after a minute). Next action: a failing
+  route test first, then reset before the cooldown, and drop the guide's workaround sentences, in
+  the stolen-phone and misused-account paragraphs of both languages, and the "or it changes
+  nothing" pointer in each language's Users guide (`staff.md`, `#account-access`).
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
   migration; waits for the labour and privacy specialists (A664 G2, G3).

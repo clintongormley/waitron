@@ -77,7 +77,8 @@ due when staff take them. When the customer is a company, its own details are no
 Copy and adapt the next paragraph:
 
 **Data protection.** _Your venue's legal name_ uses your name, tax number and address to issue
-this invoice and meet its tax duties, including sending it to the Tax Agency. Your rights and more
+this invoice and meet its tax duties, including sending the Tax Agency a record of it with your
+name and tax number. Your rights and more
 information: _your privacy email address_, _the address of your privacy page_.
 
 Waitron does not show this notice anywhere yet. Show it where staff take the customer's details,
@@ -107,8 +108,10 @@ they say when they take it, by phone or in person.
 
 Copy and adapt the next paragraph:
 
-**Booking.** We keep your name and phone number for the booking. If you tell us about an allergy,
-we note it so we can prepare your food safely. There is more information on our website.
+**Booking.** _Your venue's legal name_ keeps your name and phone number for the booking. If you
+tell us about an allergy, we note it so we can prepare your food safely. You can ask us to see,
+correct or delete your details, or use your other data protection rights, and there is more
+information at _the address of your privacy page_.
 
 ## The full notice on your web page {#full-notice}
 
@@ -116,15 +119,18 @@ The full notice is the one each short notice points to. Put it on your own web p
 page's address in the short notices. Cover each group of people you hold data about: staff,
 invoice customers and guests who book. For each group, the law asks the notice to say:
 
-- who you are, and how to contact you;
+- who you are, and how to contact you; if you have a representative, who they are and how to
+  contact them;
 - how to contact your data protection officer, if you have one;
 - why you use the data, and the legal basis for each use;
 - where a use rests on legitimate interests, the interests you or someone else pursue;
 - who receives the data, or which kinds of recipient, if anyone does, such as the Tax Agency for
   invoices, your email provider and the provider of your backup storage;
 - where it applies, that you intend to transfer the data to a third country or an international
-  organisation, as the law calls them; this can happen through the providers you chose, so ask each
-  one where it keeps data, and ask your adviser which countries count;
+  organisation, as the law calls them, and whether the European Commission has found that
+  country's protection adequate or which safeguards apply and how to get a copy of them; this can
+  happen through the providers you chose, so ask each one where it keeps data, and ask your adviser
+  which countries count;
 - how long you keep the data, or, if you cannot say, how you decide; the law sets four years for
   the working-time record, and your adviser helps you set the rest;
 - that the person may ask you for access to their data, and for its rectification or erasure, may
@@ -134,7 +140,8 @@ invoice customers and guests who book. For each group, the law asks the notice t
   https://www.aepd.es;
 - whether the person has to give the data, by law, by contract or to enter into a contract, and what
   happens if they do not;
-- whether you make automated decisions about the person, including profiling.
+- whether you make automated decisions about the person, including profiling, and if you do, how
+  they are made and what they mean for the person.
 
 Copy and adapt the next paragraph, to open the page:
 
@@ -154,11 +161,15 @@ you need a record, and whether your allergy notes are health data.
 
 The law asks the record to say:
 
-- your name and contact details;
+- your name and contact details, and those of any joint controller, representative or data
+  protection officer you have;
 - why you use the data;
 - whose data it is, and what kinds of data;
-- who receives it, or which kinds of recipient;
-- where it applies, transfers of the data to a third country or an international organisation;
+- which kinds of recipient receive it, including any in a third country or an international
+  organisation;
+- where it applies, transfers of the data to a third country or an international organisation,
+  naming which one, and, for one rare kind of transfer the law names, the documents showing the
+  safeguards, which your adviser can tell you about;
 - where possible, when you expect to delete each kind of data;
 - where possible, a general description of how you keep it secure.
 
@@ -188,8 +199,8 @@ dashboard.
 - What data: names, email address, telephone, role, PIN, password, passkeys, two-factor settings, a
   Google link for a person who signs in with Google, and when and on which device each person
   signed in.
-- Who receives it: your email provider, which delivers invitations and password-reset emails, and
-  _anyone else you share it with_.
+- Who receives it: your email provider, which delivers invitations and password-reset emails;
+  Google, if you let staff sign in with Google; and _anyone else you share it with_.
 - How long: _set with your adviser_.
 - Security: Waitron stores PINs and passwords only as salted hashes, a deliberately slow scrambled
   form, so the database never holds them as typed. A short PIN can still be guessed from its hash
@@ -356,7 +367,8 @@ answers four questions:
 You do not need every answer at once: the information may follow in stages, without further undue
 delay. The AEPD takes notifications through an online form on its electronic office, the Sede
 Electrónica. The AEPD's guide of June 2021 says that to open the form, the person who fills it in
-needs a recognised electronic certificate or the Cl@ve permanente and PIN24H systems, so check that
+needs a recognised electronic certificate or the Spanish government's Cl@ve permanente and PIN24H
+sign-in systems, so check that
 you have one before you need it. The form lets you send an initial notification before the 72 hours
 are up, with what you know so far, and complete it within 30 days of that initial notification.
 
@@ -437,12 +449,14 @@ invoice records to the Tax Agency and its passphrase, so ask your adviser how to
 also keeps the recovery key, which opens your scheduled backups. The key that protects two-factor
 secrets is on the box too, so choose **Reset login** for each person who uses two-factor sign-in.
 Waitron refuses **Reset login** for the venue's only active admin, who instead opens **Account
-settings**, chooses **Disable authenticator**, and sets it up again.
+settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
 **A lost recovery kit.** The kit holds your bucket's access key and secret and the recovery key, so
 whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
-each person who uses two-factor sign-in. The recovery key also opens your scheduled backups,
+each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only
+active admin, who instead opens **Account settings**, chooses **Disable** beside **Authenticator
+app**, and sets it up again. The recovery key also opens your scheduled backups,
 wherever that person can reach them. Revoke the old access keys at your bucket provider, which
 Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. If
 your scheduled backups go to **The bucket copy's bucket**, also choose **Change destination or
@@ -455,14 +469,16 @@ in the bucket copy's history from before the change, which is kept for a week.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with
-pay rate and availability. It never holds a PIN, password, two-factor secret or Google link. It is
+pay rate and availability. It never holds a PIN, password, passkey, two-factor secret, recovery
+code or Google link. It is
 encrypted under the passphrase chosen when it was downloaded, which has at least 12 characters, so
 how exposed the data is depends on how strong that passphrase was and whether it leaked too. No
 screen shows who downloaded an export.
 
 **An account someone else used.** On **Users**, an admin chooses **Disable** or **Reset login** for
 the person. Both sign the person out everywhere and delete their PIN, password, two-factor settings,
-Google link, passkeys and recovery codes. **Reset login** sends a new invitation, and **Disable**
+Google link, passkeys and recovery codes. **Reset login** sends a new invitation if email is set
+up, and **Disable**
 keeps the person out until an admin chooses **Enable and send invitation**. Within a minute of an
 earlier invitation, **Reset login** or **Enable and send invitation** for the same person, **Reset
 login** changes nothing and says only that the invitation was not sent, so choose it again after a

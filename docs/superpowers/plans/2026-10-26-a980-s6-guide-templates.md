@@ -2,7 +2,7 @@
 
 **Status: plan, 2026-10-26, revised the same day after one fresh-context review
 (`~/waitron-campaign-b/a980-s6-plan-review.md`, findings I1–I4 and M1–M11, all folded). Nothing was
-built when this was written.** Written by lane B with
+built when this was written.** 2026-10-26: built on `feat/a980-s6-guide-templates`. Written by lane B with
 nobody watching; every choice the design does not make is listed under "Decisions this plan
 makes" with the default that will be built. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.1 (the
@@ -201,12 +201,22 @@ showed four points above wrong or too broad; the text above is left as written.
   (`till-app.ts:16663-16673` → `#clearTenderRefundSession`, `:7751-7759`), not by disabling or
   deleting the device, which clears nothing on it.
 - Point 9: Diagnostics masks only details logged under a listed key (`log-personal-data.ts:31-45`),
-  each piece shown as at most its first and last character; a name, email or tax number logged any other way
+  each piece keeping only a few of its characters; a name, email or tax number logged any other way
   is not masked. The page now says exactly that much.
 
 The plan's L11 row and Task 2 step 2 say "certificate or Cl@ve"; the AEPD guide names "certificado
 electrónico reconocido o sistemas Cl@ve permanente y PIN24H", and the page now quotes those names
-and no gloss.
+and no gloss. The finish review (2026-10-26) added one: "the Spanish government's Cl@ve permanente
+and PIN24H sign-in systems".
+
+**Corrected at the finish review (2026-10-26).** Later checks narrowed more of the points above; the
+page, not this list, holds the result. Point 5: **Change the recovery key** shows only while
+scheduled backups are on. Point 6: the export also never holds a passkey or a recovery code. Point
+8: the one address kept from a request's connection is a clock-check device's, and a print agent
+reports its own address, which **Printers** shows. Task 2 step 2's example of a key exposed with its
+data is a scheduled backup whose recovery key was lost too, not the recovery kit, because Waitron
+does not encrypt the bucket copy. The page also covers a stolen phone or laptop used for the
+dashboard, and the record has a "Table names and notes" entry.
 
 ## Global constraints
 

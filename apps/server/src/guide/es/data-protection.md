@@ -83,7 +83,8 @@ personales.
 Copia y adapta el párrafo siguiente:
 
 **Protección de datos.** _Razón social del local_ trata su nombre, NIF y dirección para emitir esta
-factura y cumplir sus obligaciones fiscales, incluida su remisión a la Agencia Tributaria. Derechos
+factura y cumplir sus obligaciones fiscales, incluida la remisión a la Agencia Tributaria de un
+registro de la factura con su nombre y su NIF. Derechos
 y más información: _correo de privacidad del local_, _dirección de la página de privacidad_.
 
 Waitron todavía no muestra este aviso en ningún sitio. Muéstralo donde el personal toma los datos
@@ -113,8 +114,10 @@ reserva, así que el aviso breve es lo que dice al tomarla, por teléfono o en p
 
 Copia y adapta el párrafo siguiente:
 
-**Reserva.** Guardamos su nombre y teléfono para la reserva. Si nos cuenta una alergia, la
-anotamos para preparar su comida con seguridad. Tiene más información en nuestra web.
+**Reserva.** _Razón social del local_ guarda su nombre y teléfono para la reserva. Si nos cuenta
+una alergia, la anotamos para preparar su comida con seguridad. Puede pedirnos ver, corregir o
+borrar sus datos, o ejercer sus demás derechos de protección de datos, y tiene más información en
+_dirección de la página de privacidad_.
 
 ## El aviso completo en tu página web {#full-notice}
 
@@ -123,7 +126,7 @@ dirección de esa página en los avisos breves. Cubre cada grupo de personas de 
 el personal, los clientes con factura y los clientes que reservan. Para cada grupo, la ley pide que
 el aviso diga:
 
-- quién eres y cómo contactar contigo;
+- quién eres y cómo contactar contigo; si tienes representante, quién es y cómo contactar con él;
 - cómo contactar con tu delegado de protección de datos, si tienes uno;
 - para qué usas los datos, y la base jurídica de cada uso;
 - cuando un uso se basa en intereses legítimos, los intereses que persigues tú o un tercero;
@@ -131,8 +134,10 @@ el aviso diga:
   Tributaria para las facturas, tu proveedor de correo y el proveedor de tu almacenamiento de copias
   de seguridad;
 - en su caso, que tienes intención de transferir los datos a un tercer país o a una organización
-  internacional, como los llama la ley; puede ocurrir a través de los proveedores que elegiste, así
-  que pregunta a cada uno dónde guarda los datos, y a tu asesor qué países cuentan;
+  internacional, como los llama la ley, y si la Comisión Europea ha decidido que la protección de
+  ese país es adecuada o qué garantías se aplican y cómo obtener una copia de ellas; puede ocurrir a
+  través de los proveedores que elegiste, así que pregunta a cada uno dónde guarda los datos, y a tu
+  asesor qué países cuentan;
 - cuánto tiempo conservas los datos o, si no puedes decirlo, cómo lo decides; la ley fija cuatro
   años para el registro de jornada, y tu asesor te ayuda a fijar el resto;
 - que la persona puede pedirte el acceso a sus datos y su rectificación o supresión, puede pedirte
@@ -142,7 +147,8 @@ el aviso diga:
   AEPD, en https://www.aepd.es;
 - si la persona está obligada a dar los datos, por ley, por contrato o para celebrar un contrato, y
   qué ocurre si no los da;
-- si tomas decisiones automatizadas sobre la persona, incluida la elaboración de perfiles.
+- si tomas decisiones automatizadas sobre la persona, incluida la elaboración de perfiles, y, si
+  las tomas, cómo se toman y qué suponen para la persona.
 
 Copia y adapta el párrafo siguiente, para abrir la página:
 
@@ -164,11 +170,15 @@ la salud.
 
 La ley pide que el registro diga:
 
-- tu nombre y tus datos de contacto;
+- tu nombre y tus datos de contacto, y los de tu corresponsable, tu representante o tu delegado de
+  protección de datos, si los tienes;
 - para qué usas los datos;
 - de quién son los datos, y qué categorías de datos son;
-- quién los recibe, o qué categorías de destinatarios;
-- en su caso, las transferencias de los datos a un tercer país o a una organización internacional;
+- qué categorías de destinatarios los reciben, incluidos los de un tercer país o una organización
+  internacional;
+- en su caso, las transferencias de los datos a un tercer país o a una organización internacional,
+  indicando cuál, y, para un tipo poco frecuente de transferencia que la ley señala, los documentos
+  que muestran las garantías, sobre los que te puede informar tu asesor;
 - cuando sea posible, cuándo prevés suprimir cada categoría de datos;
 - cuando sea posible, una descripción general de cómo los proteges.
 
@@ -201,7 +211,8 @@ caja o el panel.
   pasos, un vínculo con Google para quien inicia sesión con Google, y cuándo y en qué dispositivo
   inició sesión cada persona.
 - Destinatarios: tu proveedor de correo, que entrega las invitaciones y los correos para restablecer
-  la contraseña, y _cualquier otro con quien los compartas_.
+  la contraseña; Google, si permites que el personal inicie sesión con Google; y _cualquier otro con
+  quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_.
 - Seguridad: Waitron guarda los PIN y las contraseñas solo como hashes con sal, una forma codificada
   y lenta a propósito, así que la base de datos nunca los guarda tal como se escribieron. Aun así,
@@ -478,14 +489,17 @@ pregunta a tu asesor cómo sustituirlo. El equipo también guarda la clave de re
 tus copias programadas. La clave que protege los secretos de la verificación en dos pasos también
 está en el equipo, así que elige **Restablecer acceso** para cada persona que use la verificación en
 dos pasos. Waitron no permite **Restablecer acceso** para el único administrador activo, que en su
-lugar abre **Configuración de la cuenta**, elige **Desactivar autenticador** y lo vuelve a
-configurar.
+lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
+autenticación** y lo vuelve a configurar.
 
 **Un kit de recuperación perdido.** El kit contiene la clave de acceso y el secreto de tu bucket y
 la clave de recuperación, así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
-persona que la use. La clave de recuperación también abre tus copias programadas, allí donde esa
+persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo,
+que en su lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
+autenticación** y lo vuelve a configurar. La clave de recuperación también abre tus copias
+programadas, allí donde esa
 persona pueda llegar a ellas. Revoca las claves de acceso antiguas en tu proveedor del bucket, algo
 que Waitron no puede hacer por ti. Después, en **Copias de seguridad**, elige **Cambiar de bucket**
 e introduce las claves nuevas. Si tus copias programadas van a **El bucket de la copia continua**,
@@ -501,7 +515,8 @@ se guarda una semana.
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,
 y sus datos de contrato con la tarifa de pago y la disponibilidad. Nunca contiene un PIN, una
-contraseña, un secreto de verificación en dos pasos ni un vínculo con Google. Va cifrado con la
+contraseña, una llave de acceso, un secreto de verificación en dos pasos, un código de
+recuperación ni un vínculo con Google. Va cifrado con la
 frase de paso que se eligió al descargarlo, que tiene al menos 12 caracteres, así que lo expuestos
 que están los datos depende de lo segura que fuera esa frase y de si también se filtró. Ninguna
 pantalla muestra quién descargó una exportación.
@@ -509,7 +524,8 @@ pantalla muestra quién descargó una exportación.
 **Una cuenta que usó otra persona.** En **Usuarios**, un administrador elige **Deshabilitar** o
 **Restablecer acceso** para la persona. Las dos acciones cierran todas sus sesiones y borran su PIN,
 su contraseña, su verificación en dos pasos, su vínculo con Google, sus llaves de acceso y sus
-códigos de recuperación. **Restablecer acceso** envía una nueva invitación, y **Deshabilitar**
+códigos de recuperación. **Restablecer acceso** envía una nueva invitación si el correo está
+configurado, y **Deshabilitar**
 mantiene fuera a la persona hasta que un administrador elija **Habilitar y enviar invitación**. Si
 en el último minuto ya se envió una invitación a esa persona, se restableció su acceso o se eligió
 **Habilitar y enviar invitación**, **Restablecer acceso** no cambia nada y solo indica que no se

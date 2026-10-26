@@ -232,7 +232,9 @@ so
 _2026-10-26: S6 ([its plan](../plans/2026-10-26-a980-s6-guide-templates.md), Task 0). Row d3's
 "none stored" is too broad: a clock check's confirmation keeps the LAN address of each device that
 took part, in `clock_confirmations.proof` (`packages/fiscal-verifactu/src/clock-checks.ts`,
-`storedWitnesses`). No sign-in, session or request records an address._
+`storedWitnesses`). No sign-in or session records an address; that confirmation is the one place
+an address taken from a request's connection is kept, and a print agent reports its own address,
+which Printers shows._
 
 ### 2.4 Copies and routes off the box
 
@@ -308,6 +310,9 @@ rights, plus "una dirección electrónica u otro medio que permita acceder de fo
 inmediata a la restante información" (R23). The full notice carries every item of Article 13
 (R10). The drafts below use a fictional venue, **Bar Ejemplo S.L.**; the venue's adviser checks
 them. In the product they are templates in the help guide, in English and Spanish (S6, O10 (b)).
+
+_2026-10-26: S6's finish review changed the invoice and booking templates; the help guide's
+data-protection page holds the current text._
 
 **Staff** (shown today in invitation emails, account setup and the profile page when a link is
 configured, `apps/server/src/account-email.ts:132`, `apps/dashboard/src/screens/login-screen.ts:1129-1138`):
