@@ -154,7 +154,7 @@ async function targetVenue(taxId = "123456789") {
   );
 }
 
-async function taxpayerRow(db: Database) {
+async function taxpayerRows(db: Database) {
   return db.select().from(tenants);
 }
 
@@ -162,17 +162,17 @@ it.each(["123456789", "987654321"])(
   "an import writes the bundle's privacy contact onto the taxpayer row (target tax ID %s)",
   async (taxId) => {
     const target = await targetVenue(taxId);
-    const [before] = await taxpayerRow(importTarget.db);
+    const [before] = await taxpayerRows(importTarget.db);
     await withTransaction(importTarget.db, (tx) =>
       importConfigurationTables(tx, configurationBundle(), target, [], {}),
     );
-    expect(await taxpayerRow(importTarget.db)).toEqual([{ ...before, ...stored }]);
+    expect(await taxpayerRows(importTarget.db)).toEqual([{ ...before, ...stored }]);
   },
 );
 
 it("an import stores the privacy contact trimmed and composed", async () => {
   const target = await targetVenue();
-  const [before] = await taxpayerRow(importTarget.db);
+  const [before] = await taxpayerRows(importTarget.db);
   const bundle = withContact({
     privacyNoticeUrl: "  https://example.com/privacy  ",
     privacyEmail: `jose${String.fromCodePoint(0x301)}@example.com`,
@@ -180,7 +180,7 @@ it("an import stores the privacy contact trimmed and composed", async () => {
   await withTransaction(importTarget.db, (tx) =>
     importConfigurationTables(tx, bundle, target, [], {}),
   );
-  expect(await taxpayerRow(importTarget.db)).toEqual([
+  expect(await taxpayerRows(importTarget.db)).toEqual([
     {
       ...before,
       privacyNoticeUrl: "https://example.com/privacy",
@@ -189,9 +189,24 @@ it("an import stores the privacy contact trimmed and composed", async () => {
   ]);
 });
 
+it("an import with an unset privacy contact leaves the taxpayer row as it was", async () => {
+  const target = await targetVenue();
+  const before = await taxpayerRows(importTarget.db);
+  await withTransaction(importTarget.db, (tx) =>
+    importConfigurationTables(
+      tx,
+      withContact({ privacyNoticeUrl: null, privacyEmail: null }),
+      target,
+      [],
+      {},
+    ),
+  );
+  expect(await taxpayerRows(importTarget.db)).toEqual(before);
+});
+
 it("an import writes the privacy contact before the modules' afterImport hooks, and a failing hook rolls it back", async () => {
   const target = await targetVenue();
-  const [before] = await taxpayerRow(importTarget.db);
+  const [before] = await taxpayerRows(importTarget.db);
   let seen: PrivacyContact | null | undefined;
   const module: WaitronModule = {
     ...ALL_MODULES.find((candidate) => candidate.name === "fiscal-none")!,
@@ -212,7 +227,7 @@ it("an import writes the privacy contact before the modules' afterImport hooks, 
     ),
   ).rejects.toThrow("synthetic afterImport failure");
   expect(seen).toEqual(stored);
-  expect(await taxpayerRow(importTarget.db)).toEqual([before]);
+  expect(await taxpayerRows(importTarget.db)).toEqual([before]);
 });
 
 it("an import with no taxpayer row finishes and creates none", async () => {
