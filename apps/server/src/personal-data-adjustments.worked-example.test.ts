@@ -8,11 +8,10 @@ import {
 } from "@waitron/adjustments";
 import { createProduct } from "@waitron/catalogue";
 import {
-  catalogues,
-  categories,
   drawerOpens,
   lineServiceCancellations,
   parties,
+  products,
   sales,
   tenderRefunds,
   tenders,
@@ -71,6 +70,8 @@ interface Story {
   ana: string;
   /** Table 4's order number, as `billWith` allocated it. */
   tableFourOrder: number;
+  /** Ana's bill's order number, as `billWith` allocated it. */
+  anaOrder: number;
   /** Line ids on table 4's bill, by dish. */
   lines: Map<string, string>;
   /** Each recorded cancel's `created_at`, by dish. */
@@ -143,6 +144,16 @@ async function linesOf(venue: AdjustmentVenue, billId: string): Promise<Map<stri
   return new Map(rows.map((row) => [row.name, row.id]));
 }
 
+async function orderNumberOf(venue: AdjustmentVenue, billId: string): Promise<number> {
+  const [order] = await inTx(venue, (tx) =>
+    tx
+      .select({ orderNumber: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId)),
+  );
+  return order!.orderNumber;
+}
+
 async function startPreparing(venue: AdjustmentVenue, lineId: string): Promise<void> {
   await inTx(venue, async (tx) => {
     const [ticket] = await tx
@@ -205,19 +216,15 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
       .insert(persons)
       .values({ displayName: "Ana Soler", role: "staff" })
       .returning({ id: persons.id });
-    const [carta] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(eq(catalogues.name, "Carta"));
-    const [platos] = await tx
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.name, "Platos"));
+    const [olives] = await tx
+      .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+      .from(products)
+      .where(eq(products.id, venue.olivesId));
     const ids = new Map<string, string>();
     for (const dish of DISHES) {
       const product = await createProduct(tx, {
-        catalogueId: carta!.id,
-        categoryId: platos!.id,
+        catalogueId: olives!.catalogueId,
+        categoryId: olives!.categoryId,
         name: dish.name,
         customerName: { [venue.cfg.locale]: dish.customer },
         kitchenName: dish.kitchen,
@@ -253,12 +260,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
     ],
     { operatorId: marta },
   );
-  const [order] = await inTx(venue, (tx) =>
-    tx
-      .select({ orderNumber: workingOrders.orderNumber })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, tableFour.billId)),
-  );
+  const tableFourOrder = await orderNumberOf(venue, tableFour.billId);
   const lines = await linesOf(venue, tableFour.billId);
   const at = new Map<string, string>();
   for (const dish of ["Grilled squid", "House red", "Chocolate cake"])
@@ -293,6 +295,8 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
   expect(removed).toBeUndefined();
 
   const anasBill = await billWith(selling, [{ name: "Lemon tart" }], { operatorId: ana });
+  const anaOrder = await orderNumberOf(venue, anasBill.billId);
+  expect(anaOrder).not.toBe(tableFourOrder);
   const tart = (await linesOf(venue, anasBill.billId)).get("Lemon tart")!;
   await startPreparing(venue, tart);
   at.set(
@@ -304,7 +308,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
     }))!,
   );
 
-  return { venue, marta, luis, ana, tableFourOrder: order!.orderNumber, lines, at };
+  return { venue, marta, luis, ana, tableFourOrder, anaOrder, lines, at };
 }
 
 // The money in the same story, as S2c's `personal-data-actions.test.ts` seeds it, on this venue: a
@@ -443,10 +447,13 @@ useVenueDb({
 });
 
 // As `sendPersonalData` does: prepare inside the snapshot turn, build outside it.
-async function download(personId: string) {
+async function download(
+  personId: string,
+  parts = personalDataParts(modulesNamed(["core", "identity", "adjustments"])),
+) {
   const { db, cfg } = story.venue;
   const build = await db.withWriteLock(() =>
-    preparePersonalData(db, personalDataParts(modulesNamed(["core", "identity", "adjustments"])), {
+    preparePersonalData(db, parts, {
       personId,
       language: "en",
       at: new Date(),
@@ -462,7 +469,7 @@ describe("the worked example's line voids in Marta's download", () => {
     const files = await download(story.marta);
     expect(files.map((f) => f.name)).toEqual(["profile.json", "sign-in.json", "adjustments.json"]);
     const times = ["Grilled squid", "House red", "Chocolate cake"].map((d) => story.at.get(d)!);
-    expect(times[0]! < times[1]! && times[1]! < times[2]!).toBe(true);
+    expect(times).toEqual([...new Set(times)].sort());
     const file = files.find((f) => f.name === "adjustments.json")!;
     expect(JSON.parse(file.content as string)).toEqual(martaAdjustments(story));
   });
@@ -485,38 +492,16 @@ describe("the worked example's line voids in Marta's download", () => {
 });
 
 // The whole download as the route builds it for a venue running the adjustments module.
-async function downloadAll(personId: string) {
-  const { db, cfg } = story.venue;
-  const parts = [
+function downloadAll(personId: string) {
+  return download(personId, [
     ...personalDataParts(modulesNamed(["core", "identity", "adjustments"])),
-    ...actionsPersonalData(db),
-  ];
-  const build = await db.withWriteLock(() =>
-    preparePersonalData(db, parts, {
-      personId,
-      language: "en",
-      at: new Date(),
-      timeZone: "UTC",
-      locationId: cfg.locationId,
-    }),
-  );
-  return build();
+    ...actionsPersonalData(story.venue.db),
+  ]);
 }
 
 function fileNamed(files: { name: string; content: unknown }[], name: string) {
   expect(files.map((f) => f.name)).toContain(name);
   return JSON.parse(files.find((f) => f.name === name)!.content as string);
-}
-
-async function lemonTartOrder(): Promise<number> {
-  const [row] = await inTx(story.venue, (tx) =>
-    tx
-      .select({ orderNumber: workingOrders.orderNumber })
-      .from(workingOrders)
-      .innerJoin(adjustments, eq(adjustments.workingOrderId, workingOrders.id))
-      .where(eq(adjustments.lineName, "Lemon tart")),
-  );
-  return row!.orderNumber;
 }
 
 function lemonTartEntry(order: number, yourPart: string[]) {
@@ -594,7 +579,7 @@ describe("the worked example's whole download: the refund, the drawer, and the o
 
   it("lists the three cancels Luis approved, in time order, in his adjustments.json", async () => {
     const times = ["Grilled squid", "Chocolate cake", "Lemon tart"].map((d) => story.at.get(d)!);
-    expect(times[0]! < times[1]! && times[1]! < times[2]!).toBe(true);
+    expect(times).toEqual([...new Set(times)].sort());
     const marta = martaAdjustments(story).entries;
     const approved = { yourPart: ["approved"] };
     const files = await downloadAll(story.luis);
@@ -603,7 +588,7 @@ describe("the worked example's whole download: the refund, the drawer, and the o
       entries: [
         { ...marta[0], ...approved },
         { ...marta[2], ...approved },
-        lemonTartEntry(await lemonTartOrder(), ["approved"]),
+        lemonTartEntry(story.anaOrder, ["approved"]),
       ],
     });
   });
@@ -612,7 +597,7 @@ describe("the worked example's whole download: the refund, the drawer, and the o
     const files = await downloadAll(story.ana);
     expect(fileNamed(files, "adjustments.json")).toEqual({
       counts: { cancel: 1, comp: 0, discount_percent: 0, discount_amount: 0 },
-      entries: [lemonTartEntry(await lemonTartOrder(), ["requested"])],
+      entries: [lemonTartEntry(story.anaOrder, ["requested"])],
     });
   });
 

@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { ADJUSTMENTS_MIGRATIONS, recordAdjustment } from "@waitron/adjustments";
+import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
 import { decimal, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
@@ -250,9 +250,9 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
           },
           action: "comp",
           percentBp: null,
-          beforeAmount: decimal("24.70"),
-          afterAmount: decimal("12.35"),
-          reduction: decimal("12.35"),
+          beforeAmount: decimal("19.76"),
+          afterAmount: decimal("9.88"),
+          reduction: decimal("9.88"),
           nominalValue: decimal("12.35"),
           requestedBy: personId,
           approvedBy: null,
@@ -265,6 +265,9 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
 
     it("gets her adjustments.json after sign-in.json, listed in the README", async () => {
       const files = await download(["core", "identity", "adjustments"], {}, compAskedFor);
+      const [stored] = await suite.db
+        .select({ createdAt: adjustments.createdAt })
+        .from(adjustments);
       expect(Object.keys(files)).toEqual([
         "README.txt",
         "profile.json",
@@ -276,12 +279,12 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
         entries: [
           {
             action: "comp",
-            at: expect.any(String),
+            at: stored!.createdAt,
             order: 41,
             item: "Grilled squid",
             quantity: "1.000",
             percent: null,
-            takenOff: "12.35",
+            takenOff: "9.88",
             listValue: "12.35",
             reason: "Cold dish",
             stage: "served",

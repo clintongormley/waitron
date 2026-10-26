@@ -7,8 +7,9 @@ import { ADJUSTMENT_ACTIONS } from "./policy.js";
 import { adjustments } from "./schema/adjustments.js";
 
 /** A row marked `by_guest` is the guests' request, never the requester's, as the Adjustment report
- * counts it; its approver's part still stands. `note` and `credited_to` are left out: the first is
- * free text that can name someone else, the second names whose sale it was. */
+ * counts it; its approver's part still stands. `note` is left out: it is free text that can name
+ * someone else. `credited_to` is not carried yet: backlog, The rest of "who did what" in the
+ * download. */
 export const ADJUSTMENTS_PERSONAL_DATA: ModulePersonalData = {
   files: ["adjustments.json"],
 

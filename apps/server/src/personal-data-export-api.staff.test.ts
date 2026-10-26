@@ -3,7 +3,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { ADJUSTMENTS_MIGRATIONS, recordAdjustment } from "@waitron/adjustments";
+import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
 import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -399,17 +399,18 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
         },
         action: "comp",
         percentBp: null,
-        beforeAmount: decimal("6.85"),
+        beforeAmount: decimal("5.48"),
         afterAmount: decimal("0.00"),
-        reduction: decimal("6.85"),
+        reduction: decimal("5.48"),
         nominalValue: decimal("6.85"),
         requestedBy: ids.marta,
         approvedBy: ids.admin,
         note: "note for the tart",
         chargeKept: false,
-        preparationStarted: false,
+        preparationStarted: true,
       }),
     );
+    const [stored] = await suite.db.select({ createdAt: adjustments.createdAt }).from(adjustments);
     const response = await ask(staffPath(ids.marta), tokens.admin);
     expect(response.status).toBe(200);
     const files = await unzipped(response);
@@ -418,17 +419,17 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
       entries: [
         {
           action: "comp",
-          at: expect.any(String),
+          at: stored!.createdAt,
           order: 43,
           item: "Lemon tart",
           quantity: "1.000",
           percent: null,
-          takenOff: "6.85",
+          takenOff: "5.48",
           listValue: "6.85",
           reason: "Long wait",
           stage: "fired",
           chargeKept: false,
-          preparationStarted: false,
+          preparationStarted: true,
           yourPart: ["requested"],
         },
       ],

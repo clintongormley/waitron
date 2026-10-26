@@ -124,20 +124,9 @@ async function insertRow(db: Database, row: Row): Promise<void> {
   });
 }
 
-const NOTES = [
-  "note for m1",
-  "note for m2",
-  "note for m3",
-  "note for m4",
-  "note for a1",
-  "note for l1",
-];
-
 /** The plan's fixture: ids run against time, and m3 and m4 share one time. */
-async function seedFixture(): Promise<Record<41 | 42 | 43, string>> {
-  const db = suite.db;
-  const orders = await seedOrders(db);
-  const rows: Row[] = [
+function fixtureRows(orders: Record<41 | 42 | 43, string>): Row[] {
+  return [
     {
       id: "00000000-0000-4000-8000-000000000006",
       createdAt: "2026-10-03T19:05:00.000Z",
@@ -242,7 +231,11 @@ async function seedFixture(): Promise<Record<41 | 42 | 43, string>> {
       note: "note for l1",
     },
   ];
-  for (const row of rows) await insertRow(db, row);
+}
+
+async function seedFixture(): Promise<Record<41 | 42 | 43, string>> {
+  const orders = await seedOrders(suite.db);
+  for (const row of fixtureRows(orders)) await insertRow(suite.db, row);
   return orders;
 }
 
@@ -405,12 +398,13 @@ describe("ADJUSTMENTS_PERSONAL_DATA", () => {
     const orders = await seedOrders(suite.db);
     const guest = (
       id: string,
+      createdAt: string,
       item: string,
       requestedBy: string,
       approvedBy: string | null,
     ): Row => ({
       id,
-      createdAt: `2026-10-08T12:0${id.slice(-1)}:00.000Z`,
+      createdAt,
       workingOrderId: orders[41],
       action: "comp",
       line: { name: item, quantity: 1000, stage: "served" },
@@ -428,15 +422,33 @@ describe("ADJUSTMENTS_PERSONAL_DATA", () => {
     });
     await insertRow(
       suite.db,
-      guest("00000000-0000-4000-8000-000000000011", "g1 croquettes", MARTA, null),
+      guest(
+        "00000000-0000-4000-8000-000000000011",
+        "2026-10-08T12:01:00.000Z",
+        "g1 croquettes",
+        MARTA,
+        null,
+      ),
     );
     await insertRow(
       suite.db,
-      guest("00000000-0000-4000-8000-000000000012", "g2 olives", MARTA, LUIS),
+      guest(
+        "00000000-0000-4000-8000-000000000012",
+        "2026-10-08T12:02:00.000Z",
+        "g2 olives",
+        MARTA,
+        LUIS,
+      ),
     );
     await insertRow(
       suite.db,
-      guest("00000000-0000-4000-8000-000000000013", "g3 almonds", MARTA, MARTA),
+      guest(
+        "00000000-0000-4000-8000-000000000013",
+        "2026-10-08T12:03:00.000Z",
+        "g3 almonds",
+        MARTA,
+        MARTA,
+      ),
     );
     const marta = JSON.parse(await fileOf(MARTA)) as {
       entries: { item: string; yourPart: string[] }[];
@@ -464,12 +476,13 @@ describe("ADJUSTMENTS_PERSONAL_DATA", () => {
   });
 
   it("names no person and carries no note", async () => {
-    await seedFixture();
+    const notes = fixtureRows(await seedFixture()).map((row) => row.note);
     const files = { marta: await fileOf(MARTA), luis: await fileOf(LUIS), ana: await fileOf(ANA) };
     expect(files.marta).toContain("Grilled squid");
     for (const id of [MARTA, LUIS, ANA]) expect(files.marta, id).not.toContain(id);
+    for (const id of [MARTA, ANA]) expect(files.luis, id).not.toContain(id);
     for (const [who, text] of Object.entries(files)) {
-      for (const note of NOTES) expect(text, `${who}: ${note}`).not.toContain(note);
+      for (const note of notes) expect(text, `${who}: ${note}`).not.toContain(note);
     }
   });
 });
