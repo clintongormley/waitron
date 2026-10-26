@@ -27,7 +27,7 @@ export const helpEn = {
   "help.floor.needs_moving":
     "Nobody can be seated at this table until this is settled. Leave it here keeps the table where it stands until the floor is next laid out, so it can be used straight away.",
   "help.floor.ready_bar":
-    "Tables with food ready to take out. Tap one to open it; Open opens the first.",
+    "Tables with food ready to take out, the one waiting longest first. Tables in amber, whose food has waited as long as its station's Ready warning time, go before the rest. Tap one to open it; Open opens the first.",
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
   "help.order.send":
@@ -75,7 +75,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.floor.needs_moving":
     "No se puede sentar a nadie en esta mesa hasta resolverlo. Dejar aquí mantiene la mesa donde está hasta la próxima vez que se prepare la sala, y así se puede usar ya.",
   "help.floor.ready_bar":
-    "Mesas con comida lista para llevar. Toca una para abrirla; Abrir abre la primera.",
+    "Mesas con comida lista para llevar, primero la que más espera. Las mesas en ámbar, cuya comida ha esperado tanto como el tiempo de Listo sin recoger de su estación, van antes que las demás. Toca una para abrirla; Abrir abre la primera.",
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.order.send":

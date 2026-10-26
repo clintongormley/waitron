@@ -66,15 +66,20 @@ function table(over: Partial<TableState> = {}): TableState {
   };
 }
 
-const ready = (...byStation: [string, string, number][]): TableSignal => ({
+/** A station's ready food: id, name, count, and optionally its oldest ready time and warning minutes. */
+type ReadyStation = [string, string, number, (string | null)?, number?];
+
+const ready = (...byStation: ReadyStation[]): TableSignal => ({
   kind: "ready",
-  byStation: byStation.map(([stationId, stationName, count]) => ({
-    stationId,
-    stationName,
-    count,
-    oldestReadyAt: null,
-    readyWarningAfterMinutes: 3,
-  })),
+  byStation: byStation.map(
+    ([stationId, stationName, count, oldestReadyAt = null, readyWarningAfterMinutes = 3]) => ({
+      stationId,
+      stationName,
+      count,
+      oldestReadyAt,
+      readyWarningAfterMinutes,
+    }),
+  ),
 });
 
 const zone = (id: string, name: string, displayOrder: number): FloorZone => ({
@@ -93,7 +98,7 @@ const zone = (id: string, name: string, displayOrder: number): FloorZone => ({
 const table2 = (count = 3) => table({ signals: [ready(["bar", "Bar", count])] });
 const table8 = (
   over: Partial<TableState> = {},
-  stations: [string, string, number][] = [
+  stations: ReadyStation[] = [
     ["bar", "Bar", 1],
     ["kitchen", "Kitchen", 2],
   ],
@@ -214,6 +219,92 @@ describe("till-floor-screen: the Ready bar", () => {
     for (const button of [...tableButtons, openButton(el)]) {
       expect(nameOf(button)).not.toMatch(/listos/i);
     }
+  });
+});
+
+const minute = 60_000;
+/** The ISO time `ms` before the file's fixed `now`. */
+const ago = (ms: number) => new Date(now - ms).toISOString();
+const readyAt = (...stations: ReadyStation[]) => table({ signals: [ready(...stations)] });
+const readyAt8 = (...stations: ReadyStation[]) => table8({}, stations);
+const title = (el: TillFloorScreen) =>
+  el.shadowRoot!.getElementById(bar(el)!.getAttribute("aria-labelledby")!)!.textContent!.trim();
+const warningEntries = (el: TillFloorScreen) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-ready-table][data-warning]")].map(
+    (entry) => entry.dataset.readyTable,
+  );
+/** Table 2 calm at 2 minutes, Table 8 at 4 minutes past its station's 3. */
+const warningCase = () => [
+  readyAt(["bar", "Bar", 1, ago(2 * minute), 3]),
+  readyAt8(["grill", "Grill", 2, ago(4 * minute), 3]),
+];
+
+describe("till-floor-screen: the Ready bar's warning", () => {
+  it("a calm bar reads Ready and lists the longest-waiting table first", async () => {
+    const el = await mountFloor([
+      readyAt(["bar", "Bar", 1, ago(minute), 3]),
+      readyAt8(["bar", "Bar", 2, ago(2 * minute), 3]),
+    ]);
+    expect(title(el)).toBe("Ready");
+    expect(entries(el)).toEqual(["Table 8 · 2", "Table 2 · 1"]);
+    expect(el.shadowRoot!.querySelector("[data-warning]")).toBeNull();
+    const seen = opened(el);
+    openButton(el).click();
+    expect(seen).toEqual([{ tableId: "t8", seated: true }]);
+    expect(openButton(el).getAttribute("aria-label")).toBe("Open Table 8");
+  });
+
+  it("once food has waited its station's minutes, the bar warns and names that table first with its minutes", async () => {
+    const el = await mountFloor(warningCase());
+    expect(title(el)).toBe("Ready 4 min");
+    expect(bar(el)!.hasAttribute("data-warning")).toBe(true);
+    expect(entries(el)).toEqual(["Table 8 · 2", "Table 2 · 1"]);
+    expect(warningEntries(el)).toEqual(["t8"]);
+    const seen = opened(el);
+    openButton(el).click();
+    expect(seen).toEqual([{ tableId: "t8", seated: true }]);
+  });
+
+  it("a salad waiting longer stays calm and comes after the warning table", async () => {
+    const el = await mountFloor([
+      readyAt(["cold", "Cold", 1, ago(5 * minute), 6]),
+      readyAt8(["grill", "Grill", 1, ago(4.5 * minute), 3]),
+    ]);
+    expect(title(el)).toBe("Ready 4 min");
+    expect(entries(el)).toEqual(["Table 8 · 1", "Table 2 · 1"]);
+    expect(warningEntries(el)).toEqual(["t8"]);
+  });
+
+  it("a re-read with the oldest dish served turns the bar calm", async () => {
+    const el = await mountFloor(warningCase());
+    expect(title(el)).toBe("Ready 4 min");
+    el.tables = [table8({ signals: [] }), readyAt(["bar", "Bar", 1, ago(2 * minute), 3])];
+    await el.updateComplete;
+    expect(title(el)).toBe("Ready");
+    expect(entries(el)).toEqual(["Table 2 · 1"]);
+    expect(el.shadowRoot!.querySelector("[data-warning]")).toBeNull();
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const el = await mountFloor(warningCase());
+    expect(title(el)).toBe("Listo 4 min");
+    expect(openButton(el).textContent!.trim()).toBe("Abrir ›");
+    expect(openButton(el).getAttribute("aria-label")).toBe("Abrir Table 8");
+  });
+
+  it("the section is named by its heading, minutes included", async () => {
+    const el = await mountFloor(warningCase());
+    await expect.element(bar(el)!).toHaveAccessibleName("Ready 4 min");
+    expect(bar(el)!.querySelector('[aria-live], [role="status"]')).toBeNull();
+  });
+
+  it("a till's summary has no minutes and no warning", async () => {
+    const el = await mountFloor(warningCase(), { handheld: false });
+    expect(el.shadowRoot!.querySelector("[data-station-summary] h2")!.textContent!.trim()).toBe(
+      "Ready",
+    );
+    expect(el.shadowRoot!.querySelector("[data-warning]")).toBeNull();
   });
 });
 

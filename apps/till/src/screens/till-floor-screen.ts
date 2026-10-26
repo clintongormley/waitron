@@ -123,9 +123,11 @@ import {
   type MapKind,
 } from "../state/floor-look.js";
 import {
+  readyBar,
   readyByStation,
   readyTables,
   signalOf,
+  type ReadyBarTable,
   type ReadyTable,
   type StationReady,
 } from "../state/table-signals.js";
@@ -2995,19 +2997,31 @@ export class TillFloorScreen extends LitElement {
     </section>`;
   }
 
-  /** The tables with food ready in the zones this Floor shows; Open opens the first listed. */
+  #readyEntries(): ReadyTable[] {
+    return readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)));
+  }
+
+  /**
+   * The tables with food ready in the zones this Floor shows, warning tables first; Open opens the
+   * first listed, the one waiting longest.
+   */
   #readyBar(): TemplateResult | typeof nothing {
     if (!this.handheld) return nothing;
-    const ready = readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)));
+    const { tables: ready, waitedMinutes } = readyBar(this.#readyEntries(), this.#drawnAt);
     const first = ready[0];
     if (first === undefined) return nothing;
     return html`<section
       class="ready-bar help-anchor"
       data-ready-bar
+      ?data-warning=${waitedMinutes !== null}
       aria-labelledby="ready-bar-title"
     >
       <h2 id="ready-bar-title">
-        <wt-icon name="floor-ready" size="sm"></wt-icon>${t("floor.ready_title")}
+        <wt-icon name="floor-ready" size="sm"></wt-icon>${
+          waitedMinutes === null
+            ? t("floor.ready_title")
+            : t("floor.ready_bar_waited").replace("{n}", String(waitedMinutes))
+        }
       </h2>
       <div class="ready-tables">${ready.map((entry) => this.#readyEntry(entry))}</div>
       <wt-button
@@ -3022,11 +3036,12 @@ export class TillFloorScreen extends LitElement {
     </section>`;
   }
 
-  #readyEntry(entry: ReadyTable): TemplateResult {
+  #readyEntry(entry: ReadyBarTable): TemplateResult {
     return html`<wt-button
       size="sm"
       variant="secondary"
       data-ready-table=${entry.tableId}
+      ?data-warning=${entry.warning}
       @click=${() => this.#openReady(entry)}
       >${t("floor.ready_bar_table")
         .replace("{table}", () => entry.name)
