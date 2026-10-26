@@ -114,6 +114,22 @@ it("a typed name asks before Escape, and Keep keeps it", async () => {
   expect(app.changes).toEqual([]);
 });
 
+it("a typed short name asks before Escape, and Keep keeps it", async () => {
+  const { app, panel, dialog } = await fixture();
+  const short = field(dialog, "short-name");
+  await set(panel, short, "LT");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  short.focus();
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+  await choose(app, "keep");
+  await expect.poll(async () => (await question(app)).open).toBe(false);
+  expect(dialog.open).toBe(true);
+  expect(field(dialog, "short-name").value).toBe("LT");
+  expect(app.changes).toEqual([]);
+});
+
 it("chosen tables ask before Cancel, and Discard closes without adding", async () => {
   const { app, panel, dialog } = await fixture();
   await chooseOptions(field(dialog, "made-of"), ["c3", "c4"]);
