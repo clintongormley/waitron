@@ -47,8 +47,6 @@ import type {
 import { openSentDish, openSentMore } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
-// Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
-
 const unit = {
   staffName: "Staff unit",
   staffAbbreviation: "su",
@@ -187,8 +185,8 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
   };
 }
 
-const mesa4 = table("t4", "4", party());
-const mesa7 = table(
+const table4 = table("t4", "4", party());
+const table7 = table(
   "t7",
   "7",
   party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
@@ -255,7 +253,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7]),
+    getTablesState: vi.fn().mockResolvedValue([table4, table7]),
     listZones: vi
       .fn()
       .mockResolvedValue([
@@ -374,7 +372,7 @@ async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promis
   await flush(el);
 }
 
-async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
+async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
   await flush(el);
   await signIn(el);
   emit(shell(el), "screen-select", { screen: "floor" });
@@ -434,13 +432,13 @@ describe("W69 unassigned table draft", () => {
   ) {
     const mounted = await mountApp(
       {
-        getTablesState: vi.fn().mockResolvedValue([mesa4, table("t9", "9", null)]),
+        getTablesState: vi.fn().mockResolvedValue([table4, table("t9", "9", null)]),
         ...overrides,
       },
       activity,
       theme,
     );
-    await openMesa(mounted.el, "t9");
+    await openTable(mounted.el, "t9");
     return mounted;
   }
   function unloadCancelled() {
@@ -466,7 +464,7 @@ describe("W69 unassigned table draft", () => {
     const { el } = await opening({
       seatTable: vi.fn(async () => {
         api.getTablesState.mockResolvedValue([
-          mesa4,
+          table4,
           table("t9", "9", party({ id: "v-new", mainBillId: "wo-new", tableIds: ["t9"] })),
         ]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
@@ -501,7 +499,7 @@ describe("W69 unassigned table draft", () => {
       }),
       seatTable: vi.fn(async () => {
         api.getTablesState!.mockResolvedValue([
-          mesa4,
+          table4,
           table(
             "t9",
             "9",
@@ -615,7 +613,7 @@ describe("W69 unassigned table draft", () => {
     const { el } = await opening({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([{ ...mesa4, zoneId: "z2" }, table("t9", "9", null)]),
+        .mockResolvedValue([{ ...table4, zoneId: "z2" }, table("t9", "9", null)]),
     });
     await tap(el, "Beer");
     const original = draft(el);
@@ -700,7 +698,7 @@ describe("W69 unassigned table draft", () => {
 
   it("party drafts still save automatically and leave without a form warning", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     expect(unloadCancelled()).toBe(false);
     await back(el);
@@ -794,7 +792,7 @@ it("asks where a refused line edit should be made and retries with the chosen st
     stations: [{ id: "kitchen", name: "Kitchen", open: true }],
   });
   const { el } = await mountApp({ updateOrderLine, askSaleDeadEnds });
-  const order = await openMesa(el);
+  const order = await openTable(el);
   emit(order, "change-line", {
     lineNo: 1,
     lineName: "Beer",
@@ -847,7 +845,7 @@ it.each(["light", "dark"] as const)(
       undefined,
       theme,
     );
-    const order = await openMesa(el);
+    const order = await openTable(el);
     emit(order, "change-line", {
       lineNo: 1,
       lineName: "Beer",
@@ -893,7 +891,7 @@ describe("dead-end questions with no timely answer", () => {
       updateOrderLine: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
       askSaleDeadEnds: vi.fn(() => new Promise(() => {})),
     });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     emit(order, "change-line", {
       lineNo: 1,
@@ -917,7 +915,7 @@ describe("dead-end questions with no timely answer", () => {
     let answer!: (value: unknown) => void;
     const askDraftDeadEnds = vi.fn(() => new Promise((resolve) => (answer = resolve)));
     const { el } = await mountApp({ askDraftDeadEnds });
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settleTimers(el);
@@ -976,7 +974,7 @@ it("saves an automatic-warning station choice on the matching live draft line", 
     stations: [{ id: "kitchen", name: "Kitchen", open: true }],
   }));
   const { el } = await mountApp({ askDraftDeadEnds });
-  await openMesa(el);
+  await openTable(el);
   await tap(el, "Beer");
   await tap(el, "Steak");
   await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
@@ -1018,7 +1016,7 @@ it("refreshes inline routing and keeps the outbox after a direct Send station re
     }));
   const submitDraft = vi.fn().mockRejectedValueOnce({ code: "station.no_replacement" });
   const { el } = await mountApp({ askDraftDeadEnds, submitDraft });
-  await openMesa(el);
+  await openTable(el);
   await tap(el, "Beer");
   await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
   await act(el, "send-all");
@@ -1039,7 +1037,7 @@ it("refreshes inline routing and keeps the outbox after a direct Send station re
 it("keeps direct Send available when the automatic station question fails", async () => {
   const askDraftDeadEnds = vi.fn().mockRejectedValue(new TypeError("offline"));
   const { el } = await mountApp({ askDraftDeadEnds });
-  await openMesa(el);
+  await openTable(el);
   await tap(el, "Beer");
   await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
   await flush(el);
@@ -1062,7 +1060,7 @@ function lateSaveLiveFloor() {
   const save = server.saveDraft.getMockImplementation()!;
   return {
     getTablesState: vi.fn(async () =>
-      [mesa4, mesa7].map((each) => ({
+      [table4, table7].map((each) => ({
         ...each,
         party: {
           ...each.party!,
@@ -1136,7 +1134,7 @@ afterEach(cleanupWidgets);
 describe("till-app: a table's draft is kept on the server", () => {
   it("keeps each bill's draft separate when switching and returning", async () => {
     const { el } = await mountApp();
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
 
     emit(order, "take-payment", { workingOrderId: "wo-check" });
@@ -1158,7 +1156,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("waits for the old bill's save before showing the next bill's draft", async () => {
     const { el } = await mountApp();
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     let answer!: () => void;
     api.saveDraft.mockImplementationOnce(async (partyId, save) => {
@@ -1180,7 +1178,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("retains the current bill and edits when its draft save gets no answer", async () => {
     const { el } = await mountApp();
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     api.saveDraft.mockRejectedValue(new TypeError("offline"));
 
@@ -1206,7 +1204,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("ignores a late draft response from the bill left behind", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     let answer!: () => void;
     api.listDrafts.mockImplementationOnce(async (partyId) => {
@@ -1233,7 +1231,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("saves an edit made during the bill switch to the original bill", async () => {
     const { el } = await mountApp();
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     let answer!: () => void;
     api.saveDraft.mockImplementationOnce(async (partyId, save) => {
@@ -1256,7 +1254,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("saves the draft on leaving the table, and sends nothing to the kitchen", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
     expect(api.saveDraft).not.toHaveBeenCalled();
@@ -1272,7 +1270,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("shows Mesa 4 on the floor with an unsent-order mark once the save has landed", async () => {
     const { el } = await mountApp(lateSaveLiveFloor());
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
 
@@ -1288,7 +1286,7 @@ describe("till-app: a table's draft is kept on the server", () => {
       ...lateSaveLiveFloor(),
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Flan");
 
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -1299,7 +1297,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("restores the draft from the server on coming back to the table", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await back(el);
 
@@ -1312,7 +1310,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("restores the draft after the till is reloaded", async () => {
     const first = await mountApp();
-    await openMesa(first.el);
+    await openTable(first.el);
     await tap(first.el, "Beer");
     await tap(first.el, "Flan");
     await back(first.el);
@@ -1320,7 +1318,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     const saves = server.saveDraft.mock.calls.length;
 
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
 
     expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
     expect(server.saveDraft.mock.calls.length).toBe(saves);
@@ -1328,7 +1326,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("saves three taps on Beer as one line, Beer ×3, in one save once the taps stop", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Beer");
     await tap(el, "Beer");
@@ -1345,7 +1343,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("saves the draft before opening another table", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await back(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
@@ -1364,7 +1362,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("saves the draft when the Order tab is left for the floor", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Flan");
 
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -1376,7 +1374,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("A738 asks before leaving a staged table line for Parked and Keep retains the draft", async () => {
     const { el } = await mountApp();
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     const store = draft(el);
     const picker = await openDraftLine(order, 0);
@@ -1421,7 +1419,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("saves a course picked for a line with the draft", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Flan");
     const form = await openDraftLine(tableOrder(el)!, 0);
     const picker = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
@@ -1460,7 +1458,7 @@ describe("till-app: a table's draft is kept on the server", () => {
         revision: 0,
       }),
     });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
     await flush(el);
@@ -1483,7 +1481,7 @@ describe("till-app: an order that moves to another party", () => {
     const { el } = await mountApp({
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
-    await openMesa(el);
+    await openTable(el);
     server.save("v9", {
       billId: "wo-4",
       draftId: null,
@@ -1508,7 +1506,7 @@ describe("till-app: an order that moves to another party", () => {
     await tap(el, "Beer");
     api.getTablesState.mockResolvedValue([
       table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] })),
-      mesa7,
+      table7,
     ]);
 
     emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
@@ -1530,7 +1528,7 @@ describe("till-app: signing out with a draft", () => {
     const reload = vi.fn();
     const { el } = await mountApp();
     el.reload = reload;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenCalledOnce();
@@ -1565,7 +1563,7 @@ describe("till-app: signing out with a draft", () => {
     const submitDraft = vi.fn(() => new Promise(() => {}));
     const { el } = await mountApp({ submitDraft }, activity as never);
     el.reload = reload;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await act(el, "fire-all");
     expect(submitDraft).toHaveBeenCalledOnce();
@@ -1585,7 +1583,7 @@ describe("till-app: signing out with a draft", () => {
     const reload = vi.fn();
     const { el } = await mountApp();
     el.reload = reload;
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenCalledOnce();
@@ -1609,7 +1607,7 @@ describe("till-app: signing out with a draft", () => {
 
   it("ends the session without starting a save and retains its person's local candidate", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     emit(tableOrder(el)!, "logout");
@@ -1640,7 +1638,7 @@ describe("till-app: signing out with a draft", () => {
   it("never sends one person's queued save after another has signed in", async () => {
     let answer!: () => void;
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       const sentBy = server.personId;
       await new Promise<void>((resolve) => (answer = resolve));
@@ -1705,7 +1703,7 @@ describe("till-app: switching the device's profile with a table order open", () 
       switchDeviceProfile,
       saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await askToSwitch(el);
@@ -1720,7 +1718,7 @@ describe("till-app: switching the device's profile with a table order open", () 
   it("saves a change still waiting to be saved before the switch is sent", async () => {
     const switchDeviceProfile = switchStub();
     const { el } = await mountApp({ ...profiles, switchDeviceProfile });
-    await openMesa(el);
+    await openTable(el);
     press(el, "Beer");
 
     await askToSwitch(el);
@@ -1744,7 +1742,7 @@ describe("till-app: switching the device's profile with a table order open", () 
         .mockResolvedValueOnce(till(drillFormFactor))
         .mockImplementationOnce(() => new Promise((resolve) => (answerTill = resolve))),
     });
-    await openMesa(el);
+    await openTable(el);
 
     await askToSwitch(el);
 
@@ -1773,7 +1771,7 @@ describe("till-app: switching the device's profile with a table order open", () 
         .mockResolvedValueOnce(till(drillFormFactor))
         .mockImplementationOnce(() => new Promise((resolve) => (answerTill = resolve))),
     });
-    await openMesa(el);
+    await openTable(el);
     await askToSwitch(el);
     const dialog = profileDialog(el)!;
     const native = dialog
@@ -1803,7 +1801,7 @@ describe("till-app: switching the device's profile with a table order open", () 
         status: 409,
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     press(el, "Beer");
 
     await askToSwitch(el);
@@ -1819,9 +1817,9 @@ describe("till-app: switching the device's profile with a table order open", () 
     const { el } = await mountApp({
       ...profiles,
       switchDeviceProfile,
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, unseated]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, unseated]),
     });
-    await openMesa(el, "t9");
+    await openTable(el, "t9");
     await tap(el, "Beer");
     expect(rows(el)).toEqual(["Beer ×1"]);
 
@@ -1836,7 +1834,7 @@ describe("till-app: switching the device's profile with a table order open", () 
 describe("till-app: a save the server refuses", () => {
   it("shows the draft another device saved, says so, and does not save over it", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     server.save("v1", {
       billId: "wo-4",
       draftId: null,
@@ -1879,7 +1877,7 @@ describe("till-app: a save the server refuses", () => {
         ownerName: "Sam",
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     const reads = api.listDrafts.mock.calls.length;
     await tap(el, "Beer");
 
@@ -1895,7 +1893,7 @@ describe("till-app: a save the server refuses", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await back(el);
@@ -1907,7 +1905,7 @@ describe("till-app: a save the server refuses", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await back(el);
@@ -1923,7 +1921,7 @@ describe("till-app: a save the server refuses", () => {
         saveDraft: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
       });
       expect(currentLocale()).toBe(locale);
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
 
       await back(el);
@@ -1937,7 +1935,7 @@ describe("till-app: a save the server refuses", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "session.required", status: 401 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await back(el);
@@ -1967,7 +1965,7 @@ describe("till-app: sending the draft", () => {
         listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: destinations }),
         ...overrides,
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await tap(el, "Steak");
       await tap(el, "Flan");
@@ -2154,7 +2152,7 @@ describe("till-app: sending the draft", () => {
         }),
         ...overrides,
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Steak");
       await tap(el, "Beer");
       await tap(el, "Flan");
@@ -2169,8 +2167,8 @@ describe("till-app: sending the draft", () => {
           groups: [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts],
         });
         api.getTablesState!.mockResolvedValue([
-          { ...mesa4, party: { ...mesa4.party!, revision: 4 } },
-          mesa7,
+          { ...table4, party: { ...table4.party!, revision: 4 } },
+          table7,
         ]);
         throw {
           code: when === "party" ? "party.out_of_date" : "group.not_held",
@@ -2245,7 +2243,7 @@ describe("till-app: sending the draft", () => {
         floor(el)!.tables.find((each) => each.id === "t4")?.party?.revision ?? null;
       expect(t4Revision()).toBe(4);
 
-      answerOlder([mesa4, mesa7]);
+      answerOlder([table4, table7]);
       await flush(el, 6);
       expect(t4Revision()).toBe(4);
     });
@@ -2276,16 +2274,16 @@ describe("till-app: sending the draft", () => {
         api.submitDraft!.mockReset().mockImplementationOnce(() => {
           api.getTablesState!.mockResolvedValue([
             {
-              ...mesa4,
+              ...table4,
               party:
                 snapshot === "missing-party"
                   ? null
                   : {
-                      ...mesa4.party!,
+                      ...table4.party!,
                       revision: snapshot === "older-party" ? 2 : 4,
                     },
             },
-            mesa7,
+            table7,
           ]);
           api.listGroups!.mockResolvedValue({
             revision: snapshot === "older-groups" ? 2 : 4,
@@ -2318,8 +2316,8 @@ describe("till-app: sending the draft", () => {
       api.submitDraft!.mockReset().mockImplementationOnce(() => {
         api.listGroups!.mockResolvedValue({ revision: 4, groups: [mains, desserts] });
         api.getTablesState!.mockResolvedValue([
-          { ...mesa4, party: { ...mesa4.party!, revision: 4 } },
-          mesa7,
+          { ...table4, party: { ...table4.party!, revision: 4 } },
+          table7,
         ]);
         throw { code: "group.not_held", status: 409, groupId: mains.id };
       });
@@ -2465,7 +2463,7 @@ describe("till-app: sending the draft", () => {
         reminder: null,
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
 
@@ -2500,7 +2498,7 @@ describe("till-app: sending the draft", () => {
 
   it("keeps the unsent lines in the draft, on the server too, after Fire selected now", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
     const kept = draft(el).lines[1];
@@ -2555,7 +2553,7 @@ describe("till-app: sending the draft", () => {
         }),
       ),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Flan");
     await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
     await toggle(el, "Flan");
@@ -2589,7 +2587,7 @@ describe("till-app: sending the draft", () => {
         .fn(server.submitDraft)
         .mockRejectedValueOnce(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await act(el, "fire-all");
@@ -2607,7 +2605,7 @@ describe("till-app: sending the draft", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
     const reads = api.listDrafts.mock.calls.length;
@@ -2639,7 +2637,7 @@ describe("till-app: sending the draft", () => {
         throw new TypeError("Failed to fetch");
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
     await toggle(el, "Beer");
@@ -2668,7 +2666,7 @@ describe("till-app: sending the draft", () => {
         menus: [{ menuId: "lunch", liveVersionId: "v2" }],
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     api.listZoneOffers.mockResolvedValue(catalogue("v2"));
 
@@ -2695,7 +2693,7 @@ describe("till-app: sending the draft", () => {
         menus: [{ menuId: "lunch", liveVersionId: "v2" }],
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
 
@@ -2713,7 +2711,7 @@ describe("till-app: sending the draft", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue({ code: "draft.out_of_date", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const reads = api.listDrafts.mock.calls.length;
 
@@ -2734,7 +2732,7 @@ describe("till-app: sending the draft", () => {
         ownerName: "Sam",
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     server.drafts[0]!.ownerId = "p2";
@@ -2754,7 +2752,7 @@ describe("till-app: sending the draft", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue({ code: "draft.taken_over", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await act(el, "fire-all");
@@ -2764,7 +2762,7 @@ describe("till-app: sending the draft", () => {
 
   it("reloads the draft, sends nothing and says so when the saved draft no longer lines up", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     draft(el).setLineExtras(0, { note: "cold" });
     await tap(el, "Beer");
@@ -2783,7 +2781,7 @@ describe("till-app: sending the draft", () => {
 
   it("sends nothing for lines that are not in the party's draft", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const elsewhere = new WorkingOrderStore();
 
@@ -2803,7 +2801,7 @@ describe("till-app: sending the draft", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await act(el, "fire-all");
@@ -2819,7 +2817,7 @@ describe("till-app: sending the draft", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await act(el, "fire-all");
@@ -2832,7 +2830,7 @@ describe("till-app: sending the draft", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await act(el, "fire-all");
@@ -2849,7 +2847,7 @@ describe("till-app: sending the draft", () => {
         saveDraft: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
       });
       expect(currentLocale()).toBe(locale);
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
 
       await act(el, "fire-all");
@@ -2878,7 +2876,7 @@ describe("till-app: a refused save when the draft is sent", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     await flush(el);
@@ -2896,7 +2894,7 @@ describe("till-app: a refused save when the draft is sent", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "session.required", status: 401 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await act(el, "fire-all");
@@ -2909,7 +2907,7 @@ describe("till-app: a refused save when the draft is sent", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     const floorReads = api.getTablesState.mock.calls.length;
 
@@ -2927,7 +2925,7 @@ describe("till-app: a draft that cannot be saved or read", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
 
     await back(el);
@@ -2939,7 +2937,7 @@ describe("till-app: a draft that cannot be saved or read", () => {
     const { el } = await mountApp({
       listDrafts: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
 
     expect(tableOrder(el)).not.toBeNull();
     expect(browser(el)).toBeNull();
@@ -2952,7 +2950,7 @@ describe("till-app: signing out while a save is out", () => {
   it("starts no save after sign-out begins", async () => {
     let answer!: () => void;
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
       return server.snapshot(server.save(partyId, save));
@@ -2980,7 +2978,7 @@ describe("till-app: a Send the session outlives", () => {
   it("sends nothing as the next person when Send was waiting on a save at sign-out", async () => {
     const sentBy: string[] = [];
     const { el } = await mountApp({ submitDraft: submitRecordingWho(sentBy) });
-    await openMesa(el);
+    await openTable(el);
     const answer = holdNextSave();
     await tap(el, "Beer");
     await act(el, "fire-all");
@@ -3003,7 +3001,7 @@ describe("till-app: a Send the session outlives", () => {
     const { el } = await mountApp({
       submitDraft: submitRecordingWho(sentBy, (resolve) => (lose = resolve)),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await act(el, "fire-all");
     expect(sentBy).toEqual(["p1"]);
@@ -3028,7 +3026,7 @@ describe("till-app: a Send the session outlives", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     const read = server.listDrafts.getMockImplementation()!;
     server.listDrafts.mockImplementationOnce(async (partyId: string) => {
       await new Promise<void>((resolve) => (answer = resolve));
@@ -3055,10 +3053,10 @@ describe("till-app: a Send the session outlives", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
-    await openMesa(el);
+    await openTable(el);
     api.getTablesState.mockImplementationOnce(async () => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return [mesa4, mesa7];
+      return [table4, table7];
     });
     await tap(el, "Beer");
     await act(el, "fire-all");
@@ -3082,7 +3080,7 @@ describe("till-app: a Send the session outlives", () => {
         menus: [{ menuId: "lunch", liveVersionId: "v2" }],
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     api.listZoneOffers.mockImplementationOnce(async () => {
       await new Promise<void>((resolve) => (answer = resolve));
       return catalogue("v2", { Beer: "6.00" });
@@ -3105,7 +3103,7 @@ describe("till-app: a Send the session outlives", () => {
   it("leaves the next person where they are when the reads after a Send answer after sign-out", async () => {
     let answer!: () => void;
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     api.getTabLines.mockImplementationOnce(async () => {
       await new Promise<void>((resolve) => (answer = resolve));
       return { lines: [], revision: 0 };
@@ -3130,7 +3128,7 @@ describe("till-app: a Send the session outlives", () => {
 });
 
 describe("till-app: leaving a draft while a save is out, then signing out", () => {
-  const mesa9 = table("t9", "9", null);
+  const table9 = table("t9", "9", null);
   const sideBySide: FormFactor = "till";
 
   /** Beer's save is held, and Steak is an edit waiting behind it, so the next save queues. */
@@ -3171,7 +3169,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     const { el } = await mountApp({
       listDrafts: vi.fn(who.wrap("listDrafts", server.listDrafts)),
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
       seatTable: vi.fn().mockResolvedValue({
         partyId: "v-new",
         tabId: "wo-new",
@@ -3248,7 +3246,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
   it("says nothing to the next person when Back to floor waited on a save at sign-out", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const answer = await editBehindHeldSave(el);
     await back(el);
 
@@ -3260,7 +3258,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
   it("says nothing to the next person when choosing another tab waited on a save at sign-out", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const answer = await editBehindHeldSave(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -3277,8 +3275,6 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       mergeBills: vi.fn().mockResolvedValue(undefined),
     });
 
-    /** Sam signs in, opens Mesa 7 from `floorTab` and splits a bill off it; then the held save
-     * answers. */
     async function samSplitsBeforeTheSaveAnswers(
       el: TillApp,
       answer: () => void,
@@ -3301,7 +3297,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
     it("keeps Sam on the split-off bill when Back to floor waited on the save and merges nothing back", async () => {
       const { el } = await mountApp(splitting());
-      await openMesa(el);
+      await openTable(el);
       const answer = await editBehindHeldSave(el);
       await back(el);
 
@@ -3314,7 +3310,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
     it("keeps Sam on the split-off bill when choosing another tab waited on the save and merges nothing back", async () => {
       const { el } = await mountApp(splitting());
-      await openMesa(el);
+      await openTable(el);
       const answer = await editBehindHeldSave(el);
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
@@ -3375,7 +3371,7 @@ describe("till-app: how long a send may take", () => {
 
   it("cuts a send with no answer off at 150 seconds, not before, and does not send it again", async () => {
     const { el } = await mountApp({ submitDraft: vi.fn(noAnswer) });
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
@@ -3407,7 +3403,7 @@ describe("till-app: how long a send may take", () => {
         .fn(server.submitDraft)
         .mockRejectedValueOnce(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
@@ -3423,7 +3419,7 @@ describe("till-app: how long a send may take", () => {
 
   it("unlocks the draft at the limit when the save before the send gets no answer", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
@@ -3453,7 +3449,7 @@ describe("till-app: how long a send may take", () => {
       return server.saveDraft(...args);
     });
     const { el } = await mountApp({ saveDraft });
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
@@ -3488,7 +3484,7 @@ describe("till-app: how long a send may take", () => {
           ),
       ),
     });
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
@@ -3506,7 +3502,7 @@ describe("till-app: how long a send may take", () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await openMesa(el);
+    await openTable(el);
     api.listDrafts.mockImplementation(noAnswer);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
@@ -3561,7 +3557,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
         reminder: null,
       }),
     });
-    await openMesa(mounted.el);
+    await openTable(mounted.el);
     return mounted;
   }
 
@@ -3656,7 +3652,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
       listZoneOffers: vi.fn().mockResolvedValue(inactive),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(inactive),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     expect(draft(el).lines[0]!.place).toEqual({ kind: "fire" });
     const sentStore = draft(el);
@@ -3798,11 +3794,11 @@ describe("till-app: a table open that another overtakes", () => {
 
   it("keeps the next table's draft on screen when an earlier table's read answers late", async () => {
     const sideBySide: FormFactor = "till";
-    let answerMesa7!: () => void;
+    let answerTable7!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
       listDrafts: vi.fn(async (partyId: string) => {
-        if (partyId === "v7") await new Promise<void>((resolve) => (answerMesa7 = resolve));
+        if (partyId === "v7") await new Promise<void>((resolve) => (answerTable7 = resolve));
         return server.listDrafts(partyId);
       }),
     });
@@ -3817,7 +3813,7 @@ describe("till-app: a table open that another overtakes", () => {
     await flush(el);
     expect(rows(el)).toEqual(["Beer ×1"]);
 
-    answerMesa7();
+    answerTable7();
     await flush(el);
 
     expect(browser(el)).not.toBeNull();
@@ -3877,7 +3873,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
         return { revision: 1, groups: [held] };
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     server.save("v9", {
       billId: "wo-4",
       draftId: null,
@@ -3901,7 +3897,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     });
     api.getTablesState.mockResolvedValue([
       table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] })),
-      mesa7,
+      table7,
     ]);
 
     emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
@@ -3961,7 +3957,7 @@ describe("till-app: a table open that the session outlives", () => {
 });
 
 describe("till-app: seating a free table while something else happens", () => {
-  const mesa9 = table("t9", "9", null);
+  const table9 = table("t9", "9", null);
 
   function seatingLater() {
     let answer!: () => void;
@@ -3976,7 +3972,7 @@ describe("till-app: seating a free table while something else happens", () => {
     const seat = seatingLater();
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
       seatTable: seat.seatTable,
     });
     await flush(el);
@@ -4004,7 +4000,7 @@ describe("till-app: seating a free table while something else happens", () => {
     const seat = seatingLater();
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
       seatTable: seat.seatTable,
     });
     await flush(el);
@@ -4030,7 +4026,7 @@ describe("till-app: seating a free table while something else happens", () => {
 describe("till-app: Split quantity on a draft line", () => {
   it("saves the rows kept apart, and a later tap of the same dish as a line of its own", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Beer");
     await tap(el, "Beer");
@@ -4070,7 +4066,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
           formFactor: "phone-portrait",
         }),
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await tap(el, "Beer");
       await tap(el, "Flan");
@@ -4115,7 +4111,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
           formFactor: "phone-portrait",
         }),
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       const tile = () =>
         [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
@@ -4142,7 +4138,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
     await page.viewport(1280, 720);
     try {
       const { el } = await mountApp();
-      await resized(await openMesa(el));
+      await resized(await openTable(el));
       await tap(el, "Beer");
 
       expect(visible(el, "[data-browsing]")).toBe(true);
@@ -4180,7 +4176,7 @@ describe("till-app: the next person after an ordinary sign-out", () => {
         },
       ],
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el, 6);
@@ -4205,7 +4201,7 @@ describe("till-app: the last-added bar across a save", () => {
 
   it("still shows the line after the save answers, and +1 on it is saved", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -4224,7 +4220,7 @@ describe("till-app: the last-added bar across a save", () => {
 
   it("follows its line when the save's answer replaces the lines", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     draft(el).setLineExtras(0, { note: "no ice" });
     await tap(el, "Beer");
@@ -4247,7 +4243,7 @@ describe("till-app: the last-added bar across a save", () => {
 });
 
 describe("till-app: two table opens overlapping", () => {
-  const mesa9 = table("t9", "9", null);
+  const table9 = table("t9", "9", null);
   const state = (el: TillApp) => {
     const own = el as unknown as { activeTableId?: string; activeTabId?: string };
     return {
@@ -4263,7 +4259,7 @@ describe("till-app: two table opens overlapping", () => {
     let answerLines!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
       seatTable: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerSeat = resolve));
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
@@ -4297,7 +4293,7 @@ describe("till-app: two table opens overlapping", () => {
 });
 
 describe("till-app: a table open whose last wait outlives the session", () => {
-  const mesa9 = table("t9", "9", null);
+  const table9 = table("t9", "9", null);
 
   it("leaves the next person on their floor when the table's lines answer after a sign-out", async () => {
     let answerLines!: () => void;
@@ -4331,7 +4327,7 @@ describe("till-app: a table open whose last wait outlives the session", () => {
     let answerLines!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
       seatTable: vi
         .fn()
         .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
@@ -4410,7 +4406,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
 
   it("on Review, shows the server's draft there, says so, and sends nothing again", async () => {
     const { el } = await mountBeforeSave();
-    await openMesa(el);
+    await openTable(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Beer");
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
@@ -4430,7 +4426,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
 
   it("keeps the bar on the dish tapped when the server's draft still orders it", async () => {
     const { el } = await mountBeforeSave();
-    await openMesa(el);
+    await openTable(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Steak");
     expect(bar(el)).toContain("Steak ×1");
@@ -4464,7 +4460,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     noMerge: false,
   });
 
-  /** Saves a draft on Mesa 4's party straight into the server, as `personId` on another till. */
+  /** Saves a draft on Table 4's party straight into the server, as `personId` on another till. */
   function savedBy(personId: string, personName: string, ...menuItemIds: string[]) {
     const [signedIn, name] = [server.personId, server.personName];
     server.personId = personId;
@@ -5041,7 +5037,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("shows a price the publish changed in the draft and waits; Confirm saves the lines under the new version", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -5061,7 +5057,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("takes the new version without asking, and saves it, when nothing in the draft changed", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
 
@@ -5074,7 +5070,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("keeps the draft as it was on Cancel, and a later poll does not ask again", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     await publish(el, { Beer: "6.00" });
@@ -5090,7 +5086,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("asks nothing while a send is out, and asks at the next poll once it has answered", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -5116,7 +5112,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("asks nothing while a save is out, and asks at the next poll once it has answered", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     let answer!: () => void;
@@ -5139,7 +5135,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("asks nothing while Move to is open, and asks at the next poll once it is closed", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await userEvent.click(
       [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
         (button) => button.querySelector(".name")?.textContent === "Beer",
@@ -5198,7 +5194,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       ],
     });
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     const screen = tableOrder(el)!.shadowRoot!;
@@ -5254,7 +5250,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       menuState: vi.fn().mockResolvedValue(state("v1")),
       listZoneOffers: vi.fn().mockResolvedValue(withChoices(catalogue("v1"))),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     await tap(el, "Steak");
@@ -5274,10 +5270,10 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     const withFloor: FormFactor = "till";
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(withFloor)),
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, table("t9", "9", null)]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table("t9", "9", null)]),
       menuState: vi.fn().mockResolvedValue(state("v1")),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     floor(el)!.shadowRoot!.querySelector<HTMLElement>('[data-table="t9"]')!.click();
@@ -5319,7 +5315,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       ],
     });
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     let answer!: () => void;
@@ -5351,7 +5347,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("still asks at the next poll when the publish's own offers read was overtaken by another read", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     let answerPollRead!: (offers: ZoneOfferCatalogue) => void;
@@ -5375,7 +5371,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
   });
 
-  /** Beer saved on Mesa 4 under v0, a version this till never read. */
+  /** Beer saved on Table 4 under v0, a version this till never read. */
   function savedUnderV0(): void {
     server.save("v1", {
       billId: "wo-4",
@@ -5411,7 +5407,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
         .mockResolvedValue(catalogue("v1")),
     });
 
-    await openMesa(el);
+    await openTable(el);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
     expect(refresh(el)).toBeNull();
 
@@ -5430,7 +5426,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
         .mockResolvedValueOnce(catalogue("v1"))
         .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve))),
     });
-    await openMesa(el);
+    await openTable(el);
 
     await poll(el);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
@@ -5442,7 +5438,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("does not ask again at the next poll about a price Send found changed and the person put aside", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
@@ -5464,7 +5460,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("adopts nothing onto another line when the server's draft replaced the lines while it asked", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -5487,7 +5483,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("asks nothing, and keeps the draft as it was, when the new offers cannot be read", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await saved(el);
     api.listZoneOffers.mockRejectedValue({ code: "server.internal", status: 500 });
@@ -5523,7 +5519,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       ],
     });
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await answerRefresh(el, "cancel");
     api.listZoneOffers.mockRejectedValue({ code: "server.internal", status: 500 });
     api.menuState.mockResolvedValue(state("v2"));
@@ -5536,7 +5532,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("heads a line the publish took off the menu as staying unsent", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Flan");
     await saved(el);
     const v2 = catalogue("v2");
@@ -5554,7 +5550,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("flags a line the publish took off the menu once its offers are read, even with the question put aside", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -5596,7 +5592,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       ],
     });
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
-    await openMesa(el);
+    await openTable(el);
 
     await publish(el, { Beer: "6.00" });
     await saved(el);
@@ -5647,7 +5643,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
       listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", { Beer: "6.00" })),
     });
 
-    await openMesa(el);
+    await openTable(el);
 
     expect(rows(el)).toEqual(["Beer ×1"]);
     expect(changedLines(el)).toEqual(["Beer €6.00"]);
@@ -5666,7 +5662,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
         .mockResolvedValue(catalogue("v2", { Beer: "6.00" })),
     });
 
-    await openMesa(el);
+    await openTable(el);
     await saved(el);
 
     expect(refresh(el)).toBeNull();
@@ -5684,7 +5680,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
     savedAt("v1", "offer-beer");
     const { el } = await mountApp();
 
-    await openMesa(el);
+    await openTable(el);
     await saved(el);
 
     expect(refresh(el)).toBeNull();
@@ -5701,7 +5697,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
         menus: [{ menuId: "lunch", liveVersionId: "v2" }],
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     refresh(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
     await flush(el);
 
@@ -5745,7 +5741,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
   it("shows the server refusal on the line and direct Send all leaves it out, sending the rest", async () => {
     server.unavailable.add("offer-flan");
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -5765,7 +5761,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       const { el } = await mountApp({
         menuState: vi.fn().mockResolvedValue(state(["product-offer-flan"])),
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await tap(el, "Flan");
       vi.advanceTimersByTime(15_000);
@@ -5812,7 +5808,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       }),
     });
 
-    await openMesa(el);
+    await openTable(el);
 
     expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
     expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
@@ -5902,7 +5898,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
         listZoneOffers: vi.fn().mockResolvedValue(beerWithLemon(true)),
       });
 
-      await openMesa(el);
+      await openTable(el);
 
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
@@ -5918,7 +5914,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
         listZoneOffers: vi.fn().mockResolvedValue(beerWithLemon(false)),
       });
 
-      await openMesa(el);
+      await openTable(el);
 
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(flagText(el)).toEqual([]);
@@ -5963,7 +5959,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       const { el } = await mountApp({
         listZoneOffers: vi.fn().mockResolvedValue(onlyFlanAsExtra()),
       });
-      await openMesa(el);
+      await openTable(el);
 
       expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
       expect(flagText(el)).toEqual([t("basket.blocked.not_sold_separately")]);
@@ -5984,7 +5980,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
           listZoneOffers: vi.fn().mockResolvedValue(onlyFlanAsExtra()),
           menuState: vi.fn().mockResolvedValue(state([])),
         });
-        await openMesa(el);
+        await openTable(el);
         vi.advanceTimersByTime(15_000);
         await flush(el, 6);
 
@@ -6004,7 +6000,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
           .fn()
           .mockRejectedValue({ code: "product.not_sold_separately", status: 409, productId: "x" }),
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await saved(el);
 
@@ -6017,7 +6013,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
           .fn(server.saveDraft)
           .mockRejectedValueOnce({ code: "product.not_sold_separately", status: 409 }),
       });
-      await openMesa(el);
+      await openTable(el);
       api.listZoneOffers.mockResolvedValue(onlyFlanAsExtra());
       await tap(el, "Flan");
       await saved(el);
@@ -6029,7 +6025,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
   it("takes a flagged line out on Remove, and saves that", async () => {
     server.unavailable.add("offer-flan");
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -6047,7 +6043,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       const { el } = await mountApp({
         menuState: vi.fn().mockResolvedValue(state(["product-offer-flan"])),
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await tap(el, "Flan");
       vi.advanceTimersByTime(15_000);
@@ -6075,7 +6071,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     try {
       server.unavailable.add("offer-flan");
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state([])) });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Flan");
       await saved(el);
       expect(flagText(el)).toEqual([t("basket.blocked.server")]);
@@ -6095,7 +6091,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     try {
       server.unavailable.add("offer-flan");
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state([])) });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await tap(el, "Flan");
       await saved(el);
@@ -6136,7 +6132,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     server.unavailable.add("offer-flan");
     server.unavailable.add("offer-beer");
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
@@ -6207,7 +6203,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     /** Opens Mesa 4 while the zone offers no menu; the question that raises is still open. */
     async function openWithMenuOff(): Promise<TillApp> {
       const { el } = await mountApp({ listZoneOffers: vi.fn().mockResolvedValue(menuOff()) });
-      await openMesa(el);
+      await openTable(el);
       expect(draft(el).lines.map((line) => line.notOffered)).toEqual([true]);
       expect(refresh(el)).not.toBeNull();
       return el;
@@ -6336,7 +6332,7 @@ describe("line-edit unsaved station choice", () => {
     });
     const mounted = await mountApp({ updateOrderLine, askSaleDeadEnds }, sessionActivity);
     const { el } = mounted;
-    const order = await openMesa(el);
+    const order = await openTable(el);
     const change = () =>
       emit(order, "change-line", {
         lineNo: 1,
@@ -6685,7 +6681,7 @@ describe("recalled draft source splitting", () => {
   it("direct Fire resends a recalled source even after its fresh offer's period ends", async () => {
     seedSource();
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const outbox = draft(el);
     const line = outbox.lines[0]!;
     expect(line.source?.line.id).toBe("source-7");
@@ -6747,7 +6743,7 @@ describe("recalled draft source splitting", () => {
       }),
       ...overrides,
     });
-    const order = await openMesa(mounted.el);
+    const order = await openTable(mounted.el);
     const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
     if (review?.checkVisibility()) await userEvent.click(review);
     await order.updateComplete;
@@ -6894,7 +6890,7 @@ describe("recalled draft source splitting", () => {
       listAdjustmentReasons: vi.fn(),
       applyAdjustment: vi.fn(),
     });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
     if (review?.checkVisibility()) await userEvent.click(review);
@@ -6928,7 +6924,7 @@ describe("recalled draft source splitting", () => {
   it("retires fresh Discard while its save waits across an API replacement", async () => {
     const discardDraft = vi.fn();
     const { el } = await mountApp({ discardDraft });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     const old = draft(el);
     const saved = server.saveDraft.getMockImplementation()!;
     let release!: () => void;
@@ -7254,7 +7250,7 @@ describe("recalled draft source splitting", () => {
           };
         });
       const { el } = await mountApp({ discardDraft });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
       if (review?.checkVisibility()) await userEvent.click(review);
@@ -7292,7 +7288,7 @@ describe("recalled draft source splitting", () => {
         }),
     );
     const { el } = await mountApp({ discardDraft, saveDraft });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     await tap(el, "Beer");
     const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
     if (review?.checkVisibility()) await userEvent.click(review);
@@ -7895,7 +7891,7 @@ describe("recalled draft source splitting", () => {
   async function opening(split: ReturnType<typeof vi.fn>) {
     seedSource();
     const mounted = await mountApp({ splitHeldLineIntoUnits: split });
-    const order = await openMesa(mounted.el);
+    const order = await openTable(mounted.el);
     const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
     if (review?.checkVisibility()) await userEvent.click(review);
     await order.updateComplete;
@@ -8208,7 +8204,7 @@ describe("recalled draft source splitting", () => {
   it("keeps fresh-line splitting local without calling the recorded-family command", async () => {
     const split = vi.fn();
     const { el } = await mountApp({ splitHeldLineIntoUnits: split });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Beer");
     const order = tableOrder(el)!;
@@ -8330,7 +8326,7 @@ describe("recalled draft source splitting", () => {
         recallToDraft: vi.fn(async () => ({ revision: 4, draft: recordRecall() })),
         ...overrides,
       });
-      const order = await openMesa(mounted.el);
+      const order = await openTable(mounted.el);
       return { ...mounted, order };
     }
 
@@ -8429,7 +8425,7 @@ describe("recalled draft source splitting", () => {
     it("a refreshed takeover retires an unconfirmed recalled note without saving or taking back the bill", async () => {
       seedSource();
       const { el } = await mountApp({ updateOrderLine: vi.fn() });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       const picker = await openDraftLine(order, 0);
       const note = picker
         .shadowRoot!.querySelector("wt-textarea")!
@@ -8864,7 +8860,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
         recordSale: vi.fn().mockRejectedValue(unsent),
         collectOrder: vi.fn().mockRejectedValue(unsent),
       });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       if (status === "placed") {
         await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
@@ -8905,7 +8901,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
           return save(...args);
         }),
       });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       emit(order, "bill-pay", { way, lines: [], amount: "3.00" });
       await flush(el);
@@ -8931,7 +8927,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
         recordSale: vi.fn().mockRejectedValue(unsent),
         collectOrder: vi.fn().mockRejectedValue(unsent),
       });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       emit(
         order,
@@ -8965,7 +8961,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
           return save(...args);
         }),
       });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       emit(
         order,
@@ -9009,7 +9005,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
           return save(...args);
         }),
       });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       emit(
         order,
@@ -9038,7 +9034,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
         return save(...args);
       }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     emit(shell(el), "find-bill-pay", {
       workingOrderId: "wo-4",
@@ -9065,7 +9061,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
         .fn()
         .mockRejectedValue({ code: "bill.unsent_dishes", billId: "wo-4", owners: [] }),
     });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     emit(order, "pay-tab", { method: "cash", tendered: "3.00" });
     await flush(el, 6);
     expect(banner(el)!.textContent).toContain("Send or remove the unsent dishes before paying.");
@@ -9086,7 +9082,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       }),
       takeBillPayment,
     });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     const payDialog = () => el.shadowRoot!.querySelector<HTMLElement>("till-bill-pay-dialog");
     const inPay = (selector: string) =>
       payDialog()!.shadowRoot!.querySelector<HTMLElement>(selector);
@@ -9135,7 +9131,7 @@ describe("A773 non-open bill draft restrictions", () => {
     "opening a %s bill keeps its Sent reads but accepts no fresh dishes",
     async (status) => {
       const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([bill(status)]) });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       await tap(el, "Beer");
       expect(rows(el)).toEqual([]);
       expect(browser(el)!.inert).toBe(true);
@@ -9153,7 +9149,7 @@ describe("A773 non-open bill draft restrictions", () => {
       mergeBills: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
       markServed: vi.fn().mockResolvedValue({ revision: 4 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     getPartyBills.mockResolvedValue([bill("placed")]);
     emit(tableOrder(el)!, "merge-bills", { fromBillId: "wo-check" });
@@ -9192,7 +9188,7 @@ describe("A773 known bill draft switch restrictions", () => {
       receiptAvailable: id !== "wo-4",
     }));
     const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue(bills) });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     emit(order, "take-payment", { workingOrderId: "wo-check" });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
@@ -9222,7 +9218,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("keeps a failed save separate from the saved order without an automatic retry", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     expect(rows(el)).toEqual([]);
     expect(candidate(el)?.textContent ?? "").toContain("Beer");
@@ -9237,7 +9233,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("retains the same person's candidate across sign-out and hides it from another person", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     emit(tableOrder(el)!, "logout");
     await flush(el, 6);
@@ -9256,7 +9252,7 @@ describe("A773 retained bill candidates in the app", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const settleTimers = async (ms: number) => {
@@ -9294,7 +9290,7 @@ describe("A773 retained bill candidates in the app", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn(() => new Promise<never>((_resolve, fail) => (reject = fail))),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
     const reads = api.listDrafts.mock.calls.length;
@@ -9327,7 +9323,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("names the signed-in person in each save, and the next person in theirs", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
     await flush(el);
@@ -9360,7 +9356,7 @@ describe("A773 retained bill candidates in the app", () => {
         stop: vi.fn(),
       };
       const { el } = await mountApp({}, activity as never);
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await tap(el, "Steak");
       draft(el).setLineExtras(1, { note: "No salt" });
@@ -9412,7 +9408,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("retains edits made after an unanswered save and keeps its late answer out of the candidate", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     const answer = holdNextSave();
     try {
       await tap(el, "Beer");
@@ -9465,13 +9461,13 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("finds the bill's candidate after relocation without applying its old party or expectation", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     emit(tableOrder(el)!, "logout");
     await flush(el, 6);
     api.getTablesState.mockResolvedValue([
       table("t4", "4", party({ id: "joined", mainBillId: "wo-4" })),
-      mesa7,
+      table7,
     ]);
     await reopen(el, "p1", "Ana");
     expect(candidate(el)?.textContent ?? "").toContain("Beer");
@@ -9495,7 +9491,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("requires an authoritative read before applying a reviewed candidate", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     api.listDrafts.mockRejectedValueOnce(new TypeError("offline"));
     expect(candidate(el)).not.toBeNull();
@@ -9512,7 +9508,7 @@ describe("A773 retained bill candidates in the app", () => {
     await page.viewport(1280, 900);
     try {
       const { el } = await mountApp();
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       api.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
       const readDrafts = api.listDrafts.getMockImplementation()!;
@@ -9548,7 +9544,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("discards only the local candidate without writing or sending the saved order", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     expect(candidate(el)).not.toBeNull();
     candidate(el)!.querySelector<HTMLElement>("[data-candidate-discard]")!.click();
@@ -9563,7 +9559,7 @@ describe("A773 retained bill candidates in the app", () => {
   });
   it("refreshes the visible bill on focus and separates a rival takeover from local edits", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await back(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
@@ -9594,7 +9590,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("refreshes every fifteen seconds and keeps confirmed authority after a failed periodic read", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       el.api = { ...api } as unknown as TillApi;
@@ -9621,7 +9617,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("retains unsaved work when the API is replaced and ignores the old save reply", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     let answer!: () => void;
     api.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
@@ -9645,7 +9641,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("protects retained candidates from browser unload until they are explicitly resolved", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     const before = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(before);
@@ -9660,7 +9656,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("keeps the candidate when the saved bill changes during explicit review", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     const originalRead = server.listDrafts.getMockImplementation()!;
     api.listDrafts.mockImplementationOnce(async (partyId) => {
@@ -9691,7 +9687,7 @@ describe("A773 retained bill candidates in the app", () => {
           await page.viewport(width, 900);
           try {
             const { el, host } = await mountApp({}, undefined, theme);
-            await openMesa(el);
+            await openTable(el);
             await loseSave(el);
             setLocale(locale);
             await flush(el, 6);
@@ -9724,7 +9720,7 @@ describe("A773 retained bill candidates in the app", () => {
         });
   it("keeps a pending reviewed candidate after leaving its table", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     const read = server.listDrafts.getMockImplementation()!;
     let answer!: () => void;
@@ -9749,7 +9745,7 @@ describe("A773 retained bill candidates in the app", () => {
   });
   it("starts another bill's candidate review while an old bill's read is still pending", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await loseSave(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -9810,7 +9806,7 @@ describe("direct line editing authority", () => {
       .fn()
       .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } });
     const { el } = await mountApp({ updateOrderLine });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     const ask = change();
     emit(order, "change-line", ask);
     await flush(el);
@@ -9832,7 +9828,7 @@ describe("direct line editing authority", () => {
         }),
     );
     const { el } = await mountApp({ updateOrderLine });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     emit(order, "change-line", change());
     await flush(el);
     await tap(el, "Beer");
@@ -9855,7 +9851,7 @@ describe("direct line editing authority", () => {
     async (kind) => {
       const updateOrderLine = vi.fn().mockResolvedValue({ revision: 1, party: null });
       const { el } = await mountApp({ updateOrderLine });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       const ask = change();
       const expectedEdit =
         kind === "missing"
@@ -9889,7 +9885,7 @@ describe("direct line editing authority", () => {
           }),
       );
       const { el } = await mountApp({ updateOrderLine });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       emit(order, "change-line", change());
       await flush(el);
       const refreshed = await server.listDrafts("v1");
@@ -9925,7 +9921,7 @@ describe("direct line editing authority", () => {
         }),
     );
     const { el } = await mountApp({ updateOrderLine });
-    const order = await openMesa(el);
+    const order = await openTable(el);
     emit(order, "change-line", change());
     await flush(el);
     expect(updateOrderLine).toHaveBeenCalledOnce();
@@ -9961,7 +9957,7 @@ describe("direct course and send editing authority", () => {
     it("carries the shown editing observation and reloads after the command", async () => {
       const write = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({ [method]: write });
-      const order = await openMesa(el);
+      const order = await openTable(el);
       const expectedEdit = observation();
       const reads = api.getTabLines.mock.calls.length;
       emit(order, type, { ...detail, expectedEdit });
@@ -9986,7 +9982,7 @@ describe("direct course and send editing authority", () => {
       async (kind) => {
         const write = vi.fn().mockResolvedValue(undefined);
         const { el } = await mountApp({ [method]: write });
-        const order = await openMesa(el);
+        const order = await openTable(el);
         const expectedEdit =
           kind === "missing"
             ? undefined
@@ -10019,7 +10015,7 @@ describe("direct course and send editing authority", () => {
             }),
         );
         const { el } = await mountApp({ [method]: write });
-        const order = await openMesa(el);
+        const order = await openTable(el);
         emit(order, type, { ...detail, expectedEdit: observation() });
         await flush(el);
         expect(write).toHaveBeenCalledOnce();
@@ -10047,7 +10043,7 @@ describe("direct course and send editing authority", () => {
             }),
         );
         const { el } = await mountApp({ [method]: write });
-        const order = await openMesa(el);
+        const order = await openTable(el);
         emit(order, type, { ...detail, expectedEdit: observation() });
         await flush(el);
         expect(write).toHaveBeenCalledOnce();
@@ -10133,7 +10129,7 @@ describe("held-line move editing authority", () => {
         })),
       ),
     });
-    return { el, order: await openMesa(el) };
+    return { el, order: await openTable(el) };
   }
 
   it.each([drillFormFactor, orderTabFormFactor])(
@@ -10279,7 +10275,7 @@ describe("automatic saved-draft routing", () => {
         askDraftDeadEnds,
         getTill: vi.fn().mockResolvedValue(till(formFactor)),
       });
-      await openMesa(el);
+      await openTable(el);
       await tap(el, "Beer");
       await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
       const saved = server.drafts[0]!;
@@ -10315,7 +10311,7 @@ describe("direct New order actions", () => {
       });
       const { el } = await mountApp({ submitDraft });
       try {
-        await openMesa(el);
+        await openTable(el);
         await tap(el, "Beer");
         await tap(el, "Steak");
         await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
@@ -10394,7 +10390,7 @@ describe("direct New order actions", () => {
 
   it("keeps a saved selection and its Move window through an unchanged focus refresh", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await userEvent.click(
       [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
         (button) => button.querySelector(".name")?.textContent === "Beer",
@@ -10440,7 +10436,7 @@ describe("direct New order actions", () => {
   }
   it("sends without a preview and empties the saved outbox only after the accepted response", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
     const outbox = draft(el);
@@ -10455,7 +10451,7 @@ describe("direct New order actions", () => {
   });
   it("fires only the ticked saved row and retains the unticked dish and its bill", async () => {
     const { el } = await mountApp();
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
     await toggle(el, "Steak");
@@ -10491,7 +10487,7 @@ describe("direct New order actions", () => {
         : [],
     }));
     const { el } = await mountApp({ submitDraft, askDraftDeadEnds });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await expect.poll(() => askDraftDeadEnds.mock.calls.length).toBe(1);
     await direct(el, "send-all");
@@ -10508,7 +10504,7 @@ describe("direct New order actions", () => {
     const { el } = await mountApp({
       saveDraft: vi.fn().mockRejectedValue({ code: "draft.out_of_date", status: 409 }),
     });
-    await openMesa(el);
+    await openTable(el);
     await tap(el, "Beer");
     await direct(el, "send-all");
     expect(api.submitDraft).not.toHaveBeenCalled();
