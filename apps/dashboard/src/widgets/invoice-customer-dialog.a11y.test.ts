@@ -113,4 +113,26 @@ describe.each(["light", "dark"] as const)("invoice customer dialog accessibility
       .not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it("checks Find's permission refusal in the bottom message beside the sign-in offer", async () => {
+    setLocale("en-GB");
+    const load = modules["./invoice-customer-dialog.ts"];
+    expect(load).toBeTypeOf("function");
+    await load!();
+    const api = {
+      findInvoiceCustomer: () => Promise.reject({ code: "authorization.not_permitted" }),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<InvoiceCustomerDialog>(
+      "dashboard-invoice-customer-dialog",
+      { api, open: true },
+      theme,
+    );
+    await type(el, "12345678Z");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=find]")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=admin-sign-in]"))
+      .not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

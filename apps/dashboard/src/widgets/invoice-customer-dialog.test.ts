@@ -150,6 +150,10 @@ async function bottomLine(el: InvoiceCustomerDialog): Promise<Element | null> {
   return formMessageOf(el.shadowRoot!.querySelector<WtFormActions>("wt-form-actions")!);
 }
 
+async function bottomText(el: InvoiceCustomerDialog): Promise<string | undefined> {
+  return (await bottomLine(el))?.textContent?.trim();
+}
+
 async function rows(el: InvoiceCustomerDialog): Promise<string[][]> {
   const table = el.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table");
   if (!table) return [];
@@ -377,6 +381,70 @@ describe.each([
     }
   });
 
+  it("leaves space between a download's refusal sentence and the sign-in button", async () => {
+    spyOnSaving();
+    const { el } = await mount(
+      async () => THREE,
+      () => Promise.reject({ code: "authorization.not_permitted" }),
+    );
+    await searched(el);
+    await pressDownload(el);
+    await expect.poll(() => refusalText(el)).toBe(words["invoice_customer.not_permitted"]);
+    const sentence = refusal(el)!
+      .querySelector("[data-test=refusal-text]")!
+      .getBoundingClientRect();
+    const button = refusal(el)!.querySelector("[data-test=admin-sign-in]")!.getBoundingClientRect();
+    const across = Math.max(button.left - sentence.right, sentence.left - button.right);
+    const down = button.top - sentence.bottom;
+    expect(Math.max(across, down)).toBeGreaterThan(0);
+  });
+
+  it("puts Find's permission refusal in the bottom message and offers the administrator sign-in above it", async () => {
+    const { el, find } = await mount(() => Promise.reject({ code: "authorization.not_permitted" }));
+    const heard: Event[] = [];
+    const listener = (event: Event) => heard.push(event);
+    document.body.addEventListener("admin-sign-in", listener);
+    try {
+      await type(el, "12345678Z");
+      await press(el);
+      await expect.poll(() => bottomText(el)).toBe(words["invoice_customer.not_permitted"]);
+      expect(refusal(el)).toBeNull();
+      expect(el.shadowRoot!.textContent).not.toContain(words["invoice_customer.not_permitted"]);
+      const signIn = el.shadowRoot!.querySelector<WtButton>("[data-test=admin-sign-in]")!;
+      expect(signIn.textContent!.trim()).toBe(words["staff.sign_in_as_admin"]);
+      expect(signIn.closest("wt-form-actions")).toBeNull();
+      expect(taxField(el).error).toBe("");
+      expect(findButton(el).disabled).toBe(false);
+      signIn.click();
+      expect(heard).toHaveLength(1);
+      expect(heard[0]!.bubbles).toBe(true);
+      expect(heard[0]!.composed).toBe(true);
+      await type(el, "12345678");
+      expect(await bottomLine(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=admin-sign-in]")).toBeNull();
+      expect(find).toHaveBeenCalledOnce();
+    } finally {
+      document.body.removeEventListener("admin-sign-in", listener);
+    }
+  });
+
+  it("keeps Find's refusal in the bottom message until Find is pressed again", async () => {
+    const second = pending<InvoiceCustomerSearchDto>();
+    let calls = 0;
+    const { el } = await mount(() =>
+      ++calls === 1 ? Promise.reject({ code: "server.internal" }) : second.promise,
+    );
+    await type(el, "12345678Z");
+    await press(el);
+    await expect.poll(() => bottomText(el)).toBe(codeMessage("server.internal"));
+    expect(refusal(el)).toBeNull();
+    await press(el);
+    expect(await bottomLine(el)).toBeNull();
+    second.resolve(THREE);
+    await expect.poll(async () => (await rows(el)).length).toBe(3);
+    expect(await bottomLine(el)).toBeNull();
+  });
+
   it.each([
     ["invoice_customer.not_found", "invoice_customer.vanished"],
     ["node.read_only", "invoice_customer.read_only"],
@@ -418,7 +486,8 @@ describe.each([
     const { el, find } = await mount(() => Promise.reject({ code: "node.read_only" }));
     await type(el, "12345678Z");
     await press(el);
-    await expect.poll(() => refusalText(el)).toBe(words["invoice_customer.read_only"]);
+    await expect.poll(() => bottomText(el)).toBe(words["invoice_customer.read_only"]);
+    expect(refusal(el)).toBeNull();
     expect(findButton(el).disabled).toBe(false);
     expect(findButton(el).variant).toBe("primary");
     await press(el);
@@ -429,7 +498,8 @@ describe.each([
     const { el } = await mount(() => Promise.reject({ code: "server.internal" }));
     await type(el, "12345678Z");
     await press(el);
-    await expect.poll(() => refusalText(el)).toBe(codeMessage("server.internal"));
+    await expect.poll(() => bottomText(el)).toBe(codeMessage("server.internal"));
+    expect(refusal(el)).toBeNull();
     expect(findButton(el).disabled).toBe(false);
   });
 
@@ -494,8 +564,9 @@ describe.each([
     const { el } = await mount(() => Promise.reject({ code: "invoice_customer.not_found" }));
     await type(el, "12345678Z");
     await press(el);
-    await expect.poll(() => refusalText(el)).toBe(codeMessage("invoice_customer.not_found"));
-    expect(refusalText(el)).not.toBe(words["invoice_customer.vanished"]);
+    await expect.poll(() => bottomText(el)).toBe(codeMessage("invoice_customer.not_found"));
+    expect(await bottomText(el)).not.toBe(words["invoice_customer.vanished"]);
+    expect(refusal(el)).toBeNull();
   });
 
   it("keeps Find quiet and disabled while a download is out, sends no search, and is primary again after", async () => {

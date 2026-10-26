@@ -51,6 +51,12 @@ export class InvoiceCustomerDialog extends LitElement {
         margin: 0;
         overflow-wrap: anywhere;
       }
+      .refusal {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -201,23 +207,31 @@ export class InvoiceCustomerDialog extends LitElement {
     return codeMessage(refusal.code);
   }
 
+  #renderSignIn(refusal: Refusal) {
+    return refusal.code === "authorization.not_permitted"
+      ? html`<wt-button
+          data-test="admin-sign-in"
+          @click=${(event: Event) =>
+            event.currentTarget!.dispatchEvent(
+              new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+            )}
+          >${t("staff.sign_in_as_admin")}</wt-button
+        >`
+      : nothing;
+  }
+
+  /** Find's refusal names no field the form shows, so its sentence is the bottom message and only
+   * the sign-in it offers stays here. Download acts on the results, so its refusal sits under them. */
   #renderRefusal() {
     const refusal = this.refusal;
     if (refusal === null) return nothing;
-    return html`<div role="alert" data-test="refusal">
+    if (refusal.action === "find")
+      return refusal.code === "authorization.not_permitted"
+        ? html`<div class="refusal">${this.#renderSignIn(refusal)}</div>`
+        : nothing;
+    return html`<div class="refusal" role="alert" data-test="refusal">
       <p data-test="refusal-text">${this.#refusalText(refusal)}</p>
-      ${
-        refusal.code === "authorization.not_permitted"
-          ? html`<wt-button
-              data-test="admin-sign-in"
-              @click=${(event: Event) =>
-                event.currentTarget!.dispatchEvent(
-                  new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
-                )}
-              >${t("staff.sign_in_as_admin")}</wt-button
-            >`
-          : nothing
-      }
+      ${this.#renderSignIn(refusal)}
     </div>`;
   }
 
@@ -284,7 +298,8 @@ export class InvoiceCustomerDialog extends LitElement {
     const ownProblem = this.attempted && !this.#awaitingInput() ? this.#ownProblem() : "";
     const problem = ownProblem || this.fieldRefusal;
     const ready = !this.#awaitingInput() && ownProblem === "" && !this.downloading;
-    const bottom = problem ? t("form.fix_fields") : "";
+    const findRefusal = this.refusal?.action === "find" ? this.#refusalText(this.refusal) : "";
+    const bottom = [findRefusal, problem ? t("form.fix_fields") : ""].filter(Boolean).join(" ");
     const dialog = () => this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
     return html`<wt-dialog
       .open=${this.open}
