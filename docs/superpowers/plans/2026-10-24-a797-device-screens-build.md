@@ -4,8 +4,9 @@
 
 **Goal:** Build design §8's slices one pull request at a time. This plan outlines every slice and
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
-List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard** and **slice 3 —
-The handheld's bar** in full tasks; each other slice is expanded into tasks when it starts.
+List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
+The handheld's bar** and **slice 6 — Ready warning time, data** in full tasks; each other slice is
+expanded into tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
 argues from it). Pictures: `docs/backlog/mockups/a797-device-screens/`.
@@ -192,7 +193,7 @@ with a default is expected to be `ALTER TABLE … ADD` (no CHECK in `columns.ts`
 (`packages/db/src/schema/kitchen-stations.ts:46-49`, warm < overdue < forgotten): changing a table's
 CHECK makes drizzle rebuild the table (CLAUDE.md §3); check the ready-warning bound in the writer.
 **Dependencies:** #2037 landed; slice 1's migration landed or not open. **Open decisions:** the
-column name; whether the station editor's existing three fields keep their order with the fourth last.
+column name; whether the station editor's existing three fields keep their order with the fourth last. _Expanded into tasks below (2026-10-26)._
 
 ### Slice 7 — The Ready bar's warning (LIGHT)
 
@@ -4544,6 +4545,730 @@ No guide describes a handheld's bar today (ran: `grep -n "^## \|More\b\|☰\|top
     bar at your next visit to the Floor.
 - After merge: delete the branch local and remote and check the remote one is gone; update the
   ledger; then the next slice.
+
+---
+
+## Slice 6 — Ready warning time, data (one PR, branch `feat/a797-6-ready-warning-data`)
+
+**What it changes.** Each prep station gets a fourth minutes value, its **Ready warning** time,
+3 minutes unless someone changes it (Q51 (c) as the owner answered it, design §10): how long that
+station's dishes may stand ready at the pass before the handheld's Ready bar warns. The station
+editor and Add station show it after the three late-flag minutes. The floor read's `ready` signal,
+which already lists each station's ready dishes at a table, gives every station's entry two more
+facts: **when its oldest ready dish became ready** and **that station's warning minutes**. Slice 7
+draws the warning from those two facts; this slice draws nothing on the till. In the same fields
+Q51 (f) 7 replaces "Warm" with the till's word "Waiting" and unifies the Spanish to the till's words
+(«Esperando», «Con retraso», «Olvidado»).
+
+**Review path: FULL.** A migration in the core set (CLAUDE.md §3), and a cross-package contract: the
+`ready` signal's `ReadyAtStation` (`packages/shared/src/table-signals.ts:38-42`) is built by the
+server (`apps/server/src/table-signals.ts:99-125`) and read by the till through
+`apps/till/src/api/client.ts:65-70` (`TableState.signals`, `:2241`; a counter bill's `signals`,
+`:1344`). Fields are only added; no route starts refusing anything it accepted, except a station
+write or an import that carries a bad ready warning (D3).
+
+**Migration: one, core set, no venue reset** — one `ALTER TABLE … ADD` with a constant default, no
+table rebuilt (D1 quotes the probe's generated SQL). The PR's first line says "No venue reset
+needed": an existing station takes 3 minutes.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-26 against `main` at
+`9cebf025a` (this worktree's base); **(read)** means read in the code at that commit. The probes ran
+in throwaway worktrees (`git worktree add --detach /tmp/a797-6-probe.NDR4/wt 9cebf025a`, and a
+control at `/tmp/a797-6-probe.NDR4/base`, the base itself), both removed afterwards; their logs and
+the probe's whole diff stay in `/tmp/a797-6-probe.NDR4/` (`guards.txt`, `db.txt`, `shared.txt`,
+`prov.txt`, `prov-base.txt`, `rep.txt`, `fiscal.txt`, `server-run.txt`, `vs-run.txt`,
+`till-tsc.txt`, `till-run.txt`, `probe.diff`). None of the probe code is in this branch.
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `grep -rlnE "forgottenAfter|forgotten_after|overdueAfter|warmAfter|warm_after" packages apps scripts`
+(ran, over `*.ts`, `*.json`, `*.sql` and `*.md` outside `drizzle/meta`: 70 files, most of them tests and fixtures), `grep -rn "byStation" apps packages`
+(ran) and `grep -rn "readyAt\|ready_at" apps/server/src packages/db/src` (ran), each line read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `packages/db/src/schema/kitchen-stations.ts:18-21`, CHECK `:53-56` | the three late-flag columns, ordered by `kitchen_stations_thresholds_ordered` | gains `ready_warning_after_minutes`, outside the CHECK (D1) |
+| `packages/shared/src/timing.ts:4-15`, re-exported `packages/shared/src/index.ts:132-133` | `StationThresholds` (the three band limits `classifyBand` reads) and `DEFAULT_STATION_THRESHOLDS` | gains `DEFAULT_READY_WARNING_AFTER_MINUTES = 3` and `StationTiming`; `StationThresholds` unchanged (D2) |
+| `packages/shared/src/table-signals.ts:12-13`, `:38-42` | `{ kind: "ready"; byStation: ReadyAtStation[] }`, each entry `stationId`, `stationName`, `count` | each entry gains `oldestReadyAt` and `readyWarningAfterMinutes` (D4) |
+| `apps/server/src/table-signals.ts:23-33` (`KitchenLine`), `:36-96` (`readKitchenLines`), `:99-125` (`kitchenSignals`) | one query for a set of bills' fired, unserved, not-made-here lines with their station and band limits; `ready` per station, then `long_wait` | selects `ticket_items.ready_at` and the station's warning minutes; the `ready` entry carries the oldest stamp and the minutes (D4) |
+| `readBillSignals` (`:128-135`) → the counter's tab list (`apps/server/src/working-order.ts:4908`); `readPartySignals` (`:162-244`) → the floor read (`working-order.ts:8343`) | both build their `ready` through `kitchenSignals` | both carry the two facts with no change of their own |
+| `ticket_items.ready_at` (`packages/db/src/schema/ticket-items.ts:59`, nullable) and its writers: `advanceSet` (`apps/server/src/working-order.ts:7202-7218`), used by `advanceTicketItem`/`advanceTicket` and the group bumps (`order-groups.ts:626`, `working-order.ts:2826`); made-here items (`working-order.ts:1894-1895`, `:2176-2177`) | every product write of `state = 'ready'` stamps `ready_at` (read); made-here items are left out of the signal by `readKitchenLines`'s `madeHere = false` (`table-signals.ts:71`) | read only (D4) |
+| `order-groups.ts:1946-1961` | the Sent box's "Ready n min": the latest `ready_at` of a line's components, skipping a null stamp | the precedent for D4's null handling; unchanged |
+| `packages/provisioning/src/kitchen-timing.ts:5-84` (`parseStationTimingPatch`, `assertStationTiming`, `assertImportedStationTimings`); re-exported for the server at `apps/server/src/kitchen-timing.ts:1-5`; the import calls it at `packages/provisioning/src/configuration-transfer.ts:625` | parse a route's minutes (whole, 1–2147483647, else `management.request_invalid` `{ field }`); refuse an unordered set (`station.thresholds_invalid`); check an import's rows, a missing minute read as its default | parse and bound the fourth; never order it (D3) |
+| `apps/server/src/kitchen.ts:28-45` (`Station`), `:80-124` (`createStation`), `:126-150` (`listStations`), `:168-219` (`updateStation`) | the station writes and the stations list (`GET /management-api/stations`) | write and read the fourth (Task 4) |
+| `apps/server/src/management-api.ts:1561-1604` (POST), `:1606-1613` (GET), `:1628-1712` (PATCH) | parse the body (minutes through `parseStationTimingPatch`, `:1590`, `:1697`) | the body types name the field; the parse does the work (Task 4) |
+| `packages/db/src/configuration-transfer.ts:66-70` | `kitchen_stations` travels with every column it does not omit (it omits none) | the column travels with no change; the import's check is Task 3 |
+| `apps/server/scripts/demo-seed/seed-catalogue.ts:59-74`, `packages/provisioning/src/venue-apply.ts:304-310` | insert stations naming no minutes | take the column's default, 3; unchanged (D9) |
+| `packages/venue-service/src/dashboard/routing-client.ts:31-46` (`PrepStation`), `:64-70` (`StationInput`), `:125-147` (`updateStation`) | the prep-stations screen's client types | gain the field (Task 7) |
+| `packages/venue-service/src/dashboard/station-editor.ts:40-80`, `:131-151` (`timingErrors`), `:178-216` (refusal placement and text), `:245-249`, `:289-297` (`.timing-fields`, three columns), `:631-656` | the editor's three minutes fields under "Late flags (minutes)", labelled from `prep.health.warm`/`overdue`/`forgotten` | the fourth field, the two-column grid (D6), its own message (D5) (Task 7) |
+| `packages/venue-service/src/dashboard/prep-stations-screen.ts:160-165`, `:752-766`, `:791-806`, `:824-838`, `:1007-1025`, `:1091` | Add station's draft, checks and fields; the editor's opened station | the fourth field (Task 8); the editor gets the station's value (Task 7) |
+| `packages/venue-service/src/dashboard/strings.ts` en `:218-223`, `:248-250`, `:303`, `:322`; es `:1105-1110`, `:1135-1137`, `:1191`, `:1210` | the labels and the order message | Q51 (f) 7's words and the new ones (Task 6, D5) |
+| `apps/dashboard/src/api/client.ts:740-745`, `:3363-3388` | the dashboard app's own `Station` type (a subset: no colour, no printing choices) and two write helpers only `client.test.ts` calls (ran: `grep -rn "\.createStation(\|\.updateStation(" apps/dashboard/src`) | unchanged (D8) |
+| `packages/reporting/src/overdue-orders.ts:49-51`, `:90-94` | the overdue report classifies by the three band limits | unchanged: it reads no ready time (D11) |
+| `apps/till/src/state/table-signals.ts:34` (`readyByStation`), `:62` (`readyTables`), `apps/till/src/state/floor-look.ts`, `apps/till/src/widgets/signal-chips.ts` | read `byStation`'s `stationName` and `count` | unchanged; slice 7 reads the two new facts. 14 till test files build `byStation` entries and gain them (Fixture-only, Task 5) |
+
+### Plan decisions for slice 6
+
+- **D1. The column is `kitchen_stations.ready_warning_after_minutes`**
+  (`readyWarningAfterMinutes: count("ready_warning_after_minutes").notNull().default(3)`, after
+  `forgottenAfterMinutes`), named like its three siblings (`warm_after_minutes`, …) and the label
+  "Ready warning after (min)". It owns no CHECK. **Generated (ran, the probe,
+  `pnpm --filter @waitron/db db:generate --name station_ready_warning`):**
+  ```sql
+  ALTER TABLE `kitchen_stations` ADD `ready_warning_after_minutes` integer DEFAULT 3 NOT NULL;
+  ```
+  as `packages/db/drizzle/0192_station_ready_warning.sql` (the next free number, ran: `ls
+  packages/db/drizzle | tail` → `0191_table_short_names.sql`). `kitchen_stations` is in the core set
+  (`packages/db/drizzle`, classified `state` at `packages/db/src/classification.ts:123`), so
+  `pnpm --filter @waitron/db db:generate` writes it. **Why no CHECK of its own (ran, a second
+  probe):** a `check("kitchen_stations_ready_warning_positive", sql\`… >= 1\`)` beside the new
+  column made drizzle-kit 0.31.11 generate a rebuild — `PRAGMA foreign_keys=OFF`, `CREATE TABLE
+  \`__new_kitchen_stations\``, an `INSERT … SELECT` that names `ready_warning_after_minutes` from the
+  old table (which has no such column: CLAUDE.md §3's "must not also add a column" trap), `DROP
+  TABLE \`kitchen_stations\`` — a STOP twice over. So the bound lives in the writers (D3), as the
+  schema's comment at `:18` already says of the three. **Why no venue reset:** SQLite fills an
+  `ADD … DEFAULT 3 NOT NULL` column on existing rows with the default; the migration-upgrade guard,
+  which migrates populated databases, passed with it (ran, below), and its `CANDIDATES` needed
+  nothing (a NOT NULL column with a default is not a nullable candidate). No existing migration
+  file is edited.
+- **D2. `@waitron/shared` gains `DEFAULT_READY_WARNING_AFTER_MINUTES = 3` and
+  `type StationTiming = StationThresholds & { readyWarningAfterMinutes: number }`** in `timing.ts`,
+  re-exported from `index.ts`. **`StationThresholds` stays the three band limits**: it is what
+  `classifyBand` reads, and it types the station read's and the pass read's `thresholds`
+  (`apps/till/src/api/client.ts:1671`, `:1899`; `working-order.ts:7405`, `:7842`), whose readers
+  never need a ready warning; widening it would add the field to those reads and to every till test
+  that builds a `StationThresholds` (seven test files, ran: `grep -rn "StationThresholds" apps packages --include='*.ts'`).
+  The station types that do carry the fourth (`Station`, `PrepStation`, `StationInput`,
+  `StationEditorStation`, `StationTimingPatch`) use `StationTiming`.
+- **D3. The ready warning is a whole number of minutes from 1 to 2147483647, in no order with the
+  late flags.** It runs on its own clock (from `ready_at`, design §5) while the late flags run from
+  `queued_at`, so "Ready warning 20, Forgotten after 15" is a valid station. Bounded in three
+  places, the same three that bound the late flags (`kitchen-timing.ts`):
+  - **the routes:** `parseStationTimingPatch` parses it with the three (absent → not in the patch;
+    anything else not a whole number in range → `management.request_invalid`
+    `{ field: "readyWarningAfterMinutes" }`, as `:14-20` refuses a late flag);
+  - **the writers:** `assertStationTiming` refuses a patch whose `readyWarningAfterMinutes` is out
+    of range with `station.thresholds_invalid` `{ field: "readyWarningAfterMinutes", stationId?,
+    name }`, and never compares it with the late flags, which it still orders exactly as today;
+  - **the import:** `assertImportedStationTimings` reads a row's `ready_warning_after_minutes`,
+    absent or `undefined` as 3 (as `:79` reads a missing late flag as its default), and refuses one
+    out of range with `station.thresholds_invalid` `{ field: "readyWarningAfterMinutes", name }`,
+    before anything is written. An explicit `null` is refused (the column is NOT NULL). The order
+    of checks within one station is the three's order check first, then the ready warning, so a
+    station wrong in both is named by its late flags, as today.
+- **D4. Each `ReadyAtStation` gains `oldestReadyAt: string | null` and
+  `readyWarningAfterMinutes: number`.** `oldestReadyAt` is the earliest stored `ticket_items.ready_at`
+  among exactly the lines that station's `count` counts (fired, unserved, not made here, `state =
+  'ready'`, over the party's family or the counter bill), compared with `Date.parse` and sent as
+  stored. It is `null` only when none of those lines has a stamp: the column is nullable
+  (`ticket-items.ts:59`) though every product write of `ready` stamps it (the table above), so a
+  null can come only from rows written outside the product's code; `order-groups.ts:1946-1961`
+  skips a null stamp the same way. `readyWarningAfterMinutes` is the station's own column, read in
+  the same query (each line joins its own station, `table-signals.ts:64`). **Why a timestamp, not
+  the minutes already waited:** the till compares the server's timestamps with its own clock
+  elsewhere — the held group's `dueAt` (`apps/till/src/state/floor-look.ts:122-135`) and the Sent
+  box's `readyAt` — and slice 7 must count the minutes up between reads (a handheld's Floor reads
+  every 15 s, slice 5 D7). **Alternative, for the reviewer:** the server sends the seconds already
+  waited, immune to a device whose clock is wrong but stale between reads. **Slice 7 needs no
+  further data change:** a station's dishes warn once `now − oldestReadyAt ≥
+  readyWarningAfterMinutes` minutes, judged per station (Q51 (c)'s salad and secreto), and the
+  table's longest wait is its earliest `oldestReadyAt`.
+- **D5. The words (Q51 (f) 7 and (g), design §10).** The station editor's short labels (under the
+  unchanged legend "Late flags (minutes)" «Avisos de demora (minutos)») and Add station's longer
+  ones:
+
+  | Key (`packages/venue-service/src/dashboard/strings.ts`) | English | Spanish |
+  | --- | --- | --- |
+  | `prep.health.warm` (editor) | Warm → **Waiting** | En demora → **Esperando** |
+  | `prep.health.overdue` (editor) | Overdue | Retrasado → **Con retraso** |
+  | `prep.health.forgotten` (editor) | Forgotten | Olvidado |
+  | `prep.health.ready_warning` (editor, new) | **Ready warning** | **Listo sin recoger** |
+  | `prep.warm` (Add station) | Warm after (min) → **Waiting after (min)** | Aviso a partir de (min) → **Esperando a partir de (min)** |
+  | `prep.overdue` (Add station) | Overdue after (min) | Atraso a partir de (min) → **Con retraso a partir de (min)** |
+  | `prep.forgotten` (Add station) | Forgotten after (min) | Olvido a partir de (min) → **Olvidado a partir de (min)** |
+  | `prep.ready_warning` (Add station, new) | **Ready warning after (min)** | **Listo sin recoger a partir de (min)** |
+  | `prep.threshold_invalid` | Use whole minutes with **waiting** < overdue < forgotten. (was warm) | Usa minutos enteros con **esperando < con retraso < olvidado**. |
+  | `prep.ready_warning_invalid` (new) | **Use whole minutes, at least 1.** | **Usa minutos enteros, al menos 1.** |
+
+  The till's words are «Esperando», «Con retraso», «Olvidado» (`apps/till/src/i18n/strings.ts:2779-2781`,
+  read); "Ready warning after (min)" «Listo sin recoger a partir de (min)» is (g)'s wording. The
+  keys keep their names (no reader outside the editor and Add station, ran: `grep -rn 'prep\.health'
+  packages apps --include='*.ts'`), so only the values change. The other `prep.health.*` values are
+  not touched.
+- **D6. The fourth field is last, and the editor draws the four two to a row.** Design §3.6 puts it
+  "after 'Warm after', 'Overdue after' and 'Forgotten after'", so the order is Waiting, Overdue,
+  Forgotten, Ready warning, in both the editor and Add station (where it comes before Printers).
+  **Why two columns (ran, the probe):** with today's three columns the fourth field wraps into a
+  third of the row, and the A725 check that every label reads in full at 390 px failed — "Ready
+  warning" needed 83 px of 81, «Listo sin recoger» 94 of 81; with
+  `grid-template-columns: repeat(2, minmax(0, 1fr))` both languages passed. Add station stacks its
+  fields one per line (`prep-stations-screen.ts:1091`), so it needs no layout change.
+- **D7. No hint and no placeholder on the new field**, like its three siblings (pinned "with no
+  placeholder", `station-editor.test.ts:347`); the guide says what it is (Task 9). **Alternative,
+  for the owner:** a one-line hint "How long ready food may wait".
+- **D8. The dashboard app's `apps/dashboard/src/api/client.ts` is not changed.** Its `Station` is
+  a subset the device screens read for names (`device-profiles-screen.ts:686`, `devices-screen.ts:708`),
+  already without colour or the printing choices, and its `createStation`/`updateStation` have no
+  caller outside their own tests (ran, the grep in the table). The prep-stations screen talks
+  through venue-service's `PrepStationsApi`.
+- **D9. Seeds and provisioning are not changed**: they name no minutes, so their stations take 3.
+- **D10. The guides name the field and its default; what it does lands with slice 7.** This slice
+  changes nothing a till shows, so a guide sentence about the Ready bar's warning would be untrue
+  until slice 7, which adds it to `{#ready-bar}`. **Owner FYI:** between the two slices the field
+  can be set and has no effect.
+- **D11. The overdue report is not changed**: it classifies by the three band limits and reads no
+  ready time (read, the table).
+- **D12. The till's test builders give every `byStation` entry `oldestReadyAt: null` and
+  `readyWarningAfterMinutes: 3`**, so every existing till case stays on what will be slice 7's calm
+  path (no stamp, no warning) and slice 7's own cases choose a stamp.
+
+### Changed test checks (from the probes; the implementer confirms each)
+
+**Probe (ran): the column as D1 says, D2's constant, D3's parse and import check, `kitchen.ts`
+writing and listing the field, D4's signal, the editor's fourth field and D5's words, Add station's
+fourth field.** Then:
+- **Root guards:** `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts scripts/id-columns-are-references.test.ts scripts/journal-monotonic.test.ts`
+  → `Test Files 9 passed (9)`, `Tests 498 passed (498)` (about 90 s).
+- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts src/write-path.e2e.test.ts`
+  → `Test Files 2 passed (2)`, `Tests 20 passed (20)`, unedited.
+- `pnpm --filter @waitron/db exec vitest run` → `Test Files 103 passed (103)`, `Tests 1458 passed (1458)`.
+- `pnpm --filter @waitron/shared exec vitest run` → `Test Files 47 passed (47)`, `Tests 861 passed (861)`.
+- `pnpm --filter @waitron/reporting exec vitest run src/overdue-orders.test.ts` → `Tests 17 passed (17)`.
+- `pnpm --filter @waitron/provisioning exec vitest run` → `Tests 7 failed | 1605 passed (1612)`, all
+  seven in `src/cli-owned-entry.test.ts`, `src/cli-same-hour-entry.test.ts` and
+  `src/first-setup-command-import.test.ts`, each expecting an empty standard error and getting a
+  `<claude-code-hint …>` line. **Not this slice's:** the same three files at the base, with none of
+  the probe's code (ran, the control worktree) → `Tests 7 failed | 10 passed (17)`, the same hint
+  in each. Under an AI agent's session expect them; CI's provisioning job is the judge. Any other
+  provisioning failure is a STOP.
+- `pnpm --filter @waitron/server typecheck`, `@waitron/venue-service`'s after the fixtures below, and
+  `@waitron/dashboard`'s → 0 errors.
+- **Server:** the 197 `apps/server` suites naming a station, the late flags, the floor read, the
+  signals or the configuration file (ran: `grep -rlE "kitchenStations|kitchen_stations|byStation|listStations|createStation|updateStation|management-api/stations|AfterMinutes|tables/state|listTablesWithState|readBillSignals|readPartySignals|kind: \"ready\"|configuration" src --include='*.test.ts'`
+  in `apps/server`, then `pnpm exec vitest run <those>`) → `Test Files 6 failed | 191 passed (197)`,
+  `Tests 20 failed | 8271 passed (8291)`. The twenty:
+  - **Harness, not a check (Fixture-only, Task 2):** `src/canvas-retirement-upgrade.test.ts`
+    "refuses the populated predecessor for reset and retains every row after rollback" (`:384`;
+    "table kitchen_stations has no column named ready_warning_after_minutes", from today's
+    `applyVenue` writing into a predecessor schema) and `src/station-order-migration.test.ts` "A725
+    drops only station order with populated cascading and restrictive children" (`listStations`
+    reading the column after a cut that stops before it). Each file lists the later
+    `kitchen_stations` migrations to apply ahead — `"_table_short_names"` at `:399`, and
+    `printing`/`bump`/`changes` at `:40-52` and `:252-254` — and each new one has been appended
+    there (`git log -S"_station_changes_after_sending" -- apps/server/src/station-order-migration.test.ts`
+    → `251e256a4`). Appending `"_station_ready_warning"` to the first and a `readyWarning` journal
+    entry with `when === readyWarning.when` to the second: both passed (ran, `Tests 6 passed (6)`).
+  - **`src/kitchen.test.ts`** "defaults isDefault to false and lists active stations by name"
+    (`:212`) and "updateStation renames but cannot reactivate a removed station" (`:393`): each
+    listed station gains `readyWarningAfterMinutes: 3`, every other value unchanged. Reason: D1, the
+    stations list carries the field.
+  - **`src/table-signals.test.ts`**, eight cases whose `toEqual` pins a whole `ready` signal: "A725
+    ready signals sort opposite dish insertion order by station name" (`:189`), "puts a due step
+    first among a table's signals" (`:270`), "shows Mesa 2's ready drinks, its due held group and
+    its bill request together; …" (`:309`), "A725 counts ready dishes by station name and serving
+    takes them off" (`:346`), "counts a weighed dish as one and puts stations in name order"
+    (`:410`), "gives joined tables the party's signals, and reads the bills a merged-in party kept"
+    (`:744`), "reads every kind of fact once for the whole floor, not once per table" (`:811`),
+    "shows a counter tab without a table, labelled Ana, with its ready and long-wait signals"
+    (`:867`). Each `byStation` entry printed `"oldestReadyAt": "<that run's ISO time>"` and
+    `"readyWarningAfterMinutes": 3`. Reason: D4.
+  - **`src/table-signals.service-lifetime.test.ts`** "counts only $name still in service" (`:174`,
+    six rows: live food, partly served food, partly cancelled food, partly served and cancelled
+    food, legacy quantity, weighed remaining food) and "counts $name separately routed extras by
+    their parent dishes" (`:197`, the "remaining" row): the same two keys, in the bill's and the
+    table's signals. Reason: D4.
+  - **`src/split-off-extras.groups.test.ts`** "names Fryer as ready and counts plates rather than
+    the extra's pieces" (`:197`, its `toContainEqual` at `:211`): the same two keys. Reason: D4.
+
+  These checks' `ready_at` is the moment the case bumped the dish (`advanceSet`'s `nowIso()`), so
+  each changed entry pins **`oldestReadyAt: expect.any(String)`** and **`readyWarningAfterMinutes:
+  3`**, and Task 5's new cases pin exact times on stamps they write themselves. No other server
+  case failed: `management-api.test.ts` and `configuration-transfer.test.ts` read stations with
+  `toMatchObject` or by column (ran: both in the 191 that passed).
+- **venue-service** (browser; free memory 82 % before the run, ran `memory_pressure`):
+  `pnpm exec vitest run src/dashboard/{calendar-station-month,prep-stations-screen.a11y,prep-stations-screen,prep-stations-screen.unsaved,routing-client,routing-grid.unsaved,station-action.unsaved,station-editor.a11y,station-editor.save-state,station-editor,station-editor.unsaved}.test.ts`
+  in `packages/venue-service` (the eleven names spelled out) → `Test Files 6 failed | 5 passed (11)`,
+  `Tests 33 failed | 504 passed (537)`. `pnpm --filter @waitron/venue-service typecheck` had first
+  failed on the station fixtures missing the field (ran), which the probe filled with
+  `readyWarningAfterMinutes: 3` (**Fixture-only**: Task 7's `PrepStation` and editor fixtures,
+  `calendar-station-month.test.ts:33`, `prep-stations-screen.test.ts:64`,
+  `prep-stations-screen.unsaved.test.ts:44`, `routing-grid.unsaved.test.ts:46`,
+  `station-editor.a11y.test.ts:30`, `station-editor.save-state.test.ts:15`,
+  `station-editor.test.ts:19`, `test/station-delete-test-helpers.ts:41`; Task 8's `StationInput`
+  fixture, `routing-client.test.ts:136-142`). The 33:
+  - **Fixture-only, 2:** `prep-stations-screen.a11y.test.ts` "checks refused-rest" (`:239`, light
+    and dark) expected "could not be saved" and got "Correct the highlighted fields": its untyped
+    station fixtures (`:128`, `:253`, `:262`, `:470`) had no ready warning, so the editor opened on
+    an invalid field. Given `readyWarningAfterMinutes: 3` there (and in
+    `station-editor.unsaved.test.ts:28`'s), both passed (ran, `Tests 66 passed (66)` with the
+    unsaved suite). Task 7.
+  - **Words, 18 (Task 6), reason D5:** in `station-editor.test.ts`, "opens on the station's own
+    minutes, each required, with no placeholder and no venue note" (`:347`; labels "Warm" →
+    "Waiting"), "a cleared minutes field is marked beside it and at the bottom and sends nothing"
+    (`:364`), "marks Warm for %s, explains it at the bottom, sends nothing and focuses it" (`:405`,
+    four rows; the title becomes "marks Waiting for %s, …"), "holds the timings in order against
+    the station's own minutes" (`:430`), "puts a %s refusal naming %s under that field" (`:450`,
+    two rows), "reads the timings in Spanish" (`:475`; «En demora», «Retrasado» → «Esperando»,
+    «Con retraso»), "explains timings out of order in Spanish beside the field and at the bottom,
+    and sends nothing" (`:490`), "A725 phone labels remain fully readable in %s" (`:874`, en and
+    es; its labels); in `station-editor.a11y.test.ts`, "timing refused" and "timing invalid"
+    (`:18-19`, light and dark, the message at `:85`, `:96`); in `prep-stations-screen.test.ts`,
+    "puts a timing refusal from the editor's save under the field it names and keeps the editor
+    open" (`:845`, the message at `:861`). Each changes only the words D5 changes.
+  - **The editor's fourth field (Task 7), reason D5/D6:** "opens on the station's own minutes…"
+    and "A725 phone labels…" also extend their field list to four (`TIMINGS`, `:345`; the list at
+    `:880`), so the new field is checked for its value, label, `required`, `type` and, at 390 px,
+    a label that reads in full.
+  - **Add station sends the ready warning, 13 (Task 8), reason D3/D6:** each `createStation`
+    call pinned whole gains `readyWarningAfterMinutes: 3`, every other value unchanged, in
+    `prep-stations-screen.test.ts` "creates a station from the modal with the chosen thresholds"
+    (`:621`), "a new station starts on the first colour no station has, and is created with the
+    colour chosen" (`:661`), "creates a station with its name and thresholds when Enter is pressed
+    in Name" (`:1088`), "Add station sends the printers chosen with the station" (`:4638`), "A725
+    Add station uses the shared popup in %s" (`:4974`, en and es), "A725 Add station ignores a
+    colour outside the station palette" (`:5030`), "A725 ignores a colour event from a closed Add
+    station opening" (`:5060`), "A725 holds the colour popup closed while Add station is saving"
+    (`:5101`), "A725 Add station has no manual order field and sends no retired key" (`:5199`);
+    `prep-stations-screen.unsaved.test.ts` "Add accepted write commits before a refused refresh"
+    (`:214`, its `toEqual` at `:223`); `routing-client.test.ts` "writes station changes to core and
+    cells to venue-service" (`:155`, at `:189`) and "creates station and its timing thresholds with
+    one POST" (`:289`, at `:305`), whose `StationInput` fixtures now carry the field and whose sent
+    bodies are pinned whole.
+- **Till:** `pnpm --filter @waitron/till typecheck` → 23 errors in 13 test files, every one a
+  `byStation` entry missing `oldestReadyAt` and `readyWarningAfterMinutes` (ran; the list is
+  `/tmp/a797-6-probe.NDR4/till-tsc.txt`). No source file failed. With D12's two keys added to
+  every `byStation` entry in `apps/till/src` (the 13 files and `src/till-app-device-zones.test.ts:2349`,
+  whose literal typechecks without them): `pnpm exec vitest run <those 14 files>` in `apps/till` →
+  `Test Files 14 passed (14)`, `Tests 544 passed (544)` (ran). **Fixture-only** (Task 5).
+
+Any other failure, in any suite a task names, is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **The oldest, not the first seen**: two ready lines at one station whose stamps are in the
+   opposite order to the lines' insertion (Task 5).
+2. **Serving the oldest ready dish moves `oldestReadyAt` to the next**; a partly served line keeps
+   its stamp while any of it is still to serve (Task 5).
+3. **A ready line with no stamp**: alone → `oldestReadyAt: null`; beside a stamped one → the
+   stamped one's time (Task 5).
+4. **Two stations at one table with different minutes** — design §10 Q51 (c)'s example: Cold at
+   6, the grill at 3 — each entry carries its own (Task 5).
+5. **A merged-in party's ready dishes** count toward the family's oldest, as they count toward
+   `count` today (Task 5's merged case, or the changed `:744` check).
+6. **No order with the late flags**: a ready warning of 20 beside Forgotten after 15 is saved by
+   POST, PATCH and import (Tasks 3, 4).
+7. **The bound at every door**: 0, 1.5, `"3"`, `null`, 2147483648 refused at the routes with
+   `management.request_invalid` `{ field: "readyWarningAfterMinutes" }` and nothing written; 0
+   from a direct `createStation`/`updateStation` call refused `station.thresholds_invalid`; 0 or
+   `null` in a file refused on import and nothing written; a file row with no key imports as 3
+   (Tasks 3, 4).
+8. **A PATCH of the ready warning alone** leaves the stored late flags untouched and is not
+   refused over them; a PATCH of a late flag alone leaves the ready warning (Task 4).
+9. **The editor**: "03" typed over a stored 3 sends nothing; a blank or 0 marks the field with
+   "Use whole minutes, at least 1.", not the order message; a server refusal naming
+   `readyWarningAfterMinutes` lands under that field with that message (Task 7).
+10. **Add station**: sends 3 when untouched; a 0 is marked and nothing is sent (Task 8).
+11. **Spanish at 390 px**: «Listo sin recoger» and «Con retraso» read in full in the two-column
+    grid (Task 7's changed A725 check; Task 10's LOOK).
+
+---
+
+**Task order and why.** The shared constant first (Task 1, pure); the migration (Task 2); the
+bound at the routes, the writers and the import (Task 3, the provisioning helpers and the import's
+end-to-end cases); the server's station writes and list (Task 4); the signal, with the till's
+fixtures in the same commit because the shared type change fails the till's typecheck until they
+have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); Add station's
+(Task 8); docs (Task 9); the LOOK (Task 10). Each leaves the tree green and is sized well under
+100 tool calls.
+
+### Task 1: The default ready warning time, in `@waitron/shared`
+
+**Files:**
+- Modify: `packages/shared/src/timing.ts` (after `DEFAULT_STATION_THRESHOLDS`, `:11-15`),
+  `packages/shared/src/index.ts` (`:132-133`)
+- Test: `packages/shared/src/timing.test.ts` (beside "DEFAULT_STATION_THRESHOLDS is 5, 10 and 15",
+  `:28`), `packages/shared/src/index.test.ts`
+
+**Interfaces:**
+- Produces: `DEFAULT_READY_WARNING_AFTER_MINUTES = 3`;
+  `type StationTiming = StationThresholds & { readyWarningAfterMinutes: number }` (D2). Consumed by
+  Tasks 2–8.
+
+- [ ] **Step 1: Failing tests.** `timing.test.ts`: "DEFAULT_READY_WARNING_AFTER_MINUTES is 3".
+  `index.test.ts`: "re-exports the default ready warning time" — the index's
+  `DEFAULT_READY_WARNING_AFTER_MINUTES` is `timing.ts`'s.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/shared exec vitest run src/timing.test.ts src/index.test.ts`.
+- [ ] **Step 3: Implement** the constant and the type; export both.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count), then CI's mutation job's view of the
+  file: `pnpm --filter @waitron/shared exec stryker run --mutate src/timing.ts` — a score of at
+  least 90; a surviving mutant is closed by a test that asserts something.
+- [ ] **Step 5:** `pnpm --filter @waitron/shared typecheck`;
+  `pnpm exec eslint packages/shared/src/timing.ts packages/shared/src/timing.test.ts packages/shared/src/index.ts packages/shared/src/index.test.ts`;
+  `pnpm format:check`; ledger; `git commit -s -m "A797-6: the default ready warning time"`
+
+### Task 2: The migration
+
+**Files:**
+- Modify: `packages/db/src/schema/kitchen-stations.ts` (the column after `:21`, D1; the comment at
+  `:18` becomes: "The CHECK orders the three late flags. The station routes and the import refuse
+  a minute below 1 in any of the four, and the ready warning is in no order with the others: a
+  CHECK would rebuild this table.")
+- Generate: `packages/db/drizzle/0192_station_ready_warning.sql`, `meta/0192_snapshot.json`,
+  `meta/_journal.json` (drizzle-kit writes all three)
+- Test: `packages/db/src/schema/kitchen-stations.test.ts` (new case),
+  `apps/server/src/kitchen.test.ts` (new case beside `:491`),
+  `apps/server/src/station-order-migration.test.ts` and
+  `apps/server/src/canvas-retirement-upgrade.test.ts` (harness, Fixture-only)
+
+- [ ] **Step 1: Failing tests.**
+  1. `kitchen-stations.test.ts`: "a station row given no ready warning holds 3, and the database
+     holds it in no order with the late flags" — a station seeded with no minutes reads
+     `readyWarningAfterMinutes` 3; an update to 20 (beside the default Forgotten after 15) and to 0
+     are both accepted by the database (it pins D1: the bound is the writers', not a CHECK; Tasks
+     3 and 4 pin the writers' refusals).
+  2. `kitchen.test.ts`: "a station row given no ready warning takes the schema's default, equal to
+     DEFAULT_READY_WARNING_AFTER_MINUTES" — the raw insert of `:491-496`, then the stored
+     `readyWarningAfterMinutes` equals the constant.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/db exec vitest run src/schema/kitchen-stations.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/kitchen.test.ts -t "ready warning"`.
+- [ ] **Step 3: Implement** the column, then **generate, never hand-write**:
+  `pnpm --filter @waitron/db db:generate --name station_ready_warning`. **Read the SQL.** It must be
+  exactly D1's one statement. A `__new_` table, a `DROP TABLE`, a `PRAGMA`, or any other statement
+  is a **STOP**: report it with the file, do not edit it. If `main` has gained a 0192 since this
+  plan, regenerate on top (CLAUDE.md §3), never renumber by hand.
+- [ ] **Step 4: The two upgrade harnesses** (Fixture-only; the changed-checks list says why):
+  `canvas-retirement-upgrade.test.ts` gains `"_station_ready_warning"` after `"_table_short_names"`
+  (`:399`); `station-order-migration.test.ts` gains a `readyWarning` journal entry found by
+  `tag.endsWith("_station_ready_warning")` beside `changes` (`:48-52`, with its "missing" throw)
+  and `|| when === readyWarning.when` after `when === changes.when` (`:254`). Run them:
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts`
+  (probe: `Tests 6 passed (6)`).
+- [ ] **Step 5: Run; expect PASS**, then the guard suites from the root:
+  `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts scripts/id-columns-are-references.test.ts scripts/journal-monotonic.test.ts`
+  (probe: 9 files, 498 tests passed) and
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts src/write-path.e2e.test.ts`
+  (probe: 20 passed; it passes **unedited**, or STOP). Then `pnpm --filter @waitron/db exec vitest run`
+  (probe: all 1458 passed).
+- [ ] **Step 6:** typecheck db and server; eslint the changed `.ts` files (not the generated SQL or
+  JSON); `pnpm format:check`; ledger (the two harness files as Fixture-only);
+  `git commit -s -m "A797-6: each prep station holds a ready warning time, 3 minutes by default"`
+
+### Task 3: The ready warning's bound at the routes, the writers and the import
+
+**Files:**
+- Modify: `packages/provisioning/src/kitchen-timing.ts` (D3: `StationTimingPatch` becomes
+  `Partial<StationTiming>`; `parseStationTimingPatch` parses the fourth with the three;
+  `assertStationTiming` checks its range only; `assertImportedStationTimings` reads
+  `ready_warning_after_minutes`)
+- Test: `packages/provisioning/src/kitchen-timing.test.ts`,
+  `apps/server/src/configuration-transfer.test.ts` (beside "transfers each station's bump mode",
+  `:2433`, and the timing refusals, `:4957-5060`)
+
+- [ ] **Step 1: Failing tests.** In `kitchen-timing.test.ts`:
+  1. "parseStationTimingPatch reads a ready warning with the late flags" — `{ readyWarningAfterMinutes: 20 }`
+     → `{ readyWarningAfterMinutes: 20 }`; `{}` → `{}`.
+  2. `it.each([0, 1.5, "3", null, 2_147_483_648])` "parseStationTimingPatch refuses a ready warning
+     of %j, naming it" → `management.request_invalid` `{ field: "readyWarningAfterMinutes" }`.
+  3. "assertStationTiming holds the ready warning in range but in no order" — `{ readyWarningAfterMinutes: 20 }`
+     against stored 5/10/15 passes; `{ readyWarningAfterMinutes: 0 }` throws
+     `station.thresholds_invalid` `{ field: "readyWarningAfterMinutes", stationId, name }`.
+  4. "assertImportedStationTimings reads a missing ready warning as 3, and refuses one out of
+     range" — a row with no key passes; `ready_warning_after_minutes` 0, 1.5 or `null` throws
+     `{ field: "readyWarningAfterMinutes", name }`; 20 beside `forgotten_after_minutes` 15 passes;
+     a row out of order in its late flags **and** with a 0 ready warning is named by its late flag.
+  In `configuration-transfer.test.ts`:
+  5. "transfers each station's ready warning time" — two stations with 6 and 3 (the second by
+     default) exported and imported, the bundle's rows `objectContaining({ ready_warning_after_minutes: 6 })`
+     and `…: 3`, the imported rows read back by name with 6 and 3 (the shape of `:2433-2475`).
+  6. "refuses an imported ready warning of 0 before writing anything" — the shape of `:4957-5006`:
+     `station.thresholds_invalid` `{ name, field: "readyWarningAfterMinutes" }`, and the target
+     holds no row.
+  7. "imports a station row with no ready warning as 3" — delete the key from the bundle's row
+     before importing.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/provisioning exec vitest run src/kitchen-timing.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts -t "ready warning"`.
+  Cases 1–4 and 6 fail; 5 and 7 pass on arrival, because Task 2's column already travels and takes
+  its default (they pin that, D1, and stay).
+- [ ] **Step 3: Implement** D3. Keep the three's order check exactly as it is (`invalidTimingField`,
+  `:46-59`); the ready warning's range check is its own and runs after it.
+- [ ] **Step 4: Run; expect PASS**; then `pnpm --filter @waitron/provisioning exec vitest run`
+  (expect only the seven CLI cases the changed-checks list names, if under an agent; any other
+  failure is a STOP) and the whole `configuration-transfer.test.ts` and
+  `configuration-import.test.ts` in `apps/server`.
+- [ ] **Step 5:** typecheck provisioning and server; eslint the changed files; `pnpm format:check`;
+  ledger; `git commit -s -m "A797-6: a station's ready warning is whole minutes from 1, in no order with its late flags"`
+
+### Task 4: The station routes write and list the ready warning
+
+**Files:**
+- Modify: `apps/server/src/kitchen.ts` (`Station` gains `readyWarningAfterMinutes`; `createStation`
+  writes `thresholds.readyWarningAfterMinutes ?? DEFAULT_READY_WARNING_AFTER_MINUTES`;
+  `listStations` selects it; `updateStation` takes it out of the patch beside the three, passes it
+  to `assertStationTiming` with them, and writes it), `apps/server/src/management-api.ts` (the
+  POST and PATCH body types, `:1565-1574`, `:1633-1647`, and the PATCH `patch` type, `:1653-1666`,
+  name the field; the parse already reads it)
+- Test: `apps/server/src/kitchen.test.ts` (two changed checks; new cases),
+  `apps/server/src/management-api.test.ts` (new cases in `describe("/management-api/stations (KDS-1 config)")`, `:1022`)
+
+- [ ] **Step 1: Failing tests.** `kitchen.test.ts`:
+  1. "createStation stores a given ready warning, and 3 when none is given; listStations reads it".
+  2. "updateStation saves a ready warning of 20 beside Forgotten after 15, and leaves the late
+     flags" — stored late flags unchanged; then a PATCH of `warmAfterMinutes` alone leaves the 20.
+  3. "updateStation refuses a ready warning of 0, naming it, and writes nothing" —
+     `station.thresholds_invalid` `{ field: "readyWarningAfterMinutes", stationId, name }`.
+  `management-api.test.ts`:
+  4. "POST and PATCH store a station's ready warning and GET lists it" — POST with 6 → 201,
+     listed 6; PATCH 20 → 204, listed 20 (beside Forgotten after 15).
+  5. `it.each([0, 1.5, "3", null, 2_147_483_648])` "PATCH refuses a ready warning of %j and leaves
+     the station as it was" → 400 `management.request_invalid` `{ field: "readyWarningAfterMinutes" }`;
+     and the same through POST with no station made.
+  Changed checks (probe): "defaults isDefault to false and lists active stations by name" (`:212`)
+  and "updateStation renames but cannot reactivate a removed station" (`:393`) gain
+  `readyWarningAfterMinutes: 3` on each listed station.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/kitchen.test.ts src/management-api.test.ts -t "station"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run; expect PASS**, then the whole `kitchen.test.ts`, `management-api.test.ts`,
+  `kitchen-timing-consumers.test.ts` and `station-delete.test.ts` in `apps/server`.
+- [ ] **Step 5:** typecheck server; eslint the changed files; `pnpm format:check`; ledger (both
+  changed checks); `git commit -s -m "A797-6: the station routes save and list the ready warning time"`
+
+### Task 5: The ready signal carries each station's oldest ready time and its warning minutes
+
+**Files:**
+- Modify: `packages/shared/src/table-signals.ts` (`ReadyAtStation`, `:38-42`, D4, each field with a
+  one-line doc: "The earliest stored ready time of the dishes counted; null when none has one." /
+  "This station's ready warning time."), `apps/server/src/table-signals.ts` (`KitchenLine` gains
+  `readyAt` and `readyWarningAfterMinutes`; `readKitchenLines` selects `ticketItems.readyAt` and
+  `kitchenStations.readyWarningAfterMinutes`; `kitchenSignals` keeps the earliest by `Date.parse`
+  and maps both into each entry, `:113-119`)
+- Test: `apps/server/src/table-signals.test.ts` (new cases; eight changed checks),
+  `apps/server/src/table-signals.service-lifetime.test.ts` (seven), `apps/server/src/split-off-extras.groups.test.ts` (one)
+- Fixture-only: every `byStation` entry in `apps/till/src` (D12): `src/till-app-device-zones.test.ts`,
+  `src/state/table-signals.test.ts`, `src/state/table-precedence.test.ts`,
+  `src/state/floor-look.test.ts`, `src/screens/till-floor-screen.a11y.test.ts`,
+  `.refresh.test.ts`, `.signals.test.ts`, `.ready-bar.test.ts`, `.steps.test.ts`,
+  `.precedence.test.ts`, `src/widgets/table-details-sheet.test.ts`, `held-orders.a11y.test.ts`,
+  `held-orders.test.ts`, `signal-chips.test.ts` (ran: `grep -rn "byStation" apps/till/src`); the
+  three suites with a `ready(...)` builder (`state/table-signals.test.ts:69-75`,
+  `till-floor-screen.signals.test.ts:76-82`, `till-floor-screen.ready-bar.test.ts:69-75`) change
+  the builder, the rest each literal.
+
+- [ ] **Step 1: Failing tests** in `apps/server/src/table-signals.test.ts`, with a helper beside
+  `queuedAgo` (`:119-124`): `readyAt(v, billId, name, iso)` sets `ticket_items.ready_at` for the
+  bill's ready lines named `name` to a fixed time.
+  1. "each station's ready entry carries its oldest ready time and its own warning minutes" —
+     Barra with `readyWarningAfterMinutes` 6 (through `createStation`'s thresholds), Cocina at its
+     default 3; two caña lines made ready and stamped `…T20:04:00.000Z` on the first line and
+     `…T20:01:00.000Z` on the second (the oldest is not the first inserted), a burger
+     `…T20:03:00.000Z` → Barra `{ count: 2, oldestReadyAt: "…T20:01:00.000Z", readyWarningAfterMinutes: 6 }`,
+     Cocina `{ count: 1, oldestReadyAt: "…T20:03:00.000Z", readyWarningAfterMinutes: 3 }`.
+  2. "serving the oldest ready dish moves the oldest ready time to the next" — serve the
+     `20:01` line whole → Barra's `oldestReadyAt` is `20:04`; serve one of a two-caña line → its
+     stamp stays while one is left.
+  3. "a ready dish with no stored ready time gives its station no oldest ready time" — clear the
+     stamp of a station's only ready line → `oldestReadyAt: null`; with a stamped line beside it →
+     the stamped time.
+  4. "the counter tab's ready signal carries the same two facts" — through `readBillSignals`, a
+     stamped ready dish → its exact time and 3.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts -t "oldest ready"`
+  (and the other two by name).
+- [ ] **Step 3: Implement** D4 in the two files.
+- [ ] **Step 4: The changed checks** (probe): in the sixteen cases the changed-checks list names,
+  each `byStation` entry gains `oldestReadyAt: expect.any(String), readyWarningAfterMinutes: 3`,
+  every other value unchanged. Run
+  `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts src/table-signals.service-lifetime.test.ts src/split-off-extras.groups.test.ts src/kitchen-allergy.notices.test.ts src/print-api.printer-wiring.test.ts src/station-printers.test.ts`;
+  PASS.
+- [ ] **Step 5: The till's fixtures** (D12): `pnpm --filter @waitron/till typecheck` lists them
+  (probe: 23 errors in 13 files); give each `byStation` entry `oldestReadyAt: null,
+  readyWarningAfterMinutes: 3`, and the device-zones literal (`:2349`) too. Then, after checking
+  free memory (`memory_pressure | grep free`), run the 14 files in `apps/till`
+  (`pnpm exec vitest run <the 14 paths above>`; probe: `Tests 544 passed (544)`). No till check
+  changes: a failure here is a STOP.
+- [ ] **Step 6:** typecheck shared, server and till; eslint every changed file; `pnpm format:check`;
+  ledger (the sixteen changed checks; the till files as Fixture-only);
+  `git commit -s -m "A797-6: each station's ready signal carries its oldest ready time and its warning minutes"`
+
+### Task 6: "Waiting after" and the till's Spanish in the station fields
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/strings.ts` (D5's values for `prep.health.warm`,
+  `prep.health.overdue` (es), `prep.warm`, `prep.overdue` (es), `prep.forgotten` (es),
+  `prep.threshold_invalid`, en `:221`, `:248`, `:322`; es `:1108-1109`, `:1135-1137`, `:1210`)
+- Test: the eighteen changed checks D5 lists (`station-editor.test.ts`,
+  `station-editor.a11y.test.ts`, `prep-stations-screen.test.ts`)
+
+- [ ] **Step 1: Failing tests.** Change the eighteen checks to D5's words (the changed-checks
+  list names each; "marks Warm for %s" becomes "marks Waiting for %s"). Add one: "Add station
+  reads Waiting after, Overdue after and Forgotten after, in English and Spanish" in
+  `prep-stations-screen.test.ts` — the three `wt-input` labels in each language (today nothing pins
+  them: ran `grep -n "Warm after\|Aviso a partir" packages/venue-service/src` → only `strings.ts`).
+- [ ] **Step 2: Run; expect FAIL** (free memory first) in `packages/venue-service`:
+  `pnpm exec vitest run src/dashboard/station-editor.test.ts src/dashboard/station-editor.a11y.test.ts src/dashboard/prep-stations-screen.test.ts`.
+- [ ] **Step 3: Implement** the string values only.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count); then `pnpm exec vitest run scripts/english-only.test.ts`.
+- [ ] **Step 5:** typecheck venue-service; eslint the changed files; `pnpm format:check`; ledger
+  (the eighteen, reason D5); `git commit -s -m "A797-6: the station's minutes say Waiting, in the till's Spanish words"`
+
+### Task 7: The station editor's Ready warning field
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/routing-client.ts` (`PrepStation` and
+  `updateStation`'s input gain the field; `StationInput` is Task 8's, because widening it makes Add
+  station send the field), `station-editor.ts`
+  (`StationEditorStation` and `StationEditorSave` over `StationTiming`; `TIMING_FIELDS` gains
+  `readyWarningAfterMinutes` last and `TIMING_LABELS` `prep.health.ready_warning`; `timingErrors`
+  gives it `prep.ready_warning_invalid` and keeps the order check to the three; `refusalText`
+  answers `prep.ready_warning_invalid` for a refusal naming it; the empty draft gains it; the grid
+  `repeat(2, minmax(0, 1fr))`, D6), `prep-stations-screen.ts` (the editor's opened station gains
+  `readyWarningAfterMinutes`, `:752-766`), `strings.ts` (`prep.health.ready_warning`,
+  `prep.ready_warning_invalid`, en and es, D5)
+- Test: `station-editor.test.ts`, `station-editor.a11y.test.ts` (its loop of fields, `:132`,
+  gains the fourth), `station-editor.unsaved.test.ts`
+- Fixture-only: the station fixtures the changed-checks list names (venue-service typecheck lists
+  them), `prep-stations-screen.a11y.test.ts` (`:128`, `:253`, `:262`, `:470`) and
+  `station-editor.unsaved.test.ts:28`
+
+- [ ] **Step 1: Failing tests** in `station-editor.test.ts`:
+  1. Changed: "opens on the station's own minutes…" (`:345-361`): `TIMINGS` gains
+     `readyWarningAfterMinutes` (GRILL's 3) and the labels list "Ready warning"; "A725 phone
+     labels…" (`:874`): four fields, labels with «Listo sin recoger».
+  2. "sends a typed ready warning, and nothing for 03 over a stored 3".
+  3. `it.each(["", "0", "1.5", "abc", "2147483648"])` "marks Ready warning for %j with its own
+     message, sends nothing and focuses it" — the field's error "Use whole minutes, at least 1.",
+     no other field marked.
+  4. "a ready warning above Forgotten after is saved" — 20 with Forgotten after 15 → sent
+     `{ readyWarningAfterMinutes: 20 }`, no error.
+  5. "puts a refusal naming readyWarningAfterMinutes under that field with its own message" — for
+     `management.request_invalid` and `station.thresholds_invalid`.
+  6. "reads Ready warning in Spanish" — «Listo sin recoger», and its message «Usa minutos enteros,
+     al menos 1.».
+  7. "draws the four minutes two to a row" — the second field's top equals the first's, the third's
+     is below them, the fourth's equals the third's.
+- [ ] **Step 2: Run; expect FAIL** (free memory first) `pnpm exec vitest run src/dashboard/station-editor.test.ts`
+  in `packages/venue-service` (and typecheck, which fails until the fixtures have the field).
+- [ ] **Step 3: Implement**; fill the fixtures with `readyWarningAfterMinutes: 3`.
+- [ ] **Step 4: Run; expect PASS:** `pnpm exec vitest run src/dashboard/station-editor.test.ts src/dashboard/station-editor.a11y.test.ts src/dashboard/station-editor.save-state.test.ts src/dashboard/station-editor.unsaved.test.ts src/dashboard/prep-stations-screen.a11y.test.ts src/dashboard/prep-stations-screen.test.ts src/dashboard/calendar-station-month.test.ts src/dashboard/routing-grid.unsaved.test.ts src/dashboard/station-action.unsaved.test.ts`
+  in `packages/venue-service`. Add station is untouched here, so its create calls still send
+  three minutes; any failure is a STOP.
+- [ ] **Step 5:** typecheck venue-service; eslint the changed files; `pnpm format:check`; ledger
+  (the two extended checks; the fixtures as Fixture-only);
+  `git commit -s -m "A797-6: the station editor sets the ready warning time"`
+
+### Task 8: Add station's Ready warning field
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/routing-client.ts` (`StationInput` gains the
+  field), `packages/venue-service/src/dashboard/prep-stations-screen.ts` (the draft's default,
+  `:160-165` and `#openStation`, `:799-804`, gain `readyWarningAfterMinutes:
+  DEFAULT_READY_WARNING_AFTER_MINUTES`; `#stationErrors`, `:824-838`, marks it
+  `prep.ready_warning_invalid` when not a whole number from 1 to 2147483647; the field after
+  Forgotten after, `:1091`: `${this.#field("readyWarningAfterMinutes", t("prep.ready_warning"))}`),
+  `strings.ts` (`prep.ready_warning`, en and es, D5)
+- Test: `prep-stations-screen.test.ts`, `prep-stations-screen.unsaved.test.ts`, `routing-client.test.ts`
+
+- [ ] **Step 1: Failing tests.** The thirteen changed checks (each `createStation` call or sent
+  body gains `readyWarningAfterMinutes: 3`; `routing-client.test.ts`'s `StationInput` fixture,
+  `:136-142`, gains it too, Fixture-only). New: "Add station offers Ready warning after (min) at 3, after
+  Forgotten after and before Printers, and sends a typed 6"; "Add station marks a ready warning of
+  0 and creates nothing"; the Task 6 label case gains the fourth label in both languages.
+- [ ] **Step 2: Run; expect FAIL** `pnpm exec vitest run src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.unsaved.test.ts src/dashboard/routing-client.test.ts`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run; expect PASS**, then the eleven venue-service files of the changed-checks list
+  (probe: 537 tests).
+- [ ] **Step 5:** typecheck venue-service; eslint the changed files; `pnpm format:check`; ledger
+  (the thirteen); `git commit -s -m "A797-6: Add station sets the ready warning time"`
+
+### Task 9: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/kitchen-service.md` (`:106-108`) and
+  `apps/server/src/guide/es/kitchen-service.md` (`:122-124`), `docs/developers/design-system.md`
+  (`:2931`, `:4693-4694`, `:4700-4702`), `docs/backlog.md` (both A797 entries, `:120-129` and the
+  order line in the till area), `docs/backlog/till.md` (A797's entry, `:1036-1046`),
+  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.6's row `:375`, §3.8's Warm
+  row `:427`, §5's Ready warning point `:529-541`: dated pointers)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+- [ ] **Step 1: Guides** (D10). English, the sentence at `:106-108` becomes: "Each prep station sets
+  its own late flags, and a **Ready warning** time of 3 minutes unless you change it, when you add
+  it with **Add station**, and under **Late flags (minutes)** when you edit it in **Prep
+  stations**." Spanish: «Cada estación de preparación fija sus propios avisos de demora, y un tiempo
+  de **Listo sin recoger** de 3 minutos si no lo cambias, al crearla con **Añadir estación**, y en
+  **Avisos de demora (minutos)** al editarla en **Estaciones de preparación**.» (read «Añadir
+  estación» and «Estaciones de preparación» from `strings.ts`'s `es` block before writing). Nothing
+  about the Ready bar's warning: slice 7 adds it.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md.** `:2931` "a station's three late-flag minutes" → "a station's
+  three late-flag minutes and its ready warning time"; `:4693-4694` "the three late-flag fields in
+  one row under 'Late flags (minutes)'" → "the four minutes fields, two to a row, under 'Late
+  flags (minutes)': Waiting, Overdue, Forgotten, then Ready warning"; `:4700-4702`: "… and that
+  waiting < overdue < forgotten; the ready warning is in no order with them, and its own message
+  says 'Use whole minutes, at least 1.'".
+- [ ] **Step 4: Backlog.** Both A797 entries and `till.md`'s: slice 6 in review with this plan
+  linked; slice 7 next. Open no new entry unless the LOOK finds something this slice does not fix
+  (its number from `~/waitron-campaign-shared/next-item-number`: read it, use it, write the next
+  back).
+- [ ] **Step 5: Design file** (dated pointers; a design records what was decided when): under §3.6's
+  table, "2026-10-26, slice 6: the Ready warning time is set in the station editor and Add station
+  as a fourth field after Waiting, Overdue and Forgotten, and is in no order with them; see the
+  build plan's slice 6, D3 and D6."; under §3.8's table, "2026-10-26, slice 6: the station fields
+  say Waiting, Overdue, Forgotten in English and «Esperando», «Con retraso», «Olvidado» in
+  Spanish (D5)."; under §5's Ready warning point, "2026-10-26, slice 6: the column is
+  `kitchen_stations.ready_warning_after_minutes`, and each `ready` entry carries `oldestReadyAt`
+  and `readyWarningAfterMinutes`; see the build plan's slice 6, D1 and D4."
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-6 — guides, design system and backlog for the ready warning time"`
+
+### Task 10 (visual): LOOK at the station editor and Add station
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-6-ready-warning-data`; `wa-wt ls`
+  for the URLs. Sign in to the dashboard as the demo's owner and open **Prep stations**
+  (`/manage/prep-stations`).
+- [ ] **Step 2: Look** with the workspace's Playwright Chromium (script in
+  `/Users/clintongormley/waitron-campaign-c/a797-6-scripts/`, never in the worktree, its process id
+  recorded), at **390 px** and **1280 px**, **light and dark**, **English and Spanish**:
+  - the station editor of the demo's Kitchen: the four minutes two to a row, Waiting · Overdue /
+    Forgotten · Ready warning, the fourth at 3; then a 0 typed in Ready warning and Save tried: the
+    field marked with its own message and the bottom line;
+  - Add station: Waiting after, Overdue after, Forgotten after, Ready warning after (min) at 3,
+    then Printers;
+  - save a ready warning of 6 on Kitchen and check it stored:
+    `sqlite3 <the worktree's venue folder>/venue.db "select name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes, ready_warning_after_minutes from kitchen_stations"`
+    (read-only; `wa-wt ls` names the folder); write the rows in the ledger.
+- [ ] **Step 3: Save** the PNGs under `/Users/clintongormley/waitron-campaign-c/a797-6-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, describe them in the ledger and the PR body.
+  Expected: every label reads in full, «Listo sin recoger» included, at 390 px; nothing scrolls
+  sideways.
+- [ ] **Step 4: Stop** what you started: the script by its recorded process id, then
+  `wa-wt down waitron-feat-a797-6-ready-warning-data`.
+
+### Closing slice 6
+
+- Focused runs per task as above. CI runs the package suites (db, shared, provisioning, server,
+  venue-service, till), coverage and the shared and db mutation jobs. Read the `changes` job's
+  outputs and those packages' coverage or merge jobs on the current head before calling the PR
+  green.
+- `/finish-branch` with this plan named. Review path **FULL**: per-task reviews, the
+  plan-against-spec read, and two Codex run-it reviews (the second told to set this plan's checklist
+  aside and test what it does not name).
+- PR body. **First line: "No venue reset needed."** Then: **Migration** (D1's statement, quoted,
+  and the measured reason there is no CHECK); **Contract change** (`ReadyAtStation` gains
+  `oldestReadyAt` and `readyWarningAfterMinutes`, on the floor read and the counter's tab list; the
+  station routes and the stations list carry `readyWarningAfterMinutes`; the configuration file
+  carries `ready_warning_after_minutes`); **What a person sees** (the station editor and Add
+  station's fourth field and Q51 (f) 7's words; nothing on the till until slice 7); **Decisions**
+  D1–D12 in one line each; **Changed test checks** (from the ledger: Task 4's two, Task 5's
+  sixteen, Task 6's eighteen, Task 7's two extended, Task 8's thirteen); **Fixture-only** (Task
+  2's two harnesses, Task 5's fourteen till files, Task 7's venue-service fixtures); **LOOK**.
+- **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D3 (the
+  ready warning is in no order with the late flags, so 20 beside Forgotten after 15 is allowed);
+  D5 (the Spanish of Waiting, Overdue and Forgotten in Add station now reads «Esperando a partir
+  de», «Con retraso a partir de», «Olvidado a partir de»); D7 (no hint on the field); D10 (until
+  slice 7 the field has no effect).
+- After merge: delete the branch local and remote and check the remote one is gone; update the
+  ledger; then slice 7.
 
 ---
 
