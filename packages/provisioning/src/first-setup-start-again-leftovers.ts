@@ -118,9 +118,7 @@ function draftsOf(
   const drafts = new Map<string, Draft>();
   const add = (draft: Draft) => {
     const key = `${draft.root}:${draft.path}`;
-    const existing = drafts.get(key);
-    if (existing === undefined) drafts.set(key, draft);
-    else if (draft.why === "not-created") drafts.set(key, { ...existing, why: "not-created" });
+    if (!drafts.has(key)) drafts.set(key, draft);
   };
   for (const finding of findings) {
     if (finding.kind === "wal") {
@@ -153,10 +151,15 @@ async function walk(
   path: string,
   into: StartAgainEntry[],
   budget: { left: number },
+  top = true,
 ): Promise<boolean> {
   const full = join(rootDir(roots, root), path);
   const info = await lstatOrNull(full);
-  if (info === null) return false;
+  if (info === null) {
+    // A child readdir named but lstat cannot find would otherwise move with its folder, unlisted.
+    if (!top) throw new Explain(`unit entry not found: ${root}/${path}`);
+    return false;
+  }
   if (--budget.left < 0) throw new Explain("too many entries");
   const name = path.split("/").at(-1)!;
   if (LOCKS.has(name)) throw new Explain(`unit holds a lock file: ${root}/${path}`);
@@ -174,7 +177,7 @@ async function walk(
   }
   into.push({ path, type: "folder", ino: info.ino.toString(), size: null, mtimeNs: null });
   for (const child of (await readdir(full)).sort())
-    await walk(roots, root, `${path}/${child}`, into, budget);
+    await walk(roots, root, `${path}/${child}`, into, budget, false);
   return true;
 }
 
@@ -210,7 +213,8 @@ async function setupRecordParses(roots: Roots, attemptId: string, frozenDigest: 
 
 /**
  * What a Move would set aside after a cut-off Start again, or why the page can only explain.
- * Reads metadata only: a change that keeps a file's inode, size and time is not seen.
+ * Binds the found files by their metadata only: a change that keeps a file's inode, size and time
+ * is not seen.
  */
 export async function surveyStartAgainLeftovers(roots: Roots): Promise<StartAgainSurvey | null> {
   try {
@@ -224,6 +228,7 @@ export async function surveyStartAgainLeftovers(roots: Roots): Promise<StartAgai
     const markedState = marker.files.filter((file) => file.root === "state").map((f) => f.name);
     const drafts = draftsOf(findings, marked, markedState);
     await setupRecordParses(canonical, marker.attemptId, marker.frozenDigest);
+    if (drafts.length === 0) throw new Explain("nothing found");
     const budget = { left: START_AGAIN_ENTRY_LIMIT };
     const units: StartAgainUnit[] = [];
     for (const draft of drafts) units.push(await unitOf(canonical, draft, budget));

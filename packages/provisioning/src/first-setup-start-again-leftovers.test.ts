@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import * as fs from "node:fs/promises";
 import {
   chmod,
   mkdir,
@@ -14,7 +15,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { startAgainAttempt } from "../test/start-again-attempt.js";
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
@@ -26,6 +27,8 @@ import {
   surveyStartAgainLeftovers,
   type StartAgainSurvey,
 } from "./first-setup-start-again-leftovers.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 const dirs: string[] = [];
 async function scratch() {
@@ -534,4 +537,67 @@ it("a refusal without a reason classifies without one", async () => {
   expect(classified.error.code).toBe("setup.start_again_files_found");
   expect(classified.error.reason).toBeUndefined();
   expect(classified.survey?.kind).toBe("choice");
+});
+
+it.skipIf(process.getuid?.() === 0)(
+  "a refusal with nothing found explains, and the refusal is given back unchanged",
+  async () => {
+    const { roots } = await startAgainAttempt(await scratch(), {
+      before: async ({ stateDir }) =>
+        put(join(stateDir, "first-fiscal-documents", "doc.json"), "{}"),
+    });
+    const folder = join(roots.stateDir, "first-fiscal-documents");
+    await chmod(folder, 0o555);
+    try {
+      const refused = await finishStartAgainDeletion(roots).then(
+        () => null,
+        (error: unknown) => error as AppError,
+      );
+      expect(refused).toBeInstanceOf(AppError);
+      expect(refused!.code).toBe("setup.start_again_incomplete");
+      expect(refused!.reason).toMatch(/^deletion failed: EACCES /);
+      expect(await surveyStartAgainLeftovers(roots)).toEqual({
+        kind: "explain",
+        reason: "nothing found",
+      });
+      const back = await classifyStartAgainRefusal(roots, refused!);
+      expect(back.error).toBe(refused);
+      expect(back.survey).toBeUndefined();
+    } finally {
+      await chmod(folder, 0o755);
+    }
+  },
+);
+
+it("an entry under a unit that cannot be found when looked at explains instead of being skipped", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  const folder = join(roots.venueDir, ".venue.db-litestream");
+  await put(join(folder, "a.wal"), "one");
+  await put(join(folder, "b.wal"), "two");
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.lstat).mockImplementation((async (...args: Parameters<typeof actual.lstat>) => {
+    if (String(args[0]) === join(folder, "b.wal"))
+      throw Object.assign(new Error("ENOENT: no such file or directory"), {
+        code: "ENOENT",
+        path: String(args[0]),
+      });
+    return actual.lstat(...args);
+  }) as typeof fs.lstat);
+  try {
+    expect(await surveyStartAgainLeftovers(roots)).toEqual({
+      kind: "explain",
+      reason: "unit entry not found: venue/.venue.db-litestream/b.wal",
+    });
+  } finally {
+    vi.mocked(fs.lstat).mockReset();
+  }
+});
+
+it("a -wal with no main file makes a not-created database unit", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  await writeFile(join(roots.venueDir, "venue.db-wal"), "pages with no database");
+  const survey = choice(await surveyStartAgainLeftovers(roots));
+  expect(survey.units.map((unit) => [unit.root, unit.path, unit.why, unit.pieces])).toEqual([
+    ["venue", "venue.db", "not-created", ["venue.db-wal"]],
+  ]);
 });
