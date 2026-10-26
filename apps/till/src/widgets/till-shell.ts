@@ -26,6 +26,7 @@ import {
 } from "../built-in-screens.js";
 import type { TillClockState } from "../api/client.js";
 import type { TillClockAction } from "../state/clocking.js";
+import type { BarTable } from "../state/bar-tables.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
@@ -35,6 +36,9 @@ import "@waitron/ui/src/components/wt-venue-logo.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
+
+/** The screens a tab names: on a handheld the Order screen is reached through its table's button. */
+type TabScreen = Exclude<BuiltInScreen, "order">;
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
@@ -89,6 +93,7 @@ const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "clockBusy",
   "clockError",
   "legalName",
+  "barTables",
 ];
 
 function logoKey(state: VenueLogoState): string {
@@ -250,7 +255,8 @@ export class TillShell extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      .tab {
+      .tab,
+      .bar-table {
         flex: none;
         white-space: nowrap;
         min-height: var(--wt-tap-min);
@@ -264,12 +270,14 @@ export class TillShell extends LitElement {
         cursor: pointer;
       }
 
-      .tab:hover {
+      .tab:hover,
+      .bar-table:hover {
         background: var(--wt-color-surface-raised);
       }
 
       .tab[aria-selected="true"],
-      .tab[aria-pressed="true"] {
+      .tab[aria-pressed="true"],
+      .bar-table[aria-selected="true"] {
         background: var(--wt-color-surface-raised);
         border-color: var(--wt-color-border);
       }
@@ -353,7 +361,8 @@ export class TillShell extends LitElement {
         flex: 1;
       }
 
-      .head.phone .tab {
+      .head.phone .tab,
+      .head.phone .bar-table {
         padding: var(--wt-space-2) var(--wt-space-3);
       }
 
@@ -443,6 +452,8 @@ export class TillShell extends LitElement {
   @property({ attribute: false }) transferCount?: number;
   @property({ type: Boolean }) transferAvailable = false;
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
+  /** A handheld's table buttons, after Floor. */
+  @property({ attribute: false }) barTables: readonly BarTable[] = [];
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
   /** Suppresses the whole operator `<header>`: a kitchen display shows its board, no operator
    * chrome (owner decision 2026-09-04). */
@@ -1035,16 +1046,32 @@ export class TillShell extends LitElement {
     </button>`;
   }
 
-  #screenTitle(screen: BuiltInScreen): string {
+  #screenTitle(screen: TabScreen): string {
     return screen === "kitchen" ? "" : t(`tab.${screen}`);
   }
 
+  #barTable(table: BarTable, current: boolean): TemplateResult {
+    return html`<button
+      type="button"
+      class="bar-table"
+      role="tab"
+      data-bar-table=${table.tableId}
+      aria-selected=${current ? "true" : "false"}
+      aria-label=${table.unsent ? t("shell.table_unsent").replace("{table}", () => table.name) : nothing}
+      @click=${() => this.#emit("open-bar-table", { tableId: table.tableId })}
+    >
+      ${table.unsent ? html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>` : nothing}${table.name}
+    </button>`;
+  }
+
   #primaryTabs(
-    screens: readonly BuiltInScreen[],
-    activeScreen: BuiltInScreen | undefined,
+    screens: readonly TabScreen[],
+    activeScreen: TabScreen | undefined,
     counterMenu: boolean,
     counterLabel: string,
   ): TemplateResult {
+    const tables = this.formFactor === "till" ? [] : this.barTables;
+    const tableOnScreen = tables.some((table) => table.current);
     return html` <nav class="tabs" role=${counterMenu ? nothing : "tablist"}>
       ${screens.map((screen) =>
         screen === "counter" && this.counterZones.length > 1
@@ -1076,7 +1103,7 @@ export class TillShell extends LitElement {
                 type="button"
                 class="tab"
                 role=${counterMenu ? nothing : "tab"}
-                aria-selected=${counterMenu ? nothing : screen === activeScreen ? "true" : "false"}
+                aria-selected=${counterMenu ? nothing : screen === activeScreen && !tableOnScreen ? "true" : "false"}
                 aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
                 @click=${() => this.#emit("screen-select", { screen })}
               >
@@ -1084,6 +1111,7 @@ export class TillShell extends LitElement {
               </button>
             `,
       )}
+      ${tables.map((table) => this.#barTable(table, table.current))}
     </nav>`;
   }
 
@@ -1093,8 +1121,9 @@ export class TillShell extends LitElement {
     this.#shown = moved;
     if (this.#menuOpen()) this.#held = moved;
     const screens = builtInScreensFor(this.formFactor).filter(
-      (screen) =>
-        this.formFactor !== "till" || (screen === "counter" ? this.showCounter : this.showFloor),
+      (screen): screen is TabScreen =>
+        screen !== "order" &&
+        (this.formFactor !== "till" || (screen === "counter" ? this.showCounter : this.showFloor)),
     );
     const requestedScreen = resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null);
     const activeScreen = screens.find((screen) => screen === requestedScreen) ?? screens[0];

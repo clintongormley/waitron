@@ -303,6 +303,24 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     }
   });
 
+  it("the bar with a selected table button and an unsent one has no violations", async () => {
+    const { el, host } = await mountWidget<TillShell>(
+      "till-shell",
+      {
+        formFactor: "phone-portrait",
+        activeScreen: "order",
+        operatorName: "Ana",
+        barTables: [
+          { tableId: "t4", name: "T4", unsent: true, current: false },
+          { tableId: "t9", name: "T9", unsent: false, current: true },
+        ],
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-bar-table]")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
   it("kiosk mode with its language chooser has no violations", async () => {
     const { host } = await mountWidget<TillShell>(
       "till-shell",

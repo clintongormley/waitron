@@ -1915,21 +1915,25 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     await userEvent.click(primary()[0]!);
     await flush(el);
     expect(location.pathname).toBe("/tabs/floor");
-    await userEvent.click(primary()[1]!);
-    await flush(el);
-    expect(location.pathname).toBe("/tabs/order");
-    const back = new Promise<void>((done) =>
+    const toOrder = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );
     history.back();
-    await back;
+    await toOrder;
     await flush(el);
-    expect(location.pathname).toBe("/tabs/floor");
+    expect(location.pathname).toBe("/tabs/order");
     const forward = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );
     history.forward();
     await forward;
+    await flush(el);
+    expect(location.pathname).toBe("/tabs/floor");
+    const back = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    history.back();
+    await back;
     await flush(el);
     late.resolve([tableRow(tableParty())]);
     await flush(el);

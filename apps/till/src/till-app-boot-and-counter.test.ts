@@ -5844,28 +5844,51 @@ it.each([
   expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull();
 });
 
-it.each([
-  ["till", "floor", "till-floor-screen"],
-  ["phone-portrait", "order", "till-table-order-screen"],
-  ["tablet-landscape", "order", "till-table-order-screen"],
-] as const)("navigates the fixed %s primary screen to %s", async (formFactor, destination, tag) => {
-  const { el } = await mountApp({
-    getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
-    getDeviceIdentity: vi
-      .fn()
-      .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
-  });
-  await toCounter(el);
-  const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
-  const buttons = fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab");
-  expect(buttons).toHaveLength(2);
-  await userEvent.click(buttons[1]!);
-  await flush(el);
-  const screen = el.shadowRoot!.querySelector(tag) as HTMLElement & { embedded: boolean };
-  expect(screen).not.toBeNull();
-  expect(screen.embedded).toBe(true);
-  expect(location.pathname).toBe(`/tabs/${destination}`);
-});
+it.each([["till", "floor", "till-floor-screen"]] as const)(
+  "navigates the fixed %s primary screen to %s",
+  async (formFactor, destination, tag) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+    });
+    await toCounter(el);
+    const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
+    const buttons = fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab");
+    expect(buttons).toHaveLength(2);
+    await userEvent.click(buttons[1]!);
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector(tag) as HTMLElement & { embedded: boolean };
+    expect(screen).not.toBeNull();
+    expect(screen.embedded).toBe(true);
+    expect(location.pathname).toBe(`/tabs/${destination}`);
+  },
+);
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "draws only Floor as a tab on a %s",
+  async (formFactor) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+    });
+    await toCounter(el);
+    const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
+    expect(fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")).toHaveLength(1);
+    history.pushState(null, "", "/tabs/order");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("till-table-order-screen") as HTMLElement & {
+      embedded: boolean;
+    };
+    expect(screen).not.toBeNull();
+    expect(screen.embedded).toBe(true);
+    expect(location.pathname).toBe("/tabs/order");
+  },
+);
 
 it.each([
   ["till", "order", "counter", "till-counter-screen"],
@@ -6322,7 +6345,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
             }
             if (view.formFactor === "kds")
               expect(shell(el)!.shadowRoot!.querySelector("header")).toBeNull();
-            else expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(2);
+            else
+              expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(
+                view.formFactor === "till" ? 2 : 1,
+              );
             if (view.name === "kitchen-monitor")
               expect((screen as unknown as { monitor: boolean }).monitor).toBe(true);
             await new Promise((resolve) => requestAnimationFrame(resolve));

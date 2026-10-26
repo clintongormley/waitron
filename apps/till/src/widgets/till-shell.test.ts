@@ -4,6 +4,7 @@ import type { LitElement } from "lit";
 import { cleanupWidgets, mountWidget as mountBaseWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
+import type { BarTable } from "../state/bar-tables.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   chooseTheme,
@@ -644,7 +645,7 @@ describe("till-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(12);
+        expect(controls.length).toBe(11);
         expect(controls.filter((c) => c.classList.contains("zones"))).toHaveLength(1);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
@@ -728,10 +729,10 @@ it.each(["till", "phone-portrait", "tablet-landscape"] as const)(
       const { el } = await mountWidget<TillShell>("till-shell", { formFactor });
       const labels = () =>
         [...el.shadowRoot!.querySelectorAll(".tab")].map((e) => e.textContent!.trim());
-      expect(labels()).toEqual(formFactor === "till" ? ["Counter", "Floor"] : ["Floor", "Order"]);
+      expect(labels()).toEqual(formFactor === "till" ? ["Counter", "Floor"] : ["Floor"]);
       setLocale("es-ES");
       await el.updateComplete;
-      expect(labels()).toEqual(formFactor === "till" ? ["Mostrador", "Sala"] : ["Sala", "Pedido"]);
+      expect(labels()).toEqual(formFactor === "till" ? ["Mostrador", "Sala"] : ["Sala"]);
     } finally {
       setLocale(original);
     }
@@ -1060,6 +1061,134 @@ function deepActive(): Element | null {
   return active;
 }
 
+describe("a handheld's table buttons", () => {
+  const tables: BarTable[] = [
+    { tableId: "t4", name: "T4", unsent: true, current: false },
+    { tableId: "t9", name: "T9", unsent: true, current: false },
+  ];
+  const tabsOf = (el: TillShell) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('header [role="tab"]'),
+  ];
+  const buttonOf = (el: TillShell, tableId: string) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-bar-table="${tableId}"]`)!;
+
+  it("draws Floor, then one button per table, in the order given", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      barTables: tables,
+    });
+    expect(tabsOf(el).map((tab) => tab.textContent!.trim())).toEqual(["Floor", "T4", "T9"]);
+    for (const table of tables) {
+      const icon = buttonOf(el, table.tableId).querySelector('wt-icon[name="floor-unsent"]');
+      expect(icon).not.toBeNull();
+      expect(icon!.getAttribute("aria-hidden")).toBe("true");
+      expect(buttonOf(el, table.tableId).classList.contains("bar-table")).toBe(true);
+    }
+    expect(
+      [...el.shadowRoot!.querySelectorAll(".tab")].map((tab) => tab.textContent!.trim()),
+    ).toEqual(["Floor"]);
+  });
+
+  it.each([
+    ["en-GB", "T4 unsent"],
+    ["es-ES", "T4 sin enviar"],
+  ] as const)(
+    "names a button with unsent dishes 'T4 unsent', and one without by its name (%s)",
+    async (locale, label) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          activeScreen: "order",
+          barTables: [
+            { tableId: "t4", name: "T4", unsent: true, current: false },
+            { tableId: "t9", name: "T9", unsent: false, current: true },
+          ],
+        });
+        expect(buttonOf(el, "t4").getAttribute("aria-label")).toBe(label);
+        expect(buttonOf(el, "t9").hasAttribute("aria-label")).toBe(false);
+        expect(buttonOf(el, "t9").querySelector("wt-icon")).toBeNull();
+        expect(buttonOf(el, "t9").textContent!.trim()).toBe("T9");
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
+  it("selects the table on screen and not Floor; selects Floor when no table is current", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "order",
+      barTables: [{ ...tables[0]!, current: true }, tables[1]!],
+    });
+    const selected = () => tabsOf(el).map((tab) => tab.getAttribute("aria-selected"));
+    expect(selected()).toEqual(["false", "true", "false"]);
+    Object.assign(el, { barTables: tables });
+    await el.updateComplete;
+    expect(selected()).toEqual(["true", "false", "false"]);
+  });
+
+  it("emits open-bar-table with the table's id", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      barTables: tables,
+    });
+    const events: CustomEvent[] = [];
+    const listen = (event: Event) => events.push(event as CustomEvent);
+    document.addEventListener("open-bar-table", listen);
+    const screens: unknown[] = [];
+    el.addEventListener("screen-select", (event) => screens.push(event));
+    try {
+      await userEvent.click(buttonOf(el, "t9"));
+    } finally {
+      document.removeEventListener("open-bar-table", listen);
+    }
+    expect(events.map((event) => event.detail)).toEqual([{ tableId: "t9" }]);
+    expect(events[0]!.bubbles).toBe(true);
+    expect(events[0]!.composed).toBe(true);
+    expect(screens).toEqual([]);
+  });
+
+  it("a till draws no table buttons", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
+      barTables: tables,
+    });
+    expect(el.shadowRoot!.querySelector("[data-bar-table]")).toBeNull();
+    expect(tabsOf(el).map((tab) => tab.textContent!.trim())).toEqual(["Counter", "Floor"]);
+  });
+
+  it("the strip scrolls sideways when the buttons do not fit at 360, keeping Help and More on screen", async () => {
+    setLocale("en-GB");
+    await atViewport(360, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "phone-portrait",
+        activeScreen: "floor",
+        operatorName: "Ana",
+        barTables: Array.from({ length: 10 }, (_, i) => ({
+          tableId: `t${i + 1}`,
+          name: `T${i + 1}`,
+          unsent: true,
+          current: false,
+        })),
+      });
+      await frame();
+      const strip = el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
+      expect(strip.querySelectorAll("[data-bar-table]")).toHaveLength(10);
+      expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+      const header = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
+      for (const item of [el.shadowRoot!.querySelector("header wt-help-switch")!, menuOf(el)!]) {
+        const box = item.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(header.left);
+        expect(box.right).toBeLessThanOrEqual(header.right + 0.5);
+      }
+    });
+  });
+});
+
 describe("till-shell at phone width", () => {
   const clockedIn: Partial<TillShell> = {
     ...full,
@@ -1159,7 +1288,7 @@ describe("till-shell at phone width", () => {
           const strip = el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
           const box = strip.getBoundingClientRect();
           const tabs = [...strip.children].map((c) => c.getBoundingClientRect());
-          expect(tabs).toHaveLength(2);
+          expect(tabs).toHaveLength(1);
           expect(strip.scrollWidth, "the tab strip's content fits its box").toBeLessThanOrEqual(
             strip.clientWidth,
           );
@@ -1189,7 +1318,7 @@ describe("till-shell at phone width", () => {
           ]
             .map((c) => c.getBoundingClientRect())
             .filter((r) => r.width > 0 && r.height > 0);
-          expect(visible.length).toBe(4);
+          expect(visible.length).toBe(3);
           for (const r of visible) {
             expect(r.top).toBeGreaterThanOrEqual(header.top);
             expect(r.bottom).toBeLessThanOrEqual(header.bottom);
@@ -1261,7 +1390,7 @@ describe("till-shell at phone width", () => {
       for (const tab of el.shadowRoot!.querySelectorAll<HTMLElement>(".tab")) {
         await userEvent.click(tab);
       }
-      expect(keys).toEqual(["floor", "order"]);
+      expect(keys).toEqual(["floor"]);
     });
   });
 
@@ -2364,8 +2493,8 @@ describe("till-shell above phone width", () => {
 
 it.each([
   ["till", ["Counter", "Floor"], "counter", "floor"],
-  ["phone-portrait", ["Floor", "Order"], "floor", "order"],
-  ["tablet-landscape", ["Floor", "Order"], "floor", "order"],
+  ["phone-portrait", ["Floor"], "floor", null],
+  ["tablet-landscape", ["Floor"], "floor", null],
 ] as const)(
   "fixed primary screens for %s work without an authored tab list",
   async (formFactor, labels, _home, second) => {
@@ -2380,13 +2509,22 @@ it.each([
           .filter((button) => button.getAttribute("aria-selected") === "true")
           .map((button) => button.textContent!.trim()),
       ).toEqual([labels[0]]);
-      const selected: unknown[] = [];
-      el.addEventListener("screen-select", (event) => selected.push((event as CustomEvent).detail));
-      await userEvent.click(buttons()[1]!);
-      expect(selected).toEqual([{ screen: second }]);
-      Object.assign(el, { activeScreen: second });
-      await el.updateComplete;
-      expect(buttons()[1]!.getAttribute("aria-selected")).toBe("true");
+      if (second === null) {
+        // D13: the Order screen has no tab on a handheld, so Floor stays selected on it.
+        Object.assign(el, { activeScreen: "order" });
+        await el.updateComplete;
+        expect(buttons()[0]!.getAttribute("aria-selected")).toBe("true");
+      } else {
+        const selected: unknown[] = [];
+        el.addEventListener("screen-select", (event) =>
+          selected.push((event as CustomEvent).detail),
+        );
+        await userEvent.click(buttons()[1]!);
+        expect(selected).toEqual([{ screen: second }]);
+        Object.assign(el, { activeScreen: second });
+        await el.updateComplete;
+        expect(buttons()[1]!.getAttribute("aria-selected")).toBe("true");
+      }
       Object.assign(el, { activeScreen: "retired-custom-screen" });
       await el.updateComplete;
       expect(buttons()[0]!.getAttribute("aria-selected")).toBe("true");
