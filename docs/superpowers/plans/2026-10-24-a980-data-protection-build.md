@@ -50,7 +50,17 @@ English and Spanish (`apps/server/src/guide/<language>/data-protection.md`), wit
 templates for staff, invoice customers, booking guests and the venue's web page, a record of
 processing the venue fills in, and a breach section listing the Article 33 questions, what the
 dashboard can and cannot show afterwards, and the steps for common losses. It gives no verdict on
-whether to notify. The Users guide links to it; no dashboard screen does yet (S1a). Design:
+whether to notify. The Users guide links to it; no dashboard screen does yet (S1a). 2026-10-26:
+S1a is built ([its plan](2026-10-26-a980-s1a-notice-settings.md)): core migration 0192 adds
+`tenants.privacy_notice_url` and `tenants.privacy_email`, two empty-by-default text columns, with
+no table rebuilt; the **Privacy** card on **Venue settings → Venue details** shows them under
+`venue.view` and saves them under `venue.configure`, and while help is on, a "?" beside the web
+page field in its Edit form links to the Data protection page's `staff-notice` section. Nothing reads the stored values yet: every reader still takes the link
+from `WAITRON_PRIVACY_NOTICE_URL` until S1b. The writer,
+`packages/provisioning/src/privacy-contact.ts`, is added to `scripts/write-path-tables.json`,
+the list of the only files allowed to write `tenants`. The owner then decided that a
+configuration export carries the two values (decision B of the S1a plan, answered 2026-10-26);
+on S1a's branch it does not yet. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in
@@ -175,7 +185,14 @@ has no dashboard entry point of its own).
 
 **S1b.** The invoice email is composed in `apps/server/src/invoice-email.ts`. Today the link is
 read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and passed in at
-`apps/server/src/boot.ts:1925` and `:2069`.
+`apps/server/src/boot.ts:1925` and `:2069`. 2026-10-26, corrected by the
+[S1a plan](2026-10-26-a980-s1a-notice-settings.md)'s reader list, which S1b inherits: the link is
+passed at `boot.ts:2012`, `:2137` and `:2177`; S3 added a reader this note did not list, the
+invoice customer's download (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`); and
+`invoice-email.ts` holds no privacy text, so S1b adds the invoice notice there rather than moving a
+link. The sign-in page and the profile page both read the link from one route that needs no
+sign-in, `GET /management-api/google/config` (`apps/server/src/management-api.ts:788-790`), so S1b
+reads `tenants` there.
 
 ## Build order
 

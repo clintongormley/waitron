@@ -202,12 +202,39 @@ by the answers):
     holds Maria's name and address.
   - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
     they are switched on.
-- **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
-  environment setting a box cannot set. Adds a migration.
-  The help guide's data-protection page (S6, `apps/server/src/guide/<language>/data-protection.md`)
-  has no dashboard entry point of its own: S1a's setting gets a "?" to
-  `data-protection#staff-notice`, and S1b updates that page's `staff-notice` and `full-notice`
-  sections once the setting exists.
+- **S1b** — every place that shows the privacy-notice link reads the setting S1a stores
+  (`tenants.privacy_notice_url`, `tenants.privacy_email`, saved from the **Privacy** card on
+  **Venue settings → Venue details**; the
+  [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)), and the
+  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Until then nothing reads the stored
+  values. The readers, as of 2026-10-26:
+  - `apps/server/src/boot.ts:2012`, into `mountManagementApi`, which passes the link to the
+    invitation and reset emails (`apps/server/src/management-api.ts:194`) and answers it on
+    `GET /management-api/google/config` (`management-api.ts:788-790`), a route that needs no
+    sign-in. The sign-in page and the profile page both read the link from that route.
+  - `boot.ts:2137`, into the invoice customer's download
+    (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`).
+  - `boot.ts:2177`, into `mountMeApi`, which passes it to the own personal-data download
+    (`apps/server/src/me-api.ts:130`, then `personal-data-export-api.ts` and the README in
+    `personal-data-readme.ts`) and to the email-address check email (`me-api.ts:182`).
+  - `apps/server/src/invoice-email.ts` carries no privacy text today, so S1b adds the invoice
+    notice there rather than moving a link.
+  - The dashboard's live read `getGoogleConfig` depends on `google_config` alone
+    (`apps/dashboard/src/api/live-queries.ts`); S1b adds `tenants` to it.
+  - `apps/server/README.md:487` documents the environment setting; S1b removes it with the setting.
+  - The guide (`apps/server/src/guide/<language>/data-protection.md`): S1b rewrites the
+    `privacy-settings` section's last sentence, "For now Waitron only keeps them here: nothing
+    else on the box shows them." ("Por ahora Waitron solo los guarda aquí: nada más en la caja los
+    muestra."), and names the setting in `staff-notice` and `full-notice`.
+- **A configuration export carries the privacy contact** (the owner's answer of 2026-10-26 to the
+  S1a plan's decision B, overriding its default). Today the export names the taxpayer's fields one
+  by one and selects neither column (`packages/provisioning/src/configuration-transfer.ts`, bundle
+  `version: 8`), so a new box set up from Bar Ejemplo's export shows "Not set" for both. Next
+  action: add both to the bundle, its import check (which must refuse exactly what the Privacy
+  card's save refuses, `packages/shared/src/privacy-contact.ts`) and the setup paths that apply it
+  (`apps/server/src/setup-api.ts`, `packages/provisioning/src/venue-apply.ts`), then drop the
+  guide's "A configuration export does not carry them …" sentence in both languages. The owner
+  asked for it inside S1a if it fits, else as the next slice before S1b.
 - **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
   confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
   `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
@@ -288,6 +315,23 @@ by the answers):
   decision 14). The owner then decided that a mirror is to serve no dashboard at all, so this
   refusal is the permanent answer, not a wait for A1111, which is withdrawn. Relayed by the
   watcher, `questions.md:4400` in lane B's campaign folder.
+- **A980 S1a, 2026-10-26:** the owner kept five of the
+  [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)'s six defaults (its
+  "Open decisions for the owner"; decision B was overridden, the export point under A980 above).
+  Relayed by the watcher, the "OWNER ANSWER — A980 S1a plan defaults A–F" section of lane B's
+  questions file.
+  - **A. Nothing reads the setting until S1b.** A manager saves
+    `https://barejemplo.es/privacidad` on the Privacy card and the card shows it, but an
+    invitation sent that afternoon carries no privacy link until S1b.
+  - **C. A supervisor sees the values.** The card is shown under `venue.view`, read-only and with
+    no Edit button without `venue.configure`.
+  - **D. The card is last among the core cards**: Business, Venue, Business day, Defaults, Privacy,
+    then the AEAT certificate on a venue with Veri\*Factu.
+  - **E. Last save wins.** Each save sends only the fields it changed, so a second manager's save
+    of a new web address leaves the first manager's new email in place, but had both changed the
+    email, the later one replaces the earlier with no warning, as on the Defaults card.
+  - **F. Stricter than `WAITRON_PRIVACY_NOTICE_URL`.** An address carrying a user name or
+    password, a space inside it, or an invisible character is refused; `http://` stays accepted.
 - **A980 S10, 2026-10-26:** what the log masks and what it leaves, each built with the default
   and open for the owner to reverse (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
   owner note 5). Masked in every line the server's logger writes, on `docker logs` as
