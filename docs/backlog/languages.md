@@ -132,11 +132,7 @@ Spanish variant badge "Se archivará al guardar", and the Spanish PIN reset conf
   (`apps/server/src/guide/es/appearance.md`). The Users guide (`apps/server/src/guide/es/staff.md`),
   the data download's README (`apps/server/src/i18n/personal-data-readme.ts`) and four of the
   dashboard's bill-payment strings (`payments.bill.*` in `apps/dashboard/src/i18n/strings.ts`,
-  among them «PIN de gerente») say «gerente». Seen by A980 S2c's screenshot pass. Both predate S2c: `git log -S` found
-  «Encargado» in `domain.ts` since f3b91c284 (#82, 2026-08-12) and «Como gerente, abre» in
-  `es/staff.md` since 0c86aeb87 (#1961, 2026-10-22), both ancestors of the main S2c branched
-  from; the README's «gerente» lines came with S2a2 (#2049) and S2b (#2052), and S2c added one more in the
-  guide's new admin section. Pick one word and use it everywhere.
+  among them «PIN de gerente») say «gerente». Pick one word and use it everywhere.
 
 ## Decisions and deliberate limits
 
