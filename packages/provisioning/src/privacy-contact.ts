@@ -1,9 +1,25 @@
 import { eq } from "drizzle-orm";
 import { tenants, type Transaction } from "@waitron/db";
+import {
+  AppError,
+  privacyContactProblem,
+  privacyContactValue,
+  type PrivacyContactField,
+} from "@waitron/shared";
+import "./errors.js";
 
 export interface PrivacyContact {
   privacyNoticeUrl: string | null;
   privacyEmail: string | null;
+}
+
+/** One privacy contact value as the Privacy card's save takes it: NFC and trimmed, empty is
+ * null; a value the shared rule refuses throws `venue.detail_invalid { field, reason }`. */
+export function privacyContactChecked(field: PrivacyContactField, raw: string): string | null {
+  const value = privacyContactValue(raw);
+  const problem = privacyContactProblem(field, value);
+  if (problem !== undefined) throw new AppError("venue.detail_invalid", { field, reason: problem });
+  return value;
 }
 
 /** The taxpayer row's privacy contact, or null when there is no taxpayer row. */

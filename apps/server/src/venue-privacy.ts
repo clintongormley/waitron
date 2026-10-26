@@ -1,10 +1,5 @@
-import type { PrivacyContact } from "@waitron/provisioning";
-import {
-  AppError,
-  PRIVACY_CONTACT_FIELDS,
-  privacyContactProblem,
-  privacyContactValue,
-} from "@waitron/shared";
+import { privacyContactChecked, type PrivacyContact } from "@waitron/provisioning";
+import { AppError, PRIVACY_CONTACT_FIELDS } from "@waitron/shared";
 import "./errors.js";
 
 /** The changed fields of a privacy contact request, each checked; throws `venue.detail_invalid`. */
@@ -22,10 +17,7 @@ export function privacyContactRequest(body: unknown): Partial<PrivacyContact> {
     if (!(field in body)) continue;
     const raw = (body as Record<string, unknown>)[field];
     if (typeof raw !== "string") throw invalid(field, "type");
-    const value = privacyContactValue(raw);
-    const problem = privacyContactProblem(field, value);
-    if (problem !== undefined) throw invalid(field, problem);
-    changes[field] = value;
+    changes[field] = privacyContactChecked(field, raw);
   }
   return changes;
 }
