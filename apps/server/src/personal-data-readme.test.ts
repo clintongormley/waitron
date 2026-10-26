@@ -499,7 +499,7 @@ What each file holds
 - invoices.json: the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and each email address it was sent to, with when the email was asked for, whether it went and when. Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.
 - invoices/: a copy of each of those invoices as a PDF, marked as a copy.
 ${MACHINE}
-This copy holds your full invoices and the emails that sent them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking, is not found by tax number.
+This copy holds your full invoices and the record of each email that sent them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking or an invoice you sent the venue, is not in this copy; ask the venue for it.
 
 Where it came from
 Staff at the venue entered your name, tax number and address when you asked for a full invoice; the rest was recorded as each invoice was issued and sent.

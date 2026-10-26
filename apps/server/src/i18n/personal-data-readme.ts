@@ -300,7 +300,7 @@ export const INVOICE_CUSTOMER_README_WORDS: Record<"en" | "es", InvoiceCustomerR
     use: "Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.",
     pdfs: "a copy of each of those invoices as a PDF, marked as a copy.",
     notFound:
-      "This copy holds your full invoices and the emails that sent them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking, is not found by tax number.",
+      "This copy holds your full invoices and the record of each email that sent them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking or an invoice you sent the venue, is not in this copy; ask the venue for it.",
     origin:
       "Staff at the venue entered your name, tax number and address when you asked for a full invoice; the rest was recorded as each invoice was issued and sent.",
     taxRecord:
@@ -317,7 +317,7 @@ export const INVOICE_CUSTOMER_README_WORDS: Record<"en" | "es", InvoiceCustomerR
     use: "Se guarda porque una factura debe identificar a su destinatario y el local debe conservar una copia de cada factura que emite.",
     pdfs: "una copia en PDF de cada una de esas facturas, marcada como copia.",
     notFound:
-      "Esta copia contiene tus facturas completas y los correos con que se enviaron. El servidor Waitron del local también guarda los datos que el personal escribió para una factura en la propia cuenta y en los registros de impresión; pídeselos al local. Cualquier otro dato tuyo que tenga el local, como una reserva, no se encuentra por el NIF.",
+      "Esta copia contiene tus facturas completas y el registro de cada correo con que se enviaron. El servidor Waitron del local también guarda los datos que el personal escribió para una factura en la propia cuenta y en los registros de impresión; pídeselos al local. Cualquier otro dato tuyo que tenga el local, como una reserva o una factura que enviaste al local, no está en esta copia; pídeselo al local.",
     origin:
       "El personal del local introdujo tu nombre, tu NIF y tu dirección cuando pediste una factura completa; el resto se registró al emitir y enviar cada factura.",
     taxRecord:
