@@ -5358,7 +5358,7 @@ My schedule, Profile and Transfers, each where offered; a `role="group"` headed 
 With the name on the bar, its menu holds only the clock actions, My hours and Fix my hours, and
 without the clock the name is drawn alone. Opening More holds its contents steady until it closes.
 Floor, tapped after a table, opens the Floor on that table's zone when the device shows that zone
-(`#floorReturnZone` in `till-app.ts`), and otherwise as it did before slice 3.
+(`#floorReturnZone` in `till-app.ts`).
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation
@@ -5415,7 +5415,8 @@ restarts. A display choice grants no permission. On a till, Counter is one tab f
 and a checked list for several, and Floor contains only selected table zones. A handheld has no
 Counter, so its Floor contains every selected zone, counter zones included. A handheld opens on its
 "Opens first" zone only once a choice is saved (the zones read's `saved`); before that it opens
-where it always has, on the URL's zone or the first tab. A handheld whose zones read fails at
+where it always has, on the URL's zone or the first tab. Once a table has been opened, Floor
+opens on that table's zone instead, as "Navigation and language controls" above says. A handheld whose zones read fails at
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
 Floor's pills disappear with one zone. The pills, List/Map and zone menu share one toolbar,
 including at phone width. A till with no permitted zones shows an explanation, Settings and Retry. A

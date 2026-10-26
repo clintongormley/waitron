@@ -1785,13 +1785,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
 - **A1120. A handheld stays on the table after its last send, so its button shows highlighted
-  without ✎** (for A797 slice 10). The design's worked example 1 (§4) and Q51 (b) describe Ana
-  sending everything at T9 and staying on it, its bar button highlighted without ✎ until she taps
-  Floor. Today a send that empties the New order returns a handheld to the Floor (`#returnToFloor`
-  at the end of the send in `apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's
-  ruling of 2026-10-26) because what the order screen does after a send is slice 10's, the
-  handheld's order screen at phone width:
-  [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
+  without ✎** (for A797 slice 10). The design's worked example 1 (§4) and Q51 (b) have Ana stay
+  on T9 after sending everything; today a send that empties the New order returns a handheld to the
+  Floor, which slice 3 kept because what the order screen does after a send is slice 10's.
+  [Detail](backlog/till.md#a1120-a-handheld-stays-on-the-table-after-its-last-send-so-its-button-shows-highlighted-without-)
 
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797
   slice 4's finish review, a browser probe on the branch): a till in that state shows the
@@ -2070,14 +2067,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   113–120 ms for a second table in the same zone.
 
 - **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
-  2026-10-17).** At 320×568, with the person's name moved into More, the menu's content (625 px)
-  overflows the 552 px it is given, so Log out sits below the menu's bottom edge and nothing says
-  the menu scrolls. The look hid A681's Theme row and Log out was still below the edge, so this is
-  believed to predate A681 (not run on `main`). A681 put the Theme row after Log out, so at 360×640
-  and 390×664 that row is the part that needs a scroll. On a handheld, since A797 slice 3, Log out
-  is last in ☰, after the Settings group (design §3.1), so with every entry offered it needs a
-  scroll at 360×640 (the build plan's slice 3, D6). Decide whether More should show that it
-  scrolls, or hold fewer items on a short screen.
+  2026-10-17).** On a handheld, since A797 slice 3, Log out is last in ☰, after the Settings group
+  (design §3.1), so with every entry offered it sits below the menu's bottom edge at 360×640 (759 px
+  against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and nothing says the
+  menu scrolls. Decide whether More should show that it scrolls, or hold fewer items on a short
+  screen.
 
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
   2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
@@ -2812,39 +2806,37 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   of today's joins.
 
 - **A1121. With many table buttons a handheld's Order screen can lose its visible way back to the
-  Floor.** Seen in A797 slice 3's LOOK, 2026-10-26 (`k-ten-floor-scrolled-390-light-en.png`,
-  `k-ten-order-last-390-light-en.png`, `k-ten-order-last-390-dark-es.png`,
-  `k-ten-floor-390-light-en.png` and `l-floor-360-light-en.png` in
-  `~/waitron-campaign-c/a797-3-shots/`): at 360 and 390 px with ten buttons the strip scrolls
-  sideways and Floor scrolls out of sight with the table buttons, and nothing hints that the strip
-  scrolls; the last visible button is simply cut at its edge. D14 of the slice's plan kept today's
-  scrolling strip. Options to decide: keep Floor fixed at the start of the strip, a fade at the
-  cut edge.
+  Floor.** Seen in A797 slice 3's LOOK, 2026-10-26: at 360 and 390 px with ten buttons the strip
+  scrolls sideways, Floor scrolls out of sight with the table buttons, and nothing hints that the
+  strip scrolls. Options to decide: keep Floor fixed at the start of the strip, a fade at the cut edge.
+  [Detail](backlog/till.md#a1121-with-many-table-buttons-a-handhelds-order-screen-can-lose-its-visible-way-back-to-the-floor)
 
 - **A1122. At 1024 px a handheld's Floor button slides sideways as table buttons appear.** Seen
-  in A797 slice 3's LOOK, 2026-10-26 (`a-floor-empty-1024-light-en.png`,
-  `d-floor-after-dining-1024-light-en.png`, `f-floor-after-terrace-1024-light-en.png` in
-  `~/waitron-campaign-c/a797-3-shots/`): the group is centred between the brand and the name, so
+  in A797 slice 3's LOOK, 2026-10-26: the group is centred between the brand and the name, so
   Floor sits at x 388 with no table buttons, 356 with one and 319 with two.
+  [Detail](backlog/till.md#a1122-at-1024-px-a-handhelds-floor-button-slides-sideways-as-table-buttons-appear)
 
 - **A1123. At 360×640 a handheld's ☰ popup moves up over the bar and covers ☰ itself.** Seen in
-  A797 slice 3's LOOK, 2026-10-26 (`l-menu-open-360-light-es.png`, `l-menu-open-360-dark-es.png`,
-  `l-menu-open-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`): to fit whole it starts
-  at y 11. Nothing is lost, and tapping outside or Escape closes it.
-  See also "On a short phone the till's More menu is taller than the room it gets", above.
+  A797 slice 3's LOOK, 2026-10-26: to fit whole it starts at y 11. Nothing is lost, and tapping
+  outside or Escape closes it. See also "On a short phone the till's More menu is taller than the
+  room it gets", above.
+  [Detail](backlog/till.md#a1123-at-360640-a-handhelds--popup-moves-up-over-the-bar-and-covers--itself)
 
 - **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
-  tab.** Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,
-  `l-floor-360-dark-es.png`, `l-floor-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`):
-  the tab reads "Terrac". `apps/till/src/screens/till-floor-screen.ts`, which draws the chip, is
-  unchanged between `git merge-base origin/main HEAD` and slice 3's tip, so I believe this
-  predates the slice (not run on main).
+  tab.** Seen in A797 slice 3's LOOK, 2026-10-26: the tab reads "Terrac". I believe this predates
+  the slice (not run on main).
+  [Detail](backlog/till.md#a1124-at-360-px-a---chip-on-the-till-floors-zone-tabs-covers-the-end-of-the-terrace-tab)
 
 - **A1125. On a 1024×768 handheld the Order screen's Fire and Send all buttons are cut off at the
   bottom.** Seen in A797 slice 3's LOOK, 2026-10-26 (`c-order-two-dishes-1024-light-en.png`,
   `g-two-buttons-3-open-1024-light-en.png` and their dark and Spanish twins, «Marchar» /
   «Enviar todo», in `~/waitron-campaign-c/a797-3-shots/`). Believed to predate A797 slice 3 (not
   run on main).
+
+- **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
+  bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
+  can make. Each should reach the order screen by the table's bar button or `/tabs/order`, or be
+  shown to run on a counter till (table-service, parties, menu-refresh, drafts, boot-and-counter).
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when

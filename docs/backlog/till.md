@@ -2717,3 +2717,46 @@ unless a bill comp also stands and the dish's discounts fall at more than one VA
 otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
 (`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
 Owner to confirm both halves.
+
+## A1120. A handheld stays on the table after its last send, so its button shows highlighted without ✎
+
+For A797 slice 10. The design's worked example 1 (§4) and Q51 (b) describe Ana sending everything at
+T9 and staying on it, its bar button highlighted without ✎ until she taps Floor. Today a send that
+empties the New order returns a handheld to the Floor (`#returnToFloor` at the end of the send in
+`apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's ruling of 2026-10-26) because
+what the order screen does after a send is slice 10's, the handheld's order screen at phone width:
+[design](../superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
+
+## A1121. With many table buttons a handheld's Order screen can lose its visible way back to the Floor.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`k-ten-floor-scrolled-390-light-en.png`,
+`k-ten-order-last-390-light-en.png`, `k-ten-order-last-390-dark-es.png`,
+`k-ten-floor-390-light-en.png` and `l-floor-360-light-en.png` in
+`~/waitron-campaign-c/a797-3-shots/`): at 360 and 390 px with ten buttons the strip scrolls
+sideways and Floor scrolls out of sight with the table buttons, and nothing hints that the strip
+scrolls; the last visible button is simply cut at its edge. D14 of the slice's plan kept today's
+scrolling strip. Options to decide: keep Floor fixed at the start of the strip, a fade at the
+cut edge.
+
+## A1122. At 1024 px a handheld's Floor button slides sideways as table buttons appear.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`a-floor-empty-1024-light-en.png`,
+`d-floor-after-dining-1024-light-en.png`, `f-floor-after-terrace-1024-light-en.png` in
+`~/waitron-campaign-c/a797-3-shots/`): the group is centred between the brand and the name, so
+Floor sits at x 388 with no table buttons, 356 with one and 319 with two.
+
+## A1123. At 360×640 a handheld's ☰ popup moves up over the bar and covers ☰ itself.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`l-menu-open-360-light-es.png`,
+`l-menu-open-360-dark-es.png`, `l-menu-open-360-light-en.png` in
+`~/waitron-campaign-c/a797-3-shots/`): to fit whole it starts at y 11. Nothing is lost, and tapping
+outside or Escape closes it. See also "On a short phone the till's More menu is taller than the room
+it gets" in [the backlog](../backlog.md).
+
+## A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace tab.
+
+Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,
+`l-floor-360-dark-es.png`, `l-floor-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`):
+the tab reads "Terrac". `apps/till/src/screens/till-floor-screen.ts`, which draws the chip, is
+unchanged between `git merge-base origin/main HEAD` and slice 3's tip, so I believe this
+predates the slice (not run on main).

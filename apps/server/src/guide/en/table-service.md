@@ -190,7 +190,8 @@ you want, choose the one that **Opens first**, and tap **Save**.
 The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
 all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A
 phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice, a
-phone or tablet opens where it always has; after that it opens on your **Opens first** zone.
+phone or tablet opens where it always has; after that it opens on your **Opens first** zone. After
+you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
 
 The choice belongs to this device and the profile it is signed in on, so another device on the same
 profile keeps its own, and switching profile brings back that profile's choice. It never gives this

@@ -3485,7 +3485,8 @@ without ✎, while she is on T9, and goes when she taps ✎ T4, which opens T4. 
 highlighted without ✎; in this slice a send that empties the New order still returns the handheld
 to the Floor (`till-app.ts:11754-11758`), so that moment shows only by the other ways D13 lists.
 Which **bill** a button opens is slice 11's (D9); here a button opens its table the way a tap on
-the Floor does, or returns to the table the app still holds as the Order tab did.
+the Floor does, or returns to the table the app still holds as the Order tab did. _2026-10-26:
+see D9's note._
 
 **Review path: FULL.** **A change to what a server read sends the till** (design §8: "any change to
 what a server read sends to the till"): `UnsentDraft` in `apps/server/src/order-drafts.ts:343-349`,
@@ -3687,6 +3688,11 @@ first" zone, and one without returns to the address's zone, the zone viewed befo
   `#requestLeave` and close an open overlay first (Find a bill, Pass, Kitchen, My schedule), as a
   tab does (`#onTabSelect` pops it, `:10416`). The current table's button with no overlay open does
   nothing, as the active tab does (`:19281-19286`).
+  _2026-10-26: the held table's button returns to its order only while the floor read seats no
+  other open party there; otherwise it opens the party the read seats there, and a party seated
+  since gets no ✎ for the dishes of the party that left (commits "a table button opens the table it
+  names, and a party seated since shows its ✎" and "a party seated at a table since gets no ✎ for
+  the dishes of the party that left")._
 - **D10. A table left for another table keeps its button.** Opening T9 from T4's screen releases
   T4's draft (`#releaseDraft`, `till-app.ts:10536-10556`) and no floor read follows, so a bar built
   from the read alone would drop ✎ T4 until the next Floor visit, though T4's dishes are saved
@@ -3723,6 +3729,10 @@ first" zone, and one without returns to the address's zone, the zone viewed befo
   table to resume (`#tableToResume`, `:18038-18047`) gets it again from that table, as any open
   does. A till is unchanged: its Floor stays on the page under a
   table, so changing `selectedZoneId` there would move it (`:1001`).
+  _2026-10-26: once a table has been opened, while the Floor shows its zone, the Floor reads the
+  zone from the address, which the move onto the Floor writes (`#setActiveTab`), so a language
+  change keeps a zone tapped since (commit "a language change keeps the Floor on the zone the person
+  tapped")._
 - **D13. The table on screen.** The highlighted button is the table being opened while an open is
   under way (a new `openingTableId`, set where `#openTableFromEvent` shows the Order screen and
   cleared in its `finally` under the same `offerRequest === this.#tableOfferRequest` check that
