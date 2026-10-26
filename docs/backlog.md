@@ -2299,17 +2299,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   touches `#onPayTab` (under _Payments and card readers_). Raised by the A1 review wave (A1d).
 
 - **Loose ends left by A395 (#1435) and A425, the till's one-row top bar.**
-  - Open, decided as built: a change in the pending-transfer count alone never brings items back
-    onto the bar, so when the count shrinks or goes away, items can stay in More although they
-    would now fit, until the next resize or other change refits the bar.
-  - Three lines in `apps/till/src/widgets/till-shell.ts` are pinned by no test: the phone-width
-    early return in `#release`, the return after re-adding a step in `#fit`, and the unobserve of
-    a replaced language chooser. Re-run those controls against the extracted shell before relying
-    on them.
-  - Three till top-bar cases run close to, and sometimes past, their 15 s limit locally: the "fits
-    as a fresh bar does when …" cases in `apps/till/src/widgets/till-shell.test.ts`; find what
-    makes them slow rather than raising the limit (A425).
-
+  Open, decided as built: a change in the pending-transfer count alone never brings items back
+  onto the bar, so when the count shrinks or goes away, items can stay in More although they
+  would now fit, until the next resize or other change refits the bar.
   [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
 
 - **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).** A unit with no

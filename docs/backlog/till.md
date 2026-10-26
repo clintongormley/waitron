@@ -5,35 +5,33 @@ their full text.
 
 ## Loose ends left by A429 slice 1 (#1493).
 
-- **Loose ends left by A429 slice 1 (#1493).**
-  - The bookings list shows no table for any booking, and a past booking's kept table name
-    (`bookings.table_label`) is stored but shown nowhere.
-  - A walk-up counter sale delivered to a table in a table-service zone may become a table tab
-    whose payment sends nothing to the kitchen (unverified, read only): `createOpenOrder`
-    (`apps/server/src/working-order.ts`, from #297) replaces the order's zone with the delivery
-    table's. Whether the till can offer such a table was not checked.
-  - Nothing at boot level tests that the till API receives the table-removal seats (each enabled
-    module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
-    API's wiring.
-  - Small floor-plan refusals still missing: `dining_tables.plan_table_id` has no unique index (no
-    writer makes two live tables follow one master table today); the delivery-release trigger
-    accepts an empty label.
+- The bookings list shows no table for any booking, and a past booking's kept table name
+  (`bookings.table_label`) is stored but shown nowhere.
+- A walk-up counter sale delivered to a table in a table-service zone may become a table tab
+  whose payment sends nothing to the kitchen (unverified, read only): `createOpenOrder`
+  (`apps/server/src/working-order.ts`, from #297) replaces the order's zone with the delivery
+  table's. Whether the till can offer such a table was not checked.
+- Nothing at boot level tests that the till API receives the table-removal seats (each enabled
+  module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
+  API's wiring.
+- Small floor-plan refusals still missing: `dining_tables.plan_table_id` has no unique index (no
+  writer makes two live tables follow one master table today); the delivery-release trigger
+  accepts an empty label.
 
 ## Loose ends left by A366 slice 5 Part A (#1479).
 
-- **Loose ends left by A366 slice 5 Part A (#1479).**
-  - Duplicating a till or handheld profile whose station list holds only switched-off stations is
-    refused with the general `device_profile.access_invalid` message. The copy drops switched-off
-    stations and the server refuses the emptied list; keeping them would need the create route to
-    know it is making a copy.
-  - Two device choices can lose a switched-off entry. A returning device accepted in Pair starts
-    without its switched-off stations and zones; and in Devices → edit a kitchen screen kind the
-    profile no longer shows is dropped from the draft, so it is lost if the choice is changed and
-    saved.
-  - A profile's explicit station and zone lists for its kitchen screens hold only the saving
-    location's ids, so saving the profile at one location empties another location's lists and,
-    now that a narrowing is allowed, narrows that location's devices. The flat station list these
-    lists replace was saved the same way, from W97 (#1311).
+- Duplicating a till or handheld profile whose station list holds only switched-off stations is
+  refused with the general `device_profile.access_invalid` message. The copy drops switched-off
+  stations and the server refuses the emptied list; keeping them would need the create route to
+  know it is making a copy.
+- Two device choices can lose a switched-off entry. A returning device accepted in Pair starts
+  without its switched-off stations and zones; and in Devices → edit a kitchen screen kind the
+  profile no longer shows is dropped from the draft, so it is lost if the choice is changed and
+  saved.
+- A profile's explicit station and zone lists for its kitchen screens hold only the saving
+  location's ids, so saving the profile at one location empties another location's lists and,
+  now that a narrowing is allowed, narrows that location's devices. The flat station list these
+  lists replace was saved the same way, from W97 (#1311).
 
 ## Split-off checks may reach the same path as a held-order edit that changes sent lines
 
@@ -183,8 +181,6 @@ may make one or both of those branches reachable, or show they can go.
 
 ## Three till handlers still leave a failed list refresh unhandled
 
-**Three till handlers still leave a failed list refresh unhandled — OPEN (found 2026-09-25, review of PR #641).**
-
 - `#onRetrieveOrder` awaits `#refreshHeldOrders()`, and `#onAdvanceTicketItem` awaits
   `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after its `try`/`catch` and
   outside it, on both paths, after a success and after a failure. A failed refresh there is an
@@ -200,7 +196,6 @@ when its refresh after a failed collect fails.
 
 ## Cash handed back for a voided cash sale is recorded nowhere
 
-**Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**
 A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
 a drawer shortfall at cash-up. No till screen or server route calls `recordVoid` yet, so nothing
 can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
@@ -208,82 +203,72 @@ screen is designed.
 
 ## The till's top bar is one row at every width (A395, #1435): left open
 
-- **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,
-  the bar moves items into the More menu one at a time, only as many as it needs to stay on one
-  row. It draws its actions in priority order (A425) and moves them into More from the right:
-  the Waitron name is hidden first, then Transfers (count and button together), Equipment,
-  Profile, Allergens, My schedule, Kitchen, Pass, Find a bill, and last the operator's name with
-  Log out (`design-system.md`). Tabs and the language chooser never leave; once everything
-  else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
-  `design-system.md` says which icon means which menu. While More is open nothing moves out of
-  it; the bar refits when it closes.
-  Since A737 Part 1 (2026-10-16), Find a bill stays in More at every width; the other actions
-  retain that priority and the current contract is in `design-system.md`.
-  - **Open, decided as built:** a change in the pending-transfer count alone never brings items
-    back onto the bar, so when the count shrinks or goes away, items can stay in More although they
-    would now fit, until the next resize or other change refits the bar.
-  - The header implementation and suites now live in `widgets/till-shell.ts` and
-    `widgets/till-shell.test.ts`. The measurements and deletion controls below refer to their
-    earlier source; re-run each control against the extracted shell before relying on it.
-  - **Open: the timing-variation header tests spend most of their time waiting for frames.** The "fits as a fresh bar does when
-    …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
-    owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
-    changes" case timed out at 15.4 s both before and after A425's order change. Find what makes
-    them slow rather than raising the limit. A737 Part 1 (2026-10-16) measured reset/final waits
-    of 70–267 ms in a local probe and splits the same 0–40 microtask cuts into smaller cases,
-    retaining the 15 s limit and every layout assertion. The frame-wait cost remains to investigate.
-  - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
-    any one leaves every test passing): the phone-width early return in `#release`, the return
-    after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.
+- **Open, decided as built:** a change in the pending-transfer count alone never brings items
+  back onto the bar, so when the count shrinks or goes away, items can stay in More although they
+  would now fit, until the next resize or other change refits the bar.
+- The header implementation and suites now live in `widgets/till-shell.ts` and
+  `widgets/till-shell.test.ts`. The measurements and deletion controls below refer to their
+  earlier source; re-run each control against the extracted shell before relying on it.
+- **Open: the timing-variation header tests spend most of their time waiting for frames.** The "fits as a fresh bar does when
+  …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
+  owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
+  changes" case timed out at 15.4 s both before and after A425's order change. Find what makes
+  them slow rather than raising the limit. A737 Part 1 (2026-10-16) measured reset/final waits
+  of 70–267 ms in a local probe and splits the same 0–40 microtask cuts into smaller cases,
+  retaining the 15 s limit and every layout assertion. The frame-wait cost remains to investigate.
+- **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
+  any one leaves every test passing): the phone-width early return in `#release`, the return
+  after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.
 
 ## Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review)
 
-- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).**
-  A unit with no enabled text has an empty label; the tile and basket-refresh price templates
-  still append a slash. Render those empty-label cases before choosing their display.
-  Legacy unit maps cover English and Spanish only. The default Kitchen title remains
-  English when the tab shell is shown in a synthetic Spanish probe; check whether any
-  real kitchen session shows that bar before widening the standard-tab translation.
+A unit with no enabled text has an empty label; the tile and basket-refresh price templates
+still append a slash. Render those empty-label cases before choosing their display.
+Legacy unit maps cover English and Spanish only. The default Kitchen title remains
+English when the tab shell is shown in a synthetic Spanish probe; check whether any
+real kitchen session shows that bar before widening the standard-tab translation.
 
 ## A470 — the till's floor map follow-ups
 
-- **A470 — the till's floor map follow-ups (2026-10-10).** Left open by A429 slice 3.
-  - `wt-floor-map` acts on a `click` only when its `detail` is 0 (the keyboard's), leaving a
-    pointer's click to the gestures, so a screen reader whose activation sends a `click` with
-    `detail` 1 or more and no pointer events would open nothing. Unmeasured; needs a manual
-    VoiceOver and TalkBack check.
-  - A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet
-    (`table-details-sheet.ts`); the floor card shows €0.00 the same way.
-  - The old floor card says "1 listos" in Spanish (`till-floor-screen.ts`, the count followed by
-    `floor.ready`); the map's pin and notice say "1 listo".
+Left open by A429 slice 3.
+
+- `wt-floor-map` acts on a `click` only when its `detail` is 0 (the keyboard's), leaving a
+  pointer's click to the gestures, so a screen reader whose activation sends a `click` with
+  `detail` 1 or more and no pointer events would open nothing. Unmeasured; needs a manual
+  VoiceOver and TalkBack check.
+- A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet
+  (`table-details-sheet.ts`); the floor card shows €0.00 the same way.
+- The old floor card says "1 listos" in Spanish (`till-floor-screen.ts`, the count followed by
+  `floor.ready`); the map's pin and notice say "1 listo".
 
 ## A474 — today's floor changes on the till: follow-ups
 
-- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** Left open by A429 slice 4
-  (#1526).
-  - A booking seated from the dashboard is believed to skip the taken-off check: the bookings
-    module seats through `core.seatTable` (`moduleCoreServices`, `apps/server/src/boot.ts`), while
-    the till's seat, join, Move guests and bill-move routes refuse a table taken off for today with
-    `table.taken_off` (`refuseTakenOff`, `apps/server/src/floor-today-table.ts`). Found by the
-    review reading the code; not run.
-  - `wt-floor-map` works out which table is under the finger on every pointer move. Two cheaper
-    versions were tried and each picked a different table (one failed an existing test, the other
-    a probe), so the faster version still needs a way that keeps the same answer.
-  - Back to saved place reports `table.not_on_today_plan` when a table still has today's row but
-    the last reset's copy removes it. The real `floor-today-changes.test.ts` case "refuses a
-    table whose master table was deleted, and one never on a plan" checks both the existing row and that refusal (A476
-    run-it review). Decide whether this needs its own saved-place code and wording; the owner's
-    A476 rename is retained for both paths.
-  - `leaveMerges` (`apps/server/src/floor-today-merges.ts`) reads tables by id with no location
-    filter; every caller checks the location first.
-  - A second drop made while the first is still being sent replaces the first's drawn place.
-  - When a table is dropped on another to seat a party, the till checks only the dragged table's
-    gates; the server's join refusals are believed to cover the target, but that was not run.
-  - Tapping a table to seat it is not limited to devices whose profile takes orders, while every
-    other floor write is. Believed older than slice 4; not re-checked.
-  - From the look pass: at 390 px a fixed stool shows no name; the refusal line is plain text; two
-    tables' labels overlap while they line up mid-drag.
-  - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
+Left open by A429 slice 4
+(#1526).
+
+- A booking seated from the dashboard is believed to skip the taken-off check: the bookings
+  module seats through `core.seatTable` (`moduleCoreServices`, `apps/server/src/boot.ts`), while
+  the till's seat, join, Move guests and bill-move routes refuse a table taken off for today with
+  `table.taken_off` (`refuseTakenOff`, `apps/server/src/floor-today-table.ts`). Found by the
+  review reading the code; not run.
+- `wt-floor-map` works out which table is under the finger on every pointer move. Two cheaper
+  versions were tried and each picked a different table (one failed an existing test, the other
+  a probe), so the faster version still needs a way that keeps the same answer.
+- Back to saved place reports `table.not_on_today_plan` when a table still has today's row but
+  the last reset's copy removes it. The real `floor-today-changes.test.ts` case "refuses a
+  table whose master table was deleted, and one never on a plan" checks both the existing row and that refusal (A476
+  run-it review). Decide whether this needs its own saved-place code and wording; the owner's
+  A476 rename is retained for both paths.
+- `leaveMerges` (`apps/server/src/floor-today-merges.ts`) reads tables by id with no location
+  filter; every caller checks the location first.
+- A second drop made while the first is still being sent replaces the first's drawn place.
+- When a table is dropped on another to seat a party, the till checks only the dragged table's
+  gates; the server's join refusals are believed to cover the target, but that was not run.
+- Tapping a table to seat it is not limited to devices whose profile takes orders, while every
+  other floor write is. Believed older than slice 4; not re-checked.
+- From the look pass: at 390 px a fixed stool shows no name; the refusal line is plain text; two
+  tables' labels overlap while they line up mid-drag.
+- The new floor test files repeat their setup; shared helpers were left out to avoid churn.
 
 ## A561. A 2 × 2 table's name is cut short on the till map
 
@@ -667,286 +652,286 @@ observations against that design; the original observations below are not fresh 
 
 ## Task 8 (#806, the till works from the server's drafts)
 
-- **Task 8 (#806, the till works from the server's drafts).** Left open:
-  - Saving and sending:
-    - If someone else signs in while a sign-out is still waiting for its save, the till skips
-      signing the first person out on the server, so that session lasts until it expires.
-    - A send cut off by the 150-second limit is not sent again, and after a reply that never
-      came the draft can stay locked for up to two limits: the send, then the re-read.
-    - When a send is refused because the menu changed, the re-read of the table's menu runs
-      outside that limit.
-    - While the till follows a party onto its next bill, the screen can show no draft for a
-      moment; and when a merge or move coincides with a refused save, the save's message can
-      replace "another device changed this table".
-  - Other people's drafts:
-    - At phone width nothing on the menu view says other people have drafts on the table; the
-      button reads "Review (0)". The floor's mark does say so.
-    - The Spanish "has taken over this order" wording has no test.
-  - The table screen:
-    - Seating a table whose answer arrives while a newer table is still opening shows the seated
-      table briefly before the newer one replaces it.
-    - A refused seat leaves the till pointing at the refused table.
-    - If the screen widens while Back on the Review view has focus, focus goes to the page.
-    - A dish no longer on the menu shows an empty name on its tick button in the person's own
-      draft, and in the spoken names of its course picker and Split quantity button (read in
-      the code, not run).
-    - The last-added bar is empty for a draft first read back from the server until the next tap.
-    - While a weight is being entered, the weight entry covers the bottom of the menu and the
-      bar.
-    - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and
-      calls them "items", so the two can differ for one draft.
-    - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on
-      Review; its unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
-    - The counter's basket also tracks its last-added line, which it does not use.
-  - Menu changes:
-    - The server's "cannot be sold" mark is dropped once the till's newer menu read passes the
-      line. That the two checks agree was read, not run; if they differ, one Send is refused
-      `product.unavailable` and the line is marked again, which a test covers.
-    - Every line priced under an older menu version is asked about whenever the server's draft
-      replaces the till's lines (a reload, a re-read, a take-over), so the question comes more
-      often than it would for a person who watched the menu change.
-    - A line naming a version the till does not hold costs one more read of the table's menu.
-    - The "The menu has changed" dialog shows a focus ring round the whole dialog box.
-  - Tests: the accessibility test "has no violations with the round grid, the per-line course
-    picker and the open tab drawer" no longer scans the menu grid (a phone test does), but kept
-    its name. `repriceRebuilt`'s `menuItemId ?? ""` fallback
-    (`apps/till/src/state/menu-refresh.ts`) is not covered. Whether a real till's browser ever
-    paints the narrow layout for one frame before going side by side was not measured.
-  - Rulings made on the branch for the owner to confirm:
-    - after a reload the old price of a line is not known, so the till asks about every line on
-      an older menu version, showing the new price alone, instead of storing prices on the
-      server;
-    - the two layouts are chosen by the screen's width against 720 px, not by the kind of
-      device, so a tablet held upright shows the menu and the draft side by side;
-    - −1 on the last-added bar at one takes the line out;
-    - anyone may take a draft over, including the person it was taken from;
-    - a line counts as unsellable when the till's check or the server's says so, and the
-      server's mark gives way to a newer menu read on the till;
-    - Cancel on the menu-change question holds until the next publish, re-read or Send, not
-      the next poll.
+Left open:
+
+- Saving and sending:
+  - If someone else signs in while a sign-out is still waiting for its save, the till skips
+    signing the first person out on the server, so that session lasts until it expires.
+  - A send cut off by the 150-second limit is not sent again, and after a reply that never
+    came the draft can stay locked for up to two limits: the send, then the re-read.
+  - When a send is refused because the menu changed, the re-read of the table's menu runs
+    outside that limit.
+  - While the till follows a party onto its next bill, the screen can show no draft for a
+    moment; and when a merge or move coincides with a refused save, the save's message can
+    replace "another device changed this table".
+- Other people's drafts:
+  - At phone width nothing on the menu view says other people have drafts on the table; the
+    button reads "Review (0)". The floor's mark does say so.
+  - The Spanish "has taken over this order" wording has no test.
+- The table screen:
+  - Seating a table whose answer arrives while a newer table is still opening shows the seated
+    table briefly before the newer one replaces it.
+  - A refused seat leaves the till pointing at the refused table.
+  - If the screen widens while Back on the Review view has focus, focus goes to the page.
+  - A dish no longer on the menu shows an empty name on its tick button in the person's own
+    draft, and in the spoken names of its course picker and Split quantity button (read in
+    the code, not run).
+  - The last-added bar is empty for a draft first read back from the server until the next tap.
+  - While a weight is being entered, the weight entry covers the bottom of the menu and the
+    bar.
+  - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and
+    calls them "items", so the two can differ for one draft.
+  - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on
+    Review; its unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
+  - The counter's basket also tracks its last-added line, which it does not use.
+- Menu changes:
+  - The server's "cannot be sold" mark is dropped once the till's newer menu read passes the
+    line. That the two checks agree was read, not run; if they differ, one Send is refused
+    `product.unavailable` and the line is marked again, which a test covers.
+  - Every line priced under an older menu version is asked about whenever the server's draft
+    replaces the till's lines (a reload, a re-read, a take-over), so the question comes more
+    often than it would for a person who watched the menu change.
+  - A line naming a version the till does not hold costs one more read of the table's menu.
+  - The "The menu has changed" dialog shows a focus ring round the whole dialog box.
+- Tests: the accessibility test "has no violations with the round grid, the per-line course
+  picker and the open tab drawer" no longer scans the menu grid (a phone test does), but kept
+  its name. `repriceRebuilt`'s `menuItemId ?? ""` fallback
+  (`apps/till/src/state/menu-refresh.ts`) is not covered. Whether a real till's browser ever
+  paints the narrow layout for one frame before going side by side was not measured.
+- Rulings made on the branch for the owner to confirm:
+  - after a reload the old price of a line is not known, so the till asks about every line on
+    an older menu version, showing the new price alone, instead of storing prices on the
+    server;
+  - the two layouts are chosen by the screen's width against 720 px, not by the kind of
+    device, so a tablet held upright shows the menu and the draft side by side;
+  - −1 on the last-added bar at one takes the line out;
+  - anyone may take a draft over, including the person it was taken from;
+  - a line counts as unsellable when the till's check or the server's says so, and the
+    server's mark gives way to a newer menu read on the till;
+  - Cancel on the menu-change question holds until the next publish, re-read or Send, not
+    the next poll.
 
 ## Task 11 (#916, cancellations, comps and discounts; B11a–B11g)
 
-- **Task 11 (#916, cancellations, comps and discounts; B11a–B11g).** Left open:
-  - **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
-    rather than the reason, is why.** Recording it would need a column. **Next action:** decide
-    whether to record it.
-  - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
-    it is paid) cannot be adjusted:** the placed-order trigger freezes its prices. B16 lets such
-    an order be handed over before it is paid but did not decide this. **Next action:** decide
-    whether a placed order can be adjusted before it is collected.
-  - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
-    dropped quantity without a reason** when a client sends it that way, the venue allows changes
-    to sent items and the kitchen has not started the dish (`applyLineEdits`,
-    `apps/server/src/working-order.ts`). The till's counter hides × and `−` on a sent dish only
-    while it has read the order's lines; when they cannot be read, it shows both on every line.
-    **Next action:** decide whether the edit should refuse dropping a sent line.
-  - **Two basket changes the app makes by itself do not check the edit lock:** the menu poll's
-    price-version update of the basket's lines (`adoptLines`) and the order's label
-    (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). What is lost is the basket's
-    own copy of the new prices. **Next action:** decide whether the two should wait for the lock.
-  - **Nothing on screen shows the lock.** A tap on `+` or on the menu does nothing until the
-    order and its lines have been read. How long it lasts on a real network is not measured.
-    **Next action:** dim the basket, or show a one-line note, while `editsLocked` is set.
-  - **Override PIN limits (C89, #951), for the owner:** the two PIN prompts say "wait a moment"
-    rather than counting down the seconds the server sends, as the sign-in screen does, and the
-    approver prompt hides the message as soon as someone types; the limit is an optional
-    argument, so a future route taking an approver's PIN could leave it off unnoticed; and the
-    dashboard's `verifyManagerPin` (`apps/server/src/payments-api.ts`) and the till's sign-in
-    route each still repeat the steps `verifyThrottledCredential`
-    (`packages/identity/src/credential.ts`) packages. The tests do not check that a refund's
-    wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
-    are separate, or that the count is per device. **Next action:** the owner decides whether to
-    add the countdown and make the limit required.
-  - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
-    discount, or two bill discounts under one reason, because a bill discount counts as 0% on
-    each line. A row split off by splitting the bill, by a transfer, or by moving part of a line
-    to another group starts with no percentage history. B11b's venue limit on a bill's total
-    discount can ask for a manager's PIN; this per-reason cap is unchanged. **Next action:**
-    decide whether the per-line cap should see bill discounts.
-  - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
-    (B11g) but the till's cancel dialog still says only that it comes off the bill, because the
-    till cannot see whether the HOLD ticket was queued. **Next action:** decide whether the till
-    should be told that.
-  - An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest
-    of its extras', which errs toward refusing. **Next action:** none unless staff find it gets
-    in the way.
-  - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
-    transferring items and moving part of a dish to another group still refuse a partial move
-    of a dish with extras (`tab.transfer_modifier_line`). A whole dish moves with its extras.
-    **Next action:** decide whether those partial moves should split extras too.
-  - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
-    each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
-    presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
-    repeated-Escape tests. **Next action:** decide
-    whether "closes on a real Escape press" should wait for its `wt-close` instead, keeping the
-    timer for the stays-open tests.
-  - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
-    venue's currency. How a comp or discount appears on the invoice is still asesor Q29.
+Left open:
+
+- **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
+  rather than the reason, is why.** Recording it would need a column. **Next action:** decide
+  whether to record it.
+- **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
+  it is paid) cannot be adjusted:** the placed-order trigger freezes its prices. B16 lets such
+  an order be handed over before it is paid but did not decide this. **Next action:** decide
+  whether a placed order can be adjusted before it is collected.
+- **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
+  dropped quantity without a reason** when a client sends it that way, the venue allows changes
+  to sent items and the kitchen has not started the dish (`applyLineEdits`,
+  `apps/server/src/working-order.ts`). The till's counter hides × and `−` on a sent dish only
+  while it has read the order's lines; when they cannot be read, it shows both on every line.
+  **Next action:** decide whether the edit should refuse dropping a sent line.
+- **Two basket changes the app makes by itself do not check the edit lock:** the menu poll's
+  price-version update of the basket's lines (`adoptLines`) and the order's label
+  (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). What is lost is the basket's
+  own copy of the new prices. **Next action:** decide whether the two should wait for the lock.
+- **Nothing on screen shows the lock.** A tap on `+` or on the menu does nothing until the
+  order and its lines have been read. How long it lasts on a real network is not measured.
+  **Next action:** dim the basket, or show a one-line note, while `editsLocked` is set.
+- **Override PIN limits (C89, #951), for the owner:** the two PIN prompts say "wait a moment"
+  rather than counting down the seconds the server sends, as the sign-in screen does, and the
+  approver prompt hides the message as soon as someone types; the limit is an optional
+  argument, so a future route taking an approver's PIN could leave it off unnoticed; and the
+  dashboard's `verifyManagerPin` (`apps/server/src/payments-api.ts`) and the till's sign-in
+  route each still repeat the steps `verifyThrottledCredential`
+  (`packages/identity/src/credential.ts`) packages. The tests do not check that a refund's
+  wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
+  are separate, or that the count is per device. **Next action:** the owner decides whether to
+  add the countdown and make the limit required.
+- **A reason's percentage limit can be exceeded** by combining a bill discount with a line
+  discount, or two bill discounts under one reason, because a bill discount counts as 0% on
+  each line. A row split off by splitting the bill, by a transfer, or by moving part of a line
+  to another group starts with no percentage history. B11b's venue limit on a bill's total
+  discount can ask for a manager's PIN; this per-reason cap is unchanged. **Next action:**
+  decide whether the per-line cap should see bill discounts.
+- For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
+  (B11g) but the till's cancel dialog still says only that it comes off the bill, because the
+  till cannot see whether the HOLD ticket was queued. **Next action:** decide whether the till
+  should be told that.
+- An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest
+  of its extras', which errs toward refusing. **Next action:** none unless staff find it gets
+  in the way.
+- **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
+  transferring items and moving part of a dish to another group still refuse a partial move
+  of a dish with extras (`tab.transfer_modifier_line`). A whole dish moves with its extras.
+  **Next action:** decide whether those partial moves should split extras too.
+- **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
+  each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
+  presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
+  repeated-Escape tests. **Next action:** decide
+  whether "closes on a real Escape press" should wait for its `wt-close` instead, keeping the
+  timer for the stays-open tests.
+- The till's "Amount off (€)" writes the euro sign into the label rather than taking the
+  venue's currency. How a comp or discount appears on the invoice is still asesor Q29.
 
 ## Task 16 (#981, counter handover; with B25, B26, B29, B30)
 
-- **Task 16 (#981, counter handover; with B25, B26, B29, B30).** Open:
-  - **A collect straight after Place order does not re-read the kitchen queue.** The till
-    re-reads it after a collect only when the collect was opened from the waiting list, so the
-    prep-queue card can keep showing the order without Collect until the queue is next read
-    (read in `#onCollectOrder`, `apps/till/src/till-app.ts`, and `#collectAction`,
-    `apps/till/src/widgets/station-queue.ts`; not run). Re-reading after every collect would stop
-    the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
-    does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
-    says, so B16 left it.
-  - At login the counter's three lists are read one after another, so a read that hangs delays
-    the rest (left open by B31, #1018). Load them side by side.
-  - **Done (C130, #1056) — a device shows the screens its profile assigns, and the person's permissions
-    decide the rest.**
-    Left open: a till profile saved before C130, and one newly created on the Device profiles
-    screen, has the three switches off until a manager turns them on; a till with no device reads
-    no capabilities, so it shows none of the three buttons. A change to a device profile reaches
-    a till only when the till starts again — a page load, a move to another server or a
-    re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
-    `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
-    so signing out and in again does not pick it up. Since W97 (2026-10-06) a profile switch on
-    the till reads the device's setup again too (`#onProfileSwitch`). A review measured the header on
-    2026-10-02 in real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone
-    tabs and an operator signed in: with only Find a bill offered — what main offers every
-    handheld; `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured
-    560 px wide in English and 602 px in Spanish, so the overflow predates C130 (the overflow
-    PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
-    the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
-    wholly off-screen (fixed by lane C's W27, below). On the handheld, the station screen's back
-    button says "Back to counter" though a handheld on the built-in phone layout lands on the
-    floor plan.
-  - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
-    A staff list longer than the screen still makes the page scroll to reach the language button
-    (since A187, 2026-10-02, the language chooser is at the top right of the lock screen).
-    Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
-    a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
-    `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
-    no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
-    space changes the screen's layout, so it is its own change. Likewise the till's
-    `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
-    above the bottom edge, the room the old bottom-right language button (later the footer)
-    took; decide whether it should drop to the bottom edge. While a handheld's Ready bar shows,
-    `.app:has(till-floor-screen[ready-bar]) .submitted-toast` lifts the toast by the page's
-    padding as well, which clears the bar only because the bar is no taller than that offset (the
-    "fits one line" cases in `apps/till/src/screens/till-floor-screen.ready-bar.test.ts`).
-    Dropping the toast to the bottom edge must still lift it above the bar while the bar shows. On the dashboard, the account menu (which
-    since A582's slice 2b also holds the signed-in language choices) is a native popover in the
-    top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
-    `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,
-    and its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`)
-    pauses it only while the pointer or keyboard focus is on the pop-up. Measured in A582 slice
-    2b's review: with the account menu open, the menu covered the pop-up at 400 and 1280 px wide.
-    Decide whether an arriving alert should close the menu.
+Open:
+
+- **A collect straight after Place order does not re-read the kitchen queue.** The till
+  re-reads it after a collect only when the collect was opened from the waiting list, so the
+  prep-queue card can keep showing the order without Collect until the queue is next read
+  (read in `#onCollectOrder`, `apps/till/src/till-app.ts`, and `#collectAction`,
+  `apps/till/src/widgets/station-queue.ts`; not run). Re-reading after every collect would stop
+  the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
+  does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
+  says, so B16 left it.
+- At login the counter's three lists are read one after another, so a read that hangs delays
+  the rest (left open by B31, #1018). Load them side by side.
+- A till profile saved before C130, and one newly created on the Device profiles
+  screen, has the three switches off until a manager turns them on; a till with no device reads
+  no capabilities, so it shows none of the three buttons. A change to a device profile reaches
+  a till only when the till starts again — a page load, a move to another server or a
+  re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
+  `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
+  so signing out and in again does not pick it up. Since W97 (2026-10-06) a profile switch on
+  the till reads the device's setup again too (`#onProfileSwitch`). A review measured the header on
+  2026-10-02 in real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone
+  tabs and an operator signed in: with only Find a bill offered — what main offers every
+  handheld; `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured
+  560 px wide in English and 602 px in Spanish, so the overflow predates C130 (the overflow
+  PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
+  the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
+  wholly off-screen (fixed by lane C's W27, below). On the handheld, the station screen's back
+  button says "Back to counter" though a handheld on the built-in phone layout lands on the
+  floor plan.
+- A staff list longer than the screen still makes the page scroll to reach the language button
+  (since A187, 2026-10-02, the language chooser is at the top right of the lock screen).
+  Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
+  a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
+  `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
+  no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
+  space changes the screen's layout, so it is its own change. Likewise the till's
+  `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
+  above the bottom edge, the room the old bottom-right language button (later the footer)
+  took; decide whether it should drop to the bottom edge. While a handheld's Ready bar shows,
+  `.app:has(till-floor-screen[ready-bar]) .submitted-toast` lifts the toast by the page's
+  padding as well, which clears the bar only because the bar is no taller than that offset (the
+  "fits one line" cases in `apps/till/src/screens/till-floor-screen.ready-bar.test.ts`).
+  Dropping the toast to the bottom edge must still lift it above the bar while the bar shows. On the dashboard, the account menu (which
+  since A582's slice 2b also holds the signed-in language choices) is a native popover in the
+  top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
+  `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,
+  and its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`)
+  pauses it only while the pointer or keyboard focus is on the pop-up. Measured in A582 slice
+  2b's review: with the account menu open, the menu covered the pop-up at 400 and 1280 px wide.
+  Decide whether an arriving alert should close the menu.
 
 ## Task 17 (#991, a table that leaves without paying)
 
-- **Task 17 (#991, a table that leaves without paying).** Asesor Q28 was decided by the owner
-  without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
-  Open:
-  - **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot
-    be left unpaid** (`unpaid_departure.bill_holds_payment`, even one given back in full): its
-    invoice would have to be settled in part, and `settleSale`
-    (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not add up to
-    the amount due. Such a table can only be finished by taking the rest as payment.
-  - **Collecting PART of the debt later is not built**, for the same reason. Collecting it in
-    full uses `POST /api/working-orders/:id/collect`.
-  - **A dish never sent, on hold or recalled blocks the departure**
-    (`unpaid_departure.unfired_dishes`); staff cancel it first.
-  - **The table screen still reads a credited presented bill at its full amount.** Its per-bill
-    "to pay" line (`apps/till/src/screens/till-table-order-screen.ts`, `bill.outstanding`) and
-    the party's total (`apps/till/src/till-app.ts`, summing each bill's `outstanding`) read no
-    credit note either, so a presented bill whose invoice a credit note has reduced, in part or
-    to nothing, without the bill being cancelled, still shows its full total there (read, not
-    run). The partly paid bill's "to pay" line and its pay-the-rest button
-    (`apps/till/src/screens/till-table-order-screen.ts`, `partlyPaid.outstanding`) read
-    `outstanding` too, but that section is drawn only for an open bill holding a payment
-    (`paidInPart`, `apps/till/src/state/bill-state.ts`), and an open bill has no invoice, so no
-    credit note reaches it today (read, not run). **Next action:** decide whether those read
-    `amountDue` too, which W26 (#1136) left out because other screens and the floor read
-    `outstanding`.
-  - **Left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
-    (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip, against CLAUDE.md §3's rule
-    that a default applies only when the field is absent; it predates B28, and paying a non-zero
-    bill on the reader is believed to accept it the same way (read, not run). Next: a route case
-    sending `tip: null` to `POST /api/pay`, then decide refuse or accept. (2) After a free sale
-    settles on the reader, a stale card-attempt mark on the order is left in place; manual Pay is
-    believed to leave it the same way (read, not run).
-  - **A bill presented without an invoice keeps the label it was placed with when the departure
-    invoices it.** Every other path that invoices such a bill saves the receipt label in the
-    update that settles it; the departure leaves the bill placed, and the placed-to-placed clause
-    of `working_orders_enforce_transition` (latest in
-    `packages/db/drizzle/0185_settled_order_to_counter.sql`) requires the label to stay as it is
-    (measured 2026-10-01: saving it made the departure answer 500). Not measured: what its
-    invoice's reprint and the debt list then show. Fixing it needs that trigger to allow the
-    label to change. A bill the departure settles because it owes nothing goes through
-    `settleIssuedOwingNothing` (`apps/server/src/till-sale.ts`), which sets no label, although
-    the trigger allows one there.
+Asesor Q28 was decided by the owner
+without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
+Open:
+
+- **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot
+  be left unpaid** (`unpaid_departure.bill_holds_payment`, even one given back in full): its
+  invoice would have to be settled in part, and `settleSale`
+  (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not add up to
+  the amount due. Such a table can only be finished by taking the rest as payment.
+- **Collecting PART of the debt later is not built**, for the same reason. Collecting it in
+  full uses `POST /api/working-orders/:id/collect`.
+- **A dish never sent, on hold or recalled blocks the departure**
+  (`unpaid_departure.unfired_dishes`); staff cancel it first.
+- **The table screen still reads a credited presented bill at its full amount.** Its per-bill
+  "to pay" line (`apps/till/src/screens/till-table-order-screen.ts`, `bill.outstanding`) and
+  the party's total (`apps/till/src/till-app.ts`, summing each bill's `outstanding`) read no
+  credit note either, so a presented bill whose invoice a credit note has reduced, in part or
+  to nothing, without the bill being cancelled, still shows its full total there (read, not
+  run). The partly paid bill's "to pay" line and its pay-the-rest button
+  (`apps/till/src/screens/till-table-order-screen.ts`, `partlyPaid.outstanding`) read
+  `outstanding` too, but that section is drawn only for an open bill holding a payment
+  (`paidInPart`, `apps/till/src/state/bill-state.ts`), and an open bill has no invoice, so no
+  credit note reaches it today (read, not run). **Next action:** decide whether those read
+  `amountDue` too, which W26 (#1136) left out because other screens and the floor read
+  `outstanding`.
+- **Left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
+  (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip, against CLAUDE.md §3's rule
+  that a default applies only when the field is absent; it predates B28, and paying a non-zero
+  bill on the reader is believed to accept it the same way (read, not run). Next: a route case
+  sending `tip: null` to `POST /api/pay`, then decide refuse or accept. (2) After a free sale
+  settles on the reader, a stale card-attempt mark on the order is left in place; manual Pay is
+  believed to leave it the same way (read, not run).
+- **A bill presented without an invoice keeps the label it was placed with when the departure
+  invoices it.** Every other path that invoices such a bill saves the receipt label in the
+  update that settles it; the departure leaves the bill placed, and the placed-to-placed clause
+  of `working_orders_enforce_transition` (latest in
+  `packages/db/drizzle/0185_settled_order_to_counter.sql`) requires the label to stay as it is
+  (measured 2026-10-01: saving it made the departure answer 500). Not measured: what its
+  invoice's reprint and the debt list then show. Fixing it needs that trigger to allow the
+  label to change. A bill the departure settles because it owes nothing goes through
+  `settleIssuedOwingNothing` (`apps/server/src/till-sale.ts`), which sets no label, although
+  the trigger allows one there.
 
 ## Tables, parties and bills — the till's table actions
 
-- **Tables, parties and bills — the till's table actions: DONE (2026-09-29, all thirteen tasks).**
-  [plan](../superpowers/plans/2026-09-28-table-actions.md); Task 1 #816, 2 #825, 3 #844, 4 #832,
-  5 #852, 6 #818, 7 #864, 8 #869, 9 #874, 10 #875, 11 #881, 12 #888, 13 #897. What stays open:
-  - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows
-    the original invoice total.** `collectOrder` queues no receipt on this path; the ticket it
-    returns, the original receipt the till offers, and any reprint are all built by
-    `readSettledTicket` (`apps/server/src/till-sale.ts`) and show the invoice's original total, and
-    since C67 the card-reader payment of a bill that owes nothing returns the same. The printed
-    receipt and the screen both give the cash line as total plus change
-    (`apps/server/src/receipt-ticket.ts`, `apps/till/src/screens/till-ticket-view.ts`), so it
-    overstates what was handed over. **PARKED (owner, 2026-09-29)** until the product can issue a
-    corrective invoice; the owner's points for that design are on the corrective-invoice entry (R5,
-    above). Also from C67's review (a probe, not a committed test): for a bill corrected to exactly
-    zero, a captured card payment with no sale still takes the recovery branch first, settling at
-    the captured amount with all of it recorded as tip; the below-zero case with a capture was not
-    run.
-  - **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
-    label wraps also wraps its "2 min" onto two lines (`apps/till/src/screens/till-expo-screen.ts`);
-    nothing overflows. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
-    card, later kitchen notices and the till's list of a party's bills keep showing the frozen
-    receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
-    `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
-    `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
-    the same column.
-  - **Task 7 (#864, move a whole bill).** The move moves the bill's revision on, open or
-    presented, without `bumpRevision`'s refusal of money in flight, since a move changes no amount
-    (plan P19): a decision, recorded under Decisions and deliberate limits.
-  - **Task 8 (#869, move guests, join and split tables) and C77/C86.** Open: a party with no table
-    whose chain of merges never ends (an unknown id, or two parties recorded as merged into each
-    other, which the database accepts) is named by the bill's own label; whether any till action
-    can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
-    stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
-    `packages/db/src/party-table-labels.ts`. `party.main_bill_stays`'s till wording says "the table
-    has other unpaid bills", which Split a table choosing the main bill need not satisfy. Left by
-    #906's review: `computeOverdueOrders` is the one report function that reads its own node's
-    location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
-    suggested, not done); no case pins what a correction slip prints for a counter order delivered
-    to a table; and a database built on purpose with a delivery table in another location now
-    names the order by its own label — no product path creates that state, and whether every
-    existing venue database is free of it was not checked.
-  - **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
-    2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
-    time is picked by comparing the stored times as text, right only while every writer stores the
-    same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
-    recalled and fired again carries its new fire time but its old group's firer.
-    The owner's replacement for C80's earlier course-placement rule is retained under
-    [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
-  - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
-    waiter who taps a free table to seat it, goes back to the order tab while the seating is still
-    under way and starts Move guests can have the move set the wrong table on the new party; the
-    suggested fix is to count only table opens started in the current operator session; not
-    queued. The till sends `otherPartyId: null` when its floor does not list the target table at
-    all (a failed floor read empties the list); a table another party holds is then refused as out
-    of date, never combined. On a 390 px phone the bill choice's buttons wrap ("Keep separate
-    bills" on three lines).
-  - **Open, from C84's review (#913):** when a void or line change gets no answer,
-    `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
-    own floor read failed, while the revision on screen stays where it was. A later floor read that
-    also fails keeps a floor listing the same party at that EQUAL revision, which
-    `#retakePartyFromFloor()` takes, and `#followDraft` → `#rememberOrderParty()` after a send with
-    no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
-    in the code, not reproduced.
+[plan](../superpowers/plans/2026-09-28-table-actions.md). What stays open:
+
+- **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows
+  the original invoice total.** `collectOrder` queues no receipt on this path; the ticket it
+  returns, the original receipt the till offers, and any reprint are all built by
+  `readSettledTicket` (`apps/server/src/till-sale.ts`) and show the invoice's original total, and
+  since C67 the card-reader payment of a bill that owes nothing returns the same. The printed
+  receipt and the screen both give the cash line as total plus change
+  (`apps/server/src/receipt-ticket.ts`, `apps/till/src/screens/till-ticket-view.ts`), so it
+  overstates what was handed over. **PARKED (owner, 2026-09-29)** until the product can issue a
+  corrective invoice; the owner's points for that design are on the corrective-invoice entry (R5,
+  above). Also from C67's review (a probe, not a committed test): for a bill corrected to exactly
+  zero, a captured card payment with no sale still takes the recovery branch first, settling at
+  the captured amount with all of it recorded as tip; the below-zero case with a capture was not
+  run.
+- **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
+  label wraps also wraps its "2 min" onto two lines (`apps/till/src/screens/till-expo-screen.ts`);
+  nothing overflows. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
+  card, later kitchen notices and the till's list of a party's bills keep showing the frozen
+  receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
+  `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
+  `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
+  the same column.
+- **Task 7 (#864, move a whole bill).** The move moves the bill's revision on, open or
+  presented, without `bumpRevision`'s refusal of money in flight, since a move changes no amount
+  (plan P19): a decision, recorded under Decisions and deliberate limits.
+- **Task 8 (#869, move guests, join and split tables) and C77/C86.** Open: a party with no table
+  whose chain of merges never ends (an unknown id, or two parties recorded as merged into each
+  other, which the database accepts) is named by the bill's own label; whether any till action
+  can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
+  stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
+  `packages/db/src/party-table-labels.ts`. `party.main_bill_stays`'s till wording says "the table
+  has other unpaid bills", which Split a table choosing the main bill need not satisfy. Left by
+  #906's review: `computeOverdueOrders` is the one report function that reads its own node's
+  location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
+  suggested, not done); no case pins what a correction slip prints for a counter order delivered
+  to a table; and a database built on purpose with a delivery table in another location now
+  names the order by its own label — no product path creates that state, and whether every
+  existing venue database is free of it was not checked.
+- **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
+  2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
+  time is picked by comparing the stored times as text, right only while every writer stores the
+  same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
+  recalled and fired again carries its new fire time but its old group's firer.
+  The owner's replacement for C80's earlier course-placement rule is retained under
+  [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
+- **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
+  waiter who taps a free table to seat it, goes back to the order tab while the seating is still
+  under way and starts Move guests can have the move set the wrong table on the new party; the
+  suggested fix is to count only table opens started in the current operator session; not
+  queued. The till sends `otherPartyId: null` when its floor does not list the target table at
+  all (a failed floor read empties the list); a table another party holds is then refused as out
+  of date, never combined. On a 390 px phone the bill choice's buttons wrap ("Keep separate
+  bills" on three lines).
+- **Open, from C84's review (#913):** when a void or line change gets no answer,
+  `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
+  own floor read failed, while the revision on screen stays where it was. A later floor read that
+  also fails keeps a floor listing the same party at that EQUAL revision, which
+  `#retakePartyFromFloor()` takes, and `#followDraft` → `#rememberOrderParty()` after a send with
+  no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
+  in the code, not reproduced.
 
 ## Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain text
 
@@ -971,34 +956,34 @@ original finding; its four-surface count and five-entry list no longer describe 
 
 ## Five measured till layout defects and one seen in a screenshot, all of them older than the extras-and-options work
 
-- **Five measured till layout defects and one seen in a screenshot, all of them older than the
-  extras-and-options work.** Found while looking at the real screens for B1 Task 12. **Next action:**
-  take these six as
-  one till layout pass over `apps/till`, at 390 and at 1024, measuring rectangles rather than
-  reading rules — and set the width with `page.viewport(w, h)`, never `commands.setViewportSize`,
-  which resizes the outer page and leaves the components' own iframe alone
-  ([testing-guide.md](../developers/testing-guide.md)).
-  - **Within one extras list, prices are not a column and names are not a column**
-    (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
-    price edges and the name edges, at 1024 and at 390.
-  - **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
-    top border**, so the required marker (appended as a plain space) can break onto a line of its own
-    sitting on the border rule.
-  - **Nothing says WHY Add is disabled when a list's minimum is unmet.** The only cues are a `*` on the
-    legend and a dimmed Add — and that `*` is also the only thing telling `minPicks: 1` from
-    `minPicks: 2`. Wants a sentence beside the list stating the minimum in words.
-  - **A long dish name pushes that line's remove control outside the basket**
-    (`apps/till/src/widgets/basket.ts`): the unstacked layout's `1fr` column bottoms out at the
-    longest word. Measured at phone width before A310. Since A310 a canvas tab's basket at 40rem or
-    less (`card-grid.ts`) puts the name on its own row; not re-measured there. Above 40rem the
-    unstacked layout and its `1fr` column are unchanged.
-  - **A pick's money column sits right of the dish total it belongs under**, further right than the
-    dish row's own remove button, because `.line` and `.option` use different column templates.
-  - **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses the
-    card's right border.** Seen in a screenshot, not measured. That widget was retired on 2026-09-27
-    for `till-menu-browser` (`apps/till/src/widgets/menu-browser.ts`), whose tiles wrap their text
-    inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
-    crossed a border. Looked at, not measured: close once someone measures it.
+Found while looking at the real screens for B1 Task 12. **Next action:**
+take these six as
+one till layout pass over `apps/till`, at 390 and at 1024, measuring rectangles rather than
+reading rules — and set the width with `page.viewport(w, h)`, never `commands.setViewportSize`,
+which resizes the outer page and leaves the components' own iframe alone
+([testing-guide.md](../developers/testing-guide.md)).
+
+- **Within one extras list, prices are not a column and names are not a column**
+  (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
+  price edges and the name edges, at 1024 and at 390.
+- **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
+  top border**, so the required marker (appended as a plain space) can break onto a line of its own
+  sitting on the border rule.
+- **Nothing says WHY Add is disabled when a list's minimum is unmet.** The only cues are a `*` on the
+  legend and a dimmed Add — and that `*` is also the only thing telling `minPicks: 1` from
+  `minPicks: 2`. Wants a sentence beside the list stating the minimum in words.
+- **A long dish name pushes that line's remove control outside the basket**
+  (`apps/till/src/widgets/basket.ts`): the unstacked layout's `1fr` column bottoms out at the
+  longest word. Measured at phone width before A310. Since A310 a canvas tab's basket at 40rem or
+  less (`card-grid.ts`) puts the name on its own row; not re-measured there. Above 40rem the
+  unstacked layout and its `1fr` column are unchanged.
+- **A pick's money column sits right of the dish total it belongs under**, further right than the
+  dish row's own remove button, because `.line` and `.option` use different column templates.
+- **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses the
+  card's right border.** Seen in a screenshot, not measured. That widget was retired on 2026-09-27
+  for `till-menu-browser` (`apps/till/src/widgets/menu-browser.ts`), whose tiles wrap their text
+  inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
+  crossed a border. Looked at, not measured: close once someone measures it.
 
 ## Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was being re-read is still hidden when the till follows the party onto its next tab
 
@@ -1028,18 +1013,19 @@ the bill-specific draft handles that race.
 
 ## Screen faults seen during menus Task 9's look on 2026-09-27
 
-- **Screen faults seen during menus Task 9's look on 2026-09-27.** Seen on the dev stack while
-  checking the till's home page, not investigated, and not checked against `main`, so any of them
-  may predate that branch:
-  - on the till at 390 px wide, the header makes the page wider than the screen (measured in
-    C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
-  - on the till's floor map at 390 px wide, tables overlap one another;
-  - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
-    canvases, see A182 below; fixed by A379 on 2026-10-08);
-  - the till's browser console shows Lit's "scheduled an update … after an update completed"
-    warning.
+Seen on the dev stack while
+checking the till's home page, not investigated, and not checked against `main`, so any of them
+may predate that branch:
 
-  **Next action:** check each against `main`, then fix or file it on its own.
+- on the till at 390 px wide, the header makes the page wider than the screen (measured in
+  C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
+- on the till's floor map at 390 px wide, tables overlap one another;
+- in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
+  canvases, see A182 below; fixed by A379 on 2026-10-08);
+- the till's browser console shows Lit's "scheduled an update … after an update completed"
+  warning.
+
+**Next action:** check each against `main`, then fix or file it on its own.
 
 ## Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01)
 
@@ -1115,42 +1101,40 @@ arriving, but open periods are told apart only by their start time, to the milli
 
 ## Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN
 
-- **Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN.** It
-  is a per-device setting by the 2026-10-01 decision
-  ([routing design §5.11](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
-  the 2026-10-04 profile model a "Bar till" profile could carry it instead. A268 keeps it on the
-  device. Needs an owner decision.
+It
+is a per-device setting by the 2026-10-01 decision
+([routing design §5.11](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
+the 2026-10-04 profile model a "Bar till" profile could carry it instead. A268 keeps it on the
+device. Needs an owner decision.
 
 ## Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268
 
-- **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
-  Only dev mode lets a tab act as a separate device, and it names the device by id alone
-  (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
-  whole browser. Since #269 and #287 pairing also overwrites the browser-wide device cookie, so a
-  tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
-  lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
-  secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
+Only dev mode lets a tab act as a separate device, and it names the device by id alone
+(`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
+whole browser. Since #269 and #287 pairing also overwrites the browser-wide device cookie, so a
+tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
+lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
+secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
 
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
-- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
-  2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
-  recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
-  in float cash). The entries replace the two typed totals the daily close takes today (opening float
-  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
-  No screen collects cash
-  counts yet; this is where one belongs.
+Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
+recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
+in float cash). The entries replace the two typed totals the daily close takes today (opening float
+and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
+No screen collects cash
+counts yet; this is where one belongs.
 
 ## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
-- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
-  A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
-  open float may take cash on any handheld, and it adds to their float; the waiter settles the float
-  at a till before leaving, entering what they hold, the difference is recorded against them and the
-  cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
-  Cash taken on a handheld whose profile allows cash, with no float, is counted against the
-  handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
-  A238 (landed as #1164) and A239.
+Piece 3 of
+A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
+open float may take cash on any handheld, and it adds to their float; the waiter settles the float
+at a till before leaving, entering what they hold, the difference is recorded against them and the
+cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
+Cash taken on a handheld whose profile allows cash, with no float, is counted against the
+handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
+A238 (landed as #1164) and A239.
 
 ## The till's schedule screen does not follow the forms rule yet
 
@@ -1261,17 +1245,17 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
 
 ## The till's menu reads (Task 7, #719)
 
-- **The till's menu reads (Task 7, #719).** Every `/api/menu-state` poll waits its turn in the
-  write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
-  inside `withTransaction`; reading outside a transaction would skip the queue but give
-  `menuState`'s queries no single consistent view, and there is no read-only transaction
-  (`packages/db/src/tenancy.ts`). A
-  till learns of a change only by polling, because the dashboard's live-update route accepts the
-  management cookie only; a till-session branch there would let the server tell tills (plan D11), a
-  later refinement. The basket comparison does not notice a publish that adds a required options
-  list to a dish in the basket, or lowers a list's picks limit, so the till takes the new version
-  silently and the server then refuses `options.label_required` (or `extras.limit_exceeded`): staff
-  see a refusal where the dialog should have asked.
+Every `/api/menu-state` poll waits its turn in the
+write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
+inside `withTransaction`; reading outside a transaction would skip the queue but give
+`menuState`'s queries no single consistent view, and there is no read-only transaction
+(`packages/db/src/tenancy.ts`). A
+till learns of a change only by polling, because the dashboard's live-update route accepts the
+management cookie only; a till-session branch there would let the server tell tills (plan D11), a
+later refinement. The basket comparison does not notice a publish that adds a required options
+list to a dish in the basket, or lowers a list's picks limit, so the till takes the new version
+silently and the server then refuses `options.label_required` (or `extras.limit_exceeded`): staff
+see a refusal where the dialog should have asked.
 
 ## Every remembered round is marked again against the open table's menu
 
@@ -1284,12 +1268,12 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
 
 ## The till's home page (Task 9, #729)
 
-- **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name;
-  Matching displayed section names is included (A461). Every `/api/menu-state` read from an enrolled device reads the device, once
-  per zone it polls (the counter's, and the open table's while its order shows), and each read also
-  reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token's scrypt check (21.1 ms, measured once on a Mac)
-  runs off the lock, once per device until its token changes, the server restarts or the device
-  falls out of the 256 the server remembers.
+Search matches the staff name only, not a customer name;
+Matching displayed section names is included (A461). Every `/api/menu-state` read from an enrolled device reads the device, once
+per zone it polls (the counter's, and the open table's while its order shows), and each read also
+reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token's scrypt check (21.1 ms, measured once on a Mac)
+runs off the lock, once per device until its token changes, the server restarts or the device
+falls out of the 256 the server remembers.
 
 ## A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English abbreviation
 
@@ -1303,12 +1287,11 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
 
 ## Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses the variant, and says it saved
 
-- **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
-  the variant, and says it saved.** Measured with a throwaway browser test: no variant radio is
-  selected, because `willUpdate` never seeds `variantId`, and when the operator picks one,
-  `setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it. Needs a decision first
-  about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
-  on a reopened line; if yes, `setLineModifiers` has to carry the product.
+Measured with a throwaway browser test: no variant radio is
+selected, because `willUpdate` never seeds `variantId`, and when the operator picks one,
+`setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it. Needs a decision first
+about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
+on a reopened line; if yes, `setLineModifiers` has to carry the product.
 
 ## Reopening a held order still removes a sold-out extra on the first edit
 
@@ -2456,24 +2439,22 @@ separate backlog entries. A803 owns its bill naming and pass/station presentatio
 
 ## Move this bill still offers a closed counter area
 
-- **Move this bill still offers a closed counter area (2026-10-15; open, A697 review).**
-  The table picker always offers The counter (`#tablePicker`,
-  `apps/till/src/screens/till-table-order-screen.ts`), and the app sends its counter area
-  (`#onMoveBill`, `apps/till/src/till-app.ts`). The real-route case "refuses a bill entering a
-  closed zone at a counter" in `apps/server/src/till-api.zone-closed.test.ts` returns
-  `service_zone.closed` for an open bill entering a different closed area. Give the screen the
-  counter area's identity and apply that rule, preserving same-area moves and presented bills.
-  A697 covers table destinations only; no screen-to-server counter probe was run.
+The table picker always offers The counter (`#tablePicker`,
+`apps/till/src/screens/till-table-order-screen.ts`), and the app sends its counter area
+(`#onMoveBill`, `apps/till/src/till-app.ts`). The real-route case "refuses a bill entering a
+closed zone at a counter" in `apps/server/src/till-api.zone-closed.test.ts` returns
+`service_zone.closed` for an open bill entering a different closed area. Give the screen the
+counter area's identity and apply that rule, preserving same-area moves and presented bills.
+A697 covers table destinations only; no screen-to-server counter probe was run.
 
 ## Held-order closed-area destinations need the order's source area
 
-- **Held-order closed-area destinations need the order's source area (2026-10-15; open,
-  A697 follow-up).** Move to table on a held-order card cannot distinguish a move within a closed
-  area from a move into one: neither `HeldOrderSummary` nor `HeldOrder` includes the saved source
-  area (`apps/till/src/api/client.ts`). The server permits the former and refuses the latter for
-  an open bill (`adoptZone`, `apps/server/src/move-bill.ts`). Include that context in the read
-  contract, then filter closed destinations while preserving same-area moves. A697's till-only
-  change covers the order screen; the held-order picker still leaves this decision to the server.
+Move to table on a held-order card cannot distinguish a move within a closed
+area from a move into one: neither `HeldOrderSummary` nor `HeldOrder` includes the saved source
+area (`apps/till/src/api/client.ts`). The server permits the former and refuses the latter for
+an open bill (`adoptZone`, `apps/server/src/move-bill.ts`). Include that context in the read
+contract, then filter closed destinations while preserving same-area moves. A697's till-only
+change covers the order screen; the held-order picker still leaves this decision to the server.
 
 ## A730. The floor's Rename window may keep comparing against the name it opened with
 
@@ -2486,12 +2467,12 @@ separate backlog entries. A803 owns its bill naming and pass/station presentatio
 
 ## Investigate a null device identity during profile switching
 
-- **Investigate a null device identity during profile switching.** A432’s full till coverage run
-  on 2026-10-08 passed 5,951 tests and its thresholds, but the browser logged an unhandled
-  rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterSwitchedProfile`.
-  Reproduce which profile-switch test answers null and determine whether the fixture or the
-  public identity response needs correction; keep the existing profile and login assertions.
-  Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
+A432’s full till coverage run
+on 2026-10-08 passed 5,951 tests and its thresholds, but the browser logged an unhandled
+rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterSwitchedProfile`.
+Reproduce which profile-switch test answers null and determine whether the fixture or the
+public identity response needs correction; keep the existing profile and login assertions.
+Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
 
 ## Loose ends left by A466 (A429 slice 2) / A502 part 3
 
@@ -2539,7 +2520,7 @@ separate backlog entries. A803 owns its bill naming and pass/station presentatio
 
 ## A550. Making a booked table part of a joined table is not refused
 
-**A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
+The floor
 plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part; the
 booking stays, and seating it is refused `table.in_joined_table` once the reset applies, so staff
 must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
@@ -2547,8 +2528,7 @@ refuses it, as a delete is refused, or only warns.
 
 ## The booking form draws its bottom alert and Save slot without the shared actions primitive
 
-**The booking form draws its bottom alert and Save slot without the shared actions primitive
-(2026-10-14, A551 review).** `packages/bookings/src/dashboard/booking-form.ts` keeps a
+`packages/bookings/src/dashboard/booking-form.ts` keeps a
 `p.error[role=alert]` and its footer button where the Forms contract in
 `docs/developers/design-system.md` names `wt-form-actions`. The base at
 `9e40be28237ebdd9eac90a92da9e96b977d8f590` has that same arrangement. Next: use the shared
@@ -2557,7 +2537,7 @@ draft/save behavior. A551's focused validation and axe cases pass with the retai
 
 ## Two small phone-width points A414 left (#1495)
 
-**Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
+On the Order screen at 390 px the Review
 button stops short of the right edge (seen in a screenshot, not compared with before #1495); and
 the Schedule and Allergens screens now draw their own copy of the card's border and padding
 (`apps/till/src/widgets/screen-card-styles.ts`), so a later change to the card's look will not
@@ -2585,12 +2565,11 @@ reach them.
 
 ## Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16)
 
-- **Refresh the floor without a staff action in a zone's
-  list view — OPEN (3d, W16).** — left open by the product folders work. Since A429 slice 3 the
-  floor screen re-reads the floor every 15 seconds while a zone's map is on screen
-  (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
-  events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
-  few seconds on every till; choose the interval and cost first.
+Left open by the product folders work. Since A429 slice 3 the
+floor screen re-reads the floor every 15 seconds while a zone's map is on screen
+(`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
+events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
+few seconds on every till; choose the interval and cost first.
 
 ## In dark, the till's Cash and Card turn dim blue while a payment is being sent
 
@@ -2706,34 +2685,34 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 
 ## A910. A reason's item limit errs toward asking (left open by A758-1).
 
-- **A910. A reason's item limit errs toward asking (left open by A758-1).** Each share is rounded
-  up to a whole basis point (`shareBp`, `packages/adjustments/src/record.ts`). What the reason's
-  discounts on the whole bill took off each row is not recorded, so `judgeComp`
-  (`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
-  about, and its dish or its extras), capped at what that row is now below its list value less what
-  comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
-  whole line, nothing split off, at the row's present quantity and list value); the item counts the
-  largest of those. A row no bill discount reached, such as one added after them, counts nothing for
-  them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
-  reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
-  priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
-  moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
-  that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
-  item's count starts again on another bill, because the reason's earlier comps are read from the
-  item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
-  reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
-  with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
-  an item's count should follow it to another bill.
+Each share is rounded
+up to a whole basis point (`shareBp`, `packages/adjustments/src/record.ts`). What the reason's
+discounts on the whole bill took off each row is not recorded, so `judgeComp`
+(`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
+about, and its dish or its extras), capped at what that row is now below its list value less what
+comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
+whole line, nothing split off, at the row's present quantity and list value); the item counts the
+largest of those. A row no bill discount reached, such as one added after them, counts nothing for
+them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
+reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
+priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
+moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
+that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
+item's count starts again on another bill, because the reason's earlier comps are read from the
+item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
+reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
+with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
+an item's count should follow it to another bill.
 
 ## A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).
 
-- **A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).** Free always
-  counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
-  what was left, as a 100% percentage already does. An amount counts only when it took the item's
-  whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
-  the report reads "Comp €6.00". One rule (`packages/adjustments/src/full-comp.ts`) decides the
-  ticket, the till's ticket and the report; a full invoice names a dish's row by its one own comp,
-  unless a bill comp also stands and the dish's discounts fall at more than one VAT rate, and
-  otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
-  (`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
-  Owner to confirm both halves.
+Free always
+counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
+what was left, as a 100% percentage already does. An amount counts only when it took the item's
+whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
+the report reads "Comp €6.00". One rule (`packages/adjustments/src/full-comp.ts`) decides the
+ticket, the till's ticket and the report; a full invoice names a dish's row by its one own comp,
+unless a bill comp also stands and the dish's discounts fall at more than one VAT rate, and
+otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
+(`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
+Owner to confirm both halves.
