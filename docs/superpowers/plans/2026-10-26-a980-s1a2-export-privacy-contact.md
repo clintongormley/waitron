@@ -445,13 +445,13 @@ the handover.
 | --- | --- | --- |
 | `apps/server/src/first-fiscal-setup.e2e.test.ts:129-137` | one, `{ …, claimFrom: "preview" }` (decision 13) | 2 |
 | `packages/provisioning/src/configuration-transfer.boundaries.test.ts` ("refuses an obsolete configuration format") | one, `{ ...configurationBundle(), version: 8 }` (added 2026-10-26 in Task 8's fix round) | 8 |
+| `apps/server/src/configuration-import.test.ts:96-256` (older formats) | two: format 8 with and without `privacyContact` | 4 |
+| `packages/provisioning/src/configuration-transfer.boundaries.test.ts:48-81` (malformed) | five, `privacyContact` malformed | 4 |
+| `apps/setup/src/setup-app.test.ts:3034-3051` (generic refusals) | one, `["venue.detail_invalid", "legalName"]` | 7 |
 
 **One renaming**: the same table's title template (`first-fiscal-setup.e2e.test.ts:138`) gains
 `, claim from $claimFrom`, so the new row's name differs from the first row's; every existing row's
 name gains ", claim from undefined", and no assertion changes (Task 2).
-| `apps/server/src/configuration-import.test.ts:96-256` (older formats) | two: format 8 with and without `privacyContact` | 4 |
-| `packages/provisioning/src/configuration-transfer.boundaries.test.ts:48-81` (malformed) | five, `privacyContact` malformed | 4 |
-| `apps/setup/src/setup-app.test.ts:3034-3051` (generic refusals) | one, `["venue.detail_invalid", "legalName"]` | 7 |
 
 **One restructuring with the same assertion**: in `first-fiscal-setup.e2e.test.ts:231-234` the staged
 answer's body is read into a variable before the existing `toMatchObject`, so Task 2's row can use it
