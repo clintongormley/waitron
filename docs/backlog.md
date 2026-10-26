@@ -2811,6 +2811,40 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
 
+- **A1121. With many table buttons a handheld's Order screen can lose its visible way back to the
+  Floor.** Seen in A797 slice 3's LOOK, 2026-10-26 (`k-ten-floor-scrolled-390-light-en.png`,
+  `k-ten-order-last-390-light-en.png`, `k-ten-order-last-390-dark-es.png`,
+  `k-ten-floor-390-light-en.png` and `l-floor-360-light-en.png` in
+  `~/waitron-campaign-c/a797-3-shots/`): at 360 and 390 px with ten buttons the strip scrolls
+  sideways and Floor scrolls out of sight with the table buttons, and nothing hints that the strip
+  scrolls; the last visible button is simply cut at its edge. D14 of the slice's plan kept today's
+  scrolling strip. Options to decide: keep Floor fixed at the start of the strip, a fade at the
+  cut edge.
+
+- **A1122. At 1024 px a handheld's Floor button slides sideways as table buttons appear.** Seen
+  in A797 slice 3's LOOK, 2026-10-26 (`a-floor-empty-1024-light-en.png`,
+  `d-floor-after-dining-1024-light-en.png`, `f-floor-after-terrace-1024-light-en.png` in
+  `~/waitron-campaign-c/a797-3-shots/`): the group is centred between the brand and the name, so
+  Floor sits at x 388 with no table buttons, 356 with one and 319 with two.
+
+- **A1123. At 360×640 a handheld's ☰ popup moves up over the bar and covers ☰ itself.** Seen in
+  A797 slice 3's LOOK, 2026-10-26 (`l-menu-open-360-light-es.png`, `l-menu-open-360-dark-es.png`,
+  `l-menu-open-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`): to fit whole it starts
+  at y 11. Nothing is lost, and tapping outside or Escape closes it.
+
+- **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
+  tab.** Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,
+  `l-floor-360-dark-es.png`, `l-floor-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`):
+  the tab reads "Terrac". `apps/till/src/screens/till-floor-screen.ts`, which draws the chip, is
+  unchanged between `git merge-base origin/main HEAD` and slice 3's tip, so I believe this
+  predates the slice (not run on main).
+
+- **A1125. On a 1024×768 handheld the Order screen's Fire and Send all buttons are cut off at the
+  bottom.** Seen in A797 slice 3's LOOK, 2026-10-26 (`c-order-two-dishes-1024-light-en.png`,
+  `g-two-buttons-3-open-1024-light-en.png` and their dark and Spanish twins, «Marchar» /
+  «Enviar todo», in `~/waitron-campaign-c/a797-3-shots/`). Believed to predate A797 slice 3 (not
+  run on main).
+
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
     the cookie names a disabled device, so the response time hints that an id is a disabled device;
@@ -3279,7 +3313,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **On a 390 px phone the floor map cuts table names short at every text size.** It fits twelve
   tables in squares about 30 px wide, so a name longer than three or four letters shows "Terr…"
   until the map is pinched (the map's `text-overflow: ellipsis`,
-  `packages/ui/src/components/wt-floor-map.ts`). Left open by A841 slice 10b.
+  `packages/ui/src/components/wt-floor-map.ts`). Left open by A841 slice 10b. At 360 px the labels
+  read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png` in
+  `~/waitron-campaign-c/a797-3-shots/`).
 
 ### Printers, the print agent and receipts
 
