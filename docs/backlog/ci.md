@@ -3,6 +3,90 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## A backlog detail link still names the old five-handler heading
+
+- **A backlog detail link still names the old five-handler heading.** The till entry’s
+  `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
+  no longer matches “Three till handlers still leave a failed list refresh unhandled”.
+  Retarget the link during the till backlog cleanup; keep the open handlers entry.
+
+## Retain failure screenshots for long browser test names
+
+- **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
+  in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
+  fixture checks. Bound the generated screenshot filename and keep the complete test name in
+  its metadata; verify with a deliberately failing case whose generated name is long.
+
+## CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488)
+
+- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).** codeql.yml
+  saves no overlay-base database, which the default setup's runs did, so its own durations may
+  differ. Next: after a week of nightly runs, read their job durations and set the limit from them
+  (docs/developers/ci-and-gates.md, "Every job has a time limit").
+
+## Both image jobs still run `docker/setup-buildx-action`
+
+- **Both image jobs still run `docker/setup-buildx-action`**, whose only stated reason was the
+  cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
+  print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
+  action queued.
+
+## A new branch pushed while the refresh fails still has its range start at the local `origin/main`'s merge base
+
+- **A new branch pushed while the refresh fails still has its range start at the local
+  `origin/main`'s merge base** — left open by the pre-push hook's sign-off fixes, A392 (#1421) and
+  A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
+  queued.
+
+## `bundle-smoke` builds only the credentials and server bundles
+
+- **`bundle-smoke` builds only the credentials and server bundles**, so a change to
+  `scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
+  through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
+  in CI.
+
+## Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id
+
+- **Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id.** The column
+  is `text NOT NULL` with no foreign key or CHECK, and `recordWorkingLineContexts`
+  (`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
+  or record why a sale can never carry one. Left open by A810 (#1886).
+
+## The hint's cover stops at the migration run, and provisioning runs after it
+
+- **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
+  provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
+  succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
+  curated line. Nobody has hit this.
+
+## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
+
+- **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe** (its
+  fixture closes the handles first, which removes the sidecars). The wipe's sidecar removal is
+  pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
+  on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+
+## Loose ends left by W92 (#1250)
+
+- **Loose ends left by W92 (#1250).**
+  - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
+    during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
+    its final head.
+
+## The server holds two separate 100-character limits for text a request sends
+
+- **The server holds two separate 100-character limits for text a request sends**: `SEARCH_MAX`
+  (`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
+  Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
+  the same limit and, if so, share one constant.
+
+## The test-shape half of #339's lesson is unwritten
+
+- **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
+  person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
+  other half — a matrix that varies two things separately and never crosses them proves less than
+  it looks — wants its own line. Left open by content languages and the image library (#339).
+
 ## The other sharded packages still use Vitest's file-count split.
 
 - **The other sharded packages still use Vitest's file-count split.** Fiscal-verifactu, till, dashboard,

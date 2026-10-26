@@ -5159,10 +5159,8 @@ For package distribution and the four-minute target, use the
   reduce its repeated setup while preserving its restart assertions.
   [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
 
-- **A backlog detail link still names the old five-handler heading.** The till entry’s
-  `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
-  no longer matches “Three till handlers still leave a failed list refresh unhandled”.
-  Retarget the link during the till backlog cleanup; keep the open handlers entry.
+- **A backlog detail link still names the old five-handler heading.**
+  [Detail](backlog/ci.md#a-backlog-detail-link-still-names-the-old-five-handler-heading).
 
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the
@@ -5241,10 +5239,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A999 residual: retain the other allergy-move failure if it recurs.**
   [Detail](backlog/ci.md#a999-residual-retain-the-other-allergy-move-failure-if-it-recurs).
 
-- **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
-  in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
-  fixture checks. Bound the generated screenshot filename and keep the complete test name in
-  its metadata; verify with a deliberately failing case whose generated name is long.
+- **Retain failure screenshots for long browser test names.**
+  [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
 - **A pnpm setup retry does not identify which command failed.**
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
@@ -5272,10 +5268,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Venue-service browser startup remains unexplained (#1557).**
   [Detail](backlog/ci.md#venue-service-browser-startup-remains-unexplained-1557).
 
-- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).** codeql.yml
-  saves no overlay-base database, which the default setup's runs did, so its own durations may
-  differ. Next: after a week of nightly runs, read their job durations and set the limit from them
-  (docs/developers/ci-and-gates.md, "Every job has a time limit").
+- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).**
+  [Detail](backlog/ci.md#codeqls-timeout-minutes-50-rests-on-the-default-setups-durations-a488).
 
 - **A419 dashboard CI stall remains unexplained (#1474).**
   [Detail](backlog/ci.md#a419-dashboard-ci-stall-remains-unexplained-1474).
@@ -5284,15 +5278,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
   A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
 
-- **Both image jobs still run `docker/setup-buildx-action`**, whose only stated reason was the
-  cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
-  print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
-  action queued.
+- **Both image jobs still run `docker/setup-buildx-action`**. No action queued.
+  [Detail](backlog/ci.md#both-image-jobs-still-run-dockersetup-buildx-action).
 
-- **A new branch pushed while the refresh fails still has its range start at the local
-  `origin/main`'s merge base** — left open by the pre-push hook's sign-off fixes, A392 (#1421) and
-  A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
-  queued.
+- **A new branch pushed while the refresh fails still has its range start at the local `origin/main`'s merge base**. No action queued.
+  [Detail](backlog/ci.md#a-new-branch-pushed-while-the-refresh-fails-still-has-its-range-start-at-the-local-originmains-merge-base).
 
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254 attempt 1, job 111163230954, 2026-10-03; passed on re-run).**
   The original one-off race has not been reproduced locally.
@@ -5311,10 +5301,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Boot suites that release a port probe before binding still have a race (A80/#740, A907).**
   [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
-- **`bundle-smoke` builds only the credentials and server bundles**, so a change to
-  `scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
-  through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
-  in CI.
+- **`bundle-smoke` builds only the credentials and server bundles**
+  [Detail](backlog/ci.md#bundle-smoke-builds-only-the-credentials-and-server-bundles).
 
 - **The table-service, boot-and-counter and three `tender-pay-*` suites are separate files** that
   can be folded back into `till-app.test.ts` and `tender-pay.test.ts`. Left open by `apps/till`'s
@@ -5349,10 +5337,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
 
-- **Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id.** The column
-  is `text NOT NULL` with no foreign key or CHECK, and `recordWorkingLineContexts`
-  (`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
-  or record why a sale can never carry one. Left open by A810 (#1886).
+- **Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id.**
+  [Detail](backlog/ci.md#neither-working_line_contextsunit_id-nor-its-write-refuses-an-empty-unit-id).
 
 - **Loose ends left by the comment-pruning pull requests (#559 to #624).**
   [Detail](backlog/ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
@@ -5383,15 +5369,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI**
   [Detail](backlog/ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci).
 
-- **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
-  provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
-  succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
-  curated line. Nobody has hit this.
+- **The hint's cover stops at the migration run, and provisioning runs after it**
+  [Detail](backlog/ci.md#the-hints-cover-stops-at-the-migration-run-and-provisioning-runs-after-it).
 
-- **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe** (its
-  fixture closes the handles first, which removes the sidecars). The wipe's sidecar removal is
-  pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
-  on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+- **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe**
+  [Detail](backlog/ci.md#appsserversrcrejoin-commandtesttss-sidecar-assertions-do-not-test-the-wipe).
 
 - **`scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a pipe, so the selection guard does not count it and a change to it alone runs none of those jobs.**
   [Detail](backlog/ci.md#scriptschanged-packagesmjs-runnable-runs-before-the-tests-in-many-packages-jobs-fed-from-a-pipe-so-the-selection-guard-does-not-count-it-and-a-change-to-it-alone-runs-none-of-those-jobs).
@@ -5415,9 +5397,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
 
 - **Loose ends left by W92 (#1250).**
-  - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-    during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
-    its final head.
+  [Detail](backlog/ci.md#loose-ends-left-by-w92-1250).
 
 - **The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by
   its name**, so a reference named otherwise is still unseen. Left open by W72d (#1238).
@@ -5443,10 +5423,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
   (#1332).
 
-- **The server holds two separate 100-character limits for text a request sends**: `SEARCH_MAX`
-  (`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
-  Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
-  the same limit and, if so, share one constant.
+- **The server holds two separate 100-character limits for text a request sends**
+  [Detail](backlog/ci.md#the-server-holds-two-separate-100-character-limits-for-text-a-request-sends).
 
 - **Two browser tests failed once each during A454's work (search everywhere), and neither was reproduced or checked on `main`**
   [Detail](backlog/ci.md#two-browser-tests-failed-once-each-during-a454s-work).
@@ -5462,10 +5440,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
   output, and fix at the root. [Detail](backlog/ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
 
-- **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
-  person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
-  other half — a matrix that varies two things separately and never crosses them proves less than
-  it looks — wants its own line. Left open by content languages and the image library (#339).
+- **The test-shape half of #339's lesson is unwritten.**
+  [Detail](backlog/ci.md#the-test-shape-half-of-339s-lesson-is-unwritten).
 
 - **A two-transaction concurrency test that starts both sides in sequence is racing itself.**
   Nothing guards the shape; look for it in any new racing test.
