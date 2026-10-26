@@ -290,9 +290,6 @@ async function witness(anchor: FirstSetupRoots): Promise<Witness | null> {
     uncertain();
   return first as unknown as Witness;
 }
-function sourceFor(anchor: FirstSetupRoots): FirstSetupRoots {
-  return { venueDir: anchor.venueDir, stateDir: anchor.stateDir };
-}
 async function originals(
   anchor: FirstSetupRoots,
   source: FirstSetupRoots,
@@ -545,7 +542,7 @@ async function checkedRecords(
     )
   )
     conflict();
-  if (!isDeepStrictEqual(sourceFor(anchor), selection.target.source)) conflict();
+  if (!isDeepStrictEqual(anchor, selection.target.source)) conflict();
   return records;
 }
 const coordinators = new Map<string, ReturnType<typeof createFirstSetupCoordinator>>();
@@ -560,7 +557,7 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
   async function inspect(id: string): Promise<string> {
     if (!isUuid(id)) invalid();
     const anchor = await canonical(anchorInput);
-    return digest(await stableOriginals(anchor, sourceFor(anchor), id));
+    return digest(await stableOriginals(anchor, anchor, id));
   }
   async function readRecords(chainOnly = false): Promise<BackupRepairRecord[]> {
     const anchor = await canonical(anchorInput),
@@ -575,7 +572,7 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
     if (
       !isDeepStrictEqual(anchor, input.target.anchor) ||
       !isDeepStrictEqual(await canonical(input.target.source), input.target.source) ||
-      !isDeepStrictEqual(sourceFor(anchor), input.target.source)
+      !isDeepStrictEqual(anchor, input.target.source)
     )
       conflict();
     let selected: Witness | null;
@@ -708,7 +705,7 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
           if (last.target.recoveryId !== id) conflict();
           if (last.phase === "abandoned") return last;
           const input: RecordInput = { ...recordInput(last), phase: "abandoned" };
-          if (!isDeepStrictEqual(sourceFor(anchor), input.target.source)) conflict();
+          if (!isDeepStrictEqual(anchor, input.target.source)) conflict();
           transition(last, input);
           const record: BackupRepairRecord = {
             ...structuredClone(input),
