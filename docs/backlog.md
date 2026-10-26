@@ -5808,9 +5808,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining private-name work includes till app and screen suites, payment widget suites, the
-  server's till API tests and shared station fixtures. Audit file names too.
-  Fixture text belongs to A976. The owner-held core-comment PR remains separate. See the
+  Remaining: till app, screen and payment-widget private names, server till-API tests, shared
+  station fixtures and file names. Keep fixture text with A976 and the owner-held core-comment
+  PR separate. See the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
