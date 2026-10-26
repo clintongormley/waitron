@@ -381,10 +381,6 @@ export function createFirstSetupResolutionActions(
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();
-          if (discardsStopped) {
-            if (request.owner === undefined) throw new AppError("setup.owner_required", {});
-            if (request.confirmRecoveryDiscard === undefined) conflict();
-          }
           const box = await assertStartAgainAllowedOnDisk(roots, discarding);
           const markerFor = async (markerOptions: { discarding?: string }) => {
             const marker = await startAgainMarkerFor(
@@ -401,8 +397,9 @@ export function createFirstSetupResolutionActions(
             return marker;
           };
           let marker = await markerFor(discarding);
-          if (recoveryRecordDamaged && request.owner === undefined)
+          if ((recoveryRecordDamaged || discardsStopped) && request.owner === undefined)
             throw new AppError("setup.start_again_password_required", {});
+          if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
           const gathered = await gatherStartAgainFloor(
             roots,

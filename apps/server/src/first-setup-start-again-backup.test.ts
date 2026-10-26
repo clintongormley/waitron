@@ -985,7 +985,7 @@ it("with the database present, the password and the confirmed summary discard a 
   });
 });
 
-it("with the database present, a stopped recovery's Start again without the setup password is refused setup.owner_required, and nothing changes", async () => {
+it("with the database present, a stopped recovery's Start again without the setup password is refused setup.start_again_password_required, and nothing changes", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const startAgain = await presentOver(f, f.service);
@@ -996,7 +996,7 @@ it("with the database present, a stopped recovery's Start again without the setu
       ...startAgain.ids,
       confirmRecoveryDiscard: { shown: startAgain.shown },
     }),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  ).rejects.toMatchObject({ code: "setup.start_again_password_required" });
   await expectNothingWritten(f, before);
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
 });
