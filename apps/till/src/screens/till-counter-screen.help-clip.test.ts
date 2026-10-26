@@ -11,7 +11,7 @@ import { helpBadgeLabel } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder, HeldOrderSummary, TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "p1",
   catalogueId: "cat-default",
   name: "Café",
@@ -124,7 +124,7 @@ const parts: Part[] = [
 async function mount(over: Partial<TillCounterScreen>) {
   const { el, host } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
-    products: [cafe],
+    products: [coffee],
     menus: servedMenus(
       [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
       [],
