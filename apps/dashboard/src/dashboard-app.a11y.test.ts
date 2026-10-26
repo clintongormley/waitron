@@ -442,6 +442,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         fixedReceiptLanguage: null,
         defaultProductVatClass: "general",
       }),
+      getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
       listStaff: vi.fn().mockResolvedValue(people),
       listCourses: vi.fn().mockResolvedValue([]),
     });

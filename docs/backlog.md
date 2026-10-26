@@ -3795,6 +3795,17 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   (found in A757 slice 7's review, 2026-10-19).**
   [Detail](backlog/dashboard.md#a905-the-department-dialog-can-take-back-another-managers-older-copy-of-the-venue-after-a-save-found-in-a757-slice-7s-review-2026-10-19)
 
+- **A1133. The Defaults card can show an older value after a save, and the Defaults and Venue cards
+  allow a second write after reconnecting mid-save (found by reading in A980 S1a's review,
+  2026-10-26).** `apps/dashboard/src/screens/venue-defaults-panel.ts` shows a late save answer over
+  a newer live value and throws away a live read begun during the save (its `#writes` counter);
+  `venue-defaults-panel.ts` and `venue-details-panel.ts` turn `submitting` off on disconnect.
+  `appearance-screen.ts` uses the same counter and may share the first. The Privacy card's fix
+  (`venue-privacy-panel.ts`: an order number per read and save, a background re-read after a
+  successful save, `submitting` kept across reconnection) is the pattern. The Defaults card's test
+  "ignores a departed card's late %s once it is back" asserts Save is enabled after reconnecting
+  mid-save and changes with it.
+
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
   2026-10-19).**
   [Detail](backlog/dashboard.md#an-off-wt-switch-is-hard-to-see-worst-in-a-dark-dialog-seen-in-a757-slice-1s-look-2026-10-19)
@@ -6122,8 +6133,10 @@ remains open. **Scoped 2026-10-22 by A980:** the [data-protection design](superp
 holds the data map, the controller and processor split and the builds-versus-venue list. Its
 revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
 [build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
-details deleted at deactivation), S2a1 (the server route for a person's own data download) and
-S2a2 (its README, the Profile page's Download button and the Users guide section) are built.
+details deleted at deactivation), S2a1 (the server route for a person's own data download),
+S2a2 (its README, the Profile page's Download button and the Users guide section) and S1a (the
+dashboard setting for the privacy notice page and privacy email, which nothing else reads yet) are
+built.
 The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---

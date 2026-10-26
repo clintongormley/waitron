@@ -927,6 +927,7 @@ it.each([
           fixedReceiptLanguage: null,
           defaultProductVatClass: "general",
         }),
+        getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
         getVenueDepartments: async () => [
           { id: "bar", name: "Restaurant", active: true, isDefault: true },
         ],

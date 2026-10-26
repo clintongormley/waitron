@@ -2827,6 +2827,8 @@ and nothing guards it across screens:
 - A755: Venue settings' Venue card and Defaults card, each editing in place. Their leave cases are
   in `apps/dashboard/src/screens/venue-details-panel.unsaved.test.ts` and
   `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
+- A980 S1a: Venue settings' Privacy card, editing in place. Its leave cases are in
+  `apps/dashboard/src/screens/venue-privacy-panel.unsaved.test.ts`;
 - A841 slice 5: the Look card on Settings → Appearance, editing in place
   (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
   beside it, Advanced's (A841 slice 6) among them;
@@ -3913,10 +3915,11 @@ courses in place without a modal, saving each change as it is made, and asks in 
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's
 and each size's price in its own row, saving each change as it is made (Forms → "A value saved from
 its own table row"). A fourth exception (owner, 2026-10-16, A755): Venue settings' Venue details
-tab draws four cards — Business, Venue, Business day and Defaults — with
-`apps/dashboard/src/widgets/settings-card.ts`; with the Veri\*Factu module, a fifth, the AEAT
-certificate card, comes from `packages/fiscal-verifactu/src/dashboard/certificate-card.ts`. Each card's heading is inside the card and its
-action sits in the card's header. The Venue and Defaults cards edit in place rather than in a
+tab draws five cards — Business, Venue, Business day, Defaults and Privacy (A980 S1a), in that
+order — with `apps/dashboard/src/widgets/settings-card.ts`; with the Veri\*Factu module, a sixth,
+the AEAT certificate card, comes after them from
+`packages/fiscal-verifactu/src/dashboard/certificate-card.ts`. Each card's heading is inside the card and its
+action sits in the card's header. The Venue, Defaults and Privacy cards edit in place rather than in a
 modal, each on its own while the others stay in view mode; the Business card's Change legal name
 and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
 card's one action is Change start, even while a change waits, and it shows one New start row per
@@ -5233,12 +5236,13 @@ at `/manage/venue-operations`. A department opens at
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
-opens the first visible tab. Venue details holds four cards — Business, Venue, Business day and
-Defaults — and, with the Veri\*Factu module, a fifth: the AEAT certificate, which needs
-`fiscal.view` to read and `system.manage` to install or replace. The other four cards need
+opens the first visible tab. Venue details holds five cards — Business, Venue, Business day,
+Defaults and Privacy — and, with the Veri\*Factu module, a sixth: the AEAT certificate, which needs
+`fiscal.view` to read and `system.manage` to install or replace. The other five cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
 receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
-editable with `venue.configure` and read-only without it. Venue settings has no Kitchen tab:
+editable with `venue.configure` and read-only without it. So is the Privacy card — the address of
+the venue's privacy notice web page and its privacy email. Venue settings has no Kitchen tab:
 the `kitchen` key names no panel since A756 PR 8 (2026-10-24), so its address opens Venue details. Voids and comps
 (`/manage/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before

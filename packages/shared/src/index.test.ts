@@ -48,6 +48,10 @@ import {
   normaliseDraftLines,
   normaliseUuid,
   parseEquipmentCode,
+  PRIVACY_CONTACT_FIELDS,
+  PRIVACY_CONTACT_MAX_LENGTH,
+  privacyContactProblem,
+  privacyContactValue,
   mayTakeOver,
   tillProviderForReader,
   readOrigin,
@@ -182,6 +186,13 @@ describe("package public surface (./index.js)", () => {
     expect(deriveDisplayName("", "", "", "Alba", "Ruiz")).toBe("Alba Ruiz");
     expect(isValidTelephone("+34 600 000 000")).toBe(true);
     expect(isValidEmail("ana@example.com")).toBe(true);
+  });
+
+  it("re-exports the privacy contact rule", () => {
+    expect(PRIVACY_CONTACT_FIELDS).toEqual(["privacyNoticeUrl", "privacyEmail"]);
+    expect(PRIVACY_CONTACT_MAX_LENGTH.privacyEmail).toBe(254);
+    expect(privacyContactValue(" privacy@example.com ")).toBe("privacy@example.com");
+    expect(privacyContactProblem("privacyEmail", "privacy")).toBe("email");
   });
 
   it("re-exports the media library filename pattern", () => {

@@ -622,6 +622,11 @@ export interface VenueDefaults {
   defaultProductVatClass: VatClass;
 }
 
+export interface VenuePrivacy {
+  privacyNoticeUrl: string | null;
+  privacyEmail: string | null;
+}
+
 export interface TestEmailAddress {
   name: string;
   address: string;
@@ -3280,6 +3285,14 @@ export class DashboardApi {
     changes: Partial<Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass">>,
   ): Promise<VenueDefaults> {
     return this.#request<VenueDefaults>("/management-api/venue-defaults", "PUT", changes);
+  }
+
+  getVenuePrivacy(): Promise<VenuePrivacy> {
+    return this.#request<VenuePrivacy>("/management-api/venue-privacy", "GET");
+  }
+
+  putVenuePrivacy(changes: Partial<Record<keyof VenuePrivacy, string>>): Promise<VenuePrivacy> {
+    return this.#request<VenuePrivacy>("/management-api/venue-privacy", "PUT", changes);
   }
 
   previewReceiptDraft(

@@ -511,6 +511,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   getReceiptLanguage: ["locations"],
   getVenueDefaults: ["locations", "catalogue_settings"],
+  getVenuePrivacy: ["tenants"],
   getProductRecipe: ["recipe_lines", "ingredients", "products"],
   listIngredients: ["ingredients"],
   getProfile: ["persons", "webauthn_credentials"],

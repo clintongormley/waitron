@@ -12,6 +12,7 @@ export type { ThrowawayApplyInput } from "./throwaway-allocation.js";
 export { parseInitialVenueInput, initialVenueApplyInput } from "./initial-venue-input.js";
 export type { InitialVenueInput } from "./initial-venue-input.js";
 export { renameTaxpayer } from "./taxpayer-name.js";
+export { readPrivacyContact, savePrivacyContact, type PrivacyContact } from "./privacy-contact.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export { readModulePreparationHistory } from "./module-preparation-state.js";

@@ -13,7 +13,7 @@ import {
   CORE_MIGRATIONS,
   locations,
   nodes,
-  tenants,
+  nowIso,
   stampDeployment,
   openVenueDatabase,
 } from "@waitron/db";
@@ -62,9 +62,8 @@ it("previews a backup predating named keys by migrating only its private scratch
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
-  await suite.db
-    .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Earlier venue" });
+  await suite.db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+    values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await suite.db.insert(locations).values({
     id: locationId,
     name: "Earlier location",
@@ -139,9 +138,8 @@ it("binds an older bucket copy before private preview migrations change its byte
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
-  await suite.db
-    .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Earlier venue" });
+  await suite.db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+    values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await suite.db.insert(locations).values({
     id: locationId,
     name: "Earlier location",

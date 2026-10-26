@@ -98,6 +98,7 @@ function stubApi(modules: string[]): DashboardApi {
       fixedReceiptLanguage: null,
       defaultProductVatClass: "reduced",
     }),
+    getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
   } as unknown as DashboardApi;
 }
 
@@ -132,6 +133,7 @@ it("shows a panel-only module's panel on Venue details after the core panels", a
   expect(children).toEqual([
     "dashboard-venue-details-panel",
     "dashboard-venue-defaults-panel",
+    "dashboard-venue-privacy-panel",
     "p",
   ]);
 });

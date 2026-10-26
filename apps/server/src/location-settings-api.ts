@@ -9,7 +9,7 @@ import {
 import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
-import { renameTaxpayer } from "@waitron/provisioning";
+import { readPrivacyContact, renameTaxpayer, savePrivacyContact } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -23,6 +23,7 @@ import {
 import { previewBusinessDayStart, writeBusinessDayStart } from "./business-day-start.js";
 
 import { venueClockPreview } from "./venue-clock-preview.js";
+import { privacyContactRequest } from "./venue-privacy.js";
 import type { VenueClockPreview, VenueDefaults, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
 
@@ -139,6 +140,11 @@ function legalNameRequest(body: unknown): { legalName: string; expected: string 
   if (typeof legalName !== "string") throw invalid("legalName", "type");
   if (typeof expected !== "string") throw invalid("expected", "type");
   return { legalName: normalizeVenueText(legalName), expected: normalizeVenueText(expected) };
+}
+
+function withTaxpayer<T>(contact: T | null): T {
+  if (contact === null) throw new AppError("management.request_invalid", { field: "locationId" });
+  return contact;
 }
 
 export function mountLocationSettingsApi(
@@ -291,6 +297,28 @@ export function mountLocationSettingsApi(
         const [language] = await storedLanguages(tx, deps.cfg.locationId);
         return { language, choices: rules.choices, fixed: rules.fixed ?? null };
       });
+      return c.json(answer);
+    }),
+  );
+  app.get("/management-api/venue-privacy", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(
+        await gated(
+          sessionId,
+          async (tx) => withTaxpayer(await readPrivacyContact(tx)),
+          "venue.view",
+        ),
+      );
+    }),
+  );
+  app.put("/management-api/venue-privacy", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const answer = await gated(sessionId, async (tx) =>
+        withTaxpayer(await savePrivacyContact(tx, privacyContactRequest(body))),
+      );
       return c.json(answer);
     }),
   );

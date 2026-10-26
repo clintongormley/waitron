@@ -676,6 +676,8 @@ Missing-clock emails (`apps/server/src/attendance-email.ts:30-39`) touch the rig
    setup writes holds only node, location, environment, onboarding intent and keys
    (`apps/server/src/trading-config.ts:33-41`). So neither the box's `.env` nor setup can set it,
    and invitations go out without it (`apps/server/src/account-email.ts:132`). Fixed by S1.
+   _2026-10-26: S1a stores the setting; S1a2 carries it in the configuration export; S1b makes the readers use it
+   ([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md))._
 3. **Records with no end.** Ended sessions are never deleted; a passkey challenge that is not used
    "lapse[s] by its TTL" and stays (`packages/identity/src/passkey.ts:70-79`); incidents are never
    deleted; freeze reports go only when a start is short of disk or someone presses Free on the
@@ -703,6 +705,10 @@ updates its guide page in English and Spanish (CLAUDE.md §3).
 
 _2026-10-26: S6's templates, record of processing and breach checklist are the guide page
 `apps/server/src/guide/<language>/data-protection.md`, served at `/help/<language>/data-protection`._
+
+_2026-10-26: the build plan now splits S1 in three (S1a, S1a2, S1b); S1a2 carries the setting in
+the configuration export, and the card is read under `venue.view`
+([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md), owner answers B and C)._
 
 | Slice | What | Migration | Fiscal | Permission | Tests | Gate |
 | --- | --- | --- | --- | --- | --- | --- |

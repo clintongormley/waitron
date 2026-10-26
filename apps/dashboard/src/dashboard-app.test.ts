@@ -146,6 +146,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       fixedReceiptLanguage: null,
       defaultProductVatClass: "general",
     }),
+    getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
     previewReceiptDraft: vi.fn(() => new Promise(() => undefined)),
     getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
     getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
@@ -1811,7 +1812,11 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     const page = venueSettings(el)!;
-    for (const tag of ["dashboard-venue-details-panel", "dashboard-venue-defaults-panel"])
+    for (const tag of [
+      "dashboard-venue-details-panel",
+      "dashboard-venue-defaults-panel",
+      "dashboard-venue-privacy-panel",
+    ])
       expect(page.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag)!.api).toBe(
         api,
       );
@@ -4829,10 +4834,11 @@ it("keeps Venue settings within the window at desktop width, in view and edit mo
       venueSettings(el)!.shadowRoot!.querySelector<HTMLElement>(
         '[data-test="venue-settings-venue-details"]',
       )!;
-    await expect.poll(() => panels()?.children.length).toBe(2);
+    await expect.poll(() => panels()?.children.length).toBe(3);
     expect([...panels().children].map((panel) => panel.localName)).toEqual([
       "dashboard-venue-details-panel",
       "dashboard-venue-defaults-panel",
+      "dashboard-venue-privacy-panel",
     ]);
     const details = panels().querySelector("dashboard-venue-details-panel")!;
     await expect

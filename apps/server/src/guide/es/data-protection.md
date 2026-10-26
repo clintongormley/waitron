@@ -155,6 +155,23 @@ Copia y adapta el párrafo siguiente, para abrir la página:
 **Responsable del tratamiento de sus datos.** _Razón social del local_ (_NIF del local_),
 _dirección del local_. Escriba a _correo de privacidad del local_ sobre sus datos.
 
+## Tu página y tu correo de privacidad en Waitron {#privacy-settings}
+
+Waitron guarda dos datos de tu aviso de privacidad junto con los demás datos del local: la
+dirección de la página web con tu aviso completo y el correo al que la gente escribe sobre sus
+datos. Para indicarlos, abre **Ajustes del local**, quédate en la pestaña **Datos del local** y
+busca la tarjeta **Privacidad**. Elige **Editar**, rellena uno o los dos y elige **Guardar**.
+
+- **Página web del aviso de privacidad** lleva la dirección completa de la página, que empieza por
+  `https://` o `http://`, como `https://ejemplo.es/privacidad`. Waitron rechaza una dirección que
+  no empiece así, que tenga un espacio dentro o que lleve un nombre de usuario o una contraseña.
+- **Correo de privacidad** lleva un solo correo electrónico, como `privacidad@ejemplo.es`.
+
+Para quitar uno, vacía su campo y elige **Guardar**. Un encargado o un administrador puede
+cambiarlos, y un supervisor puede verlos. Una exportación de la configuración no los incluye, así
+que, si preparas un equipo nuevo a partir de una, vuelve a escribirlos. Por ahora Waitron solo los
+guarda aquí: nada más en el equipo los muestra.
+
 ## Tu registro de actividades de tratamiento {#record}
 
 La ley pide al responsable del tratamiento que lleve por escrito un registro de cómo usa los datos

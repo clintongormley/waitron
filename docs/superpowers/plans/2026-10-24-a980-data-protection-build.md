@@ -50,7 +50,19 @@ English and Spanish (`apps/server/src/guide/<language>/data-protection.md`), wit
 templates for staff, invoice customers, booking guests and the venue's web page, a record of
 processing the venue fills in, and a breach section listing the Article 33 questions, what the
 dashboard can and cannot show afterwards, and the steps for common losses. It gives no verdict on
-whether to notify. The Users guide links to it; no dashboard screen does yet (S1a). Design:
+whether to notify. The Users guide links to it; when S6 landed no dashboard screen did (S1a's
+Privacy card now does, below). 2026-10-26:
+S1a is built ([its plan](2026-10-26-a980-s1a-notice-settings.md)): core migration 0192 adds
+`tenants.privacy_notice_url` and `tenants.privacy_email`, two empty-by-default text columns, with
+no table rebuilt; the **Privacy** card on **Venue settings → Venue details** shows them under
+`venue.view` and saves them under `venue.configure`, and while help is on, a "?" beside the web
+page field in its Edit form links to the Data protection page's `staff-notice` section. Only the
+Privacy card's own read uses the stored values: the emails, the sign-in page, the profile page and
+the downloads still take the link from `WAITRON_PRIVACY_NOTICE_URL` until S1b. The writer,
+`packages/provisioning/src/privacy-contact.ts`, is added to `scripts/write-path-tables.json`,
+the list of the only files allowed to write `tenants`. The owner then decided that a
+configuration export carries the two values (decision B of the S1a plan, answered 2026-10-26);
+S1a does not, and S1a2, the next slice, adds it before S1b. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in
@@ -72,7 +84,7 @@ S11 also wait for the labour and privacy specialists (A664's gates G2 and G3).
 
 ## The slices
 
-S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in two (S1a, S1b) so that each fits one implementer
+S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in three (S1a, S1a2, S1b) so that each fits one implementer
 well under about 100 tool calls. Slice numbers are the design's; S5, S7 and S8 were dropped by the
 owner's answers.
 
@@ -88,7 +100,8 @@ owner's answers.
 | **S6** | English and Spanish help-guide pages: the privacy-notice templates, a record of processing, and a breach checklist. | **No.** Markdown under `apps/server/src/guide/en/` and `es/` plus the guide's page list (`apps/server/src/guide-catalogue.ts`). | LIGHT | nothing | Yes |
 | **S10** | Find out whether any logged error carries a person's name or email (an email-server refusal; the `person.email_taken` and `person.display_name_taken` parameters, `staff.ts:53-66`), and mask it if so. | **No.** Logs are files, not tables. | FULL (personal data on the recovery page, which needs no sign-in) | nothing | Yes |
 | **S1a** | A dashboard setting for the address of the venue's privacy-notice page and its privacy email, stored in the database and saved under `venue.configure`, with its guide text. | **Yes.** Nothing holds a non-secret venue setting of this kind: `tenants` holds country, tax id, legal name and domicile (`packages/db/src/schema/tenants.ts:43-52`); `tenant_receipts` holds the receipt's own text (`packages/db/src/schema/tenant-receipts.ts:18-26`); `tenant_credentials` holds sealed secrets (`packages/credentials/src/schema/tenant-credentials.ts:11-40`); `service_settings` belongs to the venue-service module (`packages/venue-service/src/schema/settings.ts:10-28`). Proposed: two empty-by-default columns on `tenants`, which adds columns without rebuilding the table. A migration-free option exists, two new keys in the receipt's JSON column `tenant_receipts.receipt`, and is rejected: that document is the printed receipt's trim, saved whole by the receipt editor under `layout.configure` (`packages/layouts/src/receipt-store.ts:165-188`) and refusing keys it does not know (`packages/layouts/src/validate.ts:40`), while the venue's identity as controller already lives as columns on `tenants`. | FULL (migration) | lane B's parked pull requests closed, while lane B builds it | **No**, while lane B builds it |
-| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. | **No.** | LIGHT | S1a | No, after S1a |
+| **S1a2** | The configuration export carries `privacy_notice_url` and `privacy_email`, its import refuses exactly what the Privacy card's save refuses, and the setup path applies them on the new box (`packages/provisioning/src/configuration-transfer.ts`, `venue-plan.ts`, `venue-apply.ts`, `first-setup-state.ts`, `apps/server/src/setup-api.ts`). Added 2026-10-26 by the owner's answer B to the S1a plan. | **No** migration is expected: the two columns already exist (`packages/db/src/schema/tenants.ts:47-48`) and the bundle changes, not a table; S1a2's own plan is to confirm it. | FULL (cross-package contract: the bundle between `@waitron/provisioning` and the server) | S1a | No, after S1a |
+| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. | **No.** | LIGHT | S1a2 | No, after S1a2 |
 | **S9** | On request, erase a booking guest's details as the design's §4.3(c) says. | **No.** Append-only triggers are installed at start from `appendOnly()` declarations, not written in migration SQL. Every S9 table is declared with `classify()` (`packages/bookings/src/classification.ts:10`; `packages/venue-service/src/classification.ts:41-45`), and no trigger SQL in the tree, `packages/db/drizzle` included, names `bookings`, `party_allergy`, `ticket_item_allergies` or `kitchen_notices` (the 46 tracked `.sql` files holding `create trigger` and every non-test source file holding it, searched for those names, 2026-10-24; control: 8 of those `.sql` files name `sales`). The required booking name takes a fixed "(erased)" text. | FULL (personal data, health) | the privacy specialist (G3) | **No** |
 | **S11** | Store the date a person is deactivated, and clear a former employee's email a year later, keeping the name. | **Yes.** `persons` has no deactivation date (`packages/identity/src/schema/persons.ts:31-67`). | FULL (migration, personal data) | the labour and privacy specialists (G2, G3), and lane B's parked pull requests closed while lane B builds it | **No** |
 
@@ -175,7 +188,14 @@ has no dashboard entry point of its own).
 
 **S1b.** The invoice email is composed in `apps/server/src/invoice-email.ts`. Today the link is
 read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and passed in at
-`apps/server/src/boot.ts:1925` and `:2069`.
+`apps/server/src/boot.ts:1925` and `:2069`. 2026-10-26, corrected by the
+[S1a plan](2026-10-26-a980-s1a-notice-settings.md)'s reader list, which S1b inherits: the link is
+passed at `boot.ts:2019`, `:2144` and `:2184`; S3 added a reader this note did not list, the
+invoice customer's download (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`); and
+`invoice-email.ts` holds no privacy text, so S1b adds the invoice notice there rather than moving a
+link. The sign-in page and the profile page both read the link from one route that needs no
+sign-in, `GET /management-api/google/config` (`apps/server/src/management-api.ts:788-790`), so S1b
+reads `tenants` there.
 
 ## Build order
 
@@ -185,7 +205,7 @@ read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and pass
    `apps/server/src/guide-catalogue.ts`, as S1a and S2a2 may; the later of any two rebases onto
    the earlier. S10 may mask the error parameters in `packages/identity/src/staff.ts` (`:53-66`), a
    file S4 also changes.
-4. **S1a**, then **S1b**; while lane B builds them, once its parked pull requests are closed.
+4. **S1a**, then **S1a2**, then **S1b**; while lane B builds them, once its parked pull requests are closed.
 5. **S9** and **S11** when the specialists have agreed; S11, while lane B builds it, also after
    its parked pull requests.
 

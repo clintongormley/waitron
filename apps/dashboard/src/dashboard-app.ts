@@ -86,6 +86,7 @@ import "./screens/courses-screen.js";
 import "./screens/department-receipt-editor.js";
 import "./screens/venue-details-panel.js";
 import "./screens/venue-defaults-panel.js";
+import "./screens/venue-privacy-panel.js";
 import "./screens/appearance-screen.js";
 import "./screens/content-languages-screen.js";
 import { VENUE_SETTINGS_TABS, TAB_LABELS } from "./screens/venue-settings-screen.js";
@@ -331,6 +332,16 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
         .api=${api}
         .readOnly=${!canConfigure}
       ></dashboard-venue-defaults-panel>`,
+  },
+  {
+    key: "privacy",
+    tab: "venue-details",
+    requiresPermission: "venue.view",
+    render: (api, canConfigure) =>
+      html`<dashboard-venue-privacy-panel
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-venue-privacy-panel>`,
   },
 ];
 

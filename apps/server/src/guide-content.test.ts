@@ -207,6 +207,7 @@ it.each(GUIDE_LANGUAGES)("serves the data protection guide in %s with its sectio
     "invoice-notice",
     "booking-notice",
     "full-notice",
+    "privacy-settings",
     "record",
     "breach",
     "breach-records",

@@ -119,6 +119,7 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
       fixedReceiptLanguage: null,
       defaultProductVatClass: "reduced",
     }),
+    getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
     listCourses: vi.fn().mockResolvedValue([]),
   } as unknown as DashboardApi;
 }
@@ -154,11 +155,15 @@ it("puts a module's panels on their tab by their stated order, the core panels c
     "venue.view",
   ]);
   const details = page(el).shadowRoot!.querySelector('[slot="venue-details"]')!;
-  const core = ["DASHBOARD-VENUE-DETAILS-PANEL", "DASHBOARD-VENUE-DEFAULTS-PANEL"];
+  const core = [
+    "DASHBOARD-VENUE-DETAILS-PANEL",
+    "DASHBOARD-VENUE-DEFAULTS-PANEL",
+    "DASHBOARD-VENUE-PRIVACY-PANEL",
+  ];
   const children = [...details.children].map((child) =>
     core.includes(child.tagName) ? "core" : (child as HTMLElement).dataset.test,
   );
-  expect(children).toEqual(["panel-early", "core", "core", "panel-late"]);
+  expect(children).toEqual(["panel-early", "core", "core", "core", "panel-late"]);
 });
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
@@ -234,6 +239,23 @@ it.each([
     expect(page(el).shadowRoot!.querySelectorAll("h1")).toHaveLength(1);
   },
 );
+it.each([
+  ["manager", ["venue.view", "venue.configure", "test.use"], false],
+  ["supervisor", ["venue.view", "test.use"], true],
+])(
+  "mounts the Privacy card for %s, editable only with venue.configure",
+  async (role, permissions, readOnly) => {
+    const el = await mount("/manage/venue-settings/view/venue-details", role, permissions);
+    const panel = () =>
+      page(el).shadowRoot!.querySelector("dashboard-venue-privacy-panel") as
+        (HTMLElement & { readOnly: boolean }) | null;
+    await expect
+      .poll(() => panel()?.shadowRoot?.querySelector("[data-test=saved-privacyEmail]"))
+      .not.toBeNull();
+    expect(panel()!.readOnly).toBe(readOnly);
+    expect(panel()!.shadowRoot!.querySelector("[data-test=edit]") === null).toBe(readOnly);
+  },
+);
 it("replaces a removed Receipts deep link with Venue details for a manager with venue access", async () => {
   const el = await mount("/manage/venue-settings/view/receipts", "manager", [
     "venue.view",
@@ -272,7 +294,7 @@ it("shows a supervisor the Defaults card's values with nothing to edit", async (
   expect(defaults()!.querySelector("wt-combobox")).toBeNull();
 });
 
-it("orders the Venue details cards Business, Venue, Business day, Defaults", async () => {
+it("orders the Venue details cards Business, Venue, Business day, Defaults, Privacy", async () => {
   const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
     "venue.view",
     "venue.configure",
@@ -291,5 +313,6 @@ it("orders the Venue details cards Business, Venue, Business day, Defaults", asy
       t("venue_settings.card.venue"),
       t("venue_settings.card.business_day"),
       t("venue_settings.card.defaults"),
+      t("venue_settings.card.privacy"),
     ]);
 });

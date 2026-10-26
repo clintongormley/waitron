@@ -481,6 +481,22 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads and saves the venue's privacy contact, sending only the changed fields", async () => {
+    const answer = { privacyNoticeUrl: null, privacyEmail: "privacy@example.com" };
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getVenuePrivacy()).resolves.toEqual(answer);
+    await expect(api.putVenuePrivacy({ privacyEmail: "privacy@example.com" })).resolves.toEqual(
+      answer,
+    );
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/venue-privacy", "GET", undefined],
+      ["/management-api/venue-privacy", "PUT", { privacyEmail: "privacy@example.com" }],
+    ]);
+  });
+
   it("reads the themes and saves one theme's choices", async () => {
     const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
     const view = {

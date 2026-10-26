@@ -44,6 +44,8 @@ export const tenants = table(
     taxId: label("tax_id").notNull(),
     legalName: label("legal_name").notNull(),
     taxpayerDomicile: label("taxpayer_domicile"),
+    privacyNoticeUrl: label("privacy_notice_url"),
+    privacyEmail: label("privacy_email"),
     createdAt: ts("created_at").notNull().$defaultFn(now),
   },
   (t) => [
