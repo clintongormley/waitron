@@ -179,7 +179,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
             ...issued,
             actionUrl: deps.accountActionBaseUrl ?? "/",
             locale: issued.locale ?? deps.venueLocale,
-            privacyNoticeUrl: deps.privacyNoticeUrl,
           });
           emailVerificationSent = true;
         } catch (error) {

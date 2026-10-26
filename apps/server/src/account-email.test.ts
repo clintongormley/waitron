@@ -39,6 +39,7 @@ describe("account email", () => {
         url: "smtp://mail.example.test:587",
         from: "Waitron <hello@example.test>",
         timeZone: "UTC",
+        privacyNoticeUrl: "https://restaurant.example/privacy",
       },
       { sendMail, close() {} },
     );
@@ -49,7 +50,6 @@ describe("account email", () => {
       actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
       expiresAt: "2026-09-09T12:00:00.000Z",
       locale: "en-GB",
-      privacyNoticeUrl: "https://restaurant.example/privacy",
     });
     expect(sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -63,6 +63,32 @@ describe("account email", () => {
     expect(message.text).toContain("secret-token");
     expect(message.html).toContain("secret-token");
     expect(message.html).toContain('href="https://restaurant.example/privacy"');
+  });
+
+  it("sends an invitation with no privacy notice when the settings hold no privacy page", async () => {
+    const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
+    const sender = createAccountEmailSender(
+      {
+        url: "smtp://mail.example.test:587",
+        from: "Waitron <hello@example.test>",
+        timeZone: "UTC",
+      },
+      { sendMail, close() {} },
+    );
+    await sender({
+      purpose: "invitation",
+      email: "bea@example.test",
+      displayName: "Bea",
+      actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+      expiresAt: "2026-09-09T12:00:00.000Z",
+      locale: "en-GB",
+    });
+    const message = sendMail.mock.calls[0]![0] as { text: string; html: string };
+    expect(message.text).not.toContain("Privacy notice");
+    expect(message.html.match(/<a href/g)).toEqual(["<a href"]);
+    expect(message.html).toContain(
+      '<a href="https://dashboard.example.test/manage/account?token=secret-token">',
+    );
   });
 
   it("uses password-reset wording for a reset action", async () => {

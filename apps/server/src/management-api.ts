@@ -191,7 +191,6 @@ async function deliverAccountAction(
       codeExpiresAt: issued.codeExpiresAt,
       expiresAt: issued.expiresAt,
       locale: issued.locale ?? deps.venueLocale ?? "en-GB",
-      privacyNoticeUrl: deps.privacyNoticeUrl,
     });
     return true;
   } catch {

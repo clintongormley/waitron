@@ -273,6 +273,116 @@ describe("a running venue's account email clock", () => {
   );
 });
 
+describe("a running venue's account email privacy page", () => {
+  it.each(["invitation", "password_reset", "profile"] as const)(
+    "puts the saved privacy page in each %s email without restarting",
+    async (path) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-06T12:00:00.000Z"));
+      const venue = await setupVenue(suite.db);
+      const [port, smtpPort] = await freePorts(2);
+      const smtp = await smtpReceiver(smtpPort!);
+      let scratch: string | undefined;
+      let server: StartedServer | undefined;
+      try {
+        scratch = await mkdtemp(join(tmpdir(), "waitron-venue-email-"));
+        const { env, cookie } = await prepareBox(scratch, venue, port!);
+        await withTransaction(suite.db, (tx) =>
+          putCredential(tx, loadKeyRing(env), {
+            purpose: "email.smtp",
+            value: { url: `smtp://127.0.0.1:${smtpPort}`, from: "no-reply@example.test" },
+          }),
+        );
+        const invitees: string[] = [];
+        if (path !== "profile") {
+          for (const index of [0, 1, 2, 3]) {
+            beforeServerStarts();
+            const [person] = await suite.db
+              .insert(persons)
+              .values({
+                displayName: `Invitee ${index}`,
+                pinHash: hashPin("1234"),
+                email: `invitee-${index}@example.test`,
+                role: "staff",
+                status: path === "invitation" ? "pending" : "active",
+                passwordHash: hashPassword(PASSWORD),
+                locale: "en-GB",
+              })
+              .returning({ id: persons.id });
+            invitees.push(person!.id);
+          }
+        }
+        const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+        server = await startServer({ ...env, WAITRON_VENUE_DIR: dirname(database) }, env);
+        await vi.waitFor(async () => {
+          expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+        });
+        const request = (url: string, method = "GET", body?: unknown) =>
+          fetch(`http://127.0.0.1:${port}${url}`, {
+            method,
+            headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          });
+        const send = async (index: number) => {
+          if (path === "invitation") {
+            const response = await request(
+              `/management-api/staff/${invitees[index]!}/invitation`,
+              "POST",
+            );
+            expect(response.status).toBe(200);
+            expect(await response.json()).toEqual({ invitationSent: true });
+          } else if (path === "password_reset") {
+            const response = await request("/management-api/password-reset", "POST", {
+              email: `invitee-${index}@example.test`,
+            });
+            expect(response.status).toBe(202);
+            await vi.waitFor(() => expect(smtp.messages).toHaveLength(index + 1));
+          } else {
+            const response = await request("/management-api/session/me/profile", "PUT", {
+              displayName: "Email Clock Admin",
+              firstNames: "Email",
+              lastNames: "Admin",
+              telephone: null,
+              email: `profile-${index}@example.test`,
+              locale: "en-GB",
+              currentPassword: PASSWORD,
+            });
+            expect(response.status).toBe(200);
+            expect(await response.json()).toEqual({ emailVerificationSent: true });
+          }
+          expect(smtp.messages).toHaveLength(index + 1);
+          return smtp.messages[index]!.replace(/=\n/g, "");
+        };
+        const savePage = async (privacyNoticeUrl: string) => {
+          const response = await request("/management-api/venue-privacy", "PUT", {
+            privacyNoticeUrl,
+          });
+          expect(response.status).toBe(200);
+        };
+        const unset = await send(0);
+        expect(unset).not.toContain("Privacy notice");
+        await savePage("https://example.com/privacy");
+        const first = await send(1);
+        expect(first).toContain("Privacy notice");
+        expect(first).toContain("https://example.com/privacy");
+        await savePage("https://example.com/other");
+        const changed = await send(2);
+        expect(changed).toContain("Privacy notice");
+        expect(changed).toContain("https://example.com/other");
+        expect(changed).not.toContain("https://example.com/privacy");
+        await savePage("");
+        const cleared = await send(3);
+        expect(cleared).not.toContain("Privacy notice");
+        expect(cleared).not.toContain("https://example.com/");
+      } finally {
+        if (server !== undefined) await server.close();
+        await smtp.close();
+        if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe("a box with no email server", () => {
   it("logs the profile route's failed send as email.unconfigured", async () => {
     const venue = await setupVenue(suite.db);
