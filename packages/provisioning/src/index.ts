@@ -195,6 +195,22 @@ export {
   writeStartAgainMarker,
   type StartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
+export { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+export {
+  START_AGAIN_CHOICES_DIR,
+  assertStartAgainNotKept,
+  readStartAgainChoices,
+  writeStartAgainChoice,
+  type StartAgainChoiceRecord,
+} from "./first-setup-start-again-choice.js";
+export {
+  START_AGAIN_FORGIVE_MS,
+  START_AGAIN_FREE_GUESSES,
+  START_AGAIN_GUESSES_FILE,
+  START_AGAIN_MAX_WAIT_MS,
+  beginStartAgainGuess,
+  startAgainWaitMs,
+} from "./first-setup-start-again-guesses.js";
 export {
   START_AGAIN_ENTRY_LIMIT,
   START_AGAIN_FLOOR_MARGIN_MS,

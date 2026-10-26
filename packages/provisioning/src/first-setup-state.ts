@@ -10,6 +10,11 @@ import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.j
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
+import {
+  START_AGAIN_CHOICES_DIR,
+  START_AGAIN_GUESSES_FILE,
+  START_AGAIN_SET_ASIDE_DIR,
+} from "./first-setup-start-again-names.js";
 import "./errors.js";
 
 export interface FirstSetupHold {
@@ -150,6 +155,9 @@ export const FIRST_SETUP_HOST_FILES = [
   // workspace, so loading it first would read that name before it exists.
   "first-setup-deleting.json",
   START_AGAIN_CONFIRMATIONS_DIR,
+  START_AGAIN_CHOICES_DIR,
+  START_AGAIN_SET_ASIDE_DIR,
+  START_AGAIN_GUESSES_FILE,
 ] as const;
 export function isFirstSetupHostPath(path: string): boolean {
   return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));

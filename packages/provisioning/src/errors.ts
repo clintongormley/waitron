@@ -31,6 +31,7 @@ declare module "@waitron/shared" {
     "setup.attempt_invalid": Record<string, never>;
     "setup.start_again_incomplete": Record<string, never>;
     "setup.start_again_files_found": Record<string, never>;
+    "setup.start_again_kept": Record<string, never>;
     "setup.workspace_unsupported": Record<string, never>;
     /** `discardedAt` is the abandoned record's `recordedAt`. */
     "setup.recovery_discarded": { discardedAt: string };
