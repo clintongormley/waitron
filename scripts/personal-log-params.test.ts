@@ -9,7 +9,10 @@
  * `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`, gained an `ownerEmail`, the answer and
  * the log line would carry it and this guard would stay green); it never reads free text; and it
  * judges a named type in a registry only by its name, against `REVIEWED_TYPES`, so a person-named
- * key added later inside a type already reviewed passes.
+ * key added later inside a type already reviewed passes. Of a log call's fields it reads only an
+ * object literal written as the third argument, so it sees no spread or variable passed as the
+ * fields; and it does not see `packages/store/src/venue-liveness.ts:174-179`, which writes
+ * `waitron.log` without a `Logger`.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -59,6 +62,20 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
   ["ThemeRefusalReason", "an enum of why a theme document is refused"],
   ["UnservedDish", "a dish's bill and line ids, its name, quantity and CancellationContext"],
   ["VerifyFailure", "an enum of why a membership document fails verification"],
+]);
+
+const HARMLESS_LOG_FIELDS: ReadonlyMap<string, string> = new Map([
+  ["discovery.mounted.hostname", "the box's own host name"],
+  ["mdns.responding.hostname", "the box's own host name"],
+  ["recovery.venue_held.holderKind", "an enum of which process holds the venue folder"],
+  ["recovery.venue_holder_stalled.holderKind", "an enum of which process holds the venue folder"],
+  [
+    "restore.recovery_key_selected.name",
+    "a recovery key's name: a date and a random code (apps/server/src/break-glass.ts)",
+  ],
+  ["staff_notice.duplicate_key.owner", "the id of a notice's source, such as fiscal-outbox"],
+  ["staff_notice.source_recovered.owner", "the id of a notice's source, such as fiscal-outbox"],
+  ["staff_notice.source_unavailable.owner", "the id of a notice's source, such as fiscal-outbox"],
 ]);
 
 const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
@@ -116,6 +133,11 @@ interface RegistryType {
   name: string;
 }
 
+interface LogField {
+  event: string;
+  key: string;
+}
+
 interface RegistryKey {
   code: string;
   key: string;
@@ -129,6 +151,9 @@ const ID_ENDING = /^(.*?)(?:Id|Ids)$/;
 const REGISTRY_OPENING = /\binterface\s+ErrorParams\b[^{]*\{/g;
 const CODE_MARK = /"([a-z0-9_]+(?:\.[a-z0-9_]+)+)"\s*:/g;
 const TYPE_NAME = /\b[A-Z][\w$]*/g;
+const LOG_CALL =
+  /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\?\.)?\(\s*"(?:debug|info|warn|error)"\s*,/g;
+const OBJECT_TOKEN = /[{}()[\]]|[A-Za-z_$][\w$]*/g;
 const KEY_OR_BRACE = /([A-Za-z_$][\w$]*)\??\s*:|[{}]/g;
 
 function isJudgedKey(key: string): boolean {
@@ -255,7 +280,80 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-function registryFiles(): string[] {
+function argumentEnd(text: string, from: number): number {
+  let depth = 0;
+  for (let at = from; at < text.length; at++) {
+    const char = text[at];
+    if (char === "(" || char === "[" || char === "{") depth++;
+    else if (char === ")" || char === "]" || char === "}") {
+      if (depth === 0) return at;
+      depth--;
+    } else if (char === "," && depth === 0) return at;
+  }
+  return text.length;
+}
+
+function objectKeys(text: string): string[] {
+  const keys: string[] = [];
+  const open: string[] = [];
+  for (const match of text.matchAll(OBJECT_TOKEN)) {
+    const token = match[0];
+    if (token === "{") open.push(text[match.index - 1] === "$" ? "${" : "{");
+    else if (token === "(" || token === "[") open.push(token);
+    else if (token === "}" || token === ")" || token === "]") open.pop();
+    else if (
+      open.at(-1) === "{" &&
+      /[{,]\s*$/.test(text.slice(0, match.index)) &&
+      /^\s*[:,}]/.test(text.slice(match.index + token.length))
+    ) {
+      keys.push(token);
+    }
+  }
+  return keys;
+}
+
+function logFields(file: string, text: string): LogField[] {
+  const code = blankComments(text);
+  const literalsBlank = blankCommentsAndLiterals(text);
+  const fields: LogField[] = [];
+  for (const call of code.matchAll(LOG_CALL)) {
+    const eventStart = call.index + call[0].length;
+    const eventEnd = argumentEnd(literalsBlank, eventStart);
+    if (literalsBlank[eventEnd] !== ",") continue;
+    const fieldsStart = literalsBlank.slice(eventEnd + 1).search(/\S/) + eventEnd + 1;
+    if (literalsBlank[fieldsStart] !== "{") continue;
+    const literal = /^"([^"\\]*)"$/.exec(code.slice(eventStart, eventEnd).trim());
+    const event = literal?.[1] ?? file;
+    const body = literalsBlank.slice(fieldsStart, closingBrace(literalsBlank, fieldsStart) + 1);
+    fields.push(...objectKeys(body).map((key) => ({ event, key })));
+  }
+  return fields;
+}
+
+function refusedLogFields(
+  fields: readonly LogField[],
+  harmless: ReadonlyMap<string, string>,
+): string[] {
+  const refused = fields
+    .filter(
+      ({ event, key }) =>
+        isJudgedKey(key) && !PERSONAL_LOG_KEYS.has(key) && !harmless.has(`${event}.${key}`),
+    )
+    .map(({ event, key }) => `${event}.${key}`);
+  return [...new Set(refused)];
+}
+
+function staleLogFields(
+  fields: readonly LogField[],
+  harmless: ReadonlyMap<string, string>,
+): string[] {
+  const judged = new Set(
+    fields.filter(({ key }) => isJudgedKey(key)).map(({ event, key }) => `${event}.${key}`),
+  );
+  return [...harmless.keys()].filter((entry) => !judged.has(entry));
+}
+
+function treeSourceFiles(): string[] {
   return ["apps", "packages"]
     .flatMap((top) =>
       readdirSync(join(ROOT, top), { withFileTypes: true })
@@ -264,9 +362,14 @@ function registryFiles(): string[] {
     )
     .filter((src) => existsSync(src))
     .flatMap(sourceFiles)
-    .filter((path) => readFileSync(path, "utf8").includes("interface ErrorParams"))
     .map((path) => relative(ROOT, path))
     .sort();
+}
+
+function registryFiles(): string[] {
+  return treeSourceFiles().filter((file) =>
+    readFileSync(join(ROOT, file), "utf8").includes("interface ErrorParams"),
+  );
 }
 
 function registry(entries: string): string {
@@ -384,5 +487,54 @@ describe("named types in an error registry are reviewed", () => {
     expect(registryTypeNames(registry(`"x.p": { party: PartySummary };`))).toEqual([
       "PartySummary",
     ]);
+  });
+});
+
+describe("log calls' fields that name a person are masked", () => {
+  it("the real tree's log calls pass, and every harmless entry still names a judged field", () => {
+    const fields = treeSourceFiles().flatMap((file) =>
+      logFields(file, readFileSync(join(ROOT, file), "utf8")),
+    );
+    expect(fields).toContainEqual({ event: "staff_notice.duplicate_key", key: "owner" });
+    expect(refusedLogFields(fields, HARMLESS_LOG_FIELDS)).toEqual([]);
+    expect(staleLogFields(fields, HARMLESS_LOG_FIELDS)).toEqual([]);
+  });
+
+  it("refuses a person-named field, nested or not, in any call form", () => {
+    const text = [
+      `log("warn", "x.sent", { guestName });`,
+      `log?.("info", "x.mailed", { meta: { recipientEmail: e } });`,
+    ].join("\n");
+    expect(refusedLogFields(logFields("x/mail.ts", text), new Map())).toEqual([
+      "x.sent.guestName",
+      "x.mailed.recipientEmail",
+    ]);
+  });
+
+  it("accepts an id and a listed field", () => {
+    const text = `log("info", "x", { personId });\nlog("info", "x", { email });`;
+    const fields = logFields("x/mail.ts", text);
+    expect(fields).toEqual([
+      { event: "x", key: "personId" },
+      { event: "x", key: "email" },
+    ]);
+    expect(refusedLogFields(fields, new Map())).toEqual([]);
+  });
+
+  it("keys a field of an event that is not a literal by the file's path", () => {
+    const text = `log("warn", eventFor(code), { guestName: g });`;
+    expect(refusedLogFields(logFields("x/mail.ts", text), new Map())).toEqual([
+      "x/mail.ts.guestName",
+    ]);
+  });
+
+  it("reports a harmless entry no log call uses", () => {
+    const fields = logFields("x/mail.ts", `log("info", "x.h", { hostname: host });`);
+    const harmless = new Map([
+      ["x.h.hostname", "the box's own host name"],
+      ["x.gone.hostname", "the box's own host name"],
+    ]);
+    expect(refusedLogFields(fields, harmless)).toEqual([]);
+    expect(staleLogFields(fields, harmless)).toEqual(["x.gone.hostname"]);
   });
 });
