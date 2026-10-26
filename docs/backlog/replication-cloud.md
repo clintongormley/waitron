@@ -188,8 +188,7 @@ for this docs task; no provider work is authorised.
 
 ## The tunnel's stand-in relay pairs with sockets that have already gone
 
-**The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
-writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
+Found 2026-09-23, writing tunnel's coverage tests, PR #506. `packages/tunnel/src/testing/relay.ts` is test-only:
 nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
 box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
 box and its bytes go nowhere. When a waiting client closes,
@@ -203,39 +202,39 @@ narrow or extend that older test.
 
 ## Fiscal-certificate distribution
 
-- **Fiscal-certificate distribution** — rebuild on the asynchronous adopt (see the residuals). Open
-  design question: how the dormant certificate is protected when the seal must happen after the
-  initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
-  [plan](../superpowers/plans/2026-09-07-fiscal-cert-distribution.md)). Beside it, **the vault-ring
-  question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
-  under another's, so `fiscal.aeat` and `payments.stripe` do not travel to a standby at all.
+Rebuild on the asynchronous adopt (see the residuals). Open
+design question: how the dormant certificate is protected when the seal must happen after the
+initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
+[plan](../superpowers/plans/2026-09-07-fiscal-cert-distribution.md)). Beside it, **the vault-ring
+question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
+under another's, so `fiscal.aeat` and `payments.stripe` do not travel to a standby at all.
 
 ## Adding a mirror while the internet is down
 
-- **Adding a mirror while the internet is down** (owner, 2026-10-02). Today the only way a second
-  machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
-  (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-  Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
-  carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
-  no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
-  takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
-  has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
-  new place should begin with a full copy of the database (to be checked on the pinned Litestream),
-  so the design may cover it — but it never says so, and it does not list what else enrolling needs
-  from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
-  internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
+Owner, 2026-10-02. Today the only way a second
+machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
+(`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
+Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
+carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
+no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
+takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
+has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
+new place should begin with a full copy of the database (to be checked on the pinned Litestream),
+so the design may cover it — but it never says so, and it does not list what else enrolling needs
+from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
+internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud-replacement.json` is unreadable is not recorded in it
 
-- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. If that file is
-  later repaired and `cloud-connection.json` lost, the next start restores the connection without
-  the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
-  by C29, #808). Owner to choose: refuse Stop access while the replacement file is unreadable, or
-  record the stop somewhere that survives the repair.
+If that file is
+later repaired and `cloud-connection.json` lost, the next start restores the connection without
+the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
+by C29, #808). Owner to choose: refuse Stop access while the replacement file is unreadable, or
+record the stop somewhere that survives the repair.
 
 ## Waitron retains
 
-**Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side networking
+The implemented Cloud connection screen and manager adapter; box-side networking
 and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
 proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
 settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
@@ -251,16 +250,14 @@ key stored in `venue.db` only in locked form. Do not reopen it. See
 
 ## Validate every supported object store
 
-**What the prototype gate left open (the receipts are in the results note):**
-
-- **Validate every supported object store.** Cloud owns its production-provider checks in the
-  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
-  Waitron retains the engine's required semantics and checks for claimed self-host targets.
-  Topology §12.2's real-store gate remains open; the conditional-write promotion tie-break must be
-  demonstrated on each target (risk 11). Each owner's bucket is checked by the Backups screen's Test
-  and Save (`probeBucket`, `packages/stream/src/probe.ts`), which refuse a bucket that does not
-  refuse a stale conditional write, and the loop test runs that check against versitygw. Waitron
-  Cloud's production store still needs its own run.
+Cloud owns its production-provider checks in the
+[Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
+Waitron retains the engine's required semantics and checks for claimed self-host targets.
+Topology §12.2's real-store gate remains open; the conditional-write promotion tie-break must be
+demonstrated on each target (risk 11). Each owner's bucket is checked by the Backups screen's Test
+and Save (`probeBucket`, `packages/stream/src/probe.ts`), which refuse a bucket that does not
+refuse a stale conditional write, and the loop test runs that check against versitygw. Waitron
+Cloud's production store still needs its own run.
 
 ## A restored box whose cloud peer does not answer during its first start signs the next term and removes the marker
 
@@ -538,7 +535,7 @@ and documentation checks qualify no composed network or recovery lifecycle.
 
 ## A mirror keeps a renamed server's old chart (A917)
 
-**A mirror keeps a renamed server's old chart (A917).** A mirror node is given the venue's chart
+A mirror node is given the venue's chart
 when it is paired; A917's round-3 review found no path that delivers a later one, so after a
 rename its copy would name the old address until it is paired again. No reader routing by a
 mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
@@ -570,7 +567,7 @@ the membership chart, so a till's router sees one server (§2).
 
 ## Loose ends left by the Cloud connection integration
 
-**Loose ends left by the Cloud connection integration (2026-09-24; #638, #808).**
+2026-09-24; #638, #808.
 
 - Customer remote setup UI and production deployment remain open.
 - Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
@@ -591,7 +588,7 @@ the membership chart, so a till's router sees one server (§2).
 
 ## Four Cloud reply and state readers accept a one-item list where they want text
 
-**Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
+Each turns
 the field into text before checking it, so `["ready"]` passes as `"ready"`:
 `apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
 `cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
@@ -601,8 +598,8 @@ the field into text before checking it, so `["ready"]` passes as `"ready"`:
 
 ## Loose ends left by the SQLite failover-loop prototype gate
 
-**Loose ends left by the SQLite failover-loop prototype gate (#425; receipts in
-[the results note](../research/2026-09-16-sqlite-failover-prototype.md)).**
+Left open by #425; receipts in
+[the results note](../research/2026-09-16-sqlite-failover-prototype.md).
 
 - **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
   conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
@@ -628,7 +625,7 @@ SQLite slice 2.
 
 ## Loose ends left by SQLite slice 2 Task 9a
 
-**Loose ends left by SQLite slice 2 Task 9a (#630, the first start after a restore).**
+Left open by #630, the first start after a restore.
 
 - A node row holding no endorsement still signs `endorsements: []`, and no first-start case
   asserts it.
@@ -649,8 +646,8 @@ SQLite slice 2.
 
 ## If a later slice moves local tables into node.db
 
-**If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
-5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
+Slice 2's design reserved it for slice
+5. That slice decides again how the drain crosses the two files: SQLite refuses a trigger body
 that writes another attached database, so either `change_log` is reclassified to the file its
 writers live on, or the triggers stop writing it directly and something above them does (P3). Left
 open by SQLite slice 1 (#490 and the preparation tasks).
