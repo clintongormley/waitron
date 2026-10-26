@@ -173,7 +173,8 @@ Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin t
 En un móvil o una tableta, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
 platos esperan, por ejemplo **Listo · M2 · 3**. Cada mesa aparece con su nombre corto, por ejemplo
 M2 para Mesa 2, o con su nombre completo mientras no tenga uno; una mesa unida a otra hoy muestra
-las dos, por ejemplo M4+M5. Primero aparece la mesa cuya comida lleva más tiempo esperando.
+las dos, por ejemplo M4+M5. Mientras ninguna comida haya esperado demasiado, primero aparece la
+mesa cuya comida lleva más tiempo esperando.
 
 La comida que se queda en el pase se enfría, así que la barra te avisa cuando un plato ha esperado
 demasiado. Cuando un plato listo ha esperado tanto como el tiempo de **Listo sin recoger** de su

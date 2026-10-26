@@ -122,7 +122,7 @@ mientras un toque aún pueda avanzarla.
 Cada
 estación de preparación fija sus propios avisos de demora, y un tiempo de **Listo sin recoger** de 3
 minutos si no lo cambias, al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
-editarla en **Estaciones de preparación**. En un móvil o una tableta, la barra de Listo se vuelve
+editarla en **Estaciones de preparación**. En un móvil o una tableta, la barra Listo se vuelve
 ámbar cuando un plato listo ha esperado ese tiempo: consulta
 [Ver qué mesas tienen comida lista](table-service.md#ready-bar). Cada estación de
 preparación fija también cómo se imprimen los platos iguales en sus comandas, si imprime por

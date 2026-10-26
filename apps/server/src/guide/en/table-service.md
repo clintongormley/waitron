@@ -167,7 +167,8 @@ When the kitchen has dishes ready, you want to know which tables to take them to
 look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
 how many dishes are waiting, such as **Ready · T2 · 3**. Each table is shown by its short name, such
 as T2 for Table 2, or by its full name while it has none; a table joined to another for today shows
-both, such as T4+T5. The table whose food has waited longest comes first.
+both, such as T4+T5. While no food has waited too long, the table whose food has waited longest
+comes first.
 
 Food left at the pass goes cold, so the bar warns you when a dish has waited too long. Once a ready
 dish has waited as long as its station's **Ready warning** time (3 minutes unless you change it

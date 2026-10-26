@@ -5301,11 +5301,11 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
 
 **What it changes.** On a handheld's Floor, once food at a table has stood ready at the pass as long
 as its station's **Ready warning** time (slice 6; 3 minutes unless changed), the Ready bar turns
-amber and pulses slowly, says how long the food has waited, and puts that table first: "🍽 Ready
+amber and pulses slowly, says how long the food has waited, and puts those tables first: "🍽 Ready
 4 min · T5 · 2 · T9 · 1 · Open ›" («Listo 4 min · …», design §3.1, §4 example 2, §10 (g)). Each
 station's dishes are judged against that station's own minutes (Q51 (c): a salad from Cold at 6
-minutes and a secreto from the grill at 3 are judged apart). Open › now opens the first table the
-bar lists, which is the one whose food has waited longest (it opened the first in the floor read's
+minutes and a secreto from the grill at 3 are judged apart). Open › opens the first table the bar
+lists: the longest-waiting of the warning tables, or of all of them while none warns (it opened the first in the floor read's
 order until now, slice 5 D4). The minutes keep counting between floor reads. Under reduced motion
 nothing moves and the amber stays. A till's "Ready" summary does not change.
 
@@ -5368,7 +5368,8 @@ only readers are below), `grep -n "ready\|pulse\|reduced\|now" apps/till/src/scr
 - **D2. The order: tables whose food warns first, then the rest; within each group, the longest
   wait first.** A table with no readable time comes after every timed one in its group; ties keep
   the floor read's order (a stable sort). Open › opens the first entry, as it does today
-  (`#openReady(first)`, `:3018`), so it now opens the longest-waiting table, which is what design
+  (`#openReady(first)`, `:3018`), so it now opens the longest-waiting of the warning tables, or of all of them while
+  none warns, which is what design
   §3.1 asked of it and slice 5 D4 deferred. **Why warning first, not plain longest-first:** design
   §3.1 says both "Open › opens the table whose food has waited longest" and, of the warning, "It
   names the table waiting longest first". With every station at the same minutes (the 3-minute
@@ -5447,10 +5448,10 @@ only readers are below), `grep -n "ready\|pulse\|reduced\|now" apps/till/src/scr
   Sent box uses under its own key (`table.row_ready_ago`, `strings.ts:1062`, `:2798`); the bar gets
   its own key, as slice 5 gave it its own keys. "min" needs no plural in either language. Entries,
   Open › and its label are unchanged; the label already names the table ("Open T5"), never "the
-  first". Help, reworded (`help.floor.ready_bar`): "Tables with food ready to take out, the one
-  waiting longest first. Tables in amber, whose food has waited as long as its station's Ready
+  first". Help, reworded (`help.floor.ready_bar`): "Tables with food ready to take out. Tables in
+  amber, whose food has waited as long as its station's Ready
   warning time, go before the rest. Tap one to open it; Open opens the first." / «Mesas con comida
-  lista para llevar, primero la que más espera. Las mesas en ámbar, cuya comida ha esperado tanto
+  lista para llevar. Las mesas en ámbar, cuya comida ha esperado tanto
   como el tiempo de Listo sin recoger de su estación, van antes que las demás. Toca una para abrirla;
   Abrir abre la primera.» ("Ready warning" «Listo sin recoger» is the station field's name, slice 6
   D5.) **The words match D3, not the spec's "longer than":** the bar warns at the limit itself
@@ -5602,8 +5603,8 @@ and is sized well under 100 tool calls.
   `:3025-3035`: a private `#readyEntries()` builds `readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)))`
   for this task and Task 4; `readyBar(…, this.#drawnAt)` orders it; the heading reads
   `floor.ready_bar_waited` while `waitedMinutes !== null`, else `floor.ready_title`; `data-warning`
-  on the section while warning and on each warning entry; the doc comment at `:2998` says Open
-  opens the first listed, the longest waiting), `apps/till/src/i18n/strings.ts` (`floor.ready_bar_waited`
+  on the section while warning and on each warning entry; the doc comment at `:2998` says the order
+  and that Open opens the first listed), `apps/till/src/i18n/strings.ts` (`floor.ready_bar_waited`
   beside `:1021` and `:2757`, D8), `apps/till/src/i18n/help-strings.ts` (`:29-30`, `:77-78`, D8)
 - Test: `apps/till/src/screens/till-floor-screen.ready-bar.test.ts` (new `describe` "the Ready bar's
   warning"; its `ready` builder `:69-77` gains the same optional fourth and fifth elements as Task
@@ -5775,8 +5776,8 @@ it means the app hands the floor something the plan did not read.
 - Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
 
 - [ ] **Step 1: Guides.** English: replace "Tap a table to open it, or tap **Open ›** to open the
-  first table listed." with the order and the warning, in about three sentences: the table whose
-  food has waited longest comes first; once a ready dish has waited as long as its station's
+  first table listed." with the order and the warning, in about three sentences: while no food has
+  waited too long, the table whose food has waited longest comes first; once a ready dish has waited as long as its station's
   **Ready warning** time (3 minutes unless changed in **Prep stations**; see the kitchen guide's
   sentence, `kitchen-service.md:106-108`), the bar turns amber, pulses slowly and says how long,
   such as **Ready 4 min · T5 · 2**, and tables whose food has waited too long come first, each
@@ -5853,7 +5854,7 @@ it means the app hands the floor something the plan did not read.
 - `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read and one
   Codex run-it review.
 - PR body. First line: no venue reset. Then: **What a person sees** (the warning, the order, Open ›
-  now opening the longest-waiting table; a till unchanged); **Decisions** D1–D10 in one line each;
+  opening the first table listed, the longest-waiting of the warning tables or of all while none warns; a till unchanged); **Decisions** D1–D10 in one line each;
   **Changed test checks** (the five `readyTables` checks, reason D1, from the ledger); **LOOK**.
 - **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D2 (amber
   tables first, then longest-first; the alternative is plain longest-first), D4 (the device's clock,

@@ -129,8 +129,8 @@ come after the list above:
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
   the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md). Slice 7
   (the Ready bar's warning: once a ready dish has waited its station's Ready warning time the bar
-  turns amber, pulses slowly, shows the minutes and puts those tables first) is built and in
-  review, from the build plan's slice 7; slice 8 (the kitchen screen's group cards) is next, taking
+  turns amber, pulses slowly, shows the minutes and puts those tables first) is in flight on
+  `feat/a797-7-ready-bar-warning`, from the build plan's slice 7; slice 8 (the kitchen screen's group cards) is next, taking
   turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
@@ -2656,7 +2656,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the build plan's slice 6; slice 7 (the Ready bar's warning) is next:
+  the build plan's slice 6; slice 7 (the Ready bar's warning) is in flight on
+  `feat/a797-7-ready-bar-warning`, and slice 8 (the kitchen screen's group cards) is next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
@@ -2695,12 +2696,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   visible part of the sheet and only the list shows (`c2-refused-390-light-en.png`). Tapping a row
   in the list leaves the form scrolled the same way (`a0-select-as-lands-390-light-en.png`).
 
-- **A1104. Should the till's Ready bar sort by the short name it shows?** Seen, 2026-10-25 (the
+- **A1104. Should the till's Ready bar break ties by the short name it shows?** Seen, 2026-10-25 (the
   A797 slice 1 look, `e-bar-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): the
-  bar lists parties in the order their first table appears in the floor's tables (slice 5 of the
-  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md)), which in the look ran
-  by full name, so "Window 1", shown as W1, came last: "2 · 1", "T1+T2 · 1", "W1 · 1". Ask the
-  owner.
+  bar then listed parties in the floor read's order, which in the look ran by full name, so
+  "Window 1", shown as W1, came last: "2 · 1", "T1+T2 · 1", "W1 · 1". Since A797 slice 7 it puts
+  warning tables first, then the rest, each longest-waiting first; the floor read's order decides only ties and tables whose ready food
+  has no time (`readyBar`, `apps/till/src/state/table-signals.ts`). Ask the owner.
 
 - **A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".** Seen,
   2026-10-25 (the A797 slice 1 look, `e-bar-dining-390-light-en.png` in
