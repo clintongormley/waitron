@@ -55,6 +55,7 @@ export type {
 } from "./first-setup-state.js";
 export {
   canonicalFirstSetupDirectory,
+  canonicalFirstSetupRoots,
   createFirstSetupResolutionStore,
 } from "./first-setup-resolution.js";
 export type {

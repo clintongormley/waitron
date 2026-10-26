@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { lockVenueDatabase, openVenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import {
-  canonicalFirstSetupDirectory,
+  canonicalFirstSetupRoots,
   readModulePreparationHistory,
   readDurableHostJson,
   type FirstSetupRoots,
@@ -52,12 +52,7 @@ export async function readFirstSetupBackupHistory(options: Options): Promise<{
   }
   return options.withVenueExclusion(async () => {
     await options.recheck();
-    const roots: FirstSetupRoots[] = [
-      {
-        stateDir: await canonicalFirstSetupDirectory(options.stateDir),
-        venueDir: await canonicalFirstSetupDirectory(options.venueDir),
-      },
-    ];
+    const roots: FirstSetupRoots[] = [await canonicalFirstSetupRoots(options)];
     const venues = [...new Set(roots.map((root) => root.venueDir))];
     const databases: unknown[] = [];
     for (const venueDir of venues) {

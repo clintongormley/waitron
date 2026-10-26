@@ -17,6 +17,7 @@ import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/
 import {
   assertNoStartAgainDeletion,
   canonicalFirstSetupDirectory,
+  canonicalFirstSetupRoots,
   isEmptiedTombstone,
   readDurableHostJson,
   writeDurableHostJson,
@@ -598,10 +599,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       });
     }
     if (history.databases.length > 0 && Object.keys(documents).length === 0) return refuse();
-    const anchor = {
-      stateDir: await canonicalFirstSetupDirectory(options.stateDir),
-      venueDir: await canonicalFirstSetupDirectory(options.venueDir),
-    };
+    const anchor = await canonicalFirstSetupRoots(options);
     const base = join(
       anchor.stateDir,
       "first-setup-resolutions",

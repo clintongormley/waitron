@@ -119,6 +119,15 @@ export async function canonicalFirstSetupDirectory(path: string): Promise<string
     return join(await canonicalFirstSetupDirectory(dirname(absolute)), basename(absolute));
   }
 }
+export async function canonicalFirstSetupRoots(roots: {
+  stateDir: string;
+  venueDir: string;
+}): Promise<{ stateDir: string; venueDir: string }> {
+  return {
+    stateDir: await canonicalFirstSetupDirectory(roots.stateDir),
+    venueDir: await canonicalFirstSetupDirectory(roots.venueDir),
+  };
+}
 export async function firstSetupDirectory(path: string, create = false): Promise<void> {
   if (resolve(path) !== path) invalid();
   const parent = dirname(path);
@@ -354,10 +363,7 @@ export function createFirstSetupResolutionStore(options: {
   coordinator: FirstSetupCoordinator;
   originalsCache?: FirstSetupOriginalsCache;
 }) {
-  const roots = async () => ({
-    stateDir: await canonicalFirstSetupDirectory(options.stateDir),
-    venueDir: await canonicalFirstSetupDirectory(options.venueDir),
-  });
+  const roots = () => canonicalFirstSetupRoots(options);
   const folder = async (id: string, create = false) => {
     if (!uuid(id)) invalid();
     const path = join((await roots()).stateDir, "first-setup-resolutions", id);

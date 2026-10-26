@@ -1,5 +1,5 @@
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
-import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import {
   insideBackupRepairTarget,
@@ -11,10 +11,7 @@ import "./errors.js";
 export async function boxFolders(roots: FirstSetupRoots): Promise<FirstSetupRoots> {
   const repair = await resolveFirstSetupBackupWorkspace(roots);
   if (repair.kind !== "absent") return repair.target.anchor;
-  const folders = {
-    stateDir: await canonicalFirstSetupDirectory(roots.stateDir),
-    venueDir: await canonicalFirstSetupDirectory(roots.venueDir),
-  };
+  const folders = await canonicalFirstSetupRoots(roots);
   if (
     Object.values(folders).some(
       (dir) => insideFirstSetupWorkspace(dir) || insideBackupRepairTarget(dir),

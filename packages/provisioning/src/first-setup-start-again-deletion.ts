@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import {
   createFirstSetupBackupWorkspace,
@@ -182,13 +182,6 @@ export function markerSize(marker: StartAgainMarker): number {
   return Buffer.byteLength(JSON.stringify(marker));
 }
 
-async function canonicalRoots(roots: Roots): Promise<Roots> {
-  return {
-    stateDir: await canonicalFirstSetupDirectory(roots.stateDir),
-    venueDir: await canonicalFirstSetupDirectory(roots.venueDir),
-  };
-}
-
 async function info(path: string) {
   try {
     return await lstat(path);
@@ -335,7 +328,7 @@ export async function startAgainMarkerFor(
   attempt: { attemptId: string; frozenDigest: string },
   options: Options = {},
 ): Promise<StartAgainMarker> {
-  const canonical = await canonicalRoots(roots);
+  const canonical = await canonicalFirstSetupRoots(roots);
   const items = await itemsOnDisk(canonical, options).catch((error: unknown) => {
     throw error instanceof AppError ? error : checkFailed(error);
   });
@@ -374,7 +367,7 @@ export async function assertNoStartAgainDeletion(venueDir: string): Promise<void
 export async function writeStartAgainMarker(roots: Roots, marker: StartAgainMarker): Promise<void> {
   if (markerSize(marker) > MARKER_LIMIT) throw new AppError("setup.not_ready", {});
   const value = parseMarker(marker);
-  const canonical = await canonicalRoots(roots);
+  const canonical = await canonicalFirstSetupRoots(roots);
   if (value.venueDir !== canonical.venueDir || value.stateDir !== canonical.stateDir)
     throw incomplete("marker folders differ");
   await assertNoStartAgainDeletion(canonical.venueDir);
@@ -399,7 +392,7 @@ export async function assertStartAgainAllowedOnDisk(
   options: Options = {},
 ): Promise<Roots> {
   const notReady = (reason: string) => new AppError("setup.not_ready", {}, { reason });
-  const canonical = await canonicalRoots(roots);
+  const canonical = await canonicalFirstSetupRoots(roots);
   const rootOf = (root: Root) => (root === "venue" ? canonical.venueDir : canonical.stateDir);
   const exists = async (path: string) => {
     try {
@@ -473,7 +466,7 @@ export async function deleteMarkedAttempt(
   remove: (path: string, kind: "file" | "folder") => Promise<void> = removeAndSync,
 ): Promise<void> {
   const value = parseMarker(marker);
-  const canonical = await canonicalRoots(roots);
+  const canonical = await canonicalFirstSetupRoots(roots);
   if (value.venueDir !== canonical.venueDir || value.stateDir !== canonical.stateDir)
     throw incomplete("marker folders differ");
   const named = new Set(value.files.map((entry) => `${entry.root}:${entry.name}`));
@@ -493,7 +486,7 @@ export async function deleteMarkedAttempt(
 
 /** Run at the start: finishes an interrupted Start again deletion, or refuses and deletes nothing. */
 export async function finishStartAgainDeletion(roots: Roots): Promise<void> {
-  const canonical = await canonicalRoots(roots);
+  const canonical = await canonicalFirstSetupRoots(roots);
   if ((await readStartAgainMarker(canonical.venueDir)) === null) return;
   const hold = await lockVenueDatabase(canonical.venueDir);
   try {
