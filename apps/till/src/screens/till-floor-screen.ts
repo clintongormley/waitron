@@ -864,7 +864,9 @@ export class TillFloorScreen extends LitElement {
         }
       }
 
-      .ready-bar[data-warning] h2 {
+      /* wt-icon sets its own text colour, so it is named beside the heading. */
+      .ready-bar[data-warning] h2,
+      .ready-bar[data-warning] h2 wt-icon {
         color: var(--wt-color-warning);
       }
 

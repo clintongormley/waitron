@@ -372,6 +372,21 @@ describe("till-floor-screen: the Ready bar warning's look", () => {
     await still(drawn);
   });
 
+  it("the heading's icon is amber with its words while warning, and the text colour when calm", async () => {
+    const iconFill = (el: TillFloorScreen) => {
+      const icon = bar(el)!.querySelector("h2 wt-icon")!;
+      return getComputedStyle(icon.shadowRoot!.querySelector("svg")!).fill;
+    };
+    const el = await mountFloor(warningCase());
+    el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    expect(iconFill(el)).toBe("rgb(4, 5, 6)");
+    cleanupWidgets();
+    const calm = await mountFloor([table2()]);
+    calm.style.setProperty("--wt-color-text", "rgb(13, 14, 15)");
+    calm.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    expect(iconFill(calm)).toBe("rgb(13, 14, 15)");
+  });
+
   it("the warning entry is amber and keeps a hover cue; the calm entry is unchanged", async () => {
     await commands.emulateReducedMotion(false);
     const calm = await mountFloor([readyAt(["bar", "Bar", 1, ago(2 * minute), 3])]);
