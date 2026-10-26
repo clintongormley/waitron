@@ -7,7 +7,9 @@
  * that spreads an object can carry keys its registry type does not name (`{ ...prepared.venue }`,
  * `apps/server/src/restore-request.ts:280` and `apps/server/src/restore-stream.ts:378`: if
  * `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`, gained an `ownerEmail`, the answer and
- * the log line would carry it and this guard would stay green); it never reads free text; and it
+ * the log line would carry it and this guard would stay green); it does not read a quoted key
+ * inside an entry (`"guestName": string`); a `NOT_PERSONAL` entry `code.key` approves that key at
+ * every depth of its code, not only where it was reviewed; it never reads free text; and it
  * judges a named type in a registry only by its name, against `REVIEWED_TYPES`, so a person-named
  * key added later inside a type already reviewed passes. Of a log call's fields it reads only an
  * object literal written as the third argument, so it sees no spread or variable passed as the
@@ -142,6 +144,7 @@ interface RegistryKey {
   code: string;
   key: string;
   parent: string | undefined;
+  parentIsArray?: boolean;
 }
 
 const PERSON_WORDS =
@@ -171,18 +174,30 @@ function closingBrace(code: string, opening: number): number {
   return code.length;
 }
 
+function isArrayMember(text: string, opening: number): boolean {
+  return (
+    /\bArray\s*<\s*$/.test(text.slice(0, opening)) ||
+    /^\s*\[\s*\]/.test(text.slice(closingBrace(text, opening) + 1))
+  );
+}
+
 function keysOfEntry(code: string, text: string): RegistryKey[] {
   const keys: RegistryKey[] = [];
-  const parents: (string | undefined)[] = [];
+  const parents: { key: string | undefined; array: boolean }[] = [];
   let last: string | undefined;
   for (const match of text.matchAll(KEY_OR_BRACE)) {
     if (match[0] === "{") {
-      parents.push(last);
+      parents.push({ key: last, array: isArrayMember(text, match.index) });
       last = undefined;
     } else if (match[0] === "}") {
-      last = parents.pop();
+      last = parents.pop()?.key;
     } else if (match[1] !== undefined) {
-      keys.push({ code, key: match[1], parent: parents.at(-1) });
+      const parent = parents.at(-1);
+      keys.push(
+        parent?.key === undefined
+          ? { code, key: match[1], parent: undefined }
+          : { code, key: match[1], parent: parent.key, parentIsArray: parent.array },
+      );
       last = match[1];
     }
   }
@@ -202,6 +217,42 @@ function registryBodies(text: string): RegistryBody[] {
   return [...code.matchAll(REGISTRY_OPENING)].map((opening) => {
     const bodyStart = opening.index + opening[0].length - 1;
     return { code, literalsBlank, bodyStart, bodyEnd: closingBrace(literalsBlank, bodyStart) };
+  });
+}
+
+function topLevelSegments(text: string, from: number, to: number): [number, number][] {
+  const segments: [number, number][] = [];
+  let depth = 0;
+  let start = from;
+  for (let at = from; at < to; at++) {
+    const char = text[at];
+    if (char === "{" || char === "[" || char === "(" || char === "<") depth++;
+    else if (char === "}" || char === "]" || char === ")") depth--;
+    else if (char === ">" && text[at - 1] !== "=") depth--;
+    else if ((char === ";" || char === ",") && depth === 0) {
+      segments.push([start, at]);
+      start = at + 1;
+    }
+  }
+  segments.push([start, to]);
+  return segments;
+}
+
+function unrecognisedEntries(text: string): string[] {
+  return registryBodies(text).flatMap(({ code, literalsBlank, bodyStart, bodyEnd }) => {
+    const marks = [...code.slice(bodyStart + 1, bodyEnd).matchAll(CODE_MARK)].map(
+      (mark) => bodyStart + 1 + mark.index,
+    );
+    const firstMark = marks[0] ?? bodyEnd;
+    const outside = [
+      ...topLevelSegments(literalsBlank, bodyStart + 1, firstMark),
+      ...marks.flatMap((from, index) =>
+        topLevelSegments(literalsBlank, from, marks[index + 1] ?? bodyEnd).slice(1),
+      ),
+    ];
+    return outside
+      .map(([from, to]) => code.slice(from, to).trim().replace(/\s+/g, " "))
+      .filter((entry) => entry !== "");
   });
 }
 
@@ -253,9 +304,13 @@ function refusedPairs(
 ): string[] {
   const refused = judgedPairs(keys)
     .filter(
-      ({ code, key, parent }) =>
+      ({ code, key, parent, parentIsArray }) =>
         !PERSONAL_LOG_KEYS.has(key) &&
-        !(parent !== undefined && PERSONAL_LOG_PATHS.get(parent)?.has(key) === true) &&
+        !(
+          parent !== undefined &&
+          parentIsArray === true &&
+          PERSONAL_LOG_PATHS.get(parent)?.has(key) === true
+        ) &&
         !notPersonal.has(`${code}.${key}`),
     )
     .map(({ code, key }) => `${code}.${key}`);
@@ -447,6 +502,45 @@ describe("error-code details that name a person are masked in the log", () => {
     expect(refusedIn(registry(`"x.n": { merchants: { code: string }[]; name: string };`))).toEqual([
       "x.n.name",
     ]);
+  });
+
+  it("refuses a registry entry that is not a recognised code mark", () => {
+    const keys = registryFiles().flatMap((file) =>
+      unrecognisedEntries(readFileSync(join(ROOT, file), "utf8")),
+    );
+    expect(keys).toEqual([]);
+    expect(
+      unrecognisedEntries(
+        registry(`[X_CODE]: { guestName: string };\n"x.a": { tableId: string };`),
+      ),
+    ).toEqual(["[X_CODE]: { guestName: string }"]);
+    expect(
+      unrecognisedEntries(
+        registry(
+          [
+            `"x.a": { tableId: string };`,
+            `[X_CODE]: { guestName: string };`,
+            `"x.Bad": { ownerEmail: string };`,
+          ].join("\n"),
+        ),
+      ),
+    ).toEqual(["[X_CODE]: { guestName: string }", `"x.Bad": { ownerEmail: string }`]);
+  });
+
+  it("accepts a listed path's child only where the parent's member is an array", () => {
+    expect(refusedIn(registry(`"x.o": { merchants: { code: string; name: string } };`))).toEqual([
+      "x.o.name",
+    ]);
+    expect(
+      refusedIn(
+        registry(
+          [
+            `"x.a": { merchants: Array<{ code: string; name: string }> };`,
+            `"x.u": { merchants: { code: string; name: string }[] | { name: string; extra: number }[] };`,
+          ].join("\n"),
+        ),
+      ),
+    ).toEqual([]);
   });
 
   it("ignores keys written in comments", () => {
