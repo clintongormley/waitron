@@ -14,53 +14,55 @@ does not exist.
 
 ## Task 5 (#750, kitchen, pass and table screen by group; printing problems)
 
-- **Task 5 (#750, kitchen, pass and table screen by group; printing problems).** Left open:
-  - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
-  - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
-    `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and
-    cancel line follow the server's locale (`WAITRON_TILL_LOCALE`, `es-ES`
-    when unset), so by default a held slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and
-    `QUITAR:`, mixed on one slip. Since A683 a ticket for a named party also prints its order
-    line in that locale, so a held ticket reads `*** HOLD ***` above `Pedido 5 · Ana`.
-  - A switched-off printer's printing problem keeps showing until the printer is switched on
-    and a Reprint prints there; there is no way to dismiss one.
-  - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
-    every station it covered, even where that station's own printer printed; it stops showing at
-    a station once a Reprint of the bill would not link that pass printer to that station.
-    (`apps/server/src/print-problems.test.ts`).
-  - Finish table drops the problem of a bill that transfers emptied (read, not run; not
-    re-checked by B6a).
-  - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
-    nothing when it prints, so its warning stays until the merged bill is reprinted once more
-    (`moveKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`). The same holds when dishes move
-    by transfer, split or a line move: a copied ticket never counts as a reprint. Not tested as a
-    rule: move a dish from bill A to bill B, reprint B so it prints, move the dish back, and A
-    shows its old failure again.
-  - Only dishes whose unit does not print on the ticket — sold in Each by the unit's identity
-    (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
-    a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line
-    by line, because nothing records a unit's kind (a unit field would need a migration).
-  - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
-    `party.out_of_date` after it and reads again.
-  - Setting up a venue from an imported configuration deletes every kitchen station, and the
-    `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold
-    link rows at that point was not tested (read, not run).
-  - The pass's Ready records no `order_group_events` row, so who pressed them is
-    recorded nowhere readable; a new kind changes that append-only table's check, which is a
-    core migration.
-  - The table screen's second request for printing problems is A809.
+Left open:
+
+- A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
+- `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
+  `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and
+  cancel line follow the server's locale (`WAITRON_TILL_LOCALE`, `es-ES`
+  when unset), so by default a held slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and
+  `QUITAR:`, mixed on one slip. Since A683 a ticket for a named party also prints its order
+  line in that locale, so a held ticket reads `*** HOLD ***` above `Pedido 5 · Ana`.
+- A switched-off printer's printing problem keeps showing until the printer is switched on
+  and a Reprint prints there; there is no way to dismiss one.
+- A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
+  every station it covered, even where that station's own printer printed; it stops showing at
+  a station once a Reprint of the bill would not link that pass printer to that station.
+  (`apps/server/src/print-problems.test.ts`).
+- Finish table drops the problem of a bill that transfers emptied (read, not run; not
+  re-checked by B6a).
+- After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
+  nothing when it prints, so its warning stays until the merged bill is reprinted once more
+  (`moveKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`). The same holds when dishes move
+  by transfer, split or a line move: a copied ticket never counts as a reprint. Not tested as a
+  rule: move a dish from bill A to bill B, reprint B so it prints, move the dish back, and A
+  shows its old failure again.
+- Only dishes whose unit does not print on the ticket — sold in Each by the unit's identity
+  (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
+  a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line
+  by line, because nothing records a unit's kind (a unit field would need a migration).
+- Every pass press moves the party's revision, so a waiter's open Tab drawer meets
+  `party.out_of_date` after it and reads again.
+- Setting up a venue from an imported configuration deletes every kitchen station, and the
+  `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold
+  link rows at that point was not tested (read, not run).
+- The pass's Ready records no `order_group_events` row, so who pressed them is
+  recorded nowhere readable; a new kind changes that append-only table's check, which is a
+  core migration.
+- The table screen's second request for printing problems is A809.
 
 ## Task 6 (#761, HOLD tickets in advance)
 
-- **Task 6 (#761, HOLD tickets in advance).** Left open:
-  - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
-    like every correction slip: none is recorded in `kitchen_print_jobs`.
-  - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
-    another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
-  - A group's HOLD paper is recorded per station, not per printer
-    (`order_group_hold_stations`), so a correction to a station whose printer changed after its
-    HOLD ticket prints on the new printer, which never had that ticket (`printCorrectionSlips`
-    reads the station's current printers; read, not run).
+Left open:
+
+- A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
+  like every correction slip: none is recorded in `kitchen_print_jobs`.
+- A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
+  another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
+- A group's HOLD paper is recorded per station, not per printer
+  (`order_group_hold_stations`), so a correction to a station whose printer changed after its
+  HOLD ticket prints on the new printer, which never had that ticket (`printCorrectionSlips`
+  reads the station's current printers; read, not run).
 
 ## KDS corrections deferred from #191
 
@@ -91,11 +93,11 @@ does not exist.
 
 ## A following extra has different names on paper and on screen
 
-- **A following extra has different names on paper and on screen.** Its `+` line prints the frozen
-  staff name (`buildTicketItems`, `apps/server/src/kitchen-print.ts`), while the kitchen screen and
-  pass read its frozen customer `descriptions` (`readQueueSubItems`,
-  `apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
-  both surfaces. Decide which name the following extra should show, then make the surfaces agree.
+Its `+` line prints the frozen
+staff name (`buildTicketItems`, `apps/server/src/kitchen-print.ts`), while the kitchen screen and
+pass read its frozen customer `descriptions` (`readQueueSubItems`,
+`apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
+both surfaces. Decide which name the following extra should show, then make the surfaces agree.
 
 ## The dark-screen alert can be wrong
 
@@ -108,14 +110,13 @@ does not exist.
 
 ## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)
 
-- **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).**
-  The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
-  general request timeout (only the kitchen refresh and menu-state reads are bounded, at 25 seconds,
-  and a table's round sends and offer reloads, at 150 seconds). A refusal that lands after the tab
-  is paid, or after a server switch, shows the ordinary unnamed message. The kitchen screen's list
-  of stations is read only when the screen opens, so after that read fails the out-of-date banner
-  stays, counting, until the screen is opened again; long outages are counted in minutes, never
-  hours.
+The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
+general request timeout (only the kitchen refresh and menu-state reads are bounded, at 25 seconds,
+and a table's round sends and offer reloads, at 150 seconds). A refusal that lands after the tab
+is paid, or after a server switch, shows the ordinary unnamed message. The kitchen screen's list
+of stations is read only when the screen opens, so after that read fails the out-of-date banner
+stays, counting, until the screen is opened again; long outages are counted in minutes, never
+hours.
 
 ## A1066. Four server test files mark a HOLD ticket printed without recording a station
 
@@ -181,20 +182,18 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 
 ## A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references
 
-- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's
-  cross-references.** `apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
-  `String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
-  slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
-  fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
+`apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
+`String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
+slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
+fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
 
 ## A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17)
 
-- **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
-  (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
-  raises one acknowledged notice for each affected dish (A743's default). Print one slip per printer
-  listing the affected dishes, and raise ONE notice the cook acknowledges once per station. Done
-  when `apps/server/src/order-kitchen-note.corrections.test.ts`'s three-dish edit shows one slip per
-  printer and one notice per station.
+Today a change or removal of the order's kitchen note prints one slip and
+raises one acknowledged notice for each affected dish (A743's default). Print one slip per printer
+listing the affected dishes, and raise ONE notice the cook acknowledges once per station. Done
+when `apps/server/src/order-kitchen-note.corrections.test.ts`'s three-dish edit shows one slip per
+printer and one notice per station.
 
 ## Supervisors have no dashboard path to a prep station's times
 
@@ -214,20 +213,18 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 
 ## A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19)
 
-- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision,
-  2026-10-19).** Decide whether departure should ask about each unserved dish and send kitchen
-  cancellation slips before closing the party, using Finish table's choices without a refund.
-  A773-2 retires the pass's per-device Done action; assess this decision against its service
-  lifetime rather than adding another manual clearing action. Bring the owner a worked example.
+Decide whether departure should ask about each unserved dish and send kitchen
+cancellation slips before closing the party, using Finish table's choices without a refund.
+A773-2 retires the pass's per-device Done action; assess this decision against its service
+lifetime rather than adding another manual clearing action. Bring the owner a worked example.
 
 ## A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17)
 
-- **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
-  Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
-  `GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
-  groups read and drop the second request; the exact-body assertion in
-  `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
-  calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
+Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
+`GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
+groups read and drop the second request; the exact-body assertion in
+`apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
+calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
 
 ## The earliest fire time is picked by comparing the stored times as text
 
@@ -255,11 +252,10 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 
 ## A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision)
 
-- **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
-  Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
-  slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
-  taken off) — still print the bare order number (`formatCorrectionSlip`,
-  `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
+Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
+slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
+taken off) — still print the bare order number (`formatCorrectionSlip`,
+`apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
 ## A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields
 
@@ -271,24 +267,23 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
-- **A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a
-  "Not allowed" station.** Within one dish `ticket.already_started` is checked first, but across a
-  save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
-  bug). Decide whether "started first" should hold across the whole save
-  ([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
+Within one dish `ticket.already_started` is checked first, but across a
+save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
+bug). Decide whether "started first" should hold across the whole save
+([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
 
 ## A1087. Kitchen tickets print a whole quantity with three decimals
 
-- **A1087. Kitchen tickets print a whole quantity with three decimals.** Seen, 2026-10-25, on the
-  demo printer in A789 slice 3's look: `2.000 x CROQ JAMON` and `1.000 x GAMBAS AJILLO`. The slice
-  did not cause it. The ticket's quantity comes from `thousandthsToDecimal`
-  (`apps/server/src/kitchen-ticket.ts:133`, `:153`; `apps/server/src/kitchen-print.ts:87`; the pass
-  board's items read it the same way, `readPassBoard`, `apps/server/src/working-order.ts:8084`), and
-  tests pin it (`apps/server/src/order-groups.test.ts:526`,
-  `apps/server/src/line-cancel.test.ts:1148`), so it has been chosen or tolerated since #750
-  (2026-09-27). **Next action:** decide with the owner whether a whole-number quantity prints as
-  `2 x`. A custom unit's quantity is a neighbour: [A custom-unit extra still shows a dot in
-  Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation).
+Seen, 2026-10-25, on the
+demo printer in A789 slice 3's look: `2.000 x CROQ JAMON` and `1.000 x GAMBAS AJILLO`. The slice
+did not cause it. The ticket's quantity comes from `thousandthsToDecimal`
+(`apps/server/src/kitchen-ticket.ts:133`, `:153`; `apps/server/src/kitchen-print.ts:87`; the pass
+board's items read it the same way, `readPassBoard`, `apps/server/src/working-order.ts:8084`), and
+tests pin it (`apps/server/src/order-groups.test.ts:526`,
+`apps/server/src/line-cancel.test.ts:1148`), so it has been chosen or tolerated since #750
+(2026-09-27). **Next action:** decide with the owner whether a whole-number quantity prints as
+`2 x`. A custom unit's quantity is a neighbour: [A custom-unit extra still shows a dot in
+Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation).
 
 ## Decisions and deliberate limits
 

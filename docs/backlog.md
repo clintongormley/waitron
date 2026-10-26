@@ -1579,13 +1579,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the retired-address tests do — left open by A506-12.
 
 - **A routing period line naming another location's period is flagged but never drawn** (left open by A455, #1492).
-  Fix: show the line and make removing it an explicit choice.
   [Detail](backlog/kitchen.md#a-routing-period-line-naming-another-locations-period-is-flagged-but-never-drawn)
 
 - KDS-4 follow-up: device-mode reprint behind `requireDevice`.
 
 - **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19).**
-  Bring the owner a worked example.
   [Detail](backlog/kitchen.md#a908-kitchen-cancellation-on-record-unpaid-departure-left-open-by-a758s-q43-revision-2026-10-19)
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
@@ -1612,9 +1610,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   orders #2 and #4 while the station's queue also held #1 and #7; a reload brought them back and a
   second switch did not lose them. Cause not found; that slice did not change the kitchen screen.
 
-- **KDS operations — low priority (A9)** — Gaps: a routing audit view (a routing cell keeps no
-  record of who changed it or when — the most useful to close); no station `type`/`kind`;
-  single-target only. [Detail](backlog/kitchen.md#kds-operations--low-priority-a9)
+- **KDS operations — low priority (A9)**
+  [Detail](backlog/kitchen.md#kds-operations--low-priority-a9)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
   problems).**
@@ -1630,11 +1627,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   right only while every writer stores the same `toISOString()` form.
   [Detail](backlog/kitchen.md#the-earliest-fire-time-is-picked-by-comparing-the-stored-times-as-text)
 
-- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller** — decide whether to remove them or use them.
+- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller**
   [Detail](backlog/kitchen.md#get-management-apistationsoutputs-down-and-the-dashboards-listoutputsdown-have-no-caller)
 
 - **A long word in a routing-grid row name still splits at 390 px.**
-  Options: widen the cap, shrink the arrow at phone width, or hyphenate.
   [Detail](backlog/kitchen.md#a-long-word-in-a-routing-grid-row-name-still-splits-at-390-px)
 
 - **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
@@ -1656,7 +1652,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `packages/venue-service/src/routing.ts` and use it from both. Left open by A366 slice 4 Part A.
 
 - **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review.
-  Work each out only where it is used.
   [Detail](backlog/kitchen.md#routing-reads-do-work-only-one-screen-uses)
 
 - **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
@@ -1671,9 +1666,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   back, the message still names the zone; and only a returning zone or product has a test that the
   message clears — a returning category or No category row has none.
 
-- **KDS corrections deferred from #191** — owner, 2026-09-01. A moved dish must keep its kitchen
-  status — the ticket must travel with the line, not re-fire. Then the low-priority KDS list under
-  [KDS operations](backlog/kitchen.md#kds-operations--low-priority-a9).
+- **KDS corrections deferred from #191** — owner, 2026-09-01.
   [Detail](backlog/kitchen.md#kds-corrections-deferred-from-191)
 
 - **Order-timing and modifier follow-ons**: delivery-order floor flash, idle-floor escalation,
@@ -1681,26 +1674,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `#allergens` render, the KDS-versus-till unreviewed-dish call, the TS-4 partial-transfer
   modifier-split guard.
 
-- **Mark a new dish as urgent** — owner, 2026-09-27. A waiter can already send a new dish straight
-  to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
-  a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
+- **Mark a new dish as urgent** — owner, 2026-09-27.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
 
-- **Three follow-ups 3c-1 left:** — left open by the product folders work. the kitchen screen's
-  column view has no per-order card, so it does not show the rest of the order…
+- **Three follow-ups 3c-1 left:** — left open by the product folders work.
   [Detail](backlog/kitchen.md#three-follow-ups-3c-1-left)
 
 - **A following extra has different names on paper and on screen.** — left open by the product
-  folders work. Decide which name the following extra should show, then make the surfaces agree.
+  folders work.
   [Detail](backlog/kitchen.md#a-following-extra-has-different-names-on-paper-and-on-screen)
 
-- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper may
-  never mark dishes ready on its screen. Improve how the alert distinguishes a kitchen using paper
-  and how the dev chooser records check-ins.
+- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01).
   [Detail](backlog/kitchen.md#the-dark-screen-alert-can-be-wrong)
 
 - **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).** —
-  left open by the menus plan. The counter's prep-queue card shows no notices and does not refresh.
+  left open by the menus plan.
   [Detail](backlog/kitchen.md#changing-sent-lines-and-the-kitchen-screen-task-7c-710-and-the-kitchen-fixes-after-it)
 
 - **The review left detached `readOnly` changes and a retained table's scroll/sort unverified**; no
@@ -1722,15 +1710,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Left open by A439.
 
 - **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
-  Decide: should they carry the name too? Left open by A683.
   [Detail](backlog/kitchen.md#a694--correction-slips-do-not-print-the-partys-name-2026-10-15-open-owner-decision)
 
 - **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
-  owner decision).** Decide: should a rename of a party with sent food print a slip?
+  owner decision).**
   [Detail](backlog/kitchen.md#a695--naming-or-renaming-a-party-after-its-food-was-sent-prints-nothing)
 
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
-  (2026-10-15; open, owner decision).** Decide: should extras keep their earlier choice, as the dish does?
+  (2026-10-15; open, owner decision).**
   [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
 ### The till, devices and table service
