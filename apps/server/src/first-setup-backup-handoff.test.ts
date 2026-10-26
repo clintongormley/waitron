@@ -11,6 +11,8 @@ import { freePorts } from "./testing/free-ports.js";
 import { startServer } from "./boot.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
+import { randomBytes } from "node:crypto";
+import { PASSWORD, request as ownerRequest } from "../test/first-fiscal.js";
 
 const prefix = "/setup-api/first-setup/resolution/backup";
 it("a refused key keeps repair retryable and ordinary setup resumes after restart", async () => {
@@ -330,3 +332,112 @@ it.each(["configuration", "offerings"] as const)(
     }
   },
 );
+
+it("with the database present, the repair page's Continue and Abandon are refused setup.recovery_in_progress while a backup recovery runs, and change nothing; with none running, Continue resumes", async () => {
+  const f = await archiveHost();
+  await writeFile(
+    join(f.roots.stateDir, "modules.json"),
+    JSON.stringify({ modules: { "fiscal-none": false } }),
+  );
+  const nonce = randomBytes(32).toString("base64url");
+  await createFirstSetupModuleHost({
+    ...f.roots,
+    modules: ALL_MODULES,
+    environment: { WAITRON_ENV: "preproduction" },
+  }).owner.claimFirstSetup({ environment: "preproduction", request: ownerRequest }, nonce);
+  const migrationsRoot = join(root, "migrations");
+  await mkdir(migrationsRoot);
+  const sets = manifestSets();
+  const options = migrationOptionsFor(sets, null);
+  for (const [index, set] of sets.entries())
+    await cp(options[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+      recursive: true,
+    });
+  const [port] = await freePorts(1);
+  const origin = `https://127.0.0.1:${port}`;
+  const agent = new Agent({ connect: { rejectUnauthorized: false } });
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  const send = (path: string, init: RequestInit = {}) =>
+    fetch(origin + path, { ...init, dispatcher: agent } as RequestInit);
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    send(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+  const attempt = join(f.roots.stateDir, "first-setup.json");
+  try {
+    server = await startServer({
+      WAITRON_ENV: "dev",
+      WAITRON_STATE_DIR: f.roots.stateDir,
+      WAITRON_VENUE_DIR: f.roots.venueDir,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    });
+    expect((await send("/setup-api/venue-defaults")).status).toBe(200);
+    const resumed = await post("/setup-api/first-setup/resume", {
+      clientClaimNonce: nonce,
+      password: PASSWORD,
+    });
+    expect(resumed.status, await resumed.clone().text()).toBe(200);
+    const ownership = (await resumed.json()) as {
+      state: { attemptId: string; revision: number; ownerGeneration: number };
+      capability: string;
+    };
+    const owner = {
+      "X-Waitron-Setup-Owner": ownership.capability,
+      "X-Waitron-Setup-Attempt": ownership.state.attemptId,
+      "X-Waitron-Setup-Revision": String(ownership.state.revision),
+      "X-Waitron-Setup-Generation": String(ownership.state.ownerGeneration),
+    };
+    const inspected = await (await send("/setup-api/first-setup/resolution")).json();
+    const form = new FormData();
+    form.set(
+      "request",
+      JSON.stringify({
+        observation: {
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision,
+          ownerGeneration: inspected.ownerGeneration,
+        },
+        source: {
+          kind: "archive",
+          recoveryKey: f.restore.recoveryKey,
+          environment: "preproduction",
+        },
+        nodeRecoverySecret: key.secret,
+        context: { oldBoxGone: true, soleRecovery: true },
+      }),
+    );
+    form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "backup.wbk");
+    const opened = await send(prefix + "/open", { method: "POST", body: form });
+    expect(opened.status, await opened.clone().text()).toBe(200);
+    const activity = (await (await send(prefix + "/activity")).json()) as {
+      activity: { state: string; startedAt: string; lastActiveAt: string };
+    };
+    expect(activity.activity.state).toBe("running");
+    const before = await readFile(attempt);
+    for (const [path, body, headers] of [
+      ["/setup-api/first-setup/resume", { clientClaimNonce: nonce, password: PASSWORD }, {}],
+      ["/setup-api/first-setup/abandon", {}, owner],
+    ] as const) {
+      const refused = await post(path, body, headers);
+      expect(refused.status, path).toBe(409);
+      expect(await refused.json(), path).toEqual({
+        error: {
+          code: "setup.recovery_in_progress",
+          params: {
+            startedAt: activity.activity.startedAt,
+            lastActiveAt: activity.activity.lastActiveAt,
+          },
+        },
+      });
+    }
+    expect(await readFile(attempt)).toEqual(before);
+  } finally {
+    await server?.close();
+    await agent.close();
+  }
+});

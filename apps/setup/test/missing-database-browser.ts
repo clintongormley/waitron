@@ -63,6 +63,8 @@ export async function missingDatabaseFixture(
     /** What `/backup/activity` answers, read again on every request; `null` by default. */
     activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
     sameTab?: boolean;
+    /** What the mount waits for; the password step or the running view by default. */
+    ready?: (app: SetupApp) => boolean;
     theme?: "light" | "dark";
     locale?: "en-GB" | "es-ES";
   } = {},
@@ -142,7 +144,9 @@ export async function missingDatabaseFixture(
     },
     options.theme,
   );
-  await expect.poll(() => q(app, "resume-password") ?? q(app, "recovery-running")).not.toBeNull();
+  if (options.ready) await expect.poll(() => options.ready!(app)).toBe(true);
+  else
+    await expect.poll(() => q(app, "resume-password") ?? q(app, "recovery-running")).not.toBeNull();
   return { app, host, ...fixture };
 }
 export async function recoverMissing(app: SetupApp) {

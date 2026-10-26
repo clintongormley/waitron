@@ -25,6 +25,7 @@ export const initialOwnerStrings = {
     recoveryStoppedCloud:
       "Its approval in Waitron Cloud closes by itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's venue.",
     recoveryUnreadable: "This box found a recovery from backup whose records cannot be read.",
+    checkAgain: "Check again",
     missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
     uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
     finish: "Finish setup",
@@ -81,6 +82,7 @@ export const initialOwnerStrings = {
       "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
     recoveryUnreadable:
       "Este equipo encontró una recuperación desde una copia cuyos registros no se pueden leer.",
+    checkAgain: "Comprobar de nuevo",
     missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",

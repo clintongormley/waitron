@@ -14,6 +14,7 @@ import {
   missingDatabaseFixture,
   namedSummary,
   recoverMissing,
+  recoveryStartedAt,
   runningActivity,
   shownTimes,
   stoppedActivity,
@@ -781,3 +782,112 @@ it("sends no Start again when the stopped recovery changed after it was shown", 
   await expect.poll(() => q(app, "resume-password")).not.toBeNull();
   expect(startAgainRequests(requests)).toHaveLength(0);
 });
+
+const ACTIONS = [
+  "resume-password",
+  "resume",
+  "start-again",
+  "recover-backup",
+  "confirm-start-again",
+  "abandon-attempt",
+  "replace-attempt",
+  "finish-setup",
+  "damaged-record-continue",
+];
+const actionsDrawn = (app: Parameters<typeof q>[0]) =>
+  ACTIONS.filter((name) => q(app, name) !== null);
+
+it.each(locales)(
+  "a tab that signed in before reads the activity on reload and draws the same running view, with no password field and nothing sent ($locale)",
+  async ({ locale, browser }) => {
+    const { app, requests } = await missingDatabaseFixture({
+      locale: browser,
+      sameTab: true,
+      activity: runningActivity,
+    });
+    expect(lines(app, "recovery-running")).toEqual(runningLines(locale));
+    expect(actionsDrawn(app)).toEqual([]);
+    expect(q(app, "reconnect-first")).not.toBeNull();
+    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
+  },
+);
+
+it.each([false, true])(
+  "Reconnect while another device runs a recovery reads the activity again and offers nothing (same tab %s)",
+  async (sameTab) => {
+    let reads = 0;
+    const { app, requests } = await missingDatabaseFixture({
+      sameTab,
+      activity: () => (++reads === 1 ? null : runningActivity),
+    });
+    expect(q(app, "resume-password")).not.toBeNull();
+    await click(app, "reconnect-first");
+    await expect.poll(() => q(app, "recovery-running")).not.toBeNull();
+    expect(reads).toBe(2);
+    expect(lines(app, "recovery-running")).toEqual(runningLines("en"));
+    expect(actionsDrawn(app)).toEqual([]);
+    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
+  },
+);
+
+it.each([false, true])(
+  "an activity answer that cannot be read offers nothing but Reconnect (same tab %s)",
+  async (sameTab) => {
+    const { app, requests } = await missingDatabaseFixture({
+      sameTab,
+      intercept(path) {
+        if (path.endsWith("/backup/activity"))
+          return Response.json({ activity: { state: "running", startedAt: recoveryStartedAt } });
+      },
+      ready: (app) =>
+        [
+          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
+        ].some((f) => f.error === initialOwnerStrings.en.error),
+    });
+    expect(requests.some((r) => r.path.endsWith("/backup/activity"))).toBe(true);
+    await app.updateComplete;
+    expect(actionsDrawn(app)).toEqual([]);
+    expect(q(app, "recovery-running")).toBeNull();
+    expect(q(app, "reconnect-first")).not.toBeNull();
+    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
+  },
+);
+
+it.each(locales)(
+  "a summary naming a recovery that the backup status does not report as stopped says its records cannot be read, and Check again reads both again ($locale)",
+  async ({ locale, browser }) => {
+    let phase: "unstarted" | "prepared" = "unstarted";
+    const { app, requests } = await missingDatabaseFixture({
+      locale: browser,
+      activity: stoppedActivity,
+      summary: stoppedSummary,
+      intercept(path) {
+        if (path.endsWith("/backup/status")) return Response.json({ phase, proofRequired: true });
+      },
+    });
+    await recoverMissing(app);
+    const t = initialOwnerStrings[locale];
+    expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(t.recoveryUnreadable);
+    expect(q(app, "check-again")!.textContent!.trim()).toBe(t.checkAgain);
+    expect(
+      [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+        (f) => f.error,
+      ),
+    ).not.toContain(shells[locale]["shell.first_setup.attempt_invalid"]);
+    expect(app.shadowRoot!.textContent).not.toContain(
+      shells[locale]["shell.first_setup.attempt_invalid"],
+    );
+    expect(q(app, "recovery-stopped")).toBeNull();
+    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
+    const summaries = () => requests.filter((r) => r.path.endsWith("/start-again/summary"));
+    const statuses = () => requests.filter((r) => r.path.endsWith("/backup/status"));
+    expect([summaries().length, statuses().length]).toEqual([1, 1]);
+    phase = "prepared";
+    await click(app, "check-again");
+    await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
+    expect([summaries().length, statuses().length]).toEqual([2, 2]);
+    expect(q(app, "check-again")).toBeNull();
+    expect(q(app, "recovery-unreadable")).toBeNull();
+    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  },
+);

@@ -8,7 +8,7 @@ import {
 import type { SetupDeps } from "./setup-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
-import type { Context, Hono } from "hono";
+import type { Context, Hono, MiddlewareHandler, Next } from "hono";
 import { TLSSocket } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
@@ -649,48 +649,68 @@ export function mountSetupFirstFiscalApi(
   );
 }
 
+type FencedRecovery = Pick<
+  ReturnType<typeof import("./first-setup-backup-recovery.js").createFirstSetupBackupRecovery>,
+  "runningInMemory" | "holdsInMemory" | "sealLapsed" | "liveness"
+>;
+
 /**
- * While a backup recovery runs, every write of the repair page except the recovery's own is refused;
- * otherwise a lapsed recovery is sealed before the write goes on. A request the routes would refuse
- * for its origin or content type is refused here first, so it seals nothing. With no recovery held
- * in memory there is nothing to refuse or seal, and the routes answer alone. Decided synchronously,
- * so nothing can renew between the check and the seal.
+ * While a backup recovery runs, the write is refused; otherwise a lapsed recovery is sealed before
+ * the write goes on. A request the routes would refuse for its origin or content type is refused
+ * here first, so it seals nothing. With no recovery held in memory there is nothing to refuse or
+ * seal, and the routes answer alone. Decided synchronously, so nothing can renew between the check
+ * and the seal.
  */
+function fenceWrite(c: Context, next: Next, recovery: FencedRecovery, log: Logger) {
+  if (!recovery.holdsInMemory()) return next();
+  c.header("Cache-Control", "no-store");
+  try {
+    assertFirstFiscalRequest(c);
+  } catch (error) {
+    return boundary(c, log, async () => {
+      throw error;
+    });
+  }
+  if (recovery.runningInMemory()) {
+    // `liveness()` answers a running recovery before its first await, so these are this moment's.
+    const activity = recovery.liveness();
+    return boundary(c, log, async () => {
+      const { startedAt, lastActiveAt } = (await activity)!;
+      throw new AppError("setup.recovery_in_progress", { startedAt, lastActiveAt });
+    });
+  }
+  recovery.sealLapsed();
+  return next();
+}
+
+/** Every write of the repair page except the recovery's own goes through `fenceWrite`. */
 export function mountFirstSetupResolutionFence(
   app: Hono,
-  recovery: Pick<
-    ReturnType<typeof import("./first-setup-backup-recovery.js").createFirstSetupBackupRecovery>,
-    "runningInMemory" | "holdsInMemory" | "sealLapsed" | "liveness"
-  >,
+  recovery: FencedRecovery,
   log: Logger,
 ): void {
   const root = "/setup-api/first-setup/resolution";
   app.use(`${root}/*`, (c, next) => {
-    if (
-      c.req.method !== "POST" ||
-      c.req.path.startsWith(`${root}/backup/`) ||
-      !recovery.holdsInMemory()
-    )
-      return next();
-    c.header("Cache-Control", "no-store");
-    try {
-      assertFirstFiscalRequest(c);
-    } catch (error) {
-      return boundary(c, log, async () => {
-        throw error;
-      });
-    }
-    if (recovery.runningInMemory()) {
-      // `liveness()` answers a running recovery before its first await, so these are this moment's.
-      const activity = recovery.liveness();
-      return boundary(c, log, async () => {
-        const { startedAt, lastActiveAt } = (await activity)!;
-        throw new AppError("setup.recovery_in_progress", { startedAt, lastActiveAt });
-      });
-    }
-    recovery.sealLapsed();
-    return next();
+    if (c.req.method !== "POST" || c.req.path.startsWith(`${root}/backup/`)) return next();
+    return fenceWrite(c, next, recovery, log);
   });
+}
+
+/** The repair page's writes outside `/resolution/` that change the attempt. */
+const FIRST_SETUP_OWNER_WRITES: readonly string[] = [
+  "/setup-api/first-setup/resume",
+  "/setup-api/first-setup/abandon",
+];
+
+/** `fenceWrite` for the repair page's writes outside `/resolution/`, for a box serving them. */
+export function firstSetupOwnerWriteFence(
+  recovery: FencedRecovery,
+  log: Logger,
+): MiddlewareHandler {
+  return (c, next) =>
+    c.req.method === "POST" && FIRST_SETUP_OWNER_WRITES.includes(c.req.path)
+      ? fenceWrite(c, next, recovery, log)
+      : next();
 }
 
 export function mountFirstSetupResolutionApi(

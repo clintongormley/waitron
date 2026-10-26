@@ -1112,3 +1112,51 @@ it.each([
     expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
   },
 );
+
+it("with the database present, a tab that signed in before reads the activity on reload and, while another device runs a recovery, offers no password field, no Continue and no Abandon, and sends nothing", async () => {
+  sessionStorage.setItem(
+    FIRST_SETUP_SESSION_KEY,
+    JSON.stringify({
+      version: 1,
+      clientClaimNonce: "N".repeat(43),
+      claimPending: false,
+      owner: {
+        attemptId: initial.attemptId,
+        revision: 1,
+        ownerGeneration: 1,
+        capability: "A".repeat(43),
+      },
+    }),
+  );
+  const startedAt = new Date(2026, 9, 25, 14, 35).toISOString();
+  const lastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/backup/activity"))
+        return Response.json({ activity: { state: "running", startedAt, lastActiveAt } });
+    },
+  });
+  await expect
+    .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
+    .not.toBeNull();
+  const t = initialOwnerStrings.en;
+  expect(
+    [...q(app, "recovery-running").querySelectorAll("p")].map((p) => p.textContent!.trim()),
+  ).toEqual([
+    t.recoveryRunning.replace("{started}", "25 Oct 2026, 14:35"),
+    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:41"),
+    t.recoveryRunningNext,
+  ]);
+  const shadow = app.shadowRoot!;
+  for (const name of [
+    "resume-password",
+    "resume",
+    "abandon-attempt",
+    "start-again",
+    "recover-backup",
+    "finish-setup",
+  ])
+    expect(shadow.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(requests.filter((r) => r.body !== undefined)).toEqual([]);
+  expect(requests.some((r) => r.path.endsWith("/first-setup/resume"))).toBe(false);
+});

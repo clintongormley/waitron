@@ -604,6 +604,8 @@ export class SetupApp extends LitElement {
     this.firstBackupPhase = undefined;
     this.#stopActivityWatch();
     this.firstActivity = undefined;
+    this.firstActivityUnreadable = false;
+    this.firstRecoveryUnsettled = false;
     this.#firstPasswordScope?.dispose();
     this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
@@ -1043,8 +1045,12 @@ export class SetupApp extends LitElement {
   /** With the database present, a damaged recovery-key record: the password step, then the warning. */
   @state() private firstDamagedRecord?: "password" | "confirm";
   @state() private firstBackupPhase?: BackupRepairStatus["phase"];
-  /** Read with every signed-out inspection, so nothing is offered while a recovery runs elsewhere. */
+  /** Read before anything is offered on this page, so nothing is offered while a recovery runs elsewhere. */
   @state() private firstActivity?: BackupRepairActivity | null;
+  /** The last activity read failed, so the page offers nothing until a read succeeds. */
+  @state() private firstActivityUnreadable = false;
+  /** The ask's summary named a recovery that the backup status did not report as stopped. */
+  @state() private firstRecoveryUnsettled = false;
   #activityTimer?: ReturnType<typeof setInterval>;
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
@@ -1079,10 +1085,26 @@ export class SetupApp extends LitElement {
         this.firstInspection = inspection;
         this.#watchActivity();
       }
+    } else if (session.state) {
+      const activity = await this.#readActivity();
+      if (this.isConnected && this.#firstSession === session) {
+        this.firstActivity = activity;
+        this.#watchActivity();
+      }
     }
     return session;
   }
   async #readActivity(): Promise<BackupRepairActivity | null> {
+    try {
+      const activity = await this.#readActivityAnswer();
+      this.firstActivityUnreadable = false;
+      return activity;
+    } catch (error) {
+      this.firstActivityUnreadable = true;
+      throw error;
+    }
+  }
+  async #readActivityAnswer(): Promise<BackupRepairActivity | null> {
     const { activity } = (await this.api.firstSetupBackupActivity()) ?? {};
     if (activity === null) return null;
     if (
@@ -1098,7 +1120,7 @@ export class SetupApp extends LitElement {
     if (this.firstActivity?.state !== "running") return;
     const timer = setInterval(() => {
       // A failed read keeps the running view; the next tick asks again.
-      void this.#readActivity().then(
+      void this.#readActivityAnswer().then(
         (activity) => {
           if (this.#activityTimer !== timer) return;
           this.firstActivity = activity;
@@ -1200,6 +1222,7 @@ export class SetupApp extends LitElement {
     this.firstOwnerError = undefined;
     this.firstMissingSummary = undefined;
     this.firstBackupPhase = undefined;
+    this.firstRecoveryUnsettled = false;
     // After Cancel at the damaged-record warning the page is drawn signed out, so its Continue
     // signs in as that page does, and keeps Start again until the password is accepted.
     const damagedSignedOut = this.firstDamagedRecord === "confirm" && !this.firstRestartConfirm;
@@ -1226,26 +1249,7 @@ export class SetupApp extends LitElement {
       this.#acceptFirstIdentity();
       if (this.firstInspection?.database === "missing" && session.state!.status !== "complete") {
         this.screen = "first-owner";
-        const summary = await session.missingDatabaseSummary();
-        if (!current()) return;
-        const backup = await this.api.firstSetupBackupStatus();
-        if (!current()) return;
-        if (
-          backup?.proofRequired !== true ||
-          ![
-            "unstarted",
-            "prepared",
-            "placement-started",
-            "restored",
-            "selected",
-            "uncertain",
-          ].includes(backup.phase)
-        )
-          throw { code: "setup.attempt_invalid" };
-        if (summary.recovery !== undefined && !STOPPED_BACKUP_PHASES.includes(backup.phase))
-          throw { code: "setup.attempt_invalid" };
-        this.firstMissingSummary = summary;
-        this.firstBackupPhase = backup.phase;
+        await this.#readMissingAsk(session, current);
         return;
       }
       if (
@@ -1266,6 +1270,40 @@ export class SetupApp extends LitElement {
         if (damagedSignedOut && this.#firstSession?.recoveryRequired)
           await this.#signOutFirstSession();
       }
+    } finally {
+      if (current()) this.firstOwnerBusy = false;
+    }
+  }
+  async #readMissingAsk(session: FirstSetupSession, current: () => boolean): Promise<void> {
+    const summary = await session.missingDatabaseSummary();
+    if (!current()) return;
+    const backup = await this.api.firstSetupBackupStatus();
+    if (!current()) return;
+    if (
+      backup?.proofRequired !== true ||
+      !["unstarted", "prepared", "placement-started", "restored", "selected", "uncertain"].includes(
+        backup.phase,
+      )
+    )
+      throw { code: "setup.attempt_invalid" };
+    // Two reads that disagree: another device can move the recovery between them.
+    this.firstRecoveryUnsettled =
+      summary.recovery !== undefined && !STOPPED_BACKUP_PHASES.includes(backup.phase);
+    if (this.firstRecoveryUnsettled) return;
+    this.firstMissingSummary = summary;
+    this.firstBackupPhase = backup.phase;
+  }
+  async #checkMissingAskAgain(): Promise<void> {
+    const session = this.#firstSession;
+    if (this.firstOwnerBusy || !session) return;
+    this.firstOwnerBusy = true;
+    this.firstOwnerError = undefined;
+    const generation = ++this.#firstGeneration;
+    const current = () => this.isConnected && generation === this.#firstGeneration;
+    try {
+      await this.#readMissingAsk(session, current);
+    } catch (error) {
+      if (current()) this.firstOwnerError = this.#describeFirstError(error);
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
@@ -1410,8 +1448,10 @@ export class SetupApp extends LitElement {
       this.firstMissingSummary = undefined;
       this.firstDamagedRecord = undefined;
       this.firstBackupPhase = undefined;
+      this.firstRecoveryUnsettled = false;
       this.#stopActivityWatch();
       this.firstActivity = undefined;
+      this.firstActivityUnreadable = false;
       await this.#openFirstSession();
       const session = this.#firstSession!;
       let inspect = false;
@@ -1428,6 +1468,11 @@ export class SetupApp extends LitElement {
         if (!this.isConnected || generation !== this.#firstGeneration) return;
         this.firstActivity = activity;
         this.firstInspection = inspection;
+        this.#watchActivity();
+      } else if (session.state) {
+        const activity = await this.#readActivity();
+        if (!this.isConnected || generation !== this.#firstGeneration) return;
+        this.firstActivity = activity;
         this.#watchActivity();
       }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
@@ -2244,6 +2289,7 @@ export class SetupApp extends LitElement {
     // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
     const recoveryStarted = this.firstBackupPhase !== "unstarted";
     const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
+    const offersNothing = running !== undefined || this.firstActivityUnreadable;
     const stopped = ask?.recovery;
     const offersStartAgain = !recoveryStarted || stopped !== undefined;
     const lastActive = (at: string, source?: "memory" | "saved-step") =>
@@ -2367,7 +2413,7 @@ export class SetupApp extends LitElement {
       }
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
       ${
-        damaged === "password" && !this.firstOwnerBusy
+        damaged === "password" && !this.firstOwnerBusy && !offersNothing
           ? html`<p data-test="damaged-record-password">${t.damagedRecordPassword}</p>
               ${passwordField}
               <wt-form-actions
@@ -2391,7 +2437,7 @@ export class SetupApp extends LitElement {
       }
       ${
         ((!terminal && !authenticatedMissing) || this.#firstSession?.recoveryRequired) &&
-        !running &&
+        !offersNothing &&
         (damaged === undefined || warningClosed) &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
@@ -2411,7 +2457,7 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${
-        inspection && !this.firstRestarting && !running
+        inspection && !this.firstRestarting && !offersNothing
           ? damaged && !warningClosed
             ? damaged === "confirm"
               ? startAgainConfirm
@@ -2458,6 +2504,18 @@ export class SetupApp extends LitElement {
                 ${!canRestart && !authenticatedMissing ? html`<p>${t.startUnavailable}</p>` : nothing}
                 ${startAgainConfirm} ${recoverBackup}
                 ${
+                  authenticatedMissing && this.firstRecoveryUnsettled
+                    ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>
+                        <wt-button
+                          data-test="check-again"
+                          variant="secondary"
+                          ?disabled=${this.firstOwnerBusy}
+                          @click=${() => void this.#checkMissingAskAgain()}
+                          >${t.checkAgain}</wt-button
+                        >`
+                    : nothing
+                }
+                ${
                   authenticatedMissing && !this.firstOwnerBusy && this.firstOwnerError
                     ? html`<wt-form-actions .error=${this.firstOwnerError()}></wt-form-actions>`
                     : nothing
@@ -2470,6 +2528,7 @@ export class SetupApp extends LitElement {
       ${
         state &&
         !missing &&
+        !offersNothing &&
         ["activation-started", "committed", "publication"].includes(state.status) &&
         !this.#firstSession?.recoveryRequired
           ? html`<p>${t.finishHelp}</p>
@@ -2483,12 +2542,13 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${
-        !terminal && !inspection && !state && !this.firstOwnerBusy
+        ((!terminal && !inspection && !state) || this.firstActivityUnreadable) &&
+        !this.firstOwnerBusy
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
           : nothing
       }
-      ${!missing && !damaged && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
-      ${!missing && !damaged && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
+      ${!missing && !damaged && !offersNothing && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
+      ${!missing && !damaged && !offersNothing && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
       <wt-button
         data-test="reconnect-first"
         variant="secondary"
