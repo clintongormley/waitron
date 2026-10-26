@@ -652,20 +652,26 @@ export function mountSetupFirstFiscalApi(
 /**
  * While a backup recovery runs, every write of the repair page except the recovery's own is refused;
  * otherwise a lapsed recovery is sealed before the write goes on. A request the routes would refuse
- * for its origin or content type is refused here first, so it seals nothing. Decided synchronously,
+ * for its origin or content type is refused here first, so it seals nothing. With no recovery held
+ * in memory there is nothing to refuse or seal, and the routes answer alone. Decided synchronously,
  * so nothing can renew between the check and the seal.
  */
 export function mountFirstSetupResolutionFence(
   app: Hono,
   recovery: Pick<
     ReturnType<typeof import("./first-setup-backup-recovery.js").createFirstSetupBackupRecovery>,
-    "runningInMemory" | "sealLapsed" | "liveness"
+    "runningInMemory" | "holdsInMemory" | "sealLapsed" | "liveness"
   >,
   log: Logger,
 ): void {
   const root = "/setup-api/first-setup/resolution";
   app.use(`${root}/*`, (c, next) => {
-    if (c.req.method !== "POST" || c.req.path.startsWith(`${root}/backup/`)) return next();
+    if (
+      c.req.method !== "POST" ||
+      c.req.path.startsWith(`${root}/backup/`) ||
+      !recovery.holdsInMemory()
+    )
+      return next();
     c.header("Cache-Control", "no-store");
     try {
       assertFirstFiscalRequest(c);

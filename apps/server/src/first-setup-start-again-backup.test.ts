@@ -31,8 +31,10 @@ import {
   fixture,
   preparedRepair,
   recovery,
+  repairFixture,
   selectedRepair,
 } from "../test/first-setup-backup-recovery-fixture.js";
+import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import {
@@ -198,6 +200,7 @@ it("a recovery that failed at placement-started is discarded by Start again at o
   vi.mocked(f.workspace.append).mockRestore();
   await f.service.dispose();
   expect((await f.workspace.read()).at(-1)!.phase).toBe("placement-started");
+  await writeFile(join(f.record.target.target.venueDir, "venue.db"), "placed");
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await confirmedStartAgain(f, recovery(f.options));
   await expect(startAgain.run()).resolves.toBeUndefined();
@@ -928,6 +931,33 @@ it("a stopped recovery beside trading.env: Start again refuses setup.not_ready, 
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
 });
 
+it("a stopped recovery with the database present: no summary showed it, so Start again refuses setup.not_ready, and nothing changes", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const { owner, ids } = await signedIn(f.host);
+  const inspect = f.host.resolution.inspectFirstSetupResolution;
+  const resolution = {
+    ...f.host.resolution,
+    inspectFirstSetupResolution: async () => ({
+      ...(await inspect()),
+      database: "no-venue-rows" as const,
+      emptyDatabase: true,
+    }),
+  };
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: { ...f.host, resolution },
+    backupRecovery: f.service,
+  });
+  const last = (await f.workspace.readChain()).at(-1)!;
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(actions.startAgainFirstSetup({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await expectNothingWritten(f, before);
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+});
+
 it("a summary read before the recovery stopped, naming no recovery, refuses Start again setup.attempt_conflict, and nothing is written", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
@@ -962,6 +992,24 @@ it("an abandoned journal whose emptying was refused is finished by the next Star
   await expectDiscarded(f, { lastName: f.selected.identity, shown: first.shown, lock });
 });
 
+it("finishing an abandoned journal whose note is gone raises the note again with the attempt's own floor", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const planted = join(f.record.target.target.stateDir, "planted");
+  await symlink("/nonexistent", planted);
+  await expect((await startAgainOver(f, f.service)).run()).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await unlink(planted);
+  await unlink(join(f.roots.stateDir, "first-setup-start-again.json"));
+  clock.advance(1);
+  const second = await startAgainOver(f, f.service);
+  expect(second.shown).not.toHaveProperty("recovery");
+  expect(second.shown.lastName).not.toBeNull();
+  await expect(second.run()).resolves.toBeUndefined();
+  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(second.shown.lastName);
+});
+
 it("after Start again discards a recovery, the backup entry answers absent and the box answers fresh setup", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
@@ -984,18 +1032,42 @@ it("Start again never lowers a note that already holds a later name than the rec
   expect(await readStartAgainNote(f.roots.stateDir)).toEqual(raised);
 });
 
-it("an open started while Start again runs its checks refuses it setup.recovery_in_progress before the recovery is sealed or discarded", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
+it("an open started while Start again runs its checks refuses it setup.recovery_in_progress before anything is written, and the open resumes the recovery", async () => {
+  // Signed in before the recovery opened, so the recovery's own resume stays valid.
+  const f = await repairFixture();
+  const { owner } = await signedIn(f.host);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const request = {
+    ...f.request,
+    observation: {
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision,
+      ownerGeneration: inspected.ownerGeneration,
+    },
+  };
+  const service = recovery(f.options);
+  const session = await service.open(request, client);
+  const selected = (await recoverySelectPastWaits(
+    clock,
+    { prepare: (proposal, onBox) => service.prepare(session.sessionId, proposal, onBox) },
+    client,
+  )) as { status: string };
+  expect(selected.status).toBe("selected");
+  await service.close(session.sessionId);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
   let opening: Promise<unknown> | undefined;
   const capture = f.host.resolution.captureFirstSetupOriginals;
   const resolution = {
     ...f.host.resolution,
     captureFirstSetupOriginals: () => {
       // The open counts as running from its call, before it reaches the turn Start again holds.
-      opening ??= f.service.open(f.request, client).then(
-        () => undefined,
+      opening ??= service.open({ ...request, recoveryId: session.recoveryId }, client).then(
+        (resumed) => resumed,
         (error: unknown) => error,
       );
       return capture();
@@ -1004,13 +1076,14 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: { ...f.host, resolution },
-    backupRecovery: f.service,
+    backupRecovery: service,
   });
   const shown = await createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
-    backupRecovery: f.service,
+    backupRecovery: service,
   }).startAgainSummary({ ...ids, owner });
+  expect(shown.recovery).toBeDefined();
   const last = (await f.workspace.readChain()).at(-1)!;
   await expect(
     actions.startAgainFirstSetup({
@@ -1022,7 +1095,11 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
   expect(opening).toBeDefined();
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   await access(join(f.roots.stateDir, "first-setup.json"));
-  await opening;
+  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
+  await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
+    { code: "ENOENT" },
+  );
+  expect(await opening).toMatchObject({ recoveryId: session.recoveryId });
 });
 
 it("a recovery stopped during its settle wait, whose picks name nothing, is shown with no name, and Start again takes only the attempt's floor", async () => {

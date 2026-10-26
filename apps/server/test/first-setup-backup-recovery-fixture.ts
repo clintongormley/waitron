@@ -103,7 +103,7 @@ export async function fixture(readableAttempt = false) {
   return { ...f, host, workspace, options, request };
 }
 
-async function repairFixture() {
+export async function repairFixture() {
   const f = await fixture(true);
   const entries = unpackArchive(decryptArtifact(f.request.source.artifact, f.restore.recoveryKey));
   entries.push({

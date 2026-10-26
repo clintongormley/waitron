@@ -372,6 +372,8 @@ export function createFirstSetupResolutionActions(
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();
+          // Only the missing-database ask shows a recovery, so only its confirmation can discard one.
+          if (found?.kind === "stopped" && !missing) unavailable();
           const box = await assertStartAgainAllowedOnDisk(roots, discarding);
           const markerFor = async (markerOptions: { discarding?: string }) => {
             const marker = await startAgainMarkerFor(
@@ -404,41 +406,45 @@ export function createFirstSetupResolutionActions(
             (floor === null || found.floor.floorMs > floor.floorMs)
           )
             floor = found.floor;
-          // An unemptied journal's confirmation record and note were written by the Start again
-          // that abandoned it.
+          // An unemptied journal's confirmation record was written by the Start again that
+          // abandoned it.
           const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
-          if (missing) {
-            const shown = summaryOf(state, gathered, recovery);
-            if (
-              confirmation?.nothingFiledOrSold !== true ||
-              !isDeepStrictEqual(confirmation.shown, shown)
-            )
-              conflict();
+          const shown = missing ? summaryOf(state, gathered, recovery) : undefined;
+          if (
+            missing &&
+            (confirmation?.nothingFiledOrSold !== true ||
+              !isDeepStrictEqual(confirmation.shown, shown))
+          )
+            conflict();
+          const backup = options.backupRecovery;
+          const refuseRunning = async (): Promise<never> => {
+            const activity = await backup!.liveness();
+            if (activity === null) unavailable();
+            throw inProgress(activity);
+          };
+          // No await between this check and the first write: the record and the note change the
+          // recovery's originals, so an open that began during the checks could never resume it.
+          if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
+          if (missing && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
-            if (!finishing)
-              await writeStartAgainConfirmation(box.stateDir, {
-                at: new Date().toISOString(),
-                attemptId: state.frozen.attemptId,
-                database: "missing",
-                administrator: { displayName, email },
-                ownerGeneration: state.ownerGeneration,
-                shown,
-              });
+            await writeStartAgainConfirmation(box.stateDir, {
+              at: new Date().toISOString(),
+              attemptId: state.frozen.attemptId,
+              database: "missing",
+              administrator: { displayName, email },
+              ownerGeneration: state.ownerGeneration,
+              shown: shown!,
+            });
           }
-          if (floor !== null && !finishing) await raiseStartAgainNote(box.stateDir, floor);
+          if (floor !== null) await raiseStartAgainNote(box.stateDir, floor);
           if (found !== undefined) {
-            const backup = options.backupRecovery!;
-            // No await between this check and the seal: an open that began during the checks
+            // No await between this check and the seal: an open that began during the writes
             // above would otherwise be sealed while it runs.
-            if (backup.runningInMemory()) {
-              const activity = await backup.liveness();
-              if (activity === null) unavailable();
-              throw inProgress(activity);
-            }
-            backup.sealLapsed();
+            if (backup!.runningInMemory()) await refuseRunning();
+            backup!.sealLapsed();
             const { recordedAt } = await createFirstSetupBackupWorkspace(box).abandon(found.id);
-            await backup.discardInTurn(found.id, recordedAt);
+            await backup!.discardInTurn(found.id, recordedAt);
             await emptyAbandonedBackupRecovery(box, found.id);
             await assertStartAgainAllowedOnDisk(box);
             marker = await markerFor({});

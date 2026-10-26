@@ -1542,6 +1542,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       tombstone = { recoveryId, at: discardedAt };
     },
     runningInMemory,
+    /** When false, `sealLapsed` does nothing and `runningInMemory` answers false. */
+    holdsInMemory: (): boolean =>
+      runningInMemory() || active !== undefined || pendingCloudId !== undefined,
     async liveness(): Promise<BackupRepairActivity | null> {
       if (runningInMemory()) {
         const entry = [...steps][0]?.entry ?? (leased(active) ? active : undefined);
