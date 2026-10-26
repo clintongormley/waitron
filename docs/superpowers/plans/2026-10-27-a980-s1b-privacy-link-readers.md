@@ -78,7 +78,7 @@ huella test (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`) and
    point becomes a short S1b2 entry), the overview (an S1b2 row and build-order step), a dated
    pointer in the design.
 
-After Part 1 the privacy email is shown nowhere on the box (decision 5); the invoice email is as on
+After Part 1 nothing but the Privacy card shows the privacy email (decision 5); the invoice email is as on
 `main`.
 
 **Part 2 — S1b2:**
@@ -109,7 +109,7 @@ review E1) found the same readers and no others.
 | Invoice customer download's README | `boot.ts:2144` → `invoice-customer-data-api.ts:29`, `:125` | `personal-data-readme.ts:100` | 1, Task 3 |
 | Invoice email | nothing today | `invoice-email.ts:55` (the text body) | 2, Tasks 7 and 8 |
 
-The tests and docs that set or name the environment setting: `apps/server/src/config.test.ts:258-266`,
+The tests and docs that set or name the environment setting: `apps/server/src/config.test.ts:258-265`,
 `:296-310`, `:312-319`; `apps/server/README.md:492-495`; `docs/backlog/data-protection.md:209`,
 `:318`, `:327`; and dated plan and design records under `docs/superpowers/`. No deploy file,
 compose file or `.env.example` names it (`git grep -n PRIVACY -- deploy apps/server/.env.example`
@@ -238,11 +238,12 @@ card holds `https://barejemplo.es/privacidad` and `privacidad@barejemplo.es`. De
    Example: Jordi downloads his data; the README ends "Contact Bar Ejemplo S.L. to ask. Its privacy
    notice: https://barejemplo.es/privacidad" (`apps/server/src/i18n/personal-data-readme.ts:149-150`).
 
-5. **After S1b the privacy email is shown nowhere; S1b2 puts it in the invoice email.** The design's
+5. **After S1b only the Privacy card shows the privacy email; S1b2 puts it in the invoice email.** The design's
    invoice customers' notice names both values (design `:334-336`). For the account emails, the
    sign-in page, Account settings and the READMEs the design says "the link" (`:294`, `:715`) and
    nothing about the email, so they show the page alone, as today. So between S1b and S1b2 the
-   Privacy card saves an email that nothing on the box shows, and the guide says so (Task 5). The
+   Privacy card saves an email that only the card itself shows (`GET /management-api/venue-privacy`,
+   `apps/server/src/location-settings-api.ts:303-313`), and the guide says so (Task 5). The
    way to show it sooner is the README's last line naming it: "Contact Bar Ejemplo S.L. at
    privacidad@barejemplo.es to ask." (owner decision A). Part 2: the invoice email shows both.
    Example: after S1b, Ana's invitation and Jordi's download show the page and not the email.
@@ -345,10 +346,12 @@ card holds `https://barejemplo.es/privacidad` and `privacidad@barejemplo.es`. De
     owner decision A of the S1a plan made the card the source, and no venue is live (home
     CLAUDE.md §3, "No backwards-compatibility … until Waitron is in production"). A server that
     still has the variable starts and ignores it, with no warning: `loadConfig` names no variable
-    it does not read (a grep of `apps/server/src/*.ts` for a check of unknown `WAITRON_` names
-    finds none), and a value the old check refused, such as `restaurant.example/privacy`, no longer
+    it does not read (`git grep -n 'startsWith("WAITRON_\|/\^WAITRON_\|"WAITRON_" *+\|WAITRON_\[' -- 'apps/server/src/*.ts' ':!*.test.ts'`
+    printed nothing, exit 1, for the plan's author and the round-3 check alike), and a value the old check refused, such as `restaurant.example/privacy`, no longer
     stops the start. Task 4 pins that with a case. On a box, compose passes only the variables it
-    lists (`deploy/compose.yml:21-41`), and nothing setup writes holds this one; a hand-edited
+    lists (`deploy/compose.yml:21-41`), and nothing setup writes holds this one: `writeTradingEnv`
+    writes only the node, location, environment, onboarding intent and account key
+    (`apps/server/src/trading-config.ts:31-44`). A hand-edited
     `trading.env` could, because `loadBoxEnv` merges every key of `secrets.env`, `trading.env` and
     `backup.env` (`apps/server/src/box-env.ts:7`, `:10-33`), and is ignored the same way.
     Example: a developer's shell still exports `WAITRON_PRIVACY_NOTICE_URL=https://old.example/p`;
@@ -357,7 +360,7 @@ card holds `https://barejemplo.es/privacidad` and `privacidad@barejemplo.es`. De
 12. **The guide says where Waitron shows the two values.** Part 1 changes three sections, in English
     and Spanish (Task 5):
     - `privacy-settings` loses "Nothing else on the box shows them yet." and says where the page
-      shows and that the email is not shown anywhere yet;
+      shows and that, for now, only the Privacy card shows the email;
     - `staff-notice` says Waitron shows the page from the Privacy card in staff emails, on the
       sign-in page and in Account settings, and its placeholder "_the address of your staff privacy
       page_" (`en/data-protection.md:65-66`; «_dirección de la página de privacidad del
@@ -393,10 +396,10 @@ card holds `https://barejemplo.es/privacidad` and `privacidad@barejemplo.es`. De
 
 **Part 1 — S1b:**
 
-- **A. After S1b the privacy email is shown nowhere** (decision 5). Worked example: Bar Ejemplo saves
+- **A. After S1b only the Privacy card shows the privacy email** (decision 5). Worked example: Bar Ejemplo saves
   `privacidad@barejemplo.es`; Ana's invitation, the sign-in page, Account settings and Jordi's
-  download show `https://barejemplo.es/privacidad` and not the email, and the guide says the email
-  is not shown yet. S1b2 puts it in the invoice email. Alternative, to show it sooner: the README's
+  download show `https://barejemplo.es/privacidad` and not the email, and the guide says only the
+  Privacy card shows it for now. S1b2 puts it in the invoice email. Alternative, to show it sooner: the README's
   last line names it, "Contact Bar Ejemplo S.L. at privacidad@barejemplo.es to ask."
 - **B. A server that still has `WAITRON_PRIVACY_NOTICE_URL` set ignores it silently** (decision 11).
   Worked example: the variable holds `https://old.example/p`; nothing warns, and the readers show
@@ -482,7 +485,7 @@ assertion stays; only where the value comes from changes):
 
 | Where | Case |
 | --- | --- |
-| `apps/server/src/config.test.ts:258-266` | "accepts an absolute privacy notice URL for account surfaces" |
+| `apps/server/src/config.test.ts:258-265` | "accepts an absolute privacy notice URL for account surfaces" |
 | `apps/server/src/config.test.ts:296-310` | "refuses the privacy notice address %j, which is not an http(s) URL" (3 rows) |
 | `apps/server/src/config.test.ts:312-319` | "accepts a plain http privacy notice URL" |
 
@@ -558,8 +561,10 @@ new `describe`).
      emails, so build **four** invitees (`[0, 1, 2, 3]`, where the clock case builds three at
      `:134-149`): the cooldown is 60 seconds per person and per address
      (`apps/server/src/account-rate-limit.ts:14-28`, used at `management-api.ts:769-770`), the case
-     freezes `Date` (`:116-117`), and a fourth reset to an address with no person, or to one
-     already used, answers 202 and sends nothing (`management-api.ts:942-944`). The profile path
+     freezes `Date` (`:116-117`), and a fourth reset answers 202 and sends nothing either way: to
+     an address already used, because the cooldown refuses it (`management-api.ts:942-944`); to an
+     address with no person, because `issueRecovery` answers `null` and nothing is delivered
+     (`:947-954`). The profile path
      changes to four different addresses (`profile-${index}`). In one running server: send with
      the card empty (no `Privacy notice`); `PUT /management-api/venue-privacy` with
      `{ privacyNoticeUrl: "https://example.com/privacy" }` (200), send (the text holds
@@ -623,7 +628,7 @@ at `:28` goes; the first turn at `:73-83`, `readTenant` at `:76`; `:97`),
 `apps/server/src/invoice-customer-data-api.export.test.ts` (one new case).
 
 1. Tests first: the two changed cases ("Changed test checks"); in
-   `invoice-customer-data-api.export.test.ts`, one case using the file's `ask` (`:145`): with the
+   `invoice-customer-data-api.export.test.ts`, one case using the file's `ask` (defined at `:42`): with the
    page stored, the README's last line ends with it; with it cleared, no README line holds
    `https://`. That file shares one database across its cases (`resetPerTest: false`, `:25-26`), so
    the case clears the page in `onTestFinished`, which also runs when the case fails. Run
@@ -647,11 +652,12 @@ at `:28` goes; the first turn at `:73-83`, `readTenant` at `:76`; `:97`),
 Files: `apps/server/src/config.ts` (`:98-99`, `:503-511`, `:548`), `apps/server/src/config.test.ts`,
 `apps/server/README.md` (`:492-495`).
 
-1. Test first, in `config.test.ts` where the deleted cases were: "ignores a leftover
-   WAITRON_PRIVACY_NOTICE_URL, even one the old check refused": `loadConfig` with
+1. Test first, in `config.test.ts` where the deleted cases were: "ignores the retired privacy
+   notice variable, even a value the old check refused" (the title names no variable, so step 5's
+   grep finds only the input line): `loadConfig` with
    `WAITRON_PRIVACY_NOTICE_URL: "restaurant.example/privacy"` returns, and the config has no
    `privacyNoticeUrl` property. Run
-   `pnpm --filter @waitron/server exec vitest run src/config.test.ts -t "leftover"`; watch it fail
+   `pnpm --filter @waitron/server exec vitest run src/config.test.ts -t "retired privacy notice"`; watch it fail
    with `server.config_invalid`.
 2. Delete the five cases of "Changed test checks" and the config's field, check and return line.
    After Tasks 1 to 3 nothing reads the field; `git grep -n "config.privacyNoticeUrl" -- apps`
@@ -666,7 +672,10 @@ Files: `apps/server/src/config.ts` (`:98-99`, `:503-511`, `:548`), `apps/server/
    `pnpm exec vitest run scripts/deploy-image-env.test.ts`.
 5. `pnpm --filter @waitron/server typecheck`; then
    `git grep -n PRIVACY_NOTICE -- apps deploy scripts packages`: expected, exactly one line, the new
-   case's in `apps/server/src/config.test.ts`.
+   case's input, `apps/server/src/config.test.ts:<n>: … WAITRON_PRIVACY_NOTICE_URL: "restaurant.example/privacy" …`
+   (on `4960efd7b` the same grep prints six lines: `config.ts:503`, `:508` and `config.test.ts:260`,
+   `:301`, `:306`, `:314`). A second line, such as the title or an assertion naming the variable,
+   is a STOP: reword it, do not widen the expectation.
 
 ## Task 5: the guide, the conventions, the backlog, the overview and the design
 
@@ -692,8 +701,13 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
      «Nada más en el equipo los muestra todavía.», `es/:173-174`) with: "Waitron shows the page in
      the emails it sends staff, on the sign-in page, in **Account settings** and in the
      `README.txt` of a data download. A change shows in the next email or download; a page already
-     open shows it once reloaded, except **Account settings**, which follows it at once. Waitron
-     does not show the privacy email anywhere yet."
+     open shows it once reloaded, except **Account settings**, which follows it at once. For now,
+     only the **Privacy** card shows the privacy email." In Spanish: «Waitron muestra la página en
+     los correos que envía al personal, en la página de inicio de sesión, en **Configuración de la
+     cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en el siguiente
+     correo o la siguiente descarga; una página ya abierta lo muestra al volver a cargarla, salvo
+     **Configuración de la cuenta**, que lo sigue al momento. Por ahora, solo la tarjeta
+     **Privacidad** muestra el correo de privacidad.»
    - `invoice-notice` does not change: "Waitron does not show this notice anywhere yet." stays, in
      both languages, until S1b2.
    Each sentence's source, checked when written and again by the reviewer:
@@ -704,7 +718,7 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
    | the sign-in page and Account settings | Task 2's route case; `login-screen.ts:1142-1150`; `profile-screen.ts:1071-1083` |
    | the README of a data download | Task 3's cases, both downloads |
    | next email or download; open pages after reload; Account settings at once | decision 1; decision 10; Task 2's live row |
-   | the privacy email is shown nowhere yet | decision 5; Task 0 step 2 and step 5 (the invoice email untouched) |
+   | only the Privacy card shows the privacy email | decision 5; the card's read, `location-settings-api.ts:303-313`; Task 0 steps 2 and 5 (the invoice email untouched) |
    | Waitron holds one page | `packages/db/src/schema/tenants.ts:47` |
 
    Then `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` (its `<em>` check
@@ -714,7 +728,7 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
    housekeeping write" (`:2630`):
    - in the S2a1 paragraph (`:2656-2668`) "and the venue's name for the README" becomes "and the
      venue's name and privacy page for the README (the page since A980 S1b)"; in the S3 paragraph
-     (`:2670-2680`) the first turn's reads gain the same;
+     (`:2670-2678`) the first turn's reads gain the same;
    - a new paragraph after them (review M2): "Since A980 S1b, `GET /management-api/google/config`
      reads the venue's privacy page through `withTransaction`, so on a full disk with a change
      waiting it answers 507 and the sign-in page shows neither the Google button nor the link. This
@@ -726,11 +740,13 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
      with the privacy email and page from the Privacy card. Planned as Part 2 of the
      [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md); waits for the
      owner's ruling on whether a change to an invoice email's body lands without them. Until it
-     lands, nothing on the box shows the privacy email.";
+     lands, nothing but the Privacy card shows the privacy email.";
    - in the S10 follow-ups (`:267-268`), delete "merge `boot.ts`'s two identical `sendAccountEmail`
      wrappers (older than S10)" (Task 1 merged them);
    - in `## Decisions and deliberate limits` (`:273`), an "A980 S1b" entry with Part 1's owner
-     decisions A and B and their defaults, one line each, as the S1a2 entry (`:329-342`) has them.
+     decisions A and B and their defaults, one line each, as the S1a2 entry (`:329-343`) has them.
+     Word A without the words "invoice email" (for example "S1b2 is to show it to invoice
+     customers"), so step 7's diff check finds only the S1b2 entry.
 4. `docs/backlog.md:6180-6183`: the list of built slices gains "S1b (the staff emails, the sign-in
    page, Account settings and both downloads read the saved privacy page, and the environment
    setting is gone)", and S1a's clause "which nothing else shows yet" goes.
@@ -742,20 +758,44 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
      **No.** | set in Part 2 | S1b, and the owner's ruling on landing invoice-email changes | No,
      after S1b";
    - build order step 4 (`:212`) gains ", then **S1b2** once the owner has ruled";
+   - the "S1b." note (`:193-202`), whose `:199-200` says S1b adds the invoice notice to
+     `invoice-email.ts`, gains a dated line after `:202`: "_2026-10-27: the invoice notice moved to
+     S1b2 ([the S1b plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._";
    - the header paragraph (`:3-73`) gains a dated S1b line in the same form as S1a2's.
 6. The design: §5.2 item 2's dated line (`:679-680`) gains "; S1b built 2026-10-27, the invoice
    email follows in S1b2". §4.1's invoice customers' text gets no line until S1b2.
-7. `git grep -n -i "nothing else on the box shows\|nada más en el equipo los muestra"` over `apps`
-   and `docs`: expected, only dated records under `docs/superpowers`. And
-   `git grep -n -i "does not show this notice anywhere\|no muestra este aviso en ningún"`: expected,
-   `apps/server/src/guide/en/data-protection.md:84` and `es/data-protection.md:90` (still there),
-   plus records under `docs/superpowers`. And
+7. The guide's sentences are wrapped across lines (the Spanish «Nada más en el equipo los» ends
+   `es/:173` and «muestra todavía.» is `es/:174`), so a line grep cannot see them. Read each guide
+   file joined into one line:
+
+   ```sh
+   for f in apps/server/src/guide/en/data-protection.md apps/server/src/guide/es/data-protection.md; do
+     printf '%s ' "$f"; tr '\n' ' ' < "$f" | /usr/bin/grep -o -i \
+       "nothing else on the box shows them yet\|nada más en el equipo los muestra todavía" | wc -l
+   done
+   ```
+
+   Expected after this task: `0` for each file. Control, run by the plan's author on `4960efd7b`:
+   `1` for each. The same loop with
+   `"does not show this notice anywhere yet\|todavía no muestra este aviso en ningún sitio"`:
+   expected `1` for each file after this task (the sentence stays until S1b2); the author's run on
+   `4960efd7b` printed `1` for each. And the same loop with
+   `"only the \*\*privacy\*\* card shows the privacy email\|solo la tarjeta \*\*privacidad\*\* muestra el correo de privacidad"`
+   (the new sentence, both languages, matched case-blind): expected `1` for each file; on
+   `4960efd7b` it printed `0` for each, and piped the two sentences of Task 5 step 1 it printed
+   each one back, so it tells the two states apart. For the
+   backlog, `git grep -n -i "nothing else on the box shows" -- docs/backlog`: expected nothing (it was
+   the S1b point's `:228`). And
    `git diff main...HEAD -- apps/server/README.md apps/server/src/guide docs/backlog.md docs/backlog | /usr/bin/grep -i '^+.*invoice e\?mail'`:
    expected, only the new S1b2 entry's lines in `docs/backlog/data-protection.md` (a plain `git grep` would also print the guide's existing "An invoice emailed to the
    wrong address" paragraph, `en/data-protection.md:505`, which is why this reads the diff).
-8. `git grep -n PRIVACY_NOTICE -- . ':!docs/superpowers'`: expected, exactly the new
-   `config.test.ts` case, the backlog's A980 S1a entry's A and F (`docs/backlog/data-protection.md`,
-   at `:318` and `:327` before this task's edits), and the new A980 S1b entry's B.
+8. `git grep -n PRIVACY_NOTICE -- . ':!docs/superpowers'`: expected, exactly four lines: the
+   `config.test.ts` input line of Task 4 step 5; in `docs/backlog/data-protection.md`, the A980 S1a
+   entry's A and F lines (`:318` and `:327` before this task's edits); and the one line of the new
+   A980 S1b entry's B that names the variable. The S1b point's `:209` is gone with the point, and
+   the README names no variable (Task 4 step 3). On `4960efd7b` the same grep prints ten lines:
+   `apps/server/README.md:492`, the six of Task 4 step 5, and `docs/backlog/data-protection.md:209`,
+   `:318`, `:327`.
 
 ## Task 6: LOOK (the driver)
 
@@ -898,8 +938,10 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
      English. With neither set, the email carries no notice. The email reaches the customer after
      staff have taken the details, so show the notice where they take them too, for example on a
      sign beside the till."
-   - `privacy-settings`: "Waitron does not show the privacy email anywhere yet." (Part 1) becomes
-     "Waitron shows both in the email that sends a full invoice."
+   - `privacy-settings`: "For now, only the **Privacy** card shows the privacy email." (Part 1)
+     becomes "Waitron also shows both in the email that sends a full invoice."; in Spanish «Por
+     ahora, solo la tarjeta **Privacidad** muestra el correo de privacidad.» becomes «Waitron
+     también muestra los dos en el correo que envía una factura completa.»
    Sources:
 
    | Sentence | Source |
@@ -920,12 +962,17 @@ Files: `apps/server/src/guide/en/data-protection.md`, `apps/server/src/guide/es/
    invoice customers' privacy notice)".
 5. The overview: the S1b2 row gains "built ([plan](2026-10-27-a980-s1b-privacy-link-readers.md),
    Part 2)", and a dated line in the header.
-6. The design, under §4.1's invoice customers' text (after `:342`): "_<date>: S1b2 sends the help
+6. The design, under §4.1's invoice customers' text (after `:343`, where its paragraph ends): "_<date>: S1b2 sends the help
    guide's wording in the invoice email body, the Tax Agency part only for an invoice with a tax
    record, in Spanish unless the invoice is in English
    ([the S1b plan](../plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._"
-7. `git grep -n -i "does not show this notice anywhere\|no muestra este aviso en ningún\|privacy email anywhere yet"`
-   over `apps` and `docs`: expected, only dated records under `docs/superpowers`.
+7. Part 1's joined-file loop (Task 5 step 7) with
+   `"does not show this notice anywhere yet\|todavía no muestra este aviso en ningún sitio"` and
+   again with
+   `"only the \*\*privacy\*\* card shows the privacy email\|solo la tarjeta \*\*privacidad\*\* muestra el correo de privacidad"`:
+   expected `0` for each file both times (Part 1's state, the control, printed `1` each); and
+   `git grep -n -i "S1b2" -- docs/backlog/data-protection.md`: expected, only the new A980 S1b2
+   decisions entry.
 
 ## Task 10: LOOK for S1b2 (the driver)
 
@@ -998,3 +1045,29 @@ are Part 2's Tasks 7 and 8; Tasks 9 and 10 are new. Every finding of
 - **M13** (a failed read stops the invoice email): decision 15 and owner decision F.
 - **M14** (decisions entry lists A to E): Part 1's entry holds A and B; S1b2's holds C to F
   (Task 5 step 3, Task 9 step 3).
+
+Round 3 (`~/waitron-campaign-b/a980-s1b-plan-round3.md`, 0 Critical, 2 Important, 5 Minor), every
+finding taken:
+
+- **I-1** (Task 4's grep would print the new case's title as well as its input): the case's title
+  names no variable ("ignores the retired privacy notice variable, even a value the old check
+  refused"), so Task 4 step 5 expects exactly the input line and says a second line is a STOP; it
+  also records the grep's six lines on `4960efd7b`. Task 5 step 8 now lists its four expected lines
+  exactly, with the ten it prints on `4960efd7b`.
+- **I-2** (the Spanish grep could not see a sentence wrapped across lines; no Spanish half in Part
+  2): Task 5 step 7 and Task 9 step 7 read each guide file joined into one line (`tr '\n' ' '`),
+  with controls run on `4960efd7b` (`1` for each file for the old sentences, `0` for the new one,
+  and the new pattern matching both new sentences when piped in); Task 5 step 1 writes out the
+  Spanish `privacy-settings` text, and Task 9 step 1 gives the Spanish replacement too.
+- **m1** ("shown nowhere"): decision 5, owner decision A, the guide sentence, its source row and the
+  S1b2 backlog entry now say only the Privacy card shows the email, citing the card's read,
+  `location-settings-api.ts:303-313`.
+- **m2** (the S1b decisions entry's A would match the diff check): Task 5 step 3 says to word A
+  without "invoice email", so step 7's diff check finds only the S1b2 entry.
+- **m3** (the overview's "S1b." note goes stale): Task 5 step 5 adds a dated line after its `:202`.
+- **m4** (line numbers): the reset route's two 202 cases (`management-api.ts:942-944` and
+  `:947-954`); conventions-data.md's S3 paragraph `:2670-2678`; `ask` defined at
+  `invoice-customer-data-api.export.test.ts:42`; the design's §4.1 paragraph ends at `:343`; the
+  S1a2 decisions entry `:329-343`; the first deleted config case `config.test.ts:258-265`.
+- **m5** (decision 11's receipts): `writeTradingEnv` (`trading-config.ts:31-44`) for what setup
+  writes, and the grep for an unknown-variable check written out, with its result.
