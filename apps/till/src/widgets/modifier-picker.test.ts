@@ -122,7 +122,7 @@ const base = {
 };
 
 // A plain product with nothing offered — the common tap, which must ring up straight away.
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   ...base,
   id: "cafe",
   name: "Café",
@@ -337,10 +337,10 @@ describe("till-modifier-picker", () => {
 
   it("rings up a product that offers nothing straight away, opening no picker", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountBrowser(cafe, store);
+    const { el } = await mountBrowser(coffee, store);
     tapTile(el, "Café");
     await el.updateComplete;
-    expect(store.lines).toEqual([{ product: cafe, quantity: "1" }]);
+    expect(store.lines).toEqual([{ product: coffee, quantity: "1" }]);
     expect(pickerOf(el)).toBeNull();
   });
 
@@ -736,7 +736,7 @@ describe("till-modifier-picker", () => {
       unitPrice,
       unitPriceDifference,
       available,
-      // Every selling value differs from the parent's (`cafe`'s), so a chosen product that kept
+      // Every selling value differs from the parent's (`coffee`'s), so a chosen product that kept
       // the parent's fails the pick tests below.
       unit: {
         staffName: "Staff unit",
@@ -759,7 +759,7 @@ describe("till-modifier-picker", () => {
     });
     // The parent's price is 4.00: "125 ml" is dearer, "Wine 100" cheaper, "Wine 150" the same.
     const wineProduct: TillProduct = {
-      ...cafe,
+      ...coffee,
       name: "Vino",
       unitPrice: "4.00",
       menuItemId: "offer-wine",
@@ -873,7 +873,7 @@ describe("till-modifier-picker", () => {
 
     it("mutes an unavailable variant's name", async () => {
       const wineVariant = (id: string, available: boolean) => ({
-        ...sellingValuesOf(cafe),
+        ...sellingValuesOf(coffee),
         id,
         name: id,
         unitPrice: "4.00",
@@ -882,7 +882,7 @@ describe("till-modifier-picker", () => {
       });
       const { picker: winePicker } = await openPicker(
         {
-          ...cafe,
+          ...coffee,
           name: "Vino",
           variants: [wineVariant("Sold out", false), wineVariant("Open", true)],
         },

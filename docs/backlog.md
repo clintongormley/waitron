@@ -5344,6 +5344,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Investigate the stopped-printer polling test's CI failure.**
+  `apps/print-agent/src/ipp-print.test.ts:910` observed five polls before the printer query where
+  it requires more than five. The cause is unknown; reproduce it before changing the check.
+  [Failed main run](https://github.com/clintongormley/waitron/actions/runs/40287944882).
+
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
@@ -5825,8 +5830,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining private-name work includes till app and screen suites, menu, modifier and payment
-  widget suites, the server's till API tests and shared station fixtures. Audit file names too.
+  Remaining private-name work includes till app and screen suites, payment widget suites, the
+  server's till API tests and shared station fixtures. Audit file names too.
   Fixture text belongs to A976. The owner-held core-comment PR remains separate. See the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
