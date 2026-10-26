@@ -84,3 +84,117 @@ describe("createLogger level filtering", () => {
     expect(LOG_LEVELS.warn).toBeLessThan(LOG_LEVELS.error);
   });
 });
+
+describe("createLogger personal data", () => {
+  const at = "2026-07-26T09:14:02.000Z";
+  function writeLine(fields: Record<string, unknown>, event = "x"): string {
+    const lines: string[] = [];
+    createLogger(
+      (line) => lines.push(line),
+      () => AT,
+    )("warn", event, fields);
+    return lines[0]!;
+  }
+
+  it.each([
+    "email",
+    "displayName",
+    "ownerName",
+    "editorName",
+    "holderPersonName",
+    "person",
+    "supplierTaxId",
+    "legalName",
+    "taxId",
+    "idEmisorFactura",
+    "todayName",
+  ])("masks %s", (key) => {
+    const line = writeLine({ [key]: "Marta Soler" });
+    expect(JSON.parse(line)).toEqual({ [key]: "***", at, level: "warn", event: "x" });
+    expect(line).not.toContain("Marta Soler");
+  });
+
+  it("masks a listed key nested in objects and arrays", () => {
+    const line = writeLine({
+      edit: { editorName: "Marta Soler", editorVersion: 3 },
+      conflicts: [{ editorName: "Jordi Puig" }],
+    });
+    expect(JSON.parse(line)).toEqual({
+      edit: { editorName: "***", editorVersion: 3 },
+      conflicts: [{ editorName: "***" }],
+      at,
+      level: "warn",
+      event: "x",
+    });
+    expect(line).not.toContain("Marta Soler");
+    expect(line).not.toContain("Jordi Puig");
+  });
+
+  it("keeps null under a listed key and the names of things", () => {
+    const fields = {
+      ownerName: null,
+      name: "Patio",
+      label: "T4",
+      holderDeviceName: "Bar till",
+      locationName: "Bar del Port",
+      personId: "p1",
+      ownerId: "p2",
+    };
+    expect(JSON.parse(writeLine(fields))).toEqual({ ...fields, at, level: "warn", event: "x" });
+  });
+
+  it("masks a non-string value under a listed key", () => {
+    expect(JSON.parse(writeLine({ person: { id: "p1" } }))).toEqual({
+      person: "***",
+      at,
+      level: "warn",
+      event: "x",
+    });
+  });
+
+  it("never masks at, level or event, even an event named email", () => {
+    expect(JSON.parse(writeLine({}, "email"))).toEqual({ at, level: "warn", event: "email" });
+  });
+
+  it("masks a merchant's name under merchants and only there", () => {
+    const first = writeLine({
+      merchants: [
+        { code: "MC1", name: "Jordi Puig Ferrer" },
+        { code: "MC2", name: null },
+      ],
+      name: "Patio",
+      other: { merchants: "Jordi Puig Ferrer" },
+    });
+    expect(JSON.parse(first)).toEqual({
+      merchants: [
+        { code: "MC1", name: "***" },
+        { code: "MC2", name: null },
+      ],
+      name: "Patio",
+      other: { merchants: "Jordi Puig Ferrer" },
+      at,
+      level: "warn",
+      event: "x",
+    });
+
+    const second = writeLine({
+      merchants: [{ code: "MC1", name: "Jordi Puig Ferrer", email: "jordi.puig@example.test" }],
+    });
+    expect(JSON.parse(second)).toEqual({
+      merchants: [{ code: "MC1", name: "***", email: "***" }],
+      at,
+      level: "warn",
+      event: "x",
+    });
+    expect(second).not.toContain("Jordi Puig");
+  });
+
+  it("keeps a merchants element that is not an object as it is", () => {
+    expect(JSON.parse(writeLine({ merchants: ["Jordi Puig Ferrer", null, ["MC1"]] }))).toEqual({
+      merchants: ["Jordi Puig Ferrer", null, ["MC1"]],
+      at,
+      level: "warn",
+      event: "x",
+    });
+  });
+});

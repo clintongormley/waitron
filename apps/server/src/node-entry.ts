@@ -59,6 +59,7 @@ import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
+import { maskPersonalData } from "./log-personal-data.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
@@ -171,7 +172,7 @@ async function persistState(
 /** An `AppError`'s params as one line, or a placeholder when they will not serialise. */
 function paramsLine(params: unknown): string {
   try {
-    return `params: ${JSON.stringify(params)}`;
+    return `params: ${JSON.stringify(params, maskPersonalData)}`;
   } catch {
     return "params: (not serialisable)";
   }
