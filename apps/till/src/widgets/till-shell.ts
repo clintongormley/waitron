@@ -825,8 +825,10 @@ export class TillShell extends LitElement {
     return html`${items["find-bill"]}${items.expo}${items.station}${items.schedule}${items.profile}${items.zones}${items.equipment}${items["transfer-count"]}${items["transfer-button"]}`;
   }
 
-  /** The name and its menu on the bar. A handheld's Theme and Log out are in More instead. */
+  /** The name and its menu on the bar. A handheld's Theme and Log out are in More instead, so
+   * without the clock its menu would be empty and the name is drawn alone. */
   #operatorMenu(): TemplateResult {
+    if (this.formFactor !== "till" && !this.clockAvailable) return this.#operatorName();
     return html`<wt-row-actions
       class="operator-menu"
       align="end"

@@ -130,7 +130,7 @@ describe("till-shell's language chooser in More, beside the Help switch", () => 
       await expectTappable(switchOf(el));
       await expectTappable(moreOf(el)!);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-      // Picking is the same at every width; one width per language keeps the run short.
+      // One width per language keeps the run short.
       if (width !== 320) return;
       const picked: string[] = [];
       el.addEventListener("wt-locale-selected", (event) =>

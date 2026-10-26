@@ -97,7 +97,7 @@ describe("till-shell's Help switch", () => {
       expect(help!.previousElementSibling).toBeNull();
       expect(help!.nextElementSibling!.classList.contains("operator-menu")).toBe(true);
     } else {
-      expect(help!.previousElementSibling?.classList.contains("operator-menu") ?? false).toBe(
+      expect(help!.previousElementSibling?.classList.contains("operator") ?? false).toBe(
         width === 1280,
       );
       expect(help!.nextElementSibling!.getAttribute("data-test")).toBe("more-menu");
@@ -121,7 +121,7 @@ describe("till-shell's Help switch", () => {
     const { el } = await mountWidget<TillShell>("till-shell", handheld);
     await settle(el);
     const session = [...el.shadowRoot!.querySelector(".session")!.children].map((child) =>
-      child.classList.contains("operator-menu")
+      child.classList.contains("operator")
         ? "operator"
         : child.localName === "wt-help-switch"
           ? "help"

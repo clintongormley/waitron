@@ -391,7 +391,7 @@ describe("till-shell", () => {
     expect(el.shadowRoot!.querySelector("wt-theme-chooser")).toBeNull();
   });
 
-  it("keeps the theme chooser out of the bar, and puts Theme in More's Settings group after the languages, not in the name's menu", async () => {
+  it("keeps the theme chooser out of the bar, and puts Theme in More's Settings group after the languages, with no name menu on a handheld without the clock", async () => {
     await atViewport(1280, async () => {
       const before = currentLocale();
       setLocale("en-GB");
@@ -404,8 +404,7 @@ describe("till-shell", () => {
         });
         expect(el.shadowRoot!.querySelector("header wt-language-chooser")).not.toBeNull();
         expect(el.shadowRoot!.querySelector("wt-theme-chooser")).toBeNull();
-        const name = el.shadowRoot!.querySelector<HTMLElement>("wt-row-actions.operator-menu")!;
-        expect([...name.children].filter((c) => c.slot !== "trigger")).toEqual([]);
+        expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).toBeNull();
         const menu = menuOf(el)! as HTMLElement;
         expect(
           menu.querySelector(".settings-group > [data-test=theme-choices]")!.previousElementSibling!
@@ -964,6 +963,50 @@ describe("a handheld's More", () => {
     }).finally(() => setLocale(locale));
   });
 
+  it.each([
+    ["as text without", {}, []],
+    [
+      "as a menu of its actions with",
+      { clockAvailable: true, clockState: working.clockState },
+      ["Start break", "Clock out", "My hours", "Fix my hours"],
+    ],
+  ] as const)(
+    "draws a handheld's name on the bar %s the clock, and the same group in a narrow More",
+    async (_, clock, actions) => {
+      const locale = currentLocale();
+      setLocale("en-GB");
+      try {
+        await atViewport(ROOMY_WIDTH, async () => {
+          const { el } = await mountWidget<TillShell>("till-shell", { ...full, ...clock });
+          const session = el.shadowRoot!.querySelector("header .session")!;
+          const menu = session.querySelector(":scope > wt-row-actions.operator-menu");
+          if (actions.length === 0) {
+            expect(menu).toBeNull();
+            expect(session.querySelector(":scope > .operator")!.textContent).toContain(
+              "Ana Fernández",
+            );
+          } else {
+            expect(
+              [...menu!.querySelectorAll("wt-button")].map((b) => b.textContent!.trim()),
+            ).toEqual(actions);
+            expect(session.querySelector(":scope > .operator")).toBeNull();
+          }
+        });
+        await atViewport(390, async () => {
+          const { el } = await mountWidget<TillShell>("till-shell", { ...full, ...clock });
+          expect(contents(menuOf(el)!).slice(0, actions.length + 3)).toEqual([
+            "name",
+            ...actions,
+            "—",
+            "Pass",
+          ]);
+        });
+      } finally {
+        setLocale(locale);
+      }
+    },
+  );
+
   it("a till's More and name menu are unchanged", async () => {
     const locale = currentLocale();
     setLocale("en-GB");
@@ -981,6 +1024,13 @@ describe("a handheld's More", () => {
         "Fix my hours",
       ]);
       expect(name.querySelector('[data-test="theme-choices"]')).not.toBeNull();
+      expect(contents(name)).toEqual([
+        "Start break",
+        "Clock out",
+        "My hours",
+        "Fix my hours",
+        "theme",
+      ]);
       expect(moreItems(el)).toEqual([
         "find-bill",
         "schedule",
@@ -990,6 +1040,17 @@ describe("a handheld's More", () => {
         "logout",
       ]);
     }).finally(() => setLocale(locale));
+  });
+
+  it("a till without the clock keeps its name menu, holding Theme alone", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      ...full,
+      formFactor: "till",
+      activeScreen: "counter",
+    });
+    const name = el.shadowRoot!.querySelector("header .session > wt-row-actions.operator-menu")!;
+    expect(name).not.toBeNull();
+    expect(contents(name)).toEqual(["theme"]);
   });
 });
 
@@ -1210,8 +1271,8 @@ describe("till-shell at phone width", () => {
       const fired: string[] = [];
       for (const [, type] of phoneMenuActions) el.addEventListener(type, () => fired.push(type));
       const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
-      // Tab stops into More for each action: they rise in More's order. The languages and Theme
-      // are stops of their own before Log out.
+      // Tab stops into More for each action: they rise in More's order, and before Log out come
+      // the two languages and the three Theme choices.
       const steps: number[] = [];
       for (const [selector] of phoneMenuActions) {
         tabsEls[tabsEls.length - 1]!.focus();
@@ -1235,7 +1296,7 @@ describe("till-shell at phone width", () => {
       }
       expect(fired).toEqual(phoneMenuActions.map(([, type]) => type));
       expect(steps.slice(0, -1)).toEqual(steps.slice(0, -1).map((_, index) => index + 1));
-      expect(steps.at(-1)).toBeGreaterThan(steps.at(-2)! + 1);
+      expect(steps.at(-1)).toBe(steps.at(-2)! + 2 + 3 + 1);
     });
   });
 
@@ -1369,7 +1430,7 @@ describe("till-shell at phone width", () => {
         "theme-choices",
         "logout",
       ]);
-      expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("header .session > .operator")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       const session = el.shadowRoot!.querySelector("header .session")!;
       expect(
@@ -1387,7 +1448,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "department-transfers",
         "data-open-transfers",
-        "operator-menu",
+        "operator",
         "help-switch",
         "more-menu",
       ]);
@@ -1740,9 +1801,8 @@ describe("till-shell above phone width", () => {
             "theme-choices",
             "logout",
           ]);
-          const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
-          expect(nameMenu.querySelector(".logout")).toBeNull();
           const inMore = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
+          expect([...el.shadowRoot!.querySelectorAll(".logout")]).toEqual([inMore]);
           expect(inMore.textContent!.trim()).toBe(label);
           await userEvent.click(triggerOf(el));
           await expect
