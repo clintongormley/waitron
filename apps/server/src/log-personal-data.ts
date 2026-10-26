@@ -1,4 +1,4 @@
-// Details that name a person, masked in every log line; scripts/personal-log-params.test.ts guards the list.
+// Details that name a person, masked in every line the server's logger writes; scripts/personal-log-params.test.ts guards the list.
 export const PERSONAL_LOG_KEYS: ReadonlySet<string> = new Set([
   "email",
   "displayName",

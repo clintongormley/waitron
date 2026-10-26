@@ -86,7 +86,7 @@ describe("createLogger level filtering", () => {
 });
 
 describe("createLogger personal data", () => {
-  const at = "2026-07-26T09:14:02.000Z";
+  const at = AT.toISOString();
   function writeLine(fields: Record<string, unknown>, event = "x"): string {
     const lines: string[] = [];
     createLogger(

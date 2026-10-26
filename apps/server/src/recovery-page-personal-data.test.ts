@@ -247,7 +247,7 @@ interface Relay {
   close: () => Promise<void>;
 }
 
-/** An SMTP relay that refuses the recipient at `RCPT` or the message after `DATA`, echoing the address in its reply as Postfix does. */
+/** An SMTP relay that refuses the recipient at `RCPT` or the message after `DATA`, echoing the address in its reply. */
 async function refusingRelay(at: "rcpt" | "data"): Promise<Relay> {
   const recipients: string[] = [];
   const server = createServer((socket: Socket) => {
@@ -862,7 +862,6 @@ describe("the recovery page, the log file and stdout carry no person's details",
         expect(outcome).toBe("rejected");
         expect(reported).toBe("rejected");
         expect(reasons).toEqual([["email.test_refused"]]);
-        expect(JSON.stringify([outcome, reasons])).not.toContain(JORDI_EMAIL);
         expect(relay.recipients).toEqual([JORDI_EMAIL, JORDI_EMAIL]);
         expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
       } finally {
