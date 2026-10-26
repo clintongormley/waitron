@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
 #   sudo bash waitron.sh install            # published main image
 #   sudo bash waitron.sh install <ref>      # build and run a branch or commit on the box
-#   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate and the start-again note)
+#   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate and the start-again files)
 #   sudo bash waitron.sh --reset install [ref]   # build or pull the ref's images, wipe the box, start it on them
 #
 # Operating this file is deploy/README.md. It replaces the old install.sh / prepare.sh /
