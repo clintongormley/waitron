@@ -32,6 +32,7 @@ export interface ModuleOperationHost {
     /** Pending work survives ownership recovery; selected material keeps the owner-scoped key. */
     readonly continuationKey?: string;
     readonly localHistory: unknown;
+    readonly floors: readonly unknown[];
   }>;
   withPreparationState?<T>(
     binding: OperationBinding,
@@ -45,13 +46,6 @@ export interface ModuleOperationHost {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** Set only by a test; production leaves it unset and modules read the real clocks. */
   readonly testClock?: { wall(): number; monotonic(): number };
-  readRetiredSetup?(module: string): Promise<
-    readonly {
-      readonly context: InitialSetupContext;
-      readonly input: unknown;
-      readonly publicEvidence: readonly unknown[];
-    }[]
-  >;
   readPublicEvidence(
     binding: OperationBinding,
   ): Promise<{ trust: unknown; current: unknown } | undefined>;

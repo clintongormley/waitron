@@ -74,6 +74,16 @@ export interface InitialSetupContribution {
     readonly keys: readonly string[];
     readonly positions: readonly { namespace: string; position: number }[];
   };
+  startAgainFloor?(input: {
+    readonly attempts: readonly {
+      readonly context: InitialSetupContext;
+      readonly input: unknown;
+    }[];
+    readonly preparations: readonly unknown[];
+    readonly publicEvidence: readonly unknown[];
+    /** A backup recovery journal's recorded inputs, passed untouched; one the module cannot read names nothing. */
+    readonly recoveryInputs?: readonly unknown[];
+  }): { readonly floorMs: number; readonly lastName: string } | null;
 
   assignmentPositions?(
     context: InitialSetupContext,

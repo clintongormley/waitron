@@ -40,6 +40,7 @@ describe("createHourTestClock", () => {
           context: {} as never,
           contextKey: "hour-test-clock",
           localHistory: { reference: "empty", complete: true, records: [] },
+          floors: [],
         }),
         withPreparationState: (_binding, run) =>
           run({ value: null, history: [], replace: async () => {} }),

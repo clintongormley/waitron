@@ -28,6 +28,11 @@ declare module "@waitron/shared" {
     "setup.attempt_conflict": Record<string, never>;
     "setup.attempt_uncertain": Record<string, never>;
     "setup.attempt_invalid": Record<string, never>;
+    "setup.start_again_incomplete": Record<string, never>;
+    "setup.workspace_unsupported": Record<string, never>;
+    /** `discardedAt` is the abandoned record's `recordedAt`. */
+    "setup.recovery_discarded": { discardedAt: string };
+    "setup.recovery_in_progress": { startedAt: string; lastActiveAt: string };
     "provisioning.initial_input_invalid": Record<string, never>;
     "provisioning.initial_operator_required": Record<string, never>;
     /** Nothing supplied the venue directory: no `--venue-dir`, `WAITRON_VENUE_DIR` unset or empty,

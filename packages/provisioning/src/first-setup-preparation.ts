@@ -4,7 +4,6 @@ import {
   enabledModules,
   initialSetupFor,
   type ModuleConfig,
-  type ModuleOperationHost,
   type OperationClient,
   type WaitronModule,
 } from "@waitron/module";
@@ -25,7 +24,6 @@ interface Options {
   owner: ReturnType<typeof createFirstSetupOwner>;
   store: FirstSetupStore;
   coordinator: FirstSetupCoordinator;
-  readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   resumeBinding?(
     owner: FirstSetupOwnerAttempt,
     module: string,
@@ -82,32 +80,12 @@ export function createFirstSetupPreparation(options: Options) {
     const context = firstSetupModuleContext(state, name);
     const candidates = new Set(seat.assignmentKeys?.(context, input) ?? []);
     const positions = seat.assignmentPositions?.(context, input) ?? [];
-    const retired = (await options.readRetiredSetup?.(name)) ?? [];
-    const retainedFacts = retired.flatMap((entry) =>
-      entry.publicEvidence
-        .map((value) => seat.retainedAssignments?.(value))
-        .filter((value) => value !== undefined),
-    );
-    for (const facts of retainedFacts) {
-      if (
-        facts.keys.some((key) => candidates.has(key)) ||
-        facts.positions.some((floor) =>
-          positions.some(
-            (value) => value.namespace === floor.namespace && value.position <= floor.position,
-          ),
-        )
-      )
-        conflict();
-    }
-    for (const old of [
-      ...state.previous
-        .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === name))
-        .map((attempt) => ({
-          context: firstSetupModuleContext(attempt, name),
-          input: attempt.inputs[name],
-        })),
-      ...retired,
-    ]) {
+    for (const old of state.previous
+      .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === name))
+      .map((attempt) => ({
+        context: firstSetupModuleContext(attempt, name),
+        input: attempt.inputs[name],
+      }))) {
       for (const key of seat.assignmentKeys?.(old.context, old.input) ?? [])
         if (candidates.has(key)) conflict();
       for (const floor of seat.assignmentPositions?.(old.context, old.input) ?? []) {

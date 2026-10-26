@@ -1,31 +1,28 @@
 import { randomBytes } from "node:crypto";
-import { readFile, writeFile, rm } from "node:fs/promises";
-import * as filesystem from "node:fs/promises";
+import { readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
-  inspectFirstSetupWorkspaceSelection,
+  readStartAgainNote,
   type RegisterAnswer,
+  type StartAgainSummary,
 } from "@waitron/provisioning";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import {
+  expectStartAgainDeleted,
+  startAgainNoteName,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 import { firstFiscalPublicDigest as publicDigest } from "./first-fiscal-delivery.js";
-import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
-import { startServerOrFirstSetupResolution } from "./node-entry.js";
-import { ensureBoxSecrets } from "./box-secrets.js";
-import { freePorts } from "./testing/free-ports.js";
-import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
+import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 
-vi.mock("node:fs/promises", { spy: true });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
@@ -81,39 +78,17 @@ async function fixture(workspace?: { root: string; stateDir: string; venueDir: s
   };
   return { ...f, host, actions, start, answer };
 }
+const nameOf = (f: { context: { request?: unknown } }) =>
+  (f.context.request as { identity: string }).identity;
 it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   "a never-activated box with a delivered PDF can start again after answering %s",
   async (status) => {
     const f = await fixture();
-    const before = await f.host.resolution.captureFirstSetupOriginals();
-    const binding = await f.start(f.answer(status));
-    expect(binding.venueDir).not.toBe(f.venueDir);
-    const records = createFirstSetupResolutionStore({
-      ...f,
-      coordinator: createFirstSetupCoordinator(),
-    });
-    const all = await records.read(binding.resolutionId);
-    expect(all.map((r) => [r.action, r.phase, r.authority, r.database])).toEqual([
-      ["retire", "prepared", "local-empty-unused-assignment", "empty-preactivation"],
-      ["retire", "applied", "local-empty-unused-assignment", "empty-preactivation"],
-      ["select-workspace", "prepared", "local-empty-unused-assignment", "empty-preactivation"],
-      ["select-workspace", "applied", "local-empty-unused-assignment", "empty-preactivation"],
-    ]);
-    expect(all[1]!.register).toEqual(f.answer(status));
-    expect(await records.readOriginals(binding.resolutionId)).toEqual(before.originals);
-    for (const original of before.originals) {
-      if (original.bytes === null || !/^(state|venue)\//.test(original.name)) continue;
-      const [root, ...parts] = original.name.split("/");
-      expect(await readFile(join(root === "state" ? f.stateDir : f.venueDir, ...parts))).toEqual(
-        original.bytes,
-      );
-    }
-    expect((await f.store.readForRepair())?.state.consumptionIntent).toBe(true);
-    await expect(readFile(join(binding.venueDir, "venue.db"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await f.start(f.answer(status));
+    await expectStartAgainDeleted(f);
+    expect(await startAgainNoteName(f)).toBe(nameOf(f));
     await expect(f.host.owner.status(f.ownerAttempt)).rejects.toMatchObject({
-      code: "setup.attempt_uncertain",
+      code: "setup.owner_required",
     });
   },
 );
@@ -123,12 +98,18 @@ it.each([
   { identity: "0CNNW", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
   { identity: "0CNQR", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
 ])(
-  "retiring the unused PDF excludes hour $identity across changed bases, spent=$spent",
+  "after Start again, a new attempt with changed bases in the same folders is refused hour $identity at or before the note and picks it after, spent=$spent",
   async ({ identity, issuedAt, spent }) => {
     const f = await fixture();
-    const binding = await f.start();
-    const next = createFirstSetupModuleHost({ ...binding, modules: f.modules, environment: {} });
-    await next.owner.claimFirstSetup(
+    await f.start();
+    const next = createFirstSetupModuleHost({
+      stateDir: f.stateDir,
+      venueDir: f.venueDir,
+      modules: f.modules,
+      environment: {},
+      database: () => suite.db,
+    });
+    const claim = await next.owner.claimFirstSetup(
       {
         environment: "production",
         request: {
@@ -140,28 +121,37 @@ it.each([
       },
       randomBytes(32).toString("base64url"),
     );
-    let state = (await next.store.read())!;
-    const context = firstSetupModuleContext(state, f.module);
-    const input = hourSetupInput(
-      {
-        binding: context.binding,
-        scope: { taxpayerNif: context.taxId, environment: context.environment },
-        bases: [...context.bases].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)),
-        identity,
-        issuedAt,
-      },
-      context.administratorId,
-    );
-    state = await next.store.update(state.frozen.attemptId, state.revision, {
-      kind: "candidates",
-      module: f.module,
-      request: { kind: "waitron-hour-setup", status: "selected", identity, input },
-    });
+    const owner = { ...claim.state, capability: claim.capability };
+    const note = (await readStartAgainNote(f.stateDir))!;
+    // Production setup settles 90 seconds and names the next whole minute, so two minutes early
+    // aims the selection at this row's own minute.
+    vi.setSystemTime(Date.parse(issuedAt) - 2 * 60_000);
+    const select = async () => {
+      const compared = (await next.preparation.prepare(
+        owner,
+        f.module,
+        { action: "compare-clocks", browser: null },
+        { onBox: true },
+      )) as { id: string };
+      return next.preparation.select(
+        owner,
+        f.module,
+        { comparisonId: compared.id },
+        await next.owner.reconfirm(owner, f.password, "block-use"),
+      );
+    };
     if (spent)
-      await expect(next.assertFreshAssignment(state, f.module)).rejects.toMatchObject({
-        code: "setup.attempt_conflict",
+      await expect(select()).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "minute_not_later", allowedFromMs: note.floorMs },
       });
-    else await expect(next.assertFreshAssignment(state, f.module)).resolves.toBeUndefined();
+    else {
+      await selectPastWaits(f.clock, select);
+      const state = (await next.store.read())!;
+      expect(
+        (firstSetupModuleContext(state, f.module).request as { identity: string }).identity,
+      ).toBe(identity);
+    }
   },
 );
 it.each(["activation-started", "uncertain"] as const)(
@@ -181,33 +171,38 @@ it("an unused PDF remains eligible after a publication binding was staged but ac
     kind: "publication-binding",
     digest: "a".repeat(64),
   });
-  await expect(f.start()).resolves.toMatchObject({ selectionGeneration: 1 });
+  await expect(f.start()).resolves.toBeUndefined();
+  expect(await startAgainNoteName(f)).toBe(nameOf(f));
 });
-it("successive never-activated PDFs retain every old block while allowing a third replacement", async () => {
+it("three never-activated PDFs start again in the same folders, and the note holds the latest name", async () => {
   const first = await fixture();
-  const secondBinding = await first.start();
-  const second = await fixture({
-    root: first.root,
-    venueDir: secondBinding.venueDir,
-    stateDir: secondBinding.stateDir,
-  });
-  const thirdBinding = await second.start();
-  const third = await fixture({
-    root: first.root,
-    venueDir: thirdBinding.venueDir,
-    stateDir: thirdBinding.stateDir,
-  });
-  await expect(third.start()).resolves.toMatchObject({
-    anchorStateDir: secondBinding.anchorStateDir,
-    selectionGeneration: 3,
-  });
+  const folders = { root: first.root, venueDir: first.venueDir, stateDir: first.stateDir };
+  await first.start();
+  const second = await fixture(folders);
+  await second.start();
+  const third = await fixture(folders);
+  await expect(third.start()).resolves.toBeUndefined();
+  await expectStartAgainDeleted(folders);
+  expect(await startAgainNoteName(folders)).toBe(nameOf(third));
 });
-it("an earlier abandoned activation with a missing database does not become empty because a replacement has an unused PDF", async () => {
+const CONFIRMATIONS = "first-setup-start-again-confirmations";
+async function abandonedWithMissingDatabase(
+  changes: readonly ("activation-started" | "committed")[],
+) {
   const f = await fixture();
-  const state = await f.store.update(f.ownerAttempt.attemptId, f.ownerAttempt.revision, {
-    kind: "activation-started",
-  });
-  await f.store.update(f.ownerAttempt.attemptId, state.revision, { kind: "abandoned" });
+  let revision = f.ownerAttempt.revision;
+  for (const kind of changes) {
+    const state = await f.store.update(
+      f.ownerAttempt.attemptId,
+      revision,
+      kind === "committed" ? { kind, result: {} } : { kind },
+    );
+    revision = state.revision;
+  }
+  await f.store.update(f.ownerAttempt.attemptId, revision, { kind: "abandoned" });
+  const name = (
+    firstSetupModuleContext((await f.store.read())!, f.module).request as { identity: string }
+  ).identity;
   await rm(join(f.venueDir, "venue.db"));
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const recovered = await f.host.owner.recoverFirstSetupOwner({
@@ -218,31 +213,118 @@ it("an earlier abandoned activation with a missing database does not become empt
     password: f.password,
   });
   const current = await f.host.resolution.inspectFirstSetupResolution();
-  const binding = await f.actions.startAgainFirstSetup({
+  const ids = {
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
-    register: f.answer(),
     owner: {
       attemptId: recovered.state.attemptId,
       revision: recovered.state.revision,
       ownerGeneration: recovered.state.ownerGeneration,
       capability: recovered.capability,
     },
+  };
+  const startAgain = (shown?: StartAgainSummary) =>
+    f.actions.startAgainFirstSetup({
+      ...ids,
+      register: f.answer(),
+      ...(shown === undefined
+        ? {}
+        : { confirmMissingDatabase: { nothingFiledOrSold: true as const, shown } }),
+    });
+  const attemptFiles = () =>
+    Promise.all(
+      [join(f.stateDir, "first-setup.json"), join(f.venueDir, "first-setup-claim.json")].map(
+        (path) => readFile(path),
+      ),
+    );
+  const confirmations = () =>
+    readdir(join(f.stateDir, CONFIRMATIONS)).catch((error: { code?: string }) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+  const summary = () => f.actions.startAgainSummary(ids);
+  return { f, name, ids, startAgain, summary, attemptFiles, confirmations };
+}
+it("an abandoned activation with a missing database starts again only once confirmed, and a later attempt cannot pick an earlier minute", async () => {
+  const { f, name, startAgain, summary, attemptFiles, confirmations } =
+    await abandonedWithMissingDatabase(["activation-started"]);
+  const before = await attemptFiles();
+  await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await attemptFiles()).toEqual(before);
+  expect(await confirmations()).toEqual([]);
+  const shown = await summary();
+  expect(shown).toEqual({ reached: "fiscal-started", lastName: name });
+  await expect(startAgain({ reached: "named", lastName: name })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
   });
-  const replacement = await fixture({
-    root: f.root,
-    venueDir: binding.venueDir,
-    stateDir: binding.stateDir,
+  expect(await attemptFiles()).toEqual(before);
+  expect(await confirmations()).toEqual([]);
+  await startAgain(shown);
+  const written = await confirmations();
+  expect(written).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, written[0]!), "utf8")),
+  ).toMatchObject({ database: "missing", shown });
+  const note = (await readStartAgainNote(f.stateDir))!;
+  const fresh = createFirstSetupModuleHost({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    modules: f.modules,
+    environment: {},
+    database: () => suite.db,
   });
-  await expect(replacement.start()).rejects.toMatchObject({ code: "setup.not_ready" });
+  const claim = await fresh.owner.claimFirstSetup(
+    {
+      environment: "production",
+      request: {
+        ...request,
+        seriesCode: "B",
+        fullSeriesCode: "BFF",
+        rectificativeSeriesCode: "BR",
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  const owner = { ...claim.state, capability: claim.capability };
+  vi.setSystemTime(note.floorMs - 10 * 60_000);
+  const compared = (await fresh.preparation.prepare(
+    owner,
+    f.module,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  )) as { id: string };
+  await expect(
+    fresh.preparation.select(
+      owner,
+      f.module,
+      { comparisonId: compared.id },
+      await fresh.owner.reconfirm(owner, f.password, "block-use"),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later" },
+  });
+  expect(await startAgainNoteName(f)).toBe(name);
+});
+it("an attempt committed before it was abandoned, with a missing database, is shown as fiscal-finished and starts again on confirmation", async () => {
+  const { f, name, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
+    "activation-started",
+    "committed",
+  ]);
+  const shown = await summary();
+  expect(shown).toEqual({ reached: "fiscal-finished", lastName: name });
+  await startAgain(shown);
+  const written = await confirmations();
+  expect(written).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, written[0]!), "utf8")),
+  ).toMatchObject({ database: "missing", shown });
 });
 it.each([
   "no-master",
   "key",
   "stage",
-  "manifest",
-  "binding",
   "modules",
   "missing-db",
   "unknown-input",
@@ -257,13 +339,6 @@ it.each([
     key.stageId = "11111111-1111-4111-8111-111111111111";
     await writeFile(path, JSON.stringify(key));
   }
-  if (why === "manifest") await writeFile(join(directory, `${f.module}.recovery.json`), "{}");
-  if (why === "binding") {
-    const path = join(directory, `${f.module}.recovery.json`);
-    const manifest = JSON.parse(await readFile(path, "utf8"));
-    manifest.bindingDigest = "0".repeat(64);
-    await writeFile(path, JSON.stringify(manifest));
-  }
   if (why === "modules") await writeFile(join(f.stateDir, "modules.json"), "{}");
   if (why === "missing-db") await rm(join(f.venueDir, "venue.db"));
   if (why === "unknown-input") {
@@ -273,12 +348,11 @@ it.each([
     await writeFile(path, JSON.stringify(state));
   }
   if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
+  const unchanged = await startAgainUnchanged(f);
   await expect(
     f.start(why === "no-master" ? { kind: "no-current-master", confirmed: true } : f.answer()),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  await unchanged();
 });
 it.each([
   [
@@ -311,7 +385,65 @@ it.each([
   await expect(f.start()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(before);
 });
-it("a rehashed document with an invalid module confirmation cannot authorise unused-PDF reset", async () => {
+it.each(["manifest", "binding"] as const)(
+  "a damaged recovery-key record (%s) asks for the setup password instead of starting again without one, and nothing changes",
+  async (why) => {
+    const f = await fixture();
+    await damageRecord(f, why);
+    const unchanged = await startAgainUnchanged(f);
+    await expect(f.start(f.answer())).rejects.toMatchObject({
+      code: "setup.start_again_password_required",
+    });
+    await unchanged();
+  },
+);
+async function damageRecord(
+  f: Awaited<ReturnType<typeof fixture>>,
+  why: "manifest" | "binding" | "rehashed",
+) {
+  const directory = join(f.stateDir, "first-fiscal-documents");
+  if (why === "manifest") await writeFile(join(directory, `${f.module}.recovery.json`), "{}");
+  if (why === "binding") {
+    const path = join(directory, `${f.module}.recovery.json`);
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.bindingDigest = "0".repeat(64);
+    await writeFile(path, JSON.stringify(manifest));
+  }
+  if (why === "rehashed") {
+    const manifestPath = join(directory, `${f.module}.recovery.json`);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(manifest.kind).toBe("recovery-key-delivery");
+    manifest.statement.nodeKey.name = "different-recovery-key";
+    manifest.bindingDigest = publicDigest(manifest.statement);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+  }
+}
+/** The setup password step, with the venue database left in place. */
+async function withPassword(f: Awaited<ReturnType<typeof fixture>>) {
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const recovered = await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: f.password,
+  });
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  return {
+    ids: {
+      inspectionId: current.inspectionId,
+      revision: current.revision!,
+      ownerGeneration: current.ownerGeneration!,
+    },
+    owner: {
+      attemptId: recovered.state.attemptId,
+      revision: recovered.state.revision,
+      ownerGeneration: recovered.state.ownerGeneration,
+      capability: recovered.capability,
+    },
+  };
+}
+it("a rehashed document with an invalid module confirmation cannot authorise unused-PDF reset without the setup password", async () => {
   const f = await fixture();
   const directory = join(f.stateDir, "first-fiscal-documents");
   const manifestPath = join(directory, `${f.module}.recovery.json`);
@@ -320,104 +452,124 @@ it("a rehashed document with an invalid module confirmation cannot authorise unu
   manifest.statement.nodeKey.name = "different-recovery-key";
   manifest.bindingDigest = publicDigest(manifest.statement);
   await writeFile(manifestPath, JSON.stringify(manifest));
-  await expect(f.start()).rejects.toMatchObject({ code: "setup.not_ready" });
+  const unchanged = await startAgainUnchanged(f);
+  await expect(f.start()).rejects.toMatchObject({ code: "setup.start_again_password_required" });
+  await unchanged();
 });
-it.each(["first-setup-workspace.json", "first-setup-selection.json"])(
-  "an interrupted unused-PDF selection at %s resumes the same binding without a password",
-  async (point) => {
+it.each(["manifest", "binding", "rehashed"] as const)(
+  "with the setup password and the warning shown, a damaged recovery-key record (%s) starts again, and the note keeps the attempt's own name",
+  async (why) => {
     const f = await fixture();
-    const actual = (await vi.importActual<typeof filesystem>("node:fs/promises")).rename;
-    let interrupted = false;
-    vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-      if (!interrupted && String(to).endsWith(point)) {
-        interrupted = true;
-        throw new Error("unused-PDF selection interruption");
-      }
-      await actual(from, to);
-    });
-    await expect(f.start()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-    expect(interrupted).toBe(true);
-    vi.mocked(filesystem.rename).mockRestore();
-    const pending = (await inspectFirstSetupWorkspaceSelection(f))!;
-    const fresh = createFirstSetupModuleHost({ ...f, environment: {} });
-    const actions = createFirstSetupResolutionActions({ ...f, host: fresh });
-    const observed = (await actions.inspectWorkspaceSelection())!;
+    await damageRecord(f, why);
+    const { ids, owner } = await withPassword(f);
     await expect(
-      actions.resumeWorkspaceSelection({
-        ...observed,
-        register: { kind: "no-current-master", confirmed: true },
+      f.actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        register: f.answer(),
+        recoveryRecordDamagedShown: true,
       }),
-    ).rejects.toMatchObject({ code: "setup.not_ready" });
-    await expect(
-      actions.resumeWorkspaceSelection({ ...observed, register: f.answer() }),
-    ).resolves.toEqual(pending.binding);
-    expect(await inspectFirstSetupWorkspaceSelection(f)).toBeNull();
+    ).resolves.toBeUndefined();
+    await expectStartAgainDeleted(f);
+    expect(await startAgainNoteName(f)).toBe(nameOf(f));
   },
 );
-it("HTTPS accepts a fresh consulted-register answer for the same interrupted unused-PDF selection", async () => {
+it("with the setup password but without the warning shown, a damaged record is refused, and nothing changes", async () => {
   const f = await fixture();
-  const actual = (await vi.importActual<typeof filesystem>("node:fs/promises")).rename;
-  let interrupted = false;
-  vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-    if (!interrupted && String(to).endsWith("first-setup-workspace.json")) {
-      interrupted = true;
-      throw new Error("unused-PDF selection interruption");
+  await damageRecord(f, "manifest");
+  const { ids, owner } = await withPassword(f);
+  const unchanged = await startAgainUnchanged(f);
+  await expect(
+    f.actions.startAgainFirstSetup({ ...ids, owner, register: f.answer() }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await unchanged();
+});
+it("the warning flag on a box whose record reads cleanly is refused, and nothing changes", async () => {
+  const f = await fixture();
+  const { ids, owner } = await withPassword(f);
+  const unchanged = await startAgainUnchanged(f);
+  await expect(
+    f.actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: f.answer(),
+      recoveryRecordDamagedShown: true,
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await unchanged();
+});
+it("the warning flag with the database missing is refused", async () => {
+  const { f, ids, summary, attemptFiles, confirmations } = await abandonedWithMissingDatabase([
+    "activation-started",
+  ]);
+  const shown = await summary();
+  const before = await attemptFiles();
+  await expect(
+    f.actions.startAgainFirstSetup({
+      ...ids,
+      register: f.answer(),
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      recoveryRecordDamagedShown: true,
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await attemptFiles()).toEqual(before);
+  expect(await confirmations()).toEqual([]);
+});
+it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
+  "with the setup password, other damaged evidence (%s) still refuses setup.not_ready",
+  async (why) => {
+    const f = await fixture();
+    const directory = join(f.stateDir, "first-fiscal-documents");
+    if (why === "key") await writeFile(join(f.stateDir, "first-setup-node-key.json"), "{}");
+    if (why === "stage") {
+      const path = join(f.stateDir, "first-setup-node-key.json");
+      const key = JSON.parse(await readFile(path, "utf8"));
+      key.stageId = "11111111-1111-4111-8111-111111111111";
+      await writeFile(path, JSON.stringify(key));
     }
-    await actual(from, to);
-  });
-  await expect(f.start()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(interrupted).toBe(true);
-  vi.mocked(filesystem.rename).mockRestore();
-  const pending = (await inspectFirstSetupWorkspaceSelection(f))!;
-  await ensureBoxSecrets({
-    stateDir: f.stateDir,
-    hostnames: ["localhost", "waitron.local"],
-    now: () => new Date(),
-    listIpv4: () => ["127.0.0.1"],
-  });
-  const [port] = await freePorts(1);
-  const restart = vi.fn();
-  const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
-  let server: Awaited<ReturnType<typeof startServerOrFirstSetupResolution>> | undefined;
-  try {
-    server = await startServerOrFirstSetupResolution(
-      {
-        WAITRON_STATE_DIR: f.stateDir,
-        WAITRON_VENUE_DIR: f.venueDir,
-        WAITRON_HTTP_HOST: "127.0.0.1",
-        WAITRON_HTTP_PORT: String(port),
-      },
-      {},
-      { requestRestart: restart },
-    );
-    const origin = `https://127.0.0.1:${port}`;
-    const observed = await fetch(`${origin}/setup-api/first-setup/resolution/selection`, {
-      dispatcher: agent,
-    } as RequestInit).then((r) => r.json());
-    const register = { ...f.answer(), consultedAt: "2026-10-16T14:00:00.000Z" };
-    const post = (body: unknown) =>
-      fetch(`${origin}/setup-api/first-setup/resolution/resume-selection`, {
-        method: "POST",
-        dispatcher: agent,
-        headers: { "Content-Type": "application/json", Origin: origin },
-        body: JSON.stringify(body),
-      } as RequestInit);
-    const refused = await post({
-      ...observed,
-      register: { ...register, reference: "b".repeat(64) },
-    });
-    expect(refused.status).toBe(503);
-    expect((await refused.json()).error.code).toBe("setup.not_ready");
-    const accepted = await post({ ...observed, register });
-    expect(accepted.status).toBe(200);
-    expect(await accepted.json()).toEqual({
-      workspaceId: pending.binding.workspaceId,
-      selectionGeneration: pending.binding.selectionGeneration,
-      restarting: true,
-    });
-    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
-  } finally {
-    await server?.close();
-    await agent.close();
-  }
+    if (why === "unknown-input") {
+      const path = join(f.stateDir, "first-setup.json");
+      const state = JSON.parse(await readFile(path, "utf8"));
+      state.inputs.unknown = { evidence: "not understood" };
+      await writeFile(path, JSON.stringify(state));
+    }
+    if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
+    const { ids, owner } = await withPassword(f);
+    const unchanged = await startAgainUnchanged(f);
+    await expect(
+      f.actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        register: f.answer(),
+        recoveryRecordDamagedShown: true,
+      }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await unchanged();
+  },
+);
+it("with the setup password, a damaged record and no staged node key is refused setup.not_ready, and nothing changes", async () => {
+  const f = await fixture();
+  await damageRecord(f, "manifest");
+  await rm(join(f.stateDir, "first-setup-node-key.json"));
+  const { ids, owner } = await withPassword(f);
+  const unchanged = await startAgainUnchanged(f);
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  await expect(
+    f.actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: f.answer(),
+      recoveryRecordDamagedShown: true,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  await unchanged();
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+});
+it("a damaged record beside a refused artifact refuses setup.not_ready without asking for the password", async () => {
+  const f = await fixture();
+  await damageRecord(f, "manifest");
+  await writeFile(join(f.stateDir, "trading.env"), "X=1");
+  const unchanged = await startAgainUnchanged(f);
+  await expect(f.start(f.answer())).rejects.toMatchObject({ code: "setup.not_ready" });
+  await unchanged();
 });

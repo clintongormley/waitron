@@ -26,6 +26,7 @@ import {
   createModuleOperationHost,
   createRecoveryPreparationHost,
   readModulePreparationHistory,
+  readStartAgainFloors,
   type FirstSetupCoordinator,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
@@ -95,6 +96,13 @@ export function createNodeOperationPreparation(options: {
       check();
       return {
         ...current,
+        history: [
+          ...current.history,
+          ...(await readStartAgainFloors({
+            stateDir: options.stateDir,
+            venueDir: options.venueDir,
+          })),
+        ],
         oldMachineOffline: true,
         oldMachineAbsent: false,
         noParallelRecovery: true,

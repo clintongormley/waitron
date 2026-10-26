@@ -47,6 +47,27 @@ it("refuses outside trust fields injected into an otherwise shaped operation", a
     params: { reason: "malformed_allocation" },
   });
 });
+it.each(["symbol", "non-enumerable", "function"])(
+  "refuses an input carrying a %s field before any later check reads it",
+  async (which) => {
+    const input = { allocation: {}, approval: {} };
+    Object.defineProperty(input, which === "symbol" ? Symbol("injected") : "injected", {
+      value: which === "function" ? () => true : true,
+      enumerable: which !== "non-enumerable",
+    });
+    const readPublicEvidence = vi.fn(async () => undefined);
+    const configured = FISCAL_OPERATIONS.configure!({ environment: {}, readPublicEvidence });
+    await expect(
+      withOperationAuthority(binding, "admin", (authority) =>
+        configured.prepare({ binding, authority, input }, async () => "admitted"),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_allocation" },
+    });
+    expect(readPublicEvidence).not.toHaveBeenCalled();
+  },
+);
 
 it("binds explicit launch settings instead of ambient process variables", async () => {
   const configured = FISCAL_OPERATIONS.configure!({

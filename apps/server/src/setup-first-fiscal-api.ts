@@ -8,11 +8,16 @@ import {
 import type { SetupDeps } from "./setup-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
-import type { Context, Hono } from "hono";
+import type { Context, Hono, MiddlewareHandler, Next } from "hono";
 import { TLSSocket } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import type { VenueRequest } from "@waitron/provisioning";
+import {
+  isCanonicalInstant,
+  type StartAgainRecoveryShown,
+  type StartAgainSummary,
+  type VenueRequest,
+} from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -27,10 +32,14 @@ const boundary = createErrorBoundary(
     "setup.not_ready": 503,
     "setup.certificate_refused": 422,
     "setup.owner_required": 403,
+    "setup.start_again_password_required": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
     "setup.attempt_uncertain": 409,
+    "setup.start_again_incomplete": 409,
+    "setup.workspace_unsupported": 409,
+    "setup.recovery_in_progress": 409,
   },
   "setup.provision_failed",
 );
@@ -64,6 +73,66 @@ function registerAnswer(value: unknown): import("@waitron/provisioning").Registe
   return register;
 }
 
+function missingDatabaseConfirmation(value: unknown) {
+  const body = exact(value, ["nothingFiledOrSold", "shown"]);
+  if (body.nothingFiledOrSold !== true) invalid();
+  return { nothingFiledOrSold: true as const, shown: shownSummary(body.shown) };
+}
+function recoveryDiscardConfirmation(value: unknown) {
+  const shown = shownSummary(exact(value, ["shown"]).shown);
+  if (shown.recovery === undefined) invalid();
+  return { shown };
+}
+function shownSummary(value: unknown): StartAgainSummary {
+  const shown = exact(value, ["reached", "lastName"], ["recoveryRecordDamaged", "recovery"]);
+  const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
+  const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
+  if (
+    (damaged && shown.recoveryRecordDamaged !== true) ||
+    !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string) ||
+    (shown.lastName !== null &&
+      (typeof shown.lastName !== "string" ||
+        shown.lastName.length < 1 ||
+        shown.lastName.length > 64))
+  )
+    invalid();
+  return {
+    reached: shown.reached as StartAgainSummary["reached"],
+    lastName: shown.lastName as string | null,
+    ...(damaged && { recoveryRecordDamaged: true as const }),
+    ...(recovery !== undefined && { recovery }),
+  };
+}
+function shownRecovery(value: unknown): StartAgainRecoveryShown {
+  const recovery = exact(value, [
+    "startedAt",
+    "lastActiveAt",
+    "lastActiveSource",
+    "lastName",
+    "failed",
+    "cloud",
+  ]);
+  if (
+    !isCanonicalInstant(recovery.startedAt) ||
+    !isCanonicalInstant(recovery.lastActiveAt) ||
+    !["memory", "saved-step"].includes(recovery.lastActiveSource as string) ||
+    (recovery.lastName !== null &&
+      (typeof recovery.lastName !== "string" ||
+        recovery.lastName.length < 1 ||
+        recovery.lastName.length > 64)) ||
+    typeof recovery.failed !== "boolean" ||
+    typeof recovery.cloud !== "boolean"
+  )
+    invalid();
+  return {
+    startedAt: recovery.startedAt as string,
+    lastActiveAt: recovery.lastActiveAt as string,
+    lastActiveSource: recovery.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
+    lastName: recovery.lastName as string | null,
+    failed: recovery.failed,
+    cloud: recovery.cloud,
+  };
+}
 function assertFirstFiscalRequest(c: Context): void {
   const origin = c.req.header("Origin"),
     site = c.req.header("Sec-Fetch-Site");
@@ -586,6 +655,82 @@ export function mountSetupFirstFiscalApi(
   );
 }
 
+type FencedRecovery = Pick<
+  ReturnType<typeof import("./first-setup-backup-recovery.js").createFirstSetupBackupRecovery>,
+  "runningInMemory" | "holdsInMemory" | "sealLapsed" | "liveness"
+>;
+
+/**
+ * While a backup recovery runs, the write is refused; otherwise a lapsed recovery is sealed before
+ * the write goes on. A request the routes would refuse for its origin or content type is refused
+ * here first, so it seals nothing. With no recovery held in memory there is nothing to refuse or
+ * seal, and the routes answer alone. Decided synchronously, so nothing can renew between the check
+ * and the seal.
+ */
+function fenceWrite(c: Context, next: Next, recovery: FencedRecovery, log: Logger) {
+  if (!recovery.holdsInMemory()) return next();
+  c.header("Cache-Control", "no-store");
+  try {
+    assertFirstFiscalRequest(c);
+  } catch (error) {
+    return boundary(c, log, async () => {
+      throw error;
+    });
+  }
+  if (recovery.runningInMemory()) {
+    // `liveness()` answers a running recovery before its first await, so these are this moment's.
+    const activity = recovery.liveness();
+    return boundary(c, log, async () => {
+      const { startedAt, lastActiveAt } = (await activity)!;
+      throw new AppError("setup.recovery_in_progress", { startedAt, lastActiveAt });
+    });
+  }
+  recovery.sealLapsed();
+  return next();
+}
+
+const RESOLUTION_ROOT = "/setup-api/first-setup/resolution";
+
+/** A repair-page write under `/resolution`, other than the recovery's own under `/resolution/backup/`. */
+const resolutionWrite = (c: Context) =>
+  c.req.method === "POST" &&
+  (c.req.path === RESOLUTION_ROOT || c.req.path.startsWith(`${RESOLUTION_ROOT}/`)) &&
+  !c.req.path.startsWith(`${RESOLUTION_ROOT}/backup/`);
+
+export function mountFirstSetupResolutionFence(
+  app: Hono,
+  recovery: FencedRecovery,
+  log: Logger,
+): void {
+  app.use(`${RESOLUTION_ROOT}/*`, (c, next) =>
+    resolutionWrite(c) ? fenceWrite(c, next, recovery, log) : next(),
+  );
+}
+
+/** Writes outside `/resolution/` that this fence also covers; not every write that changes the attempt. */
+const FIRST_SETUP_OWNER_WRITES: readonly string[] = [
+  "/setup-api/first-setup/resume",
+  "/setup-api/first-setup/abandon",
+  "/setup-api/first-setup/recover",
+];
+
+/**
+ * `fenceWrite` for the attempt's writes, inside `/resolution/` and out, for a box serving them.
+ * While `gateRefuses()`, `/resolution/` writes are left to the setup gate, which refuses them
+ * before any change.
+ */
+export function firstSetupOwnerWriteFence(
+  recovery: FencedRecovery,
+  log: Logger,
+  gateRefuses: () => boolean,
+): MiddlewareHandler {
+  return (c, next) =>
+    (resolutionWrite(c) && !gateRefuses()) ||
+    (c.req.method === "POST" && FIRST_SETUP_OWNER_WRITES.includes(c.req.path))
+      ? fenceWrite(c, next, recovery, log)
+      : next();
+}
+
 export function mountFirstSetupResolutionApi(
   app: Hono,
   host: FirstFiscalHost,
@@ -594,12 +739,11 @@ export function mountFirstSetupResolutionApi(
     startAgain?: ReturnType<
       typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
     >["startAgainFirstSetup"];
+    summary?: ReturnType<
+      typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
+    >["startAgainSummary"];
     requestRestart?: () => void;
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
-    selection?: Pick<
-      ReturnType<typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions>,
-      "inspectWorkspaceSelection" | "resumeWorkspaceSelection"
-    >;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
@@ -614,61 +758,6 @@ export function mountFirstSetupResolutionApi(
       return c.json(await host.resolution.inspectFirstSetupResolution());
     }),
   );
-  if (options.selection !== undefined) {
-    const selection = options.selection;
-    app.get(`${root}/resolution/selection`, (c) =>
-      boundary(c, log, async () => {
-        assertFirstFiscalRequest(c);
-        return c.json(await selection.inspectWorkspaceSelection());
-      }),
-    );
-    app.post(`${root}/resolution/resume-selection`, (c) =>
-      boundary(c, log, async () => {
-        assertFirstFiscalRequest(c);
-        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-        if (!(socket instanceof TLSSocket) || !socket.encrypted)
-          throw new AppError("setup.owner_required", {});
-        const rawBody = object(await readFirstFiscalBody(c));
-        const withPassword = Object.hasOwn(rawBody, "password");
-        const body = exact(rawBody, [
-          "inspectionId",
-          "revision",
-          "ownerGeneration",
-          "workspaceId",
-          "selectionGeneration",
-          ...(withPassword ? ["password"] : Object.hasOwn(rawBody, "register") ? ["register"] : []),
-        ]);
-        if (
-          ![body.revision, body.ownerGeneration, body.selectionGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
-        let proof:
-          { password: string } | { register?: import("@waitron/provisioning").RegisterAnswer };
-        if (withPassword) proof = { password: text(body.password) };
-        else {
-          proof = Object.hasOwn(body, "register")
-            ? { register: registerAnswer(body.register) }
-            : {};
-        }
-        const selected = await selection.resumeWorkspaceSelection({
-          inspectionId: text(body.inspectionId),
-          revision: body.revision as number,
-          ownerGeneration: body.ownerGeneration as number,
-          workspaceId: text(body.workspaceId),
-          selectionGeneration: body.selectionGeneration as number,
-          ...proof,
-        });
-        setTimeout(() => options.requestRestart?.(), 0);
-        return c.json({
-          workspaceId: selected.workspaceId,
-          selectionGeneration: selected.selectionGeneration,
-          restarting: true,
-        });
-      }),
-    );
-  }
   app.post(`${root}/resolution/recover`, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);
@@ -810,20 +899,60 @@ export function mountFirstSetupResolutionApi(
       );
   }
 
+  const assertHttps = (c: Context) => {
+    const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+    if (!(socket instanceof TLSSocket) || !socket.encrypted)
+      throw new AppError("setup.owner_required", {});
+  };
+  if (options.summary !== undefined)
+    app.post(`${root}/resolution/start-again/summary`, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        assertHttps(c);
+        const body = exact(await readFirstFiscalBody(c), [
+          "inspectionId",
+          "revision",
+          "ownerGeneration",
+        ]);
+        if (
+          ![body.revision, body.ownerGeneration].every(
+            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+          )
+        )
+          invalid();
+        const owner = firstFiscalOwner(c);
+        return c.json(
+          await options.summary!({
+            inspectionId: text(body.inspectionId),
+            revision: body.revision as number,
+            ownerGeneration: body.ownerGeneration as number,
+            owner,
+          }),
+        );
+      }),
+    );
   if (options.startAgain !== undefined)
     app.post(`${root}/resolution/start-again`, (c) =>
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
-        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-        if (!(socket instanceof TLSSocket) || !socket.encrypted)
-          throw new AppError("setup.owner_required", {});
+        assertHttps(c);
         const rawBody = object(await readFirstFiscalBody(c));
         const body = exact(rawBody, [
           "inspectionId",
           "revision",
           "ownerGeneration",
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
+          ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
+          ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
+          ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
+            ? ["recoveryRecordDamagedShown"]
+            : []),
         ]);
+        if (
+          Object.hasOwn(body, "recoveryRecordDamagedShown") &&
+          body.recoveryRecordDamagedShown !== true
+        )
+          invalid();
         if (
           ![body.revision, body.ownerGeneration].every(
             (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
@@ -833,21 +962,35 @@ export function mountFirstSetupResolutionApi(
         const register = Object.hasOwn(body, "register")
           ? registerAnswer(body.register)
           : undefined;
-        const selected = await options.startAgain!({
-          inspectionId: text(body.inspectionId),
-          revision: body.revision as number,
-          ownerGeneration: body.ownerGeneration as number,
-          register,
-          ...(c.req.header("X-Waitron-Setup-Owner") === undefined
-            ? {}
-            : { owner: firstFiscalOwner(c) }),
-        });
+        const confirmMissingDatabase = Object.hasOwn(body, "confirmMissingDatabase")
+          ? missingDatabaseConfirmation(body.confirmMissingDatabase)
+          : undefined;
+        const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
+          ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
+          : undefined;
+        try {
+          await options.startAgain!({
+            inspectionId: text(body.inspectionId),
+            revision: body.revision as number,
+            ownerGeneration: body.ownerGeneration as number,
+            register,
+            ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+            ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+            ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
+              ? { recoveryRecordDamagedShown: true as const }
+              : {}),
+            ...(c.req.header("X-Waitron-Setup-Owner") === undefined
+              ? {}
+              : { owner: firstFiscalOwner(c) }),
+          });
+        } catch (error) {
+          // The next start tries to finish what Start again left.
+          if (error instanceof AppError && error.code === "setup.start_again_incomplete")
+            setTimeout(() => options.requestRestart?.(), 0);
+          throw error;
+        }
         setTimeout(() => options.requestRestart?.(), 0);
-        return c.json({
-          workspaceId: selected.workspaceId,
-          selectionGeneration: selected.selectionGeneration,
-          restarting: true,
-        });
+        return c.json({ restarting: true });
       }),
     );
 }

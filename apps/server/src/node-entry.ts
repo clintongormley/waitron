@@ -38,6 +38,7 @@ import {
   cleared,
   fullDiskAtStart,
   readRecoveryState,
+  refusedAtStart,
   stayedUpClear,
   updateRecoveryState,
   withFailureCode,
@@ -279,9 +280,8 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  *    holding the only copy. The clearing runs before the ahead check because that check's open
  *    creates a missing `venue.db`.
  * 6. Below the floor, the start deletes what it can make again before first-setup resolution, whose
- *    inspection opens the database. When resolution chose other folders, it then runs the same
- *    clean-up on them, whatever the free space, before judging the floor.
- * 7. Still below it, or below it in the folders first-setup resolution chose instead, the start
+ *    inspection opens the database.
+ * 7. Still below it, or below it in the folders the start was admitted to, the start
  *    writes the count back unchanged before resolution's app or the page is served: a finished
  *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
  *    admission takes the venue lock before the count.
@@ -367,13 +367,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
   let belowFloor = space.belowFloor;
   if (moved) {
-    // The logs folder is the given folders' (`resolveLogDir` in `bootThisProcess`), cleaned above.
-    await freeSpaceAtStart({
-      ...cleanUp,
-      stateDir: rooted.stateDir,
-      venueDir: rooted.venueDir,
-      logDir: null,
-    });
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
   }
@@ -398,6 +391,36 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
+  if (admission.kind === "refused") {
+    const logDir = deps.logDir ?? join(rooted.stateDir, "logs");
+    const exit = deps.exit ?? DEFAULT_EXIT;
+    const reason = admission.error.reason ?? null;
+    deps.log("warn", "recovery.serving_refused_start", { errorCode: admission.code, reason });
+    // Both lines, so the page's "Why the last start failed" is this refusal, not an earlier start's.
+    const page = pageLog(logDir, now, deps.log);
+    page("info", "server.boot_started");
+    page("error", "server.boot_failed", {
+      errorCode: admission.code,
+      detail:
+        reason === null
+          ? failureDetail(admission.error)
+          : `${failureDetail(admission.error)}\n${redactSecrets(`reason: ${reason}`)}`,
+    });
+    await deps.serveRecovery(
+      recoveryApp({
+        state: refusedAtStart(await deps.readRecoveryState(rooted.stateDir), admission.code, now()),
+        refusedAtStart: true,
+        logDir,
+        onRetry: async () => {
+          exit(0);
+        },
+        log: deps.log,
+      }),
+      transport,
+    );
+    return;
+  }
+
   if (admission.kind === "resolution") {
     const port = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(admission.app, {
@@ -415,7 +438,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
-  const selected = admission.roots.binding === null && !moved ? deps : rooted;
+  const selected = !moved ? deps : rooted;
   return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
 

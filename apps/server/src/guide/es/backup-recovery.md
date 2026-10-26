@@ -18,6 +18,31 @@ contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
 
 Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
+Mientras hay una recuperación desde una copia en curso en otro dispositivo, la página de reparación
+lo indica, con cuándo empezó y cuándo tuvo actividad por última vez. Hasta que se detenga, la página
+solo ofrece **Reconectar** y **Configurar conexión segura**, y lo vuelve a comprobar sola. Una
+recuperación cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco
+minutos siguientes a su última actividad. Esos cinco minutos terminan antes si la recuperación falla
+o el equipo se reinicia.
+
+Si una recuperación desde una copia empezó y no terminó, la página de reparación lo indica, y
+**Empezar de nuevo** la borra junto con la configuración interrumpida. Junto a ella, la página no
+ofrece **Recuperar desde una copia**. Si la página dice que falta la base de datos de configuración,
+muestra la recuperación detenida después de que introduzcas la contraseña de administrador que
+elegiste al configurar, y Empezar de nuevo la borra cuando marcas «No se envió nada a la AEAT ni se
+vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, la página muestra **Empezar de nuevo**
+junto a la recuperación detenida, disponible solo si el equipo puede comprobar que la base de datos
+de la configuración está vacía. Empezar de nuevo pide entonces la contraseña de administrador,
+vuelve a mostrar la recuperación y la borra cuando marcas «Borrar el intento anterior y empezar de
+nuevo.» y vuelves a elegir **Empezar de nuevo**.
+
+Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
+de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
+el local de este equipo.
+
+Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
+equipo se está reiniciando, espera a que responda.
+
 ## Elige tu copia {#source}
 
 Elige **Archivo de copia**, **Copia del bucket** o **Copia de Cloud** y el entorno correspondiente.
@@ -69,15 +94,17 @@ y esperas; no hay ningún código de instalación que escribir. Elige **Recupera
 elegido las nuevas series.
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si una comprobación
-lo impide, resuelve la causa e inténtalo de nuevo. No borres el intento conservado ni edites sus
-registros de recuperación.
+lo impide, resuelve la causa e inténtalo de nuevo. No borres a mano los archivos del intento
+conservado ni edites sus registros de recuperación.
 
-## Continúa después de una interrupción {#resume}
+## Si una recuperación se interrumpe {#resume}
 
-Al salir de la página o reiniciar el equipo se pierde la identificación del navegador. Vuelve a
-introducir la clave para continuar. Si la preparación se detuvo antes de colocar los datos, vuelve
-a abrir el mismo origen. Cuando aparezca **Finalizar recuperación guardada**, úsala para identificarte
-ante el destino conservado y completar esa misma recuperación. Conserva el evento y la selección guardados.
+Mientras la página de recuperación siga abierta, continúa donde lo dejaste. La recuperación se
+detiene si el equipo se reinicia o si pasan 15 minutos sin ningún paso de recuperación, aunque la
+página siga abierta. Salir de la página o cerrar su pestaña también la detiene, en menos de cinco
+minutos. Si la recuperación ya había guardado progreso, la página de reparación la muestra entonces
+como detenida y no ofrece **Recuperar desde una copia** junto a ella; **Empezar de nuevo** la borra,
+como se explica más arriba. Si no, vuelve a abrir la copia.
 Si la recuperación ya está guardada, reconecta con el equipo en lugar de volver a identificarte o colocarla.
 
 Cambiar el origen o el entorno vacía los controles autenticados de la página. No borra la operación

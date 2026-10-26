@@ -3,7 +3,6 @@ import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { type FirstSetupCoordinator, type FirstSetupHold } from "./first-setup-state.js";
-import { firstSetupAnchorFor } from "./first-setup-workspace.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type { OperationBinding } from "@waitron/module";
 
@@ -75,9 +74,8 @@ export async function readModulePreparationHistory(
   options: { stateDir: string; venueDir: string },
   module: string,
 ): Promise<readonly unknown[]> {
-  const anchor = await firstSetupAnchorFor(options);
   const file = parse(
-    await readDurableHostJson(join(anchor.stateDir, "module-preparation-state.json"), LIMIT),
+    await readDurableHostJson(join(options.stateDir, "module-preparation-state.json"), LIMIT),
   );
   return file.revisions
     .filter((row) => row.binding.module === module)
@@ -99,8 +97,7 @@ export function createModulePreparationState(options: Options) {
       const body = () =>
         options.withVenueExclusion(async () => {
           await options.authorize({ ...binding });
-          const anchor = await firstSetupAnchorFor(options);
-          const path = join(anchor.stateDir, "module-preparation-state.json");
+          const path = join(options.stateDir, "module-preparation-state.json");
           const file = parse(await readDurableHostJson(path, LIMIT));
           let value: unknown =
             [...file.revisions].reverse().find((row) => row.binding.module === binding.module)

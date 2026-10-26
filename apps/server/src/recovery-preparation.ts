@@ -16,6 +16,7 @@ import {
 import {
   createModuleOperationHost,
   createRecoveryPreparationHost,
+  readStartAgainFloors,
   type FirstSetupCoordinator,
   type FirstSetupHold,
 } from "@waitron/provisioning";
@@ -207,6 +208,10 @@ export function createSelectedRecoveryPreparation(options: Options): {
             records: [],
             timeFloorMs: Date.parse(selected.createdAt),
           },
+          ...(await readStartAgainFloors({
+            stateDir: options.stateDir,
+            venueDir: options.venueDir,
+          })),
         ],
         contextKey: JSON.stringify([
           binding,

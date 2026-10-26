@@ -9,7 +9,7 @@ import type { SQLWrapper } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase, type Database } from "@waitron/db";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
-import { assertFirstSetupBootTarget, firstSetupAnchorFor } from "./first-setup-workspace.js";
+import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
 import { readOperationalVenueIds, readTenantIdentities } from "./tenant-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
@@ -249,17 +249,11 @@ export function createFirstSetupResolutionInspection(
       return { inspection, originals };
     },
     async withVenueExclusion<T>(body: () => Promise<T>): Promise<T> {
-      const anchor = await firstSetupAnchorFor(options);
-      const hold = await lockVenueDatabase(anchor.venueDir);
-      let target: Awaited<ReturnType<typeof lockVenueDatabase>> | undefined;
+      const hold = await lockVenueDatabase(options.venueDir);
       try {
-        await assertFirstSetupBootTarget(options);
-        if (anchor.venueDir !== options.venueDir)
-          target = await lockVenueDatabase(options.venueDir);
-        await assertFirstSetupBootTarget(options);
+        await assertNoLegacyFirstSetupWorkspace(options);
         return await body();
       } finally {
-        target?.release();
         hold.release();
       }
     },

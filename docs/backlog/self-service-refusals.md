@@ -37,7 +37,7 @@ referrals, not completed recovery experiments.
 | [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
-| [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. Recheck lane A's A1042 S7l after landing; this lane does not change it. |
+| [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. A1042's S7l change is in; the `attempt_invalid` words still name no next step. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
@@ -82,7 +82,6 @@ screen mapping and producer again before changing it. Search error registries as
 `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare the codes used here.
 They declare shapes, not the conditions that make a retry useful.
 
-A1042 S7l's damaged retained recovery note belongs to lane A. Its implementation is excluded.
 Waitron Cloud's product is excluded (D254); Waitron's local Cloud client is in scope.
 
 ## Support instructions
@@ -448,9 +447,15 @@ Screen: Setup wizard. Fix: [setup-state](#setup-state).
 
 Wording: `apps/setup/src/i18n/strings/shell.ts:8` and `apps/setup/src/i18n/strings/shell.ts:147`.
 
+Added by A1042 (2026-10-26): the setup screen shows the same words in two more places — when the
+box's Start again summary does not have the expected shape (`summaryOf`,
+`apps/setup/src/first-setup-session.ts`), and when the backup recovery status read on the
+missing-database path is not one that page expects (`#readMissingAsk`, called from
+`#resumeFirstSetup`, `apps/setup/src/setup-app.ts`).
+
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
-Route: A1042 S7l is reserved to lane A. Track its released behavior before changing this wording or offering Start again. This audit leaves that implementation untouched.
+Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words.
 
 ### `shell.operation_conflict`
 
@@ -690,7 +695,7 @@ changes take their required review and existing protected-writer approvals.
 
 ### setup-state
 
-**Setup state refusals need a usable resume or recovery route.** Recheck A1042 S7l on main first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+**Setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
 
 ### setup-environment
 

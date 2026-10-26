@@ -54,13 +54,6 @@ export interface FirstSetupStatus {
   resolution?: boolean;
   state?: FirstSetupState;
 }
-export interface FirstSetupWorkspaceSelection {
-  inspectionId: string;
-  revision: number;
-  ownerGeneration: number;
-  workspaceId: string;
-  selectionGeneration: number;
-}
 export interface FirstSetupInspection {
   version: 2;
   inspectionId: string;
@@ -129,8 +122,35 @@ export interface BackupRepairSession {
   binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
   input?: unknown;
 }
+/** A stopped backup recovery that Start again would discard, as the summary names it. */
+export interface StartAgainRecoveryShown {
+  startedAt: string;
+  lastActiveAt: string;
+  lastActiveSource: "memory" | "saved-step";
+  lastName: string | null;
+  failed: boolean;
+  cloud: boolean;
+}
+export interface StartAgainSummary {
+  reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
+  lastName: string | null;
+  recoveryRecordDamaged?: true;
+  recovery?: StartAgainRecoveryShown;
+}
 export interface BackupRepairStatus {
   phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";
   recoveryId?: string;
   proofRequired: true;
 }
+export type BackupRepairActivity =
+  | { state: "running"; startedAt: string; lastActiveAt: string }
+  | {
+      state: "stopped";
+      startedAt: string;
+      lastActiveSource: "memory" | "saved-step";
+      lastActiveAt: string;
+      phase: Exclude<BackupRepairStatus["phase"], "unstarted" | "uncertain">;
+      recoveryId: string;
+      failed: boolean;
+      cloud: boolean;
+    };

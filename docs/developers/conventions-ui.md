@@ -1100,14 +1100,16 @@ recorded with the refusal (`refusedTriggers`) and shown under that line, one lin
 that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/status` reports
 `refused`, not the names.
 
-**A full disk at start** (A798-B slice 2). Every start deletes the copies a cut-off backup
-run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
-unless another process holds the venue folder's lock — in a first-setup workspace's folders too,
-when resolution moved the box there (the heartbeat fallback is in conventions-data.md, "Every start
-takes the venue lock"); one that
+**A full disk at start** (A798-B slice 2). Every start through the box's entry point (`runEntry`,
+`apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this), except one that
+finds a backup recovery's journal at its repair stage or unreadable,
+deletes the copies a cut-off backup run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
+unless another process holds the venue folder's lock — in the folders a backup recovery from the
+setup repair page selected instead, when there is one (the heartbeat fallback is in
+conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
-week (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders a
-first-setup resolution chose in their place are, and it cannot write its count back unchanged
+week (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders the
+start goes on to run from are (a selected backup recovery's), and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The
@@ -1120,8 +1122,16 @@ not the design's «borrado», because the page's never-wipe check (`NEVER_WIPE_E
 however the page was reached, because a start whose failure is classified `storage.disk_full`
 deletes the same leftovers, whatever the free space, before it records the failure.
 
-Every recovery page `runEntry` serves, the one served at once and the ordinary one, shows the free
-space just below the status line: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
+A start `runEntry` refuses before it begins (`setup.workspace_unsupported`,
+`setup.start_again_incomplete`) is not counted either: its status line reads "Level: recovery.
+This start was refused before it began, and was not counted." («Nivel: recovery. Este arranque se
+rechazó antes de empezar y no se ha contado.»), and it writes `server.boot_started` and then
+`server.boot_failed` with its code to `waitron.log`.
+
+Two of the recovery pages `runEntry` serves, the one served at once and the ordinary one, show the
+free space just below the status line; the page for a start refused before it began shows none and
+never mentions the disk (A1042 plan, Task 5b; `expectRefusedPage` in
+`apps/server/src/first-setup-resolution.boot.test.ts`). The line reads: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
 disco del equipo: 1,2 MB.»). It is read again on every `GET /`, from the lower of the state and
 venue folders, in decimal megabytes with at most one decimal, formatted for the page's language,
 and reads "unknown" («desconocido») when the filesystem cannot say; each such read logs

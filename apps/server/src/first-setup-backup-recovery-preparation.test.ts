@@ -1,4 +1,4 @@
-import { root, key, node, clock } from "../test/hour-recovery-host.js";
+import { root, key, node, clock, binding } from "../test/hour-recovery-host.js";
 import { createHash } from "node:crypto";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -11,13 +11,23 @@ import { suite } from "../test/hour-recovery-host.js";
 
 import { AppError } from "@waitron/shared";
 import { readModuleRecoveryEvidence, collectModuleNonDbState } from "./backup-sources.js";
-import { readModulePreparationHistory } from "@waitron/provisioning";
+import {
+  createFirstSetupCoordinator,
+  emptyAbandonedBackupRecovery,
+  raiseStartAgainNote,
+  readModulePreparationHistory,
+  readStartAgainNote,
+} from "@waitron/provisioning";
+import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, writePointer, signPointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { copyFile } from "node:fs/promises";
+import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
+import { packArchive, unpackArchive } from "./backup-archive.js";
 
 import {
   recovery,
@@ -595,4 +605,111 @@ it("shutdown drains an unfinished bucket restore before deleting its private des
   await expect(access(destination!)).rejects.toMatchObject({ code: "ENOENT" });
   expect(await f.workspace.read()).toEqual([]);
   expect((await readFile(f.database)).byteLength).toBeGreaterThan(0);
+});
+
+const noteTenMinutesAhead = async (stateDir: string) => {
+  const floorMs = clock.wall() - (clock.wall() % 60_000) + 10 * 60_000;
+  await raiseStartAgainNote(stateDir, {
+    floorMs,
+    lastName: "0CNQT",
+    module: "fiscal-verifactu",
+  });
+  return floorMs;
+};
+
+it("an A731 backup recovery with both clocks before the note is refused", async () => {
+  const f = await fixture(true);
+  const floorMs = await noteTenMinutesAhead(f.roots.stateDir);
+  const service = recovery(f.options);
+  const session = await service.open(f.request, { onBox: false });
+  await expect(
+    recoverySelectPastWaits(
+      clock,
+      { prepare: (proposal, client) => service.prepare(session.sessionId, proposal, client) },
+      { onBox: false },
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: floorMs },
+  });
+});
+
+it("a restore into A731's nested target reads the box's own note", async () => {
+  const f = await fixture(true);
+  const floorMs = await noteTenMinutesAhead(f.roots.stateDir);
+  const service = recovery(f.options);
+  const session = await service.open(f.request, { onBox: false });
+  await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
+  const target = (await f.workspace.read()).at(-1)!.target.target;
+  const selected = await previewRecoveryArchive(f.restore);
+  expect(await readStartAgainNote(target.stateDir)).toBeNull();
+  await expect(
+    recoverySelectPastWaits(
+      clock,
+      createSelectedRecoveryPreparation({
+        ...target,
+        coordinator: createFirstSetupCoordinator(),
+        modules: ALL_MODULES,
+        binding: { ...binding, sourceId: selected.activationSourceId ?? selected.sourceId },
+        node,
+        secret: key.secret,
+        database: () => suite.db,
+        selected,
+        readIsolation: async () => f.isolation,
+      }),
+      { onBox: false },
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: floorMs },
+  });
+});
+
+it("reads a discarded recovery as none, and runs a second archive recovery to selected beside it", async () => {
+  const f = await fixture(true);
+  const entries = unpackArchive(decryptArtifact(f.request.source.artifact, f.restore.recoveryKey));
+  entries.push({
+    name: "secrets/module-evidence/fiscal-verifactu/hour-history.json",
+    bytes: Buffer.from(
+      JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
+    ),
+  });
+  f.request.source.artifact = Uint8Array.from(
+    encryptArtifact(packArchive(entries), f.restore.recoveryKey),
+  );
+  const service = recovery(f.options);
+  const first = await service.open(f.request, { onBox: false });
+  await service.prepare(first.sessionId, { action: "clock-challenge" }, { onBox: false });
+  await service.close(first.sessionId);
+  await f.workspace.abandon(first.recoveryId);
+  expect(await service.status()).toEqual({ phase: "unstarted", proofRequired: true });
+  await expect(service.open(f.request, { onBox: false })).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("abandoned");
+  await emptyAbandonedBackupRecovery(f.roots, first.recoveryId);
+  expect(await service.status()).toEqual({ phase: "unstarted", proofRequired: true });
+  const second = await service.open(f.request, { onBox: false });
+  expect(second.recoveryId).not.toBe(first.recoveryId);
+  const selected = (await recoverySelectPastWaits(
+    clock,
+    { prepare: (proposal, client) => service.prepare(second.sessionId, proposal, client) },
+    { onBox: false },
+  )) as { status: string; input: unknown };
+  expect(selected.status).toBe("selected");
+  await service.commit(second.sessionId, selected.input, { onBox: false });
+  const records = await f.workspace.read();
+  expect(new Set(records.map((record) => record.target.recoveryId))).toEqual(
+    new Set([second.recoveryId]),
+  );
+  expect(records.slice(-3).map((record) => record.phase)).toEqual([
+    "placement-started",
+    "restored",
+    "selected",
+  ]);
+  expect(await service.status()).toEqual({
+    phase: "selected",
+    recoveryId: second.recoveryId,
+    proofRequired: true,
+  });
 });

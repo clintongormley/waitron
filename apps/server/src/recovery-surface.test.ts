@@ -1110,3 +1110,91 @@ describe("the full-disk page's free space and uncounted start", () => {
     expect(stopped).not.toContain("This start was not counted");
   });
 });
+
+describe("a start refused before it began", () => {
+  const ROWS = [
+    {
+      code: "setup.workspace_unsupported",
+      "en-GB": {
+        title:
+          "This box holds a setup from an older version of Waitron that this version cannot use.",
+        action: "Reinstall Waitron on this box to start fresh.",
+      },
+      "es-ES": {
+        title:
+          "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar.",
+        action: "Reinstala Waitron en este equipo para empezar de cero.",
+      },
+    },
+    {
+      code: "setup.start_again_incomplete",
+      "en-GB": {
+        title:
+          "Start again did not finish: the box found files it did not expect, or could not read or delete one.",
+        action:
+          "The box has not changed files it did not expect, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
+      },
+      "es-ES": {
+        title:
+          "«Empezar de nuevo» no terminó: el equipo encontró archivos que no esperaba, o no pudo leer o borrar uno.",
+        action:
+          "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
+      },
+    },
+  ] as const;
+
+  async function refusedPage(code: string, acceptLanguage: string): Promise<string> {
+    const app = recoveryApp({
+      state: { ...FRESH, level: "recovery", lastErrorCode: code },
+      logDir: "/nonexistent",
+      onRetry: vi.fn(),
+      refusedAtStart: true,
+    });
+    return await (
+      await app.request("/", { headers: { "Accept-Language": acceptLanguage } })
+    ).text();
+  }
+
+  it.each(ROWS)("names $code in both languages", async (row) => {
+    for (const [lang, acceptLanguage] of LOCALES) {
+      const body = await pageFor(row.code, undefined, acceptLanguage);
+      expect(body, lang).toContain(escapeHtml(row[lang].title));
+      expect(body, lang).toContain(escapeHtml(row[lang].action));
+    }
+  });
+
+  it.each(ROWS)(
+    "says a refused $code start was not counted, and never mentions the disk",
+    async (row) => {
+      const english = await refusedPage(row.code, "en-GB");
+      expect(english).toContain(
+        `<p>${escapeHtml("Level: recovery. This start was refused before it began, and was not counted.")}</p>`,
+      );
+      expect(english).not.toContain("Failed 0 times");
+      expect(english).not.toMatch(/disk/i);
+      const spanish = await refusedPage(row.code, SPANISH);
+      expect(spanish).toContain(
+        `<p>${escapeHtml("Nivel: recovery. Este arranque se rechazó antes de empezar y no se ha contado.")}</p>`,
+      );
+      expect(spanish).not.toContain("Intentos fallidos: 0");
+      expect(spanish).not.toMatch(/disco/i);
+    },
+  );
+  it("neither refused start sends the person to someone else, in either language", () => {
+    for (const row of ROWS) {
+      for (const lang of ["en-GB", "es-ES"] as const) {
+        const action = OPERATOR_TEXT[row.code]![lang].action;
+        expect(action, `${row.code} ${lang}`).not.toMatch(/whoever installed/i);
+        expect(action, `${row.code} ${lang}`).not.toMatch(/quien instaló/i);
+      }
+    }
+  });
+
+  it("the unfinished Start again line never tells the person to reinstall, and says what reinstalling loses", () => {
+    const text = OPERATOR_TEXT["setup.start_again_incomplete"]!;
+    expect(text["en-GB"].action).not.toMatch(/(^|[.!?]\s+)Reinstall\b/);
+    expect(text["en-GB"].action).toContain("lost");
+    expect(text["es-ES"].action).not.toMatch(/(^|[.!?]\s+)Reinstala\b/);
+    expect(text["es-ES"].action).toContain("pierde");
+  });
+});

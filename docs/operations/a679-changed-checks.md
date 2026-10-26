@@ -4,6 +4,8 @@ _2026-10-22, A973: the invoice-first settlement operator script and its test are
 
 > 2026-10-22: historical; series names are now five-symbol UTC minutes ([A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) §6.5).
 
+> 2026-10-25: historical on Start again too; Start again no longer keeps a retirement archive or moves the box into a first-setup workspace — it deletes the attempt and keeps one small note of the last series name (A1042, [plan](../superpowers/plans/2026-10-24-a1042-start-again-series-note.md)). The workspace, retirement and selection checks below record the earlier tree.
+
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 

@@ -1,5 +1,6 @@
 import { firstSetupHeaders } from "./first-setup-types.js";
 import type {
+  BackupRepairActivity,
   BackupRepairOpenRequest,
   BackupRepairResumeRequest,
   BackupRepairSession,
@@ -13,7 +14,7 @@ import type {
   FirstSetupProvisionBody,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
-  FirstSetupWorkspaceSelection,
+  StartAgainSummary,
 } from "./first-setup-types.js";
 
 // Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
@@ -323,16 +324,48 @@ export class SetupApi {
     return this.#request("/setup-api/first-setup/resolution/backup/close", "POST", { sessionId });
   }
 
-  startFirstSetupBackupCloud(): Promise<CloudRecoveryView> {
-    return this.#request("/setup-api/first-setup/resolution/backup/cloud/start", "POST", {});
+  renewFirstSetupBackup(sessionId: string): Promise<{ renewed: true }> {
+    return this.#request("/setup-api/first-setup/resolution/backup/renew", "POST", { sessionId });
   }
 
-  firstSetupBackupCloudStatus(): Promise<CloudRecoveryView> {
-    return this.#request("/setup-api/first-setup/resolution/backup/cloud/status", "POST", {});
+  firstSetupBackupActivity(): Promise<{ activity: BackupRepairActivity | null }> {
+    return this.#request("/setup-api/first-setup/resolution/backup/activity", "GET");
   }
 
-  startFirstSetupBackupCloudAgain(): Promise<CloudRecoveryView> {
-    return this.#request("/setup-api/first-setup/resolution/backup/cloud/start-again", "POST", {});
+  startFirstSetupBackupCloud(holder?: string): Promise<CloudRecoveryView> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/backup/cloud/start",
+      "POST",
+      holder === undefined ? {} : { holder },
+    );
+  }
+
+  firstSetupBackupCloudStatus(holder?: string): Promise<CloudRecoveryView> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/backup/cloud/status",
+      "POST",
+      holder === undefined ? {} : { holder },
+    );
+  }
+
+  startFirstSetupBackupCloudAgain(holder?: string): Promise<CloudRecoveryView> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/backup/cloud/start-again",
+      "POST",
+      holder === undefined ? {} : { holder },
+    );
+  }
+
+  renewFirstSetupBackupCloud(holder: string): Promise<{ renewed: true }> {
+    return this.#request("/setup-api/first-setup/resolution/backup/cloud/renew", "POST", {
+      holder,
+    });
+  }
+
+  releaseFirstSetupBackupCloud(holder: string): Promise<{ released: true }> {
+    return this.#request("/setup-api/first-setup/resolution/backup/cloud/release", "POST", {
+      holder,
+    });
   }
 
   getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {
@@ -592,38 +625,6 @@ export class SetupApi {
     return this.#request("/setup-api/first-setup/resolution", "GET");
   }
 
-  async inspectFirstSetupWorkspaceSelection(): Promise<FirstSetupWorkspaceSelection | null> {
-    const value = await this.#request<FirstSetupWorkspaceSelection | null>(
-      "/setup-api/first-setup/resolution/selection",
-      "GET",
-    );
-    if (value === null) return null;
-    if (
-      typeof value !== "object" ||
-      Array.isArray(value) ||
-      Object.keys(value).length !== 5 ||
-      typeof value.inspectionId !== "string" ||
-      !/^[a-f0-9]{64}$/.test(value.inspectionId) ||
-      typeof value.workspaceId !== "string" ||
-      !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.workspaceId) ||
-      ![value.revision, value.ownerGeneration, value.selectionGeneration].every(
-        (number) => Number.isSafeInteger(number) && number > 0,
-      )
-    )
-      throw { code: "setup.attempt_conflict" };
-    return value;
-  }
-
-  resumeFirstSetupWorkspaceSelection(
-    snapshot: FirstSetupWorkspaceSelection,
-    password: string,
-  ): Promise<{ workspaceId: string; selectionGeneration: number; restarting: true }> {
-    return this.#request("/setup-api/first-setup/resolution/resume-selection", "POST", {
-      ...snapshot,
-      password,
-    });
-  }
-
   recoverFirstSetupOwner(
     snapshot: FirstSetupResolutionSnapshot,
     clientClaimNonce: string,
@@ -636,14 +637,34 @@ export class SetupApi {
     });
   }
 
+  startAgainSummary(
+    snapshot: FirstSetupResolutionSnapshot,
+    owner: FirstSetupOwner,
+  ): Promise<StartAgainSummary> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/start-again/summary",
+      "POST",
+      snapshot,
+      firstSetupHeaders(owner),
+    );
+  }
+
   startAgainFirstSetup(
     snapshot: FirstSetupResolutionSnapshot,
     owner?: FirstSetupOwner,
+    confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary },
+    recoveryRecordDamagedShown?: true,
+    confirmRecoveryDiscard?: { shown: StartAgainSummary },
   ): Promise<{ restarting: true }> {
     return this.#request(
       "/setup-api/first-setup/resolution/start-again",
       "POST",
-      snapshot,
+      {
+        ...snapshot,
+        ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+        ...(recoveryRecordDamagedShown === undefined ? {} : { recoveryRecordDamagedShown }),
+        ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+      },
       owner === undefined ? undefined : firstSetupHeaders(owner),
     );
   }

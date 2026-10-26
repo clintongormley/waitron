@@ -62,6 +62,7 @@ export function repairApi(
     if (action === "status") return Response.json({ phase: "unstarted", proofRequired: true });
     if (action === "open") return Response.json(saved);
     if (action === "close") return Response.json({ closed: true });
+    if (action === "activity") return Response.json({ activity: null });
     if (action === "commit") return Response.json({ restarting: true });
     throw new Error("Unexpected repair request " + path);
   });

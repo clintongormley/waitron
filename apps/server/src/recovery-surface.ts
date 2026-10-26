@@ -22,6 +22,8 @@ export interface RecoveryDeps {
   freeSpace?: () => Promise<number | null>;
   /** This start could not record its failure, so `failures` does not count it. */
   uncounted?: true;
+  /** This start was refused before it began, so `failures` does not count it. */
+  refusedAtStart?: true;
   log?: Logger;
 }
 
@@ -146,6 +148,7 @@ const PAGE_TEXT: Readonly<
       status: (level: string, failures: number) => string;
       stoppedStatus: (level: string) => string;
       uncountedStatus: (level: string) => string;
+      refusedAtStartStatus: (level: string) => string;
       freeSpace: (amount: string) => string;
       unknownSpace: string;
       missingTriggers: (names: string) => string;
@@ -167,6 +170,8 @@ const PAGE_TEXT: Readonly<
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
     stoppedStatus: (level) => `Level: ${level}. Stopped while running.`,
     uncountedStatus: (level) => `Level: ${level}. This start was not counted: the disk is full.`,
+    refusedAtStartStatus: (level) =>
+      `Level: ${level}. This start was refused before it began, and was not counted.`,
     freeSpace: (amount) => `Free space on the box's disk: ${amount}.`,
     unknownSpace: "unknown",
     missingTriggers: (names) => `Missing triggers: ${names}`,
@@ -187,6 +192,8 @@ const PAGE_TEXT: Readonly<
     stoppedStatus: (level) => `Nivel: ${level}. Se detuvo mientras funcionaba.`,
     uncountedStatus: (level) =>
       `Nivel: ${level}. Este arranque no se ha contado: el disco está lleno.`,
+    refusedAtStartStatus: (level) =>
+      `Nivel: ${level}. Este arranque se rechazó antes de empezar y no se ha contado.`,
     freeSpace: (amount) => `Espacio libre en el disco del equipo: ${amount}.`,
     unknownSpace: "desconocido",
     missingTriggers: (names) => `Disparadores que faltan: ${names}`,
@@ -248,7 +255,7 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
- * 2026-09-10). Each such action names whoever installed the box: the reader has no terminal.
+ * 2026-09-10).
  */
 export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>> = {
   "provisioning.database_ahead": {
@@ -450,6 +457,32 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       action: "Reinstala Waitron en este equipo.",
     },
   },
+  "setup.workspace_unsupported": {
+    "en-GB": {
+      title:
+        "This box holds a setup from an older version of Waitron that this version cannot use.",
+      action: "Reinstall Waitron on this box to start fresh.",
+    },
+    "es-ES": {
+      title:
+        "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar.",
+      action: "Reinstala Waitron en este equipo para empezar de cero.",
+    },
+  },
+  "setup.start_again_incomplete": {
+    "en-GB": {
+      title:
+        "Start again did not finish: the box found files it did not expect, or could not read or delete one.",
+      action:
+        "The box has not changed files it did not expect, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
+    },
+    "es-ES": {
+      title:
+        "«Empezar de nuevo» no terminó: el equipo encontró archivos que no esperaba, o no pudo leer o borrar uno.",
+      action:
+        "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
+    },
+  },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
   [HOLDER_STALLED]: holderStalledText(undefined),
 };
@@ -532,9 +565,11 @@ function renderPage(
   const heading = refused ? page.stoppedHeading : page.heading;
   const status = refused
     ? page.stoppedStatus(state.level)
-    : deps.uncounted === true
-      ? page.uncountedStatus(state.level)
-      : page.status(state.level, state.failures);
+    : deps.refusedAtStart === true
+      ? page.refusedAtStartStatus(state.level)
+      : deps.uncounted === true
+        ? page.uncountedStatus(state.level)
+        : page.status(state.level, state.failures);
   const lastError = page.lastError(
     state.lastErrorCode ?? page.noCode,
     state.lastFailureAt ?? page.noTime,

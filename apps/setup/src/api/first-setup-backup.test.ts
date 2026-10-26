@@ -116,3 +116,24 @@ it.each(["open", "prepare", "resume", "commit", "close"])(
     });
   },
 );
+
+it("keeps the recovery's lease through its own routes, with the tab's holder on every Cloud call", async () => {
+  const transport = vi.fn<typeof fetch>(async () => Response.json({ activity: null }));
+  const api = new SetupApi("", transport);
+  await api.renewFirstSetupBackup("grant");
+  await api.startFirstSetupBackupCloud("tab");
+  await api.firstSetupBackupCloudStatus("tab");
+  await api.startFirstSetupBackupCloudAgain("tab");
+  await api.renewFirstSetupBackupCloud("tab");
+  await api.releaseFirstSetupBackupCloud("tab");
+  expect(await api.firstSetupBackupActivity()).toEqual({ activity: null });
+  expect(transport.mock.calls.map(([url, init]) => [url, init?.method, init?.body])).toEqual([
+    [`${root}/renew`, "POST", JSON.stringify({ sessionId: "grant" })],
+    [`${root}/cloud/start`, "POST", JSON.stringify({ holder: "tab" })],
+    [`${root}/cloud/status`, "POST", JSON.stringify({ holder: "tab" })],
+    [`${root}/cloud/start-again`, "POST", JSON.stringify({ holder: "tab" })],
+    [`${root}/cloud/renew`, "POST", JSON.stringify({ holder: "tab" })],
+    [`${root}/cloud/release`, "POST", JSON.stringify({ holder: "tab" })],
+    [`${root}/activity`, "GET", undefined],
+  ]);
+});

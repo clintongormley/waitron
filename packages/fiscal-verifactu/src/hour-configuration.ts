@@ -5,7 +5,7 @@ import type {
   ModuleOperationHost,
   ModuleOperationPreparation,
 } from "@waitron/module";
-import { createHourInitialSetup } from "./initial-hour-setup.js";
+import { createHourInitialSetup, hourStartAgainFloor } from "./initial-hour-setup.js";
 import { FISCAL_INITIAL_SETUP as historicalInitialSetup } from "./initial-setup.js";
 import { hostedHourPreparation } from "./hour-preparation.js";
 import { createHourDormantPreparation, isHourDormantInput } from "./hour-dormant-standby.js";
@@ -84,6 +84,7 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
   enrol: unconfiguredSetup,
   confirmation: unconfiguredSetup,
   documentConfirmation: unconfiguredSetup,
+  startAgainFloor: hourStartAgainFloor(historicalInitialSetup.retainedAssignments!),
   configure(host) {
     return createHourInitialSetup(host, historicalInitialSetup);
   },

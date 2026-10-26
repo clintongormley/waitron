@@ -15,9 +15,10 @@ import {
 } from "@waitron/db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
-  firstSetupAnchorFor,
+  assertNoStartAgainDeletion,
   canonicalFirstSetupDirectory,
-  resolveFirstSetupWorkspace,
+  canonicalFirstSetupRoots,
+  isEmptiedTombstone,
   readDurableHostJson,
   writeDurableHostJson,
   type FirstSetupHold,
@@ -87,6 +88,22 @@ export interface BackupRepairResumeSession extends BackupRepairSession {
   input: unknown;
 }
 const UNUSED_MS = 15 * 60_000;
+// Owner decision 1 (A1042, 14:38): a recovery runs while an open or a step is in flight, or for 5
+// minutes after its last renewal or step. A lapsed session comes back on A's next renewal or step
+// until something relies on it being stopped and seals it; a failure is final at once.
+const LEASE_MS = 5 * 60_000;
+export type BackupRepairActivity =
+  | { state: "running"; startedAt: string; lastActiveAt: string }
+  | {
+      state: "stopped";
+      startedAt: string;
+      lastActiveSource: "memory" | "saved-step";
+      lastActiveAt: string;
+      phase: BackupRepairRecord["phase"];
+      recoveryId: string;
+      failed: boolean;
+      cloud: boolean;
+    };
 type Selected = Awaited<ReturnType<typeof openFirstSetupBackupSource>>;
 function cloudIdentity(state: SavedCloudRecoveryState) {
   const { phase, ...identity } = state;
@@ -121,14 +138,14 @@ async function verifier(selected: Selected): Promise<string | null> {
 export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
   let generation = 0;
   let disposed = false;
-  const openings = new Set<Promise<void>>();
+  const openings = new Map<Promise<void>, string>();
   let disposal: Promise<void> | undefined;
   const opening = () => {
     let finish!: () => void;
     const pending = new Promise<void>((done) => {
       finish = done;
     });
-    openings.add(pending);
+    openings.set(pending, new Date().toISOString());
     return () => {
       openings.delete(pending);
       finish();
@@ -137,6 +154,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
   type Entry = {
     session: BackupRepairSession;
     usedAt: number;
+    startedAt: string;
+    lastActiveAt: string;
+    lastActiveMono: number;
+    failed?: { at: string };
+    sealed?: { at: string };
     discard(): Promise<void>;
     request: BackupRepairOpenRequest | BackupRepairResumeRequest;
     resumed?: boolean;
@@ -157,6 +179,156 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     evidence?: Record<string, unknown>;
   };
   let active: Entry | undefined;
+  let recent: Entry | undefined;
+  // A step runs inside the turn, and the fence seals outside it, so a step in flight must read as running.
+  const steps = new Set<{ entry: Entry }>();
+  const lease = () => {
+    const at = new Date().toISOString();
+    return { startedAt: at, lastActiveAt: at, lastActiveMono: performance.now() };
+  };
+  const refresh = (entry: Entry) => {
+    entry.lastActiveMono = performance.now();
+    entry.lastActiveAt = new Date().toISOString();
+  };
+  // A Cloud wait holds no session, so each tab holds it under a holder id it makes itself. Only a
+  // seal makes a recovery id's wait final (owner decision 1, A1042).
+  type CloudWait = {
+    startedAt: string;
+    lastActiveAt: string;
+    holders: Map<string, number>;
+    sealed?: { at: string };
+  };
+  const cloudWaits = new Map<string, CloudWait>();
+  const cloudWait = () =>
+    pendingCloudId === undefined ? undefined : cloudWaits.get(pendingCloudId);
+  const held = (renewedMono: number) => performance.now() - renewedMono <= LEASE_MS;
+  const cloudLeased = () => {
+    const wait = cloudWait();
+    return (
+      !disposed && wait?.sealed === undefined && [...(wait?.holders.values() ?? [])].some(held)
+    );
+  };
+  // A wait is made only while no journal exists, so a journal written before a restart gets none,
+  // and it leases only while the recovery has not started placing.
+  const holdCloud = (
+    id: string,
+    record: BackupRepairRecord | undefined,
+    holder: string | undefined,
+  ) => {
+    let wait = cloudWaits.get(id);
+    if (wait === undefined) {
+      if (record !== undefined) return;
+      const { startedAt, lastActiveAt } = lease();
+      wait = { startedAt, lastActiveAt, holders: new Map() };
+      cloudWaits.set(id, wait);
+    }
+    if (
+      wait.sealed !== undefined ||
+      holder === undefined ||
+      (record !== undefined && record.phase !== "prepared")
+    )
+      return;
+    wait.holders.set(holder, performance.now());
+    retiredHolders.delete(holder);
+    wait.lastActiveAt = new Date().toISOString();
+  };
+  const handOver = (recoveryId: string) => cloudWaits.get(recoveryId)?.holders.clear();
+  // The latest record, when it is `abandoned`, as last read or as a discard gave it: a renewal
+  // has no turn to read it in.
+  let tombstone: { recoveryId: string; at: string } | undefined;
+  // Only a caller that belonged to the discarded recovery is told it was discarded. A Cloud holder
+  // is known only in memory; a session id carries a hash binding it to its recovery, so it still
+  // matches after a restart.
+  const retiredHolders = new Map<string, string>();
+  const sessionTag = (recoveryId: string, nonce: string) =>
+    createHash("sha256").update(`${recoveryId}\0${nonce}`).digest("hex").slice(0, 32);
+  const newSessionId = (recoveryId: string) => {
+    const nonce = randomBytes(16).toString("hex");
+    return nonce + sessionTag(recoveryId, nonce);
+  };
+  const observe = (last: BackupRepairRecord | undefined) => {
+    tombstone =
+      last?.phase === "abandoned"
+        ? { recoveryId: last.target.recoveryId, at: last.recordedAt }
+        : undefined;
+    if (last !== undefined && tombstone === undefined) retiredHolders.clear();
+    return tombstone;
+  };
+  // An unreadable journal leaves the refusal the caller would give anyway.
+  const readTombstone = () =>
+    options.workspace.read().then(
+      (records) => observe(records.at(-1)),
+      () => undefined,
+    );
+  const discarded = (found: { at: string } | undefined) => {
+    if (found !== undefined)
+      throw new AppError("setup.recovery_discarded", { discardedAt: found.at });
+  };
+  const refuseDiscarded = async (recoveryId: string) => {
+    const found = await readTombstone();
+    if (found?.recoveryId === recoveryId) discarded(found);
+  };
+  const refuseDiscardedSession = (sessionId: string, found = tombstone) => {
+    if (
+      found !== undefined &&
+      sessionId.slice(32) === sessionTag(found.recoveryId, sessionId.slice(0, 32))
+    )
+      discarded(found);
+  };
+  // A Cloud call can wait 30 s for Cloud before it takes its lease, so it reads as running meanwhile.
+  const cloudCalls = new Map<object, string>();
+  const cloudCall = <T>(run: () => Promise<T>) =>
+    turn(async () => {
+      const call = {};
+      cloudCalls.set(call, new Date().toISOString());
+      try {
+        return await run();
+      } finally {
+        cloudCalls.delete(call);
+      }
+    });
+  const fail = (entry: Entry) => {
+    entry.failed ??= { at: new Date().toISOString() };
+    // A failure is final at once, so no later Check may revive the failed recovery's wait.
+    const wait = cloudWaits.get(entry.session.recoveryId);
+    if (wait !== undefined) wait.sealed ??= entry.failed;
+  };
+  const live = (entry: Entry | undefined): entry is Entry =>
+    entry !== undefined &&
+    !disposed &&
+    active === entry &&
+    entry.failed === undefined &&
+    entry.sealed === undefined &&
+    performance.now() - entry.usedAt <= UNUSED_MS;
+  const leased = (entry: Entry | undefined): boolean =>
+    live(entry) && performance.now() - entry.lastActiveMono <= LEASE_MS;
+  const inFlight = (entry: Entry) => [...steps].some((step) => step.entry === entry);
+  const enter = (sessionId: string) => {
+    const entry = active;
+    if (
+      disposed ||
+      entry === undefined ||
+      entry.session.sessionId !== sessionId ||
+      entry.failed !== undefined ||
+      entry.sealed !== undefined
+    )
+      return undefined;
+    const step = { entry };
+    steps.add(step);
+    refresh(entry);
+    return step;
+  };
+  const leave = (step: { entry: Entry } | undefined) => {
+    if (step === undefined) return;
+    steps.delete(step);
+    if (step.entry.failed === undefined) refresh(step.entry);
+  };
+  const runningInMemory = () =>
+    openings.size > 0 ||
+    cloudCalls.size > 0 ||
+    steps.size > 0 ||
+    (active !== undefined && leased(active)) ||
+    cloudLeased();
   let pendingCloudId: string | undefined;
   const cloudScratch: string[] = [];
   const clouds = new Map<
@@ -167,9 +339,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
     let cloud = clouds.get(id);
     if (cloud === undefined) {
-      const anchor = await firstSetupAnchorFor(options);
       const stateDir = join(
-        anchor.stateDir,
+        await canonicalFirstSetupDirectory(options.stateDir),
         "first-setup-resolutions",
         "backup-recovery",
         id,
@@ -179,6 +350,27 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       clouds.set(id, cloud);
     }
     return cloud;
+  };
+  const scratchCloud = async (id: string) => {
+    if (clouds.has(id)) return;
+    if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-repair-cloud-"));
+    cloudScratch.push(stateDir);
+    clouds.set(id, { stateDir, client: createCloudRecoveryClient({ ...options.cloud, stateDir }) });
+  };
+  // A seal bars only its id's wait. With no journal, a Start, Start again or open that succeeds
+  // moves the sealed id's Cloud client, and with it the Cloud request, to a new id with a new wait,
+  // so an approval Cloud already granted is kept. Check never moves it.
+  const pendingSealed = () =>
+    pendingCloudId !== undefined && cloudWaits.get(pendingCloudId)?.sealed !== undefined;
+  const takeOver = (sealed: string, id: string = randomUUID()) => {
+    const cloud = clouds.get(sealed);
+    if (cloud !== undefined) clouds.set(id, cloud);
+    clouds.delete(sealed);
+    pendingCloudId = id;
+    const { startedAt, lastActiveAt } = lease();
+    cloudWaits.set(id, { startedAt, lastActiveAt, holders: new Map() });
+    return id;
   };
   const saveCloud = async (entry: Entry, destination: string) => {
     const cloud = await cloudFor(entry.session.recoveryId);
@@ -247,18 +439,25 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       await drop();
       ownerRequired();
     }
+    await refuseDiscarded(entry.session.recoveryId);
+    await assertNoStartAgainDeletion(options.venueDir);
+    // The session's observation and digests never change, so a refusal here would repeat on every step.
+    const refuse = (): never => {
+      fail(entry);
+      return conflict();
+    };
     if (
       !isDeepStrictEqual(await observation(), entry.request.observation) ||
       (await options.workspace.inspect(entry.session.recoveryId)) !== entry.originalsDigest ||
       (await fingerprint(entry.selected)) !== entry.sourceDigest ||
       (await verifier(entry.selected)) !== entry.provedVerifier
     )
-      conflict();
+      refuse();
     if (
       entry.publicationDigest !== undefined &&
       (await readBackupRepairPublication(entry.record!)).digest !== entry.publicationDigest
     )
-      conflict();
+      refuse();
     if (entry.preparation !== undefined || entry.resumed) {
       const latest = (await options.workspace.read()).at(-1);
       if (
@@ -270,7 +469,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           entry.record,
         )
       )
-        conflict();
+        refuse();
     }
     if (
       entry.cloudState !== undefined &&
@@ -279,14 +478,30 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         entry.cloudState,
       )
     )
-      conflict();
+      refuse();
   };
+  // A failed session is refused by `unfailed`, after the step's own journal and phase checks.
   const admitted = async (sessionId: string) => {
-    if (active === undefined || active.session.sessionId !== sessionId) ownerRequired();
+    if (
+      active === undefined ||
+      active.session.sessionId !== sessionId ||
+      active.sealed !== undefined
+    ) {
+      refuseDiscardedSession(sessionId, await readTombstone());
+      ownerRequired();
+    }
     const entry = active;
     await recheck(entry);
-    touch(entry);
+    if (entry.failed === undefined) touch(entry);
     return entry;
+  };
+  const unfailed = (entry: Entry) => {
+    if (entry.failed !== undefined) ownerRequired();
+  };
+  // A seal deletes the copy under a failed session's checks, so what they then throw is the seal's doing.
+  const sealedUnder = (entry: Entry | undefined, error: unknown): never => {
+    if (entry?.sealed !== undefined && !isAppError(error)) ownerRequired();
+    throw error;
   };
   const existingTarget = async (record: NonNullable<Entry["record"]>) => {
     for (const directory of Object.values(record.target.target))
@@ -384,8 +599,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       });
     }
     if (history.databases.length > 0 && Object.keys(documents).length === 0) return refuse();
-    const anchor = await firstSetupAnchorFor(options);
-    const source = await resolveFirstSetupWorkspace(options);
+    const anchor = await canonicalFirstSetupRoots(options);
     const base = join(
       anchor.stateDir,
       "first-setup-resolutions",
@@ -397,10 +611,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       target: {
         recoveryId: entry.session.recoveryId,
         anchor,
-        source: {
-          stateDir: await canonicalFirstSetupDirectory(source.stateDir),
-          venueDir: await canonicalFirstSetupDirectory(source.venueDir),
-        },
+        source: anchor,
         target: { stateDir: join(base, "state"), venueDir: join(base, "venue") },
         generation: 1,
       },
@@ -480,12 +691,33 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     });
     return entry.preparation;
   };
+  // A discarded recovery reads as none, and its Cloud approval is never used again. Until it is
+  // emptied a new one is refused, as the workspace would; status still offers Start again.
+  const liveRecords = async (starting = true) => {
+    const records = await options.workspace.read(),
+      last = records.at(-1);
+    observe(last);
+    if (last?.phase !== "abandoned") return records;
+    if (
+      starting &&
+      !(await isEmptiedTombstone(
+        { venueDir: options.venueDir, stateDir: options.stateDir },
+        last.target.recoveryId,
+      ))
+    )
+      throw new AppError("setup.start_again_incomplete", {});
+    if (pendingCloudId === last.target.recoveryId) {
+      clouds.delete(pendingCloudId);
+      pendingCloudId = undefined;
+    }
+    return [];
+  };
   return {
     status() {
       return turn(async () => {
         if (disposed) ownerRequired();
         try {
-          const record = (await options.workspace.read()).at(-1);
+          const record = (await liveRecords(false)).at(-1);
           return record === undefined
             ? { phase: "unstarted" as const, proofRequired: true }
             : { phase: record.phase, recoveryId: record.target.recoveryId, proofRequired: true };
@@ -494,11 +726,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         }
       });
     },
-    cloudStart() {
-      return turn(async () => {
+    cloudStart(holder?: string) {
+      return cloudCall(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
-        const record = (await options.workspace.read()).at(-1);
+        const record = (await liveRecords()).at(-1);
         if (record !== undefined) {
           const directory = dirname(dirname(record.target.target.stateDir));
           if (
@@ -512,34 +744,35 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           pendingCloudId = record.target.recoveryId;
           clouds.delete(pendingCloudId);
         }
+        const sealed = record === undefined && pendingSealed();
         pendingCloudId ??= randomUUID();
-        if (!clouds.has(pendingCloudId)) {
-          if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
-          const stateDir = await mkdtemp(join(tmpdir(), "waitron-repair-cloud-"));
-          cloudScratch.push(stateDir);
-          clouds.set(pendingCloudId, {
-            stateDir,
-            client: createCloudRecoveryClient({ ...options.cloud, stateDir }),
-          });
-        }
+        await scratchCloud(pendingCloudId);
         generation++;
-        return (await cloudFor(pendingCloudId)).client.start();
+        const id = pendingCloudId;
+        const answer = await (await cloudFor(id)).client.start();
+        holdCloud(sealed ? takeOver(id) : id, record, holder);
+        return answer;
       });
     },
-    cloudStatus() {
-      return turn(async () => {
+    cloudStatus(holder?: string) {
+      return cloudCall(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
-        pendingCloudId ??= (await options.workspace.read()).at(-1)?.target.recoveryId;
+        const record = (await liveRecords()).at(-1);
+        pendingCloudId ??= record?.target.recoveryId;
         if (pendingCloudId === undefined) conflict();
-        return (await cloudFor(pendingCloudId)).client.status();
+        const id = pendingCloudId;
+        const answer = await (await cloudFor(id)).client.status();
+        holdCloud(id, record, holder);
+        return answer;
       });
     },
-    cloudStartAgain() {
-      return turn(async () => {
+    cloudStartAgain(holder?: string) {
+      return cloudCall(async () => {
         if (disposed) ownerRequired();
-        if (active !== undefined || pendingCloudId === undefined) conflict();
-        const record = (await options.workspace.read()).at(-1);
+        if (active !== undefined) conflict();
+        const record = (await liveRecords()).at(-1);
+        if (pendingCloudId === undefined) conflict();
         if (
           record !== undefined &&
           (record.phase !== "prepared" ||
@@ -549,8 +782,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             )) !== null)
         )
           conflict();
+        const sealed = record === undefined && pendingSealed();
         generation++;
-        return (await cloudFor(pendingCloudId)).client.startAgain();
+        const id = pendingCloudId;
+        const answer = await (await cloudFor(id)).client.startAgain();
+        holdCloud(sealed ? takeOver(id) : id, record, holder);
+        return answer;
       });
     },
     async open(
@@ -569,15 +806,23 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           });
         if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
           throw new AppError("module.operation_invalid", { module: "core" });
-        const recoveryId =
-          request.recoveryId ??
-          (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
-          randomUUID();
         const before = await turn(async () => {
           if (disposed) ownerRequired();
+          if (request.recoveryId !== undefined) await refuseDiscarded(request.recoveryId);
+          await assertNoStartAgainDeletion(options.venueDir);
           if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
-          const records = await options.workspace.read();
+          const records = await liveRecords();
           const record = records.at(-1);
+          const sealedId =
+            request.recoveryId === undefined && request.source.kind === "cloud" && pendingSealed()
+              ? pendingCloudId
+              : undefined;
+          const recoveryId =
+            request.recoveryId ??
+            (request.source.kind === "cloud" && sealedId === undefined
+              ? pendingCloudId
+              : undefined) ??
+            randomUUID();
           if (
             request.recoveryId === undefined
               ? records.length !== 0
@@ -593,8 +838,15 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           const digest = await options.workspace.inspect(recoveryId);
           if (record !== undefined && digest !== record.observation.originalsDigest) conflict();
-          return { digest, generation: ++generation, record };
+          return { digest, generation: ++generation, record, recoveryId, sealedId };
         });
+        const { recoveryId, sealedId } = before;
+        const cloudId = sealedId ?? recoveryId;
+        // A Start since the first turn may have moved the sealed id's client to a new id.
+        const cloudClient = async () => {
+          if (sealedId !== undefined && !clouds.has(sealedId)) conflict();
+          return (await cloudFor(cloudId)).client;
+        };
         // Decrypted copies and key derivation stay outside the retained roots and their action lock.
         const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
         let selected: Selected | undefined;
@@ -613,8 +865,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               ...options.sources,
               ...(request.source.kind === "cloud"
                 ? {
-                    cloudRecovery:
-                      options.cloud === undefined ? undefined : (await cloudFor(recoveryId)).client,
+                    cloudRecovery: options.cloud === undefined ? undefined : await cloudClient(),
                   }
                 : {}),
               stateDir: scratch,
@@ -656,18 +907,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           return await turn(async () => {
             if (disposed) ownerRequired();
+            await refuseDiscarded(recoveryId);
             if (
               generation !== before.generation ||
               !isDeepStrictEqual(await observation(), request.observation) ||
               (await options.workspace.inspect(recoveryId)) !== before.digest ||
               (await fingerprint(selected!)) !== sourceDigest ||
               (await verifier(selected!)) !== provedVerifier ||
-              !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record)
+              !isDeepStrictEqual((await liveRecords()).at(-1), before.record)
             )
               conflict();
             await drop();
             const session = {
-              sessionId: randomBytes(32).toString("hex"),
+              sessionId: newSessionId(recoveryId),
               recoveryId,
               binding,
               preview,
@@ -678,6 +930,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             const entry: Entry = {
               session,
               usedAt: performance.now(),
+              ...lease(),
               discard,
               request,
               selected: selected!,
@@ -686,11 +939,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               provedVerifier,
               ...(request.source.kind === "cloud"
                 ? {
-                    cloudState: await readCloudRecoveryState((await cloudFor(recoveryId)).stateDir),
+                    cloudState: await readCloudRecoveryState((await cloudFor(cloudId)).stateDir),
                   }
                 : {}),
             };
             active = entry;
+            recent = entry;
             try {
               if (before.record !== undefined) {
                 const { version, sequence, previousRecordDigest, recordedAt, ...record } =
@@ -740,7 +994,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
                 }
                 await recheck(entry);
               }
+              refresh(entry);
               touch(entry);
+              if (sealedId !== undefined) takeOver(sealedId, recoveryId);
+              handOver(recoveryId);
               owned = false;
               return structuredClone(session);
             } catch (error) {
@@ -772,6 +1029,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         try {
           const before = await turn(async () => {
             if (disposed) ownerRequired();
+            await assertNoStartAgainDeletion(options.venueDir);
             const record = (await options.workspace.read()).at(-1);
             if (
               record === undefined ||
@@ -903,7 +1161,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             void previousRecordDigest;
             void recordedAt;
             const session = {
-              sessionId: randomBytes(32).toString("hex"),
+              sessionId: newSessionId(request.recoveryId),
               recoveryId: request.recoveryId,
               preview: selected.preview,
               binding: record.binding,
@@ -912,6 +1170,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             const entry: Entry = {
               session,
               usedAt: performance.now(),
+              ...lease(),
               request,
               selected: source,
               originalsDigest: record.observation.originalsDigest,
@@ -927,14 +1186,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               publicationDigest: before.material.digest,
             };
             active = entry;
+            recent = entry;
             await admitCloud(entry);
             buildPreparation(entry);
             await recheck(entry);
+            refresh(entry);
             touch(entry);
+            handOver(request.recoveryId);
             owned = false;
             return structuredClone(session);
           });
         } catch (error) {
+          // A discard empties the files a resume reads between its turns.
+          await refuseDiscarded(request.recoveryId);
           if (isAppError(error)) throw error;
           throw new AppError("setup.attempt_uncertain", {});
         } finally {
@@ -947,41 +1211,50 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     prepare(sessionId: string, supplied: unknown, client: OperationClient): Promise<unknown> {
       const proposal = structuredClone(supplied);
       return turn(async (hold) => {
-        const entry = await admitted(sessionId);
-        if (
-          (entry.publicationDigest !== undefined && !entry.sourceReopened) ||
-          (entry.record !== undefined &&
-            entry.record.phase !== "prepared" &&
-            !(entry.sourceReopened && entry.record.phase === "placement-started"))
-        )
-          conflict();
-        const service = await preparation(entry);
-        const store = await openVenueDatabase(entry.working!);
+        const step = enter(sessionId);
+        const own = active?.session.sessionId === sessionId ? active : undefined;
         try {
-          const result = await scopes.run({ hold, db: store.venue }, () =>
-            service.prepare(proposal, client),
-          );
-          await recheck(entry);
+          const entry = await admitted(sessionId);
           if (
-            typeof result === "object" &&
-            result !== null &&
-            "status" in result &&
-            result.status === "selected" &&
-            "input" in result
-          ) {
+            (entry.publicationDigest !== undefined && !entry.sourceReopened) ||
+            (entry.record !== undefined &&
+              entry.record.phase !== "prepared" &&
+              !(entry.sourceReopened && entry.record.phase === "placement-started"))
+          )
+            conflict();
+          unfailed(entry);
+          const service = await preparation(entry);
+          const store = await openVenueDatabase(entry.working!);
+          try {
+            const result = await scopes.run({ hold, db: store.venue }, () =>
+              service.prepare(proposal, client),
+            );
+            await recheck(entry);
             if (
-              entry.publicationDigest !== undefined &&
-              !isDeepStrictEqual(result.input, entry.record!.input)
-            )
-              conflict();
-            const next = { ...entry.record!, input: structuredClone(result.input) };
-            await options.workspace.append(next);
-            entry.record = next;
+              typeof result === "object" &&
+              result !== null &&
+              "status" in result &&
+              result.status === "selected" &&
+              "input" in result
+            ) {
+              if (
+                entry.publicationDigest !== undefined &&
+                !isDeepStrictEqual(result.input, entry.record!.input)
+              )
+                conflict();
+              const next = { ...entry.record!, input: structuredClone(result.input) };
+              await options.workspace.append(next);
+              entry.record = next;
+            }
+            touch(entry);
+            return result;
+          } finally {
+            await store.close();
           }
-          touch(entry);
-          return result;
+        } catch (error) {
+          return sealedUnder(own, error);
         } finally {
-          await store.close();
+          leave(step);
         }
       });
     },
@@ -989,74 +1262,175 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       const input = structuredClone(supplied);
       void _client;
       return turn(async (hold) => {
-        const entry = await admitted(sessionId);
-        if (
-          entry.preparation === undefined ||
-          entry.record === undefined ||
-          (entry.resumed
-            ? !["placement-started", "restored"].includes(entry.record.phase)
-            : entry.record.phase !== "prepared" &&
-              !(entry.sourceReopened && entry.record.phase === "placement-started")) ||
-          entry.record.input === null ||
-          !isDeepStrictEqual(entry.record.input, input)
-        )
-          conflict();
-        const assertCommitted = options.modules.find(
-          (module) => module.name === entry.session.binding.module,
-        )?.backup?.assertRestoreCommitted;
-        if (assertCommitted === undefined)
-          throw new AppError("module.operation_invalid", { module: entry.session.binding.module });
-        await evidence(entry, false, false, !entry.resumed);
-        const target = entry.record.target.target;
-        if (!entry.resumed) {
-          await emptyTarget(entry.record, entry.cloudState);
-          await refuseIfArchiveSourceLive({
-            validated: entry.selected.copy,
-            stateDir: target.stateDir,
-            oldBoxGone: entry.request.context.oldBoxGone,
-            now: options.sources.bucket.now,
-            openStore: options.sources.bucket.openStore,
-          });
-          await recheck(entry);
-          entry.rebuildSource =
-            "source" in entry.request && entry.request.source.kind === "bucket"
-              ? "stream"
-              : "archive";
-          const material = await persistBackupRepairPublication(
-            entry.record,
-            entry.cloudState === undefined
-              ? entry.selected.copy
-              : {
-                  ...entry.selected.copy,
-                  secretEntries: entry.selected.copy.secretEntries.filter(
-                    (item) => item.name !== "secrets/backup.env",
-                  ),
-                },
-            entry.session.preview,
-            entry.request.nodeRecoverySecret,
-            entry.cloudState === undefined ? entry.rebuildSource : "cloud",
-            entry.cloudState,
-          );
-          entry.publicationDigest = material.digest;
-          await recheck(entry);
-          if (entry.record.phase !== "placement-started") {
-            const started = { ...entry.record, phase: "placement-started" as const };
-            await options.workspace.append(started);
-            entry.record = started;
+        const step = enter(sessionId);
+        const own = active?.session.sessionId === sessionId ? active : undefined;
+        let begun = false;
+        try {
+          const entry = await admitted(sessionId);
+          if (
+            entry.preparation === undefined ||
+            entry.record === undefined ||
+            (entry.resumed
+              ? !["placement-started", "restored"].includes(entry.record.phase)
+              : entry.record.phase !== "prepared" &&
+                !(entry.sourceReopened && entry.record.phase === "placement-started")) ||
+            entry.record.input === null ||
+            !isDeepStrictEqual(entry.record.input, input)
+          )
+            conflict();
+          unfailed(entry);
+          const assertCommitted = options.modules.find(
+            (module) => module.name === entry.session.binding.module,
+          )?.backup?.assertRestoreCommitted;
+          if (assertCommitted === undefined)
+            throw new AppError("module.operation_invalid", {
+              module: entry.session.binding.module,
+            });
+          begun = true;
+          await evidence(entry, false, false, !entry.resumed);
+          const target = entry.record.target.target;
+          if (!entry.resumed) {
+            await emptyTarget(entry.record, entry.cloudState);
+            await refuseIfArchiveSourceLive({
+              validated: entry.selected.copy,
+              stateDir: target.stateDir,
+              oldBoxGone: entry.request.context.oldBoxGone,
+              now: options.sources.bucket.now,
+              openStore: options.sources.bucket.openStore,
+            });
+            await recheck(entry);
+            entry.rebuildSource =
+              "source" in entry.request && entry.request.source.kind === "bucket"
+                ? "stream"
+                : "archive";
+            const material = await persistBackupRepairPublication(
+              entry.record,
+              entry.cloudState === undefined
+                ? entry.selected.copy
+                : {
+                    ...entry.selected.copy,
+                    secretEntries: entry.selected.copy.secretEntries.filter(
+                      (item) => item.name !== "secrets/backup.env",
+                    ),
+                  },
+              entry.session.preview,
+              entry.request.nodeRecoverySecret,
+              entry.cloudState === undefined ? entry.rebuildSource : "cloud",
+              entry.cloudState,
+            );
+            entry.publicationDigest = material.digest;
+            await recheck(entry);
+            if (entry.record.phase !== "placement-started") {
+              const started = { ...entry.record, phase: "placement-started" as const };
+              await options.workspace.append(started);
+              entry.record = started;
+            }
+          } else {
+            await admitCloud(entry);
+            await existingTarget(entry.record);
+            const current = await openVenueDatabase(target.venueDir);
+            try {
+              if (
+                (await readBreakGlassVerifier(
+                  current.venue,
+                  entry.session.binding.targetNodeId,
+                )) !== entry.provedVerifier ||
+                (await readBreakGlassKeyName(current.venue, entry.session.binding.targetNodeId)) !==
+                  entry.session.preview.nodeRecoveryKeyName
+              )
+                conflict();
+              await withTransaction(current.venue, (tx) =>
+                assertCommitted(
+                  tx,
+                  readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                  entry.session.binding,
+                ),
+              );
+            } finally {
+              await current.close();
+            }
+            if (entry.cloudState === undefined) await evidence(entry, false, true);
           }
-        } else {
-          await admitCloud(entry);
-          await existingTarget(entry.record);
-          const current = await openVenueDatabase(target.venueDir);
+          const store = await openVenueDatabase(entry.working!);
           try {
-            if (
-              (await readBreakGlassVerifier(current.venue, entry.session.binding.targetNodeId)) !==
-                entry.provedVerifier ||
-              (await readBreakGlassKeyName(current.venue, entry.session.binding.targetNodeId)) !==
-                entry.session.preview.nodeRecoveryKeyName
-            )
-              conflict();
-            await withTransaction(current.venue, (tx) =>
+            await scopes.run({ hold, db: store.venue, placing: true }, async () => {
+              const runner = entry.preparation!.runner(
+                input,
+                entry.resumed ? undefined : { refresh: true },
+              );
+              const check = runner.checkBeforePlacement;
+              runner.checkBeforePlacement = async (context) => {
+                if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
+                await check?.(context);
+              };
+              const placement = {
+                ...target,
+                stagingDir: dirname(entry.selected.copy.databasePath),
+                modules: options.modules,
+                migrationsRoot: options.sources.migrationsRoot,
+                environment: options.environment,
+                log: options.log,
+                rebuildSource: entry.rebuildSource,
+                withModuleOperations: runner,
+                ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
+              };
+              if (entry.cloudState !== undefined && !entry.resumed) {
+                const cloud = await cloudFor(entry.session.recoveryId);
+                await cloud.client.restore(async (request) => {
+                  if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
+                  await recheck(entry);
+                  await saveCloud(entry, target.stateDir);
+                  const checkTarget = runner.checkBeforePlacement;
+                  runner.checkBeforePlacement = async (context) => {
+                    await saveCloud(entry, target.stateDir);
+                    await checkTarget?.(context);
+                  };
+                  await restoreFromArtifact({
+                    ...placement,
+                    ...request,
+                    snapshotRequestKey: entry.cloudState!.publicKey,
+                  });
+                }, entry.cloudState.pointId!);
+                entry.cloudState = { ...entry.cloudState, phase: "staged" };
+              } else if (entry.cloudState === undefined)
+                await writeValidated(entry.selected.copy, placement);
+              if (entry.cloudState !== undefined) {
+                const cloud = await cloudFor(entry.session.recoveryId);
+                await cloud.client.reconcileRestored(
+                  { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
+                  async () => {
+                    await admitCloud(entry);
+                    if (entry.resumed) {
+                      await evidence(entry, false, true);
+                      await writeValidated(entry.selected.copy, placement);
+                    }
+                    const db = await openVenueDatabase(target.venueDir);
+                    try {
+                      await withTransaction(db.venue, (tx) =>
+                        assertCommitted(
+                          tx,
+                          readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                          entry.session.binding,
+                        ),
+                      );
+                    } finally {
+                      await db.close();
+                    }
+                  },
+                );
+                entry.cloudState = {
+                  ...entry.cloudState,
+                  phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
+                };
+                await saveCloud(entry, target.stateDir);
+              }
+            });
+          } finally {
+            await store.close();
+          }
+          const placed = await openVenueDatabase(target.venueDir);
+          try {
+            await withTransaction(placed.venue, (tx) =>
               assertCommitted(
                 tx,
                 readArtifactIdentity(entry.selected.copy.secretEntries).node,
@@ -1064,132 +1438,156 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               ),
             );
           } finally {
-            await current.close();
+            await placed.close();
           }
-          if (entry.cloudState === undefined) await evidence(entry, false, true);
-        }
-        const store = await openVenueDatabase(entry.working!);
-        try {
-          await scopes.run({ hold, db: store.venue, placing: true }, async () => {
-            const runner = entry.preparation!.runner(
-              input,
-              entry.resumed ? undefined : { refresh: true },
-            );
-            const check = runner.checkBeforePlacement;
-            runner.checkBeforePlacement = async (context) => {
-              if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
-              await check?.(context);
-            };
-            const placement = {
-              ...target,
-              stagingDir: dirname(entry.selected.copy.databasePath),
-              modules: options.modules,
-              migrationsRoot: options.sources.migrationsRoot,
-              environment: options.environment,
-              log: options.log,
-              rebuildSource: entry.rebuildSource,
-              withModuleOperations: runner,
-              ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
-            };
-            if (entry.cloudState !== undefined && !entry.resumed) {
-              const cloud = await cloudFor(entry.session.recoveryId);
-              await cloud.client.restore(async (request) => {
-                if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
-                await recheck(entry);
-                await saveCloud(entry, target.stateDir);
-                const checkTarget = runner.checkBeforePlacement;
-                runner.checkBeforePlacement = async (context) => {
-                  await saveCloud(entry, target.stateDir);
-                  await checkTarget?.(context);
-                };
-                await restoreFromArtifact({
-                  ...placement,
-                  ...request,
-                  snapshotRequestKey: entry.cloudState!.publicKey,
-                });
-              }, entry.cloudState.pointId!);
-              entry.cloudState = { ...entry.cloudState, phase: "staged" };
-            } else if (entry.cloudState === undefined)
-              await writeValidated(entry.selected.copy, placement);
-            if (entry.cloudState !== undefined) {
-              const cloud = await cloudFor(entry.session.recoveryId);
-              await cloud.client.reconcileRestored(
-                { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
-                async () => {
-                  await admitCloud(entry);
-                  if (entry.resumed) {
-                    await evidence(entry, false, true);
-                    await writeValidated(entry.selected.copy, placement);
-                  }
-                  const db = await openVenueDatabase(target.venueDir);
-                  try {
-                    await withTransaction(db.venue, (tx) =>
-                      assertCommitted(
-                        tx,
-                        readArtifactIdentity(entry.selected.copy.secretEntries).node,
-                        entry.session.binding,
-                      ),
-                    );
-                  } finally {
-                    await db.close();
-                  }
-                },
-              );
-              entry.cloudState = {
-                ...entry.cloudState,
-                phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
-              };
+          await recheck(entry);
+          // Core publishes backup secrets after activation; carry-forward must follow that publication.
+          await evidence(entry, false, true);
+          const restored =
+            entry.record.phase === "restored"
+              ? (await options.workspace.read()).at(-1)!
+              : await options.workspace.append({ ...entry.record, phase: "restored" });
+          entry.record = { ...entry.record, phase: "restored" };
+          await options.workspace.select(restored);
+          if (entry.cloudState !== undefined) {
+            const cloud = await cloudFor(entry.session.recoveryId);
+            try {
+              await cloud.client.reportRestored();
+              entry.cloudState = { ...entry.cloudState, phase: "reported" };
               await saveCloud(entry, target.stateDir);
+            } catch {
+              options.log("warn", "cloud.recovery_report_pending", {});
             }
-          });
-        } finally {
-          await store.close();
-        }
-        const placed = await openVenueDatabase(target.venueDir);
-        try {
-          await withTransaction(placed.venue, (tx) =>
-            assertCommitted(
-              tx,
-              readArtifactIdentity(entry.selected.copy.secretEntries).node,
-              entry.session.binding,
-            ),
-          );
-        } finally {
-          await placed.close();
-        }
-        await recheck(entry);
-        // Core publishes backup secrets after activation; carry-forward must follow that publication.
-        await evidence(entry, false, true);
-        const restored =
-          entry.record.phase === "restored"
-            ? (await options.workspace.read()).at(-1)!
-            : await options.workspace.append({ ...entry.record, phase: "restored" });
-        entry.record = { ...entry.record, phase: "restored" };
-        await options.workspace.select(restored);
-        if (entry.cloudState !== undefined) {
-          const cloud = await cloudFor(entry.session.recoveryId);
-          try {
-            await cloud.client.reportRestored();
-            entry.cloudState = { ...entry.cloudState, phase: "reported" };
-            await saveCloud(entry, target.stateDir);
-          } catch {
-            options.log("warn", "cloud.recovery_report_pending", {});
           }
+          await drop();
+          for (const directory of cloudScratch.splice(0))
+            await rm(directory, { recursive: true, force: true });
+        } catch (error) {
+          if (
+            step !== undefined &&
+            begun &&
+            ["placement-started", "restored"].includes(step.entry.record?.phase ?? "")
+          )
+            fail(step.entry);
+          sealedUnder(own, error);
+        } finally {
+          leave(step);
         }
-        await drop();
-        for (const directory of cloudScratch.splice(0))
-          await rm(directory, { recursive: true, force: true });
       });
     },
     close(sessionId: string): Promise<void> {
       return turn(async () => {
-        if (active === undefined || active.session.sessionId !== sessionId) ownerRequired();
+        if (active === undefined || active.session.sessionId !== sessionId) {
+          refuseDiscardedSession(sessionId, await readTombstone());
+          ownerRequired();
+        }
         if (performance.now() - active.usedAt > UNUSED_MS) {
           await drop();
           ownerRequired();
         }
         await drop();
       });
+    },
+    renew(sessionId: string): void {
+      const entry = active;
+      if (entry === undefined || entry.session.sessionId !== sessionId)
+        refuseDiscardedSession(sessionId);
+      if (entry === undefined || entry.session.sessionId !== sessionId || !live(entry))
+        ownerRequired();
+      refresh(entry);
+    },
+    cloudRenew(holder: string): void {
+      const wait = cloudWait();
+      const renewed = wait?.holders.get(holder);
+      if (
+        !disposed &&
+        renewed === undefined &&
+        tombstone !== undefined &&
+        retiredHolders.get(holder) === tombstone.recoveryId
+      )
+        discarded(tombstone);
+      if (disposed || wait?.sealed !== undefined || renewed === undefined || !held(renewed))
+        ownerRequired();
+      wait!.holders.set(holder, performance.now());
+      wait!.lastActiveAt = new Date().toISOString();
+    },
+    cloudRelease(holder: string): void {
+      for (const wait of cloudWaits.values()) wait.holders.delete(holder);
+    },
+    sealLapsed(): void {
+      if (openings.size > 0 || cloudCalls.size > 0) return;
+      const entry = active;
+      if (entry !== undefined) {
+        if (inFlight(entry) || leased(entry)) return;
+        // drop() deletes the selected copy, which an open or a step in flight would still be reading.
+        entry.sealed = { at: new Date().toISOString() };
+        void drop().catch(() => {});
+      }
+      if (pendingCloudId === undefined || runningInMemory()) return;
+      const at = new Date().toISOString();
+      const wait: CloudWait = cloudWaits.get(pendingCloudId) ?? {
+        startedAt: at,
+        lastActiveAt: at,
+        holders: new Map(),
+      };
+      wait.sealed ??= { at };
+      cloudWaits.set(pendingCloudId, wait);
+    },
+    // Runs inside the caller's turn; `discardedAt` is the `abandoned` record's `recordedAt`.
+    async discardInTurn(recoveryId: string, discardedAt: string): Promise<void> {
+      generation++;
+      if (active?.session.recoveryId === recoveryId) await drop();
+      if (pendingCloudId === recoveryId) pendingCloudId = undefined;
+      clouds.delete(recoveryId);
+      for (const holder of cloudWaits.get(recoveryId)?.holders.keys() ?? [])
+        retiredHolders.set(holder, recoveryId);
+      cloudWaits.delete(recoveryId);
+      tombstone = { recoveryId, at: discardedAt };
+    },
+    runningInMemory,
+    /** When false, `sealLapsed` does nothing and `runningInMemory` answers false. */
+    holdsInMemory: (): boolean =>
+      runningInMemory() || active !== undefined || pendingCloudId !== undefined,
+    async liveness(): Promise<BackupRepairActivity | null> {
+      if (runningInMemory()) {
+        const entry = [...steps][0]?.entry ?? (leased(active) ? active : undefined);
+        const opened = [...openings.values()][0];
+        const wait = cloudLeased() ? cloudWait() : undefined;
+        const calling = [...cloudCalls.values()][0];
+        return {
+          state: "running",
+          startedAt: entry?.startedAt ?? opened ?? wait?.startedAt ?? calling!,
+          lastActiveAt: entry?.lastActiveAt ?? opened ?? wait?.lastActiveAt ?? calling!,
+        };
+      }
+      let records: BackupRepairRecord[];
+      try {
+        records = await options.workspace.readChain();
+      } catch {
+        return null;
+      }
+      const last = records.at(-1);
+      if (last === undefined || last.phase === "abandoned") return null;
+      const recoveryId = last.target.recoveryId;
+      const memory = recent?.session.recoveryId === recoveryId ? recent : undefined;
+      const cloud =
+        memory?.cloudState !== undefined ||
+        (await lstat(
+          join(dirname(dirname(last.target.target.stateDir)), "cloud", "cloud-recovery.json"),
+        ).then(
+          () => true,
+          () => false,
+        ));
+      return {
+        state: "stopped",
+        startedAt: memory?.startedAt ?? records[0]!.recordedAt,
+        lastActiveSource: memory === undefined ? "saved-step" : "memory",
+        lastActiveAt: memory?.lastActiveAt ?? last.recordedAt,
+        phase: last.phase,
+        recoveryId,
+        failed: memory?.failed !== undefined,
+        cloud,
+      };
     },
     dispose(): Promise<void> {
       disposal ??= (async () => {
@@ -1198,7 +1596,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           generation++;
           await drop();
         });
-        await Promise.all([...openings]);
+        await Promise.all([...openings.keys()]);
         await options.host.coordinator.run(async () => {
           for (const directory of cloudScratch.splice(0))
             await rm(directory, { recursive: true, force: true });

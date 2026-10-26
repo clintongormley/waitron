@@ -1,15 +1,9 @@
-import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
-  selectFirstSetupWorkspace,
-} from "@waitron/provisioning";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 
 let root: string;
@@ -102,59 +96,6 @@ it("exports current journal and retained public hour evidence without private pr
   });
   expect(JSON.stringify(result)).not.toContain("PRIVATE-");
   expect(await readFile(path)).toEqual(before);
-});
-it("retains the anchor's journal and both public floors after workspace selection", async () => {
-  await writeFile(
-    join(roots.stateDir, "module-preparation-state.json"),
-    JSON.stringify({
-      version: 1,
-      revisions: [{ binding, value: { version: 1, entries: [intent] } }],
-    }),
-  );
-  await retain(roots.stateDir);
-  await writeFile(join(roots.stateDir, "first-setup.json"), "original state");
-  await writeFile(join(roots.venueDir, "first-setup-claim.json"), "original claim");
-  const workspaceId = randomUUID(),
-    resolutionId = randomUUID();
-  const selected = {
-    workspaceId,
-    resolutionId,
-    anchorStateDir: await realpath(roots.stateDir),
-    anchorVenueDir: await realpath(roots.venueDir),
-    stateDir: join(await realpath(roots.stateDir), "first-setup-workspaces", workspaceId, "state"),
-    venueDir: join(await realpath(roots.stateDir), "first-setup-workspaces", workspaceId, "venue"),
-    selectionGeneration: 1,
-  };
-  const archive = createFirstSetupResolutionStore({
-    ...roots,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  const prepared = await archive.prepare(
-    {
-      resolutionId,
-      attemptId: randomUUID(),
-      observedRevision: 1,
-      observedOwnerGeneration: 1,
-      database: "missing",
-      authority: "original-password",
-      register: null,
-      action: "retire",
-      nextWorkspace: selected,
-    },
-    [
-      { name: "state/first-setup.json", bytes: Buffer.from("original state") },
-      { name: "venue/first-setup-claim.json", bytes: Buffer.from("original claim") },
-      { name: "venue/venue.db", bytes: null },
-    ],
-  );
-  await selectFirstSetupWorkspace(roots, await archive.apply(prepared));
-  await retain(selected.stateDir, "0CNVG");
-  const evidence = await readRecoveryDocumentEvidence(selected, module);
-  expect(evidence).toMatchObject({
-    "hour-history": {
-      records: [{ identity: "0CNSM" }, { identity: "0CNVG" }, { identity: "0CNPT" }],
-    },
-  });
 });
 it("modules without preparation-history sources have no document evidence", async () => {
   expect(await readRecoveryDocumentEvidence(roots, fakeModule("no-backup"))).toEqual({});

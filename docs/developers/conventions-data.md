@@ -2974,6 +2974,15 @@ printed:
 is killed" case (`packages/store/src/venue-lock.test.ts`) runs in CI on `ubuntu-latest`; that run is
 the Linux reading, not this paragraph.
 
+**A discarded backup recovery keeps its lock files.** The state folder can hold discarded
+backup-recovery tombstones (`first-setup-resolutions/backup-recovery/<id>/`). Emptying one, by
+Start again or by its retry at the next start, keeps the journal records and the lock files of its
+restored copy (`KEPT_IN_TARGET` in `packages/provisioning/src/first-setup-backup-discard.ts`), and
+Start again's deletion of the attempt leaves the folder in place
+(`packages/provisioning/src/first-setup-start-again-deletion.ts`, `backupRecoveryKept`). A plain
+`sudo bash waitron.sh reset` stops the box and deletes them with the rest of the state folder
+(`wipe_box` in `deploy/waitron.sh`).
+
 **Why the migrator's lock cannot serve.** It is held only while migrations run and then released, and
 it WAITS (up to two minutes, `LOCK_WAIT_MS`) for another migrator, where a second server has to be
 refused at once. Held for the life of the process, it would make that process's own later migrate
@@ -3013,8 +3022,10 @@ open the folder with `exclusive: false`, so they take no lock and write no holde
 dies leaves its file behind; the next holder overwrites it.
 
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
-when the lock cannot be taken.** Whatever the free space, a start deletes the copies a backup run
-leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
+when the lock cannot be taken.** Whatever the free space, a start through the box's entry point
+(`runEntry`, `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this
+clean-up) — except one that finds a backup recovery's journal at its repair stage or unreadable —
+deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
 `lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
 The same section deletes `<state>/restore-staging/staged-recovery` whole. That is where the setup
 wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
@@ -3026,10 +3037,9 @@ of `createSetupRecoveryPreparation`. On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.
-When first-setup resolution has moved the box into a workspace (`<state>/first-setup-workspaces/<id>/`),
-the start runs the same clean-up on the workspace's folders as well, under the workspace's own venue
-lock, before it judges the floor; it cleans the logs once, in the folder it was given (`runEntry`,
-`apps/server/src/node-entry.ts`).
+When a backup recovery from the setup repair page has selected its own folders, the start runs the
+clean-up on those folders instead, under their own venue lock, and cleans the logs in that state
+folder (`runEntry`, `apps/server/src/node-entry.ts`).
 Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
 makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
 refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other
@@ -3142,16 +3152,18 @@ lock, not that every writer of the file takes it.
 
 **First-setup entry, 2026-10-16:** `apps/server/src/first-setup-entry.ts` inspects an existing claim
 through a read-only SQLite connection before the ordinary entry path. Its admission callback holds
-the original anchor venue lock, then the selected target's lock when different, and rereads the
-selection and setup/database admission before staged work or normal boot. An ordinary unclaimed
-workspace keeps the locking path in the table above. `first-setup-resolution.boot.test.ts` removes
-the database or changes the selected workspace after discovery and checks that the callback refuses
-without creating a database. The same suite checks direct, supervised and already-recovery entry.
+the venue lock and rereads setup/database admission before normal boot; since A1042 (2026-10-25)
+there is no first-setup workspace, so no second lock and no selection to reread. An ordinary
+unclaimed box keeps the locking path in the table above. `first-setup-resolution.boot.test.ts`
+removes the database after discovery and checks that the callback refuses without creating a
+database ("rechecks the unfinished database after taking the startup locks"). The same suite checks direct, supervised and already-recovery entry.
 
 **First-setup durable replay, 2026-10-16:** on Node v26.11.1, the new
 `first-setup-resolution.durability.test.ts` left an applied record visible after injecting a
 directory-sync failure; retry returned it without another sync. The renamed-backlink and final
-selection cases in `first-setup-workspace.test.ts` reproduced the same early success. Replays now
+selection cases in `first-setup-workspace.test.ts` reproduced the same early success (dated
+pointer, 2026-10-25: those cases went with first-setup workspaces in A1042; that file now holds
+only the refusal of an earlier layout). Replays now
 sync the existing record or witness directory before returning. The resolution suite also injects
 write, file-sync, rename and directory-sync failures into original chunks, manifests and both
 action phases, then resumes through a new store and compares retained bytes. These are filesystem
@@ -3550,7 +3562,9 @@ after a second clock on another machine agrees within 30 seconds
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). The minute is strictly later than every name in the history it can read
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
-the surviving database") and begins no earlier than the backup's newest record or creation time
+the surviving database"), later than the name the box's start-again note keeps
+(`apps/server/src/hour-recovery-host.test.ts`, "a restore with the clock set back behind the
+start-again note is refused, not given a repeated name") and begins no earlier than the backup's newest record or creation time
 (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"), and is taken 90 to 150
 seconds after the clock check (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore
 waits until a minute start 90 to 150 seconds after its check"). It retains recovered invoices
@@ -4625,7 +4639,12 @@ unverifiable under the other environment.
 reimaged box, destructive for a working one. A setup, restore, re-registration or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after a check
 against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
-every name in the history it can read; a setup or restore waits 90 to 150 seconds first. The one
+every name in the history it can read and than the name the start-again note keeps
+(`first-setup-start-again.json` in the state folder, which only `waitron.sh reset --all` removes;
+owner, 2026-10-24, A1042); a setup or restore waits 90 to 150 seconds first. Guard for the note:
+`scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
+note as text, so a path built from pieces escapes it, and it never sees code that empties the whole
+state folder without naming the file. The one
 exception is the preproduction throwaway, which names with no second clock and no history check
 and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
 `packages/fiscal-verifactu/src/hour-clock.test.ts` and

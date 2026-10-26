@@ -6,24 +6,46 @@ export const initialOwnerStrings = {
     resume: "Continue with your setup password",
     password: "Administrator password",
     required: "Enter your password.",
-    passwordNotAccepted: "Password not accepted",
     resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
-    missingDatabase:
-      "The setup database is missing. Check your backups before starting again. Missing data cannot be recovered by starting again.",
+    missingDatabase: "The setup database is missing.",
+    missingAsk:
+      "This box cannot check whether this setup filed anything to AEAT or made a sale. Its record says it:",
+    reachedName: "chose the invoice series name {name}",
+    reachedNoName: "chose no invoice series name",
+    reachedFiscalStarted: "started activation, with no record that it finished",
+    reachedFiscalFinished: "finished activation",
+    missingBackup: "If you have a backup, recover from it.",
+    recoveryRunning: "A recovery from backup is in progress on another device (started {started}).",
+    recoveryLastActive: "Last active: {at}.",
+    recoveryLastSaved: "Last saved step: {at}.",
+    recoveryRunningNext: "If it stops before it finishes, you can start again here.",
+    recoveryStopped:
+      "A recovery from backup started on {started} and did not finish. Start again deletes it.",
+    recoveryStoppedCloud:
+      "Its approval in Waitron Cloud closes by itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's venue.",
+    recoveryUnreadable: "This box found a recovery from backup whose records cannot be read.",
+    checkAgain: "Check again",
+    recoveryDetailsUnread:
+      "This box could not read the details of the recovery from backup. Check again.",
+    missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
     uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
     finish: "Finish setup",
     finishReview: "Check the saved details.",
     finishEmail: "Re-enter the email settings used for this setup.",
     finishHelp: "Re-enter the certificate and email settings used for this setup.",
     startAgain: "Start again",
-    startAgainHelp:
-      "Keep the old attempt and its files, and begin in a new workspace. Previously selected installation codes stay used.",
-    retireConfirmed: "Keep the old attempt and start again.",
+    recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
+    damagedRecordPassword:
+      "To start again, enter the administrator password you chose during setup.",
+    startAgainHelp: "Deletes this attempt. This box will not use its invoice series names again.",
+    retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
-    restarting: "The old attempt is retained. Reconnect to continue in the new workspace.",
+    restarting: "The old attempt is deleted. Reconnect to continue.",
     startUnavailable:
       "Start again without a password is available only when the box can verify an unused, empty setup.",
+    startUnavailableOccupied:
+      "Start again is not available: this setup's database already holds records, and Start again deletes only a setup that holds none.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -43,11 +65,31 @@ export const initialOwnerStrings = {
     resume: "Continuar con tu contraseña de configuración",
     password: "Contraseña de administrador",
     required: "Introduce tu contraseña.",
-    passwordNotAccepted: "Contraseña no aceptada",
     resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
     interrupted: "La configuración inicial se interrumpió",
-    missingDatabase:
-      "Falta la base de datos de configuración. Revisa tus copias antes de empezar de nuevo. Empezar de nuevo no recupera los datos perdidos.",
+    missingDatabase: "Falta la base de datos de configuración.",
+    missingAsk:
+      "Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:",
+    reachedName: "eligió el nombre de serie de facturas {name}",
+    reachedNoName: "no eligió ningún nombre de serie de facturas",
+    reachedFiscalStarted: "empezó la activación, sin constancia de que terminara",
+    reachedFiscalFinished: "terminó la activación",
+    missingBackup: "Si tienes una copia, recupera desde ella.",
+    recoveryRunning:
+      "Hay una recuperación en curso en otro dispositivo, desde una copia (iniciada el {started}).",
+    recoveryLastActive: "Última actividad: {at}.",
+    recoveryLastSaved: "Último paso guardado: {at}.",
+    recoveryRunningNext: "Si se detiene antes de terminar, podrás empezar de nuevo aquí.",
+    recoveryStopped:
+      "Una recuperación desde una copia, iniciada el {started}, no terminó. Empezar de nuevo la borra.",
+    recoveryStoppedCloud:
+      "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
+    recoveryUnreadable:
+      "Este equipo encontró una recuperación desde una copia cuyos registros no se pueden leer.",
+    checkAgain: "Comprobar otra vez",
+    recoveryDetailsUnread:
+      "Este equipo no pudo leer los datos de la recuperación desde una copia. Comprueba otra vez.",
+    missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
     finish: "Finalizar configuración",
@@ -56,13 +98,19 @@ export const initialOwnerStrings = {
     finishHelp:
       "Vuelve a introducir el certificado y los ajustes de correo usados en esta configuración.",
     startAgain: "Empezar de nuevo",
+    recoveryRecordDamaged:
+      "El registro de la clave de recuperación de esta configuración está dañado y no se puede leer.",
+    damagedRecordPassword:
+      "Para empezar de nuevo, introduce la contraseña de administrador que elegiste al configurar.",
     startAgainHelp:
-      "Conserva el intento anterior y sus archivos, y empieza en un espacio nuevo. Los códigos de instalación ya elegidos siguen usados.",
-    retireConfirmed: "Conservar el intento anterior y empezar de nuevo.",
+      "Borra este intento. Este equipo no volverá a usar sus nombres de serie de facturas.",
+    retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",
     cancel: "Cancelar",
-    restarting: "El intento anterior se conserva. Reconecta para continuar en el espacio nuevo.",
+    restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
     startUnavailable:
       "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
+    startUnavailableOccupied:
+      "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros, y Empezar de nuevo solo borra una configuración que no tiene ninguno.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",

@@ -5,11 +5,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import { OPTIONAL_BACKUP_STATE, collectOptionalStateFiles } from "./backup-optional-state.js";
 import { collectModuleNonDbState } from "./backup-sources.js";
 import { collectStateSecrets } from "./state-secrets.js";
-import {
-  readModulePreparationHistory,
-  readDurableHostJson,
-  firstSetupAnchorFor,
-} from "@waitron/provisioning";
+import { readModulePreparationHistory, readDurableHostJson } from "@waitron/provisioning";
 import { join } from "node:path";
 
 /** Everything a backup archive carries besides its manifest and the database copy, read off disk. */
@@ -39,16 +35,8 @@ export async function collectStateParts(
           module,
         ),
       readRetained: async (name) => {
-        const anchor = await firstSetupAnchorFor({
-          stateDir: deps.stateDir,
-          venueDir: deps.venueDir ?? deps.stateDir,
-        });
-        const values: unknown[] = [];
-        for (const root of new Set([anchor.stateDir, deps.stateDir])) {
-          const value = await readDurableHostJson(join(root, name), 1024 * 1024);
-          if (value !== null) values.push(value);
-        }
-        return values;
+        const value = await readDurableHostJson(join(deps.stateDir, name), 1024 * 1024);
+        return value === null ? [] : [value];
       },
     }),
     collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE, budget),

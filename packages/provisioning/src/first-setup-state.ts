@@ -1,7 +1,4 @@
-import {
-  assertFirstSetupVenueTarget,
-  readRetiredFirstSetupStates,
-} from "./first-setup-workspace.js";
+import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -10,6 +7,9 @@ import { AppError, isUuid } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
 import type { VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
+import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
+import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import "./errors.js";
 
 export interface FirstSetupHold {
@@ -145,6 +145,11 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
+  START_AGAIN_NOTE_FILE,
+  // Not START_AGAIN_MARKER_FILE: the deletion module imports this one through the backup
+  // workspace, so loading it first would read that name before it exists.
+  "first-setup-deleting.json",
+  START_AGAIN_CONFIRMATIONS_DIR,
 ] as const;
 export function isFirstSetupHostPath(path: string): boolean {
   return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));
@@ -489,7 +494,7 @@ export async function inspectFirstSetupMarker(
   venueDir: string,
   stateDir?: string,
 ): Promise<FirstSetupMarker | null> {
-  await assertFirstSetupVenueTarget(venueDir);
+  await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir: stateDir ?? venueDir });
   return (
     (
       await readPair(
@@ -500,9 +505,18 @@ export async function inspectFirstSetupMarker(
   );
 }
 export async function assertVenueFirstSetupAllowed(venueDir: string): Promise<void> {
-  await assertFirstSetupVenueTarget(venueDir);
+  await assertNoStartAgainDeletion(venueDir);
+  await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir: venueDir });
   const pair = await readPair(await canonicalDirectory(venueDir));
   assertOtherSetupAllowed(pair?.state ?? null);
+}
+/** The guard adopt and provision take before they write into the venue folder. */
+export async function assertOtherFirstSetupAllowed(
+  venueDir: string,
+  store: Pick<FirstSetupStore, "read">,
+): Promise<void> {
+  await assertNoStartAgainDeletion(venueDir);
+  assertOtherSetupAllowed(await store.read());
 }
 export function assertOtherSetupAllowed(state: FirstSetupState | null): void {
   if (
@@ -553,6 +567,7 @@ export function createFirstSetupStore(options: {
     status,
   });
   const persist = async (state: FirstSetupState) => {
+    await assertNoStartAgainDeletion(venueDir);
     parseState(state, venueDir, stateDir);
     await writeDurableHostJson(statePath, state, STATE_LIMIT);
     await writeDurableHostJson(markerPath, marker(state), MARKER_LIMIT);
@@ -617,6 +632,7 @@ export function createFirstSetupStore(options: {
           conflict();
         await assertUnused();
         if (!isDeepStrictEqual(await readForRepair(), current)) conflict();
+        await assertNoStartAgainDeletion(venueDir);
         await writeDurableHostJson(
           markerPath,
           { ...current.marker, status: current.repairMarker },
@@ -627,6 +643,8 @@ export function createFirstSetupStore(options: {
     },
     claim(frozen, ownerVerifier, capabilityHash, claimNonceHash, hold) {
       return inside(hold, async () => {
+        await bindRoots();
+        await assertNoStartAgainDeletion(venueDir);
         validateFrozen(frozen);
         if (
           ownerVerifier !== frozen.request.admin.passwordHash ||
@@ -635,7 +653,7 @@ export function createFirstSetupStore(options: {
         )
           invalid();
         const old = await read();
-        await assertFirstSetupVenueTarget(venueDir);
+        await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir });
         assertOtherSetupAllowed(old);
         if (old?.status === "complete") conflict();
         const previous =
@@ -647,16 +665,13 @@ export function createFirstSetupStore(options: {
                   ATTEMPT_KEYS.map((key) => [key, old[key as keyof FirstSetupState]]),
                 ) as unknown as Attempt,
               ];
-        const retired = await readRetiredFirstSetupStates({ venueDir, stateDir });
         const allIds = new Set(
-          [...previous, ...retired.flatMap((state) => [state, ...state.previous])].flatMap(
-            (attempt) => [
-              attempt.frozen.attemptId,
-              attempt.frozen.nodeId,
-              attempt.frozen.administratorId,
-              ...attempt.frozen.modules.map((module) => module.eventId),
-            ],
-          ),
+          previous.flatMap((attempt) => [
+            attempt.frozen.attemptId,
+            attempt.frozen.nodeId,
+            attempt.frozen.administratorId,
+            ...attempt.frozen.modules.map((module) => module.eventId),
+          ]),
         );
         if (
           [
@@ -696,7 +711,7 @@ export function createFirstSetupStore(options: {
         const ownership = change.kind === "resume" || change.kind === "recover";
         const pair = ownership ? await readResumable() : null;
         const state = ownership ? (pair?.state ?? null) : await read();
-        await assertFirstSetupVenueTarget(venueDir);
+        await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir });
         if (state === null || state.frozen.attemptId !== attemptId || state.revision !== revision)
           conflict();
         const allowed =

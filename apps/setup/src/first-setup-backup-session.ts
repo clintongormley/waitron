@@ -1,4 +1,4 @@
-import type { SetupApi } from "./api/client.js";
+import type { ApiError, SetupApi } from "./api/client.js";
 import type {
   BackupRepairOpenRequest,
   BackupRepairResumeRequest,
@@ -65,8 +65,47 @@ function same(a: unknown, b: unknown): boolean {
   );
 }
 
+export const LEASE_RENEWAL_MS = 30_000;
+const SESSION_ENDED: readonly string[] = ["setup.owner_required", "setup.recovery_discarded"];
+/** The only renewal refusals that mean the lease is over; any other answer is retried. */
+export const leaseEnded = (cause: ApiError) => SESSION_ENDED.includes(cause.code);
+/**
+ * Renews every 30 s and whenever the page becomes visible, until the returned stop is called or
+ * the box answers a renewal with an error `final` accepts. A renewal that
+ * never reached the box, or one `final` does not accept, is not a refusal: the next one tries again.
+ */
+export function keepLease(
+  renew: () => Promise<unknown>,
+  onRefused: (cause: ApiError) => void,
+  final: (cause: ApiError) => boolean,
+): () => void {
+  let stopped = false;
+  const tick = () => {
+    if (stopped) return;
+    renew().catch((cause: unknown) => {
+      if (stopped || typeof (cause as ApiError | undefined)?.status !== "number") return;
+      if (!final(cause as ApiError)) return;
+      stop();
+      onRefused(cause as ApiError);
+    });
+  };
+  const visible = () => {
+    if (document.visibilityState === "visible") tick();
+  };
+  const timer = setInterval(tick, LEASE_RENEWAL_MS);
+  document.addEventListener("visibilitychange", visible);
+  const stop = () => {
+    stopped = true;
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", visible);
+  };
+  return stop;
+}
+
 export class FirstSetupBackupSession {
   readonly #api: SetupApi;
+  readonly #onRenewalRefused?: (cause: ApiError) => void;
+  #stopLease?: () => void;
   #current?: BackupRepairSession;
   #grant?: string;
   #disposed = false;
@@ -74,8 +113,14 @@ export class FirstSetupBackupSession {
   #disposal?: Promise<void>;
   #selected?: unknown;
 
-  constructor(api: SetupApi) {
+  constructor(api: SetupApi, options: { onRenewalRefused?: (cause: ApiError) => void } = {}) {
     this.#api = api;
+    this.#onRenewalRefused = options.onRenewalRefused;
+  }
+
+  #endLease(): void {
+    this.#stopLease?.();
+    this.#stopLease = undefined;
   }
 
   get current(): BackupRepairSession | undefined {
@@ -110,6 +155,15 @@ export class FirstSetupBackupSession {
     }
     this.#current = structuredClone(raw);
     this.#selected = raw.input === null ? undefined : structuredClone(raw.input);
+    const sessionId = raw.sessionId;
+    this.#stopLease = keepLease(
+      () => this.#api.renewFirstSetupBackup(sessionId),
+      (cause) => {
+        this.#stopLease = undefined;
+        this.#onRenewalRefused?.(cause);
+      },
+      leaseEnded,
+    );
     return structuredClone(raw);
   }
 
@@ -154,6 +208,7 @@ export class FirstSetupBackupSession {
       const result = await this.#api.commitFirstSetupBackup(this.#grant, input);
       if (this.#disposed) fail("setup.owner_required");
       if (!object(result) || result.restarting !== true) fail("setup.attempt_invalid");
+      this.#endLease();
       this.#current = undefined;
       this.#selected = undefined;
       this.#grant = undefined;
@@ -163,6 +218,7 @@ export class FirstSetupBackupSession {
   dispose(): Promise<void> {
     if (this.#disposal) return this.#disposal;
     this.#disposed = true;
+    this.#endLease();
     this.#current = undefined;
     this.#selected = undefined;
     this.#disposal = (async () => {

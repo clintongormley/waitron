@@ -298,6 +298,8 @@ it.each([
   ["secrets/cloud-connection.json", "restore.unexpected_entry"],
   ["secrets/cloud-staff.key", "restore.unexpected_entry"],
   ["secrets/first-setup-claim.json", "restore.unexpected_entry"],
+  ["secrets/first-setup-start-again.json", "restore.unexpected_entry"],
+  ["secrets/first-setup-start-again-confirmations/1-earlier.json", "restore.unexpected_entry"],
 ])("refuses %s before placement", async (name, code) => {
   const f = await fixture();
   f.entries.push({ name, bytes: Buffer.from("untrusted") });

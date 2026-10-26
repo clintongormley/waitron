@@ -1,4 +1,8 @@
-import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
+import {
+  assertNoStartAgainDeletion,
+  assertVenueFirstSetupAllowed,
+  inspectFirstSetupMarker,
+} from "@waitron/provisioning";
 import { lockVenueDatabase } from "@waitron/db";
 import { chmod, copyFile, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { VENUE_FILE } from "@waitron/store";
@@ -410,6 +414,7 @@ export async function runStagedRestore(
       cloudRecoveryUnavailable();
     }
   }
+  await assertNoStartAgainDeletion(deps.venueDir);
   if ((await inspectFirstSetupMarker(deps.venueDir)) !== null) {
     const claimHold = await lockVenueDatabase(deps.venueDir);
     try {

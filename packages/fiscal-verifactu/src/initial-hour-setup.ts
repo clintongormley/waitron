@@ -7,8 +7,17 @@ import {
   type ModuleOperationHost,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { encodeMinuteIdentity, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
+import {
+  EPOCH_MS,
+  MINUTE_MS,
+  encodeMinuteIdentity,
+  decodeMinuteIdentity,
+  isMinuteIdentity,
+} from "./hour-identity.js";
+import { readInitialCloudConfirmation } from "./initial-cloud-setup.js";
+import { hourInputIdentity } from "./allocation-envelope.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
+import { publicHourSelectionHistory } from "./hour-selection.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import {
@@ -78,6 +87,95 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   );
   if (!isDeepStrictEqual(expected, request.input) || !isDeepStrictEqual(input, expected)) refuse();
   return structuredClone(expected);
+}
+
+function hourAssignmentPositions(context: InitialSetupContext, input?: unknown) {
+  if (context.request == null && input === undefined) return [];
+  const allocation = readHourSetupInput(
+    context,
+    input ?? (context.request as { input: unknown }).input,
+  ).allocation;
+  return [
+    {
+      namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
+      position: decodeMinuteIdentity(allocation.installationIdentity),
+    },
+  ];
+}
+const PAPER_BLOCK_CONFIRMATION_KEYS = [
+  "version",
+  "allocationId",
+  "binding",
+  "operatorId",
+  "priorActivation",
+  "incidentEvidence",
+  "requiredBases",
+  "recipientVenueId",
+  "generationId",
+  "blockId",
+  "currentRegisterConfirmed",
+  "consumptionConfirmed",
+  "currentEntryState",
+];
+/** Public evidence a real reader returns that legitimately names no minute; anything else that
+ * names nothing is unreadable, never empty. */
+function isNamelessEvidence(evidence: unknown): boolean {
+  if (!record(evidence)) return false;
+  if (evidence.format === "waitron-hour-history") return true;
+  if (evidence.kind === "waitron-recovery-document") {
+    parseRecoveryDocumentPublic(evidence);
+    return true;
+  }
+  if (evidence.kind === "cloud-initial-confirmation") {
+    readInitialCloudConfirmation(evidence);
+    return true;
+  }
+  return (
+    exact(evidence, PAPER_BLOCK_CONFIRMATION_KEYS) &&
+    evidence.version === 1 &&
+    evidence.currentEntryState === "consumed-for-event"
+  );
+}
+export function hourStartAgainFloor(
+  retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
+): NonNullable<InitialSetupContribution["startAgainFloor"]> {
+  return ({ attempts, preparations, publicEvidence, recoveryInputs = [] }) => {
+    let minutes: number[];
+    try {
+      minutes = [
+        ...attempts.flatMap(({ context, input }) =>
+          hourAssignmentPositions(context, input).map(({ position }) => position),
+        ),
+        ...publicHourSelectionHistory(preparations).records.map((row) =>
+          decodeMinuteIdentity((row as { identity: string }).identity),
+        ),
+        ...publicEvidence.flatMap((evidence) => {
+          const retained = retainedAssignments(evidence);
+          if (
+            retained.keys.length === 0 &&
+            retained.positions.length === 0 &&
+            !isNamelessEvidence(evidence)
+          )
+            refuse();
+          return retained.positions
+            .filter(({ namespace }) => (JSON.parse(namespace) as unknown[]).at(-1) === "hour")
+            .map(({ position }) => position);
+        }),
+        ...recoveryInputs.flatMap((input) => {
+          const identity = hourInputIdentity(input);
+          return identity === null ? [] : [decodeMinuteIdentity(identity)];
+        }),
+      ];
+    } catch {
+      return refuse("history_invalid");
+    }
+    if (minutes.length === 0) return null;
+    const minute = Math.max(...minutes);
+    return {
+      floorMs: EPOCH_MS + (minute + 1) * MINUTE_MS,
+      lastName: encodeMinuteIdentity(EPOCH_MS + minute * MINUTE_MS),
+    };
+  };
 }
 
 async function reviewCommandClock(
@@ -289,18 +387,7 @@ export function createHourInitialSetup(
         ]),
       ];
     },
-    assignmentPositions(context, input) {
-      if (context.request == null && input === undefined) return [];
-      const allocation = readHourSetupInput(
-        context,
-        input ?? (context.request as { input: unknown }).input,
-      ).allocation;
-      return [
-        {
-          namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
-          position: decodeMinuteIdentity(allocation.installationIdentity),
-        },
-      ];
-    },
+    assignmentPositions: hourAssignmentPositions,
+    startAgainFloor: hourStartAgainFloor(base.retainedAssignments!),
   };
 }

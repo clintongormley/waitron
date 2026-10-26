@@ -19,7 +19,7 @@ import {
   access,
   unlink,
 } from "node:fs/promises";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import * as fileSystem from "node:fs/promises";
@@ -28,11 +28,7 @@ import { openVenueDatabase, invoiceSeries } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
-import {
-  createFirstSetupBackupWorkspace,
-  createFirstSetupResolutionStore,
-  selectFirstSetupWorkspace,
-} from "@waitron/provisioning";
+import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
 import { request as setupRequest } from "../test/first-fiscal.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -234,80 +230,6 @@ it("does not return evidence after an original WAL appears during inspection", a
       },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-});
-
-it("reads both retained and current databases after an ordinary workspace selection", async () => {
-  const f = await fixture();
-  await f.host.owner.claimFirstSetup(
-    {
-      request: {
-        ...setupRequest,
-        location: { ...setupRequest.location, operationDescription: "Restaurant" },
-      },
-      environment: "preproduction",
-    },
-    randomBytes(32).toString("base64url"),
-  );
-  const old = (await f.host.store.read())!;
-  await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
-  const resolutionId = randomUUID(),
-    workspaceId = randomUUID();
-  const anchor = {
-    stateDir: await realpath(f.roots.stateDir),
-    venueDir: await realpath(f.roots.venueDir),
-  };
-  const selected = {
-    resolutionId,
-    workspaceId,
-    anchorStateDir: anchor.stateDir,
-    anchorVenueDir: anchor.venueDir,
-    stateDir: join(anchor.stateDir, "first-setup-workspaces", workspaceId, "state"),
-    venueDir: join(anchor.stateDir, "first-setup-workspaces", workspaceId, "venue"),
-    selectionGeneration: 1,
-  };
-  const records = createFirstSetupResolutionStore({ ...anchor, coordinator: f.host.coordinator });
-  const prepared = await records.prepare(
-    {
-      resolutionId,
-      attemptId: old.frozen.attemptId,
-      observedRevision: old.revision,
-      observedOwnerGeneration: old.ownerGeneration,
-      database: "unknown-or-nonempty",
-      authority: "original-password",
-      register: { kind: "no-current-master", confirmed: true },
-      action: "retire",
-      nextWorkspace: selected,
-    },
-    [
-      {
-        name: "state/first-setup.json",
-        bytes: await readFile(join(anchor.stateDir, "first-setup.json")),
-      },
-      {
-        name: "venue/first-setup-claim.json",
-        bytes: await readFile(join(anchor.venueDir, "first-setup-claim.json")),
-      },
-      { name: "venue/venue.db", bytes: await readFile(join(anchor.venueDir, "venue.db")) },
-    ],
-  );
-  await selectFirstSetupWorkspace(anchor, await records.apply(prepared));
-  await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
-  await suite.db.archiveTo(join(selected.venueDir, "venue.db"));
-  const host = createFirstSetupModuleHost({ ...selected, modules: ALL_MODULES, environment: {} });
-  const result = await readFirstSetupBackupHistory({
-    ...f.options,
-    ...selected,
-    withVenueExclusion: host.resolution.withVenueExclusion,
-    module: {
-      ...module,
-      operations: {
-        ...module.operations!,
-        readRecoveryHistory: async (db) =>
-          db.select({ nextNumber: invoiceSeries.nextNumber }).from(invoiceSeries).limit(1),
-      },
-    },
-  });
-  expect(result.databases).toEqual([{ nextNumber: 123 }, { nextNumber: 456 }]);
 });
 
 it("closes and deletes its private copy even when a module refuses its history", async () => {
@@ -679,35 +601,6 @@ it.each(["setup-operation.json", "restore-request.json", "reset-request.json"])(
 
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 
-it("reads retained outside evidence privately from archived snapshots, and refuses unreadable JSON", async () => {
-  const f = await fixture();
-  const held = await selectedSetup(f);
-  const proof = {
-    format: "waitron-hour-history",
-    scope,
-    sources: [{ reference: "old", complete: true, records: [] }],
-  };
-  const original = {
-    name: "outside-file:/private/retained.json",
-    bytes: Buffer.from(JSON.stringify(proof)),
-  };
-  const value = await readFirstSetupBackupSetups(
-    [],
-    [{ state: held.state, originals: [original, { name: "outside-file:/absent", bytes: null }] }],
-    module,
-  );
-  expect(value.publicEvidence).toEqual([proof]);
-  expect(value.setups).toEqual([
-    expect.objectContaining({ input: held.state.inputs[binding.module] }),
-  ]);
-  await expect(
-    readFirstSetupBackupSetups(
-      [],
-      [{ state: held.state, originals: [{ ...original, bytes: Buffer.from("not JSON") }] }],
-      module,
-    ),
-  ).rejects.toMatchObject({ code: "module.operation_invalid" });
-});
 it("does not invent an empty attempt for orphan public document chunks or an unreadable documents directory", async () => {
   const f = await fixture();
   const directory = join(f.roots.stateDir, "first-fiscal-documents");
@@ -725,13 +618,27 @@ it("does not invent an empty attempt for orphan public document chunks or an unr
 });
 it("does not pass another module's retained setup context to the requested module", async () => {
   const f = await fixture();
-  const held = await selectedSetup(f);
+  await selectedSetup(f);
+  const roots = [
+    { stateDir: await realpath(f.roots.stateDir), venueDir: await realpath(f.roots.venueDir) },
+  ];
   expect(
-    await readFirstSetupBackupSetups([], [{ state: held.state, originals: [] }], {
+    await readFirstSetupBackupSetups(roots, {
       ...module,
       name: "another-module",
     }),
   ).toEqual({ setups: [], publicEvidence: [] });
+});
+it("passes the requested module its own retained setup context", async () => {
+  const f = await fixture();
+  const held = await selectedSetup(f);
+  const roots = [
+    { stateDir: await realpath(f.roots.stateDir), venueDir: await realpath(f.roots.venueDir) },
+  ];
+  const value = await readFirstSetupBackupSetups(roots, module);
+  expect(value.setups).toEqual([
+    expect.objectContaining({ input: held.state.inputs[binding.module] }),
+  ]);
 });
 import { readFirstSetupBackupSetups } from "./first-setup-backup-setups.js";
 import { rm } from "node:fs/promises";

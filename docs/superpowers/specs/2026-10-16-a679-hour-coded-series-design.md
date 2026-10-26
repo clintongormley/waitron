@@ -2,6 +2,8 @@
 
 **Approved by the owner, 2026-10-16 at 14:50.** **Dated pointer, 2026-10-21:** the owner replaced the four-symbol hour code with a five-symbol code for the UTC minute on every series, removed the "last hour" question and took the installation code off the recovery sheet and the restore form; see [A947 §6.5 and §6.7](2026-10-21-a947-two-box-failover-design.md). This design is not rewritten, and that change is not built yet.
 
+**Dated pointer, 2026-10-24: 'Preserve the original attempt and artifacts' is superseded by A1042 — Start again deletes the attempt and keeps one small note; see `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`.**
+
 The owner accepted this design as written, including the epoch, clock threshold and disclosed limits.
 References below to proposals and recommendations record the design presented for that decision.
 Follow the [replacement implementation plan](../plans/2026-10-16-a679-hour-code-implementation.md)
@@ -155,6 +157,8 @@ The current restore chain is `apps/server/src/restore.ts:696–727` → `package
 On interruption, show **Continue with your setup password** first and **Start again** second.
 
 The **2026-10-16 12:20 exception** allows password-free Start again even when a recovery PDF exists, only with positive proof that the box never activated and its database contains no business data. Preserve the original attempt and artifacts; burn its **whole former block**, represented here by its entire selected hour, not just one configured base. The new isolated workspace uses a later eligible hour.
+
+> **Dated pointer, 2026-10-24: 'Preserve the original attempt and artifacts' is superseded by A1042 — Start again deletes the attempt and keeps one small note; see `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`.**
 
 The approved **13:40** inspection permission remains limited to read-only empty proof. Missing, partial, corrupt, unreadable or unknown state does not count as empty. Current inspection separates taxpayer/location classification from that proof at `apps/server/src/first-setup-resolution-inspection.ts:106–125`; schema, migration and application-row checks are at `first-setup-empty-database.ts:18–105`.
 

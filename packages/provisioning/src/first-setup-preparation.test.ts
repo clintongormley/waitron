@@ -9,7 +9,6 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
   initialSetupFor,
   type WaitronModule,
-  type ModuleOperationHost,
   type InitialSetupContribution,
   type InitialSetupContext,
 } from "@waitron/module";
@@ -52,7 +51,6 @@ afterEach(async () => {
 async function fixture(
   options: {
     modules?: readonly WaitronModule[];
-    readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "owned-preparation-"));
@@ -63,7 +61,6 @@ async function fixture(
     venueDir: join(root, "venue"),
     modules: options.modules ?? ALL_MODULES,
     database: () => venue.db,
-    readRetiredSetup: options.readRetiredSetup,
   };
   const host = createFirstSetupRuntime(settings);
   const claim = await host.owner.claimFirstSetup(
@@ -303,20 +300,6 @@ it.each([
   expect((await f.host.store.read())!.status).toBe("claimed");
 });
 
-it("checks retired assignments before freezing or accepting a supplied request", async () => {
-  let retired: Awaited<ReturnType<NonNullable<ModuleOperationHost["readRetiredSetup"]>>> = [];
-  const f = await fixture({ readRetiredSetup: async () => retired });
-  await f.selectPastWaits();
-  const state = (await f.host.store.read())!;
-  const context = firstSetupModuleContext(state, MODULE);
-  const input = (context.request as { input: unknown }).input;
-  retired = [{ context, input, publicEvidence: [] }];
-  await expect(f.host.preparation.import(f.owner, MODULE, input)).rejects.toMatchObject({
-    code: "setup.attempt_conflict",
-  });
-  expect((await f.host.store.read())!.inputs).toEqual({});
-});
-
 it("awaits the opaque module before freezing and consumes a grant even when it has no preparation store", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -385,57 +368,6 @@ it("waits for every offering before recording consumption intent", async () => {
       .filter((entry) => [MODULE, second.name].includes(entry.module))
       .map((entry) => entry.request),
   ).toEqual([{ candidate: "olivo-1" }, { candidate: "olivo-1" }]);
-});
-
-it.each(["key", "position", "retained-key", "retained-position"] as const)(
-  "refuses a spent %s before freezing a candidate",
-  async (kind) => {
-    const modules = opaqueModules({
-      assignmentKeys: () => (kind.includes("key") ? ["spent"] : []),
-      assignmentPositions: () =>
-        kind.includes("position") ? [{ namespace: "same-taxpayer", position: 4 }] : [],
-      retainedAssignments: () => ({
-        keys: ["spent"],
-        positions: [{ namespace: "same-taxpayer", position: 4 }],
-      }),
-    });
-    let retired: Awaited<ReturnType<NonNullable<ModuleOperationHost["readRetiredSetup"]>>> = [];
-    const f = await fixture({ modules, readRetiredSetup: async () => retired });
-    const context = firstSetupModuleContext((await f.host.store.read())!, MODULE);
-    retired = [{ context, input: {}, publicEvidence: kind.startsWith("retained") ? [{}] : [] }];
-    await expect(f.select()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-    const state = (await f.host.store.read())!;
-    expect(state.status).toBe("claimed");
-    expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
-  },
-);
-
-it("accepts a strictly later assignment in its own namespace", async () => {
-  const modules = opaqueModules({
-    assignmentKeys: (_context: InitialSetupContext, input: unknown) =>
-      input == null ? ["new"] : ["old"],
-    assignmentPositions: (_context: InitialSetupContext, input: unknown) => [
-      { namespace: "same-taxpayer", position: input == null ? 5 : 4 },
-    ],
-    retainedAssignments: () => ({
-      keys: ["old"],
-      positions: [
-        { namespace: "same-taxpayer", position: 4 },
-        { namespace: "another-taxpayer", position: 99 },
-      ],
-    }),
-  });
-  let retired: Awaited<ReturnType<NonNullable<ModuleOperationHost["readRetiredSetup"]>>> = [];
-  const f = await fixture({ modules, readRetiredSetup: async () => retired });
-  retired = [
-    {
-      context: firstSetupModuleContext((await f.host.store.read())!, MODULE),
-      input: {},
-      publicEvidence: [{}],
-    },
-  ];
-  await f.select();
-  expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
 
 it("hands the module where the request came from", async () => {

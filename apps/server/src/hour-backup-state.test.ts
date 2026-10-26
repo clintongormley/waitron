@@ -1,20 +1,8 @@
 import { ARCHIVE_MAX_METADATA_BYTES } from "./backup-archive-file.js";
 import { collectModuleNonDbState, readModuleRecoveryEvidence } from "./backup-sources.js";
-import { randomUUID } from "node:crypto";
-import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
-  selectFirstSetupWorkspace,
-} from "@waitron/provisioning";
 import { mkdir, mkdtemp, realpath, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { runOnce } from "./backup-sweep.js";
-import { LocalFsBackend } from "./local-fs-backend.js";
-import { createSealedStateRefresher, readSealedStateRow } from "./sealed-state.js";
-import { readdir } from "node:fs/promises";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { ALL_MODULES } from "./modules.js";
 import { collectStateParts, assembleArchiveEntries } from "./archive-entries.js";
@@ -24,12 +12,6 @@ import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 
-const suite = useVenueDb({
-  migrations: migrationOptionsFor(
-    manifestSets().filter((set) => ["core", "fiscal-verifactu"].includes(set.name)),
-    null,
-  ),
-});
 const modules = ALL_MODULES.filter((m) => m.name === "fiscal-verifactu");
 const manifest = {
   manifestVersion: 1,
@@ -202,116 +184,6 @@ it("refuses malformed restored evidence rather than discarding its floor", async
     code: "sif.allocation_invalid",
     params: { reason: "history_invalid" },
   });
-});
-
-it("captures the original anchor journal and restored floor after workspace retirement", async () => {
-  await journal();
-  const publicPath = join(stateDir, entryName.slice("secrets/".length));
-  await mkdir(dirname(publicPath), { recursive: true });
-  const higher = {
-    ...expected.records[0],
-    reference: "intent/fiscal-verifactu/retired-higher",
-    nodeId: "retired-peer",
-    identity: "0CNRE",
-    recordedAtMs: 1792155720000,
-  };
-  await writeFile(publicPath, JSON.stringify({ ...expected, records: [higher] }));
-  await writeFile(join(stateDir, "first-setup.json"), "original state");
-  await writeFile(join(venueDir, "first-setup-claim.json"), "original claim");
-  const resolutionId = randomUUID(),
-    workspaceId = randomUUID();
-  const base = join(stateDir, "first-setup-workspaces", workspaceId);
-  const next = {
-    resolutionId,
-    workspaceId,
-    anchorStateDir: stateDir,
-    anchorVenueDir: venueDir,
-    stateDir: join(base, "state"),
-    venueDir: join(base, "venue"),
-    selectionGeneration: 1,
-  };
-  const archive = createFirstSetupResolutionStore({
-    stateDir,
-    venueDir,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  const prepared = await archive.prepare(
-    {
-      resolutionId,
-      attemptId: randomUUID(),
-      observedRevision: 1,
-      observedOwnerGeneration: 1,
-      database: "missing",
-      authority: "original-password",
-      register: { kind: "no-current-master", confirmed: true },
-      action: "retire",
-      nextWorkspace: next,
-    },
-    [
-      { name: "state/first-setup.json", bytes: Buffer.from("original state") },
-      { name: "venue/first-setup-claim.json", bytes: Buffer.from("original claim") },
-      { name: "venue/venue.db", bytes: null },
-    ],
-  );
-  await selectFirstSetupWorkspace({ stateDir, venueDir }, await archive.apply(prepared));
-  for (const name of RECOVERY_FILES) {
-    await mkdir(dirname(join(next.stateDir, name)), { recursive: true });
-    await writeFile(join(next.stateDir, name), "existing-state");
-  }
-  expect(evidence(await collectSealedEntries({ ...deps(), ...next, manifest }))).toEqual({
-    ...expected,
-    records: [higher, expected.records[0]],
-  });
-  const nodeId = "d0000000-0000-4000-8000-000000000001";
-  const refresher = createSealedStateRefresher({
-    ...deps(),
-    ...next,
-    db: suite.db,
-    nodeId,
-    environment: "preproduction",
-    readRecoveryKey: async () => "separate-backup-password",
-    now: () => new Date(manifest.createdAt),
-    log: () => {},
-    status: { failedSince: null },
-  });
-  expect(await refresher.refresh()).toBe("sealed");
-  const stored = await readSealedStateRow(suite.db, nodeId);
-  expect(stored).not.toBeNull();
-  expect(evidence(unsealNodeState(stored!, "separate-backup-password"))).toEqual({
-    ...expected,
-    records: [higher, expected.records[0]],
-  });
-  const destination = join(root, "destination");
-  const backend = new LocalFsBackend("one", destination);
-  try {
-    await runOnce({
-      ...deps(),
-      ...next,
-      db: suite.db,
-      backends: [backend],
-      environment: "preproduction",
-      stagingDir: join(root, "staging"),
-      recoveryKey: "separate-backup-password",
-      retain: 2,
-      retainDays: 30,
-      signal: new AbortController().signal,
-      destinationTimeoutMs: 60000,
-      now: () => new Date(manifest.createdAt),
-      log: () => {},
-      archive: (path) => suite.db.archiveTo(path),
-    });
-    const objects = await readdir(destination);
-    expect(objects).toHaveLength(1);
-    const entries = unpackArchive(
-      decryptArtifact(await readFile(join(destination, objects[0])), "separate-backup-password"),
-    );
-    expect(evidence(entries)).toEqual({
-      ...expected,
-      records: [higher, expected.records[0]],
-    });
-  } finally {
-    backend.close();
-  }
 });
 
 it("names malformed JSON in retained backup evidence", () => {

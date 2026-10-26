@@ -47,7 +47,6 @@ async function fixture(
   answer = "no",
   password = PASSWORD,
   modules: readonly WaitronModule[] = ALL_MODULES,
-  readRetiredSetup?: ModuleOperationHost["readRetiredSetup"],
   testClock?: ModuleOperationHost["testClock"],
 ) {
   const root = await mkdtemp(join(tmpdir(), "setup-command-"));
@@ -58,7 +57,6 @@ async function fixture(
     venueDir: join(root, "venue"),
     modules,
     database: () => venue.db,
-    readRetiredSetup,
     testClock,
   });
   const claim = await runtime.owner.claimFirstSetup(
@@ -102,7 +100,7 @@ it("prepares a real owned name after the terminal's wait, asking no question, wi
     monotonicStartedMs: monotonic,
     monotonicFinishedMs: monotonic,
   }));
-  const f = await fixture("no", PASSWORD, ALL_MODULES, undefined, {
+  const f = await fixture("no", PASSWORD, ALL_MODULES, {
     wall: () => wall,
     monotonic: () => monotonic,
   });
@@ -457,23 +455,6 @@ it("preflights every command contribution before asking for any password or sele
   });
   expect(await f.runtime.store.read()).toEqual(before);
   expect(f.prompts).toEqual([]);
-});
-
-it("rechecks retired assignment floors before returning an already imported request", async () => {
-  let retired: Awaited<ReturnType<NonNullable<ModuleOperationHost["readRetiredSetup"]>>> = [];
-  const f = await fixture("no", PASSWORD, ALL_MODULES, async () => retired);
-  const first = await prepareCommandPastWaits(f.runtime, f.owner, f.io);
-  retired = [
-    {
-      context: firstSetupModuleContext(first.state, MODULE),
-      input: first.state.inputs[MODULE],
-      publicEvidence: [],
-    },
-  ];
-  await expect(prepareFirstSetupCommand(f.runtime, first.owner, f.io)).rejects.toMatchObject({
-    code: "setup.attempt_conflict",
-  });
-  expect(await f.runtime.store.read()).toEqual(first.state);
 });
 
 it("refuses module selection drift before a command can return cancellation", async () => {

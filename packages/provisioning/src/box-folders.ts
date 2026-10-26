@@ -1,0 +1,29 @@
+import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
+import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
+import {
+  insideBackupRepairTarget,
+  resolveFirstSetupBackupWorkspace,
+} from "./first-setup-backup-workspace.js";
+import { readStartAgainNote, startAgainFloorSources } from "./first-setup-start-again-note.js";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
+
+export async function boxFolders(roots: FirstSetupRoots): Promise<FirstSetupRoots> {
+  const repair = await resolveFirstSetupBackupWorkspace(roots);
+  if (repair.kind !== "absent") return repair.target.anchor;
+  const folders = await canonicalFirstSetupRoots(roots);
+  if (
+    Object.values(folders).some(
+      (dir) => insideFirstSetupWorkspace(dir) || insideBackupRepairTarget(dir),
+    )
+  )
+    throw new AppError("setup.attempt_uncertain", {});
+  return folders;
+}
+
+export async function readStartAgainFloors(
+  roots: FirstSetupRoots,
+): Promise<ReturnType<typeof startAgainFloorSources>> {
+  return startAgainFloorSources(await readStartAgainNote((await boxFolders(roots)).stateDir));
+}

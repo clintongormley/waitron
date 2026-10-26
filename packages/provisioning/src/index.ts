@@ -38,6 +38,7 @@ export {
   createFirstSetupStore,
   parseState as parseFirstSetupState,
   assertOtherSetupAllowed,
+  assertOtherFirstSetupAllowed,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "./first-setup-state.js";
@@ -54,6 +55,7 @@ export type {
 } from "./first-setup-state.js";
 export {
   canonicalFirstSetupDirectory,
+  canonicalFirstSetupRoots,
   createFirstSetupResolutionStore,
 } from "./first-setup-resolution.js";
 export type {
@@ -63,17 +65,7 @@ export type {
   ResolutionInput,
   FirstSetupOriginal,
 } from "./first-setup-resolution.js";
-export {
-  firstSetupAnchorFor,
-  inspectFirstSetupWorkspaceSelection,
-  readRetiredFirstSetupStates,
-  readFirstSetupRetirements,
-  readFirstSetupRetirementArchives,
-  selectFirstSetupWorkspace,
-  resolveFirstSetupWorkspace,
-  assertFirstSetupBootTarget,
-} from "./first-setup-workspace.js";
-export type { FirstSetupAnchor, FirstSetupBootTarget } from "./first-setup-workspace.js";
+export { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 export { createSetupPreparationHost } from "./setup-preparation-host.js";
 export { publicFirstSetupState, createFirstSetupOwner } from "./first-setup-owner.js";
 export type {
@@ -166,11 +158,43 @@ export * from "./artifact-cipher.js";
 export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
+export { boxFolders, readStartAgainFloors } from "./box-folders.js";
+export {
+  START_AGAIN_NOTE_FILE,
+  raiseStartAgainNote,
+  readStartAgainNote,
+  startAgainFloorSources,
+  type StartAgainNote,
+} from "./first-setup-start-again-note.js";
+export {
+  START_AGAIN_CONFIRMATIONS_DIR,
+  isCanonicalInstant,
+  startAgainSummary,
+  writeStartAgainConfirmation,
+  type StartAgainConfirmation,
+  type StartAgainSummary,
+  type StartAgainRecoveryShown,
+} from "./first-setup-start-again-confirmation.js";
+export {
+  START_AGAIN_MARKER_FILE,
+  START_AGAIN_MARKER_LIMIT,
+  assertNoStartAgainDeletion,
+  assertStartAgainAllowedOnDisk,
+  clearStartAgainMarker,
+  deleteMarkedAttempt,
+  finishStartAgainDeletion,
+  markerSize,
+  readStartAgainMarker,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
+  type StartAgainMarker,
+} from "./first-setup-start-again-deletion.js";
 export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,
 } from "./first-setup-backup-workspace.js";
+export { emptyAbandonedBackupRecovery, isEmptiedTombstone } from "./first-setup-backup-discard.js";
 export type {
   BackupRepairTarget,
   BackupRepairObservation,

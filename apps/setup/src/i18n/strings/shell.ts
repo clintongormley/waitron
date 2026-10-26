@@ -6,6 +6,14 @@ export const shellEn = {
   "shell.first_setup.attempt_uncertain":
     "This assignment may have been used. Resume the saved attempt; do not assign it again.",
   "shell.first_setup.attempt_invalid": "The saved setup cannot be read. Contact support.",
+  "shell.first_setup.start_again_incomplete":
+    "Start again has not finished. Reload this page to see what is left to do. If the box is restarting, wait until it answers.",
+  "shell.first_setup.workspace_unsupported":
+    "This box holds a setup from an older version of Waitron that this version cannot use. Reinstall Waitron on this box to start fresh.",
+  "shell.first_setup.recovery_in_progress":
+    "A recovery from backup is in progress on another device. If it stops before it finishes, you can start again here.",
+  "shell.first_setup.recovery_discarded":
+    "This recovery was discarded on another device. Start again to recover.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -146,6 +154,14 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta asignación puede estar usada. Reanuda el intento guardado; no la asignes de nuevo.",
   "shell.first_setup.attempt_invalid":
     "No se puede leer la configuración guardada. Contacta con soporte.",
+  "shell.first_setup.start_again_incomplete":
+    "«Empezar de nuevo» no ha terminado. Recarga esta página para ver lo que falta. Si el equipo se está reiniciando, espera a que responda.",
+  "shell.first_setup.workspace_unsupported":
+    "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar. Reinstala Waitron en este equipo para empezar de cero.",
+  "shell.first_setup.recovery_in_progress":
+    "Hay una recuperación en curso en otro dispositivo, desde una copia. Si se detiene antes de terminar, podrás empezar de nuevo aquí.",
+  "shell.first_setup.recovery_discarded":
+    "Esta recuperación se descartó en otro dispositivo. Empieza de nuevo para recuperar.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",

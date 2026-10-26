@@ -644,6 +644,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         "setup.attempt_conflict": 409,
         "setup.attempt_uncertain": 409,
         "setup.attempt_invalid": 409,
+        "setup.start_again_incomplete": 409,
+        "setup.workspace_unsupported": 409,
       },
       "setup.provision_failed",
     );

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { VENUE_HOLDER_KINDS, type VenueHolderKind } from "@waitron/db";
+import type { ErrorCode } from "@waitron/shared";
 import { writeFileAtomic } from "./fs-atomic.js";
 
 /** Where a box sits on the escalation, and therefore whether it can still SELL. */
@@ -151,6 +152,11 @@ export function withFailureCode(
 /** What a start serves, never writes, when it cannot record itself because the disk is full. */
 export function fullDiskAtStart(current: RecoveryState, at: Date): RecoveryState {
   return { ...withFailureCode(current, "storage.disk_full", at), level: "recovery" };
+}
+
+/** What a start serves, never writes, when it refuses `code` before it begins. */
+export function refusedAtStart(current: RecoveryState, code: ErrorCode, at: Date): RecoveryState {
+  return { ...withFailureCode(current, code, at), level: "recovery" };
 }
 
 /** The count back to nothing, one clear on from `current`. */

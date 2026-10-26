@@ -582,13 +582,17 @@ it("retirement refuses existing owner capabilities and password recovery without
   const current = (await f.store.read())!;
   await writeFile(join(current.venueDir, "first-setup-retirement.json"), "{}");
   const before = await readFile(join(current.stateDir, "first-setup.json"));
-  await expect(f.owner.authorize(owner)).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  await expect(f.owner.status(owner)).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  await expect(f.owner.authorize(owner)).rejects.toMatchObject({
+    code: "setup.workspace_unsupported",
+  });
+  await expect(f.owner.status(owner)).rejects.toMatchObject({
+    code: "setup.workspace_unsupported",
+  });
   await expect(
     f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
       password: payload.request.admin.password,
     }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
   expect(await readFile(join(current.stateDir, "first-setup.json"))).toEqual(before);
 });
 

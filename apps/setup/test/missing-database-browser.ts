@@ -4,7 +4,15 @@ import type { WtButton, WtInput } from "@waitron/ui";
 import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "../src/first-setup-session.js";
-import type { FirstSetupInspection, FirstSetupState } from "../src/api/first-setup-types.js";
+import type {
+  BackupRepairActivity,
+  BackupRepairStatus,
+  FirstSetupInspection,
+  FirstSetupState,
+  StartAgainRecoveryShown,
+  StartAgainSummary,
+} from "../src/api/first-setup-types.js";
+import { initialOwnerStrings } from "../src/screens/initial-owner-strings.js";
 import { initial, venue, wizardApi } from "./first-setup-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
@@ -13,11 +21,50 @@ export const q = <T extends Element>(app: SetupApp, name: string) =>
 export async function click(app: SetupApp, name: string) {
   await userEvent.click(q<WtButton>(app, name)!.shadowRoot!.querySelector("button")!);
 }
+export const namedSummary: StartAgainSummary = { reached: "named", lastName: "0CNQT" };
+export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
+/** 25 Oct 2026 at 14:35 and 14:41 in the browser's own zone, so the shown times are fixed. */
+export const recoveryStartedAt = new Date(2026, 9, 25, 14, 35).toISOString();
+export const recoveryLastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
+export const shownTimes = {
+  en: { started: "25 Oct 2026, 14:35", last: "25 Oct 2026, 14:41" },
+  es: { started: "25 oct 2026, 14:35", last: "25 oct 2026, 14:41" },
+} as const;
+export const runningActivity: BackupRepairActivity = {
+  state: "running",
+  startedAt: recoveryStartedAt,
+  lastActiveAt: recoveryLastActiveAt,
+};
+export const stoppedActivity: Extract<BackupRepairActivity, { state: "stopped" }> = {
+  state: "stopped",
+  startedAt: recoveryStartedAt,
+  lastActiveSource: "memory",
+  lastActiveAt: recoveryLastActiveAt,
+  phase: "prepared",
+  recoveryId: "r".repeat(32),
+  failed: false,
+  cloud: false,
+};
+export const stoppedRecovery: StartAgainRecoveryShown = {
+  startedAt: recoveryStartedAt,
+  lastActiveAt: recoveryLastActiveAt,
+  lastActiveSource: "memory",
+  lastName: "0CNQT",
+  failed: false,
+  cloud: false,
+};
+export const stoppedSummary: StartAgainSummary = { ...namedSummary, recovery: stoppedRecovery };
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
     recoveredStatus?: FirstSetupState["status"];
+    summary?: StartAgainSummary;
+    backupPhase?: BackupRepairStatus["phase"];
+    /** What `/backup/activity` answers, read again on every request; `null` by default. */
+    activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
     sameTab?: boolean;
+    /** What the mount waits for; by default the password step, or with `activity` given, the password step or the running view. */
+    ready?: (app: SetupApp) => boolean;
     theme?: "light" | "dark";
     locale?: "en-GB" | "es-ES";
   } = {},
@@ -57,11 +104,20 @@ export async function missingDatabaseFixture(
           ownerGeneration: 2,
         });
       }
-      if (path.endsWith("/start-again"))
+      if (path.endsWith("/start-again/summary"))
+        return Response.json(options.summary ?? namedSummary);
+      if (path.endsWith("/backup/status"))
         return Response.json({
-          workspaceId: "successor",
-          selectionGeneration: 1,
-          restarting: true,
+          phase: options.backupPhase ?? "unstarted",
+          proofRequired: true,
+        } satisfies BackupRepairStatus);
+      if (path.endsWith("/start-again")) return Response.json({ restarting: true });
+      if (path.endsWith("/backup/activity"))
+        return Response.json({
+          activity:
+            typeof options.activity === "function"
+              ? options.activity()
+              : (options.activity ?? null),
         });
     },
   });
@@ -88,7 +144,11 @@ export async function missingDatabaseFixture(
     },
     options.theme,
   );
-  await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+  if (options.ready) await expect.poll(() => options.ready!(app)).toBe(true);
+  else if (options.activity === undefined)
+    await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+  else
+    await expect.poll(() => q(app, "resume-password") ?? q(app, "recovery-running")).not.toBeNull();
   return { app, host, ...fixture };
 }
 export async function recoverMissing(app: SetupApp) {
@@ -100,5 +160,12 @@ export async function recoverMissing(app: SetupApp) {
   await expect
     .poll(() => JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner?.ownerGeneration)
     .toBe(2);
+  await expect
+    .poll(() =>
+      [initialOwnerStrings.en.waiting, initialOwnerStrings.es.waiting].some((text) =>
+        app.shadowRoot!.textContent!.includes(text),
+      ),
+    )
+    .toBe(false);
   await app.updateComplete;
 }

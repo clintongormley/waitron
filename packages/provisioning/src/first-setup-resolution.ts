@@ -1,11 +1,12 @@
 import { AppError, isUuid } from "@waitron/shared";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, mkdir, chmod, realpath, open, readdir } from "node:fs/promises";
+import { lstat, mkdir, chmod, realpath, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type { FirstSetupCoordinator } from "./first-setup-state.js";
+import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
+import { syncFolder } from "./folder-sync.js";
 import "./errors.js";
 
 export type RegisterAnswer =
@@ -118,6 +119,15 @@ export async function canonicalFirstSetupDirectory(path: string): Promise<string
     return join(await canonicalFirstSetupDirectory(dirname(absolute)), basename(absolute));
   }
 }
+export async function canonicalFirstSetupRoots(roots: {
+  stateDir: string;
+  venueDir: string;
+}): Promise<{ stateDir: string; venueDir: string }> {
+  return {
+    stateDir: await canonicalFirstSetupDirectory(roots.stateDir),
+    venueDir: await canonicalFirstSetupDirectory(roots.venueDir),
+  };
+}
 export async function firstSetupDirectory(path: string, create = false): Promise<void> {
   if (resolve(path) !== path) invalid();
   const parent = dirname(path);
@@ -143,17 +153,7 @@ export async function firstSetupDirectory(path: string, create = false): Promise
     await chmod(path, 0o700);
   }
   if (create) {
-    for (const folder of new Set([path, parent])) {
-      const handle = await open(
-        folder,
-        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-      );
-      try {
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-    }
+    for (const folder of new Set([path, parent])) await syncFolder(folder);
   }
 }
 export function validateWorkspaceBinding(value: unknown): asserts value is WorkspaceBinding {
@@ -363,10 +363,7 @@ export function createFirstSetupResolutionStore(options: {
   coordinator: FirstSetupCoordinator;
   originalsCache?: FirstSetupOriginalsCache;
 }) {
-  const roots = async () => ({
-    stateDir: await canonicalFirstSetupDirectory(options.stateDir),
-    venueDir: await canonicalFirstSetupDirectory(options.venueDir),
-  });
+  const roots = () => canonicalFirstSetupRoots(options);
   const folder = async (id: string, create = false) => {
     if (!uuid(id)) invalid();
     const path = join((await roots()).stateDir, "first-setup-resolutions", id);
@@ -519,6 +516,7 @@ export function createFirstSetupResolutionStore(options: {
     },
     prepare(input: unknown, originals: readonly FirstSetupOriginal[]): Promise<ResolutionRecord> {
       return options.coordinator.run(async () => {
+        await assertNoStartAgainDeletion((await roots()).venueDir);
         validateInput(input);
         const packed = pack(originals),
           path = await folder(input.resolutionId, true);
@@ -569,6 +567,7 @@ export function createFirstSetupResolutionStore(options: {
     },
     apply(prepared: ResolutionRecord): Promise<ResolutionRecord> {
       return options.coordinator.run(async () => {
+        await assertNoStartAgainDeletion((await roots()).venueDir);
         validateRecord(prepared);
         const records = await read(prepared.resolutionId);
         if (

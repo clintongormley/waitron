@@ -41,6 +41,30 @@ export async function readDurableHostJson(path: string, limit: number): Promise<
   }
 }
 
+async function syncFolder(parent: string, io: DurableJsonIo): Promise<void> {
+  const folder = await io.open(
+    parent,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_DIRECTORY,
+  );
+  try {
+    await folder.sync();
+  } finally {
+    await folder.close();
+  }
+}
+
+/** For a caller that keeps a file already in place: its rename may never have been synced. */
+export async function syncDurableHostJsonFolder(
+  path: string,
+  io: DurableJsonIo = fs,
+): Promise<void> {
+  try {
+    await syncFolder(dirname(path), io);
+  } catch {
+    throw invalid();
+  }
+}
+
 export async function writeDurableHostJson(
   path: string,
   value: unknown,
@@ -74,15 +98,7 @@ export async function writeDurableHostJson(
       await handle.close();
     }
     await io.rename(temporary, path);
-    const folder = await io.open(
-      parent,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_DIRECTORY,
-    );
-    try {
-      await folder.sync();
-    } finally {
-      await folder.close();
-    }
+    await syncFolder(parent, io);
   } catch {
     throw invalid();
   } finally {

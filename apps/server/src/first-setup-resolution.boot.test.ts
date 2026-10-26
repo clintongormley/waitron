@@ -1,27 +1,33 @@
-import { mkdtemp, mkdir, realpath, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, expect, it, vi } from "vitest";
+import { request as httpsRequest } from "node:https";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { Hono } from "hono";
 import * as entry from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
-import { randomUUID } from "node:crypto";
 import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
-  selectFirstSetupWorkspace,
+  START_AGAIN_MARKER_FILE,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
 } from "@waitron/provisioning";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, LOG_FILE_NAME } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { dumpFileName } from "./backup-keys.js";
+import { serveRecovery } from "./recovery-listener.js";
+import { closeListener } from "./close-listener.js";
+import { freePorts } from "./testing/free-ports.js";
+import { escapeHtml, OPERATOR_TEXT } from "./recovery-surface.js";
+import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const dirs: string[] = [];
+const closes: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  await Promise.all(closes.splice(0).map((close) => close()));
   await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 async function torn() {
@@ -39,59 +45,6 @@ async function torn() {
 const stopped = () => Promise.resolve({ close: async () => {} });
 /** Keeps the start's free-space step out of cases that do not test it, whatever the temp folder holds. */
 const plentyOfSpace = async () => ({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 });
-
-async function replacement() {
-  const f = await firstFiscalFixture();
-  const anchor = { stateDir: await realpath(f.stateDir), venueDir: await realpath(f.venueDir) };
-  const resolutionId = randomUUID(),
-    workspaceId = randomUUID();
-  const base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
-  const binding = {
-    anchorStateDir: anchor.stateDir,
-    anchorVenueDir: anchor.venueDir,
-    stateDir: join(base, "state"),
-    venueDir: join(base, "venue"),
-    resolutionId,
-    workspaceId,
-    selectionGeneration: 1,
-  };
-  const records = createFirstSetupResolutionStore({
-    ...anchor,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  const prepared = await records.prepare(
-    {
-      resolutionId,
-      attemptId: f.ownerAttempt.attemptId,
-      observedRevision: f.ownerAttempt.revision,
-      observedOwnerGeneration: 1,
-      database: "missing",
-      authority: "original-password",
-      register: {
-        kind: "current-master",
-        status: "Unknown",
-        custodian: "Elena",
-        reference: "c".repeat(64),
-        consultedAt: "2026-10-16T02:00:00.000Z",
-      },
-      action: "retire",
-      nextWorkspace: binding,
-    },
-    [
-      {
-        name: "state/first-setup.json",
-        bytes: await readFile(join(anchor.stateDir, "first-setup.json")),
-      },
-      {
-        name: "venue/first-setup-claim.json",
-        bytes: await readFile(join(anchor.venueDir, "first-setup-claim.json")),
-      },
-      { name: "venue/venue.db", bytes: null },
-    ],
-  );
-  await selectFirstSetupWorkspace(anchor, await records.apply(prepared));
-  return { ...f, anchor, binding };
-}
 
 it("direct entry serves resolution before strict boot or creating a missing database", async () => {
   const f = await torn();
@@ -194,102 +147,6 @@ it("a strictly paired attempt with a missing database reaches resolution without
   }
 });
 
-it("direct entry boots the checked replacement using only its settings", async () => {
-  const f = await replacement();
-  try {
-    await writeFile(
-      join(f.binding.stateDir, "trading.env"),
-      "WAITRON_TEST_SETTING=new-workspace\n",
-    );
-    let actual: NodeJS.ProcessEnv | undefined;
-    await entry.startServerOrFirstSetupResolution(
-      { WAITRON_STATE_DIR: f.anchor.stateDir, WAITRON_VENUE_DIR: f.anchor.venueDir },
-      {},
-      {
-        startServer: async (env) => {
-          actual = env;
-          return stopped();
-        },
-      },
-    );
-    expect(actual).toMatchObject({
-      WAITRON_STATE_DIR: f.binding.stateDir,
-      WAITRON_VENUE_DIR: f.binding.venueDir,
-      WAITRON_TEST_SETTING: "new-workspace",
-    });
-    await expect(stat(join(f.anchor.venueDir, "venue.db"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  } finally {
-    await f.dispose();
-  }
-});
-
-it("supervised entry stages and boots only the checked replacement", async () => {
-  const f = await replacement();
-  try {
-    const effects: string[] = [];
-    await entry.runEntry({
-      ...f.anchor,
-      args: [],
-      statfs: plentyOfSpace,
-      baseEnv: {},
-      readRecoveryState: async (path) => {
-        effects.push(`recovery:${path}`);
-        return FRESH;
-      },
-      writeRecoveryState: async (path) => {
-        effects.push(`counter:${path}`);
-      },
-      withRecoveryLock: async (_path, body) => body(),
-      loadBoxEnv: async (base, path) => {
-        effects.push(`env:${path}`);
-        return base;
-      },
-      runStagedRestore: async (deps) => {
-        effects.push(`restore:${deps.venueDir}:${deps.stateDir}`);
-        return false;
-      },
-      runStagedReset: async (deps) => {
-        effects.push(`reset:${deps.venueDir}:${deps.stateDir}`);
-        return false;
-      },
-      clearReplacedDatabases: async (path) => {
-        effects.push(`cleanup:${path}`);
-      },
-      assertNotAhead: async (path) => {
-        effects.push(`ahead:${path}`);
-      },
-      startServer: async (env) => {
-        effects.push(`boot:${env.WAITRON_VENUE_DIR}:${env.WAITRON_STATE_DIR}`);
-        return stopped();
-      },
-      serveRecovery: async () => {
-        throw new Error("unexpected resolution");
-      },
-      scheduleStayedUp: () => {},
-      installShutdownHandlers: () => {},
-      log: () => {},
-    });
-    expect(effects).toEqual([
-      `recovery:${f.binding.stateDir}`,
-      `recovery:${f.binding.stateDir}`,
-      `counter:${f.binding.stateDir}`,
-      `restore:${f.binding.venueDir}:${f.binding.stateDir}`,
-      `reset:${f.binding.venueDir}:${f.binding.stateDir}`,
-      `cleanup:${f.binding.venueDir}`,
-      `ahead:${f.binding.venueDir}`,
-      `env:${f.binding.stateDir}`,
-      `boot:${f.binding.venueDir}:${f.binding.stateDir}`,
-    ]);
-    await expect(stat(join(f.anchor.venueDir, "venue.db"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  } finally {
-    await f.dispose();
-  }
-});
-
 it("direct entry still boots a normal unclaimed workspace", async () => {
   const f = await torn();
   await rm(join(f.venueDir, "first-setup-claim.json"));
@@ -370,60 +227,6 @@ it("a completed marker cannot make a missing committed database look like a new 
   }
 });
 
-it.each(["venue-selection", "state-selection", "target-backlink"])(
-  "losing the %s never falls back to the retired database",
-  async (missing) => {
-    const f = await replacement();
-    try {
-      const path =
-        missing === "venue-selection"
-          ? join(f.anchor.venueDir, "first-setup-selection.json")
-          : missing === "state-selection"
-            ? join(f.anchor.stateDir, "first-setup-selection.json")
-            : join(f.binding.venueDir, "first-setup-workspace.json");
-      await rm(path);
-      const boot = vi.fn(stopped);
-      let app: Hono | undefined;
-      await entry.startServerOrFirstSetupResolution(
-        { WAITRON_STATE_DIR: f.anchor.stateDir, WAITRON_VENUE_DIR: f.anchor.venueDir },
-        {},
-        {
-          startServer: boot,
-          serveResolution: async (surface) => {
-            app = surface;
-            return stopped();
-          },
-        },
-      );
-      expect(boot).not.toHaveBeenCalled();
-      expect((await app!.request("/setup-api/first-setup/status")).status).toBe(200);
-      await expect(stat(join(f.anchor.venueDir, "venue.db"))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-      await expect(stat(join(f.binding.venueDir, "venue.db"))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-    } finally {
-      await f.dispose();
-    }
-  },
-);
-
-it("changing a selected workspace after discovery refuses before staged work", async () => {
-  const f = await replacement();
-  try {
-    const admission = await resolveFirstSetupEntry(f.anchor, {});
-    expect(admission.kind).toBe("normal");
-    if (admission.kind !== "normal") throw new Error("expected checked target");
-    await writeFile(join(f.binding.venueDir, "first-setup-retirement.json"), "{}");
-    const stages = vi.fn(stopped);
-    await expect(admission.run(stages)).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-    expect(stages).not.toHaveBeenCalled();
-  } finally {
-    await f.dispose();
-  }
-});
-
 function startupLockFromAnotherProcess(venueDir: string) {
   const result = spawnSync(
     process.execPath,
@@ -448,23 +251,15 @@ try {
   return result.stdout;
 }
 
-it.each([
-  { selected: false, failure: false },
-  { selected: false, failure: true },
-  { selected: true, failure: false },
-  { selected: true, failure: true },
-])(
-  "startup holds and releases its real locks: selected=$selected failure=$failure",
-  async ({ selected, failure }) => {
-    const selectedFixture = selected ? await replacement() : null;
-    const f = selectedFixture ?? (await firstFiscalFixture());
+it.each([{ failure: false }, { failure: true }])(
+  "startup holds and releases its real locks: failure=$failure",
+  async ({ failure }) => {
+    const f = await firstFiscalFixture();
     try {
-      const anchor = selectedFixture?.anchor ?? f;
-      const target = selectedFixture?.binding ?? f;
-      if (!selected) await suite.db.archiveTo(join(f.venueDir, "venue.db"));
-      const paths = [...new Set([anchor.venueDir, target.venueDir])];
+      await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+      const paths = [f.venueDir];
       const originals = await readFile(join(f.stateDir, "first-setup.json"));
-      const admission = await resolveFirstSetupEntry(anchor, {});
+      const admission = await resolveFirstSetupEntry(f, {});
       expect(admission.kind).toBe("normal");
       if (admission.kind !== "normal") throw new Error("expected startup admission");
       const sentinel = new Error("synthetic startup failure");
@@ -477,14 +272,6 @@ it.each([
       else await expect(start).resolves.toBe("startup completed");
       for (const path of paths) expect(startupLockFromAnotherProcess(path)).toBe("AVAILABLE");
       expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(originals);
-      if (selected) {
-        await expect(stat(join(anchor.venueDir, "venue.db"))).rejects.toMatchObject({
-          code: "ENOENT",
-        });
-        await expect(stat(join(target.venueDir, "venue.db"))).rejects.toMatchObject({
-          code: "ENOENT",
-        });
-      }
     } finally {
       await f.dispose();
     }
@@ -518,141 +305,325 @@ it.each(["activation-started", "abandoned", "uncertain"] as const)(
   },
 );
 
-it.each(["anchor", "selected"] as const)(
-  "startup refuses a busy %s venue before its callback and releases earlier locks",
-  async (busy) => {
-    const f = await replacement();
-    let blocker: DatabaseSync | undefined;
-    try {
-      const admission = await resolveFirstSetupEntry(f.anchor, {});
-      expect(admission.kind).toBe("normal");
-      if (admission.kind !== "normal") throw new Error("expected startup admission");
-      const path = busy === "anchor" ? f.anchor.venueDir : f.binding.venueDir;
-      blocker = new DatabaseSync(join(path, "venue.lock"));
-      blocker.exec("begin immediate");
-      let entered = false;
-      await expect(
-        admission.run(async () => {
-          entered = true;
-        }),
-      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
-      expect(entered).toBe(false);
-      if (busy === "selected")
-        expect(startupLockFromAnotherProcess(f.anchor.venueDir)).toBe("AVAILABLE");
-      blocker.close();
-      blocker = undefined;
-      for (const venueDir of [f.anchor.venueDir, f.binding.venueDir]) {
-        expect(startupLockFromAnotherProcess(venueDir)).toBe("AVAILABLE");
-        await expect(stat(join(venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-      }
-    } finally {
-      blocker?.close();
-      await f.dispose();
-    }
+it("startup refuses a busy venue before its callback and releases earlier locks", async () => {
+  const f = await firstFiscalFixture();
+  let blocker: DatabaseSync | undefined;
+  try {
+    await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+    const admission = await resolveFirstSetupEntry(f, {});
+    expect(admission.kind).toBe("normal");
+    if (admission.kind !== "normal") throw new Error("expected startup admission");
+    blocker = new DatabaseSync(join(f.venueDir, "venue.lock"));
+    blocker.exec("begin immediate");
+    let entered = false;
+    await expect(
+      admission.run(async () => {
+        entered = true;
+      }),
+    ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    expect(entered).toBe(false);
+    blocker.close();
+    blocker = undefined;
+    expect(startupLockFromAnotherProcess(f.venueDir)).toBe("AVAILABLE");
+  } finally {
+    blocker?.close();
+    await f.dispose();
+  }
+});
+
+let material: SelfSignedMaterial;
+beforeAll(() => {
+  material = mintSelfSignedServerCert({
+    hostnames: ["waitron.local", "localhost"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+});
+
+type Box = "archive" | "interrupted" | "unfinishable" | "unlisted";
+
+/** A box with healthy TLS, so a real recovery listener serves the page rather than connection repair. */
+async function startingBox(box: Box) {
+  const root = await mkdtemp(join(tmpdir(), "refused-start-"));
+  dirs.push(root);
+  const stateDir = join(root, "state"),
+    venueDir = join(root, "venue");
+  await mkdir(join(stateDir, "tls"), { recursive: true });
+  await mkdir(venueDir);
+  for (const [name, value] of Object.entries({
+    "ca.crt": material.caCertPem,
+    "ca.key": material.caKeyPem,
+    "server.crt": material.serverCertPem,
+    "server.key": material.serverKeyPem,
+  }))
+    await writeFile(join(stateDir, "tls", name), value);
+  const roots = { stateDir, venueDir };
+  if (box === "archive") {
+    await writeFile(join(venueDir, "first-setup-retirement.json"), '{"version":1}');
+    return { root, ...roots };
+  }
+  await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
+  await writeFile(join(venueDir, "first-setup-claim.json"), '{"synthetic":"claim"}');
+  await writeStartAgainMarker(
+    roots,
+    await startAgainMarkerFor(roots, {
+      attemptId: "33333333-3333-4333-8333-333333333333",
+      frozenDigest: "a".repeat(64),
+    }),
+  );
+  if (box === "unfinishable")
+    await writeFile(join(stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  if (box === "unlisted") await writeFile(join(venueDir, "venue.db"), "written after the marker");
+  return { root, ...roots };
+}
+
+const MODES = ["supervised", "direct"] as const;
+type Mode = (typeof MODES)[number];
+
+/** Starts the box in `mode` on a real listener; `restart` is what Try again reaches in either mode. */
+async function startIn(mode: Mode, roots: { stateDir: string; venueDir: string }) {
+  const [port] = (await freePorts(1)) as [number];
+  const listenerEnv = {
+    WAITRON_HTTP_HOST: "127.0.0.1",
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_LANDING_PORT: "0",
+  };
+  const restart = vi.fn();
+  const writes = vi.fn(async () => {});
+  const startServer = vi.fn(stopped);
+  if (mode === "supervised") {
+    await entry.runEntry({
+      ...roots,
+      args: [],
+      statfs: plentyOfSpace,
+      baseEnv: listenerEnv,
+      readRecoveryState: async () => FRESH,
+      writeRecoveryState: writes,
+      withRecoveryLock: async (_path, body) => body(),
+      loadBoxEnv: async (base) => base,
+      runStagedRestore: async () => false,
+      runStagedReset: async () => false,
+      clearReplacedDatabases: async () => {},
+      assertNotAhead: async () => {},
+      startServer,
+      serveRecovery: async (app, options) => {
+        const server = await serveRecovery(app, options);
+        closes.push(() => closeListener(server));
+      },
+      scheduleStayedUp: () => {},
+      installShutdownHandlers: () => {},
+      log: () => {},
+      exit: restart,
+    });
+  } else {
+    const server = await entry.startServerOrFirstSetupResolution(
+      { WAITRON_STATE_DIR: roots.stateDir, WAITRON_VENUE_DIR: roots.venueDir, ...listenerEnv },
+      {},
+      { startServer, requestRestart: restart },
+    );
+    closes.push(() => server.close());
+  }
+  return { port, restart, writes, startServer };
+}
+
+function overHttps(
+  port: number,
+  path: string,
+  language = "en-GB",
+  method = "GET",
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        hostname: "127.0.0.1",
+        servername: "waitron.local",
+        port,
+        path,
+        method,
+        ca: material.caCertPem,
+        headers: { "Accept-Language": language },
+        timeout: 5000,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        res.on("end", () => resolve({ status: res.statusCode!, body }));
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("HTTPS test deadline")));
+    req.end();
+  });
+}
+
+const STATUS_EN = "Level: recovery. This start was refused before it began, and was not counted.";
+// The Spanish status line has no exported table to read it from; the titles and actions do.
+const STATUS_ES = "Nivel: recovery. Este arranque se rechazó antes de empezar y no se ha contado.";
+const REFUSED_TEXT = {
+  "setup.workspace_unsupported": {
+    title: "This box holds a setup from an older version of Waitron that this version cannot use.",
+    action: "Reinstall Waitron on this box to start fresh.",
+  },
+  "setup.start_again_incomplete": {
+    title:
+      "Start again did not finish: the box found files it did not expect, or could not read or delete one.",
+    action:
+      "The box has not changed files it did not expect, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
+  },
+} as const;
+
+/** The page names `code` in both languages, with the refused-start status line and no disk line. */
+async function expectRefusedPage(port: number, code: keyof typeof REFUSED_TEXT) {
+  const en = await overHttps(port, "/", "en-GB");
+  expect(en.status).toBe(200);
+  for (const text of [REFUSED_TEXT[code].title, REFUSED_TEXT[code].action, STATUS_EN])
+    expect(en.body).toContain(escapeHtml(text));
+  expect(en.body).not.toMatch(/disk/i);
+  const es = await overHttps(port, "/", "es-ES");
+  expect(es.status).toBe(200);
+  const spanish = OPERATOR_TEXT[code]!["es-ES"];
+  for (const text of [spanish.title, spanish.action, STATUS_ES])
+    expect(es.body).toContain(escapeHtml(text));
+  expect(es.body).not.toMatch(/disco/i);
+  const status = await overHttps(port, "/recovery-api/status");
+  expect(JSON.parse(status.body)).toMatchObject({
+    failures: 0,
+    level: "recovery",
+    lastErrorCode: code,
+  });
+}
+
+const gone = (path: string) => expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+
+it.each(MODES)(
+  "a box holding a pre-A1042 archive serves the recovery page naming it, in every entry mode (%s)",
+  async (mode) => {
+    const f = await startingBox("archive");
+    const started = await startIn(mode, f);
+    await expectRefusedPage(started.port, "setup.workspace_unsupported");
+    expect(started.startServer).not.toHaveBeenCalled();
+    expect(started.writes).not.toHaveBeenCalled();
+    await gone(join(f.stateDir, "recovery.json"));
   },
 );
 
-/** The supervised entry's dependencies for a selected workspace, every staged step a no-op. */
-function selectedEntryDeps(
-  f: Awaited<ReturnType<typeof replacement>>,
-  over: Partial<Parameters<typeof entry.runEntry>[0]>,
-): Parameters<typeof entry.runEntry>[0] {
-  return {
-    ...f.anchor,
+it.each(MODES)(
+  "the start finishes an interrupted Start again before serving setup (%s)",
+  async (mode) => {
+    const f = await startingBox("interrupted");
+    const started = await startIn(mode, f);
+    expect(started.startServer).toHaveBeenCalledOnce();
+    await gone(join(f.stateDir, "first-setup.json"));
+    await gone(join(f.venueDir, "first-setup-claim.json"));
+    await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
+  },
+);
+
+it.each(MODES)(
+  "an unfinishable deletion serves the recovery page naming it, and Try again exits (%s)",
+  async (mode) => {
+    const f = await startingBox("unfinishable");
+    const started = await startIn(mode, f);
+    await expectRefusedPage(started.port, "setup.start_again_incomplete");
+    expect(started.startServer).not.toHaveBeenCalled();
+    expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+      '{"changed":"after the marker"}',
+    );
+    expect(await readFile(join(f.venueDir, "first-setup-claim.json"), "utf8")).toBe(
+      '{"synthetic":"claim"}',
+    );
+    expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
+    expect(started.restart).not.toHaveBeenCalled();
+    const retry = await overHttps(started.port, "/recovery-api/retry", "en-GB", "POST");
+    expect(retry).toEqual({ status: 200, body: JSON.stringify({ ok: true }) });
+    await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
+    if (mode === "supervised") expect(started.restart).toHaveBeenCalledWith(0);
+    expect(started.writes).not.toHaveBeenCalled();
+    await gone(join(f.stateDir, "recovery.json"));
+  },
+);
+
+it("a refused start after an earlier failed start shows the new code under 'Why the last start failed'", async () => {
+  const f = await startingBox("archive");
+  await mkdir(join(f.stateDir, "logs"));
+  await writeFile(
+    join(f.stateDir, "logs", LOG_FILE_NAME),
+    [
+      { at: "2026-10-20T10:00:00.000Z", level: "info", event: "server.boot_started" },
+      {
+        errorCode: "migrations.incomplete",
+        detail: "the detail of an older start",
+        at: "2026-10-20T10:00:01.000Z",
+        level: "error",
+        event: "server.boot_failed",
+      },
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join(""),
+  );
+  const started = await startIn("supervised", f);
+  const page = (await overHttps(started.port, "/", "en-GB")).body;
+  const heading = page.indexOf("Why the last start failed (");
+  expect(heading).toBeGreaterThan(-1);
+  const section = page.slice(heading, page.indexOf("</pre>", heading));
+  expect(section).toContain("setup.workspace_unsupported");
+  expect(section).not.toContain("the detail of an older start");
+  expect(section).not.toContain("2026-10-20T10:00:01.000Z");
+});
+
+it.each(MODES)(
+  "folders reached through a symbolic link still finish an interrupted Start again (%s)",
+  async (mode) => {
+    const f = await startingBox("interrupted");
+    const link = `${f.root}-link`;
+    await symlink(f.root, link);
+    dirs.push(link);
+    const started = await startIn(mode, {
+      stateDir: join(link, "state"),
+      venueDir: join(link, "venue"),
+    });
+    expect(started.startServer).toHaveBeenCalledOnce();
+    await gone(join(f.stateDir, "first-setup.json"));
+    await gone(join(f.venueDir, "first-setup-claim.json"));
+    await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
+  },
+);
+
+it("a deletion refused for an unlisted file names that file under 'Why the last start failed'", async () => {
+  const f = await startingBox("unlisted");
+  const lines: { event: string; fields: unknown }[] = [];
+  const [port] = (await freePorts(1)) as [number];
+  await entry.runEntry({
+    ...f,
     args: [],
     statfs: plentyOfSpace,
-    baseEnv: {},
+    baseEnv: {
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    },
     readRecoveryState: async () => FRESH,
     writeRecoveryState: async () => {},
-    withRecoveryLock: async (_path, body) => body(),
     loadBoxEnv: async (base) => base,
-    runStagedRestore: async () => false,
-    runStagedReset: async () => false,
-    clearReplacedDatabases: async () => {},
-    assertNotAhead: async () => {},
     startServer: stopped,
-    serveRecovery: async () => {
-      throw new Error("unexpected page");
+    serveRecovery: async (app, options) => {
+      const server = await serveRecovery(app, options);
+      closes.push(() => closeListener(server));
     },
     scheduleStayedUp: () => {},
     installShutdownHandlers: () => {},
-    log: () => {},
-    ...over,
-  };
-}
-
-const diskFull = () => Object.assign(new Error("database or disk is full"), { errcode: 13 });
-
-it("serves the full-disk page at once when the selected workspace's disk is full and the original folders have room", async () => {
-  const f = await replacement();
-  try {
-    const workspaces = join(f.anchor.stateDir, "first-setup-workspaces");
-    const statfs = vi.fn(async (dir: string) => ({
-      bavail: dir.startsWith(workspaces) ? 10 : Number.MAX_SAFE_INTEGER,
-      frsize: 1,
-    }));
-    let page: Hono | undefined;
-    const startServer = vi.fn(stopped);
-    await entry.runEntry(
-      selectedEntryDeps(f, {
-        statfs,
-        freeSpaceFloor: 1000,
-        withRecoveryLock: () => Promise.reject(diskFull()),
-        startServer,
-        serveRecovery: async (surface) => {
-          page = surface;
-        },
-      }),
-    );
-    expect(startServer).not.toHaveBeenCalled();
-    expect(await (await page!.request("/recovery-api/status")).json()).toMatchObject({
-      lastErrorCode: "storage.disk_full",
-      level: "recovery",
-    });
-  } finally {
-    await f.dispose();
-  }
-});
-
-it("fails the start as before when the selected workspace's free space cannot be read", async () => {
-  const f = await replacement();
-  try {
-    const workspaces = join(f.anchor.stateDir, "first-setup-workspaces");
-    const error = diskFull();
-    const serveRecovery = vi.fn(async () => {});
-    await expect(
-      entry.runEntry(
-        selectedEntryDeps(f, {
-          statfs: async (dir: string) =>
-            dir.startsWith(workspaces)
-              ? Promise.reject(new Error("ENOSYS"))
-              : { bavail: Number.MAX_SAFE_INTEGER, frsize: 1 },
-          freeSpaceFloor: 1000,
-          withRecoveryLock: () => Promise.reject(error),
-          serveRecovery,
-        }),
-      ),
-    ).rejects.toBe(error);
-    expect(serveRecovery).not.toHaveBeenCalled();
-  } finally {
-    await f.dispose();
-  }
-});
-
-it("a start that failed on a full disk deletes backup staging while it holds the selected workspace itself", async () => {
-  const f = await replacement();
-  try {
-    const staged = join(f.binding.stateDir, "backup-staging", dumpFileName(new Date()));
-    const error = diskFull();
-    // Written by the failing start itself: the start's own clean-up of the workspace runs earlier.
-    const startServer = async () => {
-      await mkdir(dirname(staged), { recursive: true });
-      await writeFile(staged, "copy");
-      throw error;
-    };
-    await expect(entry.runEntry(selectedEntryDeps(f, { startServer }))).rejects.toBe(error);
-    await expect(stat(staged)).rejects.toMatchObject({ code: "ENOENT" });
-  } finally {
-    await f.dispose();
-  }
+    log: (_level, event, fields) => lines.push({ event, fields }),
+    exit: () => {},
+  });
+  const page = (await overHttps(port, "/", "en-GB")).body;
+  const heading = page.indexOf("Why the last start failed (");
+  expect(heading).toBeGreaterThan(-1);
+  const section = page.slice(heading, page.indexOf("</pre>", heading));
+  expect(section).toContain("unlisted file: venue/venue.db");
+  expect(lines).toContainEqual({
+    event: "recovery.serving_refused_start",
+    fields: { errorCode: "setup.start_again_incomplete", reason: "unlisted file: venue/venue.db" },
+  });
 });

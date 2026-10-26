@@ -9,21 +9,9 @@ import {
   type WaitronModule,
   type ModuleConfig,
 } from "@waitron/module";
-import {
-  venueFiscalSelection,
-  createFirstSetupRuntime,
-  readFirstSetupRetirementArchives,
-} from "@waitron/provisioning";
-import {
-  createFirstFiscalDelivery,
-  readFirstFiscalDeliverySnapshot,
-} from "./first-fiscal-delivery.js";
-import { readFirstSetupRecoveryDeliverySnapshot } from "./first-setup-recovery-delivery.js";
-import {
-  firstSetupModuleContext,
-  createFirstFiscalEvidence,
-  readFirstFiscalEvidenceSnapshot,
-} from "./first-fiscal-evidence.js";
+import { venueFiscalSelection, createFirstSetupRuntime } from "@waitron/provisioning";
+import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
+import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
 export { createModuleOperationHost } from "@waitron/provisioning";
 
 export function createFirstSetupModuleHost(options: {
@@ -49,37 +37,9 @@ export function createFirstSetupModuleHost(options: {
       invalidate(attemptId: string): void;
     };
   } = {};
-  const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> = async (name) => {
-    const result: Awaited<ReturnType<typeof readRetiredSetup>>[number][] = [];
-    for (const { state, originals } of await readFirstSetupRetirementArchives(options)) {
-      const publicEvidence = readFirstFiscalEvidenceSnapshot(name, originals);
-      for (const original of originals) {
-        if (!original.name.startsWith("outside-file:") || original.bytes === null) continue;
-        try {
-          publicEvidence.push(JSON.parse(original.bytes.toString("utf8")) as unknown);
-        } catch {
-          throw new AppError("setup.attempt_invalid", {});
-        }
-      }
-      const recovery = readFirstSetupRecoveryDeliverySnapshot(name, state, originals, modules);
-      const document =
-        recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(name, state, originals));
-      if (document !== undefined) publicEvidence.push(document);
-      for (const attempt of [state, ...state.previous]) {
-        if (!attempt.frozen.modules.some((entry) => entry.module === name)) continue;
-        result.push({
-          context: firstSetupModuleContext(attempt, name),
-          input: attempt.inputs[name],
-          publicEvidence,
-        });
-      }
-    }
-    return result;
-  };
   const runtime = createFirstSetupRuntime({
     ...options,
     readPublicEvidence: async (binding) => evidence.current?.read(binding),
-    readRetiredSetup,
     onOwnershipRecovered: (attemptId) => evidence.current?.invalidate(attemptId),
   });
   const { coordinator, store, owner, resolution, modules, bootId, keys, recoveryDelivery } =

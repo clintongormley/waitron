@@ -1,12 +1,16 @@
 import { mkdtemp, mkdir, rm, writeFile, stat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { afterEach, expect, it } from "vitest";
 import { startServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedReset } from "./reset-request.js";
 import { runStagedRestore } from "./restore-request.js";
+import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { startAgainMarkerFor, writeStartAgainMarker } from "@waitron/provisioning";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -36,7 +40,7 @@ it("raw boot refuses retired roots before it can create their missing database",
           WAITRON_HTTP_PORT: String(port),
         });
       })(),
-    ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+    ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
   } finally {
     await server?.close();
   }
@@ -62,7 +66,7 @@ it("the restore command refuses retired roots even when the original claim marke
   });
   expect(code).toBe(1);
   expect(calls).toBe(0);
-  expect(lines.join("\n")).toContain("setup.attempt_uncertain");
+  expect(lines.join("\n")).toContain("setup.workspace_unsupported");
   expect(await readFile(source, "utf8")).toBe("unopened archive");
 });
 it.each(["restore", "reset"])(
@@ -79,10 +83,85 @@ it.each(["restore", "reset"])(
             placements++;
           })
         : runStagedReset(deps),
-    ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+    ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
     expect(placements).toBe(0);
     expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(
       "retained synthetic secret",
     );
   },
 );
+it("a first-setup request on a box whose earlier Waitron's selection appears after the start answers 409 setup.workspace_unsupported", async () => {
+  const root = await mkdtemp(join(tmpdir(), "legacy-route-"));
+  dirs.push(root);
+  const venueDir = join(root, "venue"),
+    stateDir = join(root, "state");
+  await mkdir(venueDir);
+  await mkdir(stateDir);
+  await writeFile(join(stateDir, "first-setup.json"), "uncheckable attempt");
+  const entry = await resolveFirstSetupEntry({ venueDir, stateDir }, {});
+  expect(entry.kind).toBe("resolution");
+  if (entry.kind !== "resolution") return;
+  await writeFile(join(stateDir, "first-setup-selection.json"), '{"version":1}');
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await entry.app.request(
+      "https://localhost/setup-api/first-setup/resolution/start-again/summary",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Waitron-Setup-Owner": "synthetic",
+          "X-Waitron-Setup-Attempt": "synthetic",
+          "X-Waitron-Setup-Revision": "1",
+          "X-Waitron-Setup-Generation": "1",
+        },
+        body: JSON.stringify({ inspectionId: "synthetic", revision: 1, ownerGeneration: 1 }),
+      },
+      { incoming: { socket } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.workspace_unsupported", params: {} },
+    });
+  } finally {
+    socket.destroy();
+    await entry.dispose();
+  }
+});
+it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete", async () => {
+  const root = await mkdtemp(join(tmpdir(), "marked-boot-"));
+  dirs.push(root);
+  const venueDir = join(root, "venue"),
+    stateDir = join(root, "state");
+  await mkdir(venueDir);
+  await mkdir(stateDir);
+  await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
+  await writeStartAgainMarker(
+    { venueDir, stateDir },
+    await startAgainMarkerFor(
+      { venueDir, stateDir },
+      { attemptId: "33333333-3333-4333-8333-333333333333", frozenDigest: "a".repeat(64) },
+    ),
+  );
+  await writeFile(join(stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  const [port] = await freePorts(1);
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  try {
+    await expect(
+      (async () => {
+        server = await startServer({
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_HTTP_HOST: "127.0.0.1",
+          WAITRON_HTTP_PORT: String(port),
+        });
+      })(),
+    ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  } finally {
+    await server?.close();
+  }
+  expect(await readFile(join(stateDir, "first-setup.json"), "utf8")).toBe(
+    '{"changed":"after the marker"}',
+  );
+  await expect(stat(join(venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+});

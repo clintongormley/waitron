@@ -8,8 +8,8 @@ import type { OperationBinding } from "@waitron/module";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupCoordinator } from "./first-setup-state.js";
 import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup-resolution.js";
-import { resolveFirstSetupWorkspace, firstSetupAnchorFor } from "./first-setup-workspace.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import "./errors.js";
 
 export interface BackupRepairTarget {
@@ -25,7 +25,8 @@ export interface BackupRepairObservation {
   ownerGeneration: number | null;
   originalsDigest: string;
 }
-export type BackupRepairPhase = "prepared" | "placement-started" | "restored" | "selected";
+export type BackupRepairPhase =
+  "prepared" | "placement-started" | "restored" | "selected" | "abandoned";
 export interface BackupRepairRecord {
   version: 2;
   sequence: number;
@@ -59,7 +60,14 @@ interface Original {
 const NAMESPACE = join("first-setup-resolutions", "backup-recovery");
 const LIMIT = 131072;
 const HASH = /^[a-f0-9]{64}$/;
-const PHASES: BackupRepairPhase[] = ["prepared", "placement-started", "restored", "selected"];
+const PHASES: BackupRepairPhase[] = [
+  "prepared",
+  "placement-started",
+  "restored",
+  "selected",
+  "abandoned",
+];
+const ABANDONABLE: BackupRepairPhase[] = ["prepared", "placement-started", "restored"];
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
@@ -182,7 +190,7 @@ function inputValid(value: unknown): asserts value is RecordInput {
     invalid();
   publicJson(value.input);
   if (Buffer.byteLength(JSON.stringify(value)) > LIMIT) invalid();
-  if (value.phase !== "prepared" && value.input === null) invalid();
+  if (!["prepared", "abandoned"].includes(value.phase as string) && value.input === null) invalid();
 }
 function recordInput(record: BackupRepairRecord): RecordInput {
   return Object.fromEntries(
@@ -211,6 +219,12 @@ function transition(previous: BackupRepairRecord | undefined, next: RecordInput)
   }
   const old = recordInput(previous);
   if (!isDeepStrictEqual({ ...old, phase: next.phase, input: next.input }, next)) conflict();
+  if (next.phase === "abandoned") {
+    if (!ABANDONABLE.includes(previous.phase) || !isDeepStrictEqual(previous.input, next.input))
+      conflict();
+    return;
+  }
+  if (previous.phase === "abandoned") conflict();
   const before = PHASES.indexOf(previous.phase),
     after = PHASES.indexOf(next.phase);
   if (after !== before + 1 && !(before === 0 && after === 0)) conflict();
@@ -276,10 +290,6 @@ async function witness(anchor: FirstSetupRoots): Promise<Witness | null> {
     uncertain();
   return first as unknown as Witness;
 }
-async function sourceFor(anchor: FirstSetupRoots): Promise<FirstSetupRoots> {
-  const selected = await resolveFirstSetupWorkspace(anchor);
-  return { venueDir: selected.venueDir, stateDir: selected.stateDir };
-}
 async function originals(
   anchor: FirstSetupRoots,
   source: FirstSetupRoots,
@@ -294,9 +304,12 @@ async function originals(
     ]),
   );
   const pointers = new Set(currentPaths(anchor));
+  const recoveries = join(anchor.stateDir, NAMESPACE);
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
+    // A discarded recovery is not one of the box's originals, and emptying it changes its folder.
+    if (dirname(path) === recoveries && (await abandonedJournal(anchor, basename(path)))) return;
     // Lock journals and holder heartbeats carry no setup or recovery authority.
     if (
       rootsToRead.some(
@@ -358,6 +371,31 @@ async function originals(
     await walk(root, true);
   }
   return [...entries.values()].sort((a, b) => a.path.localeCompare(b.path, "en"));
+}
+async function abandonedJournal(anchor: FirstSetupRoots, id: string): Promise<boolean> {
+  if (!isUuid(id)) return false;
+  try {
+    const path = join(anchor.stateDir, NAMESPACE, id);
+    const names = (await readdir(path)).filter((name) => /^\d+\.json$/.test(name)).sort();
+    let previous: BackupRepairRecord | undefined;
+    for (const [index, name] of names.entries()) {
+      const record = await read(join(path, name));
+      recordValid(record);
+      if (
+        name !== `${String(index + 1).padStart(6, "0")}.json` ||
+        record.sequence !== index + 1 ||
+        record.previousRecordDigest !== (previous === undefined ? null : digest(previous)) ||
+        record.target.recoveryId !== id ||
+        !isDeepStrictEqual(record.target.anchor, anchor)
+      )
+        return false;
+      transition(previous, recordInput(record));
+      previous = record;
+    }
+    return previous?.phase === "abandoned";
+  } catch {
+    return false;
+  }
 }
 async function stableOriginals(anchor: FirstSetupRoots, source: FirstSetupRoots, id: string) {
   const first = await originals(anchor, source, id),
@@ -453,6 +491,7 @@ async function archiveControls(base: string, entries: Original[]): Promise<void>
 async function checkedRecords(
   anchor: FirstSetupRoots,
   selection: Witness,
+  chainOnly = false,
 ): Promise<BackupRepairRecord[]> {
   const path = folder(selection.target);
   await firstSetupDirectory(path);
@@ -474,6 +513,10 @@ async function checkedRecords(
     records.push(record);
   }
   if (digest(records[0]) !== selection.initialRecordDigest) uncertain();
+  // An abandoned recovery is a tombstone; the attempt it was taken against may be deleted.
+  // Abandoning checks only the chain too: Start again writes its note and confirmation
+  // into the box's state folder before it abandons.
+  if (chainOnly || records.at(-1)!.phase === "abandoned") return records;
   const manifest = await read(join(path, "originals.json"));
   if (
     !exact(manifest, ["version", "entries"]) ||
@@ -499,7 +542,7 @@ async function checkedRecords(
     )
   )
     conflict();
-  if (!isDeepStrictEqual(await sourceFor(anchor), selection.target.source)) conflict();
+  if (!isDeepStrictEqual(anchor, selection.target.source)) conflict();
   return records;
 }
 const coordinators = new Map<string, ReturnType<typeof createFirstSetupCoordinator>>();
@@ -514,21 +557,22 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
   async function inspect(id: string): Promise<string> {
     if (!isUuid(id)) invalid();
     const anchor = await canonical(anchorInput);
-    return digest(await stableOriginals(anchor, await sourceFor(anchor), id));
+    return digest(await stableOriginals(anchor, anchor, id));
   }
-  async function readRecords(): Promise<BackupRepairRecord[]> {
+  async function readRecords(chainOnly = false): Promise<BackupRepairRecord[]> {
     const anchor = await canonical(anchorInput),
       selected = await witness(anchor);
-    return selected === null ? [] : checkedRecords(anchor, selected);
+    return selected === null ? [] : checkedRecords(anchor, selected, chainOnly);
   }
   async function append(input: RecordInput, selecting = false): Promise<BackupRepairRecord> {
     inputValid(input);
     if (input.phase === "selected" && !selecting) conflict();
+    if (input.phase === "abandoned") conflict();
     const anchor = await canonical(anchorInput);
     if (
       !isDeepStrictEqual(anchor, input.target.anchor) ||
       !isDeepStrictEqual(await canonical(input.target.source), input.target.source) ||
-      !isDeepStrictEqual(await sourceFor(anchor), input.target.source)
+      !isDeepStrictEqual(anchor, input.target.source)
     )
       conflict();
     let selected: Witness | null;
@@ -539,7 +583,19 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
       if (values.some((value) => value !== null)) throw error;
       selected = null;
     }
-    if (selected !== null && !isDeepStrictEqual(selected.target, input.target)) conflict();
+    let replacing = false;
+    if (selected !== null && !isDeepStrictEqual(selected.target, input.target)) {
+      if (
+        input.phase !== "prepared" ||
+        (await checkedRecords(anchor, selected, true)).at(-1)!.phase !== "abandoned"
+      )
+        conflict();
+      // Start again finishes the emptying; once the pointers move, nothing could reach it.
+      if (!(await isEmptiedTombstone(anchor, selected.target.recoveryId)))
+        throw new AppError("setup.start_again_incomplete", {});
+      selected = null;
+      replacing = true;
+    }
     const path = folder(input.target);
     let previous: BackupRepairRecord | undefined;
     if (selected !== null) {
@@ -594,7 +650,14 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
       initialRecordDigest: digest(record),
       initialRecord: record,
     };
-    for (const pointer of currentPaths(anchor)) await immutable(pointer, selected);
+    if (replacing) {
+      // A discarded recovery's pointer gives way to the next one; its records stay as a tombstone.
+      // The state folder's goes first: the venue folder's is already gone, so a cut leaves one.
+      for (const pointer of currentPaths(anchor).reverse()) {
+        await firstSetupDirectory(dirname(pointer), true);
+        await writeDurableHostJson(pointer, selected, LIMIT);
+      }
+    } else for (const pointer of currentPaths(anchor)) await immutable(pointer, selected);
     await archiveControls(path, entries);
     await immutable(join(path, "originals.json"), { version: 1, entries });
     await immutable(join(path, `${String(record.sequence).padStart(6, "0")}.json`), record);
@@ -605,7 +668,10 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
   }
   return {
     inspect,
-    read: readRecords,
+    read: () => readRecords(),
+    // The recovery's own records, as abandon reads them: the attempt it was taken against may
+    // have changed since.
+    readChain: () => readRecords(true),
     // The authenticated host holds anchor/source exclusion before entering this independent turn.
     append: async (input: RecordInput) => {
       inputValid(input);
@@ -629,7 +695,38 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
           return structuredClone(restored.target);
         })
         .catch(writeFailure),
+    abandon: (id: string) =>
+      turn
+        .run(async () => {
+          const anchor = await canonical(anchorInput),
+            selected = await witness(anchor);
+          if (selected === null) conflict();
+          const last = (await checkedRecords(anchor, selected, true)).at(-1)!;
+          if (last.target.recoveryId !== id) conflict();
+          if (last.phase === "abandoned") return last;
+          const input: RecordInput = { ...recordInput(last), phase: "abandoned" };
+          if (!isDeepStrictEqual(anchor, input.target.source)) conflict();
+          transition(last, input);
+          const record: BackupRepairRecord = {
+            ...structuredClone(input),
+            version: 2,
+            sequence: last.sequence + 1,
+            previousRecordDigest: digest(last),
+            recordedAt: new Date().toISOString(),
+          };
+          recordValid(record);
+          const name = `${String(record.sequence).padStart(6, "0")}.json`;
+          await immutable(join(folder(input.target), name), record);
+          return record;
+        })
+        .catch(writeFailure),
   };
+}
+export function insideBackupRepairTarget(dir: string): boolean {
+  return (
+    basename(dirname(dir)) === "target" &&
+    basename(dirname(dirname(dirname(dir)))) === "backup-recovery"
+  );
 }
 export async function resolveFirstSetupBackupWorkspace(
   anchorInput: FirstSetupRoots,
@@ -659,6 +756,7 @@ export async function resolveFirstSetupBackupWorkspace(
     if (selected === null) return { kind: "absent" };
     const records = await checkedRecords(anchor, selected),
       last = records.at(-1)!;
+    if (last.phase === "abandoned") return { kind: "absent" };
     let paired = true;
     for (const path of [...currentPaths(anchor), ...backlinkPaths(selected.target)])
       paired &&= isDeepStrictEqual(await read(path), selected);
@@ -677,17 +775,8 @@ export async function assertFirstSetupBackupBootTarget(input: FirstSetupRoots): 
         Object.values(target).map((root) => read(join(root, NAMESPACE, "backlink.json"))),
       );
     if (backlinks.every((value) => value === null)) {
-      const v1 = await read(join(target.venueDir, "first-setup-workspace.json"));
-      const anchor = v1 === null ? target : await firstSetupAnchorFor(target);
-      const location = await resolveFirstSetupBackupWorkspace(anchor);
-      if (
-        location.kind !== "absent" ||
-        Object.values(target).some(
-          (root) =>
-            basename(dirname(root)) === "target" &&
-            basename(dirname(dirname(dirname(root)))) === "backup-recovery",
-        )
-      )
+      const location = await resolveFirstSetupBackupWorkspace(target);
+      if (location.kind !== "absent" || Object.values(target).some(insideBackupRepairTarget))
         uncertain();
       return;
     }

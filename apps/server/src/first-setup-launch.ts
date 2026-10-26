@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { resolveLogDir } from "@waitron/db";
 import { join } from "node:path";
 import { DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
@@ -14,6 +15,8 @@ import {
   type RecoveryServeOptions,
 } from "./recovery-listener.js";
 import { closeListener } from "./close-listener.js";
+import { readRecoveryState, refusedAtStart } from "./recovery-state.js";
+import { recoveryApp } from "./recovery-surface.js";
 
 export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
@@ -68,11 +71,12 @@ export async function startServerOrFirstSetupResolution(
       transition = undefined;
     }
   };
+  const requestRestart = seams.requestRestart ?? (() => process.kill(process.pid, "SIGTERM"));
   const launch = async (): Promise<{ close(): Promise<void> }> => {
     const admission = await resolveFirstSetupEntry(
       { stateDir, venueDir },
       env,
-      seams.requestRestart ?? (() => process.kill(process.pid, "SIGTERM")),
+      requestRestart,
       log,
     );
     const effectiveEnv = await loadBoxEnv(env, admission.roots.stateDir);
@@ -95,11 +99,7 @@ export async function startServerOrFirstSetupResolution(
       return listen(new Hono(), { ...options, bootstrapOnly: true });
     if (admission.kind === "normal")
       return admission.run(async () => {
-        if (
-          admission.roots.binding === null &&
-          admission.roots.stateDir === stateDir &&
-          admission.roots.venueDir === venueDir
-        )
+        if (admission.roots.stateDir === stateDir && admission.roots.venueDir === venueDir)
           return (seams.startServer ?? startServer)(env, base);
         const selectedBase = {
           ...env,
@@ -109,6 +109,28 @@ export async function startServerOrFirstSetupResolution(
         const selectedEnv = await loadBoxEnv(selectedBase, admission.roots.stateDir);
         return (seams.startServer ?? startServer)(selectedEnv, selectedBase);
       });
+    if (admission.kind === "refused") {
+      log("warn", "recovery.serving_refused_start", {
+        errorCode: admission.code,
+        reason: admission.error.reason ?? null,
+      });
+      return listen(
+        recoveryApp({
+          state: refusedAtStart(
+            await readRecoveryState(admission.roots.stateDir),
+            admission.code,
+            new Date(),
+          ),
+          refusedAtStart: true,
+          logDir: resolveLogDir(env, admission.roots.stateDir),
+          onRetry: async () => {
+            requestRestart();
+          },
+          log,
+        }),
+        options,
+      );
+    }
     return listen(admission.app, options);
   };
   active = await launch();

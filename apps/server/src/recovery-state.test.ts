@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import {
   cleared,
   levelFor,
   readRecoveryState,
+  refusedAtStart,
   refusedWhileRunning,
   stayedUpClear,
   updateRecoveryState,
@@ -415,5 +416,29 @@ describe("a refusal while running", () => {
       refused: true,
       refusedTriggers: triggers,
     });
+  });
+});
+
+describe("refusedAtStart", () => {
+  const at = new Date("2026-10-25T10:00:00Z");
+
+  it("records the code, the time and the recovery level, keeping the count", () => {
+    const current: RecoveryState = { ...FRESH, failures: 1, clears: 2 };
+    expect(refusedAtStart(current, "setup.workspace_unsupported", at)).toStrictEqual({
+      failures: 1,
+      level: "recovery",
+      lastErrorCode: "setup.workspace_unsupported",
+      lastFailureAt: at.toISOString(),
+      clears: 2,
+    });
+  });
+
+  it("touches nothing on disk", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-recovery-"));
+    const written: RecoveryState = { ...FRESH, failures: 2, level: "normal" };
+    await writeRecoveryState(stateDir, written);
+    const before = await readFile(join(stateDir, "recovery.json"), "utf8");
+    refusedAtStart(await readRecoveryState(stateDir), "setup.start_again_incomplete", at);
+    expect(await readFile(join(stateDir, "recovery.json"), "utf8")).toBe(before);
   });
 });

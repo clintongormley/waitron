@@ -333,7 +333,10 @@ another machine agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-cl
 name needs a second clock within 30 seconds of the box"), strictly later than every name in the
 history it can read (`apps/server/src/first-setup-retired-assignments.test.ts`, "the real hour
 candidate route protects a retired hour before freezing hour offset %s", which covers a retired
-name only) and after a 90 to 150 second wait
+name only), later than the name the start-again note keeps
+(`apps/server/src/first-setup-start-again-note.test.ts`, "a start-again with the clock set back
+behind the abandoned attempt's name is refused, not given a repeated name") and after a 90 to 150
+second wait
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "every setup wait over a minute of box
 readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints

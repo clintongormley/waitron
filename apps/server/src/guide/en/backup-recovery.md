@@ -18,6 +18,29 @@ device that allows it. Enter passwords and recovery keys only after HTTPS opens 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.
 
+While a recovery from backup is running on another device, the repair page says so, with when it
+started and when it was last active. Until it stops, the page offers only **Reconnect** and **Set
+up secure connection**, and it checks again by itself. A recovery counts as running while one of
+its steps is in progress and for five minutes after its last activity. Those five minutes end early
+if the recovery fails or the box restarts.
+
+If a recovery from backup started and did not finish, the repair page says so, and **Start again**
+deletes it along with the interrupted setup. The page does not offer **Recover from backup** beside
+it. If the page says the setup database is missing, it shows the stopped recovery after you enter
+the administrator password you chose during setup, and Start again deletes it once you tick
+"Nothing was filed to AEAT and nothing was sold." and choose **Start again** once more. Otherwise
+the page shows **Start again** beside the stopped recovery, available only when the box can check
+that the setup's database is empty. Start again then asks for the administrator password, shows
+the recovery again, and deletes it once you tick "Delete the old attempt and start again." and
+choose **Start again** once more.
+
+If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes by itself within an
+hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's
+venue.
+
+If the page says that Start again has not finished, reload it to see what is left to do. If the box
+is restarting, wait until it answers.
+
 ## Choose your copy {#source}
 
 Choose **Backup file**, **Bucket copy** or **Cloud copy** and the matching environment.
@@ -65,14 +88,16 @@ the recovery conditions and choose **Compare clocks**. Follow the clock and wait
 there is no installation code to type. Choose **Recover** once the new series is selected.
 
 A key that opens the backup does not bypass the history and clock checks. If a check refuses,
-resolve its cause and try again. Do not delete the retained attempt or edit its recovery records.
+resolve its cause and try again. Do not delete the retained attempt's files by hand or edit its
+recovery records.
 
-## Continue after an interruption {#resume}
+## If a recovery is interrupted {#resume}
 
-Leaving the page or restarting the box discards the browser's proof. Re-enter the key before
-continuing. If preparation stopped before placement, reopen the same source. When **Finish saved
-recovery** is available, use it to prove access to the retained target and complete that exact
-recovery. It keeps the saved event and selected input.
+While the recovery page stays open, continue where you left off. The recovery stops if the box
+restarts, or if 15 minutes pass without a recovery step, even with the page open. Leaving the page
+or closing its tab also stops it, within five minutes. If the recovery had saved progress, the
+repair page then shows it as stopped and does not offer **Recover from backup** beside it; **Start
+again** deletes it, as described above. Otherwise, open the backup again.
 If recovery is already saved, reconnect to the box rather than proving or placing it again.
 
 Changing the source or environment clears the page's authenticated controls. It does not delete

@@ -7,10 +7,11 @@ import {
   realpath,
   rm,
   stat,
+  symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
@@ -282,5 +283,114 @@ it("retains an empty V2 namespace as uncertain repair evidence", async () => {
   expect(await resolveFirstSetupBackupEntry(f.roots)).toEqual({ kind: "repair", roots: f.roots });
   expect(await readFile(join(f.roots.stateDir, "first-setup.json"), "utf8")).toBe(
     "opaque retained attempt",
+  );
+});
+
+/** A supervised start of `f`'s box with the staged steps stubbed and the server's env recorded. */
+async function superviseSelected(
+  f: Awaited<ReturnType<typeof fixture>>,
+  over: Partial<Parameters<typeof runEntry>[0]> = {},
+) {
+  let env: NodeJS.ProcessEnv | undefined;
+  let surface: Hono | undefined;
+  const statfsCalls: string[] = [];
+  await runEntry({
+    ...f.roots,
+    args: [],
+    baseEnv: { WAITRON_STATE_DIR: f.roots.stateDir, WAITRON_VENUE_DIR: f.roots.venueDir },
+    statfs: async (dir) => {
+      statfsCalls.push(dir);
+      return plenty();
+    },
+    readRecoveryState: async () => FRESH,
+    writeRecoveryState: async () => {},
+    loadBoxEnv: async (base) => base,
+    runStagedRestore: async () => false,
+    runStagedReset: async () => false,
+    clearReplacedDatabases: async () => {},
+    assertNotAhead: async () => {},
+    startServer: async (started) => {
+      env = started;
+      return stopped();
+    },
+    serveRecovery: async (app) => {
+      surface = app;
+    },
+    installShutdownHandlers: () => {},
+    scheduleStayedUp: () => {},
+    log: () => {},
+    ...over,
+  });
+  return { env, surface, statfsCalls };
+}
+
+it("a supervised start after a finished backup recovery runs the server on the restored target", async () => {
+  const f = await fixture("selected");
+  const backup = await resolveFirstSetupBackupEntry(f.roots);
+  if (backup.kind !== "selected") throw new Error("selected entry missing");
+  const target = { stateDir: backup.roots.stateDir, venueDir: backup.roots.venueDir };
+  expect(target).toEqual(f.target.target);
+  const dump = join(target.stateDir, "backup-staging", "waitron-20261020T000000Z.dump");
+  await mkdir(join(target.stateDir, "backup-staging"));
+  await writeFile(dump, "cut-off copy");
+  const { env, surface, statfsCalls } = await superviseSelected(f);
+  expect(surface).toBeUndefined();
+  expect(env).toMatchObject({
+    WAITRON_STATE_DIR: target.stateDir,
+    WAITRON_VENUE_DIR: target.venueDir,
+  });
+  expect(statfsCalls).toEqual(expect.arrayContaining([target.stateDir, target.venueDir]));
+  await expect(stat(dump)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("a supervised start after a finished backup recovery judges the floor on the original folders too", async () => {
+  const f = await fixture("selected");
+  const original = new Set([f.roots.stateDir, f.roots.venueDir]);
+  const diskFull = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+  const { env, surface } = await superviseSelected(f, {
+    statfs: async (dir) => (original.has(dir) ? { bavail: 1, frsize: 1 } : plenty()),
+    withRecoveryLock: () => Promise.reject(diskFull),
+  });
+  expect(env).toBeUndefined();
+  expect(await (await surface!.request("/")).text()).toContain(
+    "The box&#39;s disk is full, so Waitron cannot save anything.",
+  );
+});
+
+/** `f`'s folders reached through a symbolic link, so they are not spelled canonically. */
+async function linkedRoots(f: Awaited<ReturnType<typeof fixture>>) {
+  const parent = await mkdtemp(join(tmpdir(), "backup-entry-link-"));
+  directories.push(parent);
+  const link = join(parent, "box");
+  await symlink(dirname(f.roots.venueDir), link);
+  return { venueDir: join(link, "venue"), stateDir: join(link, "state") };
+}
+
+const RETAINED_DUMP = ["backup-staging", "waitron-20261016T120000Z.dump"] as const;
+
+it.each(["canonical", "symlinked"] as const)(
+  "a supervised start serving a backup recovery's repair keeps the original folder's retained dump (%s folders)",
+  async (spelling) => {
+    const f = await fixture();
+    const roots = spelling === "canonical" ? f.roots : await linkedRoots(f);
+    const { env, surface } = await superviseSelected(f, { ...roots, baseEnv: {} });
+    expect(env).toBeUndefined();
+    expect(surface).toBeDefined();
+    expect(await readFile(join(f.roots.stateDir, ...RETAINED_DUMP), "utf8")).toBe(
+      "retained interrupted dump",
+    );
+  },
+);
+
+it("a refused start beside a finished backup recovery keeps the original folder's retained dump (symlinked folders)", async () => {
+  const f = await fixture("selected");
+  await mkdir(join(f.roots.stateDir, "first-setup-workspaces"));
+  const roots = await linkedRoots(f);
+  const logDir = join(dirname(roots.stateDir), "..", "logs");
+  const { env, surface } = await superviseSelected(f, { ...roots, baseEnv: {}, logDir });
+  expect(env).toBeUndefined();
+  expect(surface).toBeDefined();
+  expect(await readFile(join(f.roots.stateDir, ...RETAINED_DUMP), "utf8")).toBe(
+    "retained interrupted dump",
   );
 });

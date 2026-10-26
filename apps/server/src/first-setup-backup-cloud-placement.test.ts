@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { expect, it, vi } from "vitest";
 
 import { ALL_MODULES } from "@waitron/composition";
+import { emptyAbandonedBackupRecovery, isEmptiedTombstone } from "@waitron/provisioning";
 
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
@@ -46,6 +47,27 @@ it("reopens the same prepared Cloud source after restart with fresh node proof a
     requestId: f.approved.requestId,
     phase: "reported",
   });
+});
+
+it("opens straight after a discarded Cloud recovery is emptied without reusing its id", async () => {
+  const f = await fixture();
+  const first = await f.service.open(f.request, { onBox: false });
+  await f.service.prepare(first.sessionId, { action: "clock-challenge" }, { onBox: false });
+  await f.service.close(first.sessionId);
+  await f.workspace.abandon(first.recoveryId);
+  await emptyAbandonedBackupRecovery(f.roots, first.recoveryId);
+  const calls = f.calls.length;
+  const inspect = vi.spyOn(f.workspace, "inspect");
+  // The discarded approval is gone, so this answers as a box with no pending approval does.
+  await expect(f.service.open(f.request, { onBox: false })).rejects.toThrow(
+    "Cloud recovery is unavailable",
+  );
+  expect(inspect).toHaveBeenCalledTimes(1);
+  expect(inspect.mock.calls[0]![0]).not.toBe(first.recoveryId);
+  expect(f.calls).toHaveLength(calls);
+  expect(await isEmptiedTombstone(f.roots, first.recoveryId)).toBe(true);
+  expect(await f.service.status()).toEqual({ phase: "unstarted", proofRequired: true });
+  expect((await f.service.cloudStart()).state).toBe("awaiting_owner");
 });
 
 it("requires a pending approval and an available Cloud client before polling or restarting", async () => {
@@ -207,3 +229,42 @@ it.each(["control", "target"] as const)(
     });
   },
 );
+
+it("starts a new Cloud recovery beside a discarded one", async () => {
+  const f = await fixture();
+  const first = await f.service.open(f.request, { onBox: false });
+  await f.service.prepare(first.sessionId, { action: "clock-challenge" }, { onBox: false });
+  await f.service.close(first.sessionId);
+  await f.workspace.abandon(first.recoveryId);
+  expect(await f.service.status()).toEqual({ phase: "unstarted", proofRequired: true });
+  const calls = f.calls.length;
+  for (const action of [
+    () => f.service.cloudStart(),
+    () => f.service.cloudStatus(),
+    () => f.service.cloudStartAgain(),
+    () => f.service.open(f.request, { onBox: false }),
+  ])
+    await expect(action()).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  expect(f.calls).toHaveLength(calls);
+  await emptyAbandonedBackupRecovery(f.roots, first.recoveryId);
+  await expect(f.service.cloudStatus()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect((await f.service.cloudStart()).state).toBe("awaiting_owner");
+  f.control.expired = true;
+  expect((await f.service.cloudStatus()).state).toBe("expired");
+  expect((await f.service.cloudStartAgain()).state).toBe("awaiting_owner");
+  f.control.expired = false;
+  expect((await f.service.cloudStatus()).state).toBe("approved");
+  const second = await f.service.open(f.request, { onBox: false });
+  expect(second.recoveryId).not.toBe(first.recoveryId);
+  const selected = (await recoverySelectPastWaits(
+    clock,
+    { prepare: (proposal, client) => f.service.prepare(second.sessionId, proposal, client) },
+    { onBox: false },
+  )) as { input: unknown };
+  await f.service.commit(second.sessionId, selected.input, { onBox: false });
+  const last = (await f.workspace.read()).at(-1)!;
+  expect([last.target.recoveryId, last.phase]).toEqual([second.recoveryId, "selected"]);
+  expect(await readCloudRecoveryState(last.target.target.stateDir)).toMatchObject({
+    phase: "reported",
+  });
+});

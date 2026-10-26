@@ -433,7 +433,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: a different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
   [Audit](backlog/self-service-refusals.md#setup-environment).
 
-- **A1089: setup state refusals need a usable resume or recovery route.** Recheck A1042 S7l on main first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
   [Audit](backlog/self-service-refusals.md#setup-state).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -441,10 +441,48 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
-- **Owner decision: should a setup request stop re-checking every old "start again" archive in
-  full?** Each request reads and checks every archived file of every retirement, and the retired
-  workspace, so its cost grows with each retirement. Both ways to stop it weaken the check. Left
-  open by A1037. [Detail](backlog/setup.md#owner-decision-should-a-setup-request-stop-re-checking-every-old-start-again-archive-in-full)
+- **Move the start-again note whenever a series name is put into use, and when a plain reset ends
+  an unfinished setup.** Today only Start again writes it; a reset during an unfinished first setup
+  forgets that setup's series name. Left open by A1042 (owner, 2026-10-25).
+  [Detail](backlog/setup.md#move-the-start-again-note-whenever-a-series-name-is-put-into-use-and-when-a-plain-reset-ends-an-unfinished-setup)
+
+- **The first-setup record store still accepts the `retire` and `select-workspace` actions and
+  `nextWorkspace`, which nothing writes since A1042.**
+  [Detail](backlog/setup.md#the-first-setup-record-store-still-accepts-the-retire-and-select-workspace-actions-and-nextworkspace-which-nothing-writes-since-a1042)
+
+- **The repair page's Start again oddities from #1752** — a stale heading after Start again, two
+  "Start again" buttons, and Continue tight against the password field at phone width.
+  [Detail](backlog/setup.md#the-repair-pages-start-again-oddities-from-1752)
+
+- **Close a discarded recovery's Cloud approval from the box.** Show the saved link and code beside
+  the repair page's stopped line; the approval otherwise stays open up to an hour. Left open by
+  A1042.
+  [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
+
+- **A full disk while a backup recovery fills it is a dead end for the person.** The box empties a
+  discarded recovery only under its folders' locks, which a full disk refuses; the full-disk page
+  then sends the person elsewhere. Follow-up: A1127. Left open by A1042.
+  [Detail](backlog/setup.md#a-full-disk-while-a-backup-recovery-fills-it-is-a-dead-end-for-the-person)
+
+- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
+  again.** Each press answers "Start again has not finished" and restarts the box. A1098 covers
+  files the box did not create; one the box created stays a manual loop. Left open by A1042.
+  [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
+
+- **A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery
+  waits.** `/setup-api/provision` is outside the recovery's write fence. Read, not run. Left open by
+  A1042.
+  [Detail](backlog/setup.md#a-stale-signed-in-setup-tabs-activation-request-is-not-refused-while-a-waitron-cloud-recovery-waits)
+
+- **A recovery that Start again recorded as discarded can still be resumed after a power cut.** A
+  hand-made `open` or `resume` after a cut before the `abandoned` record; no page offers it. Left
+  open by A1042.
+  [Detail](backlog/setup.md#a-recovery-that-start-again-recorded-as-discarded-can-still-be-resumed-after-a-power-cut)
+
+- **A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series
+  name.** In a test host, a commit held 31 seconds failed `second_clock_missing`; same on main. Not
+  measured on a box. Left open by A1042.
+  [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
@@ -4546,7 +4584,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md), no build.
   No setup codes: the owner closed W60's first-claim concern as not a concern; production-mode restrictions stay.
   Every sheet repeats the disk key. Owner ~13:45/~14:00 answers settle locked redirects and the minimal unencrypted normal Wi-Fi copy, with theft/password-change guidance and cable/local fallback; no recovery SSID/hotspot.
-  Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
+  Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. Owner, 2026-10-24 (A1042 Q3): a reinstall from the stick, and
+  the dashboard's reinstall, keep the box's series-name note; the B3 plan's first task resolves that
+  against A1042's released behaviour. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 
@@ -4574,7 +4614,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   monitor calls it every minute (design section 5). It must exercise the server, not only its
   front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
-- **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
+- **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. Owner, 2026-10-24 (A1042 Q5): a rollback never takes the start-again note backwards — it keeps the newer one. An ordinary upgrade never writes the note; it moves only when a new installation name is picked (setup, restore, re-registration, promotion, or an exceptional change such as the software provider's name). [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** [Detail](backlog/box.md#every-migrating-path-but-boot-and-the-bucket-rebuild-runs-with-no-ahead-of-image-check)
 
@@ -4835,6 +4875,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   a module that fails at start, undoing the last module change, and a migration that applied only in
   part. Not designed.
   [Detail](backlog/box.md#recovery-actions-the-2026-09-08-node-containers-design-handed-on)
+
+- **The recovery page's never-wipe test misses Spanish subjunctive forms** (`restablezca`, `borre`, `elimine` and others); tightening it changes an existing assertion, so the owner approves it. [Detail](backlog/box.md#the-recovery-pages-never-wipe-test-misses-spanish-subjunctive-forms)
+
+- **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](backlog/box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
 
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
 

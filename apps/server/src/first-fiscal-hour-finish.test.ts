@@ -36,8 +36,7 @@ import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import {
   createFirstSetupCoordinator,
   createFirstSetupResolutionStore,
-  resolveFirstSetupWorkspace,
-  assertFirstSetupBootTarget,
+  readStartAgainMarker,
 } from "@waitron/provisioning";
 import { MODULE, PASSWORD, request } from "../test/first-fiscal.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
@@ -50,6 +49,11 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { parseEnvFile } from "./env-file.js";
 import type { SetupDeps } from "./setup-api.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
+import {
+  expectStartAgainDeleted,
+  startAgainNoteName,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 import {
   createFakeTimersHourClock,
   selectPastWaits,
@@ -264,7 +268,7 @@ it("exact hour Finish publishes after password recovery without register consult
   ]);
 });
 
-it("empty never-activated hour restart retains originals and burns the entire hour on every base", async () => {
+it("empty never-activated hour restart deletes the attempt and burns the entire hour on every base", async () => {
   const f = await fixture();
   await f.host.keys.stageInitialNodeKey(
     f.owner(),
@@ -273,7 +277,7 @@ it("empty never-activated hour restart retains originals and burns the entire ho
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   const before = await f.host.resolution.captureFirstSetupOriginals();
   expect(before.inspection.emptyDatabase).toBe(true);
-  const journal = await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
+  await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
   const actions = createFirstSetupResolutionActions({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
@@ -284,49 +288,18 @@ it("empty never-activated hour restart retains originals and burns the entire ho
     revision: before.inspection.revision!,
     ownerGeneration: before.inspection.ownerGeneration!,
   };
-  const binding = await actions.startAgainFirstSetup(
-    restart as Parameters<typeof actions.startAgainFirstSetup>[0],
-  );
-  expect(binding.venueDir).not.toBe(f.venueDir);
-  expect(await resolveFirstSetupWorkspace({ stateDir: f.stateDir, venueDir: f.venueDir })).toEqual({
-    venueDir: binding.venueDir,
-    stateDir: binding.stateDir,
-    binding,
-  });
+  const abandoned = (
+    firstSetupModuleContext((await f.host.store.read())!, MODULE).request as { identity: string }
+  ).identity;
+  await actions.startAgainFirstSetup(restart as Parameters<typeof actions.startAgainFirstSetup>[0]);
   await expect(
-    assertFirstSetupBootTarget({ stateDir: f.stateDir, venueDir: f.venueDir }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  const archive = createFirstSetupResolutionStore({
+    readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+  await expectStartAgainDeleted(f);
+  expect(await startAgainNoteName(f)).toBe(abandoned);
+  const next = createFirstSetupModuleHost({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  expect(await archive.readOriginals(binding.resolutionId)).toEqual(before.originals);
-  expect(
-    (await archive.read(binding.resolutionId)).map(({ phase, action, register }) => ({
-      phase,
-      action,
-      register,
-    })),
-  ).toEqual([
-    { phase: "prepared", action: "retire", register: null },
-    { phase: "applied", action: "retire", register: null },
-    { phase: "prepared", action: "select-workspace", register: null },
-    { phase: "applied", action: "select-workspace", register: null },
-  ]);
-  for (const original of before.originals) {
-    if (original.bytes === null || !/^(state|venue)\//.test(original.name)) continue;
-    const [which, ...parts] = original.name.split("/");
-    expect(await readFile(join(which === "state" ? f.stateDir : f.venueDir, ...parts))).toEqual(
-      original.bytes,
-    );
-  }
-  expect(await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8")).toBe(journal);
-  await expect(f.host.owner.status(f.owner())).rejects.toMatchObject({
-    code: "setup.attempt_uncertain",
-  });
-  const next = createFirstSetupModuleHost({
-    ...binding,
     modules: ALL_MODULES,
     environment: {},
     database: () => suite.db,
@@ -398,6 +371,7 @@ it.each([
     }
     const snapshot = await f.host.resolution.captureFirstSetupOriginals();
     expect(snapshot.inspection.emptyDatabase).toBe(false);
+    const unchanged = await startAgainUnchanged(f);
     const actions = createFirstSetupResolutionActions({
       stateDir: f.stateDir,
       venueDir: f.venueDir,
@@ -413,9 +387,7 @@ it.each([
     expect((await f.host.resolution.captureFirstSetupOriginals()).originals).toEqual(
       snapshot.originals,
     );
-    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await unchanged();
   },
 );
 
@@ -486,7 +458,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
       } as RequestInit,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ selectionGeneration: 1, restarting: true });
+    expect(await response.json()).toEqual({ restarting: true });
   } finally {
     await agent.close();
     await new Promise<void>((resolve, reject) =>
@@ -495,7 +467,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   }
 });
 
-it("a missing hour database needs freshly recovered ownership before retirement", async () => {
+it("a missing hour database starts again only once confirmed, records the confirmation and notes the name", async () => {
   const f = await fixture();
   await f.recover();
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
@@ -510,28 +482,73 @@ it("a missing hour database needs freshly recovered ownership before retirement"
     ownerGeneration: snapshot.inspection.ownerGeneration!,
     owner: f.owner(),
   };
-  const pending = actions.startAgainFirstSetup(input);
-  await expect(pending).resolves.toMatchObject({ selectionGeneration: 1 });
-  const binding = await pending;
-  const store = createFirstSetupResolutionStore({
+  await expect(actions.startAgainFirstSetup(input)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  const shown = await actions.startAgainSummary(input);
+  expect(shown).toEqual(await hourShown(f));
+  const at = new Date().toISOString();
+  const state = (await f.host.store.read())!;
+  const pending = actions.startAgainFirstSetup({
+    ...input,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  await expect(pending).resolves.toBeUndefined();
+  const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
+  expect(confirmations).toEqual([`${Date.parse(at)}-${state.frozen.attemptId}.json`]);
+  expect(
+    JSON.parse(
+      await readFile(
+        join(f.stateDir, "first-setup-start-again-confirmations", confirmations[0]!),
+        "utf8",
+      ),
+    ),
+  ).toEqual({
+    version: 1,
+    at,
+    attemptId: state.frozen.attemptId,
+    database: "missing",
+    administrator: {
+      displayName: state.frozen.request.admin.displayName,
+      email: state.frozen.request.admin.email,
+    },
+    ownerGeneration: input.owner.ownerGeneration,
+    shown,
+  });
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  expect(await startAgainNoteName(f)).toBe(shown.lastName);
+});
+
+async function hourShown(f: Awaited<ReturnType<typeof fixture>>) {
+  const state = (await f.host.store.read())!;
+  return {
+    reached: "named" as const,
+    lastName: (firstSetupModuleContext(state, MODULE).request as { identity: string }).identity,
+  };
+}
+
+it("a missing hour database refuses a confirmed Start again from an owner whose latest event is not a fresh recovery", async () => {
+  const f = await fixture();
+  await f.refreshOwner();
+  const snapshot = await f.host.resolution.captureFirstSetupOriginals();
+  const actions = createFirstSetupResolutionActions({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
-    coordinator: createFirstSetupCoordinator(),
+    host: f.host,
   });
-  expect(
-    (await store.read(binding.resolutionId)).map(({ database, authority, register }) => ({
-      database,
-      authority,
-      register,
-    })),
-  ).toEqual(
-    Array.from({ length: 4 }, () => ({
-      database: "missing",
-      authority: "original-password",
-      register: null,
-    })),
-  );
-  expect(await store.readOriginals(binding.resolutionId)).toEqual(snapshot.originals);
+  const shown = await hourShown(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: snapshot.inspection.inspectionId,
+      revision: snapshot.inspection.revision!,
+      ownerGeneration: snapshot.inspection.ownerGeneration!,
+      owner: f.owner(),
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    readdir(join(f.stateDir, "first-setup-start-again-confirmations")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("hour Finish requires fresh recovery and cannot activate an uncommitted attempt", async () => {
@@ -708,52 +725,6 @@ it.each(
     expect((await f.host.store.read())?.status).toBe("complete");
   },
 );
-
-it("hour restart can resume an interrupted workspace selection using its archived positive empty proof", async () => {
-  const f = await fixture();
-  await suite.db.archiveTo(join(f.venueDir, "venue.db"));
-  const before = await f.host.resolution.captureFirstSetupOriginals();
-  const actions = createFirstSetupResolutionActions({
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    host: f.host,
-  });
-  const actual = await vi.importActual<typeof filesystem>("node:fs/promises");
-  let faults = 0;
-  vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-    if (String(to).endsWith("/first-setup-workspace.json") && faults === 0) {
-      faults++;
-      throw new Error("synthetic selection interruption");
-    }
-    await actual.rename(from, to);
-  });
-  await expect(
-    actions.startAgainFirstSetup({
-      inspectionId: before.inspection.inspectionId,
-      revision: before.inspection.revision!,
-      ownerGeneration: before.inspection.ownerGeneration!,
-    }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(faults).toBe(1);
-  vi.mocked(filesystem.rename).mockImplementation(actual.rename);
-  const pending = await actions.inspectWorkspaceSelection();
-  expect(pending).not.toBeNull();
-  await expect(actions.resumeWorkspaceSelection(pending!)).resolves.toMatchObject({
-    workspaceId: pending!.workspaceId,
-    selectionGeneration: 1,
-  });
-  const selected = await resolveFirstSetupWorkspace({ stateDir: f.stateDir, venueDir: f.venueDir });
-  expect(selected.binding?.workspaceId).toBe(pending!.workspaceId);
-  const archive = createFirstSetupResolutionStore({
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  expect(await archive.readOriginals(selected.binding!.resolutionId)).toEqual(before.originals);
-  await expect(
-    assertFirstSetupBootTarget({ stateDir: f.stateDir, venueDir: f.venueDir }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-});
 
 it("real HTTPS resolution boot finishes the retained hour database without document consultation", async () => {
   const f = await fixture();

@@ -17,7 +17,7 @@ import type {
   BackupRepairStatus,
   FirstSetupInspection,
 } from "../api/first-setup-types.js";
-import { FirstSetupBackupSession } from "../first-setup-backup-session.js";
+import { FirstSetupBackupSession, keepLease, leaseEnded } from "../first-setup-backup-session.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import { backupRepairStrings } from "../i18n/backup-repair.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -26,6 +26,11 @@ import { dispatchSetupGoto } from "../events.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
 type Source = "archive" | "bucket" | "cloud";
+// One per page load: the box keeps a Cloud wait running while any of its holders renews.
+const cloudHolder = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+  byte.toString(16).padStart(2, "0"),
+).join("");
+const STOPPABLE_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
 interface Draft {
   source: Source;
   environment: "production" | "preproduction";
@@ -47,6 +52,13 @@ const empty = (): Draft => ({
   offline: false,
   sole: false,
 });
+
+export function shownAt(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime())
+    ? iso
+    : at.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
+}
 
 @customElement("setup-first-backup")
 export class FirstSetupBackupScreen extends LitElement {
@@ -105,6 +117,7 @@ export class FirstSetupBackupScreen extends LitElement {
   @state() private authenticated?: BackupRepairSession;
   @state() private error?: { message: string; field?: string };
   @state() private cloud?: CloudRecoveryView;
+  @state() private ended?: { kind: "stopped" } | { kind: "discarded"; at: string };
   #generation = 0;
   #observation?: Pick<FirstSetupInspection, "inspectionId" | "revision" | "ownerGeneration">;
   #scope?: DraftScope<Draft>;
@@ -114,6 +127,8 @@ export class FirstSetupBackupScreen extends LitElement {
   #pickerSignature?: string;
   #provenSecret?: string;
   #selectedInput?: unknown;
+  #stopCloudLease?: () => void;
+  #cloudHeld = false;
   #prepare = async (request: ModuleRecoveryPreparationRequest): Promise<unknown> => {
     const session = this.#session;
     if (
@@ -157,6 +172,7 @@ export class FirstSetupBackupScreen extends LitElement {
     void this.#readStatus();
   }
   override disconnectedCallback(): void {
+    this.#letGoOfCloud();
     this.#clearAuthority();
     this.draft = empty();
     this.status = undefined;
@@ -196,9 +212,40 @@ export class FirstSetupBackupScreen extends LitElement {
         .then(() => {})
         .catch(() => {});
   }
+  #letGoOfCloud(): void {
+    this.#endCloudLease();
+    if (this.#cloudHeld) void this.api.releaseFirstSetupBackupCloud(cloudHolder).catch(() => {});
+    this.#cloudHeld = false;
+  }
+  #endCloudLease(): void {
+    this.#stopCloudLease?.();
+    this.#stopCloudLease = undefined;
+  }
+  #holdCloudLease(): void {
+    this.#cloudHeld = true;
+    this.#stopCloudLease ??= keepLease(
+      () => this.api.renewFirstSetupBackupCloud(cloudHolder),
+      (cause) => {
+        this.#stopCloudLease = undefined;
+        // A lapsed wait keeps Check: once Cloud approves, opening starts a new session.
+        if (cause.code === "setup.recovery_discarded") this.#endRecovery(cause);
+      },
+      leaseEnded,
+    );
+  }
+  #endRecovery(cause: ApiError): void {
+    this.#endCloudLease();
+    this.#clearAuthority();
+    const at = cause.params?.discardedAt;
+    this.ended =
+      cause.code === "setup.recovery_discarded" && typeof at === "string"
+        ? { kind: "discarded", at }
+        : { kind: "stopped" };
+  }
   async #readStatus(): Promise<void> {
     this.#clearAuthority();
     const generation = this.#generation;
+    this.ended = undefined;
     this.busy = true;
     this.status = undefined;
     this.#observation = undefined;
@@ -243,12 +290,21 @@ export class FirstSetupBackupScreen extends LitElement {
         )
       )
         throw { code: "setup.attempt_invalid" };
+      const activity =
+        status.recoveryId !== undefined && STOPPABLE_PHASES.includes(status.phase)
+          ? (await this.api.firstSetupBackupActivity())?.activity
+          : null;
+      if (activity !== null && typeof activity?.state !== "string")
+        throw { code: "setup.attempt_invalid" };
+      if (!this.isConnected || generation !== this.#generation) return;
       this.#observation = {
         inspectionId: inspection.inspectionId,
         revision: inspection.revision,
         ownerGeneration: inspection.ownerGeneration,
       };
       this.status = status;
+      if (activity?.state === "stopped" && activity.recoveryId === status.recoveryId)
+        this.ended = { kind: "stopped" };
     } catch {
       if (this.isConnected && generation === this.#generation)
         this.error = { message: this.#words.statusFailed };
@@ -270,6 +326,7 @@ export class FirstSetupBackupScreen extends LitElement {
       };
       this.#picker?.clear();
       this.cloud = undefined;
+      if (field === "source" && value !== "cloud") this.#letGoOfCloud();
       this.attempted = false;
       if (authenticated) void this.#readStatus();
     } else this.draft = { ...this.draft, [field]: value };
@@ -371,7 +428,11 @@ export class FirstSetupBackupScreen extends LitElement {
     }
     const generation = ++this.#generation;
     this.busy = true;
-    const session = new FirstSetupBackupSession(this.api);
+    const session = new FirstSetupBackupSession(this.api, {
+      onRenewalRefused: (cause) => {
+        if (this.isConnected && this.#session === session) this.#endRecovery(cause);
+      },
+    });
     this.#session = session;
     const { inspectionId, revision, ownerGeneration } = this.#observation;
     const proof = {
@@ -400,6 +461,8 @@ export class FirstSetupBackupScreen extends LitElement {
             ...(this.status.recoveryId ? { recoveryId: this.status.recoveryId } : {}),
           });
       if (!this.isConnected || generation !== this.#generation) return;
+      // Opening hands the Cloud wait's lease to the session, which renews it from here.
+      this.#endCloudLease();
       this.authenticated = result;
       this.#provenSecret = proof.nodeRecoverySecret;
       this.#selectedInput = resume ? result.input : undefined;
@@ -409,8 +472,10 @@ export class FirstSetupBackupScreen extends LitElement {
       this.#scope?.commit(this.draft);
     } catch (cause) {
       if (this.isConnected && generation === this.#generation) {
-        this.#refusal(cause);
         this.#session = undefined;
+        if ((cause as ApiError | undefined)?.code === "setup.recovery_discarded")
+          this.#endRecovery(cause as ApiError);
+        else this.#refusal(cause);
       }
       await session.dispose().catch(() => {});
     } finally {
@@ -440,7 +505,10 @@ export class FirstSetupBackupScreen extends LitElement {
         this.restarting = true;
       }
     } catch (cause) {
-      if (this.isConnected && generation === this.#generation) this.#refusal(cause);
+      if (this.isConnected && generation === this.#generation)
+        if ((cause as ApiError | undefined)?.code === "setup.recovery_discarded")
+          this.#endRecovery(cause as ApiError);
+        else this.#refusal(cause);
     } finally {
       if (this.isConnected && generation === this.#generation) this.busy = false;
     }
@@ -453,10 +521,10 @@ export class FirstSetupBackupScreen extends LitElement {
     this.cloud = undefined;
     try {
       const view = await (action === "start"
-        ? this.api.startFirstSetupBackupCloud()
+        ? this.api.startFirstSetupBackupCloud(cloudHolder)
         : action === "status"
-          ? this.api.firstSetupBackupCloudStatus()
-          : this.api.startFirstSetupBackupCloudAgain());
+          ? this.api.firstSetupBackupCloudStatus(cloudHolder)
+          : this.api.startFirstSetupBackupCloudAgain(cloudHolder));
       if (
         view === null ||
         typeof view !== "object" ||
@@ -468,7 +536,10 @@ export class FirstSetupBackupScreen extends LitElement {
             !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(view.point.id)))
       )
         throw { code: "setup.attempt_invalid" };
-      if (this.isConnected && generation === this.#generation) this.cloud = view;
+      if (this.isConnected && generation === this.#generation) {
+        this.cloud = view;
+        this.#holdCloudLease();
+      }
     } catch {
       if (this.isConnected && generation === this.#generation)
         this.error = { message: this.#words.cloudUnavailable };
@@ -486,6 +557,27 @@ export class FirstSetupBackupScreen extends LitElement {
           >${s.reconnect}</wt-button
         >
       </section>`;
+    if (this.ended) {
+      const discarded =
+        this.ended.kind === "discarded" ? s.discarded.replace("{at}", shownAt(this.ended.at)) : "";
+      return html`<section data-test="screen-first-backup">
+        <h1>${s.heading}</h1>
+        ${
+          this.ended.kind === "stopped"
+            ? html`<p data-test="stopped" role="status">${s.stopped}</p>
+                <wt-button data-test="back" @click=${() => dispatchSetupGoto(this, "first-owner")}
+                  >${s.back}</wt-button
+                >`
+            : html`<p data-test="discarded" role="status">${discarded}</p>
+                <wt-button
+                  data-test="reload-status"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#readStatus()}
+                  >${s.reconnect}</wt-button
+                >`
+        }
+      </section>`;
+    }
     const disabled = this.busy || !this.status || (this.attempted && this.#invalidDraft);
     return html`<section
       data-test="screen-first-backup"

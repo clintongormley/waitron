@@ -25,6 +25,7 @@ import {
   drawerOpens,
   invoiceSeries,
   locations,
+  lockVenueDatabase,
   nodes,
   openVenueDatabase,
   sales,
@@ -43,6 +44,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createFirstSetupBackupWorkspace, isEmptiedTombstone } from "@waitron/provisioning";
 import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
@@ -75,7 +77,7 @@ import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { OPERATOR_TEXT, escapeHtml } from "./recovery-surface.js";
 import {
   createStaffNoticeLog,
   readStaffNoticesInTurns,
@@ -85,39 +87,6 @@ import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
-
-/** When set, first-setup resolution answers that the box runs from these folders instead. */
-const workspace = vi.hoisted(() => ({
-  roots: undefined as { stateDir: string; venueDir: string } | undefined,
-}));
-
-vi.mock("./first-setup-entry.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./first-setup-entry.js")>();
-  const { lockVenueDatabase } = await import("@waitron/db");
-  type Admission = Awaited<ReturnType<typeof original.resolveFirstSetupEntry>>;
-  return {
-    ...original,
-    resolveFirstSetupEntry: async (
-      ...args: Parameters<typeof original.resolveFirstSetupEntry>
-    ): Promise<Admission> => {
-      const roots = workspace.roots;
-      if (roots === undefined) return original.resolveFirstSetupEntry(...args);
-      // As the real admission does, the workspace's venue folder is held for the whole start.
-      return {
-        kind: "normal",
-        roots: { ...roots, binding: { stateDir: roots.stateDir, venueDir: roots.venueDir } },
-        async run<T>(body: (venueHeld: boolean) => Promise<T>): Promise<T> {
-          const hold = await lockVenueDatabase(roots.venueDir);
-          try {
-            return await body(true);
-          } finally {
-            hold.release();
-          }
-        },
-      } as unknown as Admission;
-    },
-  };
-});
 
 const FLOOR = 8 * 1024 * 1024;
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
@@ -679,6 +648,51 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   });
 });
 
+const DISCARDED_ID = "f063ea32-8c34-4b43-8ffc-5a319ec8c895";
+
+/** A backup recovery Start again abandoned and did not empty, its target holding a 4 MiB database. */
+async function discardedRecovery(stateDir: string) {
+  const anchor = { stateDir, venueDir: join(stateDir, "venue") };
+  const base = join(stateDir, "first-setup-resolutions", "backup-recovery", DISCARDED_ID);
+  const target = {
+    recoveryId: DISCARDED_ID,
+    anchor,
+    source: anchor,
+    target: { venueDir: join(base, "target", "venue"), stateDir: join(base, "target", "state") },
+    generation: 1,
+  };
+  const workspace = createFirstSetupBackupWorkspace(anchor);
+  const input = {
+    target,
+    observation: {
+      inspectionId: "a".repeat(64),
+      revision: null,
+      ownerGeneration: null,
+      originalsDigest: await workspace.inspect(DISCARDED_ID),
+    },
+    sourceId: "b".repeat(64),
+    activationSourceId: "c".repeat(64),
+    binding: {
+      module: "synthetic",
+      action: "restore",
+      eventId: "4cc6a357-e31c-4c2e-9b40-023c9963bec8",
+      sourceId: "c".repeat(64),
+      targetNodeId: "47d5be37-2011-4afc-bdc8-46b5cb238deb",
+    },
+    input: null,
+    retainedEvidenceDigest: "d".repeat(64),
+    phase: "prepared" as const,
+  };
+  await workspace.append(input);
+  await workspace.append({ ...input, input: { accepted: true }, phase: "placement-started" });
+  (await lockVenueDatabase(target.target.venueDir)).release();
+  const database = join(target.target.venueDir, "venue.db");
+  writeFileSync(database, Buffer.alloc(4 * 1024 * 1024, 68));
+  await workspace.abandon(DISCARDED_ID);
+  expect(await isEmptiedTombstone(anchor, DISCARDED_ID)).toBe(false);
+  return { anchor, database, path: base };
+}
+
 describe("a start on a real full disk", () => {
   it("a start whose leftovers free enough counts itself and boots", async (ctx) => {
     const small = needDisk(ctx);
@@ -715,6 +729,80 @@ describe("a start on a real full disk", () => {
     expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);
   });
 
+  it("a discarded recovery on a full disk with nothing to delete: the emptying is refused as a full disk, its database stays, and the full-disk page is served; once 1 MiB is freed the next start empties it and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "discarded-full");
+    const discarded = await discardedRecovery(stateDir);
+    const spare = join(stateDir, "spare");
+    writeFileSync(spare, Buffer.alloc(1024 * 1024, 69));
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const full = entryDeps(stateDir);
+    await runEntry(full);
+    const refused = vi
+      .mocked(full.log)
+      .mock.calls.filter(([, event]) => event === "setup.recovery_cleanup_refused");
+    expect(refused).toEqual([
+      [
+        "warn",
+        "setup.recovery_cleanup_refused",
+        {
+          reason: "storage.disk_full",
+          errno: "ERR_SQLITE_ERROR",
+          errcode: expect.any(Number),
+          path: discarded.path,
+        },
+      ],
+    ]);
+    // SQLite says "full" (13) on CI's Linux filesystem and "unable to open" (14) on macOS's
+    // hdiutil image; `fullDiskFailure` classifies both as a full disk here.
+    expect([13, 14]).toContain((refused[0]![2] as { errcode: number }).errcode);
+    expect(statSync(discarded.database).size).toBe(4 * 1024 * 1024);
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(false);
+    expect(full.startServer).not.toHaveBeenCalled();
+    expect(vi.mocked(full.log).mock.calls.map(([, event]) => event)).toContain(
+      "recovery.serving_disk_full",
+    );
+    expect(full.serveRecovery).toHaveBeenCalledTimes(1);
+    const app = vi.mocked(full.serveRecovery).mock.calls[0]![0];
+    const page = await (await app.request("/")).text();
+    expect(page).toContain(TITLE);
+    expect(page).toContain(escapeHtml(OPERATOR_TEXT["storage.disk_full"]!["en-GB"].action));
+
+    rmSync(spare);
+    const room = entryDeps(stateDir);
+    await runEntry(room);
+    expect(vi.mocked(room.log).mock.calls.map(([, event]) => event)).not.toContain(
+      "setup.recovery_cleanup_refused",
+    );
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(true);
+    expect(() => statSync(discarded.database)).toThrow();
+    expect(room.serveRecovery).not.toHaveBeenCalled();
+    expect(room.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a discarded recovery on a full disk with a rotated log: the start deletes the log, then empties the recovery and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "discarded-log");
+    const discarded = await discardedRecovery(stateDir);
+    const rotated = join(stateDir, "logs", "waitron.log.2");
+    writeFileSync(rotated, Buffer.alloc(1024 * 1024, 70));
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(() => statSync(rotated)).toThrow();
+    expect(vi.mocked(d.log).mock.calls.map(([, event]) => event)).not.toContain(
+      "setup.recovery_cleanup_refused",
+    );
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(true);
+    expect(() => statSync(discarded.database)).toThrow();
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+  });
+
   it("a start whose staged recovery copies fill the disk frees them and boots", async (ctx) => {
     const small = needDisk(ctx);
     const stateDir = await startedBefore(small, "staged");
@@ -737,45 +825,6 @@ describe("a start on a real full disk", () => {
     expect(() => statSync(staged)).toThrow();
     expect(statSync(restoreStaging).isDirectory()).toBe(true);
     expect(readFileSync(join(download, "part"), "utf8")).toBe("x");
-  });
-
-  it("a start that first setup moved to a workspace frees the workspace's staged recovery copy and boots", async (ctx) => {
-    const small = needDisk(ctx);
-    const anchor = await startedBefore(small, "moved");
-    const base = join(anchor, "first-setup-workspaces", "0b6f3c1e-5d2a-4c8e-9f1a-7e2d4b6a8c90");
-    const roots = { stateDir: join(base, "state"), venueDir: join(base, "venue") };
-    mkdirSync(roots.stateDir, { recursive: true });
-    mkdirSync(roots.venueDir);
-    await writeRecoveryState(roots.stateDir, FRESH);
-    workspace.roots = roots;
-    try {
-      const room = entryDeps(anchor);
-      await runEntry(room);
-      expect(room.startServer).toHaveBeenCalledTimes(1);
-      const staged = join(roots.stateDir, "restore-staging", "staged-recovery");
-      mkdirSync(join(staged, "upload-1"), { recursive: true });
-      writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
-      mkdirSync(join(roots.stateDir, "backup-staging"));
-      const dump = join(
-        roots.stateDir,
-        "backup-staging",
-        dumpFileName(new Date("2026-10-20T00:00:00Z")),
-      );
-      writeFileSync(dump, Buffer.alloc(1024 * 1024, 66));
-
-      small.fill();
-      expect(small.free()).toBeLessThan(65_536);
-
-      const d = entryDeps(anchor);
-      await runEntry(d);
-      expect(d.serveRecovery).not.toHaveBeenCalled();
-      expect(d.startServer).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(d.startServer).mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
-      expect(() => statSync(staged)).toThrow();
-      expect(() => statSync(dump)).toThrow();
-    } finally {
-      workspace.roots = undefined;
-    }
   });
 
   let nothingDir: string | undefined;

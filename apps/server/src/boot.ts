@@ -5,9 +5,10 @@ import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
-  assertOtherSetupAllowed,
-  assertFirstSetupBootTarget,
+  assertOtherFirstSetupAllowed,
   assertFirstSetupBackupBootTarget,
+  assertNoLegacyFirstSetupWorkspace,
+  assertNoStartAgainDeletion,
   readTenantIdentities,
 } from "@waitron/provisioning";
 import {
@@ -34,6 +35,7 @@ import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { firstSetupBackupRecoveryFor } from "./first-setup-backup-entry.js";
+import { firstSetupOwnerWriteFence } from "./setup-first-fiscal-api.js";
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
@@ -44,7 +46,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { eq, inArray } from "drizzle-orm";
-import type { Context, Hono } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import {
   installChangeFeed,
   subscribeToChanges,
@@ -880,7 +882,8 @@ async function bootServer(
   }
 
   await assertFirstSetupBackupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
-  await assertFirstSetupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
+  await assertNoLegacyFirstSetupWorkspace({ venueDir: config.venueDir, stateDir: config.stateDir });
+  await assertNoStartAgainDeletion(config.venueDir);
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
@@ -1026,6 +1029,9 @@ async function bootServer(
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
   const normalSetupRequests = new Set<Promise<void>>();
+  // Ahead of the gate below, so a running backup recovery is named rather than "not ready".
+  let ownerWriteFence: MiddlewareHandler = (_c, next) => next();
+  app.use("/setup-api/first-setup/*", (c, next) => ownerWriteFence(c, next));
   app.use("/setup-api/*", async (c, next) => {
     const repair = c.req.path.startsWith("/setup-api/first-setup/resolution/backup/");
     const publicRead =
@@ -1131,7 +1137,7 @@ async function bootServer(
     const firstSetupStore = firstSetupHost.store;
     const firstSetup = {
       coordinator: firstSetupCoordinator,
-      assertOtherAllowed: async () => assertOtherSetupAllowed(await firstSetupStore.read()),
+      assertOtherAllowed: () => assertOtherFirstSetupAllowed(config.venueDir, firstSetupStore),
     };
     const recoveryPreparation = createSetupRecoveryPreparation({
       testClock: seams.testClock,
@@ -1147,6 +1153,7 @@ async function bootServer(
     });
     const backupRepair = firstSetupBackupRecoveryFor(config, env, firstSetupHost, stdoutLog);
     undoOnFailure.push(() => backupRepair.dispose());
+    ownerWriteFence = firstSetupOwnerWriteFence(backupRepair, stdoutLog, () => backupRepairOnly);
     let repairHandoff: Promise<void> | undefined;
     mountFirstSetupBackupApi(
       app,

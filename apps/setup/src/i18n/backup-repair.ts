@@ -41,6 +41,8 @@ export const backupRepairStrings = {
     cloudUnavailable: "Use a supported Cloud recovery service.",
     statusFailed: "The saved recovery could not be checked. Check again.",
     missingModule: "This image cannot open this recovery key.",
+    stopped: "This recovery stopped before it finished. Go back and choose Start again.",
+    discarded: "This recovery was discarded on another device at {at}. Start again to recover.",
   },
   es: {
     heading: "Recuperar desde una copia",
@@ -84,5 +86,9 @@ export const backupRepairStrings = {
     cloudUnavailable: "Usa un servicio compatible de recuperación de Cloud.",
     statusFailed: "No se pudo comprobar la recuperación guardada. Comprueba otra vez.",
     missingModule: "Esta imagen no puede abrir esta clave de recuperación.",
+    stopped:
+      "Esta recuperación se detuvo antes de terminar. Vuelve atrás y elige Empezar de nuevo.",
+    discarded:
+      "Esta recuperación se descartó en otro dispositivo el {at}. Empieza de nuevo para recuperar.",
   },
 } as const;

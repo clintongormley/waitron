@@ -46,12 +46,17 @@ defaults to finding the folders there. Running `dist/server.js` without that cop
 error as it starts, not silently.
 
 If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
-API before ordinary database opens or staged restore/reset work. It currently offers inspection,
-original-password recovery, an isolated replacement workspace and publication-only Finish. To finish
-over HTTPS, recover ownership, retrieve the staged publication reference, confirm the current document
-and submit the unchanged publication inputs. An interrupted workspace selection can be inspected and
-resumed over HTTPS with the original password. Retirement and selection have separate linked
-prepared/applied records.
+API before ordinary database opens or staged restore/reset work. It offers inspection
+(`GET /setup-api/first-setup/resolution`), ownership recovery with the setup password, recovery from
+a backup (under `/setup-api/first-setup/resolution/backup/`), Start again and publication-only
+Finish (`apps/server/src/setup-first-fiscal-api.ts`, `setup-first-backup-api.ts`). Start again runs
+over HTTPS only: it deletes the interrupted attempt, keeps a small note of the last invoice series
+name it chose, if any (`first-setup-start-again.json` in the state folder), and ends the process so
+its supervisor starts it again.
+With the venue database missing, it also needs the setup password and a confirmation that nothing
+was filed or sold. With the venue database present, discarding a stopped backup recovery also needs
+the setup password and a confirmation of the recovery's details the page showed. To finish over HTTPS, recover ownership, retrieve the staged publication
+reference, confirm the current document and submit the unchanged publication inputs.
 
 Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will
 not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](#log-events)) and
@@ -89,7 +94,7 @@ repair remain [open work](../../docs/backlog/box.md#authenticated-server-certifi
 
 Repair retains the original fixed TLS files under a private `tls/repair-archive/` directory and
 resumes a reserved replacement after interruption. It does not recreate the vault or change the
-selected workspace, recovery records or fiscal identity. The public HTTP guide stays available while you download
+setup attempt, recovery records or fiscal identity. The public HTTP guide stays available while you download
 and install the certificate, even if the repair answer was lost. Choose **Reconnect** when you are
 ready. A supervised process then restarts after sending that answer; a direct process repeats its
 admission checks internally. The guide retains its public certificate download when you open HTTPS.

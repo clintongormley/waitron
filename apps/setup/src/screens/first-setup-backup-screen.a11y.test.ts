@@ -77,3 +77,69 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await page.viewport(previous[0]!, previous[1]!);
           }
         });
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280])
+      for (const state of ["stopped", "discarded"] as const)
+        it(`${locale} ${theme} ${width} ${state}: accessible ended backup repair`, async () => {
+          const previous = [innerWidth, innerHeight];
+          try {
+            await page.viewport(width, 1200);
+            setLocale(locale);
+            const { api } = repairApi((action) => {
+              if (action === "status")
+                return Response.json({
+                  phase: "restored",
+                  recoveryId: saved.recoveryId,
+                  proofRequired: true,
+                });
+              if (action === "activity")
+                return Response.json({
+                  activity:
+                    state === "stopped"
+                      ? {
+                          state: "stopped",
+                          startedAt: "2026-10-25T14:35:00.000Z",
+                          lastActiveSource: "saved-step",
+                          lastActiveAt: "2026-10-25T14:41:00.000Z",
+                          phase: "restored",
+                          recoveryId: saved.recoveryId,
+                          failed: false,
+                          cloud: false,
+                        }
+                      : null,
+                });
+              if (action === "resume")
+                return Response.json({ ...saved, input: { selected: "saved" } });
+              if (action === "commit")
+                return Response.json(
+                  {
+                    error: {
+                      code: "setup.recovery_discarded",
+                      params: { discardedAt: "2026-10-25T14:41:00.000Z" },
+                    },
+                  },
+                  { status: 409 },
+                );
+            });
+            const { el, host } = await mountWidget<FirstSetupBackupScreen>(
+              "setup-first-backup",
+              { api, inspection },
+              theme,
+            );
+            if (state === "discarded") {
+              await expect.poll(() => q<WtButton>(el, "resume")?.disabled).toBe(false);
+              await bucketProof(el);
+              await click(el, "resume");
+              await expect.poll(() => q(el, "review")).not.toBeNull();
+              await click(el, "commit");
+            }
+            await expect.poll(() => q(el, state)).not.toBeNull();
+            await expectNoA11yViolations(host);
+            expect(innerWidth).toBe(width);
+            expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          } finally {
+            await page.viewport(previous[0]!, previous[1]!);
+          }
+        });

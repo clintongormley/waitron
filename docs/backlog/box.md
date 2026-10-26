@@ -122,6 +122,15 @@ Three parts:
   - **Upgrade testing above still comes first**: a rollback keeps the venue trading through a
     failed migration; it does not prevent one.
 
+  **The series-name note** (owner, 2026-10-24, A1042 Q5): a rollback never takes the start-again
+  note backwards — it keeps the newer one. An ordinary upgrade never writes the note; it moves only
+  when a new installation name is picked (setup, restore, re-registration, promotion, or an
+  exceptional change such as the software provider's name). The note is
+  `first-setup-start-again.json` in the state folder, so rolling the state volume back to its
+  snapshot would otherwise put an older note back. Today only Start again writes the note; moving
+  it at the other moments is its own setup entry, "Move the start-again note whenever a series name
+  is put into use, and when a plain reset ends an unfinished setup".
+
 ## Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.**
@@ -161,6 +170,24 @@ Three parts:
   (it only appends, so they do not apply); the two restore errors' text quotes the "Why the last start
   failed" heading with nothing tying the quote to the heading; and no staged restore has been run
   through the real migrator to see it end in `migrations.apply_failed`.
+
+## The recovery page's never-wipe test misses Spanish subjunctive forms
+
+`apps/server/src/recovery-surface.test.ts:386-394`, "never suggests wiping anything, in either
+language", checks the Spanish actions against `NEVER_WIPE_ES` (`:182`), which matches
+`\brestablece` but not `restablezca` or `restablezcas`. Run on 2026-10-25 in Node against the same
+expression: `borre`, `elimine`, `resetee`, `formatee` and `vacíe` slip past it too, while
+`restablece`, `borra` and `elimina` are caught. Tightening it changes an existing assertion, so
+the owner approves that change.
+
+## start-space.ts's `logDir: null` option is dead since A1042
+
+`freeSpaceAtStart` (`apps/server/src/start-space.ts`) still accepts `logDir: null`, meaning "no
+logs folder of its own"; both its calls in `apps/server/src/node-entry.ts` pass a folder now that
+the start no longer cleans a first-setup workspace. Removing it deletes
+the case "with no logs folder of its own, deletes no logs or crash reports below the floor, and
+still deletes staging" (`apps/server/src/start-space.test.ts:163`), a changed assertion, so the
+owner approves the removal.
 
 ## The recovery page's secret bound is a convention, not a guard
 
@@ -381,6 +408,11 @@ today); generalise archive entry routing off declared source ids when a second n
 
 ## Box image constraints (B3)
 
+- **The series-name note survives a reinstall** (owner, 2026-10-24, A1042 Q3): a reinstall from the
+  stick, and the dashboard's reinstall, keep the box's series-name note. Proposed change to the
+  design, waiting for the owner's review of B3:
+  `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`, 'Proposed change to B3's
+  design'.
 - **A setup box's `/health` returns 503 by design** (no duty loop); a liveness probe must gate on
   `/setup-api/status` (200), or it restart-loops an unprovisioned box.
 - **Android certificate trust needs actual-device qualification.** The 2026-09-08 receipt
@@ -873,10 +905,10 @@ once released. Belongs with A1016.
   the staging turn (A798-B slice 7); where the lock cannot be taken for another reason (measured on a full disk with
   no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s
   before keeps it until a later start (`docs/developers/conventions-data.md`, "Every start takes
-  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). On a box whose first
-  setup was retired into a new workspace, the start also deletes them in the workspace's state
-  folder (`runEntry`, `apps/server/src/node-entry.ts`; run on a full disk by
-  `apps/server/src/start-full-disk.e2e.test.ts`).
+  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). On a box where a
+  backup recovery from the setup repair page has selected its own folders, the start deletes them
+  in that recovery's state folder instead (`runEntry`, `apps/server/src/node-entry.ts`; read, not
+  run).
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
   authorize trading or stop another server.

@@ -20,6 +20,9 @@ const boundary = createErrorBoundary(
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
     "setup.attempt_uncertain": 409,
+    "setup.start_again_incomplete": 409,
+    "setup.workspace_unsupported": 409,
+    "setup.recovery_discarded": 409,
     "promotion.break_glass_invalid": 422,
     "recovery.passphrase_invalid": 422,
     "backup.artifact_invalid": 422,
@@ -262,13 +265,34 @@ export function mountFirstSetupBackupApi(
     await service.close(text(body.sessionId, "sessionId", 256));
     return c.json({ closed: true });
   });
+  app.get(`${root}/activity`, (c) => {
+    c.header("Cache-Control", "no-store");
+    return boundary(c, log, async () => c.json({ activity: await service.liveness() }));
+  });
+  route("renew", async (c) => {
+    const body = exact(await json(c), ["sessionId"]);
+    service.renew(text(body.sessionId, "sessionId", 256));
+    return c.json({ renewed: true });
+  });
+  route("cloud/renew", async (c) => {
+    const body = exact(await json(c), ["holder"]);
+    service.cloudRenew(text(body.holder, "holder", 256));
+    return c.json({ renewed: true });
+  });
+  route("cloud/release", async (c) => {
+    const body = exact(await json(c), ["holder"]);
+    service.cloudRelease(text(body.holder, "holder", 256));
+    return c.json({ released: true });
+  });
   for (const [path, action] of [
-    ["start", () => service.cloudStart()],
-    ["status", () => service.cloudStatus()],
-    ["start-again", () => service.cloudStartAgain()],
+    ["start", (holder?: string) => service.cloudStart(holder)],
+    ["status", (holder?: string) => service.cloudStatus(holder)],
+    ["start-again", (holder?: string) => service.cloudStartAgain(holder)],
   ] as const)
     route(`cloud/${path}`, async (c) => {
-      exact(await json(c), []);
-      return c.json(await action());
+      const body = exact(await json(c), [], ["holder"]);
+      return c.json(
+        await action(body.holder === undefined ? undefined : text(body.holder, "holder", 256)),
+      );
     });
 }

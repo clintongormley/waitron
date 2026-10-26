@@ -1,18 +1,48 @@
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { randomBytes } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Agent } from "undici";
-import { expect, it, vi } from "vitest";
-import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
+import { afterEach, expect, it, vi } from "vitest";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
 import { freePorts } from "./testing/free-ports.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
+
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 500,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 it.each(["Consumed", "Not consumed", "Unknown"])(
   "trusted HTTPS recovers a missing-database attempt and retires it after %s",
   async (status) => {
-    const f = await firstFiscalFixture();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime("2026-10-16T11:40:00Z");
+    const f = await hourFirstFiscalFixture({
+      clock: createFakeTimersHourClock(),
+      database: () => suite.db,
+    });
     let server: { close(): Promise<void> } | undefined;
     let agent: Agent | undefined;
     try {
@@ -67,39 +97,74 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         ownerGeneration: 2,
       });
       const current = await get();
+      const ids = {
+        inspectionId: current.inspectionId,
+        revision: current.revision,
+        ownerGeneration: current.ownerGeneration,
+      };
+      const register = {
+        kind: "current-master",
+        status,
+        custodian: "Elena",
+        reference: "c".repeat(64),
+        consultedAt: "2026-10-16T02:00:00.000Z",
+      };
+      const ownerHeaders = {
+        "X-Waitron-Setup-Owner": recovered.capability,
+        "X-Waitron-Setup-Attempt": recovered.state.attemptId,
+        "X-Waitron-Setup-Revision": String(recovered.state.revision),
+        "X-Waitron-Setup-Generation": String(recovered.state.ownerGeneration),
+      };
+      const summary = await post("start-again/summary", ids, ownerHeaders);
+      expect(summary.status, await summary.clone().text()).toBe(200);
+      const shown = await summary.json();
+      expect(shown).toEqual({
+        reached: "named",
+        lastName: (firstSetupModuleContext(before, MODULE).request as { identity: string })
+          .identity,
+      });
+      const attemptFile = await readFile(join(f.stateDir, "first-setup.json"));
+      const unconfirmed = await post("start-again", { ...ids, register }, ownerHeaders);
+      expect(unconfirmed.status).toBe(503);
+      expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(attemptFile);
+      expect(
+        await readdir(join(f.stateDir, "first-setup-start-again-confirmations")).catch(
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return [];
+            throw error;
+          },
+        ),
+      ).toEqual([]);
+      const at = new Date().toISOString();
       const response = await post(
         "start-again",
-        {
-          inspectionId: current.inspectionId,
-          revision: current.revision,
-          ownerGeneration: current.ownerGeneration,
-          register: {
-            kind: "current-master",
-            status,
-            custodian: "Elena",
-            reference: "c".repeat(64),
-            consultedAt: "2026-10-16T02:00:00.000Z",
-          },
-        },
-        {
-          "X-Waitron-Setup-Owner": recovered.capability,
-          "X-Waitron-Setup-Attempt": recovered.state.attemptId,
-          "X-Waitron-Setup-Revision": String(recovered.state.revision),
-          "X-Waitron-Setup-Generation": String(recovered.state.ownerGeneration),
-        },
+        { ...ids, register, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
+        ownerHeaders,
       );
       expect(response.status).toBe(200);
-      const selected = await response.json();
-      expect(selected).toEqual({
-        workspaceId: expect.any(String),
-        selectionGeneration: 1,
-        restarting: true,
+      const confirmations = join(f.stateDir, "first-setup-start-again-confirmations");
+      const written = await readdir(confirmations);
+      expect(written).toEqual([`${Date.parse(at)}-${before.frozen.attemptId}.json`]);
+      expect(JSON.parse(await readFile(join(confirmations, written[0]!), "utf8"))).toEqual({
+        version: 1,
+        at,
+        attemptId: before.frozen.attemptId,
+        database: "missing",
+        administrator: {
+          displayName: before.frozen.request.admin.displayName,
+          email: before.frozen.request.admin.email,
+        },
+        ownerGeneration: recovered.state.ownerGeneration,
+        shown,
       });
+      const selected = await response.json();
+      expect(selected).toEqual({ restarting: true });
       expect(JSON.stringify(selected)).not.toContain(f.root);
       await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
-      const retained = JSON.parse(await readFile(join(f.stateDir, "first-setup.json"), "utf8"));
-      expect(retained.consumptionIntent).toBe(true);
-      expect(retained.frozen).toEqual(before.frozen);
+      await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(
         (await fetch(`${origin}/retry`, { dispatcher: agent, method: "POST" } as RequestInit))

@@ -106,6 +106,7 @@ export function wizardApi(
       claimed = true;
       return Response.json({ state: initial, capability: "A".repeat(43), ownerGeneration: 1 });
     }
+    if (path.endsWith("/resolution/backup/activity")) return Response.json({ activity: null });
     if (path.endsWith("/fiscal-test")) return Response.json({ status: "accepted" });
     if (path.endsWith("/provision")) return Response.json({ provisioned: true, restarting: true });
     throw new Error(`Unhandled test route ${path}`);

@@ -1468,7 +1468,7 @@ describe("waitron.sh reset", () => {
     for (const read of reads) expect(read).toMatch(/^run\b.*--entrypoint /);
   });
 
-  it("removes the transient volumes, empties state except tls, keeps .env", () => {
+  it("removes the transient volumes, empties state except tls, the start-again note and the confirmation records, keeps .env", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
@@ -1493,6 +1493,50 @@ describe("waitron.sh reset", () => {
     expect(compose).toContainEqual(expect.stringMatching(/^up -d\b/));
   });
 
+  // Weaker than its name: under the stubbed docker it can only match the command's text. The next
+  // case runs the command itself.
+  it("a plain reset's state clean-up spares the start-again note and the confirmation records", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).toBe(0);
+    expect(composeCalls(sb)).toContainEqual(
+      expect.stringMatching(
+        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations /,
+      ),
+    );
+  });
+
+  it("the reset's state clean-up keeps tls/, the note and the confirmation records and removes the rest", () => {
+    const match = readFileSync(SCRIPT, "utf8").match(
+      /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
+    );
+    expect(match).not.toBeNull();
+    const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
+    dirs.push(state);
+    mkdirSync(join(state, "tls"));
+    writeFileSync(join(state, "tls", "ca.pem"), "ca");
+    writeFileSync(join(state, "first-setup-start-again.json"), "{}");
+    mkdirSync(join(state, "first-setup-start-again-confirmations"));
+    writeFileSync(join(state, "first-setup-start-again-confirmations", "one.json"), "{}");
+    writeFileSync(join(state, "first-setup.json"), "{}");
+    writeFileSync(join(state, "trading.env"), "WAITRON_ENV=preproduction\n");
+    writeFileSync(join(state, ".leftover"), "x");
+    const r = spawnSync("sh", ["-c", match[1]], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, WAITRON_STATE_DIR: state },
+      timeout: 10_000,
+    });
+    expect(r.status).toBe(0);
+    expect(readdirSync(state).sort()).toEqual([
+      "first-setup-start-again-confirmations",
+      "first-setup-start-again.json",
+      "tls",
+    ]);
+    expect(readdirSync(join(state, "first-setup-start-again-confirmations"))).toEqual(["one.json"]);
+    expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
+  });
+
   it("stops, naming --yes, when nobody can confirm and --yes was not given", () => {
     const sb = sandbox();
     installedBox(sb);
@@ -1510,6 +1554,16 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--all", "--yes"]);
     expect(r.status).toBe(0);
     expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_state\b/);
+  });
+
+  it("reset --all removes the state volume, note included", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--all", "--yes"]);
+    expect(r.status).toBe(0);
+    const calls = readFileSync(sb.log, "utf8");
+    expect(calls).toMatch(/docker volume rm .*waitron_state\b/);
+    expect(calls).not.toMatch(/! -name first-setup-start-again\.json/);
   });
 
   it("refuses on a production box (trading.env signal) and removes no volume", () => {
@@ -1616,6 +1670,18 @@ describe("waitron.sh --reset install", () => {
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
     expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
+  });
+
+  it("--reset install keeps the start-again note and the confirmation records too", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).toBe(0);
+    expect(loggedCalls(sb)).toContainEqual(
+      expect.stringMatching(
+        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations /,
+      ),
+    );
   });
 
   it("pulls a supporting image the box lacks before taking the box down", () => {

@@ -312,6 +312,7 @@ function configured() {
       context,
       contextKey: "frozen-scope",
       localHistory: { reference: "venue", complete: true, records: [] },
+      floors: [],
     }),
     withPreparationState: async (_binding, run) =>
       run({
@@ -922,4 +923,288 @@ it("a select with another page's box-only comparison stays refused", async () =>
   });
   expect(f.history).toEqual([]);
   expect(await f.select()).toMatchObject({ status: "selected", identity: "0CNNW" });
+});
+
+const minuteMs = (iso: string) => Date.parse(iso);
+const digest = "a".repeat(64);
+// The kinds of public evidence a real reader returns that carry no minute name.
+const namelessEvidence = [
+  {
+    format: "waitron-hour-history",
+    scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+    sources: [{ reference: "venue", complete: true, records: [] }],
+  },
+  {
+    kind: "waitron-recovery-document",
+    version: 1,
+    scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
+    taxpayerName: "Olivo",
+    venueName: "Centro",
+    createdAt: "2026-10-16T11:40:00.000Z",
+    nodeKey: { nodeId: "node", name: "key" },
+  },
+  {
+    version: 1,
+    kind: "cloud-initial-confirmation",
+    binding: context.binding,
+    operatorId: "administrator",
+    allocationId: "cloud/event",
+    receiptId: "receipt",
+    priorActivation: "none",
+    incidentEvidence: "cloud/event",
+    requiredBases: context.bases,
+    delivery: { kept: true, documentDigest: digest, historyDigest: digest },
+  },
+  {
+    version: 1,
+    allocationId: "paper/event",
+    binding: context.binding,
+    operatorId: "administrator",
+    priorActivation: "none",
+    incidentEvidence: "paper/event",
+    requiredBases: context.bases,
+    recipientVenueId: "first-setup:attempt",
+    generationId: "generation",
+    blockId: "block",
+    currentRegisterConfirmed: true,
+    consumptionConfirmed: true,
+    currentEntryState: "consumed-for-event",
+  },
+];
+const hourEvidence = (identity: string) => ({
+  format: "waitron-hour-history",
+  scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+  sources: [
+    {
+      reference: "retired",
+      complete: true,
+      records: [
+        {
+          taxpayerNif: "89890001K",
+          environment: "preproduction",
+          reference: "row/retired",
+          kind: "intent",
+          softwareId: "W1",
+          nodeId: "node",
+          identity,
+          recordedAtMs: null,
+        },
+      ],
+    },
+  ],
+});
+async function selectedIntents(issuedAt: string, identity: string) {
+  startEarly();
+  const f = configured();
+  await f.clock();
+  await f.select();
+  const state = structuredClone(f.history.at(-1)) as { entries: Record<string, unknown>[] };
+  for (const entry of state.entries)
+    if (entry.kind === "intent") Object.assign(entry, { issuedAt, identity });
+  return { seat: f.seat, state };
+}
+it("no name gives no floor", () => {
+  const seat = configured().seat;
+  expect(seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [] })).toBeNull();
+  expect(
+    seat.startAgainFloor!({
+      attempts: [{ context, input: undefined }],
+      preparations: [null],
+      publicEvidence: namelessEvidence,
+    }),
+  ).toBeNull();
+});
+it("evidence that names nothing and is no known nameless kind is refused, not read as empty", () => {
+  const seat = configured().seat;
+  for (const evidence of [
+    {},
+    { foo: 1 },
+    { format: "waitron-hour-histroy" },
+    { ...namelessEvidence[1], venueName: 7 },
+    { ...namelessEvidence[2], delivery: null },
+    { ...namelessEvidence[3], currentEntryState: "kept" },
+    { ...namelessEvidence[3], extra: true },
+  ])
+    expect(() =>
+      seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [evidence] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "history_invalid" },
+      }),
+    );
+});
+it("the latest of a frozen request, an intent and public evidence gives the floor", async () => {
+  const { seat, state } = await selectedIntents("2026-10-16T11:45:00.000Z", "0CNP1");
+  const attempts = [{ context: fixture(), input: undefined }];
+  expect(
+    seat.startAgainFloor!({
+      attempts,
+      preparations: [state],
+      publicEvidence: [hourEvidence("0CNPG")],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:01:00Z"), lastName: "0CNPG" });
+  expect(
+    seat.startAgainFloor!({
+      attempts,
+      preparations: [state],
+      publicEvidence: [hourEvidence("0CNNA")],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T11:46:00Z"), lastName: "0CNP1" });
+  expect(
+    seat.startAgainFloor!({
+      attempts: [{ context: fixture(), input }],
+      preparations: [],
+      publicEvidence: [hourEvidence("0CNNA")],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00Z"), lastName: "0CNNW" });
+});
+it("the floor is the start of the minute after the name", () => {
+  expect(
+    configured().seat.startAgainFloor!({
+      attempts: [{ context: fixture(), input: undefined }],
+      preparations: [],
+      publicEvidence: [],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00.000Z"), lastName: "0CNNW" });
+});
+it("an unreadable intent refuses rather than giving no floor", async () => {
+  const { seat, state } = await selectedIntents("2026-10-16T11:45:00.000Z", "0CNNW");
+  const refused = expect.objectContaining({
+    code: "sif.allocation_invalid",
+    params: { reason: "history_invalid" },
+  });
+  for (const value of [
+    { attempts: [], preparations: [state], publicEvidence: [] },
+    { attempts: [], preparations: [{ version: 1, entries: [{}] }], publicEvidence: [] },
+    { attempts: [], preparations: [], publicEvidence: [null] },
+    {
+      attempts: [{ context: { ...fixture(), request: { status: "selected" } }, input: undefined }],
+      preparations: [],
+      publicEvidence: [],
+    },
+  ])
+    expect(() => seat.startAgainFloor!(value)).toThrowError(refused);
+});
+it("a paper register's numbered positions are not minute names", () => {
+  const scope = { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" };
+  const known = {
+    scope,
+    sHighWater: 42,
+    pHighWater: 7,
+    sBurnFloor: 42,
+    pBurnFloor: 7,
+    currentHead: null,
+    retainedHeads: [],
+    originals: [],
+    retiredBindings: [],
+  };
+  const history = {
+    format: "waitron-paper-register",
+    version: 2,
+    integrity: "owner-declared",
+    registerId: "retired-public-register",
+    scope,
+    mode: "checkpoint",
+    originals: [],
+    revisions: [],
+    checkpoint: {
+      version: 2,
+      kind: "declared-burn-checkpoint",
+      checkpointId: "typed-42",
+      scope,
+      sHighWater: 42,
+      pHighWater: 7,
+      current: {
+        currentRegisterConfirmed: true,
+        noParallelPaperAllocation: true,
+        confirmedAt: "2026-10-16T03:00:00.000Z",
+      },
+      completeHistoryUnavailable: true,
+      burnAllPrior: true,
+      createdAt: "2026-10-16T03:00:00.000Z",
+    },
+  };
+  const seat = configured().seat;
+  expect(seat.retainedAssignments!({ history, known }).positions).toHaveLength(2);
+  expect(
+    seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [{ history, known }] }),
+  ).toBeNull();
+});
+const recoveryInput = (issuedAt: string, identity: string) => ({
+  allocation: {
+    ...input.allocation,
+    allocationId: "hour/restore",
+    installationIdentity: identity,
+    series: context.bases.map(({ code, purpose }) => ({ code: `${code}-${identity}`, purpose })),
+    issuedAt,
+  },
+  approval: {
+    ...input.approval,
+    eventId: "restore",
+    sourceId: "archive",
+    operatorId: { kind: "recovery-key", nodeId: "node", eventId: "restore" },
+    oldMachineAbsent: false,
+    oldMachineOffline: true,
+    confirmedAt: issuedAt,
+    incidentEvidence: "hour/restore",
+  },
+});
+it("a backup recovery's recorded input names its minute", () => {
+  const seat = configured().seat;
+  const recorded = recoveryInput("2026-10-16T12:42:00.000Z", "0CNQT");
+  expect(
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      recoveryInputs: [recorded],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+  expect(
+    seat.startAgainFloor!({
+      attempts: [{ context: fixture(), input: undefined }],
+      preparations: [],
+      publicEvidence: [],
+      recoveryInputs: [recoveryInput("2026-10-16T11:39:00.000Z", "0CNNV")],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00.000Z"), lastName: "0CNNW" });
+});
+it("a recorded input the module cannot read names nothing, and a readable one beside it still names", () => {
+  const seat = configured().seat;
+  const valid = recoveryInput("2026-10-16T12:42:00.000Z", "0CNQT");
+  const malformed: unknown[] = [
+    null,
+    "0CNQT",
+    {},
+    { allocation: valid.allocation },
+    { ...valid, extra: true },
+    { ...valid, allocation: { ...valid.allocation, installationIdentity: "0CNQV" } },
+    { ...valid, allocation: { ...valid.allocation, installationIdentity: "nope" } },
+    { ...valid, allocation: { ...valid.allocation, source: "cloud" } },
+    { ...valid, allocation: { ...valid.allocation, reservationEvidence: {} } },
+    { ...valid, allocation: { ...valid.allocation, issuedAt: "2026-10-16T12:42:00Z" } },
+    { ...valid, allocation: { ...valid.allocation, issuedAt: "2025-12-31T23:59:00.000Z" } },
+    { ...valid, allocation: { ...valid.allocation, extra: true } },
+    { ...valid, approval: { ...valid.approval, operatorId: 7 } },
+    { ...valid, approval: null },
+  ];
+  for (const recorded of malformed) {
+    expect(
+      seat.startAgainFloor!({
+        attempts: [],
+        preparations: [],
+        publicEvidence: [],
+        recoveryInputs: [recorded],
+      }),
+    ).toBeNull();
+  }
+  expect(
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      recoveryInputs: [...malformed, valid],
+    }),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
 });
