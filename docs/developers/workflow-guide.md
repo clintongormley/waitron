@@ -525,3 +525,29 @@ The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or `w
 ### The first dev stack's venue is a seeded directory of SQLite files on the host, shared by worktrees that take the first port slot. Moving between worktrees on the same target does not wipe that slot's venue — so a branch's migrations can fail on the rows already in it
 
 Cost: repeated dead boots with only a driver stack trace to read.
+
+
+## Root detail moved on 2026-10-26
+
+These excerpts retain the supporting detail and full guard limits from `CLAUDE.md` at
+`fa3e76787188a08a8367477202cb03e5840d1b7d` before A1114 shortened the root entries.
+They are source excerpts, not new experiments or changes to the rules.
+
+### Treat a Dependabot pull request like any other: an npm-only one's green CI builds no front-end, and a guard that pins a version number fails its bump.
+
+**Treat a Dependabot pull request like any other: an npm-only one's green CI builds no front-end,
+and a guard that pins a version number fails its bump.** A bot gets no exemption from the strict
+sign-off check (owner decision 2026-09-27). How to land one:
+[workflow-guide.md](workflow-guide.md) → _Dependabot pull requests_.
+
+### The main checkout goes stale in a way the worktrees do not
+
+**The main checkout goes stale in a way the worktrees do not**, because nothing installs there.
+`/land-branch` runs `pnpm install` after the pull; run it yourself after any other pull. An
+untracked file there can block the post-merge `git pull --ff-only` — diff it before deleting.
+
+### Development and loopback-only servers must not advertise the appliance's LAN name.
+
+**Development and loopback-only servers must not advertise the appliance's LAN name.** A laptop
+and box both answered `waitron.local`, sending some lookups to the laptop. Guard:
+`apps/server/src/mdns.test.ts`.

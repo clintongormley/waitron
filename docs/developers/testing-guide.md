@@ -2898,3 +2898,177 @@ A final cut-3 probe moved only the JavaScript wall clock backwards while cleanup
 waited. The Date-based allowance then renewed across steps; the regression now
 checks elapsed time with a monotonic clock. Budget arithmetic uses
 `node:perf_hooks` performance time, independently of captured record timestamps.
+
+
+## Root detail moved on 2026-10-26
+
+These excerpts retain the supporting detail and full guard limits from `CLAUDE.md` at
+`fa3e76787188a08a8367477202cb03e5840d1b7d` before A1114 shortened the root entries.
+They are source excerpts, not new experiments or changes to the rules.
+
+### A test file whose awaits are all synchronous `node:sqlite` work gives the event loop no timer turn, so the venue watchdog kills its worker once the file outlasts `WATCHDOG_KILL_MS`; `useVenueDb` waits one real timer after every test.
+
+**A test file whose awaits are all synchronous `node:sqlite` work gives the event loop no timer
+turn, so the venue watchdog kills its worker once the file outlasts `WATCHDOG_KILL_MS`;
+`useVenueDb` waits one real timer after every test.** Guard: two cases in
+`packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
+folder without `useVenueDb` gets no turn. Guard: the cases under "a holder whose test fakes the
+clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options
+only, and only when the store loads before the clock is faked. Receipt:
+[testing-guide.md](testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
+
+### The stream loop test and the stream pause test need two pinned binaries: without them they are SKIPPED locally and FAIL in CI.
+
+**The stream loop test and the stream pause test need two pinned binaries: without them they are
+SKIPPED locally and FAIL in CI.** Install both with
+`node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. The S3 rehearsal
+scenarios, send gate and interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
+`aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
+and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
+`ci.yml` as TEXT, so install commands left only in a YAML comment, or in a step an `if:` switches
+off, pass it. Receipt:
+[testing-guide.md](testing-guide.md#the-stream-loop-test-skips-locally-without-its-two-binaries-and-a-skip-reads-as-a-pass).
+
+### The full-disk start tests need a small real filesystem
+
+**The full-disk start tests need a small real filesystem**: on macOS they make one with
+`hdiutil`; on Linux they read `WAITRON_FULL_DISK_DIR`, are SKIPPED locally without it, and FAIL
+in CI. Cost avoided: a local Linux skip reads as a pass. An interrupted macOS run can leave its
+image attached, and `pnpm reap` does not detach it.
+Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
+[testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem).
+
+### In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be one an earlier test's rows still name
+
+**In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be
+one an earlier test's rows still name**, so a test that finds a row by address checks that the row
+is its own. Guard: `apps/server/src/print-agent-e2e.test.ts`'s `portsNoPrinterNames` and
+pre-discovery row check, weaker than the rule — they cover that one test. Receipt:
+[testing-guide.md](testing-guide.md#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered).
+
+### A fiscal record in a test's database must not be dated more than a minute after the clock of a later write that records
+
+**A fiscal record in a test's database must not be dated more than a minute after the clock of a
+later write that records**, or the chain refuses that write as `clock.behind_chain`: a fixture
+dated in the past recorded after a newer record, or a case that records ahead of the real clock
+before a real-clock write. In a file that shares one database, every write takes its clock from
+the latest record time, helpers included, or the case gets a database of its own. Nothing guards
+it. Receipt:
+[testing-guide.md](testing-guide.md#a-fiscal-record-dated-after-a-later-writes-clock-makes-the-chain-refuse-that-write).
+
+### A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs.
+
+**A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs.** Set the bound above
+the SUM of its waits plus its untimed work, not the largest one; under `packages/` and `apps/` the
+bound usually comes from the package's `vitest.config.ts`. Guard:
+`scripts/spawn-timeout-budget.test.ts`, which scans `scripts/` ALONE — nothing checks the rule
+under `packages/` and `apps/` — and is weaker than its name over the half it covers: it reads
+TEXT and checks only the largest SINGLE wait.
+
+### A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included
+
+**A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included**, or it kills
+the child and returns `status: null`, which reads as a broken test. Cut the WAIT, not the retrying
+(`WAITRON_SH_HEALTH_DELAY`). Nothing guards the rule in general.
+
+### A `spawnSync` timeout kills only the process it started; the script's own children keep running, so each run of a script keeps its files apart from the next.
+
+**A `spawnSync` timeout kills only the process it started; the script's own children keep running,
+so each run of a script keeps its files apart from the next.** Receipt:
+[testing-guide.md](testing-guide.md#a-spawnsync-timeout-kills-only-the-process-it-started).
+Guard: the leftover-call case in `scripts/ci-workflow.test.mjs`, weaker than the rule — it covers
+that one script; nothing guards the rule in general.
+
+### A test that shells out to `git` must clear `GIT_DIR` and its family.
+
+**A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
+every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
+`GIT_DIR` before trusting it.
+
+### Browser recovery tests read the native control inside a shared component.
+
+**Browser recovery tests read the native control inside a shared component.** A host's `checked`
+property can report the expected value while its inner checkbox is visibly wrong.
+
+### A browser test that checks something a screen does on a dialog's `wt-close` waits for that event first, or for the close event the screen sends from it, never for `vi.waitFor`'s one second alone, nor for the dialog's `open` to turn false.
+
+**A browser test that checks something a screen does on a dialog's `wt-close` waits for that event
+first, or for the close event the screen sends from it, never for `vi.waitFor`'s one second alone,
+nor for the dialog's `open` to turn false.** Nothing guards it. Receipt:
+[testing-guide.md](testing-guide.md#a-browser-test-waits-for-a-dialogs-close-event-not-a-timer).
+
+### A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`, never by counting `history.length`
+
+**A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`,
+never by counting `history.length`**, which Chromium stops at 50. Nothing guards it. Receipt:
+[testing-guide.md](testing-guide.md#a-browser-test-sees-a-push-through-pushstate-not-historylength).
+
+### A proof-by-deletion belongs to the SHAPE of the code it was taken against.
+
+**A proof-by-deletion belongs to the SHAPE of the code it was taken against.** Restructure that
+code and the deletion can stop failing while every test stays green — re-run the control, and move
+the proof to whatever still catches it.
+
+### Treat "there is a test" as an unfinished sentence.
+
+**Treat "there is a test" as an unfinished sentence.** Coverage proves a line executed, not that
+anything asserted on the result. Ask which assertion would fail if the behaviour were deleted; "it
+doesn't throw" is not an answer. `pnpm --filter @waitron/ui mutation` checks this systematically.
+
+### A package config must name its own source tree in `coverage.include`, or an untested file stops being counted
+
+**A package config must name its own source tree in `coverage.include`, or an untested file stops
+being counted** — and moving code into one RAISES the percentage. Guard:
+`scripts/coverage-thresholds.test.ts`, which looks for one exact string. That include is not
+anchored to the package, so a sibling whose name extends this one's can land in its report.
+
+### Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.
+
+**Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
+Marked `next`, a package's guards failed its branch bar silently (#437). Nothing guards it.
+
+### In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with `import()` inside a case only when that case asserts on what the module builds as it loads
+
+**In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with
+`import()` inside a case only when that case asserts on what the module builds as it loads** (as
+`describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file. Nothing
+guards it. Receipt:
+[ci-and-gates.md](ci-and-gates.md#reading-packagesdbs-score-by-hand).
+
+### A default you did not state is not a value you tested
+
+**A default you did not state is not a value you tested**, and a library default can be computed
+from the RUNNING runtime. State it at every call site that shares it. Guard: the two
+pinned-algorithm cases in `packages/identity/src/passkey.test.ts`.
+
+### The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write lock
+
+**The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
+can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
+lock**. A copy fifteen minutes behind raises `backup.stream_behind`, unless a stopped, refused or
+unusable-settings alert already explains it (`apps/server/src/alert-sources.ts`). Guards, narrower
+than the rule: `apps/server/src/stream-pause.e2e.test.ts`,
+`apps/server/src/stream-loop.e2e.test.ts` (both skipped locally without their binaries) and the
+bucket-copy cases in `apps/server/src/health.test.ts`. Receipt:
+[testing-guide.md](testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
+
+### Dispatch events when testing a `composedPath()` guard.
+
+**Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
+empty path, so the test can pass without reaching the branch it claims to check.
+
+### Position a native popover before its first paint.
+
+**Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
+event left the menu at `(0, 0)` for its first frame.
+
+### Test public recovery links through the real boot modes that serve them.
+
+**Test public recovery links through the real boot modes that serve them.** Mounting a route on a
+bare Hono app cannot establish that trading or recovery boot installs it.
+
+### Test provider HTTP refusals through the real client, as well as a throwing fake seat.
+
+**Test provider HTTP refusals through the real client, as well as a throwing fake seat.** A fake
+proved the thrown error preserved the local reader while the HTTP client silently accepted
+401/403/409.
