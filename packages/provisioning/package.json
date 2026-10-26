@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./testing/allocated-venue": "./test/allocated-venue.ts"
+    "./testing/allocated-venue": "./test/allocated-venue.ts",
+    "./testing/start-again-attempt": "./test/start-again-attempt.ts"
   },
   "waitron": {
     "commands": {
