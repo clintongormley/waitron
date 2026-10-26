@@ -5926,7 +5926,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Private identifiers remain in the till's draft, party and widget suites and other server
-  suites, including catalogue, bill-splitting and station-queue tests. File names still need auditing.
+  suites, including catalogue and station-queue tests. File names still need auditing.
   Fixture text belongs to A976. The owner-held core-comment PR remains separate. See the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
