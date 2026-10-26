@@ -25,9 +25,9 @@
 
 ## OPEN QUESTIONS (for the owner)
 
-Each is a point where the code or a house rule does not fit the approved shape as it stands. Q1 and Q2 block the tasks named. Q3, Q5 and Q6 block nothing: the build uses the recommended answer unless the owner answers otherwise, and the PR lists them for approval. Q4 was withdrawn in revision 2.
+Each is a point where the code or a house rule does not fit the approved shape as it stands. Q1 blocks the tasks named. Q2, Q3, Q5 and Q6 block nothing: the build uses the recommended answer unless the owner answers otherwise, and the PR lists them for approval. Q4 was withdrawn in revision 2.
 
-**While Q1 and Q2 are open, Tasks 0, 1 and 11 can be built.** Task 2's types (`StartAgainUnit`, `StartAgainSurvey`) are used by every task from 3 to 10, so Q2 holds all of them. Task 12 (guides and backlog) describes the finished behaviour, so it waits for both answers. Task 13 waits for everything.
+**While Q1 is open, Tasks 0–6 and 11 can be built** (Q2 is built with its option A; lane A, 2026-10-26 18:25). Task 12 (guides and backlog) describes the finished behaviour, so it waits for both answers. Task 13 waits for everything.
 
 ### Q1. The password box is a raw HTML field, which a house rule and its guard forbid (blocks Task 7, and through it Tasks 8a–10b and 13)
 
@@ -38,7 +38,7 @@ Each is a point where the code or a house rule does not fit the approved shape a
 - **A (recommended):** add one `ALLOWED` entry, `{ file: "apps/server/src/recovery-start-again.ts", lines: 1, reason: "an HTML string the server builds for the page a box serves when it cannot start, with no script or front-end bundle; the server does not depend on @waitron/ui or @waitron/ui-core" }`, following the print agent's entry (`:55-60`). The form follows design-system.md → Forms where no script is needed: both fields marked required with a visible `*` and the native `required` attribute (the browser blocks an empty submit), errors only after the first press, the field's error under the field and one bottom message above Continue. What it cannot do without a script: keep Continue disabled until the fields are filled.
 - **B:** no password box on this page; send the person to the setup app for the choice. The setup app is not served while the start is refused, so this needs a second listener mode — a much larger change.
 
-### Q2. Found items the move cannot handle safely (blocks Tasks 2–10b and 13; Tasks 0, 1 and 11 proceed meanwhile)
+### Q2. Found items the move cannot handle safely (blocks nothing since 2026-10-26 18:25: lane A builds A, the most cautious option — today's page for these boxes — and the owner may still choose B)
 
 The finisher stops for some findings that are not plain files: a symbolic link or a device file where the attempt's files live, a folder inside `first-setup-resolutions/` that is not a record folder (for example a backup recovery's journal, whose target holds a `venue.lock` — `CLAUDE.md` §3 "Never unlink venue.lock"), or a folder holding a lock file. Moving a folder that holds a lock file moves the lock away from the path other programs open, which is the hazard the never-unlink rule exists for (`packages/store/src/venue-lock.ts:7-10`). Separately, a found folder could hold very many files (a backup stream's folder), and the page binds its choice to a list of every one.
 
