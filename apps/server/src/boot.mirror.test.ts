@@ -207,6 +207,18 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
       expect([profile.id, profile.displayName]).toEqual([MIRROR_STAFF_ID, "Marta"]);
 
+      // A lookup by a typed tax number stays closed on a mirror, even for the admin viewer.
+      for (const path of ["", "/export"]) {
+        const invoiceCustomer = await fetch(
+          `${base}/management-api/invoice-customers/personal-data${path}?taxId=12345678Z`,
+          { headers: { cookie } },
+        );
+        expect(invoiceCustomer.status).toBe(403);
+        expect(await invoiceCustomer.json()).toEqual({
+          error: { code: "node.read_only", params: {} },
+        });
+      }
+
       const write = await fetch(`${base}/management-api/catalogues`, {
         method: "POST",
         body: "{}",

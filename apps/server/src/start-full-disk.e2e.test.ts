@@ -43,7 +43,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -74,6 +74,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
+import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { escapeHtml } from "./recovery-surface.js";
 import {
   createStaffNoticeLog,
@@ -305,6 +306,28 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
+    // An invoice naming a customer, for the invoice-customer search and download.
+    await db.insert(sales).values({
+      source: "device",
+      deviceId,
+      nodeId,
+      seriesId: series!.id,
+      invoiceNumber: 318,
+      issuedAt: "2026-10-20T09:00:00.000Z",
+      issuedOffsetMinutes: 120,
+      total: 5000,
+      vatBreakdown: [],
+      locale: "en",
+      invoiceLocales: ["en"],
+      fiscalBackend: "none",
+      fiscalState: "not_applicable",
+      workingOrderId: null,
+      counterpartyTaxId: "12345678Z",
+      counterpartyLegalName: "Jordi Customer SL",
+      counterpartyCountryCode: "ES",
+      counterpartyAddress: "8 Customer Street, Madrid",
+    });
+    await FakeFiscalBackend.install(db);
     await db.insert(drawerOpens).values({
       reason: "cash_sale",
       personId: cashier.personId,
@@ -396,6 +419,25 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         modules: ALL_MODULES,
         serverParts: [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(db)],
         venueLocale: "en-GB",
+      },
+      () => {},
+    );
+    mountInvoiceCustomerDataApi(
+      app,
+      {
+        db,
+        backend: new FakeFiscalBackend(db),
+        till: {
+          nodeId: brandNodeId(nodeId),
+          locationId: brandLocationId(main!.id),
+          locale: "en-GB",
+          invoiceLocales: ["en-GB"],
+          tipsEnabled: false,
+          simplifiedInvoiceLimit: null,
+        },
+        nodeId,
+        venueLocale: "en-GB",
+        onMirror: () => false,
       },
       () => {},
     );
@@ -528,6 +570,51 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(lastSeenOf(admin.token)).toBe(at);
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs4'`)).toEqual([
       { id: "bs4" },
+    ]);
+  });
+
+  it("an admin's invoice-customer search and download answer on a full disk with a change waiting, and write nothing", async (ctx) => {
+    const small = needDisk(ctx);
+    const at = new Date(Date.now() - 60_000).toISOString();
+    db.run(
+      sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
+    );
+    db.run(sql`insert into change_log (id, payload) values ('bs6', '{"resource":"zz","id":"6"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+
+    const search = await app.request(
+      "/management-api/invoice-customers/personal-data?taxId=12345678Z",
+      { headers: { cookie: admin.cookie } },
+    );
+    expect(search.status).toBe(200);
+    expect(await search.json()).toEqual({
+      taxId: "12345678Z",
+      invoices: [
+        {
+          invoice: "FD/318",
+          issuedAt: "2026-10-20T09:00:00.000Z",
+          name: "Jordi Customer SL",
+          total: "50.00",
+        },
+      ],
+    });
+    const res = await app.request(
+      "/management-api/invoice-customers/personal-data/export?taxId=12345678Z",
+      { headers: { cookie: admin.cookie } },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    expect(Object.keys(files).sort()).toEqual([
+      "README.txt",
+      "invoices.json",
+      "invoices/FD-318.pdf",
+    ]);
+    expect(new TextDecoder().decode(files["invoices/FD-318.pdf"]!.subarray(0, 5))).toBe("%PDF-");
+    expect(lastSeenOf(admin.token)).toBe(at);
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs6'`)).toEqual([
+      { id: "bs6" },
     ]);
   });
 
