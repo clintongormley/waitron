@@ -139,16 +139,32 @@ interface RegistryType {
   name: string;
 }
 
-interface LogField {
-  event: string;
+interface PlacedKey {
   key: string;
+  parent?: string | undefined;
+  parentIsArray?: boolean;
 }
 
-interface RegistryKey {
+interface LogField extends PlacedKey {
+  event: string;
+}
+
+interface RegistryKey extends PlacedKey {
   code: string;
-  key: string;
   parent: string | undefined;
-  parentIsArray?: boolean;
+}
+
+interface Blanked {
+  code: string;
+  literalsBlank: string;
+}
+
+type Source = string | Blanked;
+
+function blanked(source: Source): Blanked {
+  return typeof source === "string"
+    ? { code: blankComments(source), literalsBlank: blankCommentsAndLiterals(source) }
+    : source;
 }
 
 const PERSON_WORDS =
@@ -158,10 +174,23 @@ const ID_ENDING = /^(.*?)(?:Id|Ids)$/;
 const REGISTRY_OPENING = /\binterface\s+ErrorParams\b[^{]*\{/g;
 const CODE_MARK = /"([a-z0-9_]+(?:\.[a-z0-9_]+)+)"\s*:/g;
 const TYPE_NAME = /\b[A-Z][\w$]*/g;
-const LOG_CALL =
-  /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\?\.)?\(\s*"(?:debug|info|warn|error)"\s*,/g;
+const LOG_LEVEL = '"(?:debug|info|warn|error)"';
+const LOG_CALL = new RegExp(
+  String.raw`\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\?\.)?\(\s*${LOG_LEVEL}\s*,`,
+  "g",
+);
+const MAY_LOG = new RegExp(LOG_LEVEL);
 const OBJECT_TOKEN = /[{}()[\]]|[A-Za-z_$][\w$]*/g;
 const KEY_OR_BRACE = /([A-Za-z_$][\w$]*)\??\s*:|[{}]/g;
+
+function isMasked({ key, parent, parentIsArray }: PlacedKey): boolean {
+  return (
+    PERSONAL_LOG_KEYS.has(key) ||
+    (parent !== undefined &&
+      parentIsArray === true &&
+      PERSONAL_LOG_PATHS.get(parent)?.has(key) === true)
+  );
+}
 
 function isJudgedKey(key: string): boolean {
   const id = ID_ENDING.exec(key);
@@ -178,11 +207,28 @@ function closingBrace(code: string, opening: number): number {
   return code.length;
 }
 
+/** Brackets left open between the enclosing object's `{` and `opening`, innermost first. */
+function unclosedBefore(text: string, opening: number): string[] {
+  const unclosed: string[] = [];
+  let depth = 0;
+  for (let at = opening - 1; at >= 0; at--) {
+    const char = text[at] ?? "";
+    if ("}])".includes(char) || (char === ">" && text[at - 1] !== "=")) depth++;
+    else if ("{[(<".includes(char)) {
+      if (depth > 0) depth--;
+      else if (char === "{") break;
+      else unclosed.push(char === "<" && /\bArray\s*$/.test(text.slice(0, at)) ? "Array<" : char);
+    }
+  }
+  return unclosed;
+}
+
+/** `maskPersonalData` masks only an object that is a direct element of the array, never nested. */
 function isArrayMember(text: string, opening: number): boolean {
-  return (
-    /\bArray\s*<\s*$/.test(text.slice(0, opening)) ||
-    /^\s*\[\s*\]/.test(text.slice(closingBrace(text, opening) + 1))
-  );
+  const unclosed = unclosedBefore(text, opening).join(" ");
+  const after = text.slice(closingBrace(text, opening) + 1);
+  if (unclosed === "") return /^\s*\[\s*\](?!\s*\[)/.test(after);
+  return unclosed === "Array<" && /^\s*>(?!\s*\[)/.test(after);
 }
 
 function keysOfEntry(code: string, text: string): RegistryKey[] {
@@ -208,16 +254,13 @@ function keysOfEntry(code: string, text: string): RegistryKey[] {
   return keys;
 }
 
-interface RegistryBody {
-  code: string;
-  literalsBlank: string;
+interface RegistryBody extends Blanked {
   bodyStart: number;
   bodyEnd: number;
 }
 
-function registryBodies(text: string): RegistryBody[] {
-  const code = blankComments(text);
-  const literalsBlank = blankCommentsAndLiterals(text);
+function registryBodies(source: Source): RegistryBody[] {
+  const { code, literalsBlank } = blanked(source);
   return [...code.matchAll(REGISTRY_OPENING)].map((opening) => {
     const bodyStart = opening.index + opening[0].length - 1;
     return { code, literalsBlank, bodyStart, bodyEnd: closingBrace(literalsBlank, bodyStart) };
@@ -242,8 +285,8 @@ function topLevelSegments(text: string, from: number, to: number): [number, numb
   return segments;
 }
 
-function unrecognisedEntries(text: string): string[] {
-  return registryBodies(text).flatMap(({ code, literalsBlank, bodyStart, bodyEnd }) => {
+function unrecognisedEntries(source: Source): string[] {
+  return registryBodies(source).flatMap(({ code, literalsBlank, bodyStart, bodyEnd }) => {
     const marks = [...code.slice(bodyStart + 1, bodyEnd).matchAll(CODE_MARK)].map(
       (mark) => bodyStart + 1 + mark.index,
     );
@@ -260,8 +303,8 @@ function unrecognisedEntries(text: string): string[] {
   });
 }
 
-function registryTypeNames(text: string): string[] {
-  const names = registryBodies(text).flatMap(({ literalsBlank, bodyStart, bodyEnd }) =>
+function registryTypeNames(source: Source): string[] {
+  const names = registryBodies(source).flatMap(({ literalsBlank, bodyStart, bodyEnd }) =>
     [...literalsBlank.slice(bodyStart + 1, bodyEnd).matchAll(TYPE_NAME)].map(([name]) => name),
   );
   return [...new Set(names)];
@@ -285,9 +328,9 @@ function staleTypes(
   return [...reviewed.keys()].filter((name) => !named.has(name));
 }
 
-function registryKeys(text: string): RegistryKey[] {
+function registryKeys(source: Source): RegistryKey[] {
   const keys: RegistryKey[] = [];
-  for (const { code, literalsBlank, bodyStart, bodyEnd } of registryBodies(text)) {
+  for (const { code, literalsBlank, bodyStart, bodyEnd } of registryBodies(source)) {
     const marks = [...code.slice(bodyStart + 1, bodyEnd).matchAll(CODE_MARK)];
     marks.forEach((mark, index) => {
       const from = bodyStart + 1 + mark.index + mark[0].length;
@@ -307,16 +350,7 @@ function refusedPairs(
   notPersonal: ReadonlyMap<string, string>,
 ): string[] {
   const refused = judgedPairs(keys)
-    .filter(
-      ({ code, key, parent, parentIsArray }) =>
-        !PERSONAL_LOG_KEYS.has(key) &&
-        !(
-          parent !== undefined &&
-          parentIsArray === true &&
-          PERSONAL_LOG_PATHS.get(parent)?.has(key) === true
-        ) &&
-        !notPersonal.has(`${code}.${key}`),
-    )
+    .filter((pair) => !isMasked(pair) && !notPersonal.has(`${pair.code}.${pair.key}`))
     .map(({ code, key }) => `${code}.${key}`);
   return [...new Set(refused)];
 }
@@ -352,28 +386,52 @@ function argumentEnd(text: string, from: number): number {
   return text.length;
 }
 
-function objectKeys(text: string): string[] {
-  const keys: string[] = [];
-  const open: string[] = [];
+interface OpenBracket {
+  token: string;
+  key: string | undefined;
+  parent: string | undefined;
+  parentIsArray: boolean;
+}
+
+function objectKeys(text: string): PlacedKey[] {
+  const keys: PlacedKey[] = [];
+  const open: OpenBracket[] = [];
+  let last: string | undefined;
   for (const match of text.matchAll(OBJECT_TOKEN)) {
     const token = match[0];
-    if (token === "{") open.push(text[match.index - 1] === "$" ? "${" : "{");
-    else if (token === "(" || token === "[") open.push(token);
-    else if (token === "}" || token === ")" || token === "]") open.pop();
-    else if (
-      open.at(-1) === "{" &&
-      /[{,]\s*$/.test(text.slice(0, match.index)) &&
-      /^\s*[:,}]/.test(text.slice(match.index + token.length))
-    ) {
-      keys.push(token);
+    if (token === "{" || token === "(" || token === "[") {
+      const enclosing = open.at(-1);
+      const inArray = enclosing?.token === "[";
+      open.push({
+        token: token === "{" && text[match.index - 1] === "$" ? "${" : token,
+        key: last,
+        parent: inArray ? enclosing.key : last,
+        parentIsArray: inArray,
+      });
+      last = undefined;
+    } else if (token === "}" || token === ")" || token === "]") {
+      last = open.pop()?.key;
+    } else {
+      const object = open.at(-1);
+      if (
+        object?.token === "{" &&
+        /[{,]\s*$/.test(text.slice(0, match.index)) &&
+        /^\s*[:,}]/.test(text.slice(match.index + token.length))
+      ) {
+        keys.push(
+          object.parent === undefined
+            ? { key: token }
+            : { key: token, parent: object.parent, parentIsArray: object.parentIsArray },
+        );
+        last = token;
+      }
     }
   }
   return keys;
 }
 
-function logFields(file: string, text: string): LogField[] {
-  const code = blankComments(text);
-  const literalsBlank = blankCommentsAndLiterals(text);
+function logFields(file: string, source: Source): LogField[] {
+  const { code, literalsBlank } = blanked(source);
   const fields: LogField[] = [];
   for (const call of code.matchAll(LOG_CALL)) {
     const eventStart = call.index + call[0].length;
@@ -384,7 +442,7 @@ function logFields(file: string, text: string): LogField[] {
     const literal = /^"([^"\\]*)"$/.exec(code.slice(eventStart, eventEnd).trim());
     const event = literal?.[1] ?? file;
     const body = literalsBlank.slice(fieldsStart, closingBrace(literalsBlank, fieldsStart) + 1);
-    fields.push(...objectKeys(body).map((key) => ({ event, key })));
+    fields.push(...objectKeys(body).map((placed) => ({ event, ...placed })));
   }
   return fields;
 }
@@ -395,8 +453,8 @@ function refusedLogFields(
 ): string[] {
   const refused = fields
     .filter(
-      ({ event, key }) =>
-        isJudgedKey(key) && !PERSONAL_LOG_KEYS.has(key) && !harmless.has(`${event}.${key}`),
+      (field) =>
+        isJudgedKey(field.key) && !isMasked(field) && !harmless.has(`${field.event}.${field.key}`),
     )
     .map(({ event, key }) => `${event}.${key}`);
   return [...new Set(refused)];
@@ -425,18 +483,33 @@ function treeSourceFiles(): string[] {
     .sort();
 }
 
-function registryFiles(): string[] {
-  return treeSourceFiles().filter((file) =>
-    readFileSync(join(ROOT, file), "utf8").includes("interface ErrorParams"),
-  );
+interface TreeSource extends Blanked {
+  file: string;
+  isRegistry: boolean;
+}
+
+let tree: readonly TreeSource[] | undefined;
+
+/** Skips a file with no level literal: `LOG_CALL` cannot match in it. */
+function treeSources(): readonly TreeSource[] {
+  tree ??= treeSourceFiles().flatMap((file) => {
+    const text = readFileSync(join(ROOT, file), "utf8");
+    const isRegistry = text.includes("interface ErrorParams");
+    return isRegistry || MAY_LOG.test(text) ? [{ file, ...blanked(text), isRegistry }] : [];
+  });
+  return tree;
+}
+
+function registrySources(): readonly TreeSource[] {
+  return treeSources().filter(({ isRegistry }) => isRegistry);
 }
 
 function registry(entries: string): string {
   return `declare module "@waitron/shared" {\n  interface ErrorParams {\n${entries}\n  }\n}\n`;
 }
 
-function typesIn(file: string, text: string): RegistryType[] {
-  return registryTypeNames(text).map((name) => ({ file, name }));
+function typesIn(file: string, source: Source): RegistryType[] {
+  return registryTypeNames(source).map((name) => ({ file, name }));
 }
 
 function refusedIn(text: string): string[] {
@@ -445,10 +518,11 @@ function refusedIn(text: string): string[] {
 
 describe("error-code details that name a person are masked in the log", () => {
   it("the real registries pass, and every harmless entry still names a judged detail", () => {
-    const files = registryFiles();
+    const sources = registrySources();
+    const files = sources.map(({ file }) => file);
     expect(files).toContain("packages/shared/src/errors.ts");
     expect(files).toContain("packages/payments-sumup/src/errors.ts");
-    const keys = files.flatMap((file) => registryKeys(readFileSync(join(ROOT, file), "utf8")));
+    const keys = sources.flatMap((source) => registryKeys(source));
     expect(refusedPairs(keys, NOT_PERSONAL)).toEqual([]);
     expect(stalePairs(keys, NOT_PERSONAL)).toEqual([]);
   });
@@ -509,9 +583,7 @@ describe("error-code details that name a person are masked in the log", () => {
   });
 
   it("refuses a registry entry that is not a recognised code mark", () => {
-    const keys = registryFiles().flatMap((file) =>
-      unrecognisedEntries(readFileSync(join(ROOT, file), "utf8")),
-    );
+    const keys = registrySources().flatMap((source) => unrecognisedEntries(source));
     expect(keys).toEqual([]);
     expect(
       unrecognisedEntries(
@@ -547,6 +619,22 @@ describe("error-code details that name a person are masked in the log", () => {
     ).toEqual([]);
   });
 
+  it("refuses a listed path's child whose parent's member is an array nested in an array", () => {
+    expect(
+      refusedIn(
+        registry(
+          [
+            `"x.d": { merchants: { name: string }[][] };`,
+            `"x.e": { merchants: Array<Array<{ name: string }>> };`,
+            `"x.f": { merchants: Array<{ name: string }[]> };`,
+            `"x.g": { merchants: Array<{ name: string }>[] };`,
+            `"x.h": { merchants: Array<string | Array<{ name: string }>> };`,
+          ].join("\n"),
+        ),
+      ),
+    ).toEqual(["x.d.name", "x.e.name", "x.f.name", "x.g.name", "x.h.name"]);
+  });
+
   it("ignores keys written in comments", () => {
     expect(
       refusedIn(registry(`"x.c": {\n  /** guestName: a comment */\n  tableId: string;\n};`)),
@@ -556,9 +644,7 @@ describe("error-code details that name a person are masked in the log", () => {
 
 describe("named types in an error registry are reviewed", () => {
   it("the real registries name only reviewed types, and every reviewed type is still named", () => {
-    const found = registryFiles().flatMap((file) =>
-      typesIn(file, readFileSync(join(ROOT, file), "utf8")),
-    );
+    const found = registrySources().flatMap((source) => typesIn(source.file, source));
     expect(found.map(({ name }) => name)).toContain("BillEditState");
     expect(unreviewedTypes(found, REVIEWED_TYPES)).toEqual([]);
     expect(staleTypes(found, REVIEWED_TYPES)).toEqual([]);
@@ -590,9 +676,7 @@ describe("named types in an error registry are reviewed", () => {
 
 describe("log calls' fields that name a person are masked", () => {
   it("the real tree's log calls pass, and every harmless entry still names a judged field", () => {
-    const fields = treeSourceFiles().flatMap((file) =>
-      logFields(file, readFileSync(join(ROOT, file), "utf8")),
-    );
+    const fields = treeSources().flatMap((source) => logFields(source.file, source));
     expect(fields).toContainEqual({ event: "staff_notice.duplicate_key", key: "owner" });
     expect(refusedLogFields(fields, HARMLESS_LOG_FIELDS)).toEqual([]);
     expect(staleLogFields(fields, HARMLESS_LOG_FIELDS)).toEqual([]);
@@ -617,6 +701,28 @@ describe("log calls' fields that name a person are masked", () => {
       { event: "x", key: "email" },
     ]);
     expect(refusedLogFields(fields, new Map())).toEqual([]);
+  });
+
+  it("accepts a listed path's child only where it is an element of the parent's array", () => {
+    expect(
+      refusedLogFields(
+        logFields(
+          "x/merchants.ts",
+          `log("warn", "x.a", { merchants: [{ name: "Marta", code: "MC1" }] });`,
+        ),
+        new Map(),
+      ),
+    ).toEqual([]);
+    const text = [
+      `log("warn", "x.o", { merchants: { name: m } });`,
+      `log("warn", "x.n", { merchants: [{ code: c }], name: n });`,
+      `log("warn", "x.d", { merchants: [[{ name: n }]] });`,
+    ].join("\n");
+    expect(refusedLogFields(logFields("x/merchants.ts", text), new Map())).toEqual([
+      "x.o.name",
+      "x.n.name",
+      "x.d.name",
+    ]);
   });
 
   it("keys a field of an event that is not a literal by the file's path", () => {
