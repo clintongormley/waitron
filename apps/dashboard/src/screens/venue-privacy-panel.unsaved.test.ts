@@ -174,6 +174,8 @@ it("turning read-only with a changed draft drops the draft and its protection", 
   expect(unload()).toBe(true);
   panel.readOnly = true;
   await panel.updateComplete;
+  expect(field(panel, "privacyEmail")).toBeNull();
+  expect(saved(panel, "privacyEmail")).toBe("privacy@example.com");
   expect(unload()).toBe(false);
   expect(await leave(app)).toBe("proceeded");
   expect(writes).toEqual([]);
