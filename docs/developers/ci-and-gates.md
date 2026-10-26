@@ -1174,7 +1174,7 @@ Individual local shard wall times range from57.75 to134.90seconds, with two proc
 time. The new layout still needs its own CI timing measurement.
 
 **Shared bin B, 2026-10-26 (A1116):** main run `40266252596`, job `121389421810`,
-took 375 seconds overall. The test step took 334 seconds after about 38 seconds of setup.
+took 375 seconds overall. The test step took 335 seconds after 37 seconds of setup.
 Its log reports 141.56 seconds for catalogue, 139.46 for identity and 137.85 for workforce;
 the longest file was catalogue's `menu-publication.test.ts`, at 28.3 seconds. The two-process
 bin accumulated several large package runs. That log does not identify a single slow operation
