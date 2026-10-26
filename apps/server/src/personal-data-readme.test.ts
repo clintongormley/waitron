@@ -496,7 +496,7 @@ describe("invoiceCustomerReadme", () => {
 Prepared for Jordi Puig on 2026-10-26.
 
 What each file holds
-- invoices.json: the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and each email address it was sent to, with when the email was asked for, whether it went and when, and what the email service reported about it and when, even if that came after the box stopped waiting. Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.
+- invoices.json: the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and every address the box emailed it to or tried to, with when the email was asked for, whether it went and when, and what the email service reported about it and when, even if that came after the box stopped waiting. Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.
 - invoices/: a copy of each of those invoices as a PDF, marked as a copy.
 ${MACHINE}
 This copy holds your full invoices and a record of every attempt to email them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking or an invoice you sent the venue, is not in this copy; ask the venue for it.

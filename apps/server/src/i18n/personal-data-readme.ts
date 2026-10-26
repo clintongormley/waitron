@@ -296,7 +296,7 @@ export interface InvoiceCustomerReadmeWords {
 export const INVOICE_CUSTOMER_README_WORDS: Record<"en" | "es", InvoiceCustomerReadmeWords> = {
   en: {
     holds:
-      "the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and each email address it was sent to, with when the email was asked for, whether it went and when, and what the email service reported about it and when, even if that came after the box stopped waiting.",
+      "the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and every address the box emailed it to or tried to, with when the email was asked for, whether it went and when, and what the email service reported about it and when, even if that came after the box stopped waiting.",
     use: "Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.",
     pdfs: "a copy of each of those invoices as a PDF, marked as a copy.",
     notFound:
@@ -313,7 +313,7 @@ export const INVOICE_CUSTOMER_README_WORDS: Record<"en" | "es", InvoiceCustomerR
   },
   es: {
     holds:
-      "las facturas completas que el local emitió a tu NIF: de cada una, su número, cuándo se emitió, el nombre, el NIF, el país y la dirección que lleva, su total, la copia en PDF de esta descarga, si el servidor Waitron del local guarda un registro fiscal de ella, y cada dirección de correo a la que se envió, con cuándo se pidió el envío, si salió y cuándo, y lo que el servicio de correo informó del envío y cuándo, aunque llegara después de que el servidor Waitron del local dejara de esperar.",
+      "las facturas completas que el local emitió a tu NIF: de cada una, su número, cuándo se emitió, el nombre, el NIF, el país y la dirección que lleva, su total, la copia en PDF de esta descarga, si el servidor Waitron del local guarda un registro fiscal de ella, y todas las direcciones de correo a las que se envió o se intentó enviar, con cuándo se pidió el envío, si salió y cuándo, y lo que el servicio de correo informó del envío y cuándo, aunque llegara después de que el servidor Waitron del local dejara de esperar.",
     use: "Se guarda porque una factura debe identificar a su destinatario y el local debe conservar una copia de cada factura que emite.",
     pdfs: "una copia en PDF de cada una de esas facturas, marcada como copia.",
     notFound:
