@@ -10572,13 +10572,21 @@ export class TillApp extends LitElement {
 
   /** A read's answer replaces the tables unless a read that started after it was applied first, so
    * a poll answering late never undoes an action's newer read. An answer equal to the tables shown
-   * still counts as applied, but keeps the list shown. */
+   * still counts as applied, but keeps the array shown. The one writer of `tables` and `barFloor`;
+   * `barFloor` takes only a list the box answered. */
   #applyTables(read: TablesRead, tables: TableState[], answered = true): void {
     if (read.number <= this.#tablesApplied) return;
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
     if (answered) this.#forgetReleased((each) => (each.savedBefore ?? read.number) < read.number);
-    if (!this.#setTables(tables, answered)) return;
+    const json = JSON.stringify(tables);
+    const changed = json !== this.#tablesJson;
+    if (changed) {
+      this.#tablesJson = json;
+      this.tables = tables;
+    }
+    if (answered) this.barFloor = this.tables;
+    if (!changed) return;
     const party = this.orderParty;
     const latest = tables.find((row) => row.id === this.activeTableId)?.party;
     if (
@@ -10588,19 +10596,6 @@ export class TillApp extends LitElement {
       latest.kitchenNote.revision >= party.kitchenNote.revision
     )
       this.orderParty = { ...party, kitchenNote: latest.kitchenNote };
-  }
-
-  /** The one writer of `tables` and `barFloor`. A list equal to the one shown keeps the array shown;
-   * `barFloor` takes only a list the box answered. Answers whether `tables` changed. */
-  #setTables(tables: TableState[], answered: boolean): boolean {
-    const json = JSON.stringify(tables);
-    const changed = json !== this.#tablesJson;
-    if (changed) {
-      this.#tablesJson = json;
-      this.tables = tables;
-    }
-    if (answered) this.barFloor = this.tables;
-    return changed;
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party

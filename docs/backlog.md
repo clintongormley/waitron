@@ -2840,6 +2840,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   till, where `order` resolves to Counter, drop the emit or replace it with the tap the test means
   (table-service, parties, menu-refresh, drafts, boot-and-counter).
 
+- **A1129. A late allergy re-read or course-places repair can step the order back a revision.**
+  Read only: after their waits both set `orderParty` from their own read without checking a newer
+  one (`till-app.ts`), until the next command's `party.out_of_date` reloads; check the revision as
+  `#rememberOrderParty` does. Believed to predate A797 slice 3 (ba517141a, c9ad7a634).
+
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
     the cookie names a disabled device, so the response time hints that an id is a disabled device;
