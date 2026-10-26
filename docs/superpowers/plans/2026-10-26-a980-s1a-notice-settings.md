@@ -1,7 +1,8 @@
 # A980 slice S1a: a dashboard setting for the venue's privacy notice page and privacy email
 
 **Status: plan, 2026-10-26, the fresh plan review folded in (0 Critical, 5 Important, 10 Minor,
-`~/waitron-campaign-b/a980-s1a-plan-review.md`). Nothing was built when this was written.** Branch
+`~/waitron-campaign-b/a980-s1a-plan-review.md`), then its round-3 claim check (0 Critical, 3
+Important, 9 Minor, `~/waitron-campaign-b/a980-s1a-plan-round3.md`). Nothing was built when this was written.** Branch
 `feat/a980-s1a-notice-settings`, from `main` at `00abe58e3`. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4 (the row
 "Privacy notices": "a setting for the address of the venue's notice page (O3 (a))"), §4.1 (the
@@ -149,15 +150,25 @@ Each probe below states what the failing case would have printed.
    accepts a user name and password, a space in the path, and `https:` without `//`. Decision 5
    says what this slice accepts instead. The review added (same Node): `https:///example.com`,
    `"https://\\example.com"` (a JavaScript string holding one backslash) and `https://.` all parse, and so does an address ending in a
-   zero-width space (U+200B), which `/\s/` does not match. `https://example.com:99999/privacy` (a
-   port out of range) gives `null`.
+   zero-width space (U+200B), which `/\s/` does not match: `URL.parse` keeps it as `%E2%80%8B` in a
+   path (a different page), and drops it, like a soft hyphen (U+00AD), from a host. `"\u200b".trim()`
+   is not `""`. `https://example.com:99999/privacy` (a port out of range) gives `null`. Round 3 also
+   found these accepted by the rule and rewritten by `URL.parse` to the host they name:
+   `https://@example.com/p`, `https://:@example.com/p`, `https://ex%61mple.com/p`,
+   `https://0x7f.1/p` (to `127.0.0.1`), `https://example.com:/p` and
+   `"https://example.com\\privacy"` (one backslash, read as `/privacy`).
 
 5. **Task 1's rule and table, and Stryker on them.** The rule of decision 5 and Task 1's table, as
    this plan now writes them, were put in a throwaway `packages/shared/src/privacy-contact.ts` and
-   `privacy-contact.test.ts` (kept, outside the repo, in
-   `~/waitron-campaign-b/a980-s1a-plan-probe/`). `pnpm exec vitest run src/privacy-contact.test.ts`
-   printed `Tests  38 passed (38)`, and `pnpm exec stryker run --mutate src/privacy-contact.ts` in
-   `packages/shared` printed 46 killed, 0 survived. The table needed two rows to get there. Without
+   `privacy-contact.test.ts` (kept, outside the repo, in `~/waitron-campaign-b/a980-s1a-plan-probe/`
+   as `privacy-contact.round3.ts` and `privacy-contact.round3.test.ts`; the earlier pair without
+   the round-3 rows sits beside them). `pnpm exec vitest run src/privacy-contact.test.ts` printed
+   `Tests  45 passed (45)`, and `pnpm exec stryker run --mutate src/privacy-contact.ts` in
+   `packages/shared` printed 51 killed, 0 survived. Two controls run on the same files: with the
+   invisible-character class cut back to `/\s/`, 5 rows failed (the four web page rows with U+200B,
+   U+00AD, U+200D and U+2060, and the email row with U+200B; the U+FEFF row still passed, because
+   `/\s/` matches U+FEFF); with `value.length` for `[...value].length`, 1 row failed (the accepted
+   500-code-point `😀` row). Before round 3, the table needed two rows to reach 0 survived. Without
    `javascript:https://example.com` the review's Stryker run left the prefix's `^` anchor alive, and
    an unanchored prefix accepts that value. Without the out-of-range port row, the `parsed === null`
    test survived on this rule, because the new prefix already refuses `https://`. The throwaway
@@ -165,7 +176,8 @@ Each probe below states what the failing case would have printed.
 
 6. **What Chromium does to typed text** (the workspace's playwright 1.64.1, typing with
    `pressSequentially` into bare inputs). `type="url"` keeps `https://cafetería.es/privacidad` and
-   `  https://example.com/p  ` exactly as typed. `type="email"` turns `privacidad@cafetería.es` into
+   `  https://example.com/p  ` exactly as typed (round 3 saw the same for `fill` and
+   `keyboard.insertText`, but a script setting the input's `value` strips the surrounding spaces). `type="email"` turns `privacidad@cafetería.es` into
    `privacidad@xn--cafetera-i2a.es` (the review also saw it strip surrounding spaces).
    `type="text"` keeps both the accent and the spaces. Decision 8 follows from this.
 
@@ -236,7 +248,9 @@ Read, not run: everything else cited by `file:line` below.
 5. **What the web page field accepts.** After `privacyContactValue`, a value is refused as
    `length` when it has more than **500** code points (counted as `[...value].length`, as
    `apps/server/src/venue-details.ts:193` counts), and otherwise as `web_address` when any of these
-   holds: it contains whitespace (`/\s/`); it does not start with `http://` or `https://` in any
+   holds: it contains whitespace or an invisible format character
+   (`/[\s\u00ad\u200b-\u200d\u2060]/`: whitespace, which in JavaScript includes U+FEFF, plus the
+   soft hyphen, the zero-width space, non-joiner and joiner, and the word joiner); it does not start with `http://` or `https://` in any
    letter case followed by a character that is neither `/` nor `\` (`/^https?:\/\/[^/\\]/i`);
    `URL.parse(value)` is `null` (for example an out-of-range port); or the parsed address has a
    user name or a password. The anchored prefix makes a protocol check redundant, and it already
@@ -244,17 +258,20 @@ Read, not run: everything else cited by `file:line` below.
    value is **stored as typed** (trimmed), not as `URL.parse`'s rewrite, which would add a slash,
    change letter case and turn an accented host into its ASCII form (`xn--…`); for the same reason
    the typed text is never compared with the parsed host, which would refuse every accented
-   Spanish domain. Against today's environment rule (probe 4) this refuses five things it accepts:
-   a user name or password, whitespace, `https:` without `//`, and `/` or `\` straight after `//`.
-   Two odd spellings stay accepted on purpose, because the browser opens them as the address they
-   name or as nothing harmful: `https://.`, and an address with a zero-width space in it (probe 4).
-   Owner decision F.
+   Spanish domain. Against today's environment rule (probe 4) this refuses five kinds of value it
+   accepts: a user name or password; whitespace; an invisible format character, which a paste from
+   a web page or document can carry and which turns the link into another page (probe 4); `https:`
+   without `//`; and `/` or `\` straight after `//`. Some odd spellings stay accepted: the rule does
+   not try to refuse every spelling `URL.parse` rewrites. `https://.` has a row of its own in Task 1
+   as accepted on purpose; the others round 3 found (probe 4) each open the host they name. Owner
+   decision F.
    Worked example: `https://barejemplo.es/privacidad` and `http://barejemplo.es` are saved as
    typed; `barejemplo.es/privacidad` is refused with "Enter the page's full web address, such as
    https://example.com/privacy."
 
 6. **What the email field accepts.** Refused as `length` above **254** code points, otherwise as
-   `email` when `isValidEmail` refuses it. Stored trimmed and as typed: not lower-cased, because
+   `email` when it holds an invisible format character (the same class as decision 5) or
+   `isValidEmail` refuses it. Stored trimmed and as typed: not lower-cased, because
    it is shown to people, never compared. "As typed" holds through the dashboard only because the
    field is a text input, not an email one (decision 8, probe 6).
 
@@ -311,7 +328,7 @@ Read, not run: everything else cited by `file:line` below.
    - **The help badge**: a `<wt-help-tooltip mode="help-mode" slot="help">` inside the web page
      field (the `help` slot, `packages/ui-core/src/components/wt-input.ts:130`), with
      `aria-label` from `venue_privacy.notice_url_help_label` (the Forms contract asks for a
-     localized one, `docs/developers/design-system.md:3258`),
+     localized one, `docs/developers/design-system.md:3259`),
      `guide-href=${guideHref("data-protection.staff-notice")}` and its own `guide-label`, as the
      profile page's badge does (`apps/dashboard/src/screens/profile-screen.ts:899-907`). It is in
      the Edit form only, because only a primitive's slot positions a badge. It links to
@@ -377,8 +394,12 @@ Read, not run: everything else cited by `file:line` below.
   `https://admin:secreto@barejemplo.es/privacidad` is accepted in `WAITRON_PRIVACY_NOTICE_URL` today
   and would be refused here, so a password typed by mistake never reaches the staff emails S1b sends.
   So would `https:///barejemplo.es/privacidad`. `http://` addresses stay accepted, as today; the
-  alternative is to require `https://`. Accepted on purpose, and stored as typed: `https://.` and an
-  address with an invisible zero-width space in it (decision 5).
+  alternative is to require `https://`. A pasted address carrying an invisible character, such as a
+  zero-width space at its end, is refused with the web address message rather than saved as a link
+  to a page that probably does not exist. Still accepted, and stored as typed, because each opens
+  the host it names: `https://.`, `https://@example.com/p`, `https://ex%61mple.com/p`,
+  `https://0x7f.1/p`, `https://example.com:/p` and an address with a backslash for a slash after
+  the host (decision 5).
 
 ## Global constraints
 
@@ -434,7 +455,8 @@ Read, not run: everything else cited by `file:line` below.
   the JSON list, the guard's header and `conventions-data.md` agree; Task 3's proof by deletion.
 - **The rule** (decisions 4 to 6): one function on both sides; the limits at the boundary; every
   refusal case of Task 1, including the anchored prefix's `javascript:https://…` row; the value
-  stored as typed; Stryker leaves no mutant alive (probe 5 printed 46 killed, 0 survived on this
+  stored as typed; the invisible-character rows; Stryker leaves no mutant alive (probe 5 printed 51
+  killed, 0 survived on this
   table; Task 1 runs it again on the real file).
 - **The routes** (decision 7): authorisation before the body; `venue.configure` for the write and
   `venue.view` for the read; nothing written on any refusal, which the transaction guarantees
@@ -480,43 +502,49 @@ Files: `packages/shared/src/privacy-contact.ts` (new), `packages/shared/src/priv
 Write every invisible or look-alike character in the tests as a JavaScript escape (`\u0301`,
 `\u00e9`, `\u00a0`, `\t`), never as the character itself.
 
-1. Tests first, two `it.each` tables, which Task 6a1 copies into the panel's own-check test (a test
-   file cannot import another package's test file):
+1. Tests first, two `it.each` tables:
    - **`privacyContactValue`** (raw → value), 5 rows: `"  https://example.com/privacy  "` →
      `"https://example.com/privacy"`; `""` → `null`; `"   "` → `null`; `"\u00a0"` → `null`;
      `"jose\u0301@example.com"` → `"jos\u00e9@example.com"`.
-   - **`privacyContactProblem`** (field, value → problem), 32 rows. Web page, accepted
-     (`undefined`), 6 rows: `"https://example.com/privacy"`, `"http://example.com"`,
+   - **`privacyContactProblem`** (field, value → problem), 39 rows. Web page, accepted
+     (`undefined`), 7 rows: `"https://example.com/privacy"`, `"http://example.com"`,
      `"HTTPS://EXAMPLE.COM/Privacy"`, `"https://example.com/" + "a".repeat(480)` (500 code points),
-     `"https://example.com/" + "😀".repeat(480)` (500 code points, 980 UTF-16 units), `null`.
-     Web page, `web_address`, 16 rows: `"example.com/privacy"`, `"https:example.com"`,
+     `"https://example.com/" + "😀".repeat(480)` (500 code points, 980 UTF-16 units), `null`,
+     `"https://."` (accepted on purpose, decision 5).
+     Web page, `web_address`, 21 rows: `"example.com/privacy"`, `"https:example.com"`,
      `"ftp://example.com"`, `"javascript:alert(1)"`, `"javascript:https://example.com"`,
      `"mailto:privacy@example.com"`, `"https://"`, `"https://example.com:99999/privacy"`,
      `"https:///example.com"`, `"https://\\example.com"` (one backslash in the value),
      `"https://user:pw@example.com/p"`, `"https://user@example.com/p"`,
      `"https://:pw@example.com/p"`, `"https://example.com/priv acy"`,
-     `"https://example.com/a\u00a0b"`, `"https://example.com/a\tb"`. Web page, `length`, 2 rows:
+     `"https://example.com/a\u00a0b"`, `"https://example.com/a\tb"`,
+     `"https://example.com/privacy\u200b"`, `"https://exam\u00adple.com/privacy"`,
+     `"https://example.com/a\u200db"`, `"https://example.com/a\u2060b"`,
+     `"https://example.com/a\ufeffb"`. Web page, `length`, 2 rows:
      `"https://example.com/" + "a".repeat(481)`, `"https://example.com/" + "😀".repeat(481)`.
      Email, accepted, 3 rows: `"privacy@example.com"`, `"a@" + "b".repeat(249) + ".es"` (254),
-     `null`. Email, `email`, 4 rows: `"privacy"`, `"privacy@example"`, `"a@b@example.com"`,
-     `"pri vacy@example.com"`. Email, `length`, 1 row: `"a@" + "b".repeat(250) + ".es"` (255).
+     `null`. Email, `email`, 5 rows: `"privacy"`, `"privacy@example"`, `"a@b@example.com"`,
+     `"pri vacy@example.com"`, `"privacy\u200b@example.com"`. Email, `length`, 1 row: `"a@" + "b".repeat(250) + ".es"` (255).
    - One case: `PRIVACY_CONTACT_MAX_LENGTH` is exactly `{ privacyNoticeUrl: 500, privacyEmail: 254 }`
      and `PRIVACY_CONTACT_FIELDS` exactly `["privacyNoticeUrl", "privacyEmail"]`.
    Run `pnpm --filter @waitron/shared exec vitest run src/privacy-contact.test.ts`; watch it fail
    (no module).
 2. Write the module (decisions 4 to 6): length first, then shape; no protocol or host check
-   (decision 5 says why). Run again: expected `Tests  38 passed (38)` (probe 5 printed the same
+   (decision 5 says why). Run again: expected `Tests  45 passed (45)` (probe 5 printed the same
    for this table).
 3. Omission controls, each run and reverted, the failing rows recorded for the pull request:
-   count `.length` instead of code points (fails the two `😀` rows); `>=` for `>` (fails the 500 and
+   count `.length` instead of code points (fails the 500-code-point `😀` row; the 501 one answers
+   `length` either way); `>=` for `>` (fails the 500 and
    254 rows); drop the whitespace test (fails the three whitespace rows); drop the password check
    (fails `https://:pw@…`); make the prefix case-sensitive (fails the capitals row); drop the `^`
    anchor (fails the `javascript:https://example.com` row); drop `[^/\\]` from the prefix (fails
    `https:///example.com` and `https://\example.com`; `https://` is then refused by `URL.parse`); drop the `parsed === null` test
-   (the port row throws instead of answering); skip NFC (fails the accent row).
+   (the port row throws instead of answering); cut the invisible-character class back to `/\s/`
+   (fails the U+200B, U+00AD, U+200D and U+2060 web page rows and the U+200B email row; the U+FEFF
+   row still passes, since `/\s/` matches it); skip NFC (fails the accent row).
 4. Mutation, this file only:
    `pnpm --filter @waitron/shared exec stryker run --mutate src/privacy-contact.ts`. Expected: 0
-   survived (probe 5 printed 46 killed, 0 survived on a rule written from this plan; a different
+   survived (probe 5 printed 51 killed, 0 survived on a rule written from this plan; a different
    but equivalent rule may give another number of mutants). A survivor is answered with a test, or
    by deleting the code it shows to be redundant; never by an ignore comment. Delete the
    `packages/shared/reports/` directory Stryker writes if it did not exist before.
@@ -565,7 +593,9 @@ export interface PrivacyContact { privacyNoticeUrl: string | null; privacyEmail:
 /** The taxpayer row's privacy contact, or null when there is no taxpayer row. */
 export async function readPrivacyContact(tx: Transaction): Promise<PrivacyContact | null>;
 /** Writes the given columns alone, on the taxpayer row; returns the stored pair, or null when there
- * is no taxpayer row. With no keys it writes nothing and returns `readPrivacyContact(tx)`. Takes
+ * is no taxpayer row. It drops keys whose value is `undefined` first; with no value left it writes
+ * nothing and returns `readPrivacyContact(tx)`, because drizzle's `.set()` throws `No values to
+ * set` for `{}` and for `{ privacyEmail: undefined }` alike. Takes
  * checked values: it throws no code of its own. */
 export async function savePrivacyContact(
   tx: Transaction,
@@ -578,9 +608,9 @@ export async function savePrivacyContact(
    `{ ...before, privacyNoticeUrl, privacyEmail }`; saving one leaves the other; saving `null`
    stores SQL `NULL` (read back with `select privacy_email is null as unset from tenants`); with no
    taxpayer row, read and save answer `null` and `select count(*) from tenants` stays 0; saving
-   `{}` writes nothing and answers the stored pair (drizzle's `.set({})` throws, so the function
-   must not reach it). Run `pnpm --filter @waitron/provisioning exec vitest run
-   src/privacy-contact.db.test.ts`; watch it fail; write the file; expected `Tests  6 passed (6)`.
+   `{}` and saving `{ privacyEmail: undefined }` (one `it.each`, 2 rows) each write nothing and answer
+   the stored pair. Run `pnpm --filter @waitron/provisioning exec vitest run
+   src/privacy-contact.db.test.ts`; watch it fail; write the file; expected `Tests  7 passed (7)`.
 2. Add `"packages/provisioning/src/privacy-contact.ts"` to `tenants` in
    `scripts/write-path-tables.json`, and a line to the guard's header list
    (`write-path-tables.test.ts:40-62`): "changes the taxpayer's privacy notice web page and privacy
@@ -707,7 +737,10 @@ Words (English / Spanish), new keys:
    5. typing a change into the web page field enables Save, and typing it back makes it quiet
       again;
    6. adding only spaces around the stored web page keeps Save quiet (the web page field keeps the
-      spaces it is given, probe 6, so this case sees them);
+      spaces it is given when typed, probe 6). The spaces go in by typing with `userEvent`, or by a
+      `wt-change` event carrying the spaced value as `venue-defaults-panel.test.ts:238-241` sends one;
+      never by setting the native input's `value` from a script, which Chromium's url input strips
+      of surrounding spaces, so the case would pass without the code it tests;
    7. Save sends only the changed field, closes the form and shows the answered value;
    8. emptying a field and saving sends `""` and shows "Not set";
    9. nothing is said before the first Save; a Save with `example.com/privacy` sends nothing, puts
@@ -734,7 +767,7 @@ Words (English / Spanish), new keys:
 2. Write the panel (decision 8) without the help badge or the live read's `#adopt` (6a2). Expected:
    `Tests  19 passed (19)`.
 3. Omission controls, each run and reverted: compare the draft without `privacyContactValue` (case
-   6 fails, because the web page field keeps the spaces); disable Save on a server refusal (cases
+   6 fails, provided it put the spaces in as case 6 says); disable Save on a server refusal (cases
    14 and 15 fail); give the email field `type="email"` (case 19 fails).
 4. `pnpm --filter @waitron/dashboard typecheck`; at the root `pnpm exec vitest run
    scripts/native-form-fields.test.ts scripts/style-token-names.test.ts
@@ -803,7 +836,7 @@ in `CORE_SETTINGS_PANELS`, `:314-335`), and the app tests below.
    `"/management-api/venue-privacy": { privacyNoticeUrl: null, privacyEmail: null }` beside its
    `venue-defaults` answer (`:116-121`): it answers any path it does not know with `[]` (`:136-147`),
    which no real server sends.
-2. Before any edit, run the seven app files of step 5 and write down each file's `Tests` count.
+2. Before any edit, run the eleven files of step 5 and write down each file's `Tests` count.
 3. The pinned lists listed under "Existing assertions that change on purpose" gain the new card,
    including the even-spacing case (`dashboard-app.venue-settings-unsaved.test.ts:976-993`), which
    collects five cards and four equal gaps and is renamed to say five.
@@ -813,9 +846,12 @@ in `CORE_SETTINGS_PANELS`, `:314-335`), and the app tests below.
    Venue settings with a changed Privacy draft asks, and Discard leaves without a write.
 5. Run `dashboard-app.a11y.test.ts`, `dashboard-app.help.test.ts`, `dashboard-app.panel-only.test.ts`,
    `dashboard-app.settings-panels.test.ts`, `dashboard-app.test.ts`,
-   `dashboard-app.unsaved-changes.test.ts` and `dashboard-app.venue-settings-unsaved.test.ts`.
-   Expected: each file's count from step 2, plus 2 for `settings-panels` and plus 1 for
-   `venue-settings-unsaved`, with nothing failed. Then `pnpm --filter @waitron/dashboard typecheck`.
+   `dashboard-app.unsaved-changes.test.ts` and `dashboard-app.venue-settings-unsaved.test.ts`, and
+   the shared fixture's four other users: `dashboard-app.receipt-tab.test.ts`,
+   `screens/department-receipt-editor.a11y.test.ts`, `screens/department-receipt-editor.client.test.ts`
+   and `screens/department-receipt-editor.width.test.ts`. Expected: each file's count from step 2,
+   plus 2 for `settings-panels` and plus 1 for `venue-settings-unsaved`, the rest unchanged, with
+   nothing failed. Then `pnpm --filter @waitron/dashboard typecheck`.
 
 ## Task 8: the guide
 
@@ -871,7 +907,7 @@ Each sentence's source, checked when the text is written and again by the review
 | one email address | Task 1's email rows (`isValidEmail`) |
 | empty its field and Save removes it | Task 4's clearing case; Task 6a1's emptying case |
 | a manager or an admin can change them; a supervisor can see them | `permissions.ts:48-84`; Task 4's permission case; Task 7's read-only case; the role names as the dashboard shows them, «Encargado», «Administrador», «Supervisor» (`apps/dashboard/src/i18n/domain.ts:8-13`) |
-| a configuration export does not carry them | decision 10: `configuration-transfer.ts:74-118` selects no privacy column |
+| a configuration export does not carry them | decision 10: `packages/provisioning/src/configuration-transfer.ts:74-118` selects no privacy column |
 | nothing else on the box shows them | decision 1: no reader changed (Task 0 step 4 and the S1b list) |
 
 1. Change the ids in `guide-content.test.ts:204-214` to include `privacy-settings` after
@@ -916,9 +952,12 @@ Files: `docs/backlog/data-protection.md`, `docs/superpowers/plans/2026-10-24-a98
      card, editing in place. Its leave cases are in
      `apps/dashboard/src/screens/venue-privacy-panel.unsaved.test.ts`;".
    Then grep the whole tree, docs included, for `four cards` and `Business, Venue, Business day`,
-   and fix or leave each hit on purpose: on 2026-10-26 the other hits were the dated A755 plan
-   (`docs/superpowers/plans/2026-10-16-a755-venue-settings-cards.md`, a historical record, left as it
-   is) and the two test lines Task 7 changes.
+   and fix or leave each hit on purpose. On 2026-10-26 the other hits were: the dated A755 plan
+   (`docs/superpowers/plans/2026-10-16-a755-venue-settings-cards.md`) and the dated A795 design
+   (`docs/superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md:261`), historical
+   records left as they are; `docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md:1167`,
+   whose "four cards" is about something else; this plan; and the two test lines Task 7 changes
+   (`dashboard-app.settings-panels.test.ts:275`, `dashboard-app.venue-settings-unsaved.test.ts:976`).
 
 ## Root guards to run before `/finish-branch`
 
