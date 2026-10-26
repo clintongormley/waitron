@@ -48,7 +48,8 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *                                                dashboard's legal-name route.
  *   `packages/provisioning/src/privacy-contact.ts` changes the taxpayer's privacy notice web page
  *                                                and privacy email, from the dashboard's
- *                                                venue-privacy route.
+ *                                                venue-privacy route and a configuration
+ *                                                import, inside setup's venue transaction.
  *   `packages/db/src/node-identity.ts`           stamps a node's public key, from the setup-mode
  *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot

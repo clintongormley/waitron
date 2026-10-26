@@ -11,7 +11,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { planVenue, venueFiscalSelection } from "@waitron/provisioning";
+import { planVenue, savePrivacyContact, venueFiscalSelection } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { enabledModules } from "@waitron/module";
 import { createCatalogue, createProduct } from "@waitron/catalogue";
@@ -114,6 +114,10 @@ async function configurationArtifact() {
       pricingUnit: "each",
       unitPrice: "7.25",
       vatClass: "general",
+    });
+    await savePrivacyContact(tx, {
+      privacyNoticeUrl: "https://example.com/privacy",
+      privacyEmail: "privacy@example.com",
     });
   });
   const bundle = await buildConfigurationBundle(
@@ -445,6 +449,15 @@ it.each([
         ]);
         expect(db.prepare("select tax_id as taxId from tenants").all()).toEqual([
           { taxId: venue.taxId },
+        ]);
+        expect(
+          db
+            .prepare(
+              "select privacy_notice_url as privacyNoticeUrl, privacy_email as privacyEmail from tenants",
+            )
+            .all(),
+        ).toEqual([
+          { privacyNoticeUrl: "https://example.com/privacy", privacyEmail: "privacy@example.com" },
         ]);
         expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
         expect(db.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);

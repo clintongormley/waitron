@@ -901,7 +901,8 @@ Real code does write all five, legitimately: the setup-mode provision route reac
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
 `packages/provisioning/src/privacy-contact.ts`, which updates `privacy_notice_url` and
-`privacy_email` alone. Each does it by calling into one of the
+`privacy_email` alone; a configuration import reaches the same writer for those two columns
+(A980 S1a2). Each does it by calling into one of the
 files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
