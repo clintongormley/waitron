@@ -119,6 +119,22 @@ describe("findInvoiceCustomerSales", () => {
     expect(await ids("87654321X")).toEqual([raw]);
   });
 
+  it("takes the searched number as already normalised, and does not normalise it again", async () => {
+    const [j1] = await suite.db.select().from(sales).where(eq(sales.id, fixture.sales.j1));
+    const raw = randomUUID();
+    await suite.db.withWriteLock(() =>
+      suite.db.insert(sales).values({
+        ...j1!,
+        id: raw,
+        invoiceNumber: 900002,
+        workingOrderId: null,
+        counterpartyTaxId: "ESES55555555K",
+      }),
+    );
+    expect(await ids("ES55555555K")).toEqual([raw]);
+    expect(await search("ES12345678Z")).toEqual([]);
+  });
+
   describe("the statement", () => {
     it("scans with no ORDER BY, then reads the matches by key in chunks", async () => {
       const recorded = await suite.db.withWriteLock(async () => {

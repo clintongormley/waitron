@@ -313,17 +313,18 @@ describe.each([
     expect(findButton(el).disabled).toBe(false);
   });
 
-  it("downloads the answered tax number, not the field's text, and saves it under the server's name", async () => {
+  it("downloads the number exactly as Find sent it, and saves it under the server's name", async () => {
     const saving = spyOnSaving();
     const answer = pending<DownloadedFile>();
-    const { el, download } = await mount(
+    const { el, find, download } = await mount(
       async () => THREE,
       () => answer.promise,
     );
     await searched(el);
     expect(preparing(el)).toBeNull();
     await pressDownload(el);
-    expect(download).toHaveBeenCalledExactlyOnceWith("12345678Z");
+    expect(find).toHaveBeenCalledExactlyOnceWith("es 12345678z");
+    expect(download).toHaveBeenCalledExactlyOnceWith("es 12345678z");
     expect(downloadButton(el)!.disabled).toBe(true);
     expect(preparing(el)?.textContent?.trim()).toBe(words["invoice_customer.preparing"]);
     await pressDownload(el);

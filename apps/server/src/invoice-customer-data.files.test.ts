@@ -100,6 +100,11 @@ describe("buildInvoiceCustomerFiles", () => {
     expect(built.anyTaxRecord).toBe(expected.invoices.some((invoice) => invoice.taxRecord));
   });
 
+  it("writes the tax number it is given as invoices.json's own, without normalising it again", async () => {
+    const built = await buildInvoiceCustomerFiles(deps(), "ES12345678Z", await jordi());
+    expect((JSON.parse(invoicesText(built.files)) as { taxId: string }).taxId).toBe("ES12345678Z");
+  });
+
   it("names nothing of the other customers' or of staff in invoices.json", async () => {
     const text = invoicesText((await build()).files);
     const staff = await suite.db

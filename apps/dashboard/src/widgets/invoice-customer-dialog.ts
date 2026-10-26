@@ -175,14 +175,15 @@ export class InvoiceCustomerDialog extends LitElement {
   }
 
   async #downloadData(): Promise<void> {
-    const found = this.found;
-    if (this.downloading || found === null) return;
+    if (this.downloading || this.found === null) return;
     const download = ++this.#download;
+    // Every edit clears `found`, so this is the text Find sent. The server normalises both the
+    // same way; its normalised answer would be normalised a second time, which can change it.
     const sent = this.taxId;
     this.downloading = true;
     this.refusal = null;
     try {
-      const file = await this.api.downloadInvoiceCustomerData(found.taxId);
+      const file = await this.api.downloadInvoiceCustomerData(sent);
       if (download !== this.#download) return;
       const url = URL.createObjectURL(file.blob);
       const link = document.createElement("a");

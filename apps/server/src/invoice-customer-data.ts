@@ -31,21 +31,22 @@ export interface InvoiceCustomerSale {
 }
 
 /** Decision 6's search: one statement over the sales naming a customer, filtered by
- * `normaliseInvoiceTaxId`, then their columns by key. Call it inside a write-lock turn. */
+ * `normaliseInvoiceTaxId` of each stored number, then their columns by key. `taxId` is already
+ * normalised: normalising removes only one leading "ES", so a second pass would change it. Call it
+ * inside a write-lock turn. */
 export async function findInvoiceCustomerSales(
   tx: Transaction,
   taxId: string,
   options?: { chunk?: number },
 ): Promise<InvoiceCustomerSale[]> {
   const chunk = options?.chunk ?? SALE_LOOKUP_CHUNK;
-  const wanted = normaliseInvoiceTaxId(taxId);
   // No ORDER BY: ordering by issued_at walks the issue-time index and fetches every row by
   // position, slower than the plain scan (plan decision 6).
   const named = tx.all<{ id: string; counterparty_tax_id: string }>(
     sql`select id, counterparty_tax_id from sales where counterparty_tax_id is not null`,
   );
   const matched = named
-    .filter((row) => normaliseInvoiceTaxId(row.counterparty_tax_id) === wanted)
+    .filter((row) => normaliseInvoiceTaxId(row.counterparty_tax_id) === taxId)
     .map((row) => row.id);
   const found: InvoiceCustomerSale[] = [];
   for (let start = 0; start < matched.length; start += chunk) {
@@ -123,7 +124,7 @@ interface InvoiceRead {
 }
 
 /** Decision 6's invoice turns, then the PDFs outside any turn, with `nextTurn()` after each.
- * Throws a plain `Error` (cause attached) when any invoice cannot be made, after logging
+ * `taxId`, already normalised, is written as it is. Throws a plain `Error` (cause attached) when any invoice cannot be made, after logging
  * `invoice_customer.pdf_failed` with its sale id. */
 export async function buildInvoiceCustomerFiles(
   deps: InvoiceCustomerFilesDeps,
@@ -195,7 +196,7 @@ export async function buildInvoiceCustomerFiles(
     await nextTurn();
   }
   const file = {
-    taxId: normaliseInvoiceTaxId(taxId),
+    taxId,
     invoices: read.map(({ sale, pdf, taxRecord, emails }) => ({
       invoice: sale.invoice,
       issuedAt: sale.issuedAt,

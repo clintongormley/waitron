@@ -164,6 +164,33 @@ describe("the invoice customer search", () => {
     });
   });
 
+  it("removes one leading ES from the typed number, and only one", async () => {
+    const response = await ask(withTaxId(SEARCH, "ESES12345678Z"), fixture.venue.adminDashboard);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ taxId: "ES12345678Z", invoices: [] });
+    await refused(
+      await ask(withTaxId(DOWNLOAD, "ESES12345678Z"), fixture.venue.adminDashboard),
+      404,
+      { code: "invoice_customer.not_found", params: {} },
+    );
+  });
+
+  it("downloads the invoices its search listed when sent the same text", async () => {
+    for (const typed of ["es 12345678z", "ES12345678Z", "12.345.678-Z", "es b76543214"]) {
+      const found = (await (
+        await ask(withTaxId(SEARCH, typed), fixture.venue.adminDashboard)
+      ).json()) as { invoices: { invoice: string }[] };
+      expect(found.invoices.length).toBeGreaterThan(0);
+      const download = await ask(withTaxId(DOWNLOAD, typed), fixture.venue.adminDashboard);
+      expect(download.status).toBe(200);
+      const files = unzipSync(new Uint8Array(await download.arrayBuffer()));
+      const exported = JSON.parse(strFromU8(files["invoices.json"]!)) as typeof found;
+      expect(exported.invoices.map((row) => row.invoice)).toEqual(
+        found.invoices.map((row) => row.invoice),
+      );
+    }
+  });
+
   it("answers an unknown number with no invoices", async () => {
     expect(getCountryPack("ES")!.taxIdentifier!.validate(UNKNOWN_VALID).valid).toBe(true);
     const response = await ask(withTaxId(SEARCH, UNKNOWN_VALID), fixture.venue.adminDashboard);
