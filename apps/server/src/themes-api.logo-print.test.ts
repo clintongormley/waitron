@@ -19,7 +19,7 @@ import {
 } from "@waitron/media";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { drawLogoRasters } from "./receipt-logo.js";
+import { countBlackDots, drawLogoRasters } from "./receipt-logo.js";
 import { mountThemesApi, type ThemeLogoPrint } from "./themes-api.js";
 import { forgetVenueTheme } from "./venue-theme.js";
 
@@ -118,20 +118,10 @@ const refusal = (code: string, params: Record<string, unknown> = {}) => ({
   error: { code, params },
 });
 
-function setBits(data: string, widthDots: number, heightDots: number): number {
-  const bits = Buffer.from(data, "base64");
-  const stride = Math.ceil(widthDots / 8);
-  let count = 0;
-  for (let y = 0; y < heightDots; y++)
-    for (let x = 0; x < widthDots; x++)
-      if ((bits[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) !== 0) count++;
-  return count;
-}
-
 async function rows(): Promise<unknown[]> {
-  const images = await suite.db.execute(sql`select * from media_images order by id`);
+  const imageRows = await suite.db.execute(sql`select * from media_images order by id`);
   const themes = await suite.db.execute(sql`select * from custom_themes order by id`);
-  return [images.rows, themes.rows];
+  return [imageRows.rows, themes.rows];
 }
 
 describe("GET /management-api/theme-logo-print", () => {
@@ -145,7 +135,13 @@ describe("GET /management-api/theme-logo-print", () => {
     const body = (await res.json()) as ThemeLogoPrint;
     expect(body.paperDots).toBe(504);
     expect(body.picture).toEqual(expected);
-    expect(body.blackDots).toBe(setBits(expected.data, expected.widthDots, expected.heightDots));
+    expect(body.blackDots).toBe(
+      countBlackDots({
+        widthDots: expected.widthDots,
+        heightDots: expected.heightDots,
+        bits: Buffer.from(expected.data, "base64"),
+      }),
+    );
     expect(body.blackDots).toBeGreaterThan(0);
   });
 
@@ -187,6 +183,22 @@ describe("GET /management-api/theme-logo-print", () => {
 
   it("an image the library does not have draws nothing", async () => {
     const res = await ask(`image=${"c".repeat(64)}.png`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ paperDots: 504, picture: null, blackDots: 0 });
+  });
+
+  it("an image whose source bytes are gone draws nothing", async () => {
+    await suite.db.execute(sql`delete from media_image_data`);
+    await suite.db.execute(sql`delete from media_image_blobs`);
+    const res = await ask(`image=${A}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ paperDots: 504, picture: null, blackDots: 0 });
+  });
+
+  it("an image whose source bytes do not decode draws nothing", async () => {
+    await suite.db.execute(sql`update media_image_data set bytes = ${new Uint8Array([1, 2, 3])}`);
+    await suite.db.execute(sql`update media_image_blobs set bytes = ${new Uint8Array([1, 2, 3])}`);
+    const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ paperDots: 504, picture: null, blackDots: 0 });
   });

@@ -5,11 +5,11 @@ import { authorizeManager } from "@waitron/identity";
 import {
   createCustomTheme,
   deleteCustomTheme,
+  encodeLogoRaster,
   listCustomThemes,
   prepareThemeSave,
   renameCustomTheme,
   saveCustomTheme,
-  encodeLogoRaster,
   setThemeInUse,
   type ReceiptLogoRasters,
   type StoredTheme,
