@@ -1931,7 +1931,7 @@ describe("till-station-queue — a seated party's groups", () => {
     expect(el.shadowRoot!.querySelector('[data-fire-group="g-4"]')).toBeNull();
   });
 
-  it("draws a party's bill as one card per sent group, the dishes with no group first, and no course headers", async () => {
+  it("draws a party's bill as one card per sent group, the dishes with no group first, each card's one course in its heading", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       stationId: "st-1",
@@ -1947,7 +1947,9 @@ describe("till-station-queue — a seated party's groups", () => {
       [...held!.querySelectorAll<HTMLElement>("[data-item]")].map((i) => i.dataset.item),
     ).toEqual(["it-steak", "it-fish"]);
     expect(el.shadowRoot!.querySelector(".course-head")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Principales");
+    expect(held!.querySelector(".ticket-head")!.textContent).toContain(
+      partyOrder.items[0]!.course!.name,
+    );
   });
 
   it("a held group's card says it is held, not released, and its lines are greyed and not bump targets", async () => {
@@ -3096,6 +3098,125 @@ describe("the board's cards", () => {
     el.addEventListener("reprint-order", (e) => reprinted((e as CustomEvent).detail));
     for (const reprint of reprints) reprint.click();
     expect(reprinted.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-2" }]]);
+  });
+
+  const starters = { id: "co-start", name: "Starters", displayOrder: 1 };
+  const mains = { id: "co-main", name: "Mains", displayOrder: 2 };
+  const fired = "2026-08-17T10:00:00.000Z";
+  const stateWord = (card: Element, id: string) =>
+    card.querySelector(`[data-item="${id}"] .line-state`);
+
+  it("names the group's course in its heading when its dishes share one", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("steak", fired, { group: sent("g-2", 2), course: mains }),
+          dish("fish", fired, { group: sent("g-2", 2), course: mains }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [card] = cardsIn(el.shadowRoot!);
+    const head = flat(card!.querySelector(".ticket-head")!);
+    expect(head).toContain(t("table.group_n").replace("{n}", "2"));
+    expect(head).toContain("Mains");
+    expect(card!.querySelector(".course-head")).toBeNull();
+    expect(dishesOn(card!)).toEqual(["steak", "fish"]);
+  });
+
+  it("puts course heads inside a card whose dishes span two courses, null course first", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("steak", fired, { group: sent("g-1", 1), course: mains }),
+          dish("soup", fired, { group: sent("g-1", 1), course: starters }),
+          dish("bread", fired, { group: sent("g-1", 1), course: null }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [card] = cardsIn(el.shadowRoot!);
+    const sections = [...card!.querySelectorAll<HTMLElement>("[data-course]")];
+    expect(sections.map((section) => section.dataset.course)).toEqual([
+      "none",
+      "co-start",
+      "co-main",
+    ]);
+    expect(sections.map((section) => section.querySelector(".course-head")?.textContent)).toEqual([
+      undefined,
+      "Starters",
+      "Mains",
+    ]);
+    expect(sections.map(dishesOn)).toEqual([["bread"], ["soup"], ["steak"]]);
+    const head = flat(card!.querySelector(".ticket-head")!);
+    expect(head).not.toContain("Starters");
+    expect(head).not.toContain("Mains");
+  });
+
+  it("a dish ahead of its card's column says its state; one at the column says none", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("waiting", fired, { group: sent("g-1", 1) }),
+          dish("cooking", fired, { group: sent("g-1", 1), state: "preparing" }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [card] = cardsIn(column(el, "queued"));
+    expect(flat(stateWord(card!, "cooking")!)).toBe(t("station.state.preparing"));
+    expect(stateWord(card!, "waiting")).toBeNull();
+  });
+
+  it("a held dish on a fired card says it is held, and is not a button", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("fired-by-hand", fired, { group: sent("g-1", 1, "held") }),
+          dish("kept-back", null, { group: sent("g-1", 1, "held") }),
+          dish("all-held", null, { group: sent("g-2", 2, "held") }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [mixed, held] = cardsIn(column(el, "queued"));
+    expect(mixed!.dataset.cardGroup).toBe("g-1");
+    expect(flat(stateWord(mixed!, "kept-back")!)).toBe(t("station.group_held"));
+    expect(mixed!.querySelector('button[data-item="kept-back"]')).toBeNull();
+    expect(mixed!.querySelector('button[data-item="fired-by-hand"]')).not.toBeNull();
+    expect(stateWord(mixed!, "fired-by-hand")).toBeNull();
+    // The control: on a card that is itself held, the heading says it and the dish says nothing.
+    expect(held!.dataset.cardGroup).toBe("g-2");
+    expect(stateWord(held!, "all-held")).toBeNull();
+  });
+
+  it("a Ready dish on a Preparing card reads Ready, in English and in Spanish", async () => {
+    const mountMixed = async () =>
+      (
+        await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [
+            bill("wo-1", 5, [
+              dish("cooking", fired, { group: sent("g-1", 1), state: "preparing" }),
+              dish("plated", fired, { group: sent("g-1", 1), state: "ready" }),
+            ]),
+          ],
+          stationId: "st-1",
+        })
+      ).el;
+    const english = cardsIn(column(await mountMixed(), "preparing"))[0]!;
+    expect(flat(stateWord(english, "plated")!)).toBe("Ready");
+    expect(stateWord(english, "cooking")).toBeNull();
+    cleanupWidgets();
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanish = cardsIn(column(await mountMixed(), "preparing"))[0]!;
+      const expected = t("station.state.ready");
+      expect(expected).not.toBe("Ready");
+      expect(flat(stateWord(spanish, "plated")!)).toBe(expected);
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("keeps a long dish name whole inside its card at 1024 px", async () => {

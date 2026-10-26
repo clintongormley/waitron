@@ -366,6 +366,11 @@ export class TillStationQueue extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .line-state {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
       .line-station,
       .notice-station {
         display: block;
@@ -830,9 +835,10 @@ export class TillStationQueue extends LitElement {
   #courseSection(
     section: CourseSection,
     row: (item: StationQueueItem) => TemplateResult,
+    headed: boolean,
   ): TemplateResult {
     return html`<div class="course" data-course=${section.course?.id ?? "none"}>
-      ${section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
+      ${headed && section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
       <ul class="lines">
         ${this.#sectionLines(section.items, row)}
       </ul>
@@ -907,7 +913,11 @@ export class TillStationQueue extends LitElement {
         ? "held"
         : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
     const labels = [...new Set(card.orders.map((order) => order.label).filter((label) => !!label))];
-    const row = (item: StationQueueItem) => this.#renderLine(card.orderOf.get(item.id)!, item);
+    const row = (item: StationQueueItem) =>
+      this.#renderLine(card.orderOf.get(item.id)!, item, this.#stateWord(card, item));
+    const sections = this.#courseSections(card.items);
+    // One shared course is named in the heading; its dishes keep their `.course` wrapper (D5).
+    const sharedCourse = sections.length === 1 ? sections[0]!.course : null;
     // On a card merging bills, each bill's facts and actions name their bill (D11).
     const tag = (order: StationQueueGroup) =>
       card.orders.length === 1 ? "" : ` #${order.orderNumber}`;
@@ -927,6 +937,7 @@ export class TillStationQueue extends LitElement {
         ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
         ${labels.map((label) => html`<span class="label">${label}</span>`)}
         ${group === null ? nothing : html`<span class="group-name">${groupName(group)}</span>`}
+        ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
         ${
           group?.state === "held"
             ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
@@ -941,13 +952,7 @@ export class TillStationQueue extends LitElement {
       ${card.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(first) : nothing}
       ${card.orders.map((order) => this.#kitchenNote(order, tag(order)))}
       ${card.orders.map((order) => this.#printProblem(order, tag(order)))}
-      ${
-        group === null
-          ? this.#courseSections(card.items).map((section) => this.#courseSection(section, row))
-          : html`<ul class="lines">
-              ${this.#sectionLines(card.items, row)}
-            </ul>`
-      }
+      ${sections.map((section) => this.#courseSection(section, row, sections.length > 1))}
       ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
       ${card.orders.map((order) => this.#collectAction(order, tag(order)))}
       ${card.orders.map((order) => this.#reprintAction(order, tag(order)))}
@@ -977,11 +982,27 @@ export class TillStationQueue extends LitElement {
     return item.firedAt !== null && NEXT[item.state] !== undefined;
   }
 
-  #renderLine(group: MergedQueueGroup, item: StationQueueItem): TemplateResult {
+  /** A dish at its card's column says nothing, the column does; one further on says its state, and a
+   * held dish on a card that is not itself held says so (D12). */
+  #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
+    let word: string | undefined;
+    if (item.firedAt === null) {
+      if (card.since !== null) word = t("station.group_held");
+    } else if (COLUMNS.indexOf(item.state) > COLUMNS.indexOf(card.column)) {
+      word = t(`station.state.${item.state}` as const);
+    }
+    return word === undefined ? nothing : html`<span class="line-state">${word}</span>`;
+  }
+
+  #renderLine(
+    group: MergedQueueGroup,
+    item: StationQueueItem,
+    state: TemplateResult | typeof nothing,
+  ): TemplateResult {
     const station =
       group.stationId === undefined ? undefined : this.stationNames?.get(group.stationId);
     const main = html`<span class="line-main">
-        <span class="line-name">${this.#dish(item)}</span> </span
+        <span class="line-name">${this.#dish(item)}</span>${state} </span
       >${
         station === undefined
           ? nothing
