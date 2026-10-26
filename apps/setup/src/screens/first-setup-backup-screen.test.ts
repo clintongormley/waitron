@@ -4,7 +4,7 @@ import type { LitElement } from "lit";
 import type { WtButton } from "@waitron/ui";
 import { FirstSetupBackupScreen } from "./first-setup-backup-screen.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import { backupRepairStrings } from "../i18n/backup-repair.js";
 import {
   repairApi,
@@ -551,10 +551,14 @@ it.each(["back", "source"])(
 );
 
 const root = "/setup-api/first-setup/resolution/backup";
-const discardedAt = "2026-10-25T14:41:00.000Z";
-function shownAt(iso: string) {
-  return new Date(iso).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
-}
+// 14:41 on 25 October 2026 in the browser's own time zone, so the shown time below is fixed.
+const discardedAt = new Date(2026, 9, 25, 14, 41).toISOString();
+const shownDiscardedAt = { "en-GB": "25 Oct 2026, 14:41", "es-ES": "25 oct 2026, 14:41" } as const;
+const discardedText = (locale: keyof typeof shownDiscardedAt) =>
+  backupRepairStrings[locale === "es-ES" ? "es" : "en"].discarded.replace(
+    "{at}",
+    shownDiscardedAt[locale],
+  );
 const refused = (code: string, params: Record<string, unknown> = {}) =>
   Response.json(
     { error: { code, params } },
@@ -634,12 +638,7 @@ it.each(["en-GB", "es-ES"] as const)(
       );
       await vi.advanceTimersByTimeAsync(30_000);
       await expect.poll(() => q(el, "discarded")).not.toBeNull();
-      expect(q(el, "discarded").textContent).toBe(
-        backupRepairStrings[locale === "es-ES" ? "es" : "en"].discarded.replace(
-          "{at}",
-          shownAt(discardedAt),
-        ),
-      );
+      expect(q(el, "discarded").textContent).toBe(discardedText(locale));
       expectNoStep(el);
       expect(q(el, "stopped")).toBeNull();
       expect(q(el, "reload-status")).not.toBeNull();
@@ -663,9 +662,7 @@ it("shows the discarded sentence when completing a discarded recovery is refused
   await click(el, "resume");
   await expect.poll(() => q(el, "review")).not.toBeNull();
   await click(el, "commit");
-  await expect
-    .poll(() => q(el, "discarded")?.textContent)
-    .toBe(backupRepairStrings.en.discarded.replace("{at}", shownAt(discardedAt)));
+  await expect.poll(() => q(el, "discarded")?.textContent).toBe(discardedText("en-GB"));
   expectNoStep(el);
 });
 
@@ -712,6 +709,121 @@ it("still offers resume when the saved recovery is not reported stopped", async 
   expect(q(el, "resume")).not.toBeNull();
   expect(q(el, "stopped")).toBeNull();
   expect(calls.map((call) => call.action)).toEqual(["status", "resolution", "activity"]);
+});
+
+it("keeps the session and its renewals when the box answers a renewal with a fault", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el, calls } = await openedWithRenewal(() =>
+      Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 }),
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    await new Promise((done) => setTimeout(done, 50));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await el.updateComplete;
+    expect(calls.filter((call) => call.path === `${root}/renew`)).toHaveLength(2);
+    expect(q(el, "stopped")).toBeNull();
+    expect(q(el, "review")).not.toBeNull();
+    expect(calls.some((call) => call.action === "close")).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each([
+  { locale: "en-GB", action: "open" },
+  { locale: "es-ES", action: "open" },
+  { locale: "en-GB", action: "resume" },
+  { locale: "es-ES", action: "resume" },
+] as const)(
+  "shows the discarded sentence when $action is refused as discarded, in $locale",
+  async ({ locale, action }) => {
+    setLocale(locale);
+    const { el } = await mount((called) =>
+      called === "status"
+        ? Response.json({ phase: "restored", proofRequired: true, recoveryId: saved.recoveryId })
+        : called === action
+          ? refused("setup.recovery_discarded", { discardedAt })
+          : undefined,
+    );
+    await bucketProof(el);
+    await click(el, action === "open" ? "prove" : "resume");
+    await expect.poll(() => q(el, "discarded")?.textContent).toBe(discardedText(locale));
+    expectNoStep(el);
+    expect(q(el, "reload-status")).not.toBeNull();
+  },
+);
+
+it("shows a discarded time it cannot read as the box sent it", async () => {
+  const { el } = await mount((action) =>
+    action === "open"
+      ? refused("setup.recovery_discarded", { discardedAt: "not a time" })
+      : undefined,
+  );
+  await bucketProof(el);
+  await click(el, "prove");
+  await expect
+    .poll(() => q(el, "discarded")?.textContent)
+    .toBe(backupRepairStrings.en.discarded.replace("{at}", "not a time"));
+});
+
+it.each([
+  {
+    name: "a refused read",
+    answer: () =>
+      Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 }),
+  },
+  { name: "an answer without activity", answer: () => Response.json({}) },
+  {
+    name: "an activity that is not a record",
+    answer: () => Response.json({ activity: "stopped" }),
+  },
+])(
+  "offers no resume when it cannot tell whether the saved recovery stopped: $name",
+  async ({ answer }) => {
+    const { api, calls } = repairApi((action) =>
+      action === "status"
+        ? Response.json({ phase: "restored", proofRequired: true, recoveryId: saved.recoveryId })
+        : action === "activity"
+          ? answer()
+          : undefined,
+    );
+    const { el } = await mountWidget<FirstSetupBackupScreen>("setup-first-backup", {
+      api,
+      inspection,
+    });
+    await expect.poll(() => q(el, "reload-status")).not.toBeNull();
+    expect(q(el, "resume")).toBeNull();
+    expect(q<WtButton>(el, "prove").disabled).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+    ).toBe(backupRepairStrings.en.statusFailed);
+    expect(calls.map((call) => call.action)).toEqual(["status", "resolution", "activity"]);
+  },
+);
+
+it("ends the Cloud wait and lets go of it when the source changes away from Cloud", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el, calls, cloudRenewals } = await cloudWait(() => Response.json({ renewed: true }));
+    const holder = (
+      calls.find((call) => call.path === `${root}/cloud/start`)!.body as {
+        holder: string;
+      }
+    ).holder;
+    q(el, "source").dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bucket" } }));
+    await el.updateComplete;
+    await expect
+      .poll(() => calls.filter((call) => call.path === `${root}/cloud/release`).map((c) => c.body))
+      .toEqual([{ holder }]);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(cloudRenewals()).toHaveLength(0);
+    el.remove();
+    await new Promise((done) => setTimeout(done, 50));
+    expect(calls.filter((call) => call.path === `${root}/cloud/release`)).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 async function cloudWait(renew: () => Response) {
@@ -785,9 +897,7 @@ it("a Cloud renewal refused as discarded shows the discarded sentence with its t
   try {
     const { el } = await cloudWait(() => refused("setup.recovery_discarded", { discardedAt }));
     await vi.advanceTimersByTimeAsync(30_000);
-    await expect
-      .poll(() => q(el, "discarded")?.textContent)
-      .toBe(backupRepairStrings.en.discarded.replace("{at}", shownAt(discardedAt)));
+    await expect.poll(() => q(el, "discarded")?.textContent).toBe(discardedText("en-GB"));
     expectNoStep(el);
   } finally {
     vi.useRealTimers();

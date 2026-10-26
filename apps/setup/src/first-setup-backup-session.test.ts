@@ -482,3 +482,38 @@ it("keeps renewing when a renewal could not reach the box", async () => {
     vi.useRealTimers();
   }
 });
+
+it("keeps renewing when the box answers a renewal with a fault rather than ending the session", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { session, renewals, refusals } = leaseFixture(() =>
+      Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 }),
+    );
+    await session.open(request);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await new Promise((done) => setTimeout(done, 50));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(renewals()).toHaveLength(2);
+    expect(refusals).toEqual([]);
+    await session.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("ends the session's renewals when the box says the session is no longer its own", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { session, renewals, refusals } = leaseFixture(() =>
+      Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 }),
+    );
+    await session.open(request);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect.poll(() => refusals).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renewals()).toHaveLength(1);
+    await session.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
