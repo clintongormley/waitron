@@ -173,10 +173,10 @@ describe("till-shell's menu badges", () => {
 
   it("on the bar an option with help stays a plain button, with no row", async () => {
     setHelpMode(true);
-    const el = await mountShell({ ...handheld, affordances: [], transferAvailable: false }, 1500);
-    const profile = el.shadowRoot!.querySelector<Lit>(".session > wt-button.profile");
-    expect(profile).not.toBeNull();
-    expect(el.shadowRoot!.querySelector(".session > wt-menu-row")).toBeNull();
+    const el = await mountShell(till, 1280);
+    const pass = el.shadowRoot!.querySelector<Lit>(".till-strip > wt-button.expo");
+    expect(pass).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".till-strip wt-menu-row")).toBeNull();
   });
 
   it.each([

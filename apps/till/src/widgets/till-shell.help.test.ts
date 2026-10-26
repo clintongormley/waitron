@@ -5,7 +5,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { currentHelpMode, setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
-import type { ShellAffordance, TillShell } from "./till-shell.js";
+import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { helpText } from "../i18n/help-strings.js";
 
@@ -176,49 +176,6 @@ describe("till-shell's Help switch", () => {
     const { el } = await mountWidget<TillShell>("till-shell", { ...till, ...props });
     await settle(el);
     expect(el.shadowRoot!.querySelector("wt-help-switch")).toBeNull();
-  });
-
-  it("above phone width items still leave for More in LEAVE_ORDER's order", async () => {
-    setLocale("es-ES");
-    const affordances: ShellAffordance[] = ["find-bill", "station", "expo", "schedule"];
-    const leaveOrder = [
-      ["transfers", "[data-open-transfers]"],
-      ["equipment", ".equipment"],
-      ["profile", ".profile"],
-      ["schedule", ".schedule"],
-      ["station", ".station"],
-      ["expo", ".expo"],
-      ["operator", ".operator"],
-    ] as const;
-    const failures: string[] = [];
-    for (let width = 660; width <= 1500; width += 40) {
-      await page.viewport(width, 844);
-      await frame();
-      const { el, host } = await mountWidget<TillShell>("till-shell", {
-        ...handheld,
-        operatorName: "Ana Fernández",
-        affordances,
-        canSwitchProfile: true,
-        transferAvailable: true,
-      });
-      await settle(el);
-      await settle(el);
-      const menu = moreOf(el);
-      const inMore =
-        menu === null
-          ? []
-          : leaveOrder
-              .filter(([, selector]) => menu.querySelector(selector) !== null)
-              .map(([k]) => k);
-      const leading = leaveOrder.slice(0, inMore.length).map(([k]) => k);
-      if (JSON.stringify(inMore) !== JSON.stringify(leading))
-        failures.push(`${width}: More holds ${inMore.join(",")}`);
-      const head = el.shadowRoot!.querySelector<HTMLElement>(".head")!;
-      if (head.scrollWidth > head.clientWidth)
-        failures.push(`${width}: head ${head.scrollWidth} > ${head.clientWidth}`);
-      host.remove();
-    }
-    expect(failures).toEqual([]);
   });
 
   it("the badge size inside the shell is 32px with a 24px circle", async () => {

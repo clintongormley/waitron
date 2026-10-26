@@ -37,41 +37,13 @@ import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
 
-/** The screens a tab names: on a handheld the Order screen is reached through its table's button. */
+/** The screens a tab names: a handheld draws no Order tab. */
 type TabScreen = Exclude<BuiltInScreen, "order">;
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
 
 export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
-
-type ActionVariant = "secondary" | "ghost";
-
-/** An item of the bar that can move into More; "transfers" is the count and its button together,
- * "operator" the name and everything in its menu together. */
-type BarItem =
-  | "transfers"
-  | "find-bill"
-  | "station"
-  | "expo"
-  | "schedule"
-  | "profile"
-  | "zones"
-  | "equipment"
-  | "operator";
-
-/** First to leave the bar first: the lowest priority first, and who is signed in last. `#barItems`
- * draws the others in the reverse order, so the rightmost of them leaves first. */
-const LEAVE_ORDER: readonly BarItem[] = [
-  "transfers",
-  "equipment",
-  "profile",
-  "schedule",
-  "station",
-  "expo",
-  "find-bill",
-  "operator",
-];
 
 /** Properties whose change owes a step-back, so may let items come back to the bar. A change of
  * `transferCount` alone does not owe one. */
@@ -490,9 +462,8 @@ export class TillShell extends LitElement {
     this.#stopLogoRetry();
   }
 
-  /** With More closed and above phone width: 0, everything on the bar; 1, the brand mark (the venue's
-   * logo, or the word) hidden; n, the brand mark hidden and the first n − 1 present items of
-   * `LEAVE_ORDER` in More. */
+  /** With More closed and above phone width: 0, the brand mark (the venue's logo, or the word) and
+   * the name on the bar; 1, the brand mark hidden; 2, the brand mark hidden and the name in More. */
   @state() private steps = 0;
   #run = 0;
   #stepBackOwed = false;
@@ -505,59 +476,31 @@ export class TillShell extends LitElement {
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
   #watchedPopup?: Element;
-  #shown: ReadonlySet<BarItem> = new Set();
-  #held?: ReadonlySet<BarItem>;
+  #shownName = false;
+  #heldName?: boolean;
   readonly #onPopupToggle = () => {
     this.#release();
     if (this.#menuOpen()) return;
     if (this.#stepBackOwed) void this.#fit();
   };
 
-  /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
-   * `steps` to cover what it held, so closing it moves nothing back before the fit steps back. Runs before every
-   * render as well as on the toggle event, because a render can come between closing and that
-   * event. */
+  /** An open More can hold the name though `steps` puts it on the bar; once it has closed, above
+   * phone width, raise `steps` to cover it, so closing it moves nothing back before the fit steps
+   * back. Runs before every render as well as on the toggle event, because a render can come between
+   * closing and that event. */
   #release(): void {
-    const held = this.#held;
+    const held = this.#heldName;
     if (held === undefined || this.#menuOpen()) return;
-    this.#held = undefined;
-    if (this.phone) return;
-    const present = this.#present();
-    const covering = Math.max(0, ...present.map((item, i) => (held.has(item) ? i + 2 : 0)));
-    if (covering > this.steps) {
-      this.steps = covering;
-      this.#stepBackOwed = true;
-    }
+    this.#heldName = undefined;
+    if (this.phone || !held || this.steps >= 2) return;
+    this.steps = 2;
+    this.#stepBackOwed = true;
   }
 
-  #present(): BarItem[] {
-    const has: Record<BarItem, boolean> = {
-      transfers: this.transferCount !== undefined || this.transferAvailable,
-      "find-bill": false,
-      station: this.affordances.includes("station"),
-      expo: this.affordances.includes("expo"),
-      schedule: this.affordances.includes("schedule"),
-      profile: this.canSwitchProfile,
-      zones: false,
-      equipment: true,
-      operator: true,
-    };
-    return LEAVE_ORDER.filter((item) => has[item]);
-  }
-
-  /** While More is open no item moves from it to the bar: what it showed stays, whatever `steps`
-   * now selects. */
-  #moved(): ReadonlySet<BarItem> {
-    const present = this.#present();
-    const fitted = this.phone ? present : present.slice(0, Math.max(0, this.steps - 1));
-    const moved = new Set(
-      this.#menuOpen()
-        ? present.filter((item) => fitted.includes(item) || this.#shown.has(item))
-        : fitted,
-    );
-    if (this.affordances.includes("find-bill")) moved.add("find-bill");
-    moved.add("zones");
-    return moved;
+  /** On a handheld everything but the name is always in More. While More is open the name does not
+   * move from it to the bar, whatever `steps` now selects. */
+  #nameInMore(): boolean {
+    return this.phone || this.steps >= 2 || (this.#menuOpen() && this.#shownName);
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -692,8 +635,7 @@ export class TillShell extends LitElement {
       }
       this.#stepBackOwed = false;
     }
-    const most = this.#present().length + 1;
-    while (this.#wraps() && this.steps < most) {
+    while (this.#wraps() && this.steps < 2) {
       this.steps += 1;
       if (await stale()) return;
     }
@@ -760,16 +702,19 @@ export class TillShell extends LitElement {
     >`;
   }
 
-  /** Each bar item, drawn when it is in More (`inMore`) or on the bar (not `inMore`). */
-  #items(
-    moved: ReadonlySet<BarItem>,
-    inMore: boolean,
-  ): Record<
-    Exclude<BarItem, "operator" | "transfers"> | "transfer-count" | "transfer-button",
+  /** A handheld's More entries for the screens and settings. */
+  #items(): Record<
+    | "find-bill"
+    | "expo"
+    | "station"
+    | "schedule"
+    | "profile"
+    | "zones"
+    | "equipment"
+    | "transfer-count"
+    | "transfer-button",
     TemplateResult | typeof nothing
   > {
-    const variant: ActionVariant = inMore ? "ghost" : "secondary";
-    const here = (item: BarItem) => moved.has(item) === inMore;
     const button = (
       cls: string | typeof nothing,
       type: string,
@@ -781,59 +726,40 @@ export class TillShell extends LitElement {
         html`<wt-button
           class=${cls}
           ?data-open-transfers=${opensTransfers}
-          variant=${variant}
-          align=${inMore ? "start" : nothing}
+          variant="ghost"
+          align="start"
           @click=${() => this.#emit(type)}
           >${label}</wt-button
         >`,
-        inMore ? help : undefined,
+        help,
         label,
       );
-    const affordance = (
-      item: ShellAffordance & BarItem,
-      type: string,
-      label: string,
-      help?: HelpKey,
-    ) =>
-      here(item) && this.affordances.includes(item) ? button(item, type, label, help) : nothing;
+    const affordance = (item: ShellAffordance, type: string, label: string, help?: HelpKey) =>
+      this.affordances.includes(item) ? button(item, type, label, help) : nothing;
     return {
       "find-bill": affordance("find-bill", "find-bill", t("find_bill.open")),
       expo: affordance("expo", "show-expo", t("expo.open"), "help.more.pass"),
       station: affordance("station", "show-station", t("station.open")),
       schedule: affordance("schedule", "show-schedule", t("schedule.open")),
-      profile:
-        here("profile") && this.canSwitchProfile
-          ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
-          : nothing,
-      zones: here("zones")
-        ? button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones")
+      profile: this.canSwitchProfile
+        ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
         : nothing,
-      equipment: here("equipment")
-        ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment")
-        : nothing,
+      zones: button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones"),
+      equipment: button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment"),
       "transfer-count":
-        here("transfers") && this.transferCount !== undefined
-          ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
-              >${this.#transferText()}</span
-            >`
+        this.transferCount !== undefined
+          ? html`<span data-test="department-transfers">${this.#transferText()}</span>`
           : nothing,
-      "transfer-button":
-        here("transfers") && this.transferAvailable
-          ? button(
-              nothing,
-              "open-transfers",
-              t("department_transfer.short"),
-              "help.more.transfers",
-              true,
-            )
-          : nothing,
+      "transfer-button": this.transferAvailable
+        ? button(
+            nothing,
+            "open-transfers",
+            t("department_transfer.short"),
+            "help.more.transfers",
+            true,
+          )
+        : nothing,
     };
-  }
-
-  /** The items on the bar, in the bar's order. */
-  #barItems(moved: ReadonlySet<BarItem>): TemplateResult {
-    const items = this.#items(moved, false);
-    return html`${items["find-bill"]}${items.expo}${items.station}${items.schedule}${items.profile}${items.zones}${items.equipment}${items["transfer-count"]}${items["transfer-button"]}`;
   }
 
   /** The name and its menu on the bar. A handheld's Theme and Log out are in More instead, so
@@ -942,8 +868,8 @@ export class TillShell extends LitElement {
   }
 
   /** A handheld's More, in the design's order: the name's group, the screens, Settings, Log out. */
-  #menu(moved: ReadonlySet<BarItem>): TemplateResult {
-    const items = this.#items(moved, true);
+  #menu(nameInMore: boolean): TemplateResult {
+    const items = this.#items();
     const screens = [
       items.expo,
       items.station,
@@ -953,8 +879,7 @@ export class TillShell extends LitElement {
       items["transfer-count"],
       items["transfer-button"],
     ];
-    const pending =
-      moved.has("transfers") && this.transferCount !== undefined && this.transferCount > 0;
+    const pending = this.transferCount !== undefined && this.transferCount > 0;
     return html`<wt-row-actions
       icon="hamburger"
       align="end"
@@ -976,7 +901,7 @@ export class TillShell extends LitElement {
           : nothing
       }
       ${
-        moved.has("operator")
+        nameInMore
           ? html`${this.#operatorName()}${this.#operatorActions(false)}
               <hr class="menu-rule" />`
           : nothing
@@ -1117,9 +1042,9 @@ export class TillShell extends LitElement {
 
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
-    const moved = this.#moved();
-    this.#shown = moved;
-    if (this.#menuOpen()) this.#held = moved;
+    const nameInMore = this.#nameInMore();
+    this.#shownName = nameInMore;
+    if (this.#menuOpen()) this.#heldName = nameInMore;
     const screens = builtInScreensFor(this.formFactor).filter(
       (screen): screen is TabScreen =>
         screen !== "order" &&
@@ -1139,7 +1064,7 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill" && item !== "zones") ? nothing : this.#brandMark()}
+                  ${this.formFactor === "till" || this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${
                     this.formFactor === "till"
                       ? html`<div class="till-strip">
@@ -1151,9 +1076,9 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorMenu()}${this.#tillMenu()}` : html`${this.#barItems(moved)}${moved.has("operator") ? nothing : this.#operatorMenu()}${this.#helpSwitch()}${this.#menu(moved)}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorMenu()}${this.#tillMenu()}` : html`${nameInMore ? nothing : this.#operatorMenu()}${this.#helpSwitch()}${this.#menu(nameInMore)}`}
                   </div>
-                  ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
+                  ${this.formFactor !== "till" ? this.#transferStatus() : nothing}
                 </header>
                 <slot name="notices"></slot>
               `
