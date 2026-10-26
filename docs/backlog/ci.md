@@ -3,6 +3,18 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## Tests that read a built command's error output fail under Claude Code
+
+The command's stderr
+begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
+seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
+plan, E8 and E13). Found while planning A798-B slice 8. On 2026-10-26, during A980 S1a2,
+`packages/provisioning/src/first-setup-command-import.test.ts`'s case "the actual relocated command
+resumes a retained import and publishes it once" failed this way (its child's stderr held
+`<claude-code-hint …/>` where the case expects it empty) and passed under
+`env -i HOME PATH TMPDIR`; it fails the same way on `27ae35c09` and `d23e32966`. Next action: find
+which inherited variable lets the hint through and clear it in the cases' child environment.
+
 ## A backlog detail link still names the old five-handler heading
 
 The till entry’s
@@ -26,24 +38,23 @@ differ. Next: after a week of nightly runs, read their job durations and set the
 
 ## Both image jobs still run `docker/setup-buildx-action`
 
-- **Both image jobs still run `docker/setup-buildx-action`**, whose only stated reason was the
-  cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
-  print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
-  action queued.
+The only stated reason was the
+cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
+print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
+action queued.
 
 ## A new branch pushed while the refresh fails still has its range start at the local `origin/main`'s merge base
 
-- **A new branch pushed while the refresh fails still has its range start at the local
-  `origin/main`'s merge base** — left open by the pre-push hook's sign-off fixes, A392 (#1421) and
-  A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
-  queued.
+Left open by the pre-push hook's sign-off fixes, A392 (#1421) and
+A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
+queued.
 
 ## `bundle-smoke` builds only the credentials and server bundles
 
-- **`bundle-smoke` builds only the credentials and server bundles**, so a change to
-  `scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
-  through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
-  in CI.
+A change to
+`scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
+through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
+in CI.
 
 ## Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id
 
@@ -54,31 +65,30 @@ or record why a sale can never carry one. Left open by A810 (#1886).
 
 ## The hint's cover stops at the migration run, and provisioning runs after it
 
-- **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
-  provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
-  succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
-  curated line. Nobody has hit this.
+A module's
+provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
+succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
+curated line. Nobody has hit this. Left open by #343.
 
 ## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
 
-- **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe** (its
-  fixture closes the handles first, which removes the sidecars). The wipe's sidecar removal is
-  pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
-  on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+The
+fixture closes the handles first, which removes the sidecars. The wipe's sidecar removal is
+pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
+on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
 
 ## Loose ends left by W92 (#1250)
 
-- **Loose ends left by W92 (#1250).**
-  - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-    during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
-    its final head.
+- Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
+  during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
+  its final head.
 
 ## The server holds two separate 100-character limits for text a request sends
 
-- **The server holds two separate 100-character limits for text a request sends**: `SEARCH_MAX`
-  (`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
-  Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
-  the same limit and, if so, share one constant.
+`SEARCH_MAX`
+(`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
+Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
+the same limit and, if so, share one constant.
 
 ## The test-shape half of #339's lesson is unwritten
 
@@ -146,25 +156,24 @@ Vitest 4.1.11 reads it.
 
 ## What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open
 
-- **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
-  `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
-  container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
-  `scripts/scratch-dir.mjs` measures 83% of branches, because the line for a missing `/dev/shm` runs
-  only on macOS; the root project's thresholds still pass. Neither is queued. Receipt:
-  [ci-and-gates.md](../developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
+`scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
+container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
+`scripts/scratch-dir.mjs` measures 83% of branches, because the line for a missing `/dev/shm` runs
+only on macOS; the root project's thresholds still pass. Neither is queued. Receipt:
+[ci-and-gates.md](../developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 
 ## What the landing-port fix (A80, PR #740) left open
 
-- **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)`
-  (`apps/server/src/testing/free-ports.ts`) holds every probe until the last port is drawn, but a
-  port is still released before the server binds it, so another test worker drawing or connecting
-  in that gap can take it; nothing has measured how often. The normal `WAITRON_HTTP_PORT`
-  parser refuses `"0"`.
-  `bench/sqlite-failover/src/unreachable-store.ts`'s `reservePort` and the inline copy in
-  `apps/server/scripts/cloud-integration-fixture.ts` have the same release-then-use shape and were
-  not changed. C88 (#920) reproduced this gap as one way the pause test's single CI failure could
-  happen, and `startS3TestServer` now recovers from it; the remaining Waitron boot suites still
-  have the gap.
+`freePorts(n)`
+(`apps/server/src/testing/free-ports.ts`) holds every probe until the last port is drawn, but a
+port is still released before the server binds it, so another test worker drawing or connecting
+in that gap can take it; nothing has measured how often. The normal `WAITRON_HTTP_PORT`
+parser refuses `"0"`.
+`bench/sqlite-failover/src/unreachable-store.ts`'s `reservePort` and the inline copy in
+`apps/server/scripts/cloud-integration-fixture.ts` have the same release-then-use shape and were
+not changed. C88 (#920) reproduced this gap as one way the pause test's single CI failure could
+happen, and `startS3TestServer` now recovers from it; the remaining Waitron boot suites still
+have the gap.
 
 A907 changes only `apps/server/src/boot.till-clock.test.ts`: its test-local wrapper calls the
 real Hono server with port 0 and reads the bound address. Configuration still passes through the
@@ -187,29 +196,27 @@ above concerns the release-to-bind interval, including single draws.
 
 ## What the per-push CI concurrency groups (#384) left open
 
-- **What the per-push CI concurrency groups (#384) left open:**
-  - **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
-    needs two merges close enough together to overlap and is not worth forcing.
-  - **Two states stop publishing until a person intervenes:** a `:main` carrying no
-    `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
-    image built outside CI, or a rewritten history). Both wedge every later publish identically; the
-    `sha-` tags keep coming. The repair is to delete or retag `:main` by hand. Nothing alerts on it.
-  - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
-    for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
-    exactly the broadening that would publish a backwards tag. It matters only to a fork.
-  - **The guard's concurrency cases see ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that
-    one file as text for them, so a future push-triggered workflow that groups by ref is seen by
-    nothing.
+- **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
+  needs two merges close enough together to overlap and is not worth forcing.
+- **Two states stop publishing until a person intervenes:** a `:main` carrying no
+  `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
+  image built outside CI, or a rewritten history). Both wedge every later publish identically; the
+  `sha-` tags keep coming. The repair is to delete or retag `:main` by hand. Nothing alerts on it.
+- **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
+  for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
+  exactly the broadening that would publish a backwards tag. It matters only to a fork.
+- **The guard's concurrency cases see ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that
+  one file as text for them, so a future push-triggered workflow that groups by ref is seen by
+  nothing.
 
 ## Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying
 
-- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
-  retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
-  "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); bookings' browser
-  freeze, never reproduced locally after #291. A third, from #334's validation run (2026-09-12):
-  the service-status browser suite failed with Playwright's "Frame was detached" during a
-  whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
-  again on the next sighting rather than re-running to green.
+Standing rule: a flaky test is fixed at the root. Eleven UI suites failing to load with
+"Vitest failed to find the current suite/runner" after a rebase (2026-09-11); bookings' browser
+freeze, never reproduced locally after #291. A third, from #334's validation run (2026-09-12):
+the service-status browser suite failed with Playwright's "Frame was detached" during a
+whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
+again on the next sighting rather than re-running to green.
 
 ## A sixth: a CI shard exited 1 with every test passing (PR #414)
 
@@ -233,12 +240,11 @@ above concerns the release-to-bind interval, including single draws.
 
 ## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
 
-- **A throwaway script found six comments that described code that was no longer there, and it is
-  not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
-  subject has gone from the lines beneath it. It is not usable as it stands: 13 of its 19 hits
-  were the legitimate shape where a block comment heads a group of members rather than describing
-  the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
-  header-then-member shape, and its own tests, rather than re-running a scratch script.
+Written 2026-09-14 during the tenant-column removal. It flags a comment whose
+subject has gone from the lines beneath it. It is not usable as it stands: 13 of its 19 hits
+were the legitimate shape where a block comment heads a group of members rather than describing
+the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
+header-then-member shape, and its own tests, rather than re-running a scratch script.
 
 ## `apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control
 
@@ -411,11 +417,10 @@ failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
 
 ## Switching the till's language mid-screen with `setLocale` left no error banner in some browser tests.
 
-- **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
-  tests.** The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
-  were changed to start the till in the language instead; the table-service and parties cases
-  switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
-  hides. Left open by A798-B slice 8 (#2012).
+The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
+were changed to start the till in the language instead; the table-service and parties cases
+switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
+hides. Left open by A798-B slice 8 (#2012).
 
 ## Decisions and deliberate limits
 
@@ -716,11 +721,10 @@ both themes at 390 px and 1280 px. Keep the price-format examples and demo inter
 
 ## Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)
 
-- **Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)**,
-  and in which phase they stalled is unknown: the action passes no `--progress`, so its log is
-  silent while it waits. On a recurrence, read the bounded checkout's log: a low-speed failure
-  (`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
-  out of time, not in which phase.
+In which phase they stalled is unknown: the action passes no `--progress`, so its log is
+silent while it waits. On a recurrence, read the bounded checkout's log: a low-speed failure
+(`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
+out of time, not in which phase.
 
 
 ## Profile provisioning's busiest shard after the A679 split
@@ -763,15 +767,14 @@ their cleanup; preserve their current behavioral assertions.
 
 ## A902. Say in the testing guide that Vite also prints browser console output under an AI agent
 
-- **A902. Say in the testing guide that Vite also prints browser console output under an AI
-  agent.** Its section "Vitest hides a passing test's console output under an AI agent" names only
-  Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable such as `AI_AGENT`,
-  `CLAUDECODE` or `CODEX_THREAD_ID` is set, prints a browser test's `console.error`, `console.warn`,
-  uncaught errors and unhandled rejections to the terminal, a passing test's included (seen in
-  `apps/dashboard`, which now sets `server: { forwardConsole: false }`). The other browser packages
-  (`grep -l browser */*/vitest.config.ts`) still forward. Measure one of them with and without an
-  agent variable, then add the receipt to the guide, and decide with the owner whether they should
-  turn forwarding off as the dashboard did.
+Its section "Vitest hides a passing test's console output under an AI agent" names only
+Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable such as `AI_AGENT`,
+`CLAUDECODE` or `CODEX_THREAD_ID` is set, prints a browser test's `console.error`, `console.warn`,
+uncaught errors and unhandled rejections to the terminal, a passing test's included (seen in
+`apps/dashboard`, which now sets `server: { forwardConsole: false }`). The other browser packages
+(`grep -l browser */*/vitest.config.ts`) still forward. Measure one of them with and without an
+agent variable, then add the receipt to the guide, and decide with the owner whether they should
+turn forwarding off as the dashboard did.
 
 
 ## A late move or second finger can overtake the gesture hold timer
@@ -794,11 +797,11 @@ selection count and the screenshot before retrying.
 
 ## `apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard
 
-- **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard** (208 s median
-  and 255 s worst over six runs in A938), since no packing goes below one file: on #1930's run
-  39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
-  split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
-  [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+208 s median
+and 255 s worst over six runs in A938, since no packing goes below one file: on #1930's run
+39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
+split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
+[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 
 ## Other server test files still hash fixed PINs and passwords on every test
@@ -833,87 +836,82 @@ to the same mechanism. [Receipt](../developers/conventions-ui.md#a-parent-render
 
 ## `scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or `scripts/migration-upgrade.test.ts`
 
-- **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
-  `scripts/migration-upgrade.test.ts`.** Its `budgets()` returns `unreadable: true` for both, on
-  `main` (`b81f1481c`) as on A751's branch, so a wait in either that outgrows its bound passes it.
-  Measured by calling `budgets()` on each file's text; which construct it cannot resolve was not
-  traced.
+Its `budgets()` returns `unreadable: true` for both, on
+`main` (`b81f1481c`) as on A751's branch, so a wait in either that outgrows its bound passes it.
+Measured by calling `budgets()` on each file's text; which construct it cannot resolve was not
+traced.
 
 
 ## Loose ends left by the comment-pruning pull requests (#559 to #624)
 
-- **Loose ends left by the comment-pruning pull requests (#559 to #624).** Each was found while
-  pruning comments.
-  - Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
-    (#624).
-    [Detail](#two-healthtestts-cases--feed-a-clean-pass-so-they-check-less-than-their-titles-say)
-  - `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-    `.husky/pre-push` beside the same loop; it is not there (#602).
-    [Detail](#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
-  - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
-    measured false (#562, #585). Four identity schema files and six in
-    `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is
-    a code change, for whoever next changes that package's code.
-    [Detail](#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
-  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and
-    `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
-    0.45.2 names an unnamed `unique()` itself, so nothing reaches it
-    (`packages/db/src/testing/schema-conformance.ts`) (#559).
-  - In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES
-    ANYTHING" repeats the first case under another name (a test change, not a comment one; #589).
-  - The printing error test overstates its import requirement, and profile-store setup keeps a
-    session across per-test resets (#588; the canvas-store test itself is retired).
-    [Detail](#printing-error-test-wording-and-profile-store-session-setup)
+Each was found while
+pruning comments.
+
+- Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
+  (#624).
+  [Detail](#two-healthtestts-cases--feed-a-clean-pass-so-they-check-less-than-their-titles-say)
+- `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
+  `.husky/pre-push` beside the same loop; it is not there (#602).
+  [Detail](#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
+- The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
+  measured false (#562, #585). Four identity schema files and six in
+  `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is
+  a code change, for whoever next changes that package's code.
+  [Detail](#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
+- The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and
+  `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
+  0.45.2 names an unnamed `unique()` itself, so nothing reaches it
+  (`packages/db/src/testing/schema-conformance.ts`) (#559).
+- In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES
+  ANYTHING" repeats the first case under another name (a test change, not a comment one; #589).
+- The printing error test overstates its import requirement, and profile-store setup keeps a
+  session across per-test resets (#588; the canvas-store test itself is retired).
+  [Detail](#printing-error-test-wording-and-profile-store-session-setup)
 
 
 ## `packages/db`'s static mutants are not in its mutation score
 
-- **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.
-  `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
-  runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
-  `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
-  would cost has not been timed. Owner's call.
+OPEN, left by A539.
+`"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
+runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
+`src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
+would cost has not been timed. Owner's call.
 
 
 ## `mutation.yml` repeats one shard-and-merge job pair three times
 
-- **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN (left by A841 slice 1,
-  #1927, 2026-10-21). `mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
-  shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
-  also repeat the list of sharded packages. Do it on its own branch.
-  [Detail](#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
+OPEN (left by A841 slice 1,
+#1927, 2026-10-21). `mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
+shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
+also repeat the list of sharded packages. Do it on its own branch.
+[Detail](#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
 
 
 ## `scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a pipe, so the selection guard does not count it and a change to it alone runs none of those jobs
 
-- **`scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a
-  pipe, so the selection guard does not count it and a change to it alone runs none of those jobs.**
-  Listing it against every member those jobs test would send every change to it through all of them
-  — the owner's call. Left open by SQLite slice 2 Task 10 (#652, the loop test against a real
-  S3-compatible server).
+Listing it against every member those jobs test would send every change to it through all of them
+— the owner's call. Left open by SQLite slice 2 Task 10 (#652, the loop test against a real
+S3-compatible server).
 
 
 ## Loose ends left by SQLite slice 1 (#490 and the preparation tasks)
 
-- **Loose ends left by SQLite slice 1 (#490 and the preparation tasks).**
-  - Every `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`,
-    which carries its own measurement, still says the pin is needed without having measured it; the
-    same one-worker-against-several coverage comparison would settle each.
-  - P7's leftovers (#533): `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
-    because it checks for an absence and the remaining files clear its floor of eight.
-    [Detail](#p7s-leftovers-533)
-  - A few suites still build engine-shaped refusals by hand rather than through `refusalError`
-    (`packages/db/src/testing/refusals.ts`, P10, #527), among them
-    `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
+- Every `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`,
+  which carries its own measurement, still says the pin is needed without having measured it; the
+  same one-worker-against-several coverage comparison would settle each.
+- P7's leftovers (#533): `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
+  because it checks for an absence and the remaining files clear its floor of eight.
+  [Detail](#p7s-leftovers-533)
+- A few suites still build engine-shaped refusals by hand rather than through `refusalError`
+  (`packages/db/src/testing/refusals.ts`, P10, #527), among them
+  `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
 
 
 ## Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`
 
-- **Task 2's review found no test that fails when `device_profile_admission_roles` or
-  `device_profile_admission_persons` is left out of
-  `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run); both tables' keys into
-  `device_profiles` cascade on delete (identity `0007_profile_admission.sql`). Left open by W97
-  (#1311).
+Read, not run: both tables' keys into
+`device_profiles` cascade on delete (identity `0007_profile_admission.sql`). Left open by W97
+(#1311).
 
 
 ## The relocated independent department preview needs a load investigation
@@ -928,12 +926,11 @@ that the original failure is fixed.
 
 ## drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it
 
-- **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES`
-  on this engine, while its snapshot kept it.** The schema-conformance suite compares declared
-  delete rules with the migrated database for the sets that opt in; [A812's deletion
-  experiment](../developers/testing-guide.md#a-missing-delete-rule-fails-the-schema-comparison) caught
-  one omitted rule. The generator omission was observed once by an implementer (five store tests
-  failed with a foreign-key refusal), not independently re-run. Left open by A429 slice 1 (#1493).
+The schema-conformance suite compares declared
+delete rules with the migrated database for the sets that opt in; [A812's deletion
+experiment](../developers/testing-guide.md#a-missing-delete-rule-fails-the-schema-comparison) caught
+one omitted rule. The generator omission was observed once by an implementer (five store tests
+failed with a foreign-key refusal), not independently re-run. Left open by A429 slice 1 (#1493).
 
 ## The till shard's blocked operation is unknown (A1027)
 

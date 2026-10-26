@@ -5248,15 +5248,9 @@ For browser storage checks, inspect the operation's own entry and every write, c
 values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
 
-- **Tests that read a built command's error output fail under Claude Code.** The command's stderr
-  begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
-  seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
-  plan, E8 and E13). Found while planning A798-B slice 8. On 2026-10-26, during A980 S1a2,
-  `packages/provisioning/src/first-setup-command-import.test.ts`'s case "the actual relocated command
-  resumes a retained import and publishes it once" failed this way (its child's stderr held
-  `<claude-code-hint …/>` where the case expects it empty) and passed under
-  `env -i HOME PATH TMPDIR`; it fails the same way on `27ae35c09` and `d23e32966`. Next action: find
-  which inherited variable lets the hint through and clear it in the cases' child environment.
+- **Tests that read a built command's error output fail under Claude Code.**
+  Find which inherited variable lets the hint through and clear it in the cases' child environment.
+  [Detail](backlog/ci.md#tests-that-read-a-built-commands-error-output-fail-under-claude-code).
 
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
   tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
