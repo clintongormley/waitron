@@ -8,6 +8,7 @@ import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@wait
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 registerIcons({
   kebab:
@@ -739,6 +740,10 @@ it.each(["0", "2147483648"])(
     );
     for (const field of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"])
       expect(q(el, `[data-field-error="${field}"]`)).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-modal .form > p.error")].map((p) => p.textContent),
+    ).toEqual([VENUE_SERVICE_STRINGS.en["prep.fix_fields"]]);
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
     expect(a.createStation).not.toHaveBeenCalled();
   },
 );

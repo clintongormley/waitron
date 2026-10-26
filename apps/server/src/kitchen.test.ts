@@ -604,6 +604,19 @@ describe("kitchen-station config", () => {
     expect((await asApp(cfg, (tx) => listStations(tx, cfg))).map((s) => s.name)).toEqual(["Pass"]);
   });
 
+  it("createStation refuses a ready warning of 0, naming it, and creates no station", async () => {
+    const cfg = await setupVenue();
+    await expect(
+      asApp(cfg, (tx) =>
+        createStation(tx, cfg, { name: "Pass", thresholds: { readyWarningAfterMinutes: 0 } }),
+      ),
+    ).rejects.toMatchObject({
+      code: "station.thresholds_invalid",
+      params: { field: "readyWarningAfterMinutes", name: "Pass" },
+    });
+    expect(await db.select({ id: kitchenStations.id }).from(kitchenStations)).toEqual([]);
+  });
+
   it("setDefaultStation throws station.not_found for an absent OR a deleted station", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();

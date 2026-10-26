@@ -1044,6 +1044,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       colour: string;
       ticketGrouping: string;
       printHeldWork: boolean;
+      readyWarningAfterMinutes: number;
     }[]
   > {
     return (await (await req("/stations", { method: "GET" }, managerCookie)).json()) as {
@@ -1056,6 +1057,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       colour: string;
       ticketGrouping: string;
       printHeldWork: boolean;
+      readyWarningAfterMinutes: number;
     }[];
   }
 
