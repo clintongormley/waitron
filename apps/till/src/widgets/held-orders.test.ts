@@ -8,7 +8,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
 import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
 
-const mesa: HeldOrderSummary = {
+const labeledOrder: HeldOrderSummary = {
   items: [],
   id: "wo-1",
   orderNumber: 5,
@@ -22,7 +22,7 @@ const mesa: HeldOrderSummary = {
   signals: [],
 };
 
-const barra: HeldOrderSummary = {
+const unlabeledOrder: HeldOrderSummary = {
   items: [],
   id: "wo-2",
   orderNumber: 6,
@@ -40,7 +40,9 @@ afterEach(cleanupWidgets);
 
 describe("till-held-orders", () => {
   it("returns focus to the chosen order's Move control and leaves focus alone if it disappeared", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder, unlabeledOrder],
+    });
     const buttons = [...el.shadowRoot!.querySelectorAll(".move")];
     await Promise.all(
       buttons.map(
@@ -66,7 +68,7 @@ describe("till-held-orders", () => {
       setLocale(locale);
       try {
         const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-          orders: [{ ...mesa, orderNumber: 41, formerNumbers: [40] }],
+          orders: [{ ...labeledOrder, orderNumber: 41, formerNumbers: [40] }],
         });
         expect(number(el)).toBe(text);
       } finally {
@@ -76,7 +78,7 @@ describe("till-held-orders", () => {
 
     it("leave a plain number on an order that never moved", async () => {
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [{ ...mesa, orderNumber: 41 }],
+        orders: [{ ...labeledOrder, orderNumber: 41 }],
       });
       expect(number(el)).toBe("#41");
     });
@@ -98,7 +100,9 @@ describe("till-held-orders", () => {
   });
 
   it("renders one row per parked order with its number, label, item count and total", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder, unlabeledOrder],
+    });
     const rows = el.shadowRoot!.querySelectorAll(".order");
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain("5");
@@ -111,7 +115,9 @@ describe("till-held-orders", () => {
 
   it("shows how many items an order holds and how many are held and ready under its total, and no count beside the money", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [{ ...mesa, counts: { ordered: 6, unsent: 0, held: 2, waiting: 0, ready: 2 } }],
+      orders: [
+        { ...labeledOrder, counts: { ordered: 6, unsent: 0, held: 2, waiting: 0, ready: 2 } },
+      ],
     });
     const row = el.shadowRoot!.querySelector(".order")!;
     const chips = [...row.querySelectorAll<HTMLElement>(".counts [data-count]")];
@@ -130,7 +136,9 @@ describe("till-held-orders", () => {
   });
 
   it("renders an unlabelled order (label null) without crashing", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [barra] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [unlabeledOrder],
+    });
     const rows = el.shadowRoot!.querySelectorAll(".order");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain("6");
@@ -139,7 +147,7 @@ describe("till-held-orders", () => {
 
   describe("what wants attention on each order", () => {
     const ana: HeldOrderSummary = {
-      ...barra,
+      ...unlabeledOrder,
       id: "wo-7",
       orderNumber: 7,
       label: "Ana",
@@ -167,7 +175,7 @@ describe("till-held-orders", () => {
 
     it("shows a counter tab with no table by its label, with its signals", async () => {
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [mesa, ana],
+        orders: [labeledOrder, ana],
       });
       const row = rowOf(el, 7);
       expect(row.querySelector(".label")!.textContent!.trim()).toBe("Ana");
@@ -209,7 +217,9 @@ describe("till-held-orders", () => {
   });
 
   it("a Retrieve control emits a composed retrieve-order carrying its own id", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder, unlabeledOrder],
+    });
     let captured: CustomEvent<{ id: string }> | undefined;
     el.addEventListener("retrieve-order", (event) => {
       captured = event as CustomEvent<{ id: string }>;
@@ -221,7 +231,9 @@ describe("till-held-orders", () => {
   });
 
   it("a Discard control emits a composed discard-order carrying its own id", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder, unlabeledOrder],
+    });
     let captured: CustomEvent<{ id: string }> | undefined;
     el.addEventListener("discard-order", (event) => {
       captured = event as CustomEvent<{ id: string }>;
@@ -233,7 +245,9 @@ describe("till-held-orders", () => {
   });
 
   it("labels its Retrieve/Discard controls with the localised actions", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder],
+    });
     expect(el.shadowRoot!.querySelector("wt-button.retrieve")!.textContent).toContain(
       t("held.retrieve"),
     );
@@ -243,7 +257,9 @@ describe("till-held-orders", () => {
   });
 
   it("gives each Retrieve/Discard control an order-specific accessible name", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder, unlabeledOrder],
+    });
     const retrieves = el.shadowRoot!.querySelectorAll("wt-button.retrieve");
     const discards = el.shadowRoot!.querySelectorAll("wt-button.discard");
     expect(retrieves[0]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #5 Mesa 4`);
@@ -255,9 +271,9 @@ describe("till-held-orders", () => {
 
 describe("till-held-orders: a narrow card", () => {
   it("keeps each order's count, total and what it still owes on one line at a phone's width, with the controls below", async () => {
-    const partlyPaid = { ...mesa, outstanding: "1.00", hasPayments: true };
+    const partlyPaid = { ...labeledOrder, outstanding: "1.00", hasPayments: true };
     const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [partlyPaid, barra],
+      orders: [partlyPaid, unlabeledOrder],
     });
     host.style.width = "333px";
     await el.updateComplete;
@@ -272,13 +288,13 @@ describe("till-held-orders: a narrow card", () => {
 
   it("wraps each order's counts inside its row at 320px wide", async () => {
     const busy = {
-      ...mesa,
+      ...labeledOrder,
       outstanding: "1.00",
       hasPayments: true,
       counts: { ordered: 128, unsent: 12, held: 34, waiting: 56, ready: 78 },
     };
     const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [busy, barra],
+      orders: [busy, unlabeledOrder],
     });
     host.style.width = "320px";
     await el.updateComplete;
@@ -298,13 +314,13 @@ describe("till-held-orders: a narrow card", () => {
     "keeps each order's controls clear of its summary at %ipx wide",
     async (width) => {
       const partlyPaid = {
-        ...mesa,
+        ...labeledOrder,
         outstanding: "1.00",
         hasPayments: true,
         counts: { ordered: 128, unsent: 12, held: 34, waiting: 56, ready: 78 },
       };
       const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [partlyPaid, barra],
+        orders: [partlyPaid, unlabeledOrder],
       });
       host.style.width = `${width}px`;
       await el.updateComplete;
@@ -377,7 +393,12 @@ describe("till-held-orders: moving a counter order to a table", () => {
     tableRow("t6", "Mesa 6", { condition: "needs_clearing" }),
     tableRow("t9", "Mesa 9"),
   ];
-  const partyBill: HeldOrderSummary = { ...mesa, id: "wo-7", orderNumber: 7, partyId: "v7" };
+  const partyBill: HeldOrderSummary = {
+    ...labeledOrder,
+    id: "wo-7",
+    orderNumber: 7,
+    partyId: "v7",
+  };
 
   const moveButtons = (el: TillHeldOrders) => [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-button.move"),
@@ -407,7 +428,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("offers Move to table on a counter order, and not on a party's bill listed beside it", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa, partyBill],
+      orders: [labeledOrder, partyBill],
       tables,
     });
 
@@ -418,7 +439,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
   });
 
   it("says what a partly paid order still owes", async () => {
-    const partlyPaid = { ...mesa, outstanding: "1.00", hasPayments: true };
+    const partlyPaid = { ...labeledOrder, outstanding: "1.00", hasPayments: true };
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [partlyPaid] });
 
     expect(el.shadowRoot!.querySelector(".order")!.textContent).toContain(
@@ -428,7 +449,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("asks the app for the floor, and lists every table with its condition under the order it moves", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     const opened = heard(el, "move-held-order-open");
@@ -466,7 +487,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
         serviceMode,
       };
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [mesa],
+        orders: [labeledOrder],
         zones: [zone, { ...zone, id: "dining", serviceMode: "table_tab" }],
         tables: [
           tableRow("free-counter", "1"),
@@ -488,7 +509,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
       await el.updateComplete;
       expect(moved).toEqual([
         {
-          orderId: mesa.id,
+          orderId: labeledOrder.id,
           tableId: "free-dining",
           seated: null,
           bills: "merge",
@@ -499,7 +520,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("lists the tables in number order, whatever order the floor sends them in", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables: [tableRow("t1", "T1"), tableRow("t10", "T10"), tableRow("t2", "T2")],
     });
 
@@ -527,7 +548,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
       name,
     });
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables: [
         tableRow("t1", "T1", { today: named("Zinc") }),
         tableRow("t2", "T2", { today: named("Arch") }),
@@ -561,7 +582,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
       zoneRevision: 0,
     });
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables: [
         tableRow("c3", "Counter 3", { today: spare("Long table") }),
         tableRow("c4", "Counter 4", { today: spare("Long table") }),
@@ -595,7 +616,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
       needsMoving,
     });
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables: [
         tableRow("t1", "Mesa 1", { today: onMap(true) }),
         tableRow("t2", "Mesa 2", { today: onMap(false) }),
@@ -623,7 +644,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("says so when the floor lists no table", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables: [],
     });
 
@@ -634,7 +655,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("qualifies the bill choice before opening and ignores readiness after cancelling the picker", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     let ready!: () => void;
@@ -678,7 +699,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("moves the order to a free table at once, and a table needing clearing sends nothing", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
@@ -695,7 +716,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("asks about the bills first at a seated table, naming the order and where it goes", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
@@ -724,7 +745,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("sends the party the bill choice names, though the floor read since seats another there", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
@@ -750,7 +771,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("closes the picker, sending nothing, when its dialog is dismissed", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
@@ -766,7 +787,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
   it("names a seated party with no name by the tables the floor lists for it", async () => {
     const unnamed = { ...luis, name: null, displayName: "Mesa 7", tableIds: ["t7", "t-gone"] };
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables: [{ ...tables[0]!, party: unnamed }, tables[2]!],
     });
     await openPicker(el);
@@ -780,7 +801,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
   it("goes back to the tables when the bill choice is cancelled, and Cancel there sends nothing", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [mesa],
+      orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
@@ -815,7 +836,7 @@ describe("A738 order item previews", () => {
   ];
   it("A738 toggles an order preview without retrieving it", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [{ ...mesa, items }],
+      orders: [{ ...labeledOrder, items }],
     });
     const events: unknown[] = [];
     el.addEventListener("retrieve-order", (event) => events.push(event));
@@ -849,8 +870,8 @@ describe("A738 order item previews", () => {
   });
 
   it("A738 follows order identity through reordering and refresh and prunes vanished expansions", async () => {
-    const first = { ...mesa, items };
-    const second = { ...mesa, id: "other-order", orderNumber: 99, items: [] };
+    const first = { ...labeledOrder, items };
+    const second = { ...labeledOrder, id: "other-order", orderNumber: 99, items: [] };
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [first, second],
     });
@@ -884,7 +905,7 @@ describe("A738 order item previews", () => {
     "A738 row action retrieve-order does not toggle its preview (expanded %s)",
     async (expanded) => {
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [{ ...mesa, items }],
+        orders: [{ ...labeledOrder, items }],
       });
       const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
       expect(summary).not.toBeNull();
@@ -898,7 +919,7 @@ describe("A738 order item previews", () => {
         el.shadowRoot!.querySelector(".retrieve")!.shadowRoot!.querySelector("button")!,
       );
       await el.updateComplete;
-      expect(calls).toEqual([{ id: mesa.id }]);
+      expect(calls).toEqual([{ id: labeledOrder.id }]);
       expect(summary.getAttribute("aria-expanded")).toBe(String(expanded));
     },
   );
@@ -906,7 +927,7 @@ describe("A738 order item previews", () => {
     "A738 row action discard-order does not toggle its preview (expanded %s)",
     async (expanded) => {
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [{ ...mesa, items }],
+        orders: [{ ...labeledOrder, items }],
       });
       const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
       expect(summary).not.toBeNull();
@@ -920,7 +941,7 @@ describe("A738 order item previews", () => {
         el.shadowRoot!.querySelector(".discard")!.shadowRoot!.querySelector("button")!,
       );
       await el.updateComplete;
-      expect(calls).toEqual([{ id: mesa.id }]);
+      expect(calls).toEqual([{ id: labeledOrder.id }]);
       expect(summary.getAttribute("aria-expanded")).toBe(String(expanded));
     },
   );
@@ -928,7 +949,7 @@ describe("A738 order item previews", () => {
     "A738 row action move-held-order-open does not toggle its preview (expanded %s)",
     async (expanded) => {
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [{ ...mesa, items }],
+        orders: [{ ...labeledOrder, items }],
       });
       const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
       expect(summary).not.toBeNull();
