@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, open, readFile, readdir, rmdir, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
@@ -14,6 +13,7 @@ import {
   insideBackupRepairTarget,
 } from "./first-setup-backup-workspace.js";
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
+import { removeAndSync } from "./folder-sync.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -327,24 +327,6 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
 async function sha256(path: string): Promise<StartAgainFingerprint> {
   const bytes = await readFile(path);
   return { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
-}
-
-async function syncFolder(path: string): Promise<void> {
-  const folder = await open(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_DIRECTORY,
-  );
-  try {
-    await folder.sync();
-  } finally {
-    await folder.close();
-  }
-}
-
-async function removeAndSync(path: string, kind: "file" | "folder"): Promise<void> {
-  if (kind === "file") await unlink(path);
-  else await rmdir(path);
-  await syncFolder(dirname(path));
 }
 
 /** Names every present file of the deletion list with its size and SHA-256. */

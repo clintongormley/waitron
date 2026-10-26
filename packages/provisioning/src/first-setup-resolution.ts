@@ -1,12 +1,12 @@
 import { AppError, isUuid } from "@waitron/shared";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, mkdir, chmod, realpath, open, readdir } from "node:fs/promises";
+import { lstat, mkdir, chmod, realpath, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type { FirstSetupCoordinator } from "./first-setup-state.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
+import { syncFolder } from "./folder-sync.js";
 import "./errors.js";
 
 export type RegisterAnswer =
@@ -144,17 +144,7 @@ export async function firstSetupDirectory(path: string, create = false): Promise
     await chmod(path, 0o700);
   }
   if (create) {
-    for (const folder of new Set([path, parent])) {
-      const handle = await open(
-        folder,
-        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-      );
-      try {
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-    }
+    for (const folder of new Set([path, parent])) await syncFolder(folder);
   }
 }
 export function validateWorkspaceBinding(value: unknown): asserts value is WorkspaceBinding {

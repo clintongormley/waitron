@@ -1,12 +1,12 @@
-import { constants } from "node:fs";
-import { lstat, open, readdir, rmdir, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
 import { createFirstSetupBackupWorkspace } from "./first-setup-backup-workspace.js";
 import { readDurableHostJson } from "./durable-host-json.js";
+import { removeAndSync } from "./folder-sync.js";
 import "./errors.js";
 
 type Remove = (path: string, kind: "file" | "folder") => Promise<void>;
@@ -22,24 +22,6 @@ const KEPT_IN_TARGET =
 
 const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
-
-async function syncFolder(path: string): Promise<void> {
-  const folder = await open(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_DIRECTORY,
-  );
-  try {
-    await folder.sync();
-  } finally {
-    await folder.close();
-  }
-}
-
-async function removeAndSync(path: string, kind: "file" | "folder"): Promise<void> {
-  if (kind === "file") await unlink(path);
-  else await rmdir(path);
-  await syncFolder(dirname(path));
-}
 
 async function canonical(anchor: FirstSetupRoots, recoveryId: string): Promise<FirstSetupRoots> {
   if (!isUuid(recoveryId)) throw new AppError("setup.attempt_conflict", {});
