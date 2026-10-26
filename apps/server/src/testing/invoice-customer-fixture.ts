@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
-import { invoiceDeliveries, invoiceSeries, tenants } from "@waitron/db";
+import { invoiceDeliveries, invoiceSeries, sales, tenants } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import {
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { inTx } from "./bill-venue.js";
 import { parked, provisionOrderVenue, type OrderVenue } from "./order-venue.js";
 
@@ -142,7 +146,8 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
           recipient: email.recipient,
           personId: venue.operatorId,
           createdAt: at,
-          ...(email.status === "sent" && { completedAt: at }),
+          // A minute after the request, so a reader giving one for the other is seen.
+          ...(email.status === "sent" && { completedAt: clock.now().instant.toISOString() }),
         });
       }
     });
@@ -155,6 +160,19 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
     address: "12 Harbour Road, 46023 Valencia",
   });
   await emails(j1, [{ recipient: "jordi@example.test", status: "sent" }]);
+  await inTx(venue, async (tx) => {
+    const at = clock.now().instant.toISOString();
+    await tx.insert(invoiceDeliveries).values({
+      saleId: j1,
+      requestKey: randomUUID(),
+      medium: "receipt",
+      designation: "original",
+      status: "sent",
+      generation: 2,
+      createdAt: at,
+      completedAt: at,
+    });
+  });
   const p1 = await sale("310.07", {
     name: "Puig Electrical Ltd",
     taxId: "B76543214",
@@ -180,4 +198,96 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
   const j3 = await sale("23.95", { name: "Jordi Puig Electrician", ...jordi });
   const s1 = await sale("9.90", null);
   return { venue, fullSeriesId, sales: { j1, p1, j2, a1, c1, j3, s1 } };
+}
+
+/**
+ * Plan decision 8's `invoices.json` for Jordi (12345678Z): j1, j2, j3 with what this fixture
+ * wrote, the times and the tax-record flag read back from the database.
+ */
+export async function expectedJordiFile(fixture: InvoiceCustomerVenue) {
+  const { db, backend } = fixture.venue;
+  async function stored(saleId: string) {
+    const [sale] = await db
+      .select({ issuedAt: sales.issuedAt })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    const deliveries = await db
+      .select({
+        createdAt: invoiceDeliveries.createdAt,
+        completedAt: invoiceDeliveries.completedAt,
+      })
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.saleId, saleId))
+      .orderBy(asc(invoiceDeliveries.generation));
+    const filed = await backend.filedReceiptFor(db, brandSaleId(saleId));
+    return {
+      issuedAt: sale!.issuedAt,
+      requestedAt: deliveries.map((row) => row.createdAt),
+      completedAt: deliveries.map((row) => row.completedAt),
+      taxRecord: filed !== undefined,
+    };
+  }
+  const { j1, j2, j3 } = fixture.sales;
+  const [one, two, three] = [await stored(j1), await stored(j2), await stored(j3)];
+  return {
+    taxId: "12345678Z",
+    invoices: [
+      {
+        invoice: "FF/1",
+        issuedAt: one.issuedAt,
+        name: "Jordi Puig",
+        taxId: "12345678Z",
+        countryCode: "ES",
+        address: "12 Harbour Road, 46023 Valencia",
+        total: "48.35",
+        pdf: "invoices/FF-1.pdf",
+        taxRecord: one.taxRecord,
+        emails: [
+          {
+            to: "jordi@example.test",
+            requestedAt: one.requestedAt[0],
+            status: "sent",
+            sentAt: one.completedAt[0],
+          },
+        ],
+      },
+      {
+        invoice: "FF/3",
+        issuedAt: two.issuedAt,
+        name: "Jordi Puig Electrician",
+        taxId: "12345678Z",
+        countryCode: "ES",
+        address: "3 Port Avenue, 46024 Valencia",
+        total: "112.40",
+        pdf: "invoices/FF-3.pdf",
+        taxRecord: two.taxRecord,
+        emails: [
+          {
+            to: "jordi@example.test",
+            requestedAt: two.requestedAt[0],
+            status: "failed",
+            sentAt: null,
+          },
+          {
+            to: "invoices@jordi.example.test",
+            requestedAt: two.requestedAt[1],
+            status: "sent",
+            sentAt: two.completedAt[1],
+          },
+        ],
+      },
+      {
+        invoice: "FF/6",
+        issuedAt: three.issuedAt,
+        name: "Jordi Puig Electrician",
+        taxId: "12345678Z",
+        countryCode: "ES",
+        address: "3 Port Avenue, 46024 Valencia",
+        total: "23.95",
+        pdf: "invoices/FF-6.pdf",
+        taxRecord: three.taxRecord,
+        emails: [],
+      },
+    ],
+  };
 }
