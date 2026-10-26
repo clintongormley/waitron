@@ -917,3 +917,104 @@ it.each(["en", "es"] as const)(
     expect(initialOwnerStrings[locale].checkAgain).toBe(backupRepairStrings[locale].reconnect);
   },
 );
+
+async function unsettledAsk(
+  browser: "en-GB" | "es-ES",
+  status: (read: number) => Response | undefined = () => undefined,
+) {
+  let statusReads = 0;
+  const fixture = await missingDatabaseFixture({
+    locale: browser,
+    activity: stoppedActivity,
+    summary: stoppedSummary,
+    intercept(path) {
+      if (path.endsWith("/backup/status"))
+        return status(statusReads++) ?? Response.json({ phase: "unstarted", proofRequired: true });
+    },
+  });
+  await recoverMissing(fixture.app);
+  await expect.poll(() => q(fixture.app, "check-again")).not.toBeNull();
+  const reads = (suffix: string) => fixture.requests.filter((r) => r.path.endsWith(suffix)).length;
+  return { ...fixture, reads };
+}
+
+it.each(locales)(
+  "Check again that cannot read the backup status says so and keeps Check again offered ($locale)",
+  async ({ locale, browser }) => {
+    const { app, reads } = await unsettledAsk(browser, (read) =>
+      read === 1
+        ? Response.json(
+            { error: { code: "setup.recovery_in_progress", params: {} } },
+            { status: 409 },
+          )
+        : read >= 2
+          ? Response.json({ phase: "prepared", proofRequired: true })
+          : undefined,
+    );
+    await click(app, "check-again");
+    await expect
+      .poll(() =>
+        [
+          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
+        ].map((f) => f.error),
+      )
+      .toEqual([shells[locale]["shell.first_setup.recovery_in_progress"]]);
+    expect(reads("/backup/status")).toBe(2);
+    expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(
+      initialOwnerStrings[locale].recoveryUnreadable,
+    );
+    expect(q<WtButton>(app, "check-again")!.disabled).toBe(false);
+    expect(q(app, "recovery-stopped")).toBeNull();
+    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
+    await click(app, "check-again");
+    await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
+    expect(q(app, "check-again")).toBeNull();
+    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  },
+);
+
+it("a second click on the missing database's Check again while the first is reading sends no second read", async () => {
+  const { app, reads } = await unsettledAsk("en-GB", (read) =>
+    read >= 1 ? Response.json({ phase: "prepared", proofRequired: true }) : undefined,
+  );
+  q(app, "check-again")!.dispatchEvent(new MouseEvent("click"));
+  q(app, "check-again")!.dispatchEvent(new MouseEvent("click"));
+  await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
+  expect([reads("/start-again/summary"), reads("/backup/status")]).toEqual([2, 2]);
+  expect(
+    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+      (f) => f.error,
+    ),
+  ).not.toContain(shellEn["shell.first_setup.attempt_conflict"]);
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+});
+
+it("an activity re-read that fails keeps the running view, and the next one offers the password step once the recovery stopped", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    let reads = 0;
+    const { app, requests } = await missingDatabaseFixture({
+      activity: runningActivity,
+      intercept(path) {
+        if (!path.endsWith("/backup/activity")) return undefined;
+        reads += 1;
+        if (reads === 2)
+          return Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 });
+        return Response.json({ activity: reads === 1 ? runningActivity : stoppedActivity });
+      },
+    });
+    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect.poll(() => activityReads()).toHaveLength(2);
+    await app.updateComplete;
+    expect(lines(app, "recovery-running")).toEqual(runningLines("en"));
+    expect(q(app, "resume-password")).toBeNull();
+    expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.error);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+    expect(activityReads()).toHaveLength(3);
+    expect(q(app, "recovery-running")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

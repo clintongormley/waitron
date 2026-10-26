@@ -1289,7 +1289,7 @@ async function stoppedPresent(
   options: {
     damaged?: boolean;
     running?: boolean;
-    /** The activity answered by each read, counted from 0. */
+    /** The activity answered by each read, counted from 0; a `Response`, or a promise of one, is sent as it is. */
     activity?: (read: number) => unknown;
     /** The summary's answer for each read, counted from 0; the summary itself when undefined. */
     summary?: (read: number) => Response | Promise<Response> | undefined;
@@ -1302,14 +1302,16 @@ async function stoppedPresent(
   let summaryReads = 0;
   const fixture = await mount({
     intercept(path, body, headers) {
-      if (path.endsWith("/backup/activity"))
-        return Response.json({
-          activity: options.activity
-            ? options.activity(activityReads++)
-            : options.running
-              ? { state: "running", ...stoppedAt }
-              : stoppedActivity(),
-        });
+      if (path.endsWith("/backup/activity")) {
+        const activity = options.activity
+          ? options.activity(activityReads++)
+          : options.running
+            ? { state: "running", ...stoppedAt }
+            : stoppedActivity();
+        return activity instanceof Response || activity instanceof Promise
+          ? (activity as Response | Promise<Response>)
+          : Response.json({ activity });
+      }
       if (path.endsWith("/start-again/summary"))
         return (
           options.summary?.(summaryReads++) ??
@@ -1750,3 +1752,247 @@ it.each(["en-GB", "es-ES"])(
     expect(text).not.toContain(t.startUnavailable);
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "a wrong password at the damaged-record password step keeps that step, shows the refusal and sends no Start again, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const shell = shellText(locale);
+    const { app, requests } = await damagedRecord({ locale });
+    await userEvent.fill(
+      q<WtInput>(app, "resume-password").shadowRoot!.querySelector("input")!,
+      "not the password",
+    );
+    await app.updateComplete;
+    await click(app, "damaged-record-continue");
+    await expect.poll(() => formErrors(app)).toEqual([shell["shell.first_setup.owner_required"]]);
+    expect(q(app, "damaged-record-password").textContent).toBe(t.damagedRecordPassword);
+    expect(q<WtInput>(app, "resume-password").value).toBe("");
+    expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
+    expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+    expect(
+      requests
+        .filter((r) => r.path.endsWith("/resolution/recover"))
+        .map((r) => (r.body as { password: string }).password),
+    ).toEqual(["not the password"]);
+    expect(startAgainRequests(requests)).toHaveLength(1);
+
+    await unlockDamagedRecord(app);
+    expect(q(app, "recovery-record-damaged").textContent).toBe(t.recoveryRecordDamaged);
+    expect(startAgainRequests(requests)).toHaveLength(1);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "Continue at the damaged-record password step with no password asks for it and sends nothing, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app, requests } = await damagedRecord({ locale });
+    await click(app, "damaged-record-continue");
+    await expect.poll(() => formErrors(app)).toEqual([t.fix]);
+    expect(q<WtButton>(app, "damaged-record-continue").disabled).toBe(true);
+    expect(q(app, "damaged-record-password").textContent).toBe(t.damagedRecordPassword);
+    expect(requests.some((r) => /\/(recover|resume)$/.test(r.path))).toBe(false);
+    expect(startAgainRequests(requests)).toHaveLength(1);
+  },
+);
+
+it.each([
+  {
+    name: "an answer the page cannot read",
+    locale: "en-GB",
+    answer: () => ({ state: "stopped" }),
+    shown: (): string => initialOwnerStrings.en.recoveryDetailsUnread,
+  },
+  {
+    name: "an answer the page cannot read, in Spanish",
+    locale: "es-ES",
+    answer: () => ({ state: "stopped" }),
+    shown: (): string => initialOwnerStrings.es.recoveryDetailsUnread,
+  },
+  {
+    name: "a refusal the page has words for",
+    locale: "en-GB",
+    answer: () => refusal("setup.recovery_in_progress", 409),
+    shown: (): string => shellEn["shell.first_setup.recovery_in_progress"],
+  },
+])(
+  "with the database present, an activity read after the password that fails with $name says so, reads no summary, and Check again reads both",
+  async ({ locale, answer, shown }) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app, requests } = await stoppedPresent({
+      activity: (read) => (read === 1 ? answer() : stoppedActivity()),
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    const summaries = () => requests.filter((r) => r.path.endsWith("/start-again/summary"));
+    await passwordAccepted(app);
+    await expect.poll(() => formErrors(app)).toEqual([shown()]);
+    expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+    expect(app.shadowRoot!.querySelector("[data-test=damaged-record-password]")).toBeNull();
+    expect(q(app, "check-again").textContent).toContain(t.checkAgain);
+    expect(q(app, "cancel-damaged-record").textContent).toContain(t.cancel);
+    expect(summaries()).toEqual([]);
+    await click(app, "check-again");
+    await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+    expect(summaries()).toHaveLength(1);
+    expect(formErrors(app)).toEqual([""]);
+    expect(startAgainRequests(requests)).toEqual([]);
+  },
+);
+
+it("with the database present, a stopped recovery running again after the password, when the page's next activity read is refused, shows the refusal and offers only Reconnect, signed out, with nothing sent", async () => {
+  const { app, requests } = await stoppedPresent({
+    activity: (read) =>
+      read === 0
+        ? stoppedActivity()
+        : read === 1
+          ? { state: "running", ...stoppedAt }
+          : refusal("setup.recovery_in_progress", 409),
+  });
+  await passwordAccepted(app);
+  await expect
+    .poll(() => formErrors(app))
+    .toEqual([shellEn["shell.first_setup.recovery_in_progress"]]);
+  expect(q(app, "reconnect-first")).not.toBeNull();
+  for (const name of [
+    "start-again",
+    "resume-password",
+    "damaged-record-password",
+    "confirm-start-again",
+    "check-again",
+  ])
+    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
+  expect(requests.some((r) => r.path.endsWith("/start-again/summary"))).toBe(false);
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+it("with the database present, a refused Start again whose activity read fails still asks for the password, and claims no damaged record when no recovery is found after it", async () => {
+  const { app, requests } = await stoppedPresent({
+    activity: (read) => (read === 1 ? refusal("server.internal", 500) : null),
+    passwordRequired: true,
+  });
+  await click(app, "start-again");
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  expect(formErrors(app)).toEqual([""]);
+  expect(startAgainRequests(requests)).toHaveLength(1);
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => app.shadowRoot!.querySelector("[data-test=resume]")).not.toBeNull();
+  for (const name of [
+    "recovery-record-damaged",
+    "confirm-start-again",
+    "damaged-record-password",
+    "recovery-stopped",
+  ])
+    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
+  expect(startAgainRequests(requests)).toHaveLength(1);
+});
+
+async function detailsUnread() {
+  const fixture = await stoppedPresent({
+    summary: (read) => (read === 0 ? refusal("setup.not_ready", 409) : undefined),
+  });
+  await passwordAccepted(fixture.app);
+  await expect.poll(() => q(fixture.app, "check-again")).not.toBeNull();
+  await fixture.app.updateComplete;
+  return fixture;
+}
+
+it("with the database present, a second click on Check again while the first is reading sends no second read", async () => {
+  const { app, requests } = await detailsUnread();
+  const reads = (suffix: string) => requests.filter((r) => r.path.endsWith(suffix)).length;
+  const activityReads = reads("/backup/activity");
+  q(app, "check-again").dispatchEvent(new MouseEvent("click"));
+  q(app, "check-again").dispatchEvent(new MouseEvent("click"));
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(reads("/backup/activity")).toBe(activityReads + 1);
+  expect(reads("/start-again/summary")).toBe(2);
+  expect(formErrors(app)).toEqual([""]);
+});
+
+it("with the database present, Cancel clicked while Check again is reading does nothing, and the confirmation is drawn when the read answers", async () => {
+  let answer: (response: Response) => void = () => undefined;
+  const { app, requests } = await stoppedPresent({
+    summary: (read) =>
+      read === 0
+        ? refusal("setup.not_ready", 409)
+        : read === 1
+          ? new Promise<Response>((done) => (answer = done))
+          : undefined,
+  });
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "check-again")).not.toBeNull();
+  const inspections = () =>
+    requests.filter((r) => r.path.endsWith("/first-setup/resolution")).length;
+  await click(app, "check-again");
+  await expect
+    .poll(() => requests.filter((r) => r.path.endsWith("/start-again/summary")))
+    .toHaveLength(2);
+  const before = inspections();
+  q(app, "cancel-damaged-record").dispatchEvent(new MouseEvent("click"));
+  answer(Response.json(stoppedSummary(false)));
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(inspections()).toBe(before);
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeDefined();
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+const running = { state: "running", ...stoppedAt };
+it("with the database present, a tab closed while it reads the page again after the password starts no activity re-reads", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    let answer: (response: Response) => void = () => undefined;
+    const { app, api, requests } = await stoppedPresent({
+      activity: (read) =>
+        read === 0
+          ? stoppedActivity()
+          : read === 2
+            ? new Promise<Response>((done) => (answer = done))
+            : running,
+    });
+    const activity = vi.spyOn(api, "firstSetupBackupActivity");
+    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity")).length;
+    await passwordAccepted(app);
+    await expect.poll(activityReads).toBe(3);
+    app.remove();
+    answer(Response.json({ activity: running }));
+    await activity.mock.results.at(-1)!.value;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(activityReads()).toBe(3);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("with the database present, a tab closed while a refused Start again reads the activity starts no activity re-reads", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    let answer: (response: Response) => void = () => undefined;
+    const { app, api, requests } = await stoppedPresent({
+      activity: (read) => (read === 1 ? new Promise<Response>((done) => (answer = done)) : null),
+      passwordRequired: true,
+    });
+    const activity = vi.spyOn(api, "firstSetupBackupActivity");
+    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity")).length;
+    await click(app, "start-again");
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+    await app.updateComplete;
+    await click(app, "confirm-start-again");
+    await expect.poll(activityReads).toBe(2);
+    app.remove();
+    answer(Response.json({ activity: running }));
+    await activity.mock.results.at(-1)!.value;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(activityReads()).toBe(2);
+    expect(startAgainRequests(requests)).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});

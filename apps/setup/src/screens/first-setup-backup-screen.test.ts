@@ -964,3 +964,41 @@ it("hands the Cloud wait's lease to the session once the approved point is opene
     vi.useRealTimers();
   }
 });
+
+it("Back after a refused renewal stopped the recovery returns to the setup repair page", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el } = await openedWithRenewal(() => refused("setup.owner_required"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect.poll(() => q(el, "back")).not.toBeNull();
+    const screens: unknown[] = [];
+    el.addEventListener("setup-goto", (event) =>
+      screens.push((event as CustomEvent<{ screen: string }>).detail.screen),
+    );
+    await click(el, "back");
+    expect(screens).toEqual(["first-owner"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("Reconnect after a discarded recovery reads the saved status again and offers a fresh proof", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el, calls } = await openedWithRenewal(() =>
+      refused("setup.recovery_discarded", { discardedAt }),
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect.poll(() => q(el, "reload-status")).not.toBeNull();
+    const reads = (action: string) => calls.filter((call) => call.action === action).length;
+    const before = [reads("status"), reads("resolution")];
+    await click(el, "reload-status");
+    await expect.poll(() => q<WtButton>(el, "prove")?.disabled).toBe(false);
+    expect([reads("status"), reads("resolution")]).toEqual([before[0]! + 1, before[1]! + 1]);
+    expect(q(el, "discarded")).toBeNull();
+    expect(q(el, "source")).not.toBeNull();
+    expect(q(el, "review")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

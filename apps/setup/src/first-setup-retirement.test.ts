@@ -276,3 +276,16 @@ it.each([{ restarting: false }, {}])(
     expect(session.recoveryRequired).toBe(true);
   },
 );
+
+it("after a sent Start again with the database present, the stopped recovery's summary and another Start again need the password again, and send nothing", async () => {
+  const { session, requests } = await fixture({ inspection: presentDatabase });
+  await session.retireDamagedRecord();
+  const sent = requests.length;
+  await expect(session.stoppedRecoverySummary()).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  await expect(session.retireDamagedRecord()).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  expect(requests).toHaveLength(sent);
+});
