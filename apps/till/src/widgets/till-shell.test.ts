@@ -1599,9 +1599,6 @@ describe("till-shell at phone width", () => {
             c.localName,
         ),
       ).toEqual(["operator", "help-switch", "more-menu"]);
-      for (const button of session.querySelectorAll(":scope > wt-button")) {
-        expect(button.getAttribute("variant")).toBe("secondary");
-      }
     });
   });
 
@@ -1639,8 +1636,8 @@ describe("till-shell at phone width", () => {
 });
 
 describe("till-shell above phone width", () => {
-  /** What leaves a handheld's bar for More, the name alone: its key and the selector of the name,
-   * which with no clock is drawn plainly, outside a menu. */
+  /** What leaves a handheld's bar for More, the name alone: its key and the selector of the name
+   * as ☰ draws it. */
   const leaveOrder = [["operator", ".operator"]] as const;
 
   const settle = async (el: TillShell) => {
@@ -1941,7 +1938,7 @@ describe("till-shell above phone width", () => {
     },
   );
 
-  it("keeps More in its own order, showing only the items that left", async () => {
+  it("keeps More in its own order", async () => {
     await atViewport(1024, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
@@ -1973,7 +1970,8 @@ describe("till-shell above phone width", () => {
       ];
       expect(order.length).toBeGreaterThan(0);
       expect(order).toEqual(moreOrder.filter((key) => order.includes(key)));
-      expect(order.length).toBeLessThan(moreOrder.length);
+      expect(el.shadowRoot!.querySelector("header .session > .operator")).not.toBeNull();
+      expect(order).toEqual(moreOrder.filter((key) => key !== "operator"));
       for (const key of order) {
         const selector = key.startsWith("data-")
           ? `[${key}]`
@@ -1987,10 +1985,8 @@ describe("till-shell above phone width", () => {
         expect(button.getAttribute("variant")).toBe("ghost");
         expect(button.getAttribute("align")).toBe("start");
       }
-      for (const button of el.shadowRoot!.querySelectorAll("header .session > wt-button")) {
-        expect(button.getAttribute("variant")).toBe("secondary");
-      }
       const session = el.shadowRoot!.querySelector("header .session")!;
+      expect(session.querySelector(":scope > wt-button")).toBeNull();
       expect(session.lastElementChild).toBe(menu);
     });
   });
@@ -2032,7 +2028,7 @@ describe("till-shell above phone width", () => {
     );
   });
 
-  it("refits when actions are added, and gives them back when they go", async () => {
+  it("lists added actions in More and drops them when they go", async () => {
     await atViewport(1280, async () => {
       const few: Partial<TillShell> = {
         ...full,
@@ -2338,6 +2334,13 @@ describe("till-shell above phone width", () => {
 
   const shortName = { operatorName: "Ana" };
   const longName = { operatorName: "María de los Ángeles Fernández-Villaverde y Castro" };
+  /** Measurements the race batches share, keyed by width, language and what was measured. */
+  const raceMeasures = new Map<string, Promise<unknown>>();
+  const measuredOnce = <T>(what: string, measure: () => Promise<T>): Promise<T> => {
+    const key = `${innerWidth}|${currentLocale()}|${what}`;
+    if (!raceMeasures.has(key)) raceMeasures.set(key, measure());
+    return raceMeasures.get(key) as Promise<T>;
+  };
 
   it.each(
     (
@@ -2370,17 +2373,21 @@ describe("till-shell above phone width", () => {
     async (_how, start, first, second, from, to) => {
       await withLocale("en-GB", () =>
         atViewport(1100, async () => {
-          const base = { ...full, barTables: tablesOf(await tablesMoving(longName.operatorName)) };
-          const freshMore = async (name: Partial<TillShell>) => {
-            const { el: fresh } = await mountWidget<TillShell>("till-shell", {
-              ...base,
-              ...name,
+          const count = await measuredOnce(`tables ${longName.operatorName}`, () =>
+            tablesMoving(longName.operatorName),
+          );
+          const base = { ...full, barTables: tablesOf(count) };
+          const freshMore = (name: Partial<TillShell>) =>
+            measuredOnce(`fresh ${count} ${JSON.stringify(name)}`, async () => {
+              const { el: fresh } = await mountWidget<TillShell>("till-shell", {
+                ...base,
+                ...name,
+              });
+              await settle(fresh);
+              const moved = inMore(fresh);
+              fresh.remove();
+              return moved;
             });
-            await settle(fresh);
-            const moved = inMore(fresh);
-            fresh.remove();
-            return moved;
-          };
           // The fresh bar keeps the short name and moves the long one, so a fit cut short could
           // leave either answer.
           expect(await freshMore(shortName)).toEqual([]);
