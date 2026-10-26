@@ -3536,15 +3536,15 @@ Account settings, Theme, Language and Log out — at the banner's trailing (righ
 locales) edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the
 banner takes two rows: the menu toggle, the logo (the venue's, or Waitron's lockup) and the menus
 share the first, with the logo shrinking when space runs short, and the legal name and Live mode
-pill take the second in full. Signed in, while a venue logo is in use and has not failed,
-`wt-powered-by` (`login.powered_by`) sits at the identity row's trailing side, just before the
-alerts bell or help switch, with a `--wt-color-border` divider at its trailing edge; below the
-breakpoint it takes the second row's trailing end, after the legal name, with no divider (A1096,
-`apps/dashboard/src/dashboard-app.powered-by-banner.test.ts`). The floor plan editor covers the
-banner and the menu with its full-window modal; its Undo, Redo, Cancel and Save keep one row down to
-320 px (A502). Signed out, the Theme chooser (`wt-theme-chooser`) and then the language chooser
-(`wt-language-chooser`) sit at the trailing edge, with nothing after them (see "Navigation and
-language controls"). Signed in, the banner holds neither: the banner has no room
+pill take the second. Signed in, while a venue logo is in use and has not failed, `wt-powered-by`
+(`login.powered_by`) sits at the identity row's trailing side, just before the alerts bell or help
+switch, with a `--wt-color-border` divider at its trailing edge; below the breakpoint it takes the
+second row's trailing end, after the legal name or, when the two do not fit, under it, with no
+divider (A1096, `apps/dashboard/src/dashboard-app.powered-by-banner.test.ts`). The floor plan editor
+covers the banner and the menu with its full-window modal; its Undo, Redo, Cancel and Save keep one
+row down to 320 px (A502). Signed out, the Theme chooser (`wt-theme-chooser`) and then the language
+chooser (`wt-language-chooser`) sit at the trailing edge, with nothing after them (see "Navigation
+and language controls"). Signed in, the banner holds neither: the banner has no room
 for them at phone width, so both move into the account menu, at every width, after Account
 settings and before Log out. First Theme: one row holding the visible label "Theme", which names
 the group, and then three icon-only toggle buttons (sun, crescent and half-filled circle, the icons

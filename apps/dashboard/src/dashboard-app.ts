@@ -784,8 +784,8 @@ export class DashboardApp extends LitElement {
           margin-inline-start: var(--wt-space-2);
         }
         /* Powered by moves under the name rather than past the screen's edge when the two cannot
-           share a row. A zero basis makes the row break on the name's narrowest width, so a long
-           name still shrinks beside Powered by wherever both fit. */
+           share a row. A zero basis makes the row break on the narrowest width of the name and its
+           Live pill, so a long name still shrinks beside Powered by wherever both fit. */
         .venue-row {
           grid-area: venue;
           display: flex;

@@ -302,7 +302,7 @@ describe("Powered by in the signed-in banner", () => {
   });
 
   it.each([100, 130] as const)(
-    "at 320 px in Spanish at %i% text, with a long legal name and the Live pill, keeps the whole line and its lockup on screen",
+    "at 320 px in Spanish at %i% text, with a long legal name and the Live pill, puts the whole line and its lockup on screen under the legal name",
     async (scale) => {
       await page.viewport(320, 700);
       store(withLogoAt(scale));
@@ -335,6 +335,10 @@ describe("Powered by in the signed-in banner", () => {
         expect(overlaps(box, name), `${part} against the legal name`).toBe(false);
         expect(overlaps(box, pill), `${part} against the Live pill`).toBe(false);
       }
+      expect(at.top, "the line under the legal name").toBeGreaterThanOrEqual(
+        Math.max(name.bottom, pill.bottom),
+      );
+      expect(at.top, "the line below the first row").toBeGreaterThanOrEqual(menu.bottom);
       expect(lockup.width, "the lockup's drawn width").toBeCloseTo(lockupWidth, 0);
       expect(Math.abs(at.right - menu.right), "trailing end under the menu's").toBeLessThanOrEqual(
         1,
