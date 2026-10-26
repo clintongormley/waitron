@@ -438,7 +438,7 @@ type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
 const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
 
 interface ReleasedBill {
-  sync: DraftSync;
+  personId: string;
   bill: LocalBill;
   savedBefore?: number;
 }
@@ -2680,6 +2680,8 @@ export class TillApp extends LitElement {
    * a floor read started after its save answered (`savedBefore`) has been applied, or while its
    * failed save sits in {@link #unsavedDrafts}. */
   #released: ReleasedBill[] = [];
+  /** Each released draft's record, so a record does not keep its draft, store and client alive. */
+  readonly #releasedRecords = new WeakMap<DraftSync, ReleasedBill>();
   readonly #draftCandidates = new Map<string, RetainedDraftCandidate>();
   @state() private resolvingDraftCandidate: DraftSync | null = null;
   #billDraftTimer?: ReturnType<typeof setTimeout>;
@@ -10633,11 +10635,14 @@ export class TillApp extends LitElement {
     }
     const session = this.#operatorSession;
     const tableId = this.activeTableId;
-    if (tableId !== undefined)
-      this.#released.push({
-        sync,
+    if (tableId !== undefined) {
+      const record = {
+        personId: sync.personId,
         bill: localBill({ partyId: sync.partyId, tableId, billId: sync.billId }, sync.store, sync),
-      });
+      };
+      this.#releasedRecords.set(sync, record);
+      this.#released.push(record);
+    }
     this.#leavingDrafts.set(
       sync,
       sync.flush().then((saved) => {
@@ -10657,8 +10662,8 @@ export class TillApp extends LitElement {
   /** D10: a saved bill waits for a floor read started after now, a failed one stays while it is
    * unsaved, and a refused one goes. */
   #settleReleased(sync: DraftSync, saved: DraftSaveOutcome): void {
-    const record = this.#released.find((each) => each.sync === sync);
-    if (record === undefined || saved === "failed") return;
+    const record = this.#releasedRecords.get(sync);
+    if (record === undefined || !this.#released.includes(record) || saved === "failed") return;
     if (saved === "saved") record.savedBefore = this.#tablesRead;
     else this.#forgetReleased((each) => each === record);
     if (this.formFactor !== "till") void this.#refreshFloor();
@@ -11283,7 +11288,10 @@ export class TillApp extends LitElement {
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
     kept?.drop();
-    if (kept !== undefined) this.#forgetReleased((each) => each.sync === kept);
+    if (kept !== undefined) {
+      const record = this.#releasedRecords.get(kept);
+      this.#forgetReleased((each) => each === record);
+    }
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
@@ -11391,7 +11399,7 @@ export class TillApp extends LitElement {
 
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
-    this.#forgetReleased((each) => each.sync.personId !== personId);
+    this.#forgetReleased((each) => each.personId !== personId);
     for (const sync of [...this.#leavingDrafts.keys()])
       if (sync.personId !== personId) {
         sync.drop();
