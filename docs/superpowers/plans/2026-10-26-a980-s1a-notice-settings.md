@@ -565,6 +565,9 @@ Files: `packages/db/src/schema/tenants.ts`, the generated `packages/db/drizzle/<
    privacyEmail: label("privacy_email"),
    ```
 
+   _2026-10-26: the comment was not kept: the route (`apps/server/src/venue-privacy.ts`) turns a
+   blank value into NULL, not `savePrivacyContact`, which stores what it is given._
+
 3. `cd packages/db && pnpm exec drizzle-kit generate --name privacy_contact`. Expected: one new SQL
    file holding exactly the two lines probe 1 printed, one snapshot, one journal entry. If the SQL
    holds anything else, above all `__new_tenants`, stop: that is a rebuild (decision 2).

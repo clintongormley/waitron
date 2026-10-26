@@ -708,7 +708,7 @@ _2026-10-26: S6's templates, record of processing and breach checklist are the g
 
 _2026-10-26: the build plan now splits S1 in three (S1a, S1a2, S1b); S1a2 carries the setting in
 the configuration export, and the card is read under `venue.view`
-([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md), owner decision C)._
+([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md), owner answers B and C)._
 
 | Slice | What | Migration | Fiscal | Permission | Tests | Gate |
 | --- | --- | --- | --- | --- | --- | --- |
