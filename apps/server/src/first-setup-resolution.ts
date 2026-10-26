@@ -225,10 +225,9 @@ export function createFirstSetupResolutionActions(
     );
     const named = picks === undefined ? undefined : floor(picks);
     const found = named === undefined ? floor([]) : named;
-    // A chosen name is written to the copy's picks before the journal records its input, and reaches
-    // the page or a commit only after that record (`prepare` and `commit` in
-    // first-setup-backup-recovery.ts), so with neither, no name was taken. Picks that cannot be
-    // read could hold one.
+    // A name reaches the page or a commit only after the journal records its input (`prepare` and
+    // `commit` in first-setup-backup-recovery.ts), so with no input and no name in readable picks,
+    // no name was used. Picks that cannot be read could hold one.
     if (
       (found ?? null) === null &&
       !(recoveryInputs.every((input) => input === null) && named !== undefined)

@@ -707,7 +707,7 @@ export function mountFirstSetupResolutionFence(
   );
 }
 
-/** The writes outside `/resolution/` that change the attempt. */
+/** Writes outside `/resolution/` that this fence also covers; not every write that changes the attempt. */
 const FIRST_SETUP_OWNER_WRITES: readonly string[] = [
   "/setup-api/first-setup/resume",
   "/setup-api/first-setup/abandon",
