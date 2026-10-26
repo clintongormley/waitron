@@ -5173,6 +5173,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Audit the other coverage download actions for retained refused responses.**
+  The server helper closes this response; other merge jobs still use the action exercised by
+  the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).
+
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
