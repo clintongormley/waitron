@@ -1,12 +1,13 @@
 import { clock } from "../test/hour-recovery-host.js";
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { access, readFile, readdir, writeFile } from "node:fs/promises";
 import * as filesystem from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { expect, it, vi } from "vitest";
 
+import { emptyAbandonedBackupRecovery, isEmptiedTombstone } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 
 import * as restore from "./restore.js";
@@ -944,4 +945,201 @@ it("answers Check on a sealed Cloud recovery from its own request, and leases no
   expect(answer.requestId).toBe(f.approved.requestId);
   expect(f.service.runningInMemory()).toBe(false);
   expect(() => f.service.cloudRenew("A")).toThrow(refused);
+});
+
+// What B's Start again does to A's stopped recovery: the record, the discard in memory, then the
+// emptying.
+async function discard(
+  f: {
+    workspace: { abandon(id: string): Promise<{ recordedAt: string }> };
+    service: ReturnType<typeof recovery>;
+    options: Parameters<typeof recovery>[0];
+    roots: { venueDir: string; stateDir: string };
+  },
+  recoveryId: string,
+) {
+  const { recordedAt } = await f.workspace.abandon(recoveryId);
+  await f.options.host.coordinator.run(() => f.service.discardInTurn(recoveryId));
+  await emptyAbandonedBackupRecovery(f.roots, recoveryId);
+  return recordedAt;
+}
+
+const discardedAt = (at: string) =>
+  expect.objectContaining({ code: "setup.recovery_discarded", params: { discardedAt: at } });
+
+async function tree(roots: { venueDir: string; stateDir: string }) {
+  const found: Record<string, string> = {};
+  const walk = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        found[path] = "directory";
+        await walk(path);
+      } else
+        found[path] = createHash("sha256")
+          .update(await readFile(path))
+          .digest("hex");
+    }
+  };
+  for (const directory of new Set([roots.stateDir, roots.venueDir])) await walk(directory);
+  return found;
+}
+
+it("refuses a late step from a discarded recovery in the same process, with when it was discarded", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  await expect(
+    f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+});
+
+it("refuses a late step from a discarded recovery after a restart, with when it was discarded", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  await expect(
+    restarted.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(at));
+  expect(() => restarted.renew(f.session.sessionId)).toThrow(discardedAt(at));
+  expect(() => restarted.cloudRenew("A")).toThrow(discardedAt(at));
+});
+
+it("makes a resume in flight when the recovery is discarded lose", async () => {
+  const f = await selectedRepair();
+  vi.mocked(stateSecrets.unpackBundleToDir).mockRejectedValueOnce(new Error("interrupted secrets"));
+  await expect(f.service.commit(f.session.sessionId, f.selected.input, client)).rejects.toThrow(
+    "interrupted secrets",
+  );
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  const gate = barrier();
+  const reached = barrier();
+  const real = vi.mocked(sources.authenticatedFirstSetupBackupPreview).getMockImplementation();
+  const actual = await vi.importActual<typeof sources>("./first-setup-backup-source.js");
+  vi.mocked(sources.authenticatedFirstSetupBackupPreview).mockImplementationOnce(
+    async (...args) => {
+      reached.resolve();
+      await gate.promise;
+      return (real ?? actual.authenticatedFirstSetupBackupPreview)(...args);
+    },
+  );
+  const resuming = restarted.resume(
+    {
+      observation: f.request.observation,
+      recoveryId: f.session.recoveryId,
+      nodeRecoverySecret: f.request.nodeRecoverySecret,
+      context: { oldBoxGone: true, soleRecovery: true },
+    },
+    client,
+  );
+  resuming.catch(() => {});
+  await reached.promise;
+  const at = await discard({ ...f, service: restarted }, f.session.recoveryId).finally(
+    gate.resolve,
+  );
+  await expect(resuming).rejects.toEqual(discardedAt(at));
+  expect(restarted.runningInMemory()).toBe(false);
+});
+
+it("lets nothing A sends revive a discarded recovery, and leaves the folders as they were", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  const before = await tree(f.roots);
+  await expect(f.service.commit(f.session.sessionId, {}, client)).rejects.toEqual(discardedAt(at));
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(discardedAt(at));
+  await expect(f.service.close(f.session.sessionId)).rejects.toEqual(discardedAt(at));
+  await expect(
+    f.service.open({ ...f.request, recoveryId: f.session.recoveryId }, client),
+  ).rejects.toEqual(discardedAt(at));
+  await expect(
+    f.service.resume(
+      {
+        observation: f.request.observation,
+        recoveryId: f.session.recoveryId,
+        nodeRecoverySecret: f.request.nodeRecoverySecret,
+        context: { oldBoxGone: true, soleRecovery: true },
+      },
+      client,
+    ),
+  ).rejects.toEqual(discardedAt(at));
+  expect(await tree(f.roots)).toEqual(before);
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(await f.service.liveness()).toBeNull();
+});
+
+it("makes a reopen in flight when the recovery is discarded lose", async () => {
+  const f = await preparedSession();
+  await f.service.close(f.session.sessionId);
+  const gate = barrier();
+  const reached = barrier();
+  const real = vi.mocked(sources.openFirstSetupBackupSource).getMockImplementation()!;
+  vi.mocked(sources.openFirstSetupBackupSource).mockImplementationOnce(async (...args) => {
+    reached.resolve();
+    await gate.promise;
+    return real(...args);
+  });
+  const reopening = f.service.open({ ...f.request, recoveryId: f.session.recoveryId }, client);
+  reopening.catch(() => {});
+  await reached.promise;
+  const at = await discard(f, f.session.recoveryId).finally(gate.resolve);
+  await expect(reopening).rejects.toEqual(discardedAt(at));
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(await f.service.liveness()).toBeNull();
+});
+
+it("starts a new Cloud recovery after a stopped one is discarded in the same service, writing nothing under the tombstone", async () => {
+  const f = await closedCloudSession();
+  expect((await f.service.cloudStatus("A")).state).toBe("approved");
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  expect(f.service.runningInMemory()).toBe(false);
+  const at = await discard(f, f.session.recoveryId);
+  const tombstone = join(f.roots.stateDir, "first-setup-resolutions", "backup-recovery");
+  const before = await tree({ stateDir: tombstone, venueDir: tombstone });
+  expect(() => f.service.cloudRenew("A")).toThrow(discardedAt(at));
+  const answer = await f.service.cloudStart("C");
+  expect(answer.state).toBe("awaiting_owner");
+  expect(answer.requestId).not.toBe(f.approved.requestId);
+  expect(f.service.runningInMemory()).toBe(true);
+  expect(await f.service.liveness()).toMatchObject({ state: "running" });
+  f.service.cloudRenew("C");
+  expect(() => f.service.cloudRenew("A")).toThrow(discardedAt(at));
+  expect(() => f.service.cloudRenew("Z")).toThrow(refused);
+  expect(await tree({ stateDir: tombstone, venueDir: tombstone })).toEqual(before);
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
+  expect((await f.service.cloudStatus("A")).state).toBe("approved");
+  f.service.cloudRenew("A");
+  clock.advance(LEASE + 1);
+  expect(() => f.service.cloudRenew("A")).toThrow(refused);
+});
+
+it("answers owner-required for an unknown session once a new recovery is under way beside the tombstone", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  expect(() => f.service.renew("unknown")).toThrow(discardedAt(at));
+  const second = await f.service.open(f.request, client);
+  await f.service.prepare(second.sessionId, { action: "clock-challenge" }, client);
+  expect(second.recoveryId).not.toBe(f.session.recoveryId);
+  expect(() => f.service.renew("unknown")).toThrow(refused);
+  await expect(f.service.close("unknown")).rejects.toEqual(refused);
+  f.service.renew(second.sessionId);
+});
+
+it("refuses a second prepare once its journal is abandoned under the live session", async () => {
+  const f = await preparedSession();
+  const { recordedAt } = await f.workspace.abandon(f.session.recoveryId);
+  await expect(
+    f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
+  ).rejects.toEqual(discardedAt(recordedAt));
+});
+
+it("answers owner-required for an unknown session when nothing was discarded", async () => {
+  const f = await preparedSession();
+  await expect(f.service.prepare("unknown", { action: "clock-challenge" }, client)).rejects.toEqual(
+    refused,
+  );
+  expect(() => f.service.renew("unknown")).toThrow(refused);
+  await expect(f.service.close("unknown")).rejects.toEqual(refused);
+  await expect(f.service.commit("unknown", {}, client)).rejects.toEqual(refused);
 });

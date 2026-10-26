@@ -231,6 +231,30 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     wait.lastActiveAt = new Date().toISOString();
   };
   const handOver = (recoveryId: string) => cloudWaits.get(recoveryId)?.holders.clear();
+  // The latest record as last read, when it is `abandoned`: a renewal has no turn to read it in.
+  let tombstone: { recoveryId: string; at: string } | undefined;
+  const retiredHolders = new Map<string, string>();
+  const observe = (last: BackupRepairRecord | undefined) => {
+    tombstone =
+      last?.phase === "abandoned"
+        ? { recoveryId: last.target.recoveryId, at: last.recordedAt }
+        : undefined;
+    return tombstone;
+  };
+  // An unreadable journal leaves the refusal the caller would give anyway.
+  const readTombstone = () =>
+    options.workspace.read().then(
+      (records) => observe(records.at(-1)),
+      () => undefined,
+    );
+  const discarded = (found: { at: string } | undefined) => {
+    if (found !== undefined)
+      throw new AppError("setup.recovery_discarded", { discardedAt: found.at });
+  };
+  const refuseDiscarded = async (recoveryId: string) => {
+    const found = await readTombstone();
+    if (found?.recoveryId === recoveryId) discarded(found);
+  };
   // A Cloud call can wait 30 s for Cloud before it takes its lease, so it reads as running meanwhile.
   const cloudCalls = new Map<object, string>();
   const cloudCall = <T>(run: () => Promise<T>) =>
@@ -395,6 +419,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       await drop();
       ownerRequired();
     }
+    await refuseDiscarded(entry.session.recoveryId);
     await assertNoStartAgainDeletion(options.venueDir);
     // The session's observation and digests never change, so a refusal here would repeat on every step.
     const refuse = (): never => {
@@ -441,8 +466,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       active === undefined ||
       active.session.sessionId !== sessionId ||
       active.sealed !== undefined
-    )
+    ) {
+      discarded(await readTombstone());
       ownerRequired();
+    }
     const entry = active;
     await recheck(entry);
     if (entry.failed === undefined) touch(entry);
@@ -652,6 +679,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
   const liveRecords = async (starting = true) => {
     const records = await options.workspace.read(),
       last = records.at(-1);
+    observe(last);
     if (last?.phase !== "abandoned") return records;
     if (
       starting &&
@@ -763,6 +791,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           throw new AppError("module.operation_invalid", { module: "core" });
         const before = await turn(async () => {
           if (disposed) ownerRequired();
+          if (request.recoveryId !== undefined) await refuseDiscarded(request.recoveryId);
           await assertNoStartAgainDeletion(options.venueDir);
           if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
           const records = await liveRecords();
@@ -857,6 +886,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           return await turn(async () => {
             if (disposed) ownerRequired();
+            await refuseDiscarded(recoveryId);
             if (
               generation !== before.generation ||
               !isDeepStrictEqual(await observation(), request.observation) ||
@@ -1146,6 +1176,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             return structuredClone(session);
           });
         } catch (error) {
+          // A discard empties the files a resume reads between its turns.
+          await refuseDiscarded(request.recoveryId);
           if (isAppError(error)) throw error;
           throw new AppError("setup.attempt_uncertain", {});
         } finally {
@@ -1424,7 +1456,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     },
     close(sessionId: string): Promise<void> {
       return turn(async () => {
-        if (active === undefined || active.session.sessionId !== sessionId) ownerRequired();
+        if (active === undefined || active.session.sessionId !== sessionId) {
+          discarded(await readTombstone());
+          ownerRequired();
+        }
         if (performance.now() - active.usedAt > UNUSED_MS) {
           await drop();
           ownerRequired();
@@ -1434,6 +1469,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     },
     renew(sessionId: string): void {
       const entry = active;
+      if (entry === undefined || entry.session.sessionId !== sessionId) discarded(tombstone);
       if (entry === undefined || entry.session.sessionId !== sessionId || !live(entry))
         ownerRequired();
       refresh(entry);
@@ -1441,6 +1477,13 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     cloudRenew(holder: string): void {
       const wait = cloudWait();
       const renewed = wait?.holders.get(holder);
+      const retired = retiredHolders.get(holder);
+      if (
+        !disposed &&
+        (wait === undefined ||
+          (renewed === undefined && retired !== undefined && retired === tombstone?.recoveryId))
+      )
+        discarded(tombstone);
       if (disposed || wait?.sealed !== undefined || renewed === undefined || !held(renewed))
         ownerRequired();
       wait!.holders.set(holder, performance.now());
@@ -1467,6 +1510,17 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       };
       wait.sealed ??= { at };
       cloudWaits.set(pendingCloudId, wait);
+    },
+    // Runs inside the caller's turn, after the recovery's `abandoned` record is written.
+    async discardInTurn(recoveryId: string): Promise<void> {
+      generation++;
+      if (active?.session.recoveryId === recoveryId) await drop();
+      if (pendingCloudId === recoveryId) pendingCloudId = undefined;
+      clouds.delete(recoveryId);
+      for (const holder of cloudWaits.get(recoveryId)?.holders.keys() ?? [])
+        retiredHolders.set(holder, recoveryId);
+      cloudWaits.delete(recoveryId);
+      await readTombstone();
     },
     runningInMemory,
     async liveness(): Promise<BackupRepairActivity | null> {
