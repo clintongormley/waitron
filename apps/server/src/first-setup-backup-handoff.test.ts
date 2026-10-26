@@ -12,6 +12,7 @@ import { startServer } from "./boot.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
 import { randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import { PASSWORD, request as ownerRequest } from "../test/first-fiscal.js";
 
 const prefix = "/setup-api/first-setup/resolution/backup";
@@ -441,3 +442,133 @@ it("with the database present, the repair page's Continue and Abandon are refuse
     await agent.close();
   }
 });
+
+it.each(["/setup-api/first-setup/resolution/recover", "/setup-api/first-setup/recover"])(
+  "with the database present, %s is refused setup.recovery_in_progress while a Cloud recovery waits, during the Cloud call and after its lease, and changes nothing; with none running, it recovers",
+  async (path) => {
+    const f = await archiveHost();
+    await writeFile(
+      join(f.roots.stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    const nonce = randomBytes(32).toString("base64url");
+    await createFirstSetupModuleHost({
+      ...f.roots,
+      modules: ALL_MODULES,
+      environment: { WAITRON_ENV: "preproduction" },
+    }).owner.claimFirstSetup({ environment: "preproduction", request: ownerRequest }, nonce);
+    const migrationsRoot = join(root, "migrations");
+    await mkdir(migrationsRoot);
+    const sets = manifestSets();
+    const options = migrationOptionsFor(sets, null);
+    for (const [index, set] of sets.entries())
+      await cp(options[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+        recursive: true,
+      });
+    const [port, cloudPort] = await freePorts(2);
+    let cloudReached!: () => void;
+    const reached = new Promise<void>((done) => {
+      cloudReached = done;
+    });
+    let answerCloud!: () => void;
+    const answered = new Promise<void>((done) => {
+      answerCloud = done;
+    });
+    const cloud = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const { payload } = JSON.parse(Buffer.concat(chunks).toString()) as { payload: string };
+        const requestId = (JSON.parse(Buffer.from(payload, "base64url").toString()) as string[])[2];
+        cloudReached();
+        void answered.then(() => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              requestId,
+              state: "awaiting_owner",
+              expiresAt: new Date(Date.now() + 900_000).toISOString(),
+              operationId: null,
+            }),
+          );
+        });
+      });
+    });
+    await new Promise<void>((done) => cloud.listen(cloudPort, "127.0.0.1", done));
+    const origin = `https://127.0.0.1:${port}`;
+    const agent = new Agent({ connect: { rejectUnauthorized: false } });
+    let server: Awaited<ReturnType<typeof startServer>> | undefined;
+    const send = (path: string, init: RequestInit = {}) =>
+      fetch(origin + path, { ...init, dispatcher: agent } as RequestInit);
+    const post = (path: string, body: unknown) =>
+      send(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const recover = async () => {
+      if (path === "/setup-api/first-setup/recover")
+        return post(path, { clientClaimNonce: nonce, password: PASSWORD });
+      const inspected = await (await send("/setup-api/first-setup/resolution")).json();
+      return post(path, {
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision,
+        ownerGeneration: inspected.ownerGeneration,
+        clientClaimNonce: nonce,
+        password: PASSWORD,
+      });
+    };
+    const attempt = join(f.roots.stateDir, "first-setup.json");
+    let starting: Promise<Response> | undefined;
+    try {
+      server = await startServer({
+        WAITRON_ENV: "dev",
+        WAITRON_STATE_DIR: f.roots.stateDir,
+        WAITRON_VENUE_DIR: f.roots.venueDir,
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_CLOUD_ORIGIN: `http://127.0.0.1:${cloudPort}`,
+      });
+      expect((await send("/setup-api/venue-defaults")).status).toBe(200);
+      const unfenced = await readFile(attempt);
+      const recovered = await recover();
+      expect(recovered.status, await recovered.clone().text()).toBe(200);
+      expect(await readFile(attempt)).not.toEqual(unfenced);
+
+      starting = post(prefix + "/cloud/start", { holder: "A" });
+      await reached;
+      const refusedWhile = async (moment: string) => {
+        const activity = (await (await send(prefix + "/activity")).json()) as {
+          activity: { state: string; startedAt: string; lastActiveAt: string };
+        };
+        expect(activity.activity.state, moment).toBe("running");
+        const before = await readFile(attempt);
+        const refused = await recover();
+        expect(refused.status, moment).toBe(409);
+        expect(await refused.json(), moment).toEqual({
+          error: {
+            code: "setup.recovery_in_progress",
+            params: {
+              startedAt: activity.activity.startedAt,
+              lastActiveAt: activity.activity.lastActiveAt,
+            },
+          },
+        });
+        expect(await readFile(attempt), moment).toEqual(before);
+      };
+      await refusedWhile("during the Cloud call");
+      answerCloud();
+      const started = await starting;
+      expect(started.status, await started.clone().text()).toBe(200);
+      await refusedWhile("while the Cloud lease is held");
+    } finally {
+      answerCloud();
+      await starting?.catch(() => undefined);
+      await server?.close();
+      await agent.close();
+      await new Promise<void>((done) => cloud.close(() => done()));
+    }
+  },
+);

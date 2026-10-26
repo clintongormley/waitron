@@ -683,32 +683,44 @@ function fenceWrite(c: Context, next: Next, recovery: FencedRecovery, log: Logge
   return next();
 }
 
-/** Every write of the repair page except the recovery's own goes through `fenceWrite`. */
+const RESOLUTION_ROOT = "/setup-api/first-setup/resolution";
+
+/** A repair-page write under `/resolution`, other than the recovery's own under `/resolution/backup/`. */
+const resolutionWrite = (c: Context) =>
+  c.req.method === "POST" &&
+  (c.req.path === RESOLUTION_ROOT || c.req.path.startsWith(`${RESOLUTION_ROOT}/`)) &&
+  !c.req.path.startsWith(`${RESOLUTION_ROOT}/backup/`);
+
 export function mountFirstSetupResolutionFence(
   app: Hono,
   recovery: FencedRecovery,
   log: Logger,
 ): void {
-  const root = "/setup-api/first-setup/resolution";
-  app.use(`${root}/*`, (c, next) => {
-    if (c.req.method !== "POST" || c.req.path.startsWith(`${root}/backup/`)) return next();
-    return fenceWrite(c, next, recovery, log);
-  });
+  app.use(`${RESOLUTION_ROOT}/*`, (c, next) =>
+    resolutionWrite(c) ? fenceWrite(c, next, recovery, log) : next(),
+  );
 }
 
-/** The repair page's writes outside `/resolution/` that change the attempt. */
+/** The writes outside `/resolution/` that change the attempt. */
 const FIRST_SETUP_OWNER_WRITES: readonly string[] = [
   "/setup-api/first-setup/resume",
   "/setup-api/first-setup/abandon",
+  "/setup-api/first-setup/recover",
 ];
 
-/** `fenceWrite` for the repair page's writes outside `/resolution/`, for a box serving them. */
+/**
+ * `fenceWrite` for the attempt's writes, inside `/resolution/` and out, for a box serving them.
+ * While `gateRefuses()`, `/resolution/` writes are left to the setup gate, which refuses them
+ * before any change.
+ */
 export function firstSetupOwnerWriteFence(
   recovery: FencedRecovery,
   log: Logger,
+  gateRefuses: () => boolean,
 ): MiddlewareHandler {
   return (c, next) =>
-    c.req.method === "POST" && FIRST_SETUP_OWNER_WRITES.includes(c.req.path)
+    (resolutionWrite(c) && !gateRefuses()) ||
+    (c.req.method === "POST" && FIRST_SETUP_OWNER_WRITES.includes(c.req.path))
       ? fenceWrite(c, next, recovery, log)
       : next();
 }

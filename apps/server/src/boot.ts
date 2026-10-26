@@ -1153,7 +1153,7 @@ async function bootServer(
     });
     const backupRepair = firstSetupBackupRecoveryFor(config, env, firstSetupHost, stdoutLog);
     undoOnFailure.push(() => backupRepair.dispose());
-    ownerWriteFence = firstSetupOwnerWriteFence(backupRepair, stdoutLog);
+    ownerWriteFence = firstSetupOwnerWriteFence(backupRepair, stdoutLog, () => backupRepairOnly);
     let repairHandoff: Promise<void> | undefined;
     mountFirstSetupBackupApi(
       app,
