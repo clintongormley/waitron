@@ -206,8 +206,7 @@ by the answers):
   (`tenants.privacy_notice_url`, `tenants.privacy_email`, saved from the **Privacy** card on
   **Venue settings → Venue details**; the
   [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)), and the
-  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Waits for S1a2 (the export point
-  below). Until S1b, only the Privacy card's own read uses the stored values; the emails, the
+  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Until S1b, only the Privacy card's own read uses the stored values; the emails, the
   sign-in page, the profile page and the downloads still take the environment setting. The
   readers, as of 2026-10-26:
   - `apps/server/src/boot.ts:2019`, into `mountManagementApi`, which passes the link to the
@@ -225,22 +224,8 @@ by the answers):
     (`apps/dashboard/src/api/live-queries.ts`); S1b adds `tenants` to it.
   - `apps/server/README.md:492` documents the environment setting; S1b removes it with the setting.
   - The guide (`apps/server/src/guide/<language>/data-protection.md`): S1b rewrites the
-    `privacy-settings` section's last sentence, "For now Waitron only keeps them here: nothing
-    else on the box shows them." ("Por ahora Waitron solo los guarda aquí: nada más en el equipo los
-    muestra."), and names the setting in `staff-notice` and `full-notice`.
-- **S1a2 — a configuration export carries the privacy contact** (the owner's answer of
-  2026-10-26 to the S1a plan's decision B, overriding its default). Today the export names the taxpayer's fields one
-  by one and selects neither column (`packages/provisioning/src/configuration-transfer.ts`, bundle
-  `version: 8`), so a new box set up from Bar Ejemplo's export shows "Not set" for both. Next
-  action: add both to `configuration-transfer.ts`'s export query and its import check (which
-  must refuse exactly what the Privacy card's save refuses, `packages/shared/src/privacy-contact.ts`),
-  and to the setup path that applies them: `apps/server/src/setup-api.ts`,
-  `packages/provisioning/src/venue-plan.ts`, `packages/provisioning/src/venue-apply.ts` and
-  `packages/provisioning/src/first-setup-state.ts`. Then drop the guide's "A configuration export
-  does not carry them …" sentence in both languages. It is its own slice, S1a2, after S1a and
-  before S1b (ruled 2026-10-26: it changes the bundle between `@waitron/provisioning` and the
-  server, so it gets its own plan and a FULL review; FYI in lane B's questions file, "A980 S1a:
-  the export of the privacy contact is the NEXT slice, S1a2").
+    `privacy-settings` section's last sentence, "Nothing else on the box shows them yet." ("Nada
+    más en el equipo los muestra todavía."), and names the setting in `staff-notice` and `full-notice`.
 - **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
   confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
   `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
@@ -323,7 +308,8 @@ by the answers):
   watcher, `questions.md:4400` in lane B's campaign folder.
 - **A980 S1a, 2026-10-26:** the owner kept five of the
   [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)'s six defaults (its
-  "Open decisions for the owner"; decision B was overridden, S1a2 under A980 above).
+  "Open decisions for the owner"; decision B was overridden, and S1a2 built it: the A980 S1a2
+  entry below).
   Relayed by the watcher, the "OWNER ANSWER — A980 S1a plan defaults A–F" section of lane B's
   questions file.
   - **A. Nothing but the Privacy card reads the setting until S1b.** A manager saves
@@ -339,6 +325,21 @@ by the answers):
     email, the later one replaces the earlier with no warning, as on the Defaults card.
   - **F. Stricter than `WAITRON_PRIVACY_NOTICE_URL`.** An address carrying a user name or
     password, a space inside it, or an invisible character is refused; `http://` stays accepted.
+- **A980 S1a2, 2026-10-26:** the configuration export carries the privacy notice page and the
+  privacy email, built with the four defaults of the
+  [S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md)'s "Open
+  decisions for the owner", each open for the owner to reverse:
+  - **A. Carried with New tax ID too.** A new owner setting up from Bar Ejemplo's export with
+    **New tax ID** sees Bar Ejemplo's address and email on the Privacy card until someone changes
+    them; the guide says to check them. Alternative: leave both unset with New tax ID.
+  - **B. A value the card would refuse stops the whole import**, with a sentence naming the field
+    and saying to fix it on the box it came from. Alternative: import the rest and leave the
+    refused value unset.
+  - **C. Exports made before S1a2 are refused as from an older format** (format 9, the
+    pre-production rule). Alternative: keep the old format, and import a file without the key with
+    both values unset.
+  - **D. Setup does not show the two values**; the Privacy card shows them after setup.
+    Alternative: a line on the review screen saying they will be copied.
 - **A980 S10, 2026-10-26:** what the log masks and what it leaves, each built with the default
   and open for the owner to reverse (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
   owner note 5). Masked in every line the server's logger writes, on `docker logs` as

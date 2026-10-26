@@ -161,9 +161,9 @@ card. Choose **Edit**, fill in either or both, and choose **Save**.
 - **Privacy email** takes one email address, such as `privacy@example.com`.
 
 To remove one, empty its field and choose **Save**. A manager or an admin can change them, and a
-supervisor can see them. A configuration export does not carry them, so after you set up a new box
-from one, enter them again. For now Waitron only keeps them here: nothing else on the box shows
-them.
+supervisor can see them. A configuration export carries them, so a new box set up from one shows
+them. If you set it up with **New tax ID**, check them here: they are still the old business's until
+you change them. Nothing else on the box shows them yet.
 
 ## Your record of processing {#record}
 

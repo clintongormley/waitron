@@ -441,6 +441,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
+- **A box on an older configuration format blames the export when it is the box that is out of
+  date.** Given a newer export, it shows "This export is not compatible with this Waitron version.
+  Export it again from a box running the current version, …"
+  (`apps/setup/src/i18n/strings/shell.ts:139-140`), but the file already came from a current box,
+  and it is the receiving box that needs updating. The same sentence answers module version
+  mismatches in both directions (`describeConfigurationRefusal`, `apps/setup/src/setup-app.ts`), so
+  the fix is to word the too-new case on its own. Found by A980 S1a2's plan review.
+
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
@@ -5222,6 +5230,20 @@ For package distribution and the four-minute target, use the
   reduce its repeated setup while preserving its restart assertions.
   [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
 
+- **A provisioning command test fails when run from an AI agent.** In
+  `packages/provisioning/src/first-setup-command-import.test.ts`, the case "the actual relocated
+  command resumes a retained import and publishes it once" expects the child process's stderr to be
+  empty, and under Claude Code a `<claude-code-hint …/>` line reaches it, so the case fails; under
+  `env -i HOME PATH TMPDIR` it passes (both run on 2026-10-26 during A980 S1a2). It fails the same
+  way on `27ae35c09` and `d23e32966`, before that branch changed the file. Next action: find which
+  inherited variable lets the hint through and clear it in the case's child environment.
+
+- **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
+  In `apps/server/src/first-fiscal-setup.e2e.test.ts`, a failure inside a row's success branch makes
+  the Vitest worker exit ("Worker exited unexpectedly"), so the later rows never run and the run
+  reports one failure (it still exits 1). Reproduced on `27ae35c09` by breaking the existing
+  tax-number check, during A980 S1a2. Cause not found.
+
 - **A backlog detail link still names the old five-handler heading.**
   [Detail](backlog/ci.md#a-backlog-detail-link-still-names-the-old-five-handler-heading).
 
@@ -6153,9 +6175,10 @@ holds the data map, the controller and processor split and the builds-versus-ven
 revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
 [build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
 details deleted at deactivation), S2a1 (the server route for a person's own data download),
-S2a2 (its README, the Profile page's Download button and the Users guide section) and S1a (the
-dashboard setting for the privacy notice page and privacy email, which nothing else reads yet) are
-built.
+S2a2 (its README, the Profile page's Download button and the Users guide section), S1a (the
+dashboard setting for the privacy notice page and privacy email, which nothing else reads yet) and
+S1a2 (the configuration export carries the privacy contact, and a production box can be set up from
+an export again) are built.
 The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---

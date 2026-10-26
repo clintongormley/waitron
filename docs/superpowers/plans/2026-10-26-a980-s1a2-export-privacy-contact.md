@@ -14,6 +14,20 @@ notes at `:679` and `:709` already name S1a2). Overview: [the build plan](2026-1
 row **S1a2** (`:103`) and build order step 4 (`:208`). Previous slice:
 [the S1a plan](2026-10-26-a980-s1a-notice-settings.md), whose shape this plan copies.
 
+**Built, 2026-10-26**, on this branch, Tasks 1 to 8. Two of the plan's statements below proved
+wrong while building; they stand as written, corrected here:
+
+- _2026-10-26: Task 4 step 5's last omission control predicted wrongly._ Leaving the parse at
+  `!== 8` does not fail the too-new rows, because the `> 9` line before it still refuses format 10
+  as `setup.request_invalid` on `version`. Moving that line to `> 10` does fail the too-new row of
+  `packages/provisioning/src/configuration-transfer.boundaries.test.ts`.
+- _2026-10-26: Task 6 step 3's map of which test reaches which import site was wrong._ The e2e rows
+  and both `boot.setup-routes.test.ts` cases all reach `apps/server/src/boot.ts:1383`: the server's
+  owned setup goes `setup-first-fiscal-api.ts:282` → `first-fiscal-activation.ts:129` → the
+  `provision` from `boot.ts:1342`, the same one the development route calls.
+  `packages/provisioning/src/first-setup-command-deployment.ts:328` is the `waitron-provision`
+  command's, covered by Task 5's command rows in `first-setup-command-import.test.ts`.
+
 **This branch also fixes an earlier defect (Task 1): no production box can be set up from a
 configuration export today.** The setup app copies two location keys from every real export's
 preview into the first-setup claim, and the claim refuses them (probes 1 to 3). It began with

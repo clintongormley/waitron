@@ -1640,10 +1640,19 @@ while checking this reset-only release.
 A725 (format 4), A757 slice 2 (format 5, 2026-10-19, when it dropped `table_service_statuses`),
 A841 slice 2 (format 6, 2026-10-21, when it replaced `tenant_themes` with `custom_themes`), A756
 PR 5 (format 7, 2026-10-23, when it dropped `kitchen_timing_defaults` and `kitchen_station_timing`
-and the station's own minutes joined the copy) and A756 PR 8 (format 8, 2026-10-24, when it
-dropped `service_settings`) moved the format for the same reason;
-`configuration-transfer.test.ts` now pins format 8, and older files are refused as
+and the station's own minutes joined the copy), A756 PR 8 (format 8, 2026-10-24, when it
+dropped `service_settings`) and A980 S1a2 (format 9, 2026-10-26, when the copy gained the venue's
+privacy contact as the required top-level `privacyContact` key) moved the format for the same
+reason; `configuration-transfer.test.ts` now pins format 9, and older files are refused as
 `setup.configuration_outdated`.
+
+The setup preview's `venue` is sent back by the setup app in the first-setup claim, which refuses
+any venue or location key it does not list (`apps/server/src/setup-first-fiscal-api.ts`). So a
+bundle value that is not a setup field lives outside `venue`, and the setup app copies the
+preview's location by `LocationDraft`'s fields (`apps/setup/src/setup-app.ts`). Cost: from #1752 to
+A980 S1a2 every Live setup from an export on a production box was refused at the claim, because the
+copy also carried `fireControl` and `catalogueId`; the tests that imported an export all went
+through the development route or called the owner runtime directly.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 

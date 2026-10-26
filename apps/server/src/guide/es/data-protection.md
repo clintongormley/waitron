@@ -168,9 +168,10 @@ busca la tarjeta **Privacidad**. Elige **Editar**, rellena uno o los dos y elige
 - **Correo de privacidad** lleva un solo correo electrónico, como `privacidad@ejemplo.es`.
 
 Para quitar uno, vacía su campo y elige **Guardar**. Un encargado o un administrador puede
-cambiarlos, y un supervisor puede verlos. Una exportación de la configuración no los incluye, así
-que, si preparas un equipo nuevo a partir de una, vuelve a escribirlos. Por ahora Waitron solo los
-guarda aquí: nada más en el equipo los muestra.
+cambiarlos, y un supervisor puede verlos. Una exportación de la configuración los incluye, así que
+un equipo nuevo preparado a partir de ella los muestra. Si lo preparas con **NIF nuevo**, revísalos
+aquí: siguen siendo los del negocio anterior hasta que los cambies. Nada más en el equipo los
+muestra todavía.
 
 ## Tu registro de actividades de tratamiento {#record}
 
