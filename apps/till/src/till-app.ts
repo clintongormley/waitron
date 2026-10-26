@@ -305,7 +305,13 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { barTables, type BarTable, type HeldBill, type LocalBill } from "./state/bar-tables.js";
+import {
+  barTables,
+  type BarLocal,
+  type BarTable,
+  type HeldBill,
+  type LocalBill,
+} from "./state/bar-tables.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
 import type {
   AdjustmentAsk,
@@ -2485,6 +2491,8 @@ export class TillApp extends LitElement {
   /** Kept while its contents are unchanged: a new array makes the shell step back and refit. */
   #barTableList: readonly BarTable[] = NO_BAR_TABLES;
   #barTableJson = "[]";
+  #barTableFloor?: readonly TableState[];
+  #barTableInputs = "";
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
   /** An enrolled handheld: its menu browser shows the menu's handheld display. */
@@ -11199,18 +11207,25 @@ export class TillApp extends LitElement {
       : null;
   }
 
-  /** The handheld bar's buttons (D4, D13), the same array while they are unchanged. */
+  /** The handheld bar's buttons (D4, D13), the same array while they are unchanged. A floor read
+   * replaces `barFloor` rather than changing it in place, so its identity stands for its contents. */
   #barTables(): readonly BarTable[] {
     if (this.formFactor === "till") return NO_BAR_TABLES;
     const opening = this.openingTableId;
-    const next = barTables(this.barFloor, this.#sessionPersonId, {
+    const local: BarLocal = {
       held: this.#heldBill(),
       released: this.#released.map((each) => each.bill),
       opening:
         opening === undefined
           ? undefined
           : { tableId: opening, onScreen: this.#orderScreenShown() },
-    });
+    };
+    const inputs = JSON.stringify([this.#sessionPersonId, local]);
+    if (this.barFloor === this.#barTableFloor && inputs === this.#barTableInputs)
+      return this.#barTableList;
+    this.#barTableFloor = this.barFloor;
+    this.#barTableInputs = inputs;
+    const next = barTables(this.barFloor, this.#sessionPersonId, local);
     const json = JSON.stringify(next);
     if (json !== this.#barTableJson) {
       this.#barTableJson = json;
