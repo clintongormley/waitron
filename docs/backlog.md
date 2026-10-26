@@ -1646,8 +1646,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   looks part of the marked group. Seen, 2026-10-25 (A789 slice 3's look).
 
 - **A1087. Kitchen tickets print a whole quantity with three decimals**, such as `2.000 x CROQ
-  JAMON`, and tests pin it; decide with the owner whether it prints `2 x`. Seen, 2026-10-25 (A789
-  slice 3's look); not caused by that slice.
+  JAMON`, and tests pin it; decide with the owner whether it prints `2 x`.
   [Detail](backlog/kitchen.md#a1087-kitchen-tickets-print-a-whole-quantity-with-three-decimals)
 
 - **A1092. The kitchen screen once showed only some orders after a switch to Spanish.** Seen,

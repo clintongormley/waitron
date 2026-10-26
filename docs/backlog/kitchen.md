@@ -27,10 +27,7 @@ does not exist.
   - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
     every station it covered, even where that station's own printer printed; it stops showing at
     a station once a Reprint of the bill would not link that pass printer to that station.
-    _2026-10-10 (A366 slice 5 Part B): watchers are gone, and a pass printer is now a printer
-    listed on every station; its combined ticket is linked to each station it covers, so this
-    applies again ("shows a failed combined ticket on both stations' cards, and one Reprint there
-    clears both", `apps/server/src/print-problems.test.ts`)._
+    (`apps/server/src/print-problems.test.ts`).
   - Finish table drops the problem of a bill that transfers emptied (read, not run; not
     re-checked by B6a).
   - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
@@ -168,8 +165,7 @@ and now records its stations. Left open by A756 PR 6's review.
   Quesos station already received can come back as made on the spot when a device that makes
   Quesos itself does the edit. Found by A687's review (#1720); its fifth case in
   `apps/server/src/sent-order-number.test.ts` relies on this behaviour and will fail if it
-  changes. The review believed it dates from #1013 (`git log -S keepMadeHere`), not checked
-  further. Decide: should extras keep their earlier choice, as the dish does?
+  changes. Decide: should extras keep their earlier choice, as the dish does?
 
 ## A930. The manager's overdue report counts a held dish as late
 
