@@ -4878,7 +4878,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(panelOf(el).heading).toBe("Taken over by Sam");
   });
 
-  it("shows other people's drafts on a tablet's Order tab, and takes one over there", async () => {
+  it("shows other people's drafts on a tablet's Order screen, and takes one over there", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
