@@ -336,9 +336,10 @@ called weaker than its name, the topic file lists what it does not see.
   Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code; its log tail shows the failed start's own lines through `redactSecrets` and HTML-escaped**
-  (owner decision 2026-09-26). That redaction masks only a password in a URL, which is why no
-  code's params and no logged message may carry a secret.
+  code; its log tail is the file's last lines, whichever start or running server wrote them,
+  written through `redactSecrets` and the personal-data mask, and HTML-escaped** (owner decision
+  2026-09-26). `redactSecrets` masks only a password in a URL, which is why no code's params and no
+  logged message may carry a secret.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
@@ -351,6 +352,13 @@ called weaker than its name, the topic file lists what it does not see.
   either is a migration (owner, 2026-09-26). Move every tree copy together; once live, rewrite stored
   copies and keep external readers accepting both names until both sides deploy. Stored-copy and
   prefix-matcher locations: [conventions-data.md](docs/developers/conventions-data.md).
+- **A detail or log field holding a person's name, email or tax number uses a name on
+  `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`), which the server's logger masks in
+  every line it writes; the answer keeps it. Name it for whose it is (`guestName`,
+  `customerTaxId`), never a bare `name` or `taxId`: the list is flat across every code.** Guard:
+  `scripts/personal-log-params.test.ts`, weaker than its name: reads text, judges keys by a word
+  list and a named type only by its name, sees no spread at a throw site or in a log call, no free
+  text and not the watchdog's own line. Limits: [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,

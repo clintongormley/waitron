@@ -15,7 +15,9 @@ import type { UnservedDish } from "./finish-party-service.js";
  *
  * No code's params may carry a secret: the shared error boundary
  * (`packages/server-kit/src/error-boundary.ts`) writes them into the response and the log, and the
- * unauthenticated recovery page shows the log's tail.
+ * unauthenticated recovery page shows the log's tail. A param holding a person's name, email or tax
+ * number uses a name on `PERSONAL_LOG_KEYS` (`./log-personal-data.ts`), which the log masks, named
+ * for whose it is (`guestName`, never a bare `name`).
  *
  * Reachability: every file that throws one of these imports "./errors.js" directly, and this
  * package has no public barrel — it is an application, not a library.

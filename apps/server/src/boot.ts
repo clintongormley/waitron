@@ -939,7 +939,8 @@ async function bootServer(
   // the recovery page serves that file's tail to anyone on the venue's LAN with no login. The STDOUT
   // half is left whole: it is the installer's channel, reachable only with a shell on the box, and
   // masking it would erase the difference between a wrong password and none at all. Pinned by
-  // `recovery-surface.test.ts` → "the caught error's own words on the page".
+  // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
+  // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   let backupRepairOnly = false;
   const normalLogSink = tee(stdoutSink, fileSink);
   const log = createLogger(
