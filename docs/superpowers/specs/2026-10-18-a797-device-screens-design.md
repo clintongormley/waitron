@@ -264,6 +264,10 @@ A757 built them (whole-table colour and a cue; A669's red "!" for an allergy). C
   4 min · T5 · 2 · T9 · 1 · Open ›". Under reduced motion nothing moves and the amber stays. The minutes count
   from the moment the dish was ready (`ticket_items.ready_at`, stamped by `advanceSet`,
   `apps/server/src/working-order.ts:7233-7237`), not from when it was fired (§5).
+  _2026-10-26, slice 7: warning tables come first, then the rest, each longest-waiting first, so
+  Open › opens the first; the bar warns once the wait reaches the time, not only past it; the
+  minutes show only while warning; the till compares the box's ready time with its own clock; see
+  the build plan's slice 7, D2–D4._
 - **List or Map is remembered on the device**, per zone, instead of for the session.
 
 **Order** (picture 02), under the bar:

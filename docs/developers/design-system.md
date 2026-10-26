@@ -419,7 +419,7 @@ blocks give the same values.
 
 `--wt-color-table-calm-edge` is the soft left edge of a calm list card: `#8fb7f5` light, `#4d6aa6`
 dark. `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` are the colours a pulsing
-floor ring, and the till bar's Waiting tab border, reach half-way: `#e8bebc` and `#dccbb3` light,
+floor ring, the till bar's Waiting tab border and the Ready bar's warning edge reach half-way: `#e8bebc` and `#dccbb3` light,
 `#bd9ba0` and `#b9aa94` dark. The "floor ring and calm edge colours" cases in `colors.test.ts` hold,
 in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 or more on
 `--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is
@@ -613,7 +613,8 @@ ring's pulse, which dims it to `--wt-color-danger-pulse-dim` or `--wt-color-warn
 half-way, at full opacity — in dark, toward grey, not to the card;
 `packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. The kitchen screen's and the pass's
 forgotten flash keep their own keyframes and read the fast duration; the till bar's Waiting tab
-keeps its own keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`.
+keeps its own keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`,
+and so does the Ready bar's warning edge (`till-floor-screen.ts`).
 
 Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
 their default border reads `--wt-color-primary-text`. If your screen paints the border through
@@ -991,7 +992,14 @@ List/Map is remembered per zone on the device (`apps/till/src/state/floor-view-m
 never switched shows Map when it has a table on the map, else List. On a handheld (the `handheld`
 property) a Ready bar fixed at the foot of the Floor, `position: sticky` under the floor's
 `isolation: isolate`, replaces the per-station summary, listing the shown zones' tables with food
-ready; a till keeps the summary, titled "Ready" (`#readyBar`, `#stationSummary`). While the bar
+ready; a till keeps the summary, titled "Ready" (`#readyBar`, `#stationSummary`). While a table's
+food has waited as long as its station's ready warning time (`readyBar`,
+`apps/till/src/state/table-signals.ts`), the bar's edge and heading turn `--wt-color-warning`, an
+inset `box-shadow` doubling the edge without changing the bar's size; the edge pulses at
+`--wt-duration-pulse-slow` to `--wt-color-warning-pulse-dim` (not moving under reduced motion, the
+floor's `reducedMotion` or the media query), the heading gains the first table's minutes ("Ready 4
+min"), warning tables come first and their entries are amber. The floor's one reminder timer
+redraws it when a table starts to warn and each minute while it warns. While the bar
 is drawn the Floor carries a `ready-bar` attribute, and the app raises its Sent and Served toasts by
 the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit above it.
 

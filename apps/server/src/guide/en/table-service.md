@@ -167,8 +167,19 @@ When the kitchen has dishes ready, you want to know which tables to take them to
 look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
 how many dishes are waiting, such as **Ready · T2 · 3**. Each table is shown by its short name, such
 as T2 for Table 2, or by its full name while it has none; a table joined to another for today shows
-both, such as T4+T5. Tap a table to open it, or tap **Open ›** to open the first table listed. The
-bar lists only the tables in the zones this device shows, and it goes away once nothing is ready. A
+both, such as T4+T5. The table whose food has waited longest comes first.
+
+Food left at the pass goes cold, so the bar warns you when a dish has waited too long. Once a ready
+dish has waited as long as its station's **Ready warning** time (3 minutes unless you change it
+[in **Prep stations**](kitchen-service.md#service-lifetime)), the bar turns amber, its edge pulses
+slowly, and it says how long the first table's food has waited, such as **Ready 4 min · T5 · 2 ·
+T9 · 1**. Each station is judged by its own time, so a salad from a 6-minute station and a grilled
+dish from a 3-minute one warn at different moments. Tables whose food has waited that long come
+first, in amber, and the minutes keep counting while you watch. On a device set to reduce motion,
+the bar stays amber without pulsing. Tap a table to open it, or tap **Open ›** to open the first
+table listed.
+
+The bar lists only the tables in the zones this device shows, and it goes away once nothing is ready. A
 till instead shows a **Ready** list above the tables, one line for each station. The list counts
 ready food at tables in every zone the till's profile allows, not only the zones it shows.
 

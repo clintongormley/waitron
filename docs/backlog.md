@@ -127,8 +127,11 @@ come after the list above:
   slice 3 (the handheld's bar: Floor, a ✎ button per table with this person's unsent dishes,
   then "?" and ☰) in #2097, built from the build plan below. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md); slice 7
-  (the Ready bar's warning) is next. A773-2 builds the pass's part, and the phone's
+  the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md). Slice 7
+  (the Ready bar's warning: once a ready dish has waited its station's Ready warning time the bar
+  turns amber, pulses slowly, shows the minutes and puts those tables first) is built and in
+  review, from the build plan's slice 7; slice 8 (the kitchen screen's group cards) is next, taking
+  turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
