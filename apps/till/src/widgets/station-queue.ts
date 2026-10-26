@@ -1031,10 +1031,10 @@ export class TillStationQueue extends LitElement {
     >
       <div class="ticket-head">
         ${card.orders.map(
-          (order) =>
-            html`<span class="number"
-              >${orderNumber(order.orderNumber, order.formerNumbers)}</span
-            >`,
+          (order, index) =>
+            html`${index === 0 ? nothing : " · "}<span class="number"
+                >${orderNumber(order.orderNumber, order.formerNumbers)}</span
+              >`,
         )}
         ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
         ${labels.map((label) => html`<span class="label">${label}</span>`)}

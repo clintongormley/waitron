@@ -2967,6 +2967,7 @@ describe("the board's cards", () => {
     expect(card!.dataset.cardGroup).toBe("g-2");
     expect([...card!.querySelectorAll(".ticket-head .number")].map(flat)).toEqual(["#12", "#13"]);
     expect([...card!.querySelectorAll(".ticket-head .label")].map(flat)).toEqual(["Table 7"]);
+    expect(flat(card!.querySelector(".ticket-head")!)).toContain("#12 · #13");
     expect(dishesOn(card!)).toEqual(["bill-1-dish", "bill-2-dish"]);
     const label = (id: string) =>
       card!.querySelector(`button[data-item="${id}"] .visually-hidden`)!.textContent;
