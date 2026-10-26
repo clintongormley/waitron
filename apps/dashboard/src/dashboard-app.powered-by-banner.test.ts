@@ -8,6 +8,8 @@ import {
   VENUE_THEME_STORAGE_KEY,
   type WtPoweredBy,
 } from "@waitron/ui";
+import { WAITRON_CHOICES, themeSheet, type TextScale } from "@waitron/ui-core/theme";
+import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -25,24 +27,33 @@ function store(answer: unknown): void {
   localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
 }
 const withLogo = { ...FIXTURE_ANSWER, hash: "logo-hash", logo: { light: LIGHT, dark: null } };
+const withLogoAt = (textScale: TextScale) => ({
+  ...withLogo,
+  hash: `logo-hash-${textScale}`,
+  css: themeSheet(deriveTheme({ ...WAITRON_CHOICES, textScale })),
+});
 
 interface Options {
   readonly locale?: ShellLocale;
   readonly bell?: boolean;
   readonly theme?: "light" | "dark";
   readonly venueName?: string;
+  readonly live?: boolean;
 }
 
 async function signedIn(options: Options = {}): Promise<DashboardApp> {
   const api = stubShellApi(true, options.locale ?? "es-ES");
   const extra: Record<string, unknown> = {};
   if (options.bell) extra.listAlerts = async () => ({ visible: true, alerts: [] });
-  if (options.venueName !== undefined) {
-    const name = options.venueName;
+  if (options.venueName !== undefined || options.live) {
+    const venue = {
+      ...(options.venueName === undefined ? {} : { venueName: options.venueName }),
+      ...(options.live ? { onboardingIntent: "live" } : {}),
+    };
     const me = (await api.getMe()) as Record<string, unknown>;
-    extra.getMe = vi.fn().mockResolvedValue({ ...me, venueName: name });
+    extra.getMe = vi.fn().mockResolvedValue({ ...me, ...venue });
     const locales = await api.getLocales();
-    extra.getLocales = async () => ({ ...locales, venueName: name });
+    extra.getLocales = async () => ({ ...locales, ...venue });
   }
   Object.assign(api, extra);
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api }, options.theme);
@@ -289,6 +300,50 @@ describe("Powered by in the signed-in banner", () => {
       },
     );
   });
+
+  it.each([100, 130] as const)(
+    "at 320 px in Spanish at %i% text, with a long legal name and the Live pill, keeps the whole line and its lockup on screen",
+    async (scale) => {
+      await page.viewport(320, 700);
+      store(withLogoAt(scale));
+      startVenueTheme(document.documentElement, { fetchImpl: never });
+      const el = await signedIn({ locale: "es-ES", bell: true, venueName: LONG_NAME, live: true });
+      const line = await theLine(el);
+      const at = line.getBoundingClientRect();
+      const lockup = line.shadowRoot!.querySelector("[part=lockup]")!.getBoundingClientRect();
+      const words = line.shadowRoot!.querySelector("[part=label]")!.getBoundingClientRect();
+      const name = banner(el).querySelector("[data-test=venue-name]")!.getBoundingClientRect();
+      const pill = banner(el).querySelector("[data-test=mode-indicator]")!.getBoundingClientRect();
+      const menu = banner(el).querySelector("[data-test=account-menu]")!.getBoundingClientRect();
+      expect(
+        getComputedStyle(banner(el).querySelector("[data-test=venue-name]")!).fontSize,
+        `the legal name at ${scale}%`,
+      ).toBe(scale === 100 ? "14px" : "18px");
+      const probe = document.createElement("span");
+      probe.style.display = "block";
+      probe.style.width = "calc(var(--wt-space-6) * 2)";
+      document.body.append(probe);
+      const lockupWidth = probe.getBoundingClientRect().width;
+      probe.remove();
+      for (const [part, box] of [
+        ["the line", at],
+        ["its lockup", lockup],
+        ["its words", words],
+      ] as const) {
+        expect(box.left, `${part}'s left edge`).toBeGreaterThanOrEqual(0);
+        expect(box.right, `${part}'s right edge`).toBeLessThanOrEqual(320);
+        expect(overlaps(box, name), `${part} against the legal name`).toBe(false);
+        expect(overlaps(box, pill), `${part} against the Live pill`).toBe(false);
+      }
+      expect(lockup.width, "the lockup's drawn width").toBeCloseTo(lockupWidth, 0);
+      expect(Math.abs(at.right - menu.right), "trailing end under the menu's").toBeLessThanOrEqual(
+        1,
+      );
+      expect(words.left, "the words start inside the line").toBeGreaterThanOrEqual(at.left);
+      expect(words.right, "the words end inside the line").toBeLessThanOrEqual(at.right);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
+    },
+  );
 
   it("the sign-in page keeps a single line, under its card, with none in its banner", async () => {
     store(withLogo);
