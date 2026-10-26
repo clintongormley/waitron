@@ -898,7 +898,10 @@ Real code does write all five, legitimately: the setup-mode provision route reac
 `nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
 `mirror_config`; the promote route reaches `node_roles`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
-`packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone. Each does it by calling into one of the
+`packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
+dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
+`packages/provisioning/src/privacy-contact.ts`, which updates `privacy_notice_url` and
+`privacy_email` alone. Each does it by calling into one of the
 files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.

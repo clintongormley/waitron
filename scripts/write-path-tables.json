@@ -8,6 +8,7 @@
     "packages/provisioning/src/venue-apply.ts"
   ],
   "tenants": [
+    "packages/provisioning/src/privacy-contact.ts",
     "packages/provisioning/src/taxpayer-name.ts",
     "packages/provisioning/src/venue-apply.ts"
   ]
