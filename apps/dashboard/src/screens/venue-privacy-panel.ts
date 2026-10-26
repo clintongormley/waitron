@@ -19,10 +19,12 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenuePrivacy } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
+import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -182,6 +184,15 @@ export class VenuePrivacyPanel extends LitElement {
       },
     });
   }
+  #adopt(model: VenuePrivacy): void {
+    if (!this.draft || !this.#scope) return;
+    if (!saveActionState(this.#scope).unchanged) return;
+    const expected = draftOf(model);
+    if (this.#expected && Object.keys(changes(this.#expected, expected)).length === 0) return;
+    this.#expected = expected;
+    this.draft = { ...expected };
+    this.#scope.commit(expected);
+  }
   #errors(): Errors {
     if (!this.draft) return {};
     return { ...this.refusals, ...(this.attempted ? ownErrors(this.draft) : {}) };
@@ -219,6 +230,7 @@ export class VenuePrivacyPanel extends LitElement {
       this.#writes++;
       this.model = answer;
       if (scope === this.#scope) this.#cancel();
+      else this.#adopt(answer);
     } catch (error) {
       if (generation !== this.#generation || scope !== this.#scope) return;
       const code = codeOf(error);
@@ -251,7 +263,19 @@ export class VenuePrivacyPanel extends LitElement {
       .error=${errors[field] ?? ""}
       ?disabled=${this.submitting}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
-    ></wt-input>`;
+      >${
+        url
+          ? html`<wt-help-tooltip
+              slot="help"
+              mode="help-mode"
+              aria-label=${t("venue_privacy.notice_url_help_label")}
+              guide-href=${guideHref("data-protection.staff-notice")}
+              guide-label=${t("venue_privacy.notice_url_help_guide")}
+              >${t("venue_privacy.notice_url_help")}</wt-help-tooltip
+            >`
+          : nothing
+      }</wt-input
+    >`;
   }
   #form() {
     const errors = this.#errors();
@@ -309,6 +333,7 @@ export class VenuePrivacyPanel extends LitElement {
           if (generation !== this.#generation || writes !== this.#writes) return;
           this.model = value;
           this.readError = "";
+          this.#adopt(value);
         },
       )
       .catch(() => {});

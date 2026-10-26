@@ -1,11 +1,13 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { WtButton, WtInput } from "@waitron/ui";
+import { setHelpMode, type WtButton, type WtInput } from "@waitron/ui";
 import type { DashboardApi, VenuePrivacy } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
+import { guideHref } from "../help-guide.js";
 import "./venue-privacy-panel.js";
 
 type Panel = HTMLElementTagNameMap["dashboard-venue-privacy-panel"];
@@ -72,6 +74,7 @@ async function save(el: Panel) {
 
 beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
+  setHelpMode(false);
   cleanupWidgets();
   vi.restoreAllMocks();
   setLocale("en-GB");
@@ -333,3 +336,121 @@ it.each([
     await expect.poll(() => r.api.putVenuePrivacy.mock.calls).toEqual([[{ [name]: value }]]);
   },
 );
+
+const badge = (el: Panel) =>
+  input(el, "privacyNoticeUrl")!.querySelector<HTMLElement>("wt-help-tooltip[slot=help]");
+
+it("with help off the web page field's help badge is in the page but not shown", async () => {
+  setHelpMode(false);
+  const el = await mount(rig().api);
+  await edit(el);
+  const help = badge(el)!;
+  await (help as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(help.hasAttribute("data-help-on")).toBe(false);
+  expect(getComputedStyle(help).display).toBe("none");
+});
+
+it("with help on the badge follows the help switch and links to the staff notice", async () => {
+  setHelpMode(true);
+  const el = await mount(rig().api);
+  await edit(el);
+  const help = badge(el)!;
+  await expect.poll(() => help.hasAttribute("data-help-on")).toBe(true);
+  expect(help.getAttribute("mode")).toBe("help-mode");
+  expect(help.getAttribute("aria-label")).toBe(t("venue_privacy.notice_url_help_label"));
+  expect(help.getAttribute("guide-href")).toBe(guideHref("data-protection.staff-notice"));
+  expect(help.getAttribute("guide-href")).toBe("/help/en/data-protection#staff-notice");
+  expect(help.getAttribute("guide-label")).toBe(t("venue_privacy.notice_url_help_guide"));
+  expect(text(help)).toBe(t("venue_privacy.notice_url_help"));
+  expect(getComputedStyle(help).display).not.toBe("none");
+});
+
+it("in Spanish the badge links to the Spanish guide", async () => {
+  setLocale("es-ES");
+  setHelpMode(true);
+  const el = await mount(rig().api);
+  await edit(el);
+  const help = badge(el)!;
+  expect(help.getAttribute("guide-href")).toBe("/help/es/data-protection#staff-notice");
+  expect(help.getAttribute("aria-label")).toBe(es["venue_privacy.notice_url_help_label"]);
+  expect(help.getAttribute("guide-label")).toBe(es["venue_privacy.notice_url_help_guide"]);
+  expect(text(help)).toBe(es["venue_privacy.notice_url_help"]);
+});
+
+it("in Spanish the heading, labels and placeholders are the Spanish words", async () => {
+  setLocale("es-ES");
+  const el = await mount(rig().api);
+  expect(text(q(el, "section.settings-card header > h2"))).toBe(es["venue_settings.card.privacy"]);
+  expect(rows(el)).toEqual([
+    `${es["venue_privacy.notice_url"]}: ${es["venue_details.unset"]}`,
+    `${es["venue_privacy.email"]}: ${es["venue_details.unset"]}`,
+  ]);
+  await edit(el);
+  expect(input(el, "privacyNoticeUrl")!.label).toBe(es["venue_privacy.notice_url"]);
+  expect(input(el, "privacyNoticeUrl")!.placeholder).toBe(
+    es["venue_privacy.notice_url_placeholder"],
+  );
+  expect(input(el, "privacyEmail")!.label).toBe(es["venue_privacy.email"]);
+  expect(input(el, "privacyEmail")!.placeholder).toBe(es["venue_privacy.email_placeholder"]);
+});
+
+it("in Spanish the three refusal messages are the Spanish words", async () => {
+  setLocale("es-ES");
+  const el = await mount(rig().api);
+  await edit(el);
+  await type(el, "privacyNoticeUrl", "example.com/privacy");
+  await type(el, "privacyEmail", "privacy@example");
+  await save(el);
+  expect(input(el, "privacyNoticeUrl")!.error).toBe(es["venue_privacy.web_address_invalid"]);
+  expect(input(el, "privacyEmail")!.error).toBe(es["venue_privacy.email_invalid"]);
+  expect(bottom(el)).toBe(es["form.fix_fields"]);
+  await type(el, "privacyEmail", "a@" + "b".repeat(250) + ".es");
+  expect(input(el, "privacyEmail")!.error).toBe(
+    es["venue_privacy.too_long"].replace("{max}", "254"),
+  );
+});
+
+it("a live read delivering a new stored pair updates the read view", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  r.state.stored = { ...STORED };
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect
+    .poll(() => rows(el))
+    .toEqual([
+      "Privacy notice web page: https://example.com/privacy",
+      "Privacy email: privacy@example.com",
+    ]);
+});
+
+it("during an edit an untouched draft follows a live read", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  await edit(el);
+  r.state.stored = { ...STORED };
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => input(el, "privacyNoticeUrl")!.value).toBe("https://example.com/privacy");
+  expect(input(el, "privacyEmail")!.value).toBe("privacy@example.com");
+  await el.updateComplete;
+  expect(saveButton(el).disabled).toBe(true);
+  expect(saveButton(el).variant).toBe("secondary");
+});
+
+it("during an edit a changed draft keeps what was typed when a live read arrives", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "typed@example.com");
+  const reads = r.api.getVenuePrivacy.mock.calls.length;
+  r.state.stored = { ...STORED };
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
+  await flush(el);
+  expect(input(el, "privacyEmail")!.value).toBe("typed@example.com");
+  expect(input(el, "privacyNoticeUrl")!.value).toBe("");
+  expect(saveButton(el).disabled).toBe(false);
+  saveButton(el).click();
+  await expect
+    .poll(() => r.api.putVenuePrivacy.mock.calls)
+    .toEqual([[{ privacyEmail: "typed@example.com" }]]);
+});
