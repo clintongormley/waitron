@@ -97,12 +97,11 @@ describe("till-shell's Help switch", () => {
       expect(help!.previousElementSibling).toBeNull();
       expect(help!.nextElementSibling!.classList.contains("operator-menu")).toBe(true);
     } else {
-      expect(help!.previousElementSibling!.localName).toBe("wt-language-chooser");
-      const next = help!.nextElementSibling!;
-      expect(
-        next.classList.contains("operator-menu") || next.getAttribute("data-test") === "more-menu",
-        next.outerHTML,
-      ).toBe(true);
+      expect(help!.previousElementSibling?.classList.contains("operator-menu") ?? false).toBe(
+        width === 1280,
+      );
+      expect(help!.nextElementSibling!.getAttribute("data-test")).toBe("more-menu");
+      expect(help!.nextElementSibling!.nextElementSibling).toBeNull();
     }
     await help!.updateComplete;
     const r = buttonOf(el).getBoundingClientRect();
@@ -112,6 +111,26 @@ describe("till-shell's Help switch", () => {
     expect(r.top).toBeGreaterThanOrEqual(0);
     expect(r.right).toBeLessThanOrEqual(window.innerWidth);
     expect(r.bottom).toBeLessThanOrEqual(window.innerHeight);
+  });
+
+  it.each<[number, string[]]>([
+    [1280, ["operator", "help", "more"]],
+    [390, ["help", "more"]],
+  ])("a handheld's bar reads name, Help, More at the end, at %ipx", async (width, end) => {
+    await page.viewport(width, 844);
+    const { el } = await mountWidget<TillShell>("till-shell", handheld);
+    await settle(el);
+    const session = [...el.shadowRoot!.querySelector(".session")!.children].map((child) =>
+      child.classList.contains("operator-menu")
+        ? "operator"
+        : child.localName === "wt-help-switch"
+          ? "help"
+          : child.getAttribute("data-test") === "more-menu"
+            ? "more"
+            : child.localName,
+    );
+    expect(session.slice(-end.length)).toEqual(end);
+    expect(session.includes("operator")).toBe(end.includes("operator"));
   });
 
   it.each([

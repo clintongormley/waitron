@@ -151,7 +151,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     await expectNoA11yViolations(host);
   });
 
-  it("the bar with its language chooser, closed and open, has no violations", async () => {
+  it("the bar, and More with its language chooser, closed and open, has no violations", async () => {
     const { el, host } = await mountWidget<TillShell>(
       "till-shell",
       {
@@ -164,10 +164,14 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
       theme,
     );
     await expectNoA11yViolations(host);
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
-    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+    const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+    menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+    await vi.waitFor(() =>
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+    );
+    const chooser = menu.querySelector(":scope > wt-language-chooser")!;
     await vi.waitFor(() => {
-      expect(chooser.shadowRoot!.querySelector('[role="menu"]')).not.toBeNull();
+      expect(chooser.shadowRoot!.querySelector('[role="group"]')).not.toBeNull();
     });
     await expectNoA11yViolations(host);
   });

@@ -456,7 +456,6 @@ export class TillShell extends LitElement {
     this.#phoneWidth = undefined;
     this.#observer?.disconnect();
     this.#observer = undefined;
-    this.#observedChooser = undefined;
     this.#run += 1;
     this.#stopLogoRetry();
   }
@@ -465,10 +464,6 @@ export class TillShell extends LitElement {
    * logo, or the word) hidden; n, the brand mark hidden and the first n − 1 present items of
    * `LEAVE_ORDER` in More. */
   @state() private steps = 0;
-  /** A handheld at phone width whose bar does not fit with the language chooser: it moves to the
-   * end of More. It stays there while More is open, even once the screen widens past phone width;
-   * above phone width it returns to the bar when More closes. */
-  @state() private chooserInMore = false;
   #run = 0;
   #stepBackOwed = false;
   readonly #venueLogo = new VenueLogoController(this);
@@ -479,16 +474,13 @@ export class TillShell extends LitElement {
   #fittedLocale?: string;
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
-  #observedChooser?: Element;
   #watchedPopup?: Element;
   #shown: ReadonlySet<BarItem> = new Set();
   #held?: ReadonlySet<BarItem>;
   readonly #onPopupToggle = () => {
     this.#release();
     if (this.#menuOpen()) return;
-    const chooserBack = !this.phone && this.chooserInMore;
-    if (chooserBack) this.chooserInMore = false;
-    if (this.#stepBackOwed || this.phone || chooserBack) void this.#fit();
+    if (this.#stepBackOwed) void this.#fit();
   };
 
   /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
@@ -540,7 +532,6 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
-    if (!this.phone && !this.#menuOpen()) this.chooserInMore = false;
     if (this.formFactor !== "till") this.#release();
   }
 
@@ -592,28 +583,17 @@ export class TillShell extends LitElement {
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
-   * resize it ("reports no ResizeObserver loop", till-shell.test.ts). The chooser is observed
-   * because its label can change once its language list loads. */
+   * resize it ("reports no ResizeObserver loop", till-shell.test.ts). */
   #observe(): void {
     if (this.#observer === undefined) {
       this.#observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          if (entry.target === this) {
-            if (entry.contentRect.width > this.#fittedWidth) this.#stepBackOwed = true;
-            this.#fittedWidth = entry.contentRect.width;
-          } else {
-            this.#stepBackOwed = true;
-          }
+          if (entry.contentRect.width > this.#fittedWidth) this.#stepBackOwed = true;
+          this.#fittedWidth = entry.contentRect.width;
         }
         void this.#fit();
       });
       this.#observer.observe(this);
-    }
-    const chooser = this.renderRoot.querySelector(".session > wt-language-chooser") ?? undefined;
-    if (chooser !== this.#observedChooser) {
-      if (this.#observedChooser) this.#observer.unobserve(this.#observedChooser);
-      if (chooser) this.#observer.observe(chooser);
-      this.#observedChooser = chooser;
     }
     const popup = this.#popup();
     if (popup !== this.#watchedPopup) {
@@ -665,13 +645,7 @@ export class TillShell extends LitElement {
     if (this.phone) {
       // More draws its popup after the shell has rendered, so its toggle listener is attached here.
       this.#observe();
-      if (this.#menuOpen()) return;
-      if (this.#stepBackOwed && this.chooserInMore) {
-        this.chooserInMore = false;
-        if (await stale()) return;
-      }
-      this.#stepBackOwed = false;
-      if (this.#wraps()) this.chooserInMore = true;
+      if (!this.#menuOpen()) this.#stepBackOwed = false;
       return;
     }
     if (this.#stepBackOwed && !this.#menuOpen()) {
@@ -952,7 +926,7 @@ export class TillShell extends LitElement {
       }
       ${this.#items(moved, true)}
       ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
-      ${this.chooserInMore ? this.#chooser("group") : nothing}
+      ${this.#chooser("group")}
     </wt-row-actions>`;
   }
 
@@ -1091,7 +1065,7 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.chooserInMore ? nothing : this.#chooser()}${this.#helpSwitch()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${this.#helpSwitch()}${this.#menu(moved)}`}
                   </div>
                   ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>
