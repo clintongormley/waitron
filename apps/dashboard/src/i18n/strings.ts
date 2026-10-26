@@ -1279,8 +1279,9 @@ export const en = {
   "floor_plan_editor.rectangle": "Rectangle",
   "floor_plan_editor.round": "Round",
   "floor_plan_editor.booked": "Booked {date}, {time}",
-  "floor_plan_editor.label_shown_as_short_name":
-    "{takenBy} already uses that as its short name. Choose another name for this table.",
+  "floor_plan_editor.short_name_missing": "Enter a short name.",
+  "floor_plan_editor.short_name_too_long": "Enter up to 5 characters.",
+  "floor_plan_editor.short_name_taken": "{takenBy} already uses {shortName}",
   "kitchen.stations_title": "Stations",
   "kitchen.station_name": "Name",
   "kitchen.station_order": "Order",
@@ -4665,8 +4666,9 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.rectangle": "Rectángulo",
   "floor_plan_editor.round": "Redonda",
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
-  "floor_plan_editor.label_shown_as_short_name":
-    "{takenBy} ya lo usa como nombre corto. Elige otro nombre para esta mesa.",
+  "floor_plan_editor.short_name_missing": "Escribe un nombre corto.",
+  "floor_plan_editor.short_name_too_long": "Escribe hasta 5 caracteres.",
+  "floor_plan_editor.short_name_taken": "{takenBy} ya usa {shortName}",
   "kitchen.stations_title": "Estaciones",
   "kitchen.station_name": "Nombre",
   "kitchen.station_order": "Orden",

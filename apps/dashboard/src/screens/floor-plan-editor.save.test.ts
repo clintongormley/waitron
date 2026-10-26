@@ -361,6 +361,27 @@ it("a label sent with spaces is saved trimmed, so trimming it by hand is no chan
   expectSave(el, "quiet");
 });
 
+it("a short name sent with spaces round it is kept trimmed, and Save is quiet after", async () => {
+  const saveFloorPlan = vi.fn().mockResolvedValue({ revision: 4, ids: savedIds });
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(plan())
+    .mockReturnValue(new Promise(() => {}));
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(draftFromPlan(plan()), "m2", { shortName: " W2 " }),
+  });
+  await press(el, "save");
+  const body = saveFloorPlan.mock.calls[0]![2] as ReturnType<typeof saveFromDraft>;
+  expect(body.tables.find((t) => t.key === "m2")!.shortName).toBe("W2");
+  expect(el["draft"]!.tables.find((t) => t.key === "m2")!.shortName).toBe("W2");
+  expectSave(el, "quiet");
+  await fromCanvas(el, "floor-plan-change", {
+    draft: patchTable(draftFromPlan(plan()), "m2", { shortName: "W2" }),
+  });
+  expectSave(el, "quiet");
+});
+
 it("a read's failure does not replace an action's message", async () => {
   const saveFloorPlan = vi
     .fn()
