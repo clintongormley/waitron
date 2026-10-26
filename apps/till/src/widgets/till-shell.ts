@@ -917,7 +917,8 @@ export class TillShell extends LitElement {
     });
   }
 
-  /** A handheld's More, in the design's order: the name's group, the screens, Settings, Log out. */
+  /** A handheld's More, in the design's order: the name's group, the screens, Settings, Log out,
+   * then Powered by while a venue logo is in use. */
   #menu(nameInMore: boolean): TemplateResult {
     const items = this.#items();
     const screens = [
@@ -974,7 +975,6 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  /** Shown while the venue's own logo is drawn, as on the sign-in screen. */
   #poweredBy(): TemplateResult | typeof nothing {
     const state = this.#venueLogo.state;
     return state.kind === "logo" && !state.failed

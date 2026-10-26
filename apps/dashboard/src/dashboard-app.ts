@@ -757,9 +757,9 @@ export class DashboardApp extends LitElement {
          constant that drives the narrow state). */
       @media (max-width: 48rem) {
         /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
-           one line, so the name, the pill and the inbox link, when shown, take a second row and the
-           trailing controls stay at the trailing edge of the first. The lockup's column is the one
-           that shrinks, so the trailing controls keep the first row. */
+           one line, so the name, the pill and, signed in with a venue logo, Powered by take a second
+           row and the trailing controls stay at the trailing edge of the first. The lockup's column
+           is the one that shrinks, so the trailing controls keep the first row. */
         .brand-banner {
           display: grid;
           grid-template-columns: auto minmax(0, max-content) 1fr auto;

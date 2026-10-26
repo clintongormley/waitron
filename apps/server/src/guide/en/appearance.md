@@ -140,9 +140,10 @@ The logo of the theme in use shows in these places:
 - **The sign-in screen of a cash register or handheld**, above the device's name and the list of
   names.
 - **"Powered by Waitron"**, which shows while a logo is set: under the dashboard's sign-in form; in
-  the dashboard's banner once you are signed in, before the buttons at its end (on a phone, after
-  the legal name on the banner's second line); at the foot of a cash register's or handheld's
-  sign-in screen; and at the foot of a handheld's **More** (☰) menu, under **Log out**.
+  the dashboard's banner once you are signed in, before the buttons at its end (on a narrow screen,
+  such as a phone's, after the legal name on the banner's second line); at the foot of a cash
+  register's or handheld's sign-in screen; and at the foot of a handheld's **More** (☰) menu, under
+  **Log out**.
 - **A receipt shown on a cash register's or handheld's screen**, above the venue's name. A
   department's own receipt logo comes first there too, and the main logo always shows there, never
   the version for dark screens.

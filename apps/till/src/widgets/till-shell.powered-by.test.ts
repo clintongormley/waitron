@@ -6,9 +6,9 @@ import {
   reportVenueLogoFailure,
   startVenueTheme,
   VENUE_THEME_STORAGE_KEY,
+  type WtPoweredBy,
   type WtVenueLogo,
 } from "@waitron/ui";
-import type { WtPoweredBy } from "@waitron/ui/src/components/wt-powered-by.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";

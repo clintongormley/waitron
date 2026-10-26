@@ -3531,15 +3531,20 @@ that tenant can contain several locations. While a browser with no saved copy of
 waits for its first theme read, the logo's place is an empty `wt-venue-logo` `size="banner"` box; a
 read that fails or passes its 5-second limit (`VENUE_THEME_TIME_LIMIT_MS`) ends the wait with the
 lockup.
-Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
-holding Account settings, Theme, Language and Log out — at the banner's trailing (right-hand in the shipped locales)
-edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
-two rows: the menu toggle, the logo (the venue's, or Waitron's lockup) and the menus share the
-first, with the logo shrinking when space runs short, and the legal name and Live mode pill take the second in full. The floor plan
-editor covers the banner and the menu with its full-window modal; its Undo, Redo, Cancel and Save
-keep one row down to 320 px (A502). Signed out, the Theme chooser (`wt-theme-chooser`) and then
-the language chooser (`wt-language-chooser`) sit at the trailing edge, with nothing after them (see
-"Navigation and language controls"). Signed in, the banner holds neither: the banner has no room
+Once a session is active, put the account menu — a person-icon `wt-row-actions` popover holding
+Account settings, Theme, Language and Log out — at the banner's trailing (right-hand in the shipped
+locales) edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the
+banner takes two rows: the menu toggle, the logo (the venue's, or Waitron's lockup) and the menus
+share the first, with the logo shrinking when space runs short, and the legal name and Live mode
+pill take the second in full. Signed in, while a venue logo is in use and has not failed,
+`wt-powered-by` (`login.powered_by`) sits at the identity row's trailing side, just before the
+alerts bell or help switch, with a `--wt-color-border` divider at its trailing edge; below the
+breakpoint it takes the second row's trailing end, after the legal name, with no divider (A1096,
+`apps/dashboard/src/dashboard-app.powered-by-banner.test.ts`). The floor plan editor covers the
+banner and the menu with its full-window modal; its Undo, Redo, Cancel and Save keep one row down to
+320 px (A502). Signed out, the Theme chooser (`wt-theme-chooser`) and then the language chooser
+(`wt-language-chooser`) sit at the trailing edge, with nothing after them (see "Navigation and
+language controls"). Signed in, the banner holds neither: the banner has no room
 for them at phone width, so both move into the account menu, at every width, after Account
 settings and before Log out. First Theme: one row holding the visible label "Theme", which names
 the group, and then three icon-only toggle buttons (sun, crescent and half-filled circle, the icons
@@ -5313,7 +5318,8 @@ dashboard's banner while nobody is signed in (signed in, Theme is in the account
 header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in person's
 menu under their name, Log out is in More, and the clock actions stay under the name. On a signed-in
 handheld, Theme and Log out are both in More, never in the name's menu: Theme last in the Settings
-group, and Log out last of all. Measured 2026-10-17 in A681's re-look of the till's person menu: as
+group, and Log out last of all but for the "Powered by" line, which follows it under a rule while a
+venue logo is in use (A1096). Measured 2026-10-17 in A681's re-look of the till's person menu: as
 three rows before Log out, the group pushed Log out below the visible More menu at 360×640, 360×740,
 320×740 and 390×664. Measured 2026-10-17 in the real-browser look for A681: with the chooser on the
 bar, at 360 px the tab strip got 148 px of the 178 px its tabs needed, and "Sala" showed as "Sa".
@@ -5360,9 +5366,11 @@ has failed and the bar leaves it out at its first step, the bar steps back every
 width, in this order, the groups separated by a token-coloured rule: the name with its clock state,
 the clock actions, My hours and Fix my hours, while the name is in More; Pass, Kitchen, Find a bill,
 My schedule, Profile and Transfers, each where offered; a `role="group"` headed Settings ("Settings"
-/ «Ajustes») holding Zones on this device, Equipment, the language chooser and Theme; then Log out.
-With the name on the bar, its menu holds only the clock actions, My hours and Fix my hours, and
-without the clock the name is drawn alone. Opening More holds its contents steady until it closes.
+/ «Ajustes») holding Zones on this device, Equipment, the language chooser and Theme; then Log out;
+then, while a venue logo is in use and has not failed, `wt-powered-by` with `login.powered_by`
+(A1096). With the name on the bar, its menu holds only the clock actions, My hours and Fix my hours,
+and without the clock the name is drawn alone. Opening More holds its contents steady until it
+closes.
 Floor, tapped after a table, opens the Floor on that table's zone when the device shows that zone
 (`#floorReturnZone` in `till-app.ts`).
 
