@@ -221,8 +221,8 @@ email server's refusal did not, because Waitron reduces it to a code first. S10 
 line the server's logger writes, and the failed start's report, shows `***` for a detail named on
 `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`), at any depth, and for each
 `merchants[].name`; the names of things stay visible, except a table's name for today. For row d6,
-the container's output is masked only in the server's own log lines: `console.warn` lines, the
-frozen-process watchdog's line on standard error and the command-line tools' output are not._
+the container's output is masked only in the server's own log lines and the failed start's report:
+`console.warn` lines, the frozen-process watchdog's line on standard error and the command-line tools' output are not._
 
 ### 2.4 Copies and routes off the box
 
