@@ -16,12 +16,12 @@ cumplir algunas de ellas. Entre tus obligaciones están estas:
 - Informar a las personas sobre sus datos cuando los recoges. Las secciones siguientes te dan
   avisos breves para el personal, los clientes con factura y los clientes que reservan, y una lista
   de lo que debe decir tu aviso completo.
-- Responder a quien pida ver, corregir o suprimir sus datos, o ejercer otro de sus derechos, sin
-  dilación indebida y en el plazo de un mes desde que recibes la solicitud. Si la solicitud es
-  compleja o tienes muchas, la ley te permite prorrogar el plazo otros dos meses en caso necesario,
-  siempre que se lo digas a la persona, con los motivos, dentro del primer mes. Waitron no guarda
-  una lista de estas solicitudes, así que anota cada solicitud, su fecha y tu respuesta en tus
-  propios registros.
+- Responder a quien pida ver, corregir o suprimir sus datos, o limitar u oponerse a su uso, o
+  recibirlos para llevarlos a otro sitio, sin dilación indebida y en el plazo de un mes desde que
+  recibes la solicitud. Si la solicitud es compleja o tienes muchas, la ley te permite prorrogar el
+  plazo otros dos meses en caso necesario, siempre que se lo digas a la persona, con los motivos,
+  dentro del primer mes. Waitron no guarda una lista de estas solicitudes, así que anota cada
+  solicitud, su fecha y tu respuesta en tus propios registros.
 - Llevar por escrito un registro de cómo usas los datos personales.
 - Actuar si se pierden o quedan expuestos datos personales, y decidir con tu asesor si lo comunicas
   a la AEPD, la autoridad de protección de datos de España, y a las personas afectadas.
@@ -59,7 +59,7 @@ resto. Entrega tú este aviso a cada persona del personal cuando tomes sus datos
 contrato, en papel o en tu propio correo. Sustituye cada parte en cursiva por tus propios datos, y
 quita lo que no se aplique, como el registro de jornada si lo llevas fuera de Waitron.
 
-Copia y adapta:
+Copia y adapta el párrafo siguiente:
 
 **Protección de datos.** Responsable: _razón social del local_ (_NIF del local_), _dirección del
 local_, _correo de privacidad del local_. Tratamos tus datos para gestionar tu contrato, tu acceso a
@@ -80,7 +80,7 @@ es una persona, también si es autónomo, esos datos son datos personales, y el 
 cuando el personal los toma. Cuando el cliente es una empresa, sus propios datos no son datos
 personales.
 
-Copia y adapta:
+Copia y adapta el párrafo siguiente:
 
 **Protección de datos.** _Razón social del local_ trata su nombre, NIF y dirección para emitir esta
 factura y cumplir sus obligaciones fiscales, incluida su remisión a la Agencia Tributaria. Derechos
@@ -98,7 +98,7 @@ departamento por separado. Lo escribes una vez para cada idioma que muestra el e
 Admite como máximo 200 caracteres, y el aviso anterior es más largo, así que usa una versión breve
 como esta, y cuenta su longitud cuando hayas puesto tus datos.
 
-Copia y adapta:
+Copia y adapta el párrafo siguiente:
 
 **Protección de datos.** _Razón social del local_ trata su nombre, NIF y dirección para emitir su
 factura. Derechos y más información: _dirección de la página de privacidad_.
@@ -111,7 +111,7 @@ Una reserva en Waitron guarda el nombre del cliente, un teléfono opcional y not
 dirección de correo, así que Waitron no puede escribir al cliente. Es el personal quien toma la
 reserva, así que el aviso breve es lo que dice al tomarla, por teléfono o en persona.
 
-Copia y adapta:
+Copia y adapta el párrafo siguiente:
 
 **Reserva.** Guardamos su nombre y teléfono para la reserva. Si nos cuenta una alergia, la
 anotamos para preparar su comida con seguridad. Tiene más información en nuestra web.
@@ -144,9 +144,9 @@ el aviso diga:
   qué ocurre si no los da;
 - si tomas decisiones automatizadas sobre la persona, incluida la elaboración de perfiles.
 
-Copia y adapta, para abrir la página:
+Copia y adapta el párrafo siguiente, para abrir la página:
 
-**Responsable del tratamiento de sus datos.** _Razón social del local_, NIF _NIF del local_,
+**Responsable del tratamiento de sus datos.** _Razón social del local_ (_NIF del local_),
 _dirección del local_. Escriba a _correo de privacidad del local_ sobre sus datos.
 
 ## Tu registro de actividades de tratamiento {#record}
@@ -186,7 +186,8 @@ entradas, así que no se repiten en cada una:
   proveedores que elegiste, y Waitron no comprueba dónde guardan los datos, así que consúltalo con
   cada proveedor.
 
-Copia y adapta, para abrir el registro:
+Copia y adapta el párrafo siguiente para abrir el registro, y después cada entrada que le sigue,
+hasta el siguiente encabezado:
 
 **Registro de actividades de tratamiento.** Responsable: _razón social del local_ (_NIF del
 local_), _dirección del local_, _correo de privacidad del local_.
@@ -228,8 +229,9 @@ registro diario de jornada que exige la ley.
 - Finalidad: llevar el registro de jornada que exige la ley.
 - Interesados: el personal, también el que ya no trabaja en el local.
 - Datos: las horas a las que cada persona fichó la entrada y la salida y empezó y terminó cada
-  pausa, el dispositivo que registró un fichaje cuando lo hizo uno, cada corrección con su motivo y
-  quién la pidió o la aprobó, y la dirección de correo a la que fue cada recordatorio.
+  pausa, el dispositivo que registró un fichaje cuando lo hizo uno, quién registró cada fichaje,
+  cada corrección con su motivo y quién la pidió, aprobó, rechazó o discutió, y la dirección de
+  correo a la que fue cada recordatorio.
 - Destinatarios: tu proveedor de correo, que entrega los recordatorios que Waitron envía a quien no
   fichó una entrada o una salida. La ley dice que el registro permanece a disposición de las
   personas trabajadoras, de sus representantes legales y de la Inspección de Trabajo y Seguridad
@@ -354,9 +356,10 @@ configuración para poner en marcha otro local.
 - Seguridad: Waitron no cifra la copia del bucket, pero las contraseñas y claves que guarda para tus
   proveedores van cifradas dentro de ella. Cada copia programada va cifrada con la clave de
   recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
-  base de datos en su propio disco y la borra cuando termina. La exportación de la configuración va
-  cifrada con una frase de paso de al menos 12 caracteres, así que es tan segura como esa frase. El
-  kit de recuperación abre la copia del bucket, así que guárdalo sin conexión.
+  base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
+  detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
+  menos 12 caracteres, así que es tan segura como esa frase. El kit de recuperación abre la copia
+  del bucket, así que guárdalo sin conexión.
 
 ## Si se pierden o se exponen datos personales {#breach}
 
@@ -414,8 +417,10 @@ Esto es lo que el panel puede mostrarte.
   en el menú de la fila de la persona, y su archivo `sign-in.json` muestra los inicios de sesión de
   la persona en cada dispositivo, desde cuándo hasta cuándo, y sus inicios de sesión en el panel.
   Consulta [Descargar los datos de otra persona](staff.md#person-data).
-- En **Pedidos**, **Ver detalle** muestra cada vez que se imprimió o se envió por correo el recibo o
-  la factura, con quién lo pidió cuando alguien lo hizo, y quién descargó el PDF de la factura.
+- En **Pedidos**, **Ver detalle** muestra las copias del recibo impresas desde **Pedidos** o desde
+  la pestaña **Transacciones** de la caja, con quién imprimió cada una. En una factura completa
+  también muestra cada vez que se imprimió o se envió por correo, con quién lo pidió cuando alguien
+  lo hizo, y quién descargó su PDF.
 - Ninguna pantalla muestra quién abrió el cajón de efectivo. Las aperturas recientes están entre los
   trabajos de la **Cola de impresión**, en **Impresoras**, pero ninguna columna dice cuáles son, y
   ninguna nombra a una persona. Quién abrió el cajón, o lo autorizó, está en el archivo
@@ -425,8 +430,9 @@ Esto es lo que el panel puede mostrarte.
   solo unos pocos de sus caracteres. **Avisos** muestra los avisos que ha generado el equipo.
 
 Waitron no registra quién abrió o leyó un registro en una pantalla, ni la dirección de red desde la
-que llegó un inicio de sesión. La única dirección que guarda de una petición es la de un dispositivo
-cuyo reloj ayudó a confirmar el reloj del equipo.
+que llegó un inicio de sesión. La única dirección que toma de la conexión de una petición y guarda
+es la de un dispositivo cuyo reloj ayudó a confirmar el reloj del equipo. Un agente de impresión
+también comunica al equipo su propia dirección de red, que muestra **Impresoras**.
 
 ## Pérdidas habituales {#breach-losses}
 
@@ -437,24 +443,28 @@ Cada pérdida siguiente dice qué expone y qué hacer en Waitron. Después respo
 dispositivo: un identificador de la última persona que inició sesión en él, la lista de platos que
 hay que preparar ahora con las notas escritas en ellos, y las devoluciones sin terminar con el
 motivo escrito en cada una. Deshabilitar o eliminar el dispositivo no borra nada en él. La
-aplicación de caja borra las devoluciones sin terminar cuando cierra la sesión de la persona, pero
-conserva las otras dos. Actúa en este orden. En **Dispositivos**, elige enseguida **Deshabilitar**
-en la fila del dispositivo: cierra todas las sesiones del personal en el dispositivo y le impide
-conectarse. Después, anota su **Visto por última vez**, y averigua quién lo usó con las copias de
-los datos de cada persona. Luego elige **Eliminar**, que impide que el dispositivo vuelva a
-demostrar quién es, y que Waitron rechaza mientras haya un pago en curso en él. Hasta que lo
-eliminas, un dispositivo deshabilitado puede pedir volver y aparecer en **Dispositivos que solicitan
-el alta**. Nunca elijas **Habilitar** para un dispositivo que perdiste.
+aplicación de caja borra las devoluciones sin terminar de una persona cuando esa persona cierra la
+sesión o la caja se bloquea sola, pero conserva las otras dos. Las que quedaron cuando la caja se
+cerró, se recargó o el equipo la rechazó, como ocurre al deshabilitarla, siguen en el dispositivo.
+Actúa en este orden. En **Dispositivos**, elige enseguida **Deshabilitar** en la fila del
+dispositivo: cierra todas las sesiones del personal en el dispositivo y le impide conectarse.
+Después, anota su **Visto por última vez**, y averigua quién lo usó con las copias de los datos de
+cada persona. Luego elige **Eliminar**, que impide que el dispositivo vuelva a demostrar quién es, y
+que Waitron rechaza mientras haya un pago en curso en él. Hasta que lo eliminas, un dispositivo
+deshabilitado puede pedir volver y aparecer en **Dispositivos que solicitan el alta**. Nunca elijas
+**Habilitar** para un dispositivo que perdiste.
 
 **Un móvil o un portátil robado que se usaba para el panel.** Deshabilitar un dispositivo solo
 cierra sus sesiones de caja; una sesión del panel pertenece a la persona. Por eso un administrador
 abre **Usuarios** y elige **Restablecer acceso** para esa persona. Cierra todas sus sesiones, borra
 su PIN, su contraseña, sus llaves de acceso, su verificación en dos pasos, sus códigos de
 recuperación y su vínculo con Google, y le envía una nueva invitación si el correo está configurado.
-Waitron no lo permite para el único administrador activo del local. El navegador también guarda la
-dirección de correo de la persona si eligió **Recordar mi correo en este dispositivo** al iniciar
-sesión. Si el móvil o el portátil se usaba también como caja, sigue además los pasos para un
-dispositivo de caja robado.
+Waitron no lo permite para el único administrador activo del local. Si en el último minuto ya se
+envió una invitación a esa persona, se restableció su acceso o se eligió **Habilitar y enviar
+invitación**, no cambia nada y solo indica que no se envió la invitación; vuelve a elegirlo pasado
+un minuto. El navegador también guarda la dirección de correo de la persona si eligió **Recordar mi
+correo en este dispositivo** al iniciar sesión. Si el móvil o el portátil se usaba también como
+caja, sigue además los pasos para un dispositivo de caja robado.
 
 **Un equipo perdido o robado.** Waitron no cifra la base de datos en el disco del equipo, así que
 trata todo lo que contiene como expuesto: los datos y los inicios de sesión del personal, los
@@ -467,21 +477,26 @@ el equipo envía los registros de facturación a la Agencia Tributaria y su cont
 pregunta a tu asesor cómo sustituirlo. El equipo también guarda la clave de recuperación, que abre
 tus copias programadas. La clave que protege los secretos de la verificación en dos pasos también
 está en el equipo, así que elige **Restablecer acceso** para cada persona que use la verificación en
-dos pasos.
+dos pasos. Waitron no permite **Restablecer acceso** para el único administrador activo, que en su
+lugar abre **Configuración de la cuenta**, elige **Desactivar autenticador** y lo vuelve a
+configurar.
 
 **Un kit de recuperación perdido.** El kit contiene la clave de acceso y el secreto de tu bucket y
 la clave de recuperación, así que quien lo tenga puede leer toda la copia de la base de datos de tu
-bucket y desbloquear las contraseñas y claves guardadas en ella. La clave de recuperación también
-abre tus copias programadas, allí donde esa persona pueda llegar a ellas. Revoca las claves de
-acceso antiguas en tu proveedor del bucket, algo que Waitron no puede hacer por ti. Después, en
-**Copias de seguridad**, elige **Cambiar de bucket** e introduce las claves nuevas. Si tus copias
-programadas van a **El bucket de la copia continua**, elige también **Cambiar el destino o la
-programación** y vuelve a guardar, porque conservan las claves con las que se guardaron. Una clave
-de recuperación nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas
-también en cada proveedor. Mientras las copias programadas están activadas, **Copias de seguridad**
-también ofrece **Cambiar la clave de recuperación**; después descarga el kit de recuperación nuevo.
-Las copias del bucket y las copias programadas hechas antes del cambio se siguen abriendo con la
-clave antigua.
+bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
+secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
+persona que la use. La clave de recuperación también abre tus copias programadas, allí donde esa
+persona pueda llegar a ellas. Revoca las claves de acceso antiguas en tu proveedor del bucket, algo
+que Waitron no puede hacer por ti. Después, en **Copias de seguridad**, elige **Cambiar de bucket**
+e introduce las claves nuevas. Si tus copias programadas van a **El bucket de la copia continua**,
+elige también **Cambiar el destino o la programación**, vuelve a elegir **El bucket de la copia
+continua** y guarda, porque conservan las claves con las que se guardaron. Una clave de recuperación
+nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
+proveedor. Mientras las copias programadas están activadas, **Copias de seguridad** también ofrece
+**Cambiar la clave de recuperación**; después descarga el kit de recuperación nuevo. Las copias
+programadas hechas antes del cambio se siguen abriendo con la clave antigua, igual que la parte
+sellada con las contraseñas y claves en el historial de la copia del bucket anterior al cambio, que
+se guarda una semana.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,
@@ -495,9 +510,12 @@ pantalla muestra quién descargó una exportación.
 **Restablecer acceso** para la persona. Las dos acciones cierran todas sus sesiones y borran su PIN,
 su contraseña, su verificación en dos pasos, su vínculo con Google, sus llaves de acceso y sus
 códigos de recuperación. **Restablecer acceso** envía una nueva invitación, y **Deshabilitar**
-mantiene fuera a la persona hasta que un administrador elija **Habilitar y enviar invitación**.
-Después revisa lo que se hizo con la cuenta: descarga la copia de los datos de la persona y revisa
-**Pedidos**. Consulta [Acceso a la cuenta](staff.md#account-access).
+mantiene fuera a la persona hasta que un administrador elija **Habilitar y enviar invitación**. Si
+en el último minuto ya se envió una invitación a esa persona, se restableció su acceso o se eligió
+**Habilitar y enviar invitación**, **Restablecer acceso** no cambia nada y solo indica que no se
+envió la invitación; vuelve a elegirlo pasado un minuto. Después revisa lo que se hizo con la
+cuenta: descarga la copia de los datos de la persona y revisa **Pedidos**. Consulta [Acceso a la
+cuenta](staff.md#account-access).
 
 **Una factura enviada a una dirección equivocada.** El correo lleva la factura en PDF, que muestra
 el nombre, el NIF y la dirección del cliente y lo que compró. En **Pedidos**, **Ver detalle**
