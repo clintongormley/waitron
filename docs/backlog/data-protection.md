@@ -202,10 +202,26 @@ by the answers):
     holds Maria's name and address.
   - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
     they are switched on.
-- **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
-  checklist.
 - **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
   environment setting a box cannot set. Adds a migration.
+  The help guide's data-protection page (S6, `apps/server/src/guide/<language>/data-protection.md`)
+  has no dashboard entry point of its own: S1a's setting gets a "?" to
+  `data-protection#staff-notice`, and S1b updates that page's `staff-notice` and `full-notice`
+  sections once the setting exists.
+- **Reset login may reset nothing when pressed twice within a minute** (seen by reading only, while
+  planning S6; not run). The route checks the invitation cooldown before it resets anything
+  (`apps/server/src/management-api.ts`, the `reset-login` route: `acceptInvitation(personId)` returns
+  early with `invitationSent: false`), and the cooldown is 60 seconds per person
+  (`apps/server/src/account-rate-limit.ts`). If that reading is right, a second press within a minute
+  of an invitation, a reset or a re-enable leaves the PIN, password, two-factor secret, passkeys and
+  open sign-ins in place, which matters when the reset answers a stolen account (the guide's breach
+  section). Next action: a failing route test first, then reset before the cooldown or say on screen
+  that nothing was reset.
+- **What a lost recovery kit exposes beyond the database copy** (unverified). The guide's breach
+  section says the kit opens the bucket copy and the "passwords and keys stored in it". Whether that
+  includes each person's two-factor secret, through a key derived from one sealed in the bucket copy
+  (`apps/server/src/account-key.ts`, `apps/server/src/state-secrets.ts`), was not checked.
+  Next action: trace it, and name the two-factor secrets on the page if they are exposed.
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
   migration; waits for the labour and privacy specialists (A664 G2, G3).

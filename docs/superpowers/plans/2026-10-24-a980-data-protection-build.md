@@ -44,7 +44,13 @@ a root guard refuses a person-looking detail that is neither listed nor named ha
 same day, by the owner's answer, the mask became partial: each word, each tax number, and an
 email's part before the `@` and its domain name keep their first and last character around `***` (the S10 plan's decision 14).
 S10 does
-not touch `packages/identity/src/staff.ts`, which the build order below expected it might. Design:
+not touch `packages/identity/src/staff.ts`, which the build order below expected it might. 2026-10-26: S6 is built
+([its plan](2026-10-26-a980-s6-guide-templates.md)): a help-guide page, **Data protection**, in
+English and Spanish (`apps/server/src/guide/<language>/data-protection.md`), with privacy-notice
+templates for staff, invoice customers, booking guests and the venue's web page, a record of
+processing the venue fills in, and a breach section listing the Article 33 questions, what the
+dashboard can and cannot show afterwards, and the steps for common losses. It gives no verdict on
+whether to notify. The Users guide links to it; no dashboard screen does yet (S1a). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in
@@ -82,7 +88,7 @@ owner's answers.
 | **S6** | English and Spanish help-guide pages: the privacy-notice templates, a record of processing, and a breach checklist. | **No.** Markdown under `apps/server/src/guide/en/` and `es/` plus the guide's page list (`apps/server/src/guide-catalogue.ts`). | LIGHT | nothing | Yes |
 | **S10** | Find out whether any logged error carries a person's name or email (an email-server refusal; the `person.email_taken` and `person.display_name_taken` parameters, `staff.ts:53-66`), and mask it if so. | **No.** Logs are files, not tables. | FULL (personal data on the recovery page, which needs no sign-in) | nothing | Yes |
 | **S1a** | A dashboard setting for the address of the venue's privacy-notice page and its privacy email, stored in the database and saved under `venue.configure`, with its guide text. | **Yes.** Nothing holds a non-secret venue setting of this kind: `tenants` holds country, tax id, legal name and domicile (`packages/db/src/schema/tenants.ts:43-52`); `tenant_receipts` holds the receipt's own text (`packages/db/src/schema/tenant-receipts.ts:18-26`); `tenant_credentials` holds sealed secrets (`packages/credentials/src/schema/tenant-credentials.ts:11-40`); `service_settings` belongs to the venue-service module (`packages/venue-service/src/schema/settings.ts:10-28`). Proposed: two empty-by-default columns on `tenants`, which adds columns without rebuilding the table. A migration-free option exists, two new keys in the receipt's JSON column `tenant_receipts.receipt`, and is rejected: that document is the printed receipt's trim, saved whole by the receipt editor under `layout.configure` (`packages/layouts/src/receipt-store.ts:165-188`) and refusing keys it does not know (`packages/layouts/src/validate.ts:40`), while the venue's identity as controller already lives as columns on `tenants`. | FULL (migration) | lane B's parked pull requests closed, while lane B builds it | **No**, while lane B builds it |
-| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. | **No.** | LIGHT | S1a | No, after S1a |
+| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. | **No.** | LIGHT | S1a | No, after S1a |
 | **S9** | On request, erase a booking guest's details as the design's §4.3(c) says. | **No.** Append-only triggers are installed at start from `appendOnly()` declarations, not written in migration SQL. Every S9 table is declared with `classify()` (`packages/bookings/src/classification.ts:10`; `packages/venue-service/src/classification.ts:41-45`), and no trigger SQL in the tree, `packages/db/drizzle` included, names `bookings`, `party_allergy`, `ticket_item_allergies` or `kitchen_notices` (the 46 tracked `.sql` files holding `create trigger` and every non-test source file holding it, searched for those names, 2026-10-24; control: 8 of those `.sql` files name `sales`). The required booking name takes a fixed "(erased)" text. | FULL (personal data, health) | the privacy specialist (G3) | **No** |
 | **S11** | Store the date a person is deactivated, and clear a former employee's email a year later, keeping the name. | **Yes.** `persons` has no deactivation date (`packages/identity/src/schema/persons.ts:31-67`). | FULL (migration, personal data) | the labour and privacy specialists (G2, G3), and lane B's parked pull requests closed while lane B builds it | **No** |
 
@@ -163,7 +169,9 @@ log line. If nothing leaks, the slice is the probe as a test.
 
 **S1a.** Read `docs/developers/conventions-data.md` before generating the migration. Adding
 nullable columns to `tenants` should come out as a plain column addition; if drizzle instead
-rebuilds the table, stop and read the rebuild rules in the home CLAUDE.md.
+rebuilds the table, stop and read the rebuild rules in the home CLAUDE.md. The new setting gets a
+"?" help link to the guide's `data-protection#staff-notice` (added 2026-10-26 by S6, whose page
+has no dashboard entry point of its own).
 
 **S1b.** The invoice email is composed in `apps/server/src/invoice-email.ts`. Today the link is
 read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and passed in at
