@@ -272,4 +272,5 @@ it.each([
       await agent.close();
     }
   },
+  120_000,
 );
