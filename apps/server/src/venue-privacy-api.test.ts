@@ -65,16 +65,20 @@ describe("the venue's privacy contact", () => {
 
   it("leaves the stored web page when only the email is sent", async () => {
     await save(stored);
+    const before = await taxpayer();
     const response = await save({ privacyEmail: "data@example.com" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ...stored, privacyEmail: "data@example.com" });
+    expect(await taxpayer()).toEqual({ ...before, privacyEmail: "data@example.com" });
   });
 
   it("clears a field sent empty or blank as NULL, never an empty string", async () => {
     await save(stored);
+    const before = await taxpayer();
     const response = await save({ privacyNoticeUrl: "", privacyEmail: "   " });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(unset);
+    expect(await taxpayer()).toEqual({ ...before, ...unset });
     const { rows } = await suite.db.execute<{ url: string | null; email: string | null }>(
       sql`select privacy_notice_url as url, privacy_email as email from tenants where id = 1`,
     );
@@ -82,9 +86,10 @@ describe("the venue's privacy contact", () => {
   });
 
   it("stores the composed spelling of a decomposed email", async () => {
-    const response = await save({ privacyEmail: "josé@example.com" });
+    const before = await taxpayer();
+    const response = await save({ privacyEmail: "jose\u0301@example.com" });
     expect(response.status).toBe(200);
-    expect((await taxpayer()).privacyEmail).toBe("josé@example.com");
+    expect(await taxpayer()).toEqual({ ...before, privacyEmail: "jos\u00e9@example.com" });
   });
 
   it.each([
@@ -133,13 +138,14 @@ describe("the venue's privacy contact", () => {
   });
 
   it("requires a session for both routes", async () => {
+    const before = await taxpayer();
     for (const response of [await read(null), await save(stored, null)]) {
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
         error: { code: "management_session.required", params: {} },
       });
     }
-    expect(await (await read()).json()).toEqual(unset);
+    expect(await taxpayer()).toEqual(before);
   });
 
   it("lets staff do neither and a supervisor read but not save", async () => {
@@ -163,6 +169,21 @@ describe("the venue's privacy contact", () => {
     expect(await supervisorSave.json()).toEqual({
       error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
+    expect(await taxpayer()).toEqual(before);
+  });
+
+  it("refuses an invalid save from staff and a supervisor on permission, before the body check", async () => {
+    const before = await taxpayer();
+    const refusal = {
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+    };
+    const staff = await save({ privacyEmail: "privacy" }, venue.staffCookie);
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toEqual(refusal);
+    await suite.db.execute(sql`update persons set role = 'supervisor' where role = 'manager'`);
+    const supervisor = await save({ privacyEmail: "privacy" });
+    expect(supervisor.status).toBe(403);
+    expect(await supervisor.json()).toEqual(refusal);
     expect(await taxpayer()).toEqual(before);
   });
 
