@@ -5151,6 +5151,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
+- **A local multi-file till browser run stopped reporting progress; the cause is unknown.**
+  Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
+  not qualify the concurrent path. [Detail](backlog/ci.md#local-multi-file-till-browser-stall).
+
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 
@@ -5577,8 +5581,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.** Remaining: till app and table, floor and station screen
   private names, the payment widget's idle-choice and main suites, server till-API
-  tests, shared station fixtures and file names. Keep fixture text with A976 and the owner-held core-comment PR separate. See the
-  [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
+  tests, shared station fixtures and file names. Till app work remains in the boot/counter, parties, table-service and NFC suites.
+  Keep fixture text with A976 and the owner-held core-comment PR separate. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
   `venue-screen.ts` lookup needs qualification with a country-pack code such as `constructor`;

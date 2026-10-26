@@ -955,3 +955,22 @@ and A419's dashboard stall separate; no shared cause is established.
 ## A1089 merge read-back: server coverage upload timed out
 
 - **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
+
+## Local multi-file till browser stall
+
+A local run on 26 October stopped producing output before any file completed, with
+`src/till-app.theme.test.ts`, `src/widgets/basket.adjustments.test.ts`,
+`src/till-app-parties.test.ts` and `src/till-app-counter-adjustments.test.ts` selected.
+It was stopped after five minutes, with the source tests still unchanged. The cause
+is unknown. The theme suite completed alone; the serial diagnostic command adds
+`--maxWorkers=1 --reporter=verbose --reporter=../../scripts/vitest-file-progress.mjs`
+to `pnpm --filter @waitron/till exec vitest run` with those four paths.
+
+The serial diagnostic completed three files and was still reporting passing cases
+in the larger parties suite when its four-minute outer deadline stopped it. That
+run establishes no serial stall.
+
+Capture the concurrent path's per-case and file progress, pending browser operation
+and process tree on recurrence, under `scripts/run-with-deadline.mjs`. Keep that
+qualification separate from a serial pass; neither a cause nor a repair has been
+established.
