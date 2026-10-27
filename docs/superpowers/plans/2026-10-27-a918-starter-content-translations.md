@@ -790,11 +790,11 @@ the content-language option). Slices 3 and 4 no longer wait.
 ## Task 0 results (run 2026-10-27 on `947d6ac19`)
 
 1. **A configuration import replaces the rows.** `importConfigurationTables`
-   (`packages/provisioning/src/configuration-transfer.ts:640-735`) deletes every row of each table
-   the bundle declares, in reverse order, then inserts the bundle's; `kitchen_stations` and
-   `device_profiles` are declared tables (`packages/db/src/configuration-transfer.ts:67`, `:78`). So a
-   venue set up from an export keeps the exporting venue's station and profile names; nothing to
-   change for imports.
+   (`packages/provisioning/src/configuration-transfer.ts:640-810`) deletes every row of each table
+   the bundle declares (the `persons` table keeps its administrators, `:722-726`), in reverse
+   order, then inserts the bundle's; `kitchen_stations` and `device_profiles` are declared tables
+   (`packages/db/src/configuration-transfer.ts:67`, `:78`). So a venue set up from an export keeps
+   the exporting venue's station and profile names; nothing to change for imports.
 2. **Readers of the profile data:** `git grep -n "nameByLocale\|defaultProfileName\|DEFAULT_DEVICE_PROFILES"`
    prints `packages/layouts/src/device-profile.ts`, its test, `packages/layouts/src/index.ts:35-36`,
    `packages/provisioning/src/venue-plan.ts:3-4`, `:175-176`, and `apps/server/src/payments-api.test.ts:37`,

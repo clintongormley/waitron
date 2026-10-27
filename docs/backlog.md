@@ -1973,9 +1973,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
 
 - **A918. Starter content in the venue's languages at setup (left open by A758-1).**
-  Starter content a module writes into a new venue is English, translated when the box is set up
-  (owner, 2026-10-19). The owner chose (2026-10-20): each module ships a translation file of its starter
-  names, setup writes every language the venue uses from it, and the English-only check is to allow
+  Starter content Waitron writes into a new venue (a module's seed or a core setup step) is English,
+  translated when the box is set up (owner, 2026-10-19). The owner chose (2026-10-20): each module
+  ships a translation file of its starter names, setup writes every language the venue uses from it, and the English-only check is to allow
   those files. It
   covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
   is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
