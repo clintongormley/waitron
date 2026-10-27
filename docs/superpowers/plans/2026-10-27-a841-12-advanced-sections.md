@@ -410,9 +410,10 @@ suite stays green before and after; Task 3a then builds the sections under them.
   Run: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/theme-advanced.test.ts src/widgets/theme-advanced.a11y.test.ts src/screens/look-card.advanced.test.ts src/screens/look-card.unsaved.test.ts src/screens/look-card.a11y.test.ts`
   Expected: PASS, with the same `Tests` count as the same command on the task's starting commit
   (record both counts in the commit message). A count that differs means a case was lost.
-  Record each run's `Duration` line too: Task 3a re-reads it, because a click on a row inside a
-  section that is still animating open (900 ms) waits for Playwright's hit test, and nested folds
-  add one such wait per fold (CLAUDE.md §2, about 4 minutes per CI job).
+  Record each run's `Duration` line too: Task 3a re-reads it, because nested folds may slow the
+  suites (each fold animates open over 900 ms, and a click on a row still clipped by a growing
+  body may wait on Playwright's actionability checks; reasoned, not measured) and CI jobs aim at
+  about 4 minutes (CLAUDE.md §2).
 - [ ] **Step 4:** `pnpm --filter @waitron/dashboard typecheck`, `pnpm format:check`; commit —
   `git commit -s -m "Open the folds around what Advanced's tests touch (A841 slice 12)"`.
 
@@ -577,8 +578,10 @@ suite stays green before and after; Task 3a then builds the sections under them.
     same. Read the folds after `await el.updateComplete` and the section's own `updateComplete`.
   - A newer read of the theme in use (a `list` with different stored choices, nothing changed in
     the editor, as slice 6's `#adopt` case does) leaves Page and surfaces open.
-  - Save with a warning then Back: on "two fixes" with Text colours and links opened, Save opens
-    the Hard to read dialog; Back closes it (wait for its `hard-to-read-back` event and the card's
+  - Save with a warning then Back: on "two fixes" with Text colours and links opened, one change
+    that leaves both warnings (a corners choice other than the fixture's, as the a11y state "the
+    Hard to read dialog without Fix and save" makes, `look-card.a11y.test.ts:178-187`; Save on an
+    unchanged draft does nothing, `look-card.ts:807`), then Save opens the Hard to read dialog; Back closes it (wait for its `hard-to-read-back` event and the card's
     render, `look-card.ts:935-937`, CLAUDE.md §4) →
     Text colours and links still open, the other sections closed, nothing sent.
   - Cancel, then Edit → Advanced and every section closed. Bold weight set to 700 (a weight never
@@ -633,10 +636,11 @@ suite stays green before and after; Task 3a then builds the sections under them.
     " · 1 hard to read" in two summaries); "the Text section open with a text warning" (Small text
     10).
 - [ ] **Step 3: Axe states for the card,** `look-card.a11y.test.ts` (`states`, `:228-311`, run in
-  both themes and both languages by the existing `it.each`). Most Advanced states return
-  `"dashboard-theme-advanced"` as the element axe scans (`look-card.a11y.test.ts:235-275`), so
-  opening the folds around THAT element opens no section, and its `checkVisibility()` is true with
-  every section closed: axe would then check five closed lines and nothing inside. So each state
+  both themes and both languages by the existing `it.each`). Five Advanced states return
+  `"dashboard-theme-advanced"` (`look-card.a11y.test.ts:228-278`), which the case only waits to
+  exist (`:347`); axe scans the whole card host (`:362`). Opening the folds around THAT element
+  opens no section, and its `checkVisibility()` is true with every section closed, while a closed
+  section's body is `hidden`: the state would check five closed lines and nothing inside. So each state
   names the inner elements it is about, opens their folds with `openFoldsAround`, and asserts
   `checkVisibility()` on each of those inner elements:
   - "Advanced open, nothing set by hand": every section opened (a `hand-row-*` of each colour
@@ -646,8 +650,10 @@ suite stays green before and after; Task 3a then builds the sections under them.
   - "Advanced open with two warnings": Page and surfaces and Text colours and links,
     `hand-warning-light-text` and `hand-warning-light-surface-sunken` visible;
   - "a fixed-from line": Text colours and links, `hand-fixed-light-text` visible;
-  - "a hand code's error": opened by `has-error`, `wt-input[name="handSet.light.bg"]` visible with
-    no section opened by a click;
+  - "a hand code's error": `wt-input[name="handSet.light.bg"]` visible and `section-surfaces`
+    carrying `has-error` (its `typeHand`, rewired in Task 2, opens Page and surfaces by its header
+    before typing; that `has-error` alone opens a closed
+    section is Task 3b's and Task 5 Step 2's case);
   - "the dark own colour line": unchanged (its element is on the card, outside Advanced).
   Add "Advanced open, every section closed" (the five closed lines are what it checks) and "Pick a
   different colour for dark screens pressed" (Advanced and Buttons open, the dark Main buttons
@@ -797,7 +803,7 @@ Every existing assertion this plan changes, and the design line behind it:
 6. `apps/dashboard/src/screens/look-card.unsaved.test.ts:367-375`, "Pick a different colour for dark
    screens alone asks nothing": also asserts `section-buttons` open — the same line.
 7. `look-card.a11y.test.ts` and `theme-advanced.a11y.test.ts` states (Task 5): each opens the
-   sections its element is in and asserts it visible; no state is dropped — design line 2476 ("axe
+   sections holding the elements it is about and asserts those visible; no state is dropped — design line 2476 ("axe
    in both themes").
 8. Task 2 changes helpers only; every assertion is unchanged.
 9. Unchanged and still holding: every `advancedSummary` case (`theme-words.test.ts`; Advanced
