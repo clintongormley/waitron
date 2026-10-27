@@ -91,9 +91,7 @@ for this docs task; no provider work is authorised.
 
 ## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
 
-- From #657: A completed provision or adopt operation replayed on
-  a later request still answers 200 without restarting and keeps the setup lock set (the Cloud
-  restore's replay does restart). After a refused resend of a half-finished adopt (A50, #685),
+- The Cloud restore's replay does restart. After a refused resend of a half-finished adopt (A50, #685),
   what the first identity leaves behind on the primary and on this node is still not measured.
   The standby's reset page does not show this server's machine id, so an operator cannot tell
   which row on the primary's Servers screen is this server's (left for the owner from A70's
@@ -183,7 +181,7 @@ for this docs task; no provider work is authorised.
 
 ## The tunnel's stand-in relay pairs with sockets that have already gone
 
-Found 2026-09-23, writing tunnel's coverage tests, PR #506. `packages/tunnel/src/testing/relay.ts` is test-only:
+`packages/tunnel/src/testing/relay.ts` is test-only:
 nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
 box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
 box and its bytes go nowhere. When a waiting client closes,
@@ -256,8 +254,7 @@ Cloud's production store still needs its own run.
 
 ## A restored box whose cloud peer does not answer during its first start signs the next term and removes the marker
 
-- A restored box whose cloud peer does not answer during its first start signs the next term and
-  removes the marker; a fencing document the peer serves later at that same term reads as not
+- A fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced (reproduced with a temporary two-boot case in
   `apps/server/src/boot.reconcile.test.ts`). I believe it cannot happen today — the only writer of
   `mirror_config`, which the peer check needs, is `apps/server/src/adopt.ts`, for a standby that
@@ -273,7 +270,7 @@ Cloud's production store still needs its own run.
 
 ## Only the start that finishes a restore checks the row's signature
 
-- Only the start that finishes a restore checks the row's signature. A mirror or fenced start
+- A mirror or fenced start
   checks only that it can be read and is shaped as a document (A53); a start still finishing an
   adoption checks neither. Promotion, `retireSelf` and the standby chart append
   (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
@@ -288,8 +285,7 @@ Cloud's production store still needs its own run.
 
 ## On a start with NO restore marker, text that is not JSON or a machine list that is not a list fails with the generic text
 
-- On a start with NO restore marker, text that is not JSON or a machine list that is not a list
-  fails with the generic text; a stored JSON null reads as no document, and a document breaking only
+- A stored JSON null reads as no document, and a document breaking only
   a shape limit is read and used unchecked. From reading its writers, nothing this program writes
   produces one. Once starts have failed repeatedly the recovery page shows the generic text (code
   `unknown`), not `restore.membership_invalid`. Whether to give it a curated code is open.
@@ -598,15 +594,12 @@ Left open by #425; receipts in
 
 ## Task 1a — node filters and unverified concurrency claims
 
-**Task 1a** (#548, each machine's own rows keyed by its node id). Deny's delete is the one
+Deny's delete is the one
 join-request node filter no test fails without (the `requirePending` read before it already
 refuses another node's row); and the run-it review did not reach three claims within its budget —
-holders torn by a concurrent promotion, credential sealing, and scheduler takeover. Left open by
-SQLite slice 2.
+holders torn by a concurrent promotion, credential sealing, and scheduler takeover.
 
 ## Loose ends left by SQLite slice 2 Task 9a
-
-Left open by #630, the first start after a restore.
 
 - A node row holding no endorsement still signs `endorsements: []`, and no first-start case
   asserts it.
@@ -630,8 +623,7 @@ Left open by #630, the first start after a restore.
 Slice 2's design reserved it for slice
 5. That slice decides again how the drain crosses the two files: SQLite refuses a trigger body
 that writes another attached database, so either `change_log` is reclassified to the file its
-writers live on, or the triggers stop writing it directly and something above them does (P3). Left
-open by SQLite slice 1 (#490 and the preparation tasks).
+writers live on, or the triggers stop writing it directly and something above them does (P3).
 
 ## A promoting standby may list itself with an empty contactUrl
 
