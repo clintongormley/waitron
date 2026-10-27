@@ -5467,6 +5467,48 @@ describe("the Columns window on the till", () => {
     expect(columnsWindow(el)).toBeNull();
   });
 
+  it("the Columns window: a new API closes it", async () => {
+    const { el } = await mountOperator();
+    await openColumns(el);
+    expect(columnsWindow(el)).not.toBeNull();
+    el.api = stubApi();
+    await flush(el);
+    expect(columnsWindow(el)).toBeNull();
+  });
+
+  it("the Columns window: leaving kitchen-device mode closes it", async () => {
+    const { el, host } = await mountOperator({
+      api: stubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "open" },
+              printersDown: [],
+              queue: kitchenQueue,
+              notices: [],
+            },
+          ],
+        }),
+      }),
+    });
+    // Both modes' stations are loaded before the flip, so st-1's board is still drawn after it and
+    // only the mode change itself can close the window.
+    el.deviceMode = true;
+    el.remove();
+    host.appendChild(el);
+    await flush(el);
+    await vi.waitFor(() => expect(queueWidget(el)?.stationId).toBe("st-1"));
+    await openColumns(el);
+    expect(windowBoardName(el)).toBe("Cocina");
+    el.deviceMode = false;
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-1");
+    expect(columnsWindow(el)).toBeNull();
+  });
+
   it("the Columns window: the device getting its first id closes it", async () => {
     const { el } = await mountOperator({ deviceId: undefined });
     await openColumns(el);
