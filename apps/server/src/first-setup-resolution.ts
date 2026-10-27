@@ -559,8 +559,8 @@ export function createFirstSetupResolutionActions(
           const finishing = found?.kind === "unemptied";
           const presentUnreadable =
             !missing && !discardsStopped && gathered.unreadable !== undefined;
-          // No summary is shown while an abandoned journal is being finished, so nothing confirms a
-          // damaged name record on that path.
+          // With the database present, no summary is shown while an abandoned journal is being
+          // finished, so nothing confirms a damaged name record on that path.
           if (finishing && presentUnreadable) throw new AppError("setup.attempt_invalid", {});
           if (presentUnreadable !== (request.confirmUnreadable !== undefined)) conflict();
           const confirmation = request.confirmMissingDatabase;
