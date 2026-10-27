@@ -287,14 +287,20 @@ back, or **Put live now**. What putting a patch live does:
 - It goes live at once as a new version of this menu, under the next number. Lines added to orders
   from then on use the corrected values. Lines already on open orders keep their old price and VAT
   class.
+- On a parked counter order, renaming an options list or one of its choices does what it does after
+  a publish, as [What the till does with a list](modifiers.md#till) describes: a new staff name
+  makes the till ask for that answer to be chosen again, and a new customer-facing or kitchen name
+  is saved onto those lines at the next change to the order, which can send a line the kitchen
+  already has to it again as a new ticket. Those lines keep their prices.
 - It changes nothing else: not the products, not the menu's own items and sections, not your other
   menus. A product on two menus is patched on each one.
 - A version scheduled to go live later keeps its date and its content, and goes live then without
-  the patch. It is given a new number after the patch's, under **Scheduled versions**.
+  the patch. It is given a new number after the patch's, under **Scheduled versions** on the
+  **Preview** tab.
 - The next normal publish builds the menu from the products again, so it puts the old values back
   unless you correct the products too.
 
-If what you entered is already live, nothing is saved and the window says so. If another version
+A field set back to its live value is not counted as a change. If another version
 went live while you were patching, **Put live now** is refused: **Reload** opens the version that
 is live now and keeps the changes that still fit it.
 

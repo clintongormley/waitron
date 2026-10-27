@@ -152,7 +152,7 @@ order can be sent.
 
 Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but
 it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
-different one. So once the menu is published again, the next change made to that parked order, even
+different one. So once the menu is published again or patched, the next change made to that parked order, even
 to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
 the prices they were sold at. A line the kitchen already has is recalled and sent to it again as a
 new ticket. The till refuses the change instead if the kitchen has started such a line, or if **Changes after sending**

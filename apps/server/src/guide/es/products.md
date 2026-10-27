@@ -9,7 +9,7 @@ introduce su precio. Su IVA empieza en la clase elegida en **Clase de IVA para p
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
-publicó la carta. Para corregir la clase en la carta publicada sin publicarla, consulta
+publicó la carta. Para corregir la clase en la carta publicada sin volver a publicar desde los productos, consulta
 [Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Una línea que ya
 está en un pedido conserva la clase con la que se añadió.
 
@@ -302,15 +302,21 @@ editando** para volver, o **Publicar ahora**. Esto es lo que hace publicar una c
 - Se publica al momento como una versión nueva de esta carta, con el número siguiente. Las líneas
   que se añaden a los pedidos desde entonces usan los valores corregidos. Las líneas que ya están
   en pedidos abiertos mantienen su precio y su clase de IVA anteriores.
+- En un pedido aparcado de caja, cambiar el nombre de una lista de opciones o de una de sus opciones
+  hace lo mismo que después de publicar, como explica
+  [Qué hace la caja con una lista](modifiers.md#till): un nombre del personal nuevo hace que la caja
+  pida volver a elegir esa respuesta, y un nombre para el cliente o de cocina nuevo se guarda en
+  esas líneas con el siguiente cambio del pedido, lo que puede volver a enviar a la cocina, como
+  una comanda nueva, una línea que ya tiene. Esas líneas conservan sus precios.
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
   otras cartas. Un producto que está en dos cartas se corrige en cada una.
 - Una versión programada para más tarde conserva su fecha y su contenido, y entra en vigor entonces
   sin la corrección. Recibe un número nuevo, posterior al de la corrección, en **Versiones
-  programadas**.
+  programadas**, en la pestaña **Vista previa**.
 - La próxima publicación normal vuelve a crear la carta a partir de los productos, así que vuelve a
   poner los valores anteriores, salvo que corrijas también los productos.
 
-Si lo que has introducido ya está publicado, no se guarda nada y la ventana lo dice. Si otra
+Un campo que vuelve a su valor publicado no cuenta como corrección. Si otra
 versión se ha publicado mientras corregías, **Publicar ahora** se rechaza: **Volver a cargar** abre
 la versión publicada ahora y conserva las correcciones que todavía encajan en ella.
 

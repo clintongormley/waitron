@@ -164,8 +164,8 @@ elegir antes de poder enviar el pedido.
 
 Cambiar solo un nombre para el cliente o un nombre de cocina sigue emparejando, así que nadie se
 queda parado en la caja, pero tiene un coste. El pedido recuerda los tres nombres, y Waitron no
-puede distinguir una respuesta renombrada de una distinta. Así que, una vez vuelta a publicar la
-carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
+puede distinguir una respuesta renombrada de una distinta. Así que, una vez vuelta a publicar o
+corregida la carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
 texto nuevo en todas las líneas que llevan la respuesta renombrada. Esas líneas conservan los
 precios a los que se vendieron. Una línea que la cocina ya tiene se retira y se le vuelve a enviar
 como una comanda nueva. La caja rechaza el cambio si la cocina ya ha empezado esa línea, o si
