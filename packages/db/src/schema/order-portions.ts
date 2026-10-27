@@ -5,7 +5,7 @@ import { workingOrderLines } from "./orders.js";
 import { saleLines } from "./sales.js";
 
 /**
- * One dish ordered at a table, kept for good: the line that holds it can move between orders or be
+ * One dish ordered, kept for good: the line that holds it can move between orders or be
  * deleted, and this row stays. Portions expanded from one priced request line share a cohort and
  * are numbered from 1 within it.
  */
@@ -24,7 +24,7 @@ export const orderPortions = table(
   ],
 );
 
-/** Which working dish line holds which portion right now. An extra line is never bound. */
+/** Which working line holds which portion right now. */
 export const workingLinePortions = table(
   "working_line_portions",
   {
@@ -49,7 +49,7 @@ export const workingLinePortions = table(
   ],
 );
 
-/** Which portions a filed sale row stands for. A dish row and each of its extra rows are linked. */
+/** Which portions a filed sale row stands for. */
 export const saleLinePortions = table(
   "sale_line_portions",
   {
@@ -77,8 +77,9 @@ export const ORDER_PORTION_EVENT_KINDS = ["moved", "cancelled"] as const;
 const portionEventKind = enumType(ORDER_PORTION_EVENT_KINDS);
 
 /**
- * A portion moved to another order, or cancelled with its charge. The order ids and the actor are
- * plain ids with no key: a row nothing may change must not refuse a later delete of a working order.
+ * A portion moved to another order, or cancelled with its charge. The order ids are plain ids with
+ * no key: a row nothing may change must not refuse a later delete of a working order. The actor is a
+ * plain person id because `persons` is in @waitron/identity's migration set, not the core one.
  */
 export const orderPortionEvents = table(
   "order_portion_events",

@@ -187,23 +187,23 @@ describe("A803 portions: the registry, bindings, sale links and events", () => {
       .values({ portionId: portion, kind: "cancelled", fromOrderId: orderId })
       .returning({ id: orderPortionEvents.id });
     const rows = [
-      ["order_portions", portion, "ordinal = 2"],
-      ["sale_line_portions", link!.id, "portion_id = portion_id"],
-      ["order_portion_events", event!.id, "actor_id = 'someone'"],
+      ["order_portions", portion, sql`ordinal = 2`],
+      ["sale_line_portions", link!.id, sql`portion_id = portion_id`],
+      ["order_portion_events", event!.id, sql`actor_id = ${"someone"}`],
     ] as const;
     for (const [name, rowId, set] of rows) {
       const raised = `${name} is append-only`;
       const update = await captureError(() =>
-        db.run(sql.raw(`update ${name} set ${set} where id = '${rowId}'`)),
+        db.run(sql`update ${sql.identifier(name)} set ${set} where id = ${rowId}`),
       );
       expect(triggerRaised(update, raised)).toBe(true);
       const remove = await captureError(() =>
-        db.run(sql.raw(`delete from ${name} where id = '${rowId}'`)),
+        db.run(sql`delete from ${sql.identifier(name)} where id = ${rowId}`),
       );
       expect(triggerRaised(remove, raised)).toBe(true);
       const replace = await captureError(() =>
         db.run(
-          sql.raw(`insert or replace into ${name} select * from ${name} where id = '${rowId}'`),
+          sql`insert or replace into ${sql.identifier(name)} select * from ${sql.identifier(name)} where id = ${rowId}`,
         ),
       );
       expect(triggerRaised(replace, raised)).toBe(true);
