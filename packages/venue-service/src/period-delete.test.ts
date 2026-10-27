@@ -37,6 +37,7 @@ import {
 } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
+import { starterSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -81,7 +82,8 @@ async function venue() {
     .returning({ id: kitchenStations.id });
   return scoped(async (tx) => {
     const seasons = await ensureDefaultSeasons(tx, cfg);
-    const season = (name: string) => seasons.find((entry) => entry.name === name)!.id;
+    const season = (name: string) =>
+      seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
@@ -172,8 +174,8 @@ describe("where a period is painted", () => {
 
     expect(painted.get(v.lunch)).toEqual({
       seasons: [
-        { id: v.seasons.summer, name: "Summer" },
-        { id: v.seasons.autumn, name: "Autumn" },
+        { id: v.seasons.summer, name: starterSeasonName("Summer", "es") },
+        { id: v.seasons.autumn, name: starterSeasonName("Autumn", "es") },
       ],
       specialDays: [
         { id: anniversary, name: "Aniversario" },
@@ -191,9 +193,9 @@ describe("where a period is painted", () => {
 
     expect(painted.get(v.dinner)).toEqual({
       seasons: [
-        { id: v.seasons.summer, name: "Summer" },
-        { id: v.seasons.autumn, name: "Autumn" },
-        { id: v.seasons.winter, name: "Winter" },
+        { id: v.seasons.summer, name: starterSeasonName("Summer", "es") },
+        { id: v.seasons.autumn, name: starterSeasonName("Autumn", "es") },
+        { id: v.seasons.winter, name: starterSeasonName("Winter", "es") },
       ],
       specialDays: [],
     });
@@ -536,11 +538,11 @@ describe("deleting a period", () => {
 
       const after = await stored(v);
       expect(after.seasons).toEqual([
-        "Summer 3 Afternoon 12:00-16:00",
-        "Summer 3 Dinner 20:00-23:00",
-        "Autumn 3 Afternoon 13:00-20:00",
-        "Autumn 3 Dinner 20:00-23:00",
-        "Winter 3 Dinner 20:00-23:00",
+        `${starterSeasonName("Summer", "es")} 3 Afternoon 12:00-16:00`,
+        `${starterSeasonName("Summer", "es")} 3 Dinner 20:00-23:00`,
+        `${starterSeasonName("Autumn", "es")} 3 Afternoon 13:00-20:00`,
+        `${starterSeasonName("Autumn", "es")} 3 Dinner 20:00-23:00`,
+        `${starterSeasonName("Winter", "es")} 3 Dinner 20:00-23:00`,
       ]);
       expect(after.periods).toEqual(["Afternoon", "Dinner"]);
     });
@@ -605,9 +607,9 @@ describe("deleting a period", () => {
 
       const after = await stored(v);
       expect(after.seasons).toEqual([
-        "Summer 3 Dinner 20:00-23:00",
-        "Autumn 3 Dinner 20:00-23:00",
-        "Winter 3 Dinner 20:00-23:00",
+        `${starterSeasonName("Summer", "es")} 3 Dinner 20:00-23:00`,
+        `${starterSeasonName("Autumn", "es")} 3 Dinner 20:00-23:00`,
+        `${starterSeasonName("Winter", "es")} 3 Dinner 20:00-23:00`,
       ]);
       expect(after.periods).toEqual(["Afternoon", "Dinner"]);
     });

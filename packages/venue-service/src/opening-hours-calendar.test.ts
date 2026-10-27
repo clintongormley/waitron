@@ -34,6 +34,7 @@ import { specialDayDates } from "./schema/seasons.js";
 import { ensureDefaultSeasons, readSeasons } from "./seasons.js";
 import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { englishSeasonName, starterSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -88,7 +89,10 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
       );
     }
     const seasons = Object.fromEntries(
-      (await readSeasons(tx, cfg)).map((season) => [season.name, season.id]),
+      (await readSeasons(tx, cfg)).map((season) => [
+        englishSeasonName(season.name, "es"),
+        season.id,
+      ]),
     );
     return { cfg, seasons };
   });
@@ -144,26 +148,32 @@ describe("the Opening hours year read", () => {
     expect(year.seasons).toEqual([
       {
         id: v.seasons.Spring,
-        name: "Spring",
+        name: starterSeasonName("Spring", "es"),
         startsOn: "03-01",
         lastDay: "05-31",
         colour: "green",
       },
       {
         id: v.seasons.Summer,
-        name: "Summer",
+        name: starterSeasonName("Summer", "es"),
         startsOn: "06-01",
         lastDay: "08-31",
         colour: "amber",
       },
       {
         id: v.seasons.Autumn,
-        name: "Autumn",
+        name: starterSeasonName("Autumn", "es"),
         startsOn: "09-01",
         lastDay: "11-30",
         colour: "orange",
       },
-      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
+      {
+        id: v.seasons.Winter,
+        name: starterSeasonName("Winter", "es"),
+        startsOn: "12-01",
+        lastDay: "02-28",
+        colour: "blue",
+      },
     ]);
   });
 
@@ -247,12 +257,15 @@ describe("the Opening hours year read", () => {
     const lastDays = async (year: number) =>
       (await read(v, year)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
     expect(await lastDays(2028)).toEqual([
-      { name: "Spring", lastDay: "05-31" },
-      { name: "Summer", lastDay: "08-31" },
-      { name: "Autumn", lastDay: "11-30" },
-      { name: "Winter", lastDay: "02-29" },
+      { name: starterSeasonName("Spring", "es"), lastDay: "05-31" },
+      { name: starterSeasonName("Summer", "es"), lastDay: "08-31" },
+      { name: starterSeasonName("Autumn", "es"), lastDay: "11-30" },
+      { name: starterSeasonName("Winter", "es"), lastDay: "02-29" },
     ]);
-    expect((await lastDays(2027)).at(-1)).toEqual({ name: "Winter", lastDay: "02-28" });
+    expect((await lastDays(2027)).at(-1)).toEqual({
+      name: starterSeasonName("Winter", "es"),
+      lastDay: "02-28",
+    });
     expect(dayOf(await read(v, 2028), "2028-02-29")!.seasonId).toBe(v.seasons.Winter);
   });
 
@@ -305,7 +318,10 @@ async function monthVenue() {
     const barDepartment = await department("Barra");
     await ensureDefaultSeasons(tx, cfg);
     const seasons = Object.fromEntries(
-      (await readSeasons(tx, cfg)).map((season) => [season.name, season.id]),
+      (await readSeasons(tx, cfg)).map((season) => [
+        englishSeasonName(season.name, "es"),
+        season.id,
+      ]),
     );
     const lunch = await period(diningDepartment, "Lunch");
     const dinner = await period(diningDepartment, "Dinner");
@@ -378,12 +394,18 @@ describe("the Opening hours month read", () => {
     expect(month.seasons).toEqual([
       {
         id: v.seasons.Autumn,
-        name: "Autumn",
+        name: starterSeasonName("Autumn", "es"),
         startsOn: "09-01",
         lastDay: "11-30",
         colour: "orange",
       },
-      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
+      {
+        id: v.seasons.Winter,
+        name: starterSeasonName("Winter", "es"),
+        startsOn: "12-01",
+        lastDay: "02-28",
+        colour: "blue",
+      },
     ]);
     const dayOn = (date: string) => month.days.find((day) => day.date === date);
     expect(dayOn("2030-11-30")).toEqual({
@@ -501,12 +523,12 @@ describe("the Opening hours month read", () => {
     const lastDays = async (month: string) =>
       (await readMonth(v, month)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
     expect(await lastDays("2027-12")).toEqual([
-      { name: "Autumn", lastDay: "11-30" },
-      { name: "Winter", lastDay: "02-29" },
+      { name: starterSeasonName("Autumn", "es"), lastDay: "11-30" },
+      { name: starterSeasonName("Winter", "es"), lastDay: "02-29" },
     ]);
     expect(await lastDays("2028-03")).toEqual([
-      { name: "Winter", lastDay: "02-29" },
-      { name: "Spring", lastDay: "05-31" },
+      { name: starterSeasonName("Winter", "es"), lastDay: "02-29" },
+      { name: starterSeasonName("Spring", "es"), lastDay: "05-31" },
     ]);
   });
 

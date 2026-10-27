@@ -45,6 +45,7 @@ import {
 } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
+import { starterSeasonName } from "./testing/starter-seasons.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -95,7 +96,8 @@ async function routed() {
     .returning({ id: kitchenStations.id });
   const made = await scoped(async (tx) => {
     const seasons = await ensureDefaultSeasons(tx, cfg);
-    const season = (name: string) => seasons.find((entry) => entry.name === name)!.id;
+    const season = (name: string) =>
+      seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
@@ -267,16 +269,16 @@ describe("the period-delete routes", () => {
       {
         periodId: r.dinner,
         seasons: [
-          { id: r.seasons.summer, name: "Summer" },
-          { id: r.seasons.autumn, name: "Autumn" },
+          { id: r.seasons.summer, name: starterSeasonName("Summer", "es") },
+          { id: r.seasons.autumn, name: starterSeasonName("Autumn", "es") },
         ],
         specialDays: [],
       },
       {
         periodId: r.lunch,
         seasons: [
-          { id: r.seasons.summer, name: "Summer" },
-          { id: r.seasons.autumn, name: "Autumn" },
+          { id: r.seasons.summer, name: starterSeasonName("Summer", "es") },
+          { id: r.seasons.autumn, name: starterSeasonName("Autumn", "es") },
         ],
         specialDays: [{ id: r.aniversario, name: "Aniversario" }],
       },
@@ -293,8 +295,8 @@ describe("the period-delete routes", () => {
       {
         periodId: r.dinner,
         seasons: [
-          { id: r.seasons.summer, name: "Summer" },
-          { id: r.seasons.autumn, name: "Autumn" },
+          { id: r.seasons.summer, name: starterSeasonName("Summer", "es") },
+          { id: r.seasons.autumn, name: starterSeasonName("Autumn", "es") },
         ],
         specialDays: [],
       },
@@ -390,10 +392,10 @@ describe("the period-delete routes", () => {
     await answers(response, 204);
     expect(await stored(r)).toEqual({
       seasons: [
-        "Summer 3 Afternoon 12:00-16:00",
-        "Summer 3 Dinner 20:00-23:00",
-        "Autumn 3 Afternoon 12:00-16:00",
-        "Autumn 3 Dinner 20:00-23:00",
+        `${starterSeasonName("Summer", "es")} 3 Afternoon 12:00-16:00`,
+        `${starterSeasonName("Summer", "es")} 3 Dinner 20:00-23:00`,
+        `${starterSeasonName("Autumn", "es")} 3 Afternoon 12:00-16:00`,
+        `${starterSeasonName("Autumn", "es")} 3 Dinner 20:00-23:00`,
       ],
       specialDays: [`${PAST} Afternoon 13:00-15:00`, `${FUTURE} Afternoon 13:00-18:00`],
       routing: [],
@@ -411,7 +413,10 @@ describe("the period-delete routes", () => {
 
     await answers(response, 204);
     expect(await stored(r)).toEqual({
-      seasons: ["Summer 3 Dinner 20:00-23:00", "Autumn 3 Dinner 20:00-23:00"],
+      seasons: [
+        `${starterSeasonName("Summer", "es")} 3 Dinner 20:00-23:00`,
+        `${starterSeasonName("Autumn", "es")} 3 Dinner 20:00-23:00`,
+      ],
       specialDays: [`${FUTURE} Afternoon 15:00-18:00`],
       routing: [],
       periods: ["Afternoon", "Dinner"],

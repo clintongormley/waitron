@@ -10,7 +10,9 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   seasons,
+  STARTER_SEASON_NAMES,
 } from "@waitron/venue-service";
+import { starterName } from "@waitron/country-packs";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
@@ -71,7 +73,7 @@ async function seasonVenue() {
             .select({ id: seasons.id, name: seasons.name })
             .from(seasons)
             .where(eq(seasons.locationId, cfg.locationId))
-        ).find((season) => season.name === name)!.id;
+        ).find((season) => season.name === starterName(STARTER_SEASON_NAMES, name, "es"))!.id;
       const saturday = (periodId: string) =>
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
