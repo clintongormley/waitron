@@ -119,12 +119,12 @@ function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> =
   });
 }
 
-const mesa4 = seated();
-const mesa7 = seated(
+const table4 = seated();
+const table7 = seated(
   { id: "t7", label: "7" },
   { id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] },
 );
-const mesa9 = table({ id: "t9", label: "9" });
+const table9 = table({ id: "t9", label: "9" });
 
 const tabBill: PartyBill = {
   workingOrderId: "wo-4",
@@ -271,7 +271,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+    getTablesState: vi.fn().mockResolvedValue([table4, table7, table9]),
     listZones: vi.fn().mockResolvedValue([zone]),
     seatTable: vi
       .fn()
@@ -488,8 +488,8 @@ describe("till-app: seating a party", () => {
     );
     const getTablesState = vi
       .fn()
-      .mockResolvedValueOnce([mesa4, mesa7, mesa9])
-      .mockResolvedValue([mesa4, mesa7, seatedMesa9]);
+      .mockResolvedValueOnce([table4, table7, table9])
+      .mockResolvedValue([table4, table7, seatedMesa9]);
     const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
     const screen = await toFloor(el);
 
@@ -516,7 +516,7 @@ describe("till-app: seating a party", () => {
   it("acts on the party the seat answered with when the floor cannot be read after seating", async () => {
     const getTablesState = vi
       .fn()
-      .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+      .mockResolvedValueOnce([table4, table7, table9])
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({
       getTablesState,
@@ -550,7 +550,7 @@ describe("till-app: seating a party", () => {
       .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 1, orderNumber: 12 });
     const getTablesState = vi
       .fn()
-      .mockResolvedValueOnce([mesa4, mesa9, table({ id: "t10", label: "10" })])
+      .mockResolvedValueOnce([table4, table9, table({ id: "t10", label: "10" })])
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({
       seatAtTables,
@@ -683,7 +683,7 @@ describe("till-app: seating a party", () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa4, mesa7, table({ id: "t9", label: "9", today })]),
+        .mockResolvedValue([table4, table7, table({ id: "t9", label: "9", today })]),
       moveGuests: vi.fn().mockRejectedValue({ code: "table.needs_moving", tableId: "t9" }),
     });
     const order = await openMesa(el);
@@ -749,7 +749,7 @@ describe("till-app: the party's bills and Finish table", () => {
     const order = await openMesa(el);
 
     expect(api.getPartyBills).toHaveBeenCalledWith("v1");
-    expect(order.party).toEqual(mesa4.party);
+    expect(order.party).toEqual(table4.party);
     expect(order.bills).toEqual([tabBill, checkBill]);
   });
 
@@ -846,8 +846,8 @@ describe("till-app: the party's bills and Finish table", () => {
       ),
       getTablesState: vi.fn(async () =>
         server.voided
-          ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), mesa7, mesa9]
-          : [mesa4, mesa7, mesa9],
+          ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), table7, table9]
+          : [table4, table7, table9],
       ),
     });
     const order = await openMesa(el);
@@ -876,8 +876,8 @@ describe("till-app: the party's bills and Finish table", () => {
         ),
         getTablesState: vi.fn(async () =>
           server.voided
-            ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), mesa7, mesa9]
-            : [mesa4, mesa7, mesa9],
+            ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), table7, table9]
+            : [table4, table7, table9],
         ),
       });
       const order = await openMesa(el);
@@ -925,7 +925,7 @@ describe("till-app: the party's bills and Finish table", () => {
       ),
       getTablesState: vi.fn(async () => {
         if (server.voided) throw new TypeError("Failed to fetch");
-        return [mesa4, mesa7, mesa9];
+        return [table4, table7, table9];
       }),
     });
     const order = await openMesa(el);
@@ -980,8 +980,8 @@ describe("till-app: the party's bills and Finish table", () => {
       ),
       getTablesState: vi.fn(async () =>
         server.changed
-          ? [seated({ tabTotal: "15.50" }, { revision: 4, outstanding: "45.50" }), mesa7, mesa9]
-          : [mesa4, mesa7, mesa9],
+          ? [seated({ tabTotal: "15.50" }, { revision: 4, outstanding: "45.50" }), table7, table9]
+          : [table4, table7, table9],
       ),
     };
   }
@@ -1028,7 +1028,7 @@ describe("till-app: the party's bills and Finish table", () => {
       }),
       getTablesState: vi.fn(async () => {
         if (changed) throw new TypeError("Failed to fetch");
-        return [mesa4, mesa7, mesa9];
+        return [table4, table7, table9];
       }),
     });
     const order = await openMesa(el);
@@ -1047,7 +1047,7 @@ describe("till-app: the party's bills and Finish table", () => {
       updateOrderLine: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
       getTablesState: vi
         .fn()
-        .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+        .mockResolvedValueOnce([table4, table7, table9])
         .mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openMesa(el);
@@ -1068,7 +1068,7 @@ describe("till-app: the party's bills and Finish table", () => {
       applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer(null)),
       getTablesState: vi.fn(async () => {
         if (floor.phase === "unreadable") throw new TypeError("Failed to fetch");
-        return [floor.phase === "seated" ? mesa4 : partyless, mesa7, mesa9];
+        return [floor.phase === "seated" ? table4 : partyless, table7, table9];
       }),
     });
     const order = await openMesa(el);
@@ -1281,8 +1281,8 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(banner(el)).toBeNull();
     answerFloor([
       seated({ tabTotal: "15.50" }, { revision: 4, outstanding: "45.50" }),
-      mesa7,
-      mesa9,
+      table7,
+      table9,
     ]);
     await flush(el);
     expect(figures(el)).toEqual(figuresOf("15.50", "45.50"));
@@ -1308,7 +1308,7 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
     vi.mocked(api.getTablesState).mockResolvedValueOnce([
       table(),
-      mesa7,
+      table7,
       seated(
         { id: "t9", label: "9", tabTotal: "18.50" },
         { revision: 5, outstanding: "48.50", tableIds: ["t9"] },
@@ -1538,7 +1538,7 @@ describe("till-app: the party on a handheld", () => {
     await flush(el);
 
     const card = orderCard(el)!;
-    expect(card.party).toEqual(mesa4.party);
+    expect(card.party).toEqual(table4.party);
     expect(card.bills).toEqual([tabBill, checkBill]);
 
     emit(card, "finish-table", {});
@@ -1570,7 +1570,7 @@ describe("till-app: the party on a handheld", () => {
     "refuses %s sent from an order read before a glance at the floor saw another device's change",
     async (type, detail, method, answer) => {
       const splitElsewhere = seated({}, { revision: 6, billCount: 2 });
-      const reads = floorThat([mesa4, mesa9], [splitElsewhere, mesa9]);
+      const reads = floorThat([table4, table9], [splitElsewhere, table9]);
       const command = currentRevisionOnly(6, answer);
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
@@ -1656,7 +1656,7 @@ describe("till-app: the party on a handheld", () => {
       const { el } = await mountApp({
         ...onPhone(),
         finishTable: call,
-        getTablesState: vi.fn().mockResolvedValue([mesa4, { ...mesa7, zoneId: "z2" }, mesa9]),
+        getTablesState: vi.fn().mockResolvedValue([table4, { ...table7, zoneId: "z2" }, table9]),
       });
       emit(await openOnPhone(el), "finish-table", {});
       await flush(el);
@@ -1706,7 +1706,7 @@ describe("till-app: the party on a handheld", () => {
 
     it("Move guests: back on the order tab, the screen has followed the guests into the other party, and the floor tab said nothing about the bills", async () => {
       const { call, answer } = held();
-      const mesa9Seated = seated(
+      const table9Seated = seated(
         { id: "t9", label: "9" },
         { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
       );
@@ -1714,7 +1714,7 @@ describe("till-app: the party on a handheld", () => {
       const { el } = await mountApp({
         ...onPhone(),
         getTablesState: vi.fn(async () =>
-          moved ? [table(), mesa7, mesa9Seated] : [mesa4, mesa7, mesa9Seated],
+          moved ? [table(), table7, table9Seated] : [table4, table7, table9Seated],
         ),
         moveGuests: call,
       });
@@ -1736,7 +1736,7 @@ describe("till-app: the party on a handheld", () => {
 
     it("Join a seated table: the floor tab is read again and shows the tables joined, with nothing said about the bills there", async () => {
       const { call, answer } = held();
-      const mesa9Seated = seated(
+      const table9Seated = seated(
         { id: "t9", label: "9" },
         { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
       );
@@ -1749,7 +1749,7 @@ describe("till-app: the party on a handheld", () => {
       const { el } = await mountApp({
         ...onPhone(),
         getTablesState: vi.fn(async () =>
-          joined ? [joinedAtFour, mesa7, joinedAtNine] : [mesa4, mesa7, mesa9Seated],
+          joined ? [joinedAtFour, table7, joinedAtNine] : [table4, table7, table9Seated],
         ),
         joinTables: call,
       });
@@ -1764,7 +1764,7 @@ describe("till-app: the party on a handheld", () => {
 
       expect(call).toHaveBeenCalledOnce();
       expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(floorReads);
-      expect(floor(el)!.tables).toEqual([joinedAtFour, mesa7, joinedAtNine]);
+      expect(floor(el)!.tables).toEqual([joinedAtFour, table7, joinedAtNine]);
       expect(banner(el)).toBeNull();
     });
 
@@ -1785,7 +1785,7 @@ describe("till-app: the party on a handheld", () => {
 
     it("Split a table taking the bill on screen: back on the order tab, a bill of this party is on screen, not the one that left", async () => {
       const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-      const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+      const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
       const remaining: PartyBill = { ...tabBill, workingOrderId: "remaining-a" };
       let split = false;
       let heldRead = false;
@@ -1794,8 +1794,8 @@ describe("till-app: the party on a handheld", () => {
         ...onPhone(),
         getTablesState: vi.fn(async () =>
           split
-            ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), mesa7]
-            : [atTwo, mesa5, mesa7],
+            ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), table7]
+            : [atTwo, table5, table7],
         ),
         getPartyBills: vi.fn(() => {
           if (!split) return Promise.resolve([tabBill, checkBill]);
@@ -1856,9 +1856,9 @@ describe("till-app: the party on a handheld", () => {
     "does not reopen the $window window a refusal opened when a handheld comes back to its order card",
     async ({ method, field, event, detail, dialog, cancel }) => {
       const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-      const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+      const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
       const { el } = await mountApp({
-        getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7, mesa9]),
+        getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7, table9]),
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
         getDeviceIdentity: vi
           .fn()
@@ -1950,7 +1950,7 @@ describe("till-app: reads and refusals around the party", () => {
 
   it("offers no Finish command for a tab that belongs to no party", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([{ ...mesa4, party: null }]),
+      getTablesState: vi.fn().mockResolvedValue([{ ...table4, party: null }]),
     });
     const order = await openMesa(el);
 
@@ -1976,7 +1976,10 @@ describe("till-app: reads and refusals around the party", () => {
   });
 
   it("describes the open table's party when a stale refusal does not name one", async () => {
-    const reads = floorThat([mesa4], [seated({}, { revision: 5, tableIds: ["t4", "t9"] }), mesa9]);
+    const reads = floorThat(
+      [table4],
+      [seated({}, { revision: 5, tableIds: ["t4", "t9"] }), table9],
+    );
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
@@ -2008,10 +2011,10 @@ describe("till-app: reads and refusals around the party", () => {
       name,
     });
     const reads = floorThat(
-      [seated({ today: named("Window") }), { ...mesa9, today: named("Arch") }],
+      [seated({ today: named("Window") }), { ...table9, today: named("Arch") }],
       [
         seated({ today: named("Window") }, { revision: 5, tableIds: ["t4", "t9"] }),
-        { ...mesa9, today: named("Arch") },
+        { ...table9, today: named("Arch") },
       ],
     );
     const { el } = await mountApp({
@@ -2048,7 +2051,7 @@ describe("till-app: reads and refusals around the party", () => {
 describe("till-app: table actions on the party", () => {
   it("moves the party to a free table, sending its revision and that it read the table free, and follows it there", async () => {
     const atNine = seated({ id: "t9", label: "9" }, { revision: 4, tableIds: ["t9"] });
-    const reads = floorThat([mesa4, mesa7, mesa9], [table(), mesa7, atNine]);
+    const reads = floorThat([table4, table7, table9], [table(), table7, atNine]);
     const { el } = await mountApp({ getTablesState: reads.getTablesState });
     const order = await openMesa(el);
     reads.other.acted = true;
@@ -2076,7 +2079,7 @@ describe("till-app: table actions on the party", () => {
       { id: "t7", label: "7" },
       { id: "v7", revision: 10, mainBillId: "wo-7", tableIds: ["t7"] },
     );
-    const reads = floorThat([mesa4, mesa7, mesa9], [table(), combined, mesa9]);
+    const reads = floorThat([table4, table7, table9], [table(), combined, table9]);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       moveGuests: vi.fn(async () => {
@@ -2110,7 +2113,7 @@ describe("till-app: table actions on the party", () => {
       { id: "t7", label: "7" },
       { id: "v7", revision: 10, mainBillId: null, tableIds: ["t7"] },
     );
-    const reads = floorThat([mesa4, mesa7, mesa9], [table(), combined, mesa9]);
+    const reads = floorThat([table4, table7, table9], [table(), combined, table9]);
     const luisBill: PartyBill = { ...checkBill, workingOrderId: "wo-luis", partyId: "v7" };
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
@@ -2187,9 +2190,9 @@ describe("till-app: table actions on the party", () => {
 
   it("sends a move to one of the party's own tables without another party's read", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7, table9]),
     });
     const order = await openMesa(el);
 
@@ -2207,14 +2210,14 @@ describe("till-app: table actions on the party", () => {
 
   it("splits a table off with the chosen bill, or none, and stays with the party at its other table", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const afterSplit = [
       seated({}, { revision: 4, tableIds: ["t4"] }),
       seated({ id: "t5", label: "5" }, { id: "v-split", revision: 0, tableIds: ["t5"] }),
-      mesa7,
-      mesa9,
+      table7,
+      table9,
     ];
-    const reads = floorThat([atTwo, mesa5, mesa7, mesa9], afterSplit);
+    const reads = floorThat([atTwo, table5, table7, table9], afterSplit);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       splitTable: vi.fn(async () => {
@@ -2245,17 +2248,17 @@ describe("till-app: table actions on the party", () => {
 
   it("passes the guests the waiter gave each side of a split to the split", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const afterSplit = [
       seated({}, { revision: 4, tableIds: ["t4"], guestCount: 3 }),
       seated(
         { id: "t5", label: "5" },
         { id: "v-split", revision: 0, tableIds: ["t5"], guestCount: 2 },
       ),
-      mesa7,
-      mesa9,
+      table7,
+      table9,
     ];
-    const reads = floorThat([atTwo, mesa5, mesa7, mesa9], afterSplit);
+    const reads = floorThat([atTwo, table5, table7, table9], afterSplit);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       splitTable: vi.fn(async () => {
@@ -2281,8 +2284,8 @@ describe("till-app: table actions on the party", () => {
 
   describe("a refusal of one side's count of a split", () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
-    const floorOfTwo = () => vi.fn().mockResolvedValue([atTwo, mesa5, mesa7, mesa9]);
+    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const floorOfTwo = () => vi.fn().mockResolvedValue([atTwo, table5, table7, table9]);
 
     it.each([
       ["guests.staying", "staying", { staying: 1000, leaving: 2 }, "1000", "2"],
@@ -2433,10 +2436,10 @@ describe("till-app: table actions on the party", () => {
 
   it("opens the party's main bill once the bill on screen has gone with the table split off", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const reads = floorThat(
-      [atTwo, mesa5, mesa7, mesa9],
-      [seated({}, { revision: 4, tableIds: ["t4"] }), mesa7, mesa9],
+      [atTwo, table5, table7, table9],
+      [seated({}, { revision: 4, tableIds: ["t4"] }), table7, table9],
     );
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
@@ -2505,7 +2508,7 @@ describe("till-app: table actions on the party", () => {
 
   it("names the party at the revision it read, and the floor then shows the name", async () => {
     const named = seated({}, { revision: 4, name: "Ana", displayName: "Ana" });
-    const reads = floorThat([mesa4, mesa7, mesa9], [named, mesa7, mesa9]);
+    const reads = floorThat([table4, table7, table9], [named, table7, table9]);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       setPartyName: vi.fn(async () => {
@@ -2601,7 +2604,10 @@ describe("till-app: table actions on the party", () => {
   });
 
   it("reloads and says what changed when another device changed the party before the name arrived", async () => {
-    const reads = floorThat([mesa4], [seated({}, { revision: 5, tableIds: ["t4", "t9"] }), mesa9]);
+    const reads = floorThat(
+      [table4],
+      [seated({}, { revision: 5, tableIds: ["t4", "t9"] }), table9],
+    );
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       setPartyName: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
@@ -2624,7 +2630,7 @@ describe("till-app: the party's guest count", () => {
 
   it("sets the count at the revision it read, and the floor then shows the new count", async () => {
     const counted = seated({}, { revision: 4, guestCount: 5 });
-    const reads = floorThat([mesa4, mesa7, mesa9], [counted, mesa7, mesa9]);
+    const reads = floorThat([table4, table7, table9], [counted, table7, table9]);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       setPartyGuests: vi.fn(async () => {
@@ -2773,7 +2779,7 @@ describe("till-app: the party's guest count", () => {
 });
 
 describe("till-app: a table action's answer once the waiter has opened another party", () => {
-  const mesa9Seated = seated(
+  const table9Seated = seated(
     { id: "t9", label: "9" },
     { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
   );
@@ -2811,7 +2817,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
   ])("$action: an answer arriving late leaves the other party's screen as it is", async (c) => {
     const { call, answer } = held();
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9Seated]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9Seated]),
       getPartyBills: vi.fn((partyId: string) =>
         Promise.resolve(partyId === "v7" ? [bill7] : [tabBill, checkBill]),
       ),
@@ -2906,7 +2912,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
       const { el } = await mountApp({
         getTablesState: vi.fn(() =>
           answer("getTablesState", () =>
-            moved ? [mesa7, mesa9Seated] : [mesa4, mesa7, mesa9Seated],
+            moved ? [table7, table9Seated] : [table4, table7, table9Seated],
           ),
         ),
         getPartyBills: vi.fn((partyId: string) =>
@@ -2943,7 +2949,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
   it("Move guests answering after the waiter came back to the same party still follows the guests", async () => {
     const { call, answer } = held();
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9Seated]),
+      getTablesState: vi.fn().mockResolvedValue([table4, table7, table9Seated]),
       moveGuests: call,
     });
     const order = await openMesa(el);
@@ -2969,7 +2975,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     let joined = false;
     const { el } = await mountApp({
       getTablesState: vi.fn(async () =>
-        joined ? [joinedAtFour, mesa7, joinedAtNine] : [mesa4, mesa7, mesa9Seated],
+        joined ? [joinedAtFour, table7, joinedAtNine] : [table4, table7, table9Seated],
       ),
       getPartyBills: vi.fn((partyId: string) =>
         Promise.resolve(partyId === "v9" ? [bill9] : [tabBill, checkBill]),
@@ -3001,7 +3007,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     const { el } = await mountApp({
       getTablesState: vi.fn(async () => {
         if (moved) throw new TypeError("Failed to fetch");
-        return [mesa4, mesa7, mesa9];
+        return [table4, table7, table9];
       }),
       moveGuests: vi.fn(async () => {
         moved = true;
@@ -3069,7 +3075,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     expect(lock(el)).not.toBeNull();
   });
 
-  const mesa9SeatedNew = seated(
+  const table9SeatedNew = seated(
     { id: "t9", label: "9" },
     { id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"], displayName: "9" },
   );
@@ -3088,7 +3094,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     const { el } = await mountApp({
       moveGuests: moved.call,
       seatTable: seating.call,
-      getTablesState: vi.fn(async () => [mesa4, mesa7, seatedAtNine ? mesa9SeatedNew : mesa9]),
+      getTablesState: vi.fn(async () => [table4, table7, seatedAtNine ? table9SeatedNew : table9]),
     });
     const order = await openMesa(el);
     emit(order, "move-guests", { toTableId: "t7", bills: "merge" });
@@ -3117,7 +3123,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     const { el } = await mountApp({
       finishTable: finished.call,
       seatTable: seating.call,
-      getTablesState: vi.fn(async () => [mesa4, mesa7, seatedAtNine ? mesa9SeatedNew : mesa9]),
+      getTablesState: vi.fn(async () => [table4, table7, seatedAtNine ? table9SeatedNew : table9]),
     });
     const order = await openMesa(el);
     emit(order, "finish-table", {});
@@ -3164,7 +3170,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     let finished = false;
     const { el } = await mountApp({
       getTablesState: vi.fn(async () =>
-        finished ? [table(), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+        finished ? [table(), table7, table9] : [table4, table7, table9],
       ),
       finishTable: call,
     });
@@ -3180,12 +3186,12 @@ describe("till-app: a table action's answer once the waiter has opened another p
 
     expect(call).toHaveBeenCalledOnce();
     expect(tableOrder(el)).toBeNull();
-    expect(floor(el)!.tables).toEqual([table(), mesa7, mesa9]);
+    expect(floor(el)!.tables).toEqual([table(), table7, table9]);
   });
 
   it("Split a table: the party's bills, read after the answer and answering once the waiter has opened another party, leave that party's bill on screen", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const remaining: PartyBill = { ...tabBill, workingOrderId: "remaining-a" };
     let split = false;
     let heldRead = false;
@@ -3193,8 +3199,8 @@ describe("till-app: a table action's answer once the waiter has opened another p
     const { el } = await mountApp({
       getTablesState: vi.fn(async () =>
         split
-          ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), mesa7]
-          : [atTwo, mesa5, mesa7],
+          ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), table7]
+          : [atTwo, table5, table7],
       ),
       getPartyBills: vi.fn((partyId: string) => {
         if (partyId === "v7") return Promise.resolve([bill7]);
@@ -3424,7 +3430,7 @@ describe("till-app: moving a bill", () => {
 
     expect(api.moveBill).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.orderId).toBe("wo-4");
-    expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
+    expect(tableOrder(el)!.tables).toEqual([table4, table7, table9]);
   });
 
   it("keeps the party on screen, not the older copy on the kept floor, when the floor cannot be read after the move", async () => {
@@ -3444,8 +3450,8 @@ describe("till-app: moving a bill", () => {
 
     expect(api.moveBill).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.orderId).toBe("wo-4");
-    expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
-    expect(tableOrder(el)!.party).toEqual({ ...mesa4.party, revision: 4 });
+    expect(tableOrder(el)!.tables).toEqual([table4, table7, table9]);
+    expect(tableOrder(el)!.party).toEqual({ ...table4.party, revision: 4 });
   });
 
   it("says the move stands when the held orders cannot be read again after a move to the counter", async () => {
@@ -3496,7 +3502,7 @@ describe("till-app: moving a bill", () => {
       otherPartyId: null,
       expectedEdits: [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
     });
-    expect(tableOrder(el)!.party).toEqual(mesa4.party);
+    expect(tableOrder(el)!.party).toEqual(table4.party);
     expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
 
@@ -3533,7 +3539,7 @@ describe("till-app: moving a bill", () => {
       { id: "v8", revision: 2, mainBillId: "wo-8", tableIds: ["t7"] },
     );
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, pedro, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table4, pedro, table9]),
     });
     const order = await openMesa(el);
 
@@ -3619,8 +3625,8 @@ describe("till-app: moving a bill", () => {
 
   it("reloads and says what changed when another device changed the party first", async () => {
     const reads = floorThat(
-      [mesa4, mesa7, mesa9],
-      [seated({}, { revision: 5, billCount: 2 }), mesa7, mesa9],
+      [table4, table7, table9],
+      [seated({}, { revision: 5, billCount: 2 }), table7, table9],
     );
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
@@ -3638,13 +3644,13 @@ describe("till-app: moving a bill", () => {
     expect(tableOrder(el)!.party!.revision).toBe(5);
   });
 
-  const movedFloor = () => [seated({}, { revision: 4 }), mesa7, mesa9];
+  const movedFloor = () => [seated({}, { revision: 4 }), table7, table9];
   /** Mesa 4's row, the table the order was opened from, in the order screen's tables. */
-  const mesa4Row = (el: TillApp) => tableOrder(el)!.tables.find((row) => row.id === "t4")!;
+  const table4Row = (el: TillApp) => tableOrder(el)!.tables.find((row) => row.id === "t4")!;
 
   it("Move a bill's floor read is not replaced by an older poll that answers later", async () => {
     const poll = deferredTables();
-    const getTablesState = vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]);
+    const getTablesState = vi.fn().mockResolvedValue([table4, table7, table9]);
     const { el } = await mountApp({ getTablesState });
     const order = await openMesa(el);
     getTablesState.mockReturnValueOnce(poll.promise).mockResolvedValueOnce(movedFloor());
@@ -3653,11 +3659,11 @@ describe("till-app: moving a bill", () => {
     await flush(el);
     emit(order, "move-bill", { to: { tableId: "t9", seated: null }, bills: "merge" });
     await flush(el);
-    expect(mesa4Row(el).party!.revision).toBe(4);
-    poll.resolve([mesa4, mesa7, mesa9]);
+    expect(table4Row(el).party!.revision).toBe(4);
+    poll.resolve([table4, table7, table9]);
     await flush(el);
 
-    expect(mesa4Row(el).party!.revision).toBe(4);
+    expect(table4Row(el).party!.revision).toBe(4);
   });
 
   // Passes on a rule that applies every answer too; it fails a rule that drops an answer once a
@@ -3665,7 +3671,7 @@ describe("till-app: moving a bill", () => {
   it("Move a bill's floor read is applied when a poll starts before it answers", async () => {
     const moveRead = deferredTables();
     const poll = deferredTables();
-    const getTablesState = vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]);
+    const getTablesState = vi.fn().mockResolvedValue([table4, table7, table9]);
     const { el } = await mountApp({ getTablesState });
     const order = await openMesa(el);
     const readsBefore = getTablesState.mock.calls.length;
@@ -3679,7 +3685,7 @@ describe("till-app: moving a bill", () => {
     moveRead.resolve(movedFloor());
     await flush(el);
 
-    expect(mesa4Row(el).party!.revision).toBe(4);
+    expect(table4Row(el).party!.revision).toBe(4);
     // #rememberOrderParty runs only when #refreshFloor answers true.
     expect(tableOrder(el)!.party!.revision).toBe(4);
   });
@@ -3897,7 +3903,7 @@ describe("till-app: paying a bill by its state", () => {
 describe("till-app: opening a seated table", () => {
   it("opens the party's main bill", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: "wo-check" }), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: "wo-check" }), table9]),
     });
 
     const order = await openMesa(el);
@@ -3913,7 +3919,7 @@ describe("till-app: opening a seated table", () => {
       outstanding: "0.00",
     };
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: null }), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: null }), table9]),
       getPartyBills: vi.fn().mockResolvedValue([paid, checkBill]),
     });
 
@@ -3937,7 +3943,7 @@ describe("till-app: opening a seated table", () => {
       outstanding: "0.00",
     };
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: null }), mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: null }), table9]),
       getPartyBills: vi.fn().mockResolvedValue([first, last]),
     });
 
@@ -4264,7 +4270,7 @@ describe("till-app: every table move sends the party revision it last read", () 
       { outstanding: "0.00", mainBillId: null },
     );
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([paid, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([paid, table9]),
       getPartyBills: vi
         .fn()
         .mockResolvedValue([
@@ -4326,7 +4332,7 @@ describe("till-app: the bill request", () => {
     const { el } = await mountApp({
       requestBill,
       getTablesState: vi.fn(async () =>
-        requestBill.mock.calls.length > 0 ? [asked(4), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+        requestBill.mock.calls.length > 0 ? [asked(4), table7, table9] : [table4, table7, table9],
       ),
     });
     const order = await openMesa(el);
@@ -4355,8 +4361,8 @@ describe("till-app: the bill request", () => {
       requestBill,
       getTablesState: vi.fn(async () =>
         requestBill.mock.calls.length > 0
-          ? [seated({}, { revision: 5 }), mesa7, mesa9]
-          : [asked(4), mesa7, mesa9],
+          ? [seated({}, { revision: 5 }), table7, table9]
+          : [asked(4), table7, table9],
       ),
     });
     const order = await openMesa(el);
@@ -4453,7 +4459,7 @@ describe("till-app: the bill request", () => {
     const requestBill = vi
       .fn()
       .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 });
-    const reads = floorThat([mesa4, mesa7, mesa9], [asked(5), mesa7, mesa9]);
+    const reads = floorThat([table4, table7, table9], [asked(5), table7, table9]);
     const { el } = await mountApp({ requestBill, getTablesState: reads.getTablesState });
     const order = await openMesa(el);
     reads.other.acted = true;
@@ -4483,7 +4489,10 @@ describe("till-app: the bill request", () => {
   });
 
   it("says the request was cancelled elsewhere when that is what changed", async () => {
-    const reads = floorThat([asked(4), mesa7, mesa9], [seated({}, { revision: 5 }), mesa7, mesa9]);
+    const reads = floorThat(
+      [asked(4), table7, table9],
+      [seated({}, { revision: 5 }), table7, table9],
+    );
     const { el } = await mountApp({
       requestBill: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
       getTablesState: reads.getTablesState,
@@ -4619,7 +4628,7 @@ describe("till-app: the bill request", () => {
           holdNext = false;
           await new Promise<void>((resolve) => (release = resolve));
         }
-        return [mesa4, mesa7, mesa9];
+        return [table4, table7, table9];
       });
       return { getTablesState, hold: () => (holdNext = true), release: () => release() };
     }
@@ -4673,14 +4682,14 @@ describe("till-app: another device changed the table first", () => {
     {},
     { revision: 5, tableIds: ["t4", "t5"], billCount: 2, outstanding: "50.00" },
   );
-  const mesa5 = seated({ id: "t5", label: "5" }, { revision: 5, tableIds: ["t4", "t5"] });
+  const table5 = seated({ id: "t5", label: "5" }, { revision: 5, tableIds: ["t4", "t5"] });
 
   it("reloads, says what changed, and sends the new revision only when the person acts again", async () => {
     const moveGuests = vi
       .fn()
       .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
       .mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: false });
-    const { other, getTablesState } = floorThat([mesa4, mesa9], [moved, mesa5, mesa9]);
+    const { other, getTablesState } = floorThat([table4, table9], [moved, table5, table9]);
     const { el } = await mountApp({ moveGuests, getTablesState });
     const order = await openMesa(el);
     other.acted = true;
@@ -4713,7 +4722,7 @@ describe("till-app: another device changed the table first", () => {
 
   it("names the bills and what is left to pay when those are what changed", async () => {
     const split = seated({}, { revision: 5, billCount: 2, outstanding: "44.00" });
-    const reads = floorThat([mesa4], [split]);
+    const reads = floorThat([table4], [split]);
     const { el } = await mountApp({
       splitBill: vi
         .fn()
@@ -4732,7 +4741,7 @@ describe("till-app: another device changed the table first", () => {
   });
 
   it("says the party has left the table when it is no longer there", async () => {
-    const reads = floorThat([mesa4], [table()]);
+    const reads = floorThat([table4], [table()]);
     const { el } = await mountApp({
       finishTable: vi
         .fn()
@@ -4749,7 +4758,7 @@ describe("till-app: another device changed the table first", () => {
   });
 
   it("says something else changed when its tables and bills read the same", async () => {
-    const reads = floorThat([mesa4], [seated({}, { revision: 5 })]);
+    const reads = floorThat([table4], [seated({}, { revision: 5 })]);
     const { el } = await mountApp({
       joinTables: vi
         .fn()
@@ -4767,9 +4776,9 @@ describe("till-app: another device changed the table first", () => {
 
   it("names the other table when it is the other party that changed", async () => {
     const reads = floorThat(
-      [mesa4, mesa7],
+      [table4, table7],
       [
-        mesa4,
+        table4,
         seated(
           { id: "t7", label: "7" },
           { id: "v7", revision: 10, mainBillId: "wo-7", tableIds: ["t7"] },
@@ -4838,7 +4847,7 @@ describe("till-app: leaving a finished party", () => {
 });
 
 describe("till-app: the order's groups", () => {
-  const cafe: TillProduct = {
+  const coffee: TillProduct = {
     id: "cafe",
     menuItemId: "menu-item-cafe",
     catalogueId: "cat-default",
@@ -5055,7 +5064,7 @@ describe("till-app: the order's groups", () => {
       revision: 0,
     });
     await flush(el);
-    vi.mocked(api.getTablesState).mockResolvedValue([seated({}, { revision: 5 }), mesa7, mesa9]);
+    vi.mocked(api.getTablesState).mockResolvedValue([seated({}, { revision: 5 }), table7, table9]);
     vi.mocked(api.getPartyBills).mockResolvedValue([{ ...tabBill, status: "placed" }, checkBill]);
     finish({ revision: 1, party: { id: "v1", revision: 4 } });
     await flush(el);
@@ -5116,7 +5125,7 @@ describe("till-app: the order's groups", () => {
     const order = await openMesa(el);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const round = partyDraft(order);
-    round.addProduct(cafe, "1");
+    round.addProduct(coffee, "1");
 
     emit(order, "submit-draft", {
       lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
@@ -5134,8 +5143,8 @@ describe("till-app: the order's groups", () => {
   it("sends nothing, and says so, for an order with no party to put the round on", async () => {
     // As above: an order has no party only once its party has left the table.
     const reads = floorThat(
-      [mesa4, mesa9],
-      [table({ state: "open-tab", hasOpenTab: true }), mesa9],
+      [table4, table9],
+      [table({ state: "open-tab", hasOpenTab: true }), table9],
     );
     const { el } = await mountApp({ getTablesState: reads.getTablesState });
     const order = await openMesa(el);
@@ -5155,9 +5164,9 @@ describe("till-app: the order's groups", () => {
     let landed = false;
     const { el } = await mountApp({
       getTablesState: vi.fn(async () => [
-        landed ? seated({}, { revision: 4 }) : mesa4,
-        mesa7,
-        mesa9,
+        landed ? seated({}, { revision: 4 }) : table4,
+        table7,
+        table9,
       ]),
       submitDraft: vi.fn(async () => {
         landed = true;
@@ -5313,7 +5322,7 @@ describe("till-app: the order's groups", () => {
 
     expect(api.submitDraft).toHaveBeenCalledTimes(3);
     expect(tableOrder(el)!.orderId).toBe("wo-4");
-    expect(tableOrder(el)!.party).toEqual({ ...mesa4.party, revision: 4 });
+    expect(tableOrder(el)!.party).toEqual({ ...table4.party, revision: 4 });
     emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
     await flush(el);
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
@@ -5330,7 +5339,7 @@ describe("till-app: the order's groups", () => {
     let landed = false;
     const later = seated({}, { revision: 6, name: "Ana" });
     const { el } = await mountApp({
-      getTablesState: vi.fn(async () => [landed ? later : mesa4, mesa7, mesa9]),
+      getTablesState: vi.fn(async () => [landed ? later : table4, table7, table9]),
       submitDraft: vi.fn(async (...args: SubmitArgs) => {
         landed = true;
         return { ...drafts.apply(...args), tabId: "wo-4", revision: 4, groups: [] };
@@ -5393,7 +5402,7 @@ describe("till-app: the order's groups", () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+        .mockResolvedValueOnce([table4, table7, table9])
         .mockRejectedValue(new TypeError("Failed to fetch")),
       getPartyBills: vi.fn().mockResolvedValue([]),
       submitDraft: answering({ tabId: "wo-new", revision: 1, groups: [] }),
@@ -5530,7 +5539,7 @@ describe("till-app: the order's groups", () => {
       return {
         lines,
         groups,
-        getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
+        getTablesState: vi.fn(async () => [seated({}, { revision }), table7, table9]),
         getTabLines: vi.fn(async () => ({
           lines: lines.map((line) => ({ ...line })),
           revision: 0,
@@ -5955,9 +5964,9 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp({
         ...editServer(),
         getTablesState: vi.fn(async () => [
-          landed ? seated({}, { revision: 4 }) : mesa4,
-          mesa7,
-          mesa9,
+          landed ? seated({}, { revision: 4 }) : table4,
+          table7,
+          table9,
         ]),
         fireGroup: vi.fn(async () => {
           landed = true;
@@ -6270,7 +6279,7 @@ describe("till-app: the order's groups", () => {
       async (type, detail, method) => {
         const { el } = await mountApp({
           ...editServer(),
-          getTablesState: vi.fn().mockResolvedValue([seated({ party: null }), mesa7, mesa9]),
+          getTablesState: vi.fn().mockResolvedValue([seated({ party: null }), table7, table9]),
         });
         const order = await openMesa(el);
 
@@ -6313,7 +6322,7 @@ describe("till-app: the order's groups", () => {
       const order = await openMesa(el);
       const groupReads = vi.mocked(api.listGroups).mock.calls.length;
       const round = partyDraft(order);
-      round.addProduct(cafe, "1");
+      round.addProduct(coffee, "1");
 
       emit(order, "submit-draft", {
         lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
@@ -6410,9 +6419,9 @@ describe("till-app: the order's groups", () => {
         let landed = false;
         return {
           getTablesState: vi.fn(async () => [
-            landed ? seated({}, { revision: 4 }) : mesa4,
-            mesa7,
-            mesa9,
+            landed ? seated({}, { revision: 4 }) : table4,
+            table7,
+            table9,
           ]),
           [request]: vi.fn(async () => {
             landed = true;
@@ -6481,7 +6490,7 @@ describe("till-app: the order's groups", () => {
         return {
           getTablesState: vi.fn(async () => {
             if (offline) throw new TypeError("offline");
-            return [mesa4, mesa7, mesa9];
+            return [table4, table7, table9];
           }),
           [request]: vi
             .fn()
@@ -6613,7 +6622,7 @@ describe("till-app: submitting the draft", () => {
   });
   const beer = dish("beer", "Beer", "drinks");
   const salad = dish("salad", "Salad", "cold");
-  const croquetas = dish("croquetas", "Croquetas", "warm");
+  const croquettes = dish("croquetas", "Croquetas", "warm");
   const steak = dish("steak", "Steak", "mains");
   const flan = dish("flan", "Flan", "desserts");
 
@@ -6627,7 +6636,7 @@ describe("till-app: submitting the draft", () => {
     return {
       groups,
       /** The floor lists the party at the revision the server holds. */
-      getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
+      getTablesState: vi.fn(async () => [seated({}, { revision }), table7, table9]),
       listGroups: vi.fn(async () => ({ revision, groups: groups.map((group) => ({ ...group })) })),
       submitDraft: vi.fn(async (partyId: string, draftId: string, submission: SubmitArgs[2]) => {
         if (submission.expectedPartyRevision !== revision)
@@ -6720,7 +6729,7 @@ describe("till-app: submitting the draft", () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     const order = await openMesa(el);
-    await ring(el, order, beer, salad, croquetas, steak, flan);
+    await ring(el, order, beer, salad, croquettes, steak, flan);
 
     await toggle(el, order, "Beer");
     await act(el, order, "fire-selected");
@@ -6812,7 +6821,7 @@ describe("till-app: submitting the draft", () => {
     const partyOnNextBill = () =>
       vi
         .mocked(api.getTablesState)
-        .mockResolvedValue([seated({}, { revision: 4, mainBillId: "wo-next" }), mesa7, mesa9]);
+        .mockResolvedValue([seated({}, { revision: 4, mainBillId: "wo-next" }), table7, table9]);
     const courseOf = async (order: TillTableOrderScreen, index: number) => {
       const form = await openDraftLine(order, index);
       const value = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!.value;
@@ -7660,8 +7669,8 @@ describe("till-app: Current orders", () => {
       .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
       .mockResolvedValue({ revision: 6 });
     const { other, getTablesState } = floorThat(
-      [mesa4, mesa9],
-      [seated({}, { revision: 5 }), mesa9],
+      [table4, table9],
+      [seated({}, { revision: 5 }), table9],
     );
     const { el } = await mountApp({ ...noCurrentOrders(), markServed, getTablesState });
     const order = await openMesa(el);
@@ -8984,7 +8993,7 @@ describe("till-app: recording an unpaid departure", () => {
 
   it("when another device changed the table first, closes, reloads, says what changed, and sends the new revision only when pressed again", async () => {
     const moved = seated({}, { revision: 5, outstanding: "50.00" });
-    const reads = floorThat([mesa4, mesa7, mesa9], [moved, mesa7, mesa9]);
+    const reads = floorThat([table4, table7, table9], [moved, table7, table9]);
     const recordUnpaidDeparture = vi
       .fn()
       .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
@@ -9903,7 +9912,7 @@ describe("till-app: split-table editing observations", () => {
   const edit = { billId: "wo-check", editorVersion: 5, draftId: null, draftRevision: null };
   const guests = { staying: 2, leaving: 1 };
   const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-  const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+  const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
 
   function observations(missing = false) {
     return vi.fn(async () => ({
@@ -9917,7 +9926,7 @@ describe("till-app: split-table editing observations", () => {
 
   it.each(["wo-check", null])("sends exactly the moved bill observation for %s", async (billId) => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
       listDrafts: observations(),
     });
     emit(await openMesa(el), "split-table", { tableId: "t5", billId, guests });
@@ -9936,7 +9945,7 @@ describe("till-app: split-table editing observations", () => {
 
   it("refuses to move a bill whose editing observation is missing", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
       listDrafts: observations(true),
     });
     emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
@@ -9952,7 +9961,7 @@ describe("till-app: split-table editing observations", () => {
       return { partyId: "v-split", mainBillId: "wo-check" };
     });
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
       listDrafts,
       splitTable,
     });
@@ -9972,7 +9981,7 @@ describe("till-app: split-table editing observations", () => {
       async (outcome) => {
         const pending = held();
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+          getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
           listDrafts: observations(),
           splitTable: pending.call,
         });
@@ -10022,7 +10031,7 @@ describe("till-app: split-table editing observations", () => {
 
 describe("till-app: Split a table retains the guests prompt observation", () => {
   const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-  const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+  const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
 
   async function prompt(el: TillApp, billId = "wo-check") {
     const order = tableOrder(el)!;
@@ -10071,7 +10080,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
         return snapshot;
       });
       const { el } = await mountApp({
-        getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+        getTablesState: vi.fn().mockResolvedValue([atTwo, table5]),
         listDrafts,
       });
       await openMesa(el);
@@ -10099,7 +10108,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
       return snapshot;
     });
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5]),
       listDrafts,
     });
     await openMesa(el);
@@ -10120,7 +10129,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
       return snapshot;
     });
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5]),
       listDrafts,
     });
     await openMesa(el);
@@ -10142,7 +10151,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
   });
 
   it("refuses a guests prompt carried across a bill switch", async () => {
-    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, table5]) });
     const order = await openMesa(el);
     const dialog = await prompt(el);
     emit(order, "take-payment", { workingOrderId: "wo-check" });
@@ -10160,7 +10169,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
       return snapshot;
     });
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5]),
       listDrafts,
     });
     await openMesa(el);
@@ -10196,7 +10205,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
       return snapshot;
     });
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      getTablesState: vi.fn().mockResolvedValue([atTwo, table5]),
       listDrafts,
       splitTable: vi
         .fn()
@@ -10222,11 +10231,11 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
   });
 
   it("does not send an old guests prompt to a replacement API", async () => {
-    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, table5]) });
     await openMesa(el);
     const dialog = await prompt(el);
     const original = api;
-    const replacement = stubApi({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    const replacement = stubApi({ getTablesState: vi.fn().mockResolvedValue([atTwo, table5]) });
     el.api = replacement;
     await flush(el);
     await confirm(el, dialog);
@@ -10615,9 +10624,9 @@ describe("till-app: closing editing observations", () => {
     const { el } = await mountClosing({
       listDrafts: observations(),
       getTablesState: vi.fn(async () => [
-        changed ? seated({}, { revision: 4 }) : mesa4,
-        mesa7,
-        mesa9,
+        changed ? seated({}, { revision: 4 }) : table4,
+        table7,
+        table9,
       ]),
       recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
     });
@@ -11703,7 +11712,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     const { el } = await mountFinish({
       finishTable: finish,
       getTablesState: vi.fn(async () =>
-        changed ? [seated({}, { revision: 4 }), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+        changed ? [seated({}, { revision: 4 }), table7, table9] : [table4, table7, table9],
       ),
     });
     await openFinish(el);
