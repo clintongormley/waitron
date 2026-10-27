@@ -100,10 +100,18 @@ export {
   assertLiveVersions,
   menuStatus,
   menusOfVersions,
+  patchLiveMenu,
   previewMenu,
   publishMenu,
   readLiveDocuments,
+  readLiveMenu,
 } from "./menu-publication.js";
+export type {
+  LiveMenu,
+  MenuPatchChange,
+  MenuPatchResult,
+  MenuPatchTarget,
+} from "./menu-patch-types.js";
 export {
   activateDueMenuPublications,
   cancelMenuPublication,
