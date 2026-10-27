@@ -2260,6 +2260,98 @@ describe("till-app: sending the draft", () => {
       expect(tableOrder(el)!.printProblems).toEqual(problems);
     });
 
+    it("keeps a printing problem a newer read found when the recovery's groups read answers later", async () => {
+      const problems: PrintProblem[] = [
+        {
+          workingOrderId: "wo-4",
+          stationId: "st-1",
+          stationName: "Cocina",
+          since: "2026-09-27T10:00:00Z",
+        },
+      ];
+      const reprintOrder = vi.fn().mockResolvedValue(undefined);
+      const { el, store, detail, listGroups } = await raced("submit", { reprintOrder });
+      const groups = [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts];
+      let finishOlder!: () => void;
+      api.submitDraft!.mockReset().mockImplementationOnce(() => {
+        listGroups
+          .mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                finishOlder = () => resolve({ revision: 4, groups, printProblems: [] });
+              }),
+          )
+          .mockResolvedValue({ revision: 4, groups, printProblems: problems });
+        api.getTablesState!.mockResolvedValue([
+          { ...table4, party: { ...table4.party!, revision: 4 } },
+          table7,
+        ]);
+        throw { code: "group.not_held", status: 409, groupId: mains.id };
+      });
+      const groupReads = listGroups.mock.calls.length;
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+      emit(tableOrder(el)!, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+      await vi.waitFor(() => expect(tableOrder(el)!.printProblems).toEqual(problems));
+      finishOlder();
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await vi.waitFor(() => expect(banner(el)?.textContent).toContain("Group 7"));
+      await flush(el, 6);
+      expect(reprintOrder).toHaveBeenCalledOnce();
+      expect(listGroups).toHaveBeenCalledTimes(groupReads + 2);
+      expect(tableOrder(el)!.printProblems).toEqual(problems);
+    });
+
+    it.each([
+      ["whose groups read fails", "submit"],
+      ["that finds every target still held", "save"],
+    ] as const)(
+      "shows a printing problem an older read answers after a recovery %s",
+      async (_ending, refused) => {
+        const problems: PrintProblem[] = [
+          {
+            workingOrderId: "wo-4",
+            stationId: "st-1",
+            stationName: "Cocina",
+            since: "2026-09-27T10:00:00Z",
+          },
+        ];
+        const reprintOrder = vi.fn().mockResolvedValue(undefined);
+        const { el, store, detail, listGroups } = await raced("submit", { reprintOrder });
+        let finishOlder!: () => void;
+        listGroups.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishOlder = () =>
+                resolve({ revision: 3, groups: [mains, desserts], printProblems: problems });
+            }),
+        );
+        emit(tableOrder(el)!, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+        await vi.waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+        const groupReads = listGroups.mock.calls.length;
+        const refusal = { code: "group.not_held", status: 409, groupId: mains.id };
+        if (refused === "submit") {
+          listGroups.mockRejectedValueOnce(new Error("offline"));
+          api.submitDraft!.mockReset().mockImplementationOnce(() => {
+            throw refusal;
+          });
+        } else {
+          store.setLinePlaces([1], { kind: "new", slot: 5, afterGroupId: mains.id });
+          api.saveDraft!.mockImplementationOnce(() => {
+            throw refusal;
+          });
+        }
+        emit(tableOrder(el)!, "submit-draft", detail);
+        await vi.waitFor(() => expect(store.sending).toBe(false));
+        await vi.waitFor(() => expect(listGroups).toHaveBeenCalledTimes(groupReads + 1));
+        await flush(el, 6);
+        expect(api.submitDraft).toHaveBeenCalledTimes(refused === "submit" ? 1 : 0);
+        expect(tableOrder(el)!.printProblems).toEqual([]);
+        finishOlder();
+        await vi.waitFor(() => expect(tableOrder(el)!.printProblems).toEqual(problems));
+      },
+    );
+
     it("keeps the Floor on the repair's newer floor when a floor read started before it answers last", async () => {
       const { el, detail, store } = await raced("submit");
       let answerOlder!: (tables: TableState[]) => void;

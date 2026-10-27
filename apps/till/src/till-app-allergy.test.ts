@@ -226,6 +226,222 @@ describe("A669 live table editor", () => {
     expect(screen.printProblems).toEqual(problems);
   });
 
+  it.each([
+    ["a slower allergy refresh keeps a printing problem a newer read found", "reprint"],
+    [
+      "an allergy refresh that answers first leaves the newer read's printing problem showing",
+      "allergy",
+    ],
+  ] as const)("%s", async (_name, answersFirst) => {
+    const problems: PrintProblem[] = [
+      {
+        workingOrderId: "wo-4",
+        stationId: "st-1",
+        stationName: "Cocina",
+        since: "2026-09-27T10:00:00Z",
+      },
+    ];
+    const read = vi.fn().mockResolvedValue(allergyView("none"));
+    const save = vi.fn().mockImplementationOnce(async () => {
+      read.mockResolvedValue({
+        ...allergyView("none"),
+        snapshot: { ...allergyView("none").snapshot, revision: 4 },
+      });
+      throw { code: "party.out_of_date" };
+    });
+    let finishReprint!: () => void;
+    const { el } = await mountApp({
+      readPartyAllergy: read,
+      savePartyAllergy: save,
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: problems }),
+      reprintOrder: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishReprint = resolve;
+          }),
+      ),
+    });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    expect(screen.printProblems).toEqual(problems);
+    await userEvent.click(
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-print-problem-reprint]")!,
+    );
+    await vi.waitFor(() => expect(finishReprint).toBeTypeOf("function"));
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    const newerProblems = [{ ...problems[0]!, workingOrderId: "wo-check", stationName: "Bar" }];
+    let finishOlder!: () => void;
+    api
+      .listGroups!.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOlder = () => resolve({ revision: 4, groups: [], printProblems: [] });
+          }),
+      )
+      .mockResolvedValue({ revision: 4, groups: [], printProblems: newerProblems });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    const groupReads = api.listGroups!.mock.calls.length;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+    if (answersFirst === "allergy") {
+      finishOlder();
+      await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+      expect(screen.printProblems).toEqual([]);
+    }
+    finishReprint();
+    await vi.waitFor(() => expect(api.listGroups).toHaveBeenCalledTimes(groupReads + 2));
+    await flush(el, 6);
+    expect(screen.printProblems).toEqual(newerProblems);
+    if (answersFirst === "reprint") {
+      finishOlder();
+      await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+    }
+    await flush(el);
+    expect(api.listGroups).toHaveBeenCalledTimes(groupReads + 2);
+    expect(screen.shadowRoot!.querySelector("[data-print-problem]")).not.toBeNull();
+    expect(screen.printProblems).toEqual(newerProblems);
+  });
+
+  it("a slower read after a Reprint keeps a printing problem a newer allergy refresh found", async () => {
+    const problems: PrintProblem[] = [
+      {
+        workingOrderId: "wo-4",
+        stationId: "st-1",
+        stationName: "Cocina",
+        since: "2026-09-27T10:00:00Z",
+      },
+    ];
+    const read = vi.fn().mockResolvedValue(allergyView("none"));
+    const save = vi.fn().mockImplementationOnce(async () => {
+      read.mockResolvedValue({
+        ...allergyView("none"),
+        snapshot: { ...allergyView("none").snapshot, revision: 4 },
+      });
+      throw { code: "party.out_of_date" };
+    });
+    const { el } = await mountApp({
+      readPartyAllergy: read,
+      savePartyAllergy: save,
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: problems }),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    expect(screen.printProblems).toEqual(problems);
+    let finishOlder!: () => void;
+    api.listGroups!.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOlder = () => resolve({ revision: 3, groups: [], printProblems: [] });
+        }),
+    );
+    const groupReads = api.listGroups!.mock.calls.length;
+    await userEvent.click(
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-print-problem-reprint]")!,
+    );
+    await vi.waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    const newerProblems = [{ ...problems[0]!, workingOrderId: "wo-check", stationName: "Bar" }];
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [], printProblems: newerProblems });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+    await vi.waitFor(() => expect(screen.printProblems).toEqual(newerProblems));
+    finishOlder();
+    await flush(el, 6);
+    expect(api.listGroups).toHaveBeenCalledTimes(groupReads + 2);
+    expect(screen.shadowRoot!.querySelector("[data-print-problem]")).not.toBeNull();
+    expect(screen.printProblems).toEqual(newerProblems);
+  });
+
+  it("shows a printing problem an older read answers after an allergy refresh whose groups read fails", async () => {
+    const problems: PrintProblem[] = [
+      {
+        workingOrderId: "wo-4",
+        stationId: "st-1",
+        stationName: "Cocina",
+        since: "2026-09-27T10:00:00Z",
+      },
+    ];
+    const read = vi.fn().mockResolvedValue(allergyView("none"));
+    const save = vi.fn().mockImplementationOnce(async () => {
+      read.mockResolvedValue({
+        ...allergyView("none"),
+        snapshot: { ...allergyView("none").snapshot, revision: 4 },
+      });
+      throw { code: "party.out_of_date" };
+    });
+    const { el } = await mountApp({
+      readPartyAllergy: read,
+      savePartyAllergy: save,
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    expect(screen.printProblems).toEqual([]);
+    let finishOlder!: () => void;
+    api.listGroups!.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOlder = () => resolve({ revision: 3, groups: [], printProblems: problems });
+        }),
+    );
+    emit(screen, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+    await vi.waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    api.listGroups!.mockRejectedValueOnce(new Error("offline"));
+    const groupReads = api.listGroups!.mock.calls.length;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(api.listGroups).toHaveBeenCalledTimes(groupReads + 1));
+    await flush(el, 6);
+    expect(save).toHaveBeenCalledOnce();
+    expect(screen.printProblems).toEqual([]);
+    finishOlder();
+    await vi.waitFor(() => expect(screen.printProblems).toEqual(problems));
+    expect(screen.shadowRoot!.querySelector("[data-print-problem]")).not.toBeNull();
+  });
+
   it("cancels an editor opening read when navigation leaves its party", async () => {
     const read = vi.fn().mockResolvedValue(allergyView("none"));
     const { el } = await mountApp({ readPartyAllergy: read });
