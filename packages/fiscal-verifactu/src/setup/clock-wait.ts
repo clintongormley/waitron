@@ -82,7 +82,6 @@ export function dateTimeFormat(
   return format;
 }
 
-/** The instant's calendar day in the zone, as a number that sorts by date. */
 function dayIn(ms: number, timeZone: string): number {
   const parts = dateTimeFormat("en", timeZone, {
     year: "numeric",
