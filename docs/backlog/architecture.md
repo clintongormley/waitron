@@ -5,9 +5,9 @@ their full text.
 
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
-- **A646 — owner, 2026-10-14; OPEN; DESIGN REVISED after the ~22:40 owner answer, awaiting agreement (2026-10-16).**
-  [Proposed design](../superpowers/specs/2026-10-16-a646-modules-page-design.md), not an approved
-  decision or an implementation plan. [Static mockups](mockups/a646-modules-page/README.md) illustrate the proposal. Build waits for owner design agreement and A739/A764 to land. The
+- **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
+  [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
+  [static mockups](mockups/a646-modules-page/README.md). Build waits for A739. The
   first independent build PR must repair retained disabled-module append-only protection before
   any UI state controls; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
   The revision proposes one complete optional catalogue, initially Enabled; Add a module filters
@@ -16,9 +16,8 @@ their full text.
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
   separate confirmation and server checks. Google remains proposed; Stripe/SumUp remain Payments
   contributions. Runtime, credentials, payment history, migration-slot/H2 and first-repair limits
-  remain. The one unresolved owner question is Google lockout scope: only the applying admin or
-  every active admin (recommended proposal, not approval). Both need the actor's fresh non-Google
-  proof; the wider option adds supported recorded enrollment for others, not everyone's fresh proof.
+  remain. Google disable protects every active administrator: the actor gives fresh non-Google
+  proof, and every other active administrator needs supported recorded password/passkey enrollment.
 
   **What exists today**, read 2026-10-14, not tried on a box:
   - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
@@ -45,23 +44,6 @@ their full text.
   3. SumUp and Stripe are set up from that page too. Card payments links to the list, filtered to
      card providers.
 
-  **Original design questions (the linked proposal awaits agreement):**
-  - **How a switch takes effect.** Boot picks the modules it migrates and protects from the module
-    configuration (`apps/server/src/boot.ts`), so today a change takes effect only on the next
-    start. Either the page asks for a restart, or switching applies a module's migrations and
-    protections while the box runs.
-  - **Switching off must stay safe.** A module switched off after its tables exist keeps them, and
-    no start re-protects or checks their append-only triggers —
-    [the open entry below](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
-    A switch anyone with the permission can flip from a screen makes that easier to reach, so fix
-    it first or in the same work.
-  - **Whether a card provider becomes a module of its own**, or stays a provider inside payments
-    that the page lists beside the modules.
-  - **Where the Google secret is kept.** A primary streams the whole database to the owner's bucket
-    once one is set up, so a secret stored in the database must be sealed the way the existing
-    provider credentials are (the `credentials` module).
-  - **Who may use the page** — which permission, and whether it is the same one that gates Card
-    payments today.
 
 ## Copies of the patterns A105 and C27 replaced
 
@@ -647,6 +629,13 @@ Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adap
   one value per row can still meet it.
 
 ## Decisions and deliberate limits
+
+**A646 module controls and Google access (owner, 2026-10-17).** The revised design is agreed:
+Enabled-default catalogue, Add a module selects Disabled, row-menu Configure/Disable, a Configure
+modal, red in-row reasons and settings saves separate from Enable/Disable. Disabling Google
+protects every active administrator: the applying administrator gives fresh non-Google proof;
+every other active administrator needs supported recorded password/passkey enrollment. Plan
+and build wait for A739 and start with retained disabled-module protection.
 
 **Practice-sales operation descriptions (owner, 2026-10-23).** Under the owner's approval,
 the demo-test provisioner's practice-sales golden now uses the English operation description

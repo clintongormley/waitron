@@ -5697,9 +5697,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A977. Widen the English-only guard to every text file, after A918 and A963–A975.** Accented
   letters too; a shrinking-only list of test folders still to clean. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
+- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
-  Build waits for owner agreement and A739; retained protection comes first. Google's access-check scope remains undecided.
+  Build waits for A739; retained protection comes first. Google disable protects every active administrator.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Station deletion's draft-location filter needs a discriminating test.** Add a second-location
