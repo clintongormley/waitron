@@ -255,13 +255,13 @@ describe("loadConfig", () => {
     });
   });
 
-  it("accepts an absolute privacy notice URL for account surfaces", () => {
+  it("ignores the retired privacy notice variable, even a value the old check refused", () => {
     const config = loadConfig(
-      { ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: "https://restaurant.example/privacy" },
+      { ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: "restaurant.example/privacy" },
       ROOT,
       STATE_ROOT,
     );
-    expect(config.privacyNoticeUrl).toBe("https://restaurant.example/privacy");
+    expect(config).not.toHaveProperty("privacyNoticeUrl");
   });
 
   it("refuses a partial Google login configuration", async () => {
@@ -291,31 +291,6 @@ describe("loadConfig", () => {
       variable: "WAITRON_GOOGLE_CLIENT_ID",
       reason: "google_requires_client_id_and_secret",
     });
-  });
-
-  it.each(["restaurant.example/privacy", "ftp://restaurant.example/privacy", "mailto:dpo@x.test"])(
-    "refuses the privacy notice address %j, which is not an http(s) URL",
-    async (url) => {
-      const error = await captureError(() =>
-        Promise.resolve(
-          loadConfig({ ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: url }, ROOT, STATE_ROOT),
-        ),
-      );
-      expect(isAppError(error) && error.code).toBe("server.config_invalid");
-      expect(isAppError(error) && error.params).toEqual({
-        variable: "WAITRON_PRIVACY_NOTICE_URL",
-        reason: "not_an_http_url",
-      });
-    },
-  );
-
-  it("accepts a plain http privacy notice URL", () => {
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: "http://restaurant.example/privacy" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.privacyNoticeUrl).toBe("http://restaurant.example/privacy");
   });
 
   // In production the loopback defaults would bind every passkey ceremony to `localhost`, failing

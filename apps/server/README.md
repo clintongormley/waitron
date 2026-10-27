@@ -489,10 +489,10 @@ Create a web OAuth client in Google and register this exact redirect URI:
 <WAITRON_MANAGEMENT_ORIGIN>/management-api/google/callback
 ```
 
-Set `WAITRON_PRIVACY_NOTICE_URL` to the restaurant's published privacy notice. Waitron shows the
-link in invitation emails, account setup, **Your profile** and the `README.txt` inside a person's
-own data download. The value must be an absolute HTTP or HTTPS URL; leave it unset only while the
-restaurant's notice has not been published.
+Waitron shows the restaurant's privacy notice page in the emails it sends staff to set up an
+account, reset a password or confirm a new email address, on the sign-in page, in **Account
+settings** and in the `README.txt` of a data download. It is set on the **Privacy** card in **Venue
+settings → Venue details**; there is no environment setting for it.
 
 The server refuses a partial client configuration. A person links Google from Your profile before
 the public Google button can identify their Waitron account. Waitron stores Google's stable subject

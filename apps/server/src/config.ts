@@ -95,8 +95,6 @@ export interface ServerConfig {
   /** Optional Google login client. The callback is derived from the validated management origin so
    * the configured Google redirect and the server route cannot drift. */
   googleOidc?: { clientId: string; clientSecret: string; redirectUri: string };
-  /** Optional restaurant privacy notice shown during account setup and in Your profile. */
-  privacyNoticeUrl?: string;
   /**
    * The origin tills route on for this node: its `contactUrl` in the membership document, and what
    * the CORS allow-list treats as "self". From `WAITRON_ADVERTISED_ORIGIN`; unset or empty →
@@ -500,16 +498,6 @@ export function loadConfig(
       reason: "google_requires_client_id_and_secret",
     });
   }
-  const privacyNoticeUrl = env.WAITRON_PRIVACY_NOTICE_URL;
-  if (!isUnset(privacyNoticeUrl)) {
-    const parsed = URL.parse(privacyNoticeUrl);
-    if (parsed === null || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_PRIVACY_NOTICE_URL",
-        reason: "not_an_http_url",
-      });
-    }
-  }
   return {
     environment,
     devMode: isDevMode(env),
@@ -545,7 +533,6 @@ export function loadConfig(
           },
         }
       : {}),
-    ...(!isUnset(privacyNoticeUrl) ? { privacyNoticeUrl } : {}),
     advertisedOrigin: isUnset(env.WAITRON_ADVERTISED_ORIGIN)
       ? managementOrigin
       : bareOrigin(env.WAITRON_ADVERTISED_ORIGIN, "WAITRON_ADVERTISED_ORIGIN"),
