@@ -2820,7 +2820,7 @@ describe("printers-screen", () => {
       const rows = () => [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")];
       // Fails if the row key leaves out the agent: both rows share one key.
       expect(new Set(rows().map((row) => row.dataset.rowKey)).size).toBe(2);
-      const barra = rows().find((row) => row.textContent!.includes("Barra agent"))!;
+      const barAgent = rows().find((row) => row.textContent!.includes("Barra agent"))!;
 
       passive.mockResolvedValue([both[1]]);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
@@ -2829,7 +2829,7 @@ describe("printers-screen", () => {
       // Fails if the row is told apart only by its position: the drawn row that was the first
       // agent's would be handed to the second, and the second's own row removed.
       expect(rows()).toHaveLength(1);
-      expect(rows()[0]).toBe(barra);
+      expect(rows()[0]).toBe(barAgent);
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -2858,10 +2858,10 @@ describe("printers-screen", () => {
         if ((event.target as HTMLElement).dataset.test === "name-printer-modal")
           offeredAfterAdd.push(addButtons().length);
       });
-      const barra = [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")].find((row) =>
-        row.textContent!.includes("Barra agent"),
+      const barAgent = [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")].find(
+        (row) => row.textContent!.includes("Barra agent"),
       )!;
-      await addDiscovered(el, barra.querySelector<HTMLElement>("[data-test^=register-]")!);
+      await addDiscovered(el, barAgent.querySelector<HTMLElement>("[data-test^=register-]")!);
       await flush(el);
 
       expect(api.createPrinter).toHaveBeenCalledOnce();
