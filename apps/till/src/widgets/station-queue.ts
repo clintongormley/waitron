@@ -726,9 +726,16 @@ export class TillStationQueue extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      /* A grid, so the text asks for its widest dish's width, not every dish's added up. */
+      .notice-dishes {
+        display: grid;
+        flex-basis: 100%;
+        gap: var(--wt-space-1);
+        min-width: 0;
+      }
+
       .notice-dish {
         display: flex;
-        flex-basis: 100%;
         flex-wrap: wrap;
         align-items: baseline;
         gap: var(--wt-space-1) var(--wt-space-3);
@@ -1044,14 +1051,16 @@ export class TillStationQueue extends LitElement {
         ${
           dishes === undefined
             ? html`<span class="notice-line">${line}</span>`
-            : dishes.map(
-                (dish) =>
-                  html`<span class="notice-dish" data-notice-dish>
-                    <span class="notice-line">${dishLine(dish, dish.lineName)}</span>
-                    ${dish.wasStarted ? started : nothing}
-                    ${dish.note ? html`<span class="notice-note">${dish.note}</span>` : nothing}
-                  </span>`,
-              )
+            : html`<span class="notice-dishes">
+                ${dishes.map(
+                  (dish) =>
+                    html`<span class="notice-dish" data-notice-dish>
+                      <span class="notice-line">${dishLine(dish, dish.lineName)}</span>
+                      ${dish.wasStarted ? started : nothing}
+                      ${dish.note ? html`<span class="notice-note">${dish.note}</span>` : nothing}
+                    </span>`,
+                )}
+              </span>`
         }
         ${extra === null ? nothing : html`<span class="notice-extra">${extra}</span>`}
         <span class="notice-order">${notice.orderLabel}</span>

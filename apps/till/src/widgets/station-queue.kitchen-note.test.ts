@@ -203,4 +203,43 @@ describe("kitchen instructions on station work", () => {
       expect(acknowledged.mock.calls[0]![0].detail).toEqual({ noticeId: notice.id });
     },
   );
+
+  it("A807 lays a many-dish notice out in one row wherever the same notice with one dish fits one", async () => {
+    const dish = { unitName: null, soldInEach: true, note: null, wasStarted: false };
+    const widest = { ...dish, lineName: "Croquetas de jamón ibérico", quantity: "2.000" };
+    const change = {
+      before: "All together, train at nine",
+      after: "Bread first, then the rest",
+    };
+    const one = { ...notice, id: "one", orderNoteChange: change, dishes: [widest] };
+    const many = {
+      ...notice,
+      id: "many",
+      orderNoteChange: change,
+      dishes: [
+        widest,
+        { ...dish, lineName: "Patatas bravas picantes", quantity: "1.000" },
+        { ...dish, lineName: "Flan de huevo casero", quantity: "1.000" },
+      ],
+    } satisfies KitchenNotice;
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [group],
+      notices: [one, many],
+    });
+    // The heading, the text and Got it side by side, not wrapped onto rows of their own.
+    const oneRow = (id: string): boolean => {
+      const row = el.shadowRoot!.querySelector(`[data-notice="${id}"]`)!;
+      const kind = row.querySelector(".notice-kind")!.getBoundingClientRect();
+      const body = row.querySelector(".notice-body")!.getBoundingClientRect();
+      const button = row.querySelector("wt-button")!.getBoundingClientRect();
+      return (
+        kind.top < body.bottom &&
+        kind.right <= body.left &&
+        button.top < body.bottom &&
+        button.left >= body.right
+      );
+    };
+    expect(oneRow("one")).toBe(true);
+    expect(oneRow("many")).toBe(true);
+  });
 });
