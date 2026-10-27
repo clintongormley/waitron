@@ -23,6 +23,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
+import { AppError } from "@waitron/shared";
 import {
   START_AGAIN_MARKER_FILE,
   finishStartAgainDeletion,
@@ -1622,6 +1623,55 @@ it.each([
   },
 );
 
+it("with the database missing, a kept recovery statement the module cannot use is named as the fiscal documents, and the note keeps a time floor with no name", async () => {
+  const base = await damagedRecordsAttempt(async () => {});
+  const { statement } = JSON.parse(await readFile(recoveryRecord(base.f), "utf8")) as {
+    statement: unknown;
+  };
+  await expect(access(publicRecordFile(base.f))).rejects.toMatchObject({ code: "ENOENT" });
+  const refusedItems: unknown[] = [];
+  const modules = base.f.host.modules!.map((module) => {
+    const initialSetup = module.provisioning?.initialSetup;
+    if (module.name !== base.f.module || initialSetup?.startAgainFloor === undefined) return module;
+    const floor = initialSetup.startAgainFloor;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...initialSetup,
+          startAgainFloor: (input: Parameters<typeof floor>[0]) => {
+            if (input.attempts.length === 0 && input.publicEvidence.length === 1) {
+              refusedItems.push(input.publicEvidence[0]);
+              throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
+            }
+            return floor(input);
+          },
+        },
+      },
+    };
+  });
+  const actions = createFirstSetupResolutionActions({
+    ...base.f,
+    host: { ...base.f.host, modules },
+  });
+  const shown = await summaryThenStartAgain({ ...base, actions });
+  expect(refusedItems.length).toBeGreaterThan(0);
+  for (const item of refusedItems) expect(item).toEqual(statement);
+  expect(shown).toEqual({
+    reached: "named",
+    lastName: base.name,
+    unreadable: { records: ["fiscal-documents"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  await expectStartAgainDeleted(base.f);
+});
+
 async function expectRefusedUnchanged(
   f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
   run: () => Promise<unknown>,
@@ -1659,12 +1709,13 @@ it.each(["first-setup.json", "first-setup-claim.json"])(
 );
 
 it.each(["first-setup.json", "first-setup-claim.json"])(
-  "with the database present, a damaged %s beside a damaged picks file is refused setup.attempt_conflict, and nothing changes",
+  "with the database present, a damaged %s beside a damaged picks file leaves the box reading no revision, so Start again is refused setup.attempt_conflict for the revision it sends, and nothing changes",
   async (file) => {
     const { f, actions, startRequest } = await abandonedAttempt();
     await damagePicks(f);
     await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
     const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    expect(inspected.revision).toBeNull();
     await expectRefusedUnchanged(
       f,
       () =>
