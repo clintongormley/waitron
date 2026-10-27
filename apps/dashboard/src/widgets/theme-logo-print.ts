@@ -74,11 +74,6 @@ export class ThemeLogoPrintFigure extends LitElement {
   #stopWatching: (() => void) | undefined;
   /** The image's `display` address as last heard: `undefined` before the first, `null` once gone. */
   #heard: string | null | undefined;
-  /**
-   * What was heard when the latest ask began. An answer drawn from another address is asked for
-   * again only once something newer than this is heard, so two spellings of one address cannot loop.
-   */
-  #basis: string | null | undefined;
   /** The address the shown answer was drawn from. */
   #drawnFrom: string | null | undefined;
 
@@ -129,7 +124,7 @@ export class ThemeLogoPrintFigure extends LitElement {
     if (previous === null) void this.#ask();
     else if (this.shown.kind === "failed") {
       if (typeof previous === "string" && previous !== address) void this.#ask();
-    } else if (address !== this.#drawnFrom && address !== this.#basis) void this.#ask();
+    } else if (address !== this.#drawnFrom && address !== previous) void this.#ask();
   }
 
   async #ask(): Promise<void> {
@@ -139,8 +134,9 @@ export class ThemeLogoPrintFigure extends LitElement {
       this.shown = { kind: "none" };
       return;
     }
+    // An answer is not re-asked while the heard address is still the one this ask began from, so
+    // two spellings of one address cannot loop.
     const basis = this.#heard;
-    this.#basis = basis;
     this.shown = { kind: "asking" };
     let print: ThemeLogoPrint;
     try {

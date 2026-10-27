@@ -320,6 +320,38 @@ it("an answer drawn from an address not yet heard asks no more until that addres
   expect(q(el, '[data-test="logo-print"] img')).not.toBeNull();
 });
 
+it("a framing put back after the picture moved past it asks again", async () => {
+  const a = libraryName();
+  let answer!: (value: ThemeLogoPrint) => void;
+  getThemeLogoPrint
+    .mockResolvedValueOnce(BLACK)
+    .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    .mockResolvedValue(drawn("2", 8));
+  const el = await mount(a);
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print"] img')).not.toBeNull());
+  await vi.waitFor(() => expect(network).toHaveBeenCalled());
+  await settled();
+  expect(getThemeLogoPrint).toHaveBeenCalledTimes(1);
+
+  network.mockImplementation(everyImageAs("2"));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(getThemeLogoPrint).toHaveBeenCalledTimes(2));
+  // The server read the library after it was reframed again, to 3.
+  answer(drawn("3", 0));
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
+
+  for (const version of ["3", "2"]) {
+    network.mockImplementation(everyImageAs(version));
+    const before = network.mock.calls.length;
+    invalidateMediaImages();
+    await vi.waitFor(() => expect(network.mock.calls.length).toBeGreaterThan(before));
+    await settled();
+  }
+  await vi.waitFor(() => expect(getThemeLogoPrint).toHaveBeenCalledTimes(3));
+  await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).toBeNull());
+  expect(q(el, '[data-test="logo-print"] img')).not.toBeNull();
+});
+
 it("a reframe after a failed ask asks again", async () => {
   const a = libraryName();
   getThemeLogoPrint.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(drawn("2", 8));
