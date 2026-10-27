@@ -12,7 +12,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "p1",
   catalogueId: "cat-default",
   name: "Café",
@@ -24,7 +24,7 @@ const cafe: TillProduct = {
   allergens: null,
 };
 
-const products: TillProduct[] = [cafe];
+const products: TillProduct[] = [coffee];
 
 /** Two counter zones, with Deli counter listed second. */
 const deliSecond: ServiceZoneSummary[] = [
@@ -116,7 +116,7 @@ describe("closed zone ordering", () => {
     try {
       setLocale("en-GB");
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "2");
+      store.addProduct(coffee, "2");
       const { el } = await mount({
         store,
         zoneName: "Terrace",
@@ -220,7 +220,7 @@ describe("till-counter-screen", () => {
 
   it("leaves zone changes to the header while the basket has lines", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mount({ store, serviceZones: deliSecond, selectedServiceZoneId: "deli" });
     expect(el.shadowRoot!.querySelector('wt-combobox[name="service-zone"]')).toBeNull();
     expect(el.shadowRoot!.querySelector(".service-zone-refresh")).toBeNull();
@@ -343,14 +343,14 @@ describe("till-counter-screen", () => {
   });
 
   const veganDish: TillProduct = {
-    ...cafe,
+    ...coffee,
     id: "vegan",
     name: "Ensalada",
     customerName: { es: "Ensalada para el cliente" },
     diet: { vegan: "yes", vegetarian: "yes", contains: [] },
   };
   const meatDish: TillProduct = {
-    ...cafe,
+    ...coffee,
     id: "meat",
     name: "Chuleta",
     customerName: { es: "Chuleta para el cliente" },
@@ -358,7 +358,7 @@ describe("till-counter-screen", () => {
   };
 
   it("offers Filter without a published diet so allergen exclusions stay reachable", async () => {
-    const { el } = await mount(); // cafe only — no diet
+    const { el } = await mount();
     expect(el.shadowRoot!.querySelector("till-diet-filter")).not.toBeNull();
   });
 
@@ -440,7 +440,7 @@ describe("till-counter-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("labels and emits a composed, bubbling show-floor event when Sala is tapped (FP-1)", async () => {
+  it("labels and emits a composed, bubbling show-floor event when Floor is tapped (FP-1)", async () => {
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("wt-button.floor")!.textContent).toContain(t("floor.open"));
     let captured: Event | undefined;
@@ -603,7 +603,7 @@ it.each(retirementLooks)(
       await page.viewport(width, 900);
       for (const state of ["cash", "card", "collect", "pay-rest", "busy"] as const) {
         const store = new WorkingOrderStore();
-        store.addProduct(cafe, "2");
+        store.addProduct(coffee, "2");
         const { el, host } = await mountWidget<TillCounterScreen>(
           "till-counter-screen",
           {
