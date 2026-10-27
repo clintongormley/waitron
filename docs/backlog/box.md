@@ -33,7 +33,7 @@ down, none of it built:
 
 ## a local maintenance account on each box
 
-Belongs with it: **a local maintenance account on each box**. The 2026-09-11 discussion record
+The 2026-09-11 discussion record
 proposed a password printed on a sealed card
 ([box maintenance and remote support](../superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md),
 not an approved spec); B3's revision (2026-10-21) replaces the card for a stick-installed box with a
@@ -157,8 +157,7 @@ before any image work, and an install of `main` removes the image lines from `.e
 pull, so after a failure the box's files name the new ref while its running containers are the
 old ones. Nothing has been taken down or wiped at that point, and the error asks for a re-run;
 making it leave the files untouched means fetching into a temporary folder and moving the files
-into place only once the images are in. Raised by the run-it review and not taken because it
-restructures `install`.
+into place only once the images are in.
 
 ## What showing the failed start's reason (#695) left
 
@@ -225,8 +224,7 @@ carry none.
 
 ## `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the staging folder
 
-- Found by #658 (`apps/server` part h2: the remaining held-back files), not fixable in a
-  comments-only change. `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged,
+- `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged,
   and nothing chmods the staging folder that the archive restore's two entries outside `secrets/`
   (`manifest.json` and `db.dump`) are checked against; it receives nothing and keeps an existing
   folder's mode. Still open, not fixed, by the owner's choice: `unpackBundleToDir`'s walk and file
@@ -243,8 +241,7 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
 
 ## `apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say
 
-- Found by #656 (`apps/server` part e2: the backup and restore files), outside its files or not
-  fixable in a comments-only change. `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
+- `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
   things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
   `restore.unexpected_entry` ("the cold-recovery path (CLAUDE.md §5)"). Test titles that still say
   "R3" or "rejoin", though rejoin no longer calls `restore.ts` (`rejoin-command.ts` does not import
@@ -258,11 +255,8 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
 
 ## `apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it cannot
 
-- Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
-  files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
-  `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
-  cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
-  `minTickMs > maxTickMs`); `config.test.ts`'s test title (near line 572) says "round back down
+- `sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
+  `minTickMs > maxTickMs`; `config.test.ts`'s test title (near line 572) says "round back down
   past the floor" where it means "to the floor". The restore question A38 (#669) raised about
   `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
   deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
@@ -310,8 +304,6 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
 
 ## Every synchronous `deriveKey` caller still blocks the event loop while it derives
 
-**Task 5** (#569, `@waitron/stream`). Open:
-
 - Every synchronous `deriveKey` caller still blocks the event loop while it derives:
   `encodeConfigurationBundle` (through `encryptArtifact`); everything reaching `decryptArtifact`
   (`apps/server/src/artifact-cipher.ts`) — `decodeConfigurationBundle` (on the request path),
@@ -320,8 +312,6 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   `decryptBundle` (`apps/server/src/recovery-bundle.ts`).
 
 ## A pointer write from a process that has since died, landing after the restart, can still make the box refuse itself
-
-**Task 6** (#590, the Litestream supervisor). Open:
 
 - A pointer write from a process that has since died, landing after the restart, can still make the
   box refuse itself, because a restarted process starts with an empty record; so does a
@@ -372,9 +362,6 @@ providers, and larger or busier buckets, were not measured; and the idle limit's
 handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
 
 ## The status and `errorName` on the stream's log lines other than the pause check's 403 were shown by reading
-
-**The pause test and the bucket's error reports — what is still open (left by #668, #686, A57, A60
-and #723).**
 
 - On 2026-10-14 Amazon S3's 403 to the paused supervisor's listing was logged as
   `stream.pause_check_failed` with `errorCode` `backup.stream_request_failed`, `status` 403 and
@@ -551,8 +538,7 @@ but did not reproduce the throw. Build the backends before adopting the handle, 
 `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
 `credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
 error and no form, although the bucket copy's Save would replace the record. Treat all four the
-way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
-by its review.
+way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4.
 
 ## Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.
 
@@ -740,7 +726,7 @@ must distinguish verifier non-activation from the ordinary restore's authorised 
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
 DESIGNED
-2026-10-20 (revised after review rounds 1–3) and its three questions answered (where the name is
+2026-10-20 and its three questions answered (where the name is
 set, the certificate authority, the old name during a rename;
 [design](../superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
 [mockups/a917-box-local-name/](../backlog/mockups/a917-box-local-name/)); not built. **Not
@@ -932,8 +918,7 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
 `applyMigrations`) drops each `waitron_change_*` trigger on its own. A751's probe on the full
 schema: 561 drops took 85–180 ms that way and 43–48 ms inside one transaction; A736 measured
 53–56 ms against 23–25 ms. Boot migrates at every start (`apps/server/src/boot.ts`), and the
-removal is about a quarter of the upgrade walk's processor profile. A product change in
-`packages/db`, so A751 (a test-only change) left it.
+removal is about a quarter of the upgrade walk's processor profile.
 
 ## The Amazon S3 delete and archive rehearsal's open edges (A538-9)
 
@@ -1184,8 +1169,8 @@ below records the gap that prompted the design, not a new runtime measurement.
 
 ## `packages/provisioning/README.md` also says only `ES-common` is implemented
 
-- `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
-  exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
+- A `GB-vat` run
+  exits 0 in `cli.test.ts`; the README repeats two reasons #561 deleted from the code's comments: that
   `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
   reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
   interleave was not measured) and that the entry point can only be checked through the built
@@ -1193,7 +1178,7 @@ below records the gap that prompted the design, not a new runtime measurement.
 
 ## `packages/provisioning` code found by #561 and not changed
 
-- `packages/provisioning` code, found by #561 and not changed: the `quoteLiteral` re-export in
+- The `quoteLiteral` re-export in
   `identifiers.ts` is used only by its own suite; the `action.email === undefined` branch in
   `venue-apply.ts`'s seed-admin cannot run, because the action's `email` is a required string; the
   coverage config leaves `src/bin.ts` out with no reason stated any more, which may hide code a
