@@ -319,8 +319,7 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
 
 /**
  * The newest file time, rounded up to a whole millisecond, among the attempt's own items on the
- * deletion list, or null when none is present. The databases and their side files are left out:
- * they hold no series name and the engine touches them without the attempt writing anything.
+ * deletion list, other than the databases and their side files, or null when none is present.
  */
 export async function attemptLastWriteMs(
   roots: Roots,
