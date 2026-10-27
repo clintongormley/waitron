@@ -1136,6 +1136,19 @@ describe("text set by hand in Advanced", () => {
     expect(sizeBox(el, "sm").value).toBe("12");
   });
 
+  it("Fix all keeps the typed text of every size it does not change", async () => {
+    const { el } = await mountEditing();
+    await typeSize(el, "lg", "19");
+    await typeSize(el, "xl", "x");
+    await typeSize(el, "sm", "10");
+    await typeSize(el, "md", "9");
+    await userEvent.click(button(el, "fix-all"));
+    await settleText(el);
+    expect(advanced(el).draft.choices.text).toEqual({ size: { sm: 12, md: 12, lg: 19 } });
+    expect(advanced(el).draft.textCodes).toEqual({ lg: "19", xl: "x" });
+    expect(sizeBox(el, "xl").value).toBe("x");
+  });
+
   it("a text change while a save is under way changes nothing", async () => {
     const { el, saveTheme } = await mountEditing();
     let release!: () => void;

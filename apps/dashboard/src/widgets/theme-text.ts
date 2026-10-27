@@ -300,7 +300,6 @@ export class ThemeTextRows extends LitElement {
     </p>`;
   }
 
-  /** A size warns or gets the note, never both. */
   #sizeCheck(key: TextSizeKey): TemplateResult | typeof nothing {
     const { choices } = this.draft;
     const warning = this.derived.warnings

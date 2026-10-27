@@ -442,6 +442,14 @@ describe("the Look card draft's text set by hand", () => {
     expect(isWaitronLook(weight)).toBe(true);
   });
 
+  it("Use worked-out on a row never set changes nothing", () => {
+    for (const field of ["text.family", "text.size.sm", "text.weight.bold"] as const) {
+      const draft = useWorkedOutText(waitronLook(), field);
+      expect(draft.choices.text, field).toEqual({});
+      expect(isWaitronLook(draft), field).toBe(true);
+    }
+  });
+
   it("picking a weight or the typeface sets it by hand, even Waitron's own", () => {
     const opened = waitronLook();
     const bold = setWeight(opened, "bold", 600);

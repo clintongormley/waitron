@@ -374,6 +374,21 @@ describe("under a size row", () => {
   it("at 130%, Small text set by hand to 8 draws 10 px and offers 9", async () => {
     const el = await mount(draftOf({ size: { sm: 8 } }, 130));
     expect(fix(el, "sm")!.textContent!.trim()).toBe("Use 9 px (12 px at 130%)");
+    expect(fix(el, "sm")!.getAttribute("aria-label")).toBe(
+      "Use 9\u00a0px (12\u00a0px at 130%): Small text",
+    );
+  });
+
+  it("takes the warning from the theme's answer, not from the draft", async () => {
+    const warned = await mount(draftOf({ size: { sm: 14 } }), {
+      derived: deriveTheme(draftOf({ size: { sm: 10 } }).choices),
+    });
+    expect(warning(warned, "sm")).not.toBeNull();
+    cleanupWidgets();
+    const quiet = await mount(draftOf({ size: { sm: 10 } }), {
+      derived: deriveTheme(draftOf().choices),
+    });
+    expect(warning(quiet, "sm")).toBeNull();
   });
 
   it("a Small text fixed to 9 warns again when the step moves", async () => {
