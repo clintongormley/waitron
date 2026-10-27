@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { page } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
@@ -416,3 +417,36 @@ it("shows a reprinting person's name holding a later placeholder as it is", asyn
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
   expect(el.shadowRoot!.textContent).toContain("copy printed by Person {printer} on Barra");
 });
+
+it.each(["en-GB", "es-ES"])(
+  "shows the separate recipient country on the %s detail screen",
+  async (locale) => {
+    setLocale(locale);
+    const filed = {
+      ...detail,
+      invoices: [
+        {
+          ...detail.invoices[0]!,
+          invoiceType: "F1",
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Customer Ltd",
+            countryCode: "ES",
+            address: "2 Main Street, 28013 Madrid, Madrid",
+          },
+        },
+      ],
+    };
+    const api = {
+      getOrder: vi.fn().mockResolvedValue(filed),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi;
+    const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+      api,
+      orderId: "bill-1",
+    });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Customer Ltd"));
+    expect(el.shadowRoot!.textContent).toContain(getCountryPack("ES")!.countryNames![locale]!);
+    expect(el.shadowRoot!.textContent).toContain("2 Main Street, 28013 Madrid, Madrid");
+  },
+);

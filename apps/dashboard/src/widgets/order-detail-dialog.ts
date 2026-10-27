@@ -1,3 +1,4 @@
+import { countryNameFor } from "@waitron/country-packs";
 import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -386,7 +387,10 @@ export class OrderDetailDialog extends LitElement {
                                     ${t("orders.detail.customer")}: ${invoice.recipient.legalName} ·
                                     ${invoice.recipient.taxId}
                                   </div>
-                                  <div>${invoice.recipient.address}</div>`
+                                  <div>${invoice.recipient.address}</div>
+                                  <div>
+                                    ${countryNameFor(invoice.recipient.countryCode, currentLocale())}
+                                  </div>`
                           }
                         </li>`,
                     )}

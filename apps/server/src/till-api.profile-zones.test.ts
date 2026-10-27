@@ -1751,7 +1751,7 @@ describe("the bill and invoice lookups", () => {
       recipient: {
         taxId: "B12345674",
         legalName,
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });

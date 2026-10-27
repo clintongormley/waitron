@@ -1054,7 +1054,7 @@ describe("a sale prints its goods in the default content language its lines stor
             recipient: {
               taxId: "B12345674",
               legalName: "Client SL",
-              address: "Calle Mayor 2, 08001 Barcelona, Barcelona, España",
+              address: "2 Main Street, 08001 Barcelona, Barcelona",
               countryCode: "ES",
             },
             recipientNameMaxLength: v.backend.recipientNameMaxLength,
@@ -1981,7 +1981,7 @@ describe("a sale files in the receipt language saved on its order", () => {
                 recipient: {
                   taxId: "B12345674",
                   legalName: "Client SL",
-                  address: "Calle Mayor 2, 08001 Barcelona, Barcelona, España",
+                  address: "2 Main Street, 08001 Barcelona, Barcelona",
                   countryCode: "ES",
                 },
               },

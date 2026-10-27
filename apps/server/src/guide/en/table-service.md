@@ -7,6 +7,10 @@ enter their Spanish tax number, legal name and complete address before its final
 saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
 issues the invoice; recording an unpaid departure also issues it, leaving the amount unpaid.
 
+Enter the street and number, five-digit postcode, locality and province. Spain is selected
+separately; do not add a country name to the street. The printed invoice and the till ticket
+name the country in the receipt language. Order details name it in your screen language.
+
 Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
 use that bill's payments. Placing a counter order alone does not issue an invoice.
 

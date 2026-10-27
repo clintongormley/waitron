@@ -5817,11 +5817,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
   ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's answers became the
-  items below. A963 and A964 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  items below. A964 comes first: it changes what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A963. A full invoice's address: Spain's rule moves to Spain's pack, the till stores a country
-  code.** `apps/server/src/invoice-selection.ts` refuses an address not ending «España» with a
-  five-digit postcode; the till appends «España». Changes printed invoice text. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from
   `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),

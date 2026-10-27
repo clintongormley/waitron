@@ -409,14 +409,6 @@ are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every ite
 for its own diff (grep it for non-English text before pushing — the guard will not see most of it
 until A977).
 
-- **A963 — points 3(4) and 4.** Move the full-invoice address rule (`apps/server/src/invoice-selection.ts:20–46`:
-  ends «España», five-digit postcode) into Spain's country pack beside the tax-ID check general code
-  already asks it for. The till stops appending «España»
-  (`apps/till/src/widgets/invoice-recipient-dialog.ts:279`) and stores the country code; the printed
-  invoice (`apps/server/src/receipt-document.ts:238`) names the country in the receipt language from
-  the pack. Look for other Spain-only logic of this shape while there. It changes words printed on a
-  full invoice and no filed field — under the owner's 2026-10-21 rule a truly fiscal PR (invoices)
-  waits for the owner to land it; the PR says which it is.
 - **A964 — point 3(3), and the first of point 2.** Kitchen tickets
   (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
   the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than
@@ -639,6 +631,13 @@ comparison. Catalonia and the Balearic Islands share Can Delgado; Valencia uses
 Casa Delgado de l'Horta and Galicia uses A Casa Delgado. No further country demos
 are included in these five cuts. The [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md)
 records the delivered scope; live seeded-screen qualification remains separate.
+
+**A963 recipient addresses (owner, 2026-10-20; implemented 2026-10-27).**
+Spain's pack owns completeness of the country-free recipient address. The separate country code
+selects the country name in the receipt language for thermal receipts, A4 invoices and the till
+ticket; order details use the screen language. Recorded address text is rendered unchanged,
+followed by the country line, without recognising or rewriting older address spellings.
+[Implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md).
 
 **A918 starter content in the venue's languages (owner, 2026-10-19, 2026-10-20 and 2026-10-27).**
 The owner: "These default starter names in the general module should be in English only, and

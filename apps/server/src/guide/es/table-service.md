@@ -12,6 +12,11 @@ El cobro de mostrador todavía no puede emitir una factura completa. Mantén el 
 en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
 no emite una factura.
 
+Introduce la calle y el número, el código postal de cinco cifras, la localidad y la provincia.
+España se indica por separado; no añadas el país a la calle. La factura impresa y el ticket en
+la pantalla de caja muestran el país en el idioma del ticket. El detalle del pedido lo muestra
+en el idioma de tu pantalla.
+
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el

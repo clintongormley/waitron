@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -1150,6 +1151,48 @@ describe("the header rows: order, number and date (A754)", () => {
         amount("Fecha", "18 ago 2026, 00:34"),
         amount("Fecha de operación", "17 ago 2026"),
       ]);
+    },
+  );
+});
+
+describe("recipient country presentation", () => {
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "es", "unknown"])(
+    "uses receipt language %s independently of raw address shape",
+    (locale) => {
+      const names = getCountryPack("ES")!.countryNames!;
+      const country =
+        names[locale === "ca-ES" || locale === "gl-ES" || locale === "eu-ES" ? locale : "es-ES"]!;
+      for (const address of [
+        "2 Main Street, 28013 Madrid, Madrid",
+        "Saved customer address",
+        `2 Main Street, 28013 Madrid, Madrid, ${names["es-ES"]}`,
+      ]) {
+        const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+        input.invoiceLocale = locale;
+        input.result.recipient!.address = address;
+        const before = structuredClone(input);
+        const words = buildReceiptDocument(input).elements.flatMap((e) =>
+          e.kind === "text" ? [e.text] : [],
+        );
+        expect(words[words.indexOf(address) + 1]).toBe(country);
+        expect(words.filter((word) => word === country)).toHaveLength(1);
+        expect(input).toEqual(before);
+      }
+    },
+  );
+  it.each(["58mm", "80mm"] as const)(
+    "prints the saved country on %s in every Spain receipt language",
+    (paperWidth) => {
+      for (const locale of getCountryPack("ES")!.invoiceLocales) {
+        const input = structuredClone(FULL_INVOICE_FIXTURE);
+        input.invoiceLocale = locale;
+        input.result.recipient!.address = "2 Main Street, 28013 Madrid, Madrid";
+        input.printer = { paperWidth, resolution: "180dpi" };
+        const words = printedLines(formatReceipt(input)).map((line) => line.trim());
+        const country = getCountryPack("ES")!.countryNames![locale]!;
+        expect(words.filter((word) => word === country)).toHaveLength(1);
+        expect(words).not.toContain("Spain");
+      }
     },
   );
 });

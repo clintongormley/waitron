@@ -238,7 +238,7 @@ describe("a counter sale", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -266,7 +266,7 @@ describe("a counter sale", () => {
       const recipient = {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       };
       if (stored) {
@@ -318,7 +318,7 @@ describe("a counter sale", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -359,7 +359,7 @@ describe("a counter sale", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -433,7 +433,7 @@ describe("a card on the integrated reader", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -457,7 +457,7 @@ describe("a card on the integrated reader", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -767,7 +767,7 @@ describe("growing a bill with a saved full-invoice choice", () => {
   const recipient = {
     taxId: "B12345674",
     legalName: "Cliente SL",
-    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    address: "2 Main Street, 28013 Madrid, Madrid",
     countryCode: "ES",
   };
 

@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -829,3 +830,17 @@ describe("A4 columns and right-aligned amounts", () => {
       expect(right(element)).toBeLessThanOrEqual(CONTENT_RIGHT + 1e-6);
   });
 });
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+  "renders the recipient country from the pack in a real %s PDF",
+  async (locale) => {
+    const input = structuredClone(fixture);
+    input.invoiceLocale = locale;
+    input.result.recipient!.address = "2 Main Street, 28013 Madrid, Madrid";
+    const { pages } = await rendered(input);
+    const text = pages.map((page) => page.text).join(" ");
+    expect(text).toContain("2 Main Street, 28013 Madrid, Madrid");
+    expect(text).toContain(getCountryPack("ES")!.countryNames![locale]!);
+    expect(text).not.toContain("Spain");
+  },
+);

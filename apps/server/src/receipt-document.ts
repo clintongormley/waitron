@@ -1,6 +1,6 @@
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
 import type { ReceiptLabels } from "@waitron/country";
-import { receiptLabelsFor } from "@waitron/country-packs";
+import { receiptCountryNameFor, receiptLabelsFor } from "@waitron/country-packs";
 import {
   addDecimal,
   compareDecimal,
@@ -258,6 +258,7 @@ export function buildReceiptDocument({
     text(result.recipient.legalName);
     text(`${label.nif}: ${result.recipient.taxId}`);
     text(result.recipient.address);
+    text(receiptCountryNameFor(result.recipient.countryCode, locale));
     rule();
   }
   const filedRates: string[] = [];

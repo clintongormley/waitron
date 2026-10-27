@@ -5,6 +5,8 @@ _2026-10-28, A965: the owner answered the sample-name question. Both names now f
 _2026-10-27, A965: receipt resources now include English without adding it to Spain’s receipt choices. Card slips use the saved sale language; payment/refund/sample wording lives in Spain’s pack. Samples carry an explicit receipt language, captured at request for deferred office printing. The two internal sample names retain A754’s values while the owner question is unanswered. The findings below describe the earlier tree._
 
 
+_2026-10-27, A963: Spain's country pack now owns the invoice-recipient address rule and country names. New recipient addresses keep the country code separately; printed country names follow the receipt language. The address-suffix findings below record the earlier tree. See the [implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md)._
+
 _2026-10-27, A918 slice 4: setup names the units and the first menu from `packages/catalogue/src/starter-content.ts`, and A918 is finished; the queue line below that names it records the earlier backlog._
 
 _2026-10-27, A918 slice 3: setup names the service steps, the default seasons, the counter zone and the starter period in English in code, translated from `packages/venue-service/src/starter-content.ts` into the staff language; the service-steps row below and the first finding's steps record the earlier tree._

@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { t as uiText, setLocale } from "../i18n/t.js";
@@ -2644,3 +2645,26 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     });
   });
 });
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+  "shows the separately saved recipient country in receipt language %s",
+  async (locale) => {
+    setLocale("en-GB");
+    const { el } = await mount({
+      invoiceType: "F1",
+      locale,
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Customer Ltd",
+        countryCode: "ES",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+      },
+    });
+    expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
+      getCountryPack("ES")!.countryNames![locale]!,
+    );
+    expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
+      "2 Main Street, 28013 Madrid, Madrid",
+    );
+  },
+);

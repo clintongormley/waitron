@@ -150,7 +150,7 @@ describe("handing over a counter order sent without payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -162,7 +162,7 @@ describe("handing over a counter order sent without payment", () => {
     expect(after.invoiceType).toBe("F1");
     expect(after.recipientTaxId).toBe("B12345674");
     expect(after.recipientLegalName).toBe("Cliente SL");
-    expect(after.recipientAddress).toBe("Calle Mayor 2, 28013 Madrid, Madrid, España");
+    expect(after.recipientAddress).toBe("2 Main Street, 28013 Madrid, Madrid");
     expect(after.recipientCountryCode).toBe("ES");
     expect(saleCount(id)).toBe(0);
   });
@@ -184,7 +184,7 @@ describe("handing over a counter order sent without payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },

@@ -185,7 +185,7 @@ describe("invoice-choice email contact selection", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
       delivery: delivery(),

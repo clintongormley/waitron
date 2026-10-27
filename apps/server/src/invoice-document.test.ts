@@ -301,7 +301,7 @@ describe("stored invoice document projection", () => {
         taxId: "B12345674",
         legalName: "Bill customer",
         countryCode: "ES",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
       },
     });
     const saleId = await withTransaction(suite.db, async (tx) => {
@@ -945,7 +945,7 @@ describe("the guests a full invoice prints", () => {
         taxId: "B12345674",
         legalName: "Bill customer",
         countryCode: "ES",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
       },
     });
     return withTransaction(suite.db, async (tx) => {

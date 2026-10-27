@@ -763,7 +763,7 @@ describe("invoice-choice email context at trading boot", () => {
               recipient: {
                 taxId: "12345678Z",
                 legalName: "Customer",
-                address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+                address: "2 Main Street, 28013 Madrid, Madrid",
                 countryCode: "ES",
               },
               delivery: {

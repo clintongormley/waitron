@@ -495,7 +495,7 @@ describe("invoice selection before reserving new bill money", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -846,7 +846,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -915,7 +915,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Recovery O'Brien 100%_SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -931,7 +931,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Wildcard control 100XXSL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1010,7 +1010,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Lookup batch SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -1027,7 +1027,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Lookup batch SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1091,7 +1091,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName,
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -1189,7 +1189,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1241,7 +1241,7 @@ describe("the invoice at full payment", () => {
           recipient: {
             taxId: "B12345674",
             legalName: "Cliente SL",
-            address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+            address: "2 Main Street, 28013 Madrid, Madrid",
             countryCode: "ES",
           },
           lines: [
@@ -1268,7 +1268,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1299,14 +1299,14 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
     expect(filed).toEqual({
       purpose: "full",
       taxId: "B12345674",
-      address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      address: "2 Main Street, 28013 Madrid, Madrid",
     });
     const [sale] = await inTx((tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
@@ -1317,7 +1317,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -1353,7 +1353,7 @@ describe("the invoice at full payment", () => {
             recipient: {
               taxId: "B12345674",
               legalName: "Cliente SL",
-              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              address: "2 Main Street, 28013 Madrid, Madrid",
               countryCode: "ES",
             },
           });
@@ -1418,7 +1418,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1476,7 +1476,7 @@ describe("the invoice at full payment", () => {
           recipient: {
             taxId: "B12345674",
             legalName: "Cliente SL",
-            address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+            address: "2 Main Street, 28013 Madrid, Madrid",
             countryCode: "ES",
           },
         });
@@ -1543,7 +1543,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -1582,7 +1582,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1626,7 +1626,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1707,7 +1707,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -1772,7 +1772,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1798,7 +1798,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1832,7 +1832,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -1864,7 +1864,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -1895,7 +1895,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName,
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       }),
@@ -1918,7 +1918,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "𐐀𐐀𐐀𐐀",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       }),
@@ -1943,7 +1943,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -1992,7 +1992,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
         delivery: { medium: "email", recipient: " customer@example.test ", personId: "forged" },
@@ -2052,7 +2052,7 @@ describe("the invoice at full payment", () => {
             recipient: {
               taxId: "B12345674",
               legalName: "Cliente SL",
-              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              address: "2 Main Street, 28013 Madrid, Madrid",
               countryCode: "ES",
             },
             delivery: { medium: "email", recipient: "customer@example.test", consent },
@@ -2087,7 +2087,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
       delivery,
@@ -2113,7 +2113,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
         delivery: { medium: "email", recipient: "valid@example.test" },
@@ -2131,7 +2131,7 @@ describe("the invoice at full payment", () => {
     const F1_RECIPIENT = {
       taxId: "B12345674",
       legalName: "Cliente SL",
-      address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      address: "2 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES",
     };
 
@@ -2376,7 +2376,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
       delivery: { medium: "receipt" },
@@ -2430,7 +2430,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
         delivery: { medium: "a4", pagePrinterId },
@@ -2485,7 +2485,7 @@ describe("the invoice at full payment", () => {
         recipient: {
           taxId: "B12345674",
           legalName: "Cliente SL",
-          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          address: "2 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
         delivery: { medium: "a4", pagePrinterId, personId: OPERATOR },
@@ -2549,7 +2549,7 @@ describe("the invoice at full payment", () => {
             recipient: {
               taxId: "B12345674",
               legalName: "Cliente SL",
-              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              address: "2 Main Street, 28013 Madrid, Madrid",
               countryCode: "ES",
             },
             delivery:
@@ -2659,7 +2659,7 @@ describe("the invoice at full payment", () => {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -2689,7 +2689,7 @@ describe("the invoice at full payment", () => {
       purpose: "full",
       taxId: "B12345674",
       legalName: "Cliente SL",
-      address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      address: "2 Main Street, 28013 Madrid, Madrid",
     });
   });
 
