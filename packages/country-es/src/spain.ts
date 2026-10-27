@@ -306,6 +306,8 @@ export const SPAIN: CountryPack = {
   countryCode: "ES",
   postalAddress: { isComplete: completeSpanishPostalAddress },
   countryNames: {
+    en: "Spain",
+    es: "España",
     "en-GB": "Spain",
     "es-ES": "España",
     "ca-ES": "Espanya",

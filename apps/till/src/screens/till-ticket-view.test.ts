@@ -2646,7 +2646,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   });
 });
 
-it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "es"])(
   "shows the separately saved recipient country in receipt language %s",
   async (locale) => {
     setLocale("en-GB");
@@ -2661,7 +2661,9 @@ it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
       },
     });
     expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
-      getCountryPack("ES")!.countryNames![locale]!,
+      getCountryPack("ES")!.countryNames![
+        locale === "en-GB" || locale === "es" ? "es-ES" : locale
+      ]!,
     );
     expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
       "2 Main Street, 28013 Madrid, Madrid",

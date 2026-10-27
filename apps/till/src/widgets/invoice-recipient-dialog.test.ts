@@ -628,25 +628,30 @@ describe("till-invoice-recipient-dialog email delivery", () => {
 });
 
 describe("country-free recipient input", () => {
-  it.each(["en-GB", "es-ES"])("keeps country separate from the address in %s", async (locale) => {
-    setLocale(locale);
-    const el = await mountDialog();
-    const sent = confirmations(el);
-    await fillValid(el);
-    await fill(el, "address", " Main Street, 2 ");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
-    expect(sent[0]?.recipient).toEqual({
-      taxId: "12345678Z",
-      legalName: anaGarcia.legalName,
-      address: "Main Street, 2, 28013 Madrid, Madrid",
-      countryCode: "ES",
-    });
-    const country = el.shadowRoot!.querySelector<
-      HTMLElement & { value: string; disabled: boolean }
-    >("wt-input[name=countryCode]")!;
-    expect(country.value).toBe(getCountryPack("ES")!.countryNames![locale]);
-    expect(country.disabled).toBe(true);
-  });
+  it.each(["en-GB", "es-ES", "es"])(
+    "keeps country separate from the address in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountDialog();
+      const sent = confirmations(el);
+      await fillValid(el);
+      await fill(el, "address", " Main Street, 2 ");
+      el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      expect(sent[0]?.recipient).toEqual({
+        taxId: "12345678Z",
+        legalName: anaGarcia.legalName,
+        address: "Main Street, 2, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      });
+      const country = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; disabled: boolean }
+      >("wt-input[name=countryCode]")!;
+      expect(country.value).toBe(
+        getCountryPack("ES")!.countryNames![locale === "es" ? "es-ES" : locale],
+      );
+      expect(country.disabled).toBe(true);
+    },
+  );
   it.each(["00000", "99999"])(
     "uses the pack's postcode rule for %s and recovers inline",
     async (postalCode) => {

@@ -831,7 +831,7 @@ describe("A4 columns and right-aligned amounts", () => {
   });
 });
 
-it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
   "renders the recipient country from the pack in a real %s PDF",
   async (locale) => {
     const input = structuredClone(fixture);
@@ -840,7 +840,9 @@ it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
     const { pages } = await rendered(input);
     const text = pages.map((page) => page.text).join(" ");
     expect(text).toContain("2 Main Street, 28013 Madrid, Madrid");
-    expect(text).toContain(getCountryPack("ES")!.countryNames![locale]!);
+    expect(text).toContain(
+      getCountryPack("ES")!.countryNames![locale === "en-GB" ? "es-ES" : locale]!,
+    );
     expect(text).not.toContain("Spain");
   },
 );

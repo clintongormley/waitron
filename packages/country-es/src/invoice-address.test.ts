@@ -32,6 +32,8 @@ describe("Spain's country-free invoice address", () => {
   it("supplies country names for English screens and every offered receipt language", () => {
     expect(SPAIN.countryNames).toEqual({
       "en-GB": "Spain",
+      en: "Spain",
+      es: "España",
       "es-ES": "España",
       "ca-ES": "Espanya",
       "gl-ES": "España",

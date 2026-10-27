@@ -375,3 +375,7 @@ describe("recipient country names", () => {
     expect(receiptCountryNameFor(code, "es-ES")).toBe(code);
   });
 });
+
+it("keeps the country name Spanish for the screen's bare-language alias", () => {
+  expect(countryNameFor("ES", "es")).toBe(getCountryPack("ES")!.countryNames!["es-ES"]);
+});
