@@ -194,7 +194,10 @@ export function defaultLanguageHint(
  * rather than stored. Given `defaultLanguage`, every other language falls back to the default
  * language's text first, as `resolveContentText` (`packages/shared/src/content-languages.ts`) does.
  * A `placeholder` given per language is each field's whole fallback, and `defaultLanguage` adds
- * nothing to it. A language `locked` answers a hint for is drawn disabled, with that hint.
+ * nothing to it. A language `locked` answers a hint for is drawn disabled, with that hint as its
+ * description, and again under it as a `.locked-note` paragraph, hidden from a screen reader, which
+ * would otherwise hear it twice; the host styles both classes. `wt-input` draws a hint only as an
+ * empty field's placeholder, so a locked field holding text would show no reason without it.
  */
 export function optionalTextFields(
   context: FieldContext,
@@ -208,7 +211,7 @@ export function optionalTextFields(
 ) {
   return context.locales.map((locale) => {
     const lockedHint = locked(locale);
-    return textField(
+    const input = textField(
       lockedHint === "" ? context : { ...context, busy: true },
       `${key}-${locale}`,
       `${label} (${locale})`,
@@ -222,6 +225,12 @@ export function optionalTextFields(
           : defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
       lockedHint,
     );
+    return lockedHint === ""
+      ? input
+      : html`<div class="locked">
+          ${input}
+          <p class="locked-note" aria-hidden="true">${lockedHint}</p>
+        </div>`;
   });
 }
 

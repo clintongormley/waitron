@@ -601,6 +601,49 @@ it("says in Spanish that the included folder sets a fixed name", async () => {
   expect(field(el, "wt-input", "names-en").hint).toBe("La carpeta incluida fija este nombre.");
 });
 
+/** Every element in `root`, its shadow roots' included, whose own text is `text` and which takes
+ * more than a pixel of the page: the visually hidden pattern clips to one. */
+function visibleWithText(root: Element, text: string): Element[] {
+  const all = (element: Element): Element[] => [
+    element,
+    ...[...element.children].flatMap(all),
+    ...(element.shadowRoot === null ? [] : [...element.shadowRoot.children].flatMap(all)),
+  ];
+  return all(root).filter((element) => {
+    if (element.children.length > 0 || element.textContent!.trim() !== text) return false;
+    const box = element.getBoundingClientRect();
+    return box.width > 1 && box.height > 1 && element.checkVisibility();
+  });
+}
+
+for (const [locale, words] of [
+  ["en", "The included folder sets this name."],
+  ["es", "La carpeta incluida fija este nombre."],
+] as const)
+  it(`shows why a fixed name is locked under its field, in ${locale}, read once by a screen reader`, async () => {
+    setLocale(locale);
+    const document = startersFixedInEnglish();
+    const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+    await pick(el, "Starters");
+    const shown = visibleWithText(form(el), words);
+    expect(shown).toHaveLength(1);
+    const locked = field(el, "wt-input", "names-en").getBoundingClientRect();
+    const next = field(el, "wt-input", "names-es").getBoundingClientRect();
+    const note = shown[0]!.getBoundingClientRect();
+    expect(note.top).toBeGreaterThanOrEqual(locked.bottom);
+    expect(note.bottom).toBeLessThanOrEqual(next.top);
+    // The field's own description already says it.
+    expect(shown[0]!.closest('[aria-hidden="true"]')).not.toBeNull();
+    const inputRoot = field(el, "wt-input", "names-en").shadowRoot!;
+    const input = inputRoot.querySelector("input")!;
+    expect(
+      input
+        .getAttribute("aria-describedby")!
+        .split(" ")
+        .map((id) => inputRoot.getElementById(id)!.textContent!.trim()),
+    ).toEqual([words]);
+  });
+
 it("keeps staged changes and what is being typed when reloaded onto a newer live version", async () => {
   const data = new LiveData();
   const getLiveMenu = vi

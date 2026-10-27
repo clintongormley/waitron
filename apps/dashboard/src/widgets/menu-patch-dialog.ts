@@ -237,6 +237,15 @@ export class MenuPatchDialog extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+      .locked {
+        display: grid;
+        gap: var(--wt-space-1);
+      }
+      .locked-note {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .review {
         display: grid;
         gap: var(--wt-space-3);

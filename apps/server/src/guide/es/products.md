@@ -289,8 +289,8 @@ plato nunca las cambia. Un cambio en un extra, en una opción o en el nombre de 
 todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
 extra se corrige en cada sitio por separado. Una sección que aparece dentro de la carpeta
 de una carta incluida conserva el nombre o la imagen que le fija esa carpeta, y el nombre en un
-idioma que las carpetas fijan en todos los sitios donde aparece la sección se muestra desactivado y
-no se puede cambiar aquí.
+idioma que las carpetas fijan en todos los sitios donde aparece la sección se muestra desactivado,
+con **La carpeta incluida fija este nombre.** debajo, y no se puede cambiar aquí.
 
 Una corrección no puede cambiar nada más. Los alérgenos y las etiquetas dietéticas se declaran en
 el propio producto; consulta

@@ -112,4 +112,33 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     await settle(el);
     await expectNoA11yViolations(host);
   });
+
+  it("renders a name an included folder fixes accessibly", async () => {
+    const document = structuredClone(LIVE.document);
+    const starters = document.root.members[0] as { names: unknown; fixed: unknown };
+    starters.names = { en: "Fixed English", es: "Entrantes" };
+    starters.fixed = { names: { en: "Fixed English" } };
+    const api = {
+      getLiveMenu: vi.fn(async () => ({ ...LIVE, document })),
+      getMenuPublications: vi.fn(async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: [],
+      })),
+      imageLibraryRequest: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPatchDialog>(
+      "dashboard-menu-patch-dialog",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", open: true },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
+    );
+    await pick(el, "Starters");
+    expect(el.shadowRoot!.querySelector(".locked-note")!.textContent!.trim()).toBe(
+      "The included folder sets this name.",
+    );
+    await expectNoA11yViolations(host);
+  });
 });

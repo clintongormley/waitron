@@ -5074,6 +5074,10 @@ live version's items on the leading side, and the picked item's form on the othe
 stack where there is no room for both. Until an item is picked, the form's place reads "Pick an
 item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
 item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
+A section's customer-facing name in a language that every included folder showing it fixes is drawn
+disabled, with "The included folder sets this name." under it in `--wt-color-text-muted` at
+`--wt-font-size-sm`. That line is hidden from a screen reader, which reads the same words as the
+field's description.
 The footer holds Close and "Review N changes". The review step lists each change as "<item>:
 <field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
 "Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live

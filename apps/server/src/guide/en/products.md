@@ -275,8 +275,8 @@ price and VAT class, so correct those on its variants; correcting the dish never
 change to an extra, an options list's choice or a list's name is made everywhere that list appears
 in this menu. A product sold both as a dish and as an extra is corrected in each place separately. A
 section shown inside an included menu's folder keeps any name or picture that folder sets for it,
-and a language's name that the folders set in every place the section appears is shown greyed out
-and cannot be changed here.
+and a language's name that the folders set in every place the section appears is shown greyed out,
+with **The included folder sets this name.** under it, and cannot be changed here.
 
 A patch cannot change anything else. Allergens and diet labels are declared on the product itself;
 see [Declare allergens and dietary suitability directly](products.md#allergens). Nor can it change
