@@ -453,8 +453,27 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: a different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
   [Audit](backlog/self-service-refusals.md#setup-environment).
 
-- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1099 lets Start again past a damaged record of series names, after a warning; A1158–A1162 list what still refuses.
   [Audit](backlog/self-service-refusals.md#setup-state).
+
+- **A1158: a damaged setup record or claim marker still dead-ends Start again.** Left open by A1099.
+  [Audit](backlog/self-service-refusals.md#a1158-a-damaged-setup-record-or-claim-marker-still-dead-ends-start-again).
+
+- **A1159: a venue database that is present but cannot be read refuses setup.not_ready.** It could
+  count as missing. Left open by A1099.
+  [Audit](backlog/self-service-refusals.md#a1159-a-venue-database-that-is-present-but-cannot-be-read-refuses-setupnot_ready).
+
+- **A1160: a damaged start-again note is refused late and blocks every later naming.** Left open by
+  A1099.
+  [Audit](backlog/self-service-refusals.md#a1160-a-damaged-start-again-note-is-refused-late-and-blocks-every-later-naming).
+
+- **A1161: with the database present, a public record or documents file still dead-ends Start
+  again**, damaged or intact. Left open by A1099; needs an owner decision.
+  [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
+
+- **A1162: a recovery's damaged copy of the series-name record still dead-ends Start again.** Left
+  open by A1099.
+  [Audit](backlog/self-service-refusals.md#a1162-a-recoverys-damaged-copy-of-the-series-name-record-still-dead-ends-start-again).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
@@ -508,8 +527,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Left open by A1098.
   [Detail](backlog/setup.md#a1144-after-keep-the-box-stays-on-its-page-even-if-the-files-are-later-removed-by-hand)
 
-- **A1145: a Move on a box with no start-again note raises no series-name floor.** Waits for
-  A1099's "name unknown" note. Left open by A1098 (owner question Q3).
+- **A1145: a Move on a box with no start-again note raises no series-name floor.** A1099's
+  "name unknown" note now exists for the Move to write. Left open by A1098 (owner question Q3).
   [Detail](backlog/setup.md#a1145-a-move-on-a-box-with-no-start-again-note-raises-no-series-name-floor)
 
 - **A1146: a found piece on another mount below a root fails after the choice is recorded.** The

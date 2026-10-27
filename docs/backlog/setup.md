@@ -545,7 +545,8 @@ it ever chose a series name), there is no `lastName` to keep and nothing is rais
 (`raiseNoteToRecord`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). A moved
 venue whose names were chosen by a clock running ahead could then share a name with a later setup
 on this box. On such a box the survey's `noteFloorMs` is null, so the Move option names no floor
-either. A1099's "name unknown" note would let the Move raise a floor here too.
+either. Since A1099 the note can hold no name (`lastName: null`) with only a time floor, so the
+Move could write one here too; building that is this entry.
 
 ## A1146: a found piece on another mount below a root fails after the choice is recorded
 
