@@ -2993,6 +2993,18 @@ describe("custom themes in a configuration copy", () => {
     expect(lemonBar?.choices).toEqual(lemon);
   });
 
+  it("imports a copied theme with no text key", async () => {
+    const { transferred, versions } = await themedBundle("B13572491");
+    rewriteTheme(transferred, "Lemon Bar", (theme) => {
+      delete theme.text;
+    });
+    await importInto("B97531891", transferred, versions);
+    const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
+    const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
+    expect(lemonBar?.choices?.text).toEqual({});
+    expect(lemonBar?.choices).toEqual(lemon);
+  });
+
   // JSON.parse reads a repeated key's last value, SQLite's json_extract its first: stored, the
   // venue would show the logo while the image library counted no use of it.
   it.each<[string, (text: string, carried: string) => string, string, string]>([

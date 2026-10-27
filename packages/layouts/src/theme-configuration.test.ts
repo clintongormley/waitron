@@ -114,6 +114,21 @@ describe("validateThemeConfiguration", () => {
     expect(refusal([{ ...row("Lemon", LEMON, 1), theme }])).toBeUndefined();
   });
 
+  it("refuses a copy whose theme has a 41 px size", () => {
+    const theme = JSON.stringify({ ...LEMON, text: { size: { lg: 41 } } });
+    expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.theme" },
+    });
+  });
+
+  it("imports a copy whose themes have no text", () => {
+    const { text: _, ...noText } = LEMON;
+    void _;
+    const theme = JSON.stringify(noText);
+    expect(refusal([{ ...row("Lemon", LEMON, 1), theme }])).toBeUndefined();
+  });
+
   it("refuses two themes in use as custom_themes.in_use", () => {
     expect(refusal([row("Green", DARK_GREEN, 1), row("Lemon", LEMON, 1)])).toMatchObject({
       code: "setup.request_invalid",
