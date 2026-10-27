@@ -111,16 +111,19 @@ English in its code and translated at setup from a translation file in the writi
 (`packages/adjustments/src/starter-content.ts`), for the default kitchen station and the device
 profiles (`packages/provisioning/src/starter-content.ts`), and for the service steps, the default
 seasons, the counter zone and the starter menu period
-(`packages/venue-service/src/starter-content.ts`), A918; these four are written in the staff
-language whenever they are written, a department added later included.
+(`packages/venue-service/src/starter-content.ts`), these four written in the staff language
+whenever they are written, a department added later included; and for the units and the first
+menu (`packages/catalogue/src/starter-content.ts`), A918.
 A language map, such as a reason's names, gets the venue's starting content languages (the area's
 default content language, the languages the area requires every venue to keep, then English) that
 the file carries, plus English. A field holding one name, such as a reason's plain name, the
-station's or a profile's, gets the staff language: the receipt language when the staff screens
-have it, `es-ES` or `en-GB`, otherwise the area's screen language, cut to `es` or `en`. So a file
-of one-name rows carries only the staff languages other than English (`es`). The units, and the
-first menu with its root section and home layout, are still written from code (A918's open
-slice).
+station's, a profile's, the first menu's or a unit's staff name, gets the staff language: the
+receipt language when the staff screens have it, `es-ES` or `en-GB`, otherwise the area's screen
+language, cut to `es` or `en`. So a file of one-name rows carries only the staff languages other
+than English (`es`). A starter unit's abbreviation is the same letters in every language, so it is
+not in the file: its map holds the staff abbreviation under each language its name holds. The
+first menu's root section takes the menu's name and starts with no customer-facing names; the home
+layout's internal name, "Home", is shown nowhere and stays English in code.
 
 **What it cost.** A758-1 (branch `feat/a758-1-reason-rules`) seeded the starter reasons «Cambio del
 cliente» and «Queja del cliente» from `packages/adjustments/src/provisioning.ts`. The push hook's
@@ -144,7 +147,7 @@ AEAT's form descriptions), for Spanish-specific terms, and for Spain-only printe
 translations in Spain's official languages; Spain-only text or logic found in general code moves
 into them. Every country pack must also carry English for the words it shows (Spain's
 does not yet), and a receipt in Spain prints in the venue's receipt language, never English; A963 and A965 fix what
-does not yet. The fixes are queued as A918 and A963–A977
+does not yet. The fixes are queued as A963–A977
 ([A913 in the backlog](../backlog/architecture.md#a913s-fix-items-general-code-english-only)).
 
 ## Spanish domain terms are deliberate, and a module declares its own
