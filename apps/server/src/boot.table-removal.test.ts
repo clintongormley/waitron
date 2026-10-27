@@ -16,11 +16,16 @@ import { readLayout, saveLayout } from "./floor-plan.js";
 import { resetZone } from "./floor-today-store.js";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 for (const [mode, status] of [
   ["enabled", "cancelled"],
@@ -158,9 +163,9 @@ for (const [mode, status] of [
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });
-          await awaitListening(port);
+          await awaitListening(httpPort());
           for (let pass = 0; pass < 3; pass += 1) {
-            const response = await fetch(`http://127.0.0.1:${port}/api/tables/state`, {
+            const response = await fetch(`http://127.0.0.1:${httpPort()}/api/tables/state`, {
               headers: { cookie: venue.cookie },
             });
             expect(response.status, await response.clone().text()).toBe(200);
@@ -208,7 +213,7 @@ for (const [mode, status] of [
           }
           if (fixture.managementToken !== undefined) {
             const impact = await fetch(
-              `http://127.0.0.1:${port}/management-api/zones/${fixture.zoneId}/delete-impact`,
+              `http://127.0.0.1:${httpPort()}/management-api/zones/${fixture.zoneId}/delete-impact`,
               { headers: { cookie: `${MANAGEMENT_COOKIE}=${fixture.managementToken}` } },
             );
             expect(impact.status, await impact.clone().text()).toBe(200);

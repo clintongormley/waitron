@@ -80,7 +80,7 @@ import {
 } from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
 import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
 import { DUTY_BUDGET_MS } from "./health.js";
@@ -122,7 +122,13 @@ import {
   seedTradingVenue,
 } from "./testing/boot-harness.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort, startConfiguredServer } =
+  ephemeralServerFixture();
 let fixtureDatabase: Database;
 let onFixtureRequest: (() => void) | undefined;
 const fixtureWrites = new Map<string, (db: Transaction) => Promise<void>>();
@@ -483,7 +489,7 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
       });
-      await awaitListening(port);
+      await awaitListening(httpPort());
       let acquired!: () => void;
       const locked = new Promise<void>((resolve) => {
         acquired = resolve;
@@ -500,7 +506,7 @@ describe("startServer, against a migrated venue directory", () => {
         onFixtureRequest = resolve;
       });
       let entered = false;
-      writing = liveFixture(port, async (tx) => {
+      writing = liveFixture(httpPort(), async (tx) => {
         entered = true;
         return tx
           .insert(persons)
@@ -539,7 +545,7 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ONBOARDING_INTENT: "demo",
       });
-      await awaitListening(port);
+      await awaitListening(httpPort());
       expect(() => beforeServerStarts()).toThrow(
         "write to the venue database before the server starts",
       );
@@ -548,7 +554,7 @@ describe("startServer, against a migrated venue directory", () => {
         .from(printers)
         .where(eq(printers.localKey, "WAITRON-DEMO-PRINTER"));
       expect(printer?.active).toBe(true);
-      const { jobId } = await liveFixture(port, (tx) =>
+      const { jobId } = await liveFixture(httpPort(), (tx) =>
         enqueuePrintJob(
           tx,
           { locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID },
@@ -588,7 +594,7 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
       });
-      const response = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
+      const response = await fetchHealthOk(`http://127.0.0.1:${httpPort()}/health`);
       expect(response.status).toBe(200);
     } finally {
       await server?.close();
@@ -600,7 +606,7 @@ describe("startServer, against a migrated venue directory", () => {
     // Read back below to show the rotating file sink is wired into `startServer`.
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-logs-"));
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
-      const started = await startServer({
+      const started = await startConfiguredServer({
         ...KEY_ENV,
         WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_HTTP_PORT: String(port),
@@ -724,10 +730,10 @@ describe("startServer, against a migrated venue directory", () => {
     const { via, close } = httpsVia(ca);
     try {
       // `config.environment` threads through the setup branch into `mountSetup`.
-      const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
+      const publicStatus = await fetch(`https://127.0.0.1:${httpPort()}/public/availability`, via);
       expect(publicStatus.status).toBe(503);
       expect(await publicStatus.json()).toEqual({ available: false });
-      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+      const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({
         provisioned: false,
@@ -736,24 +742,27 @@ describe("startServer, against a migrated venue directory", () => {
       });
 
       // The placeholder shell answers any unclaimed path (200 HTML) over HTTPS too.
-      const root = await fetch(`https://127.0.0.1:${port}/`, via);
+      const root = await fetch(`https://127.0.0.1:${httpPort()}/`, via);
       expect(root.status).toBe(200);
       expect(root.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(root.headers.get("content-type")).toContain("text/html");
       expect(await root.text()).toMatch(/set ?up/i);
 
       // /health still answers (503: a setup box runs no duty loop); only that it answers is asserted.
-      const health = await fetch(`https://127.0.0.1:${port}/health`, via);
+      const health = await fetch(`https://127.0.0.1:${httpPort()}/health`, via);
       expect(health.status).toBeLessThan(600);
 
       // The trading routes are not mounted: /api/staff falls to the setup catch-all's HTML, not the
       // trading roster's JSON.
-      const staff = await fetch(`https://127.0.0.1:${port}/api/staff`, via);
+      const staff = await fetch(`https://127.0.0.1:${httpPort()}/api/staff`, via);
       expect(staff.status).toBe(200);
       expect(staff.headers.get("content-type")).toContain("text/html");
       expect(await staff.text()).toMatch(/set ?up/i);
 
-      const management = await fetch(`https://127.0.0.1:${port}/management-api/session/me`, via);
+      const management = await fetch(
+        `https://127.0.0.1:${httpPort()}/management-api/session/me`,
+        via,
+      );
       expect(management.status).toBe(404);
       expect(management.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await management.json()).toEqual({ error: { code: "node.reset", params: {} } });
@@ -763,7 +772,7 @@ describe("startServer, against a migrated venue directory", () => {
       );
 
       // A plain-HTTP dial to the TLS port is torn down.
-      await expect(fetch(`http://127.0.0.1:${port}/setup-api/status`)).rejects.toThrow();
+      await expect(fetch(`http://127.0.0.1:${httpPort()}/setup-api/status`)).rejects.toThrow();
     } finally {
       await server.close();
       await close();
@@ -774,7 +783,9 @@ describe("startServer, against a migrated venue directory", () => {
     await expect(server.close()).resolves.toBeUndefined();
     const afterClose = httpsVia(ca);
     try {
-      await expect(fetch(`https://127.0.0.1:${port}/health`, afterClose.via)).rejects.toThrow();
+      await expect(
+        fetch(`https://127.0.0.1:${httpPort()}/health`, afterClose.via),
+      ).rejects.toThrow();
     } finally {
       await afterClose.close();
     }
@@ -808,21 +819,23 @@ describe("startServer, against a migrated venue directory", () => {
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
     try {
-      const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      const health = await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
       expect(health.status).toBe(200);
 
-      const trust = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
+      const trust = await fetch(`https://127.0.0.1:${httpPort()}/setup/trust`, via);
       expect(trust.status).toBe(200);
       expect(await trust.text()).toContain("to this Waitron server");
       for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
-        const download = await fetch(`https://127.0.0.1:${port}${path}`, via);
+        const download = await fetch(`https://127.0.0.1:${httpPort()}${path}`, via);
         expect(download.status).toBe(200);
         expect(await download.text()).toBe(ca.toString());
       }
-      expect((await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via)).status).toBe(404);
+      expect((await fetch(`https://127.0.0.1:${httpPort()}/setup-api/discovery`, via)).status).toBe(
+        404,
+      );
 
       // The control: a plain-HTTP dial to the same port is torn down.
-      await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+      await expect(fetch(`http://127.0.0.1:${httpPort()}/health`)).rejects.toThrow();
     } finally {
       await server.close();
       await close();
@@ -894,7 +907,9 @@ describe("startServer, against a migrated venue directory", () => {
         const server = await startTrading(stateDir, port);
         const { via, close } = httpsVia(await readFile(join(elsewhere, "tls", "ca.crt")));
         try {
-          expect((await fetchHealthOk(`https://127.0.0.1:${port}/health`, via)).status).toBe(200);
+          expect((await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via)).status).toBe(
+            200,
+          );
           expect((await lstat(join(stateDir, "tls"))).isSymbolicLink()).toBe(true);
           expect((await stat(join(elsewhere, "tls"))).mode & 0o777).toBe(0o755);
           expect(tightenFailures(lines)).toEqual([]);
@@ -913,7 +928,7 @@ describe("startServer, against a migrated venue directory", () => {
         const stateDir = await tradingStateDir("waitron-boot-tls-none-");
         const server = await startTrading(stateDir, port);
         try {
-          expect((await fetchHealthOk(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+          expect((await fetchHealthOk(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
           expect(existsSync(join(stateDir, "tls"))).toBe(false);
           expect(tightenFailures(lines)).toEqual([]);
         } finally {
@@ -946,7 +961,7 @@ describe("startServer, against a migrated venue directory", () => {
           );
           const server = await startTrading(stateDir, port);
           try {
-            expect((await fetchHealthOk(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+            expect((await fetchHealthOk(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
             const line = await waitForEvent(lines, "tls.tighten_failed");
             expect(line).toMatchObject({ level: "warn", errno: "EPERM" });
             expect(JSON.stringify(line)).not.toContain(stateDir);
@@ -969,7 +984,7 @@ describe("startServer, against a migrated venue directory", () => {
     // A private address inside the box CA's permitted name space that this host is unlikely to hold,
     // so the negative assertion below shows the override, not a resolved interface, is in the SAN.
     const override = "10.1.2.3";
-    const server = await startServer({
+    const server = await startConfiguredServer({
       WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -1131,7 +1146,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       server = started;
       // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
-      await awaitListening(port);
+      await awaitListening(httpPort());
       expect(reconcileLine.softDisabled).toEqual(["scheduler"]);
       expect(reconcileLine.toMigrate).toEqual([]);
     } finally {
@@ -1217,7 +1232,7 @@ describe("startServer, against a migrated venue directory", () => {
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
     try {
-      const root = await fetch(`https://127.0.0.1:${port}/`, via);
+      const root = await fetch(`https://127.0.0.1:${httpPort()}/`, via);
       expect(root.status).toBe(200);
       expect(root.headers.get("content-type")).toContain("text/html");
       const text = await root.text();
@@ -1226,10 +1241,10 @@ describe("startServer, against a migrated venue directory", () => {
 
       // The setup API still answers as JSON: the wizard's `mountSpa` catch-all (registered LAST) did not
       // shadow /setup-api/status.
-      const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
+      const publicStatus = await fetch(`https://127.0.0.1:${httpPort()}/public/availability`, via);
       expect(publicStatus.status).toBe(503);
       expect(await publicStatus.json()).toEqual({ available: false });
-      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+      const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({
         provisioned: false,
@@ -1286,7 +1301,7 @@ describe("startServer, against a migrated venue directory", () => {
       const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-venue-"));
       let server: StartedServer | undefined;
       try {
-        server = await startServer({
+        server = await startConfiguredServer({
           WAITRON_VENUE_DIR: venueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -1341,7 +1356,7 @@ describe("startServer, against a migrated venue directory", () => {
       // The machine-readable discovery document: this box's hostname plus whether its CA is
       // downloadable. `caDownloadAvailable` is TRUE because the shared setup path minted the box's own
       // self-signed CA at <stateDir>/tls/ca.crt (the file `ca` above was just read from).
-      const disc = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
+      const disc = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/discovery`, via);
       expect(disc.status).toBe(200);
       expect(await disc.json()).toMatchObject({
         hostname: "waitron.local",
@@ -1349,21 +1364,21 @@ describe("startServer, against a migrated venue directory", () => {
       });
 
       // The CA download — served as a named attachment so a device can install and trust it.
-      const crt = await fetch(`https://127.0.0.1:${port}/setup-api/ca.crt`, via);
+      const crt = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/ca.crt`, via);
       expect(crt.status).toBe(200);
       expect(crt.headers.get("content-disposition")).toContain("waitron-ca.crt");
 
       // The server-rendered trust page — HTML, self-contained, over HTTPS.
-      const trust = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
+      const trust = await fetch(`https://127.0.0.1:${httpPort()}/setup/trust`, via);
       expect(trust.status).toBe(200);
       expect(trust.headers.get("content-type")).toContain("text/html");
 
-      const guide = await fetch(`https://127.0.0.1:${port}/help/en/products`, via);
+      const guide = await fetch(`https://127.0.0.1:${httpPort()}/help/en/products`, via);
       expect(guide.status).toBe(200);
       expect(guide.headers.get("content-type")).toContain("text/html");
       expect(await guide.text()).toContain('id="variants"');
       // The setup surface's own catch-all would answer this with its 200 placeholder.
-      const noGuide = await fetch(`https://127.0.0.1:${port}/help/en`, via);
+      const noGuide = await fetch(`https://127.0.0.1:${httpPort()}/help/en`, via);
       expect(noGuide.status).toBe(404);
       expect(await noGuide.text()).toContain("Page not found");
     } finally {
@@ -1399,10 +1414,10 @@ describe("startServer, against a migrated venue directory", () => {
     });
     const { via, close } = httpsVia(material.caPem);
     try {
-      const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
+      const publicStatus = await fetch(`https://127.0.0.1:${httpPort()}/public/availability`, via);
       expect(publicStatus.status).toBe(503);
       expect(await publicStatus.json()).toEqual({ available: false });
-      const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+      const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toMatchObject({ provisioned: false });
 
@@ -1414,12 +1429,12 @@ describe("startServer, against a migrated venue directory", () => {
       // The box's own fallback leaf was minted too, so a later boot that drops the operator vars still
       // has a cert to serve.
       expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
-      const discovery = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
+      const discovery = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/discovery`, via);
       expect(await discovery.json()).toMatchObject({ caDownloadAvailable: false });
       for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
-        expect((await fetch(`https://127.0.0.1:${port}${path}`, via)).status).toBe(404);
+        expect((await fetch(`https://127.0.0.1:${httpPort()}${path}`, via)).status).toBe(404);
       }
-      const help = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
+      const help = await fetch(`https://127.0.0.1:${httpPort()}/setup/trust`, via);
       expect(await help.text()).not.toContain('download="waitron-ca.crt"');
     } finally {
       await server.close();
@@ -1490,7 +1505,7 @@ describe("startServer, against a migrated venue directory", () => {
             mode: "demo",
             venue: provisionVenueBody("60000009R"),
           };
-          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+          const response = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/provision`, {
             ...via,
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -1580,7 +1595,7 @@ describe("startServer, against a migrated venue directory", () => {
               certKind: "representante",
             },
           };
-          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+          const response = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/provision`, {
             ...via,
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -1676,7 +1691,7 @@ describe("startServer, against a migrated venue directory", () => {
           const draft = provisionVenueBody("60000013M");
           const owned = await ownedHourSetup(
             (input, init) => fetch(input, { ...init, ...via }),
-            `https://127.0.0.1:${port}`,
+            `https://127.0.0.1:${httpPort()}`,
             draft,
             draft.admin.password,
             undefined,
@@ -1690,7 +1705,7 @@ describe("startServer, against a migrated venue directory", () => {
               certKind: "representante",
             },
           };
-          const tested = await fetch(`https://127.0.0.1:${port}/setup-api/fiscal-test`, {
+          const tested = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/fiscal-test`, {
             ...via,
             method: "POST",
             headers: owned.headers,
@@ -1698,7 +1713,7 @@ describe("startServer, against a migrated venue directory", () => {
           });
           expect(tested.status).toBe(200);
           expect(await tested.json()).toMatchObject({ status: "accepted" });
-          const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
+          const response = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/provision`, {
             ...via,
             method: "POST",
             headers: owned.headers,
@@ -1811,22 +1826,25 @@ describe("startServer, against a migrated venue directory", () => {
         const { via, close } = httpsVia(ca);
         let owner: { state: NonNullable<Answer["state"]>; capability: string } | undefined;
         const send = async (path: string, payload?: unknown) => {
-          const response = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/${path}`, {
-            ...via,
-            method: payload === undefined ? "GET" : "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(owner === undefined
-                ? {}
-                : {
-                    "X-Waitron-Setup-Owner": owner.capability,
-                    "X-Waitron-Setup-Attempt": owner.state.attemptId,
-                    "X-Waitron-Setup-Revision": String(owner.state.revision),
-                    "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
-                  }),
+          const response = await fetch(
+            `https://127.0.0.1:${httpPort()}/setup-api/first-setup/${path}`,
+            {
+              ...via,
+              method: payload === undefined ? "GET" : "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(owner === undefined
+                  ? {}
+                  : {
+                      "X-Waitron-Setup-Owner": owner.capability,
+                      "X-Waitron-Setup-Attempt": owner.state.attemptId,
+                      "X-Waitron-Setup-Revision": String(owner.state.revision),
+                      "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
+                    }),
+              },
+              ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
             },
-            ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-          });
+          );
           const value = (await response.json()) as Answer;
           expect(response.status, JSON.stringify(value)).toBe(200);
           if (value.state)
@@ -1916,29 +1934,29 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
-      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      const staff = await fetch(`http://127.0.0.1:${httpPort()}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
 
       // The enabled fiscal backend's simplified-invoice limit reaches the till's boot read.
-      const till = await fetch(`http://127.0.0.1:${port}/api/till`);
+      const till = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
       expect(till.status).toBe(200);
       expect(await till.json()).toMatchObject({
         simplifiedInvoiceLimit: "3000.00",
         fullInvoices: true,
       });
 
-      const theme = await fetch(`http://127.0.0.1:${port}/api/theme`);
+      const theme = await fetch(`http://127.0.0.1:${httpPort()}/api/theme`);
       expect(theme.status).toBe(200);
       expect(await theme.json()).toMatchObject({ css: "", logo: null });
 
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.
-      const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
+      const status = await fetch(`http://127.0.0.1:${httpPort()}/setup-api/status`);
       expect(status.status).toBe(404);
 
       // The role probe a till reroutes on. `environment` pins that `config.environment`, not the
       // "preproduction" default, reaches the probe.
-      const probe = await fetch(`http://127.0.0.1:${port}/api/node`);
+      const probe = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -1947,7 +1965,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
 
       // The bucket-copy settings are mounted, behind the manager gate.
-      const streamSettings = await fetch(`http://127.0.0.1:${port}/api/backup/stream`);
+      const streamSettings = await fetch(`http://127.0.0.1:${httpPort()}/api/backup/stream`);
       expect(streamSettings.status).toBe(401);
       expect(await streamSettings.json()).toMatchObject({
         error: { code: "management_session.required" },
@@ -1979,7 +1997,7 @@ describe("startServer, against a migrated venue directory", () => {
     let bookingId: string | undefined;
     try {
       const send = async (method: string, path: string, body?: unknown) =>
-        fetch(`http://127.0.0.1:${port}/management-api${path}`, {
+        fetch(`http://127.0.0.1:${httpPort()}/management-api${path}`, {
           method,
           headers: {
             cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
@@ -1998,7 +2016,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(zone.status).toBe(201);
       const zoneId = ((await zone.json()) as { id: string }).id;
-      const { setId } = await liveFixture(port, (db) =>
+      const { setId } = await liveFixture(httpPort(), (db) =>
         defaultLayout(db, { ...loadTillConfig(TILL_ENV), simplifiedInvoiceLimit: null }, zoneId),
       );
       const planPath = `/floor-plan-sets/${setId}/zones/${zoneId}/floor-plan`;
@@ -2022,7 +2040,7 @@ describe("startServer, against a migrated venue directory", () => {
         tables: { liveTableId: string }[];
       };
       const liveTableId = plan.tables[0]!.liveTableId;
-      [{ id: bookingId }] = await liveFixture(port, async (db) =>
+      [{ id: bookingId }] = await liveFixture(httpPort(), async (db) =>
         db
           .insert(bookings)
           .values({
@@ -2073,18 +2091,18 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
-      const disc = await fetch(`http://127.0.0.1:${port}/setup-api/discovery`);
+      const disc = await fetch(`http://127.0.0.1:${httpPort()}/setup-api/discovery`);
       expect(disc.status).toBe(404);
-      expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
-      expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(200);
-      expect((await fetch(`http://127.0.0.1:${port}/help/es/products`)).status).toBe(200);
-      expect((await fetch(`http://127.0.0.1:${port}/help/es/nada`)).status).toBe(404);
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/setup-api/ca.crt`)).status).toBe(404);
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/setup/trust`)).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/help/es/products`)).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/help/es/nada`)).status).toBe(404);
 
-      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      const staff = await fetch(`http://127.0.0.1:${httpPort()}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
 
-      const health = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
+      const health = await fetchHealthOk(`http://127.0.0.1:${httpPort()}/health`);
       expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
     } finally {
       await server.close();
@@ -2112,13 +2130,13 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_DASHBOARD_APP_DIR: dashApp,
     });
     try {
-      const till = await fetch(`http://127.0.0.1:${port}/`);
+      const till = await fetch(`http://127.0.0.1:${httpPort()}/`);
       expect(till.status).toBe(200);
       expect(till.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(till.headers.get("content-type")).toContain("text/html");
       expect(await till.text()).toContain("till-spa-root");
 
-      const dash = await fetch(`http://127.0.0.1:${port}/manage/`);
+      const dash = await fetch(`http://127.0.0.1:${httpPort()}/manage/`);
       expect(dash.status).toBe(200);
       expect(await dash.text()).toContain("dashboard-spa-root");
 
@@ -2126,7 +2144,7 @@ describe("startServer, against a migrated venue directory", () => {
         ["/manage/floor/view/plano", "dashboard-spa-root"],
         ["/tabs/counter/menu/lunch", "till-spa-root"],
       ]) {
-        const page = await fetch(`http://127.0.0.1:${port}${path}`, {
+        const page = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
           headers: { Accept: "text/html" },
         });
         expect(page.status).toBe(200);
@@ -2135,26 +2153,26 @@ describe("startServer, against a migrated venue directory", () => {
 
       // The till's catch-all answers a path outside its navigation with an empty 404, so the body
       // is what shows the guide answered first.
-      const guide = await fetch(`http://127.0.0.1:${port}/help/en/products`, {
+      const guide = await fetch(`http://127.0.0.1:${httpPort()}/help/en/products`, {
         headers: { Accept: "text/html" },
       });
       expect(guide.status).toBe(200);
       expect(await guide.text()).toContain('id="variants"');
-      const noGuide = await fetch(`http://127.0.0.1:${port}/help/en`, {
+      const noGuide = await fetch(`http://127.0.0.1:${httpPort()}/help/en`, {
         headers: { Accept: "text/html" },
       });
       expect(noGuide.status).toBe(404);
       expect(await noGuide.text()).toContain("Page not found");
 
-      const asset = await fetch(`http://127.0.0.1:${port}/manage/assets/d-1.js`);
+      const asset = await fetch(`http://127.0.0.1:${httpPort()}/manage/assets/d-1.js`);
       expect(asset.status).toBe(200);
       expect(asset.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await asset.text()).toContain("dashboard-spa-asset");
 
-      const health = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
+      const health = await fetchHealthOk(`http://127.0.0.1:${httpPort()}/health`);
       expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
 
-      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      const staff = await fetch(`http://127.0.0.1:${httpPort()}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
     } finally {
@@ -2168,7 +2186,7 @@ describe("startServer, against a migrated venue directory", () => {
     // The relay is unreachable, so the real client just backs off; what is asserted is boot's wiring
     // of the call, and that `close()` aborts its signal.
     const port = await freePort();
-    const server = await startServer({
+    const server = await startConfiguredServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
@@ -2211,7 +2229,7 @@ describe("startServer, against a migrated venue directory", () => {
     });
     try {
       // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
-      await awaitListening(port);
+      await awaitListening(httpPort());
       expect(runTunnelClient).not.toHaveBeenCalled();
     } finally {
       await server.close();
@@ -2233,12 +2251,12 @@ describe("startServer, against a migrated venue directory", () => {
     });
     try {
       // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
-      await awaitListening(port);
+      await awaitListening(httpPort());
       expect(disabled.event).toBe("backup.disabled");
     } finally {
       await server.close();
     }
-    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
+    await expect(fetch(`http://127.0.0.1:${httpPort()}/health`)).rejects.toThrow(); // listener gone
   }, 60_000);
 
   it("leaves the live copy off when no bucket is configured, boots unaffected, and stops it on shutdown", async () => {
@@ -2253,7 +2271,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       try {
         await waitForEvent(lines, "stream.not_configured");
-        await awaitListening(port);
+        await awaitListening(httpPort());
       } finally {
         await server.close();
       }
@@ -2293,10 +2311,10 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
       });
       try {
-        await awaitListening(port);
+        await awaitListening(httpPort());
         let stream: { state?: string; reason?: string } = {};
         for (let i = 0; i < POLL_TRIES && stream.reason === undefined; i += 1) {
-          const body = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
+          const body = (await (await fetch(`http://127.0.0.1:${httpPort()}/health`)).json()) as {
             stream: typeof stream;
           };
           stream = body.stream;
@@ -2364,14 +2382,14 @@ describe("startServer, against a migrated venue directory", () => {
     });
 
     try {
-      const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
+      const image = await fetch(`http://127.0.0.1:${httpPort()}/media/${imageName}`);
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toBe("image/webp");
       expect(new Uint8Array(await image.arrayBuffer())).toEqual(prepared.bytes);
 
       // A traversal attempt is refused by the mounted route's own guard.
       const escape = await fetch(
-        `http://127.0.0.1:${port}/media/${encodeURIComponent("../../etc/passwd")}`,
+        `http://127.0.0.1:${httpPort()}/media/${encodeURIComponent("../../etc/passwd")}`,
       );
       expect(escape.status).toBe(404);
 
@@ -2380,12 +2398,12 @@ describe("startServer, against a migrated venue directory", () => {
       // `config.advertisedOrigin` falls back to `WAITRON_MANAGEMENT_ORIGIN` here (KEY_ENV), so that is
       // the venue's own origin for this boot.
       const own = "https://dashboard.example.com";
-      const corsSelf = await fetch(`http://127.0.0.1:${port}/media/${imageName}`, {
+      const corsSelf = await fetch(`http://127.0.0.1:${httpPort()}/media/${imageName}`, {
         headers: { origin: own },
       });
       expect(corsSelf.status).toBe(200);
       expect(corsSelf.headers.get("access-control-allow-origin")).toBe(own);
-      const corsStranger = await fetch(`http://127.0.0.1:${port}/media/${imageName}`, {
+      const corsStranger = await fetch(`http://127.0.0.1:${httpPort()}/media/${imageName}`, {
         headers: { origin: "https://evil.example" },
       });
       expect(corsStranger.headers.get("access-control-allow-origin")).toBeNull();
@@ -2409,7 +2427,7 @@ describe("startServer, against a migrated venue directory", () => {
         let started: StartedServer | undefined;
         try {
           const [server, failure] = await withCapturedStdout(async (lines) => {
-            const s = await startServer({
+            const s = await startConfiguredServer({
               ...KEY_ENV,
               WAITRON_VENUE_DIR: sharedVenueDir,
               WAITRON_HTTP_PORT: String(port),
@@ -2444,7 +2462,7 @@ describe("startServer, against a migrated venue directory", () => {
         let started: StartedServer | undefined;
         try {
           const [server, failure] = await withCapturedStdout(async (lines) => {
-            const s = await startServer({
+            const s = await startConfiguredServer({
               ...KEY_ENV,
               WAITRON_VENUE_DIR: sharedVenueDir,
               WAITRON_HTTP_PORT: String(port),
@@ -2644,7 +2662,7 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_ENV: "preproduction",
         });
         await waitForEvent(lines, "menu_publication.activated");
-        await awaitListening(port);
+        await awaitListening(httpPort());
         return started;
       });
       try {
@@ -2933,7 +2951,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       try {
         expect(lines.some((line) => line.includes('"event":"mdns.responding"'))).toBe(false);
         // Device-2's binding: the override selected the named device, not device-1 or a default.
-        const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
+        const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/me`, {
           headers: { [DEV_DEVICE_HEADER]: deviceId2 },
         });
         expect(res.status).toBe(200);
@@ -2963,7 +2981,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         WAITRON_SKIP_RETRY_MS: "100",
       });
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+        const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
           headers: { [DEV_DEVICE_HEADER]: deviceId1 },
         });
         expect(res.status).toBe(200);
@@ -2993,7 +3011,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       });
       try {
         const deviceMs = Date.now();
-        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+        const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
           headers: { [DEV_DEVICE_HEADER]: deviceId1, [DEVICE_CLOCK_HEADER]: String(deviceMs) },
         });
         expect(res.status).toBe(200);
@@ -3026,7 +3044,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       );
       try {
         const deviceMs = Date.now();
-        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+        const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
           headers: { [DEV_DEVICE_HEADER]: deviceId1, [DEVICE_CLOCK_HEADER]: String(deviceMs) },
         });
         expect(res.status).toBe(200);
@@ -3089,7 +3107,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
           WAITRON_SKIP_RETRY_MS: "100",
         });
         try {
-          const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+          const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
             headers: { [DEV_DEVICE_HEADER]: deviceId1 },
           });
           expect(res.status).toBe(200);
@@ -3135,7 +3153,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/management-api/orders/${randomUUID()}/reprint`,
+        `http://127.0.0.1:${httpPort()}/management-api/orders/${randomUUID()}/reprint`,
         {
           method: "POST",
           headers: {
@@ -3172,7 +3190,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
     try {
       // With `config.devMode` false the header is inert, and with no cookie the read is refused.
-      const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
+      const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/me`, {
         headers: { [DEV_DEVICE_HEADER]: deviceId1 },
       });
       expect(res.status).toBe(401);
@@ -3226,7 +3244,7 @@ describe("startServer — what a trading boot wires behind its management routes
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
     });
-    await awaitListening(port);
+    await awaitListening(httpPort());
   }, 120_000);
 
   afterAll(async () => {
@@ -3237,7 +3255,7 @@ describe("startServer — what a trading boot wires behind its management routes
   });
 
   async function invite(email: string): Promise<unknown> {
-    const [invitee] = await liveFixture(port, async (db) =>
+    const [invitee] = await liveFixture(httpPort(), async (db) =>
       db
         .insert(persons)
         .values({
@@ -3250,7 +3268,7 @@ describe("startServer — what a trading boot wires behind its management routes
         .returning({ id: persons.id }),
     );
     const response = await fetch(
-      `http://127.0.0.1:${port}/management-api/staff/${invitee!.id}/invitation`,
+      `http://127.0.0.1:${httpPort()}/management-api/staff/${invitee!.id}/invitation`,
       { method: "POST", headers: { cookie, origin: ORIGIN } },
     );
     expect(response.status).toBe(200);
@@ -3258,25 +3276,28 @@ describe("startServer — what a trading boot wires behind its management routes
   }
 
   async function changeOwnEmail(email: string): Promise<unknown> {
-    const response = await fetch(`http://127.0.0.1:${port}/management-api/session/me/profile`, {
-      method: "PUT",
-      headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-      body: JSON.stringify({
-        displayName: "Route Admin",
-        firstNames: "Route",
-        lastNames: "Admin",
-        telephone: null,
-        email,
-        locale: "en-GB",
-        currentPassword: ADMIN_PASSWORD,
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${httpPort()}/management-api/session/me/profile`,
+      {
+        method: "PUT",
+        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({
+          displayName: "Route Admin",
+          firstNames: "Route",
+          lastNames: "Admin",
+          telephone: null,
+          email,
+          locale: "en-GB",
+          currentPassword: ADMIN_PASSWORD,
+        }),
+      },
+    );
     expect(response.status).toBe(200);
     return response.json();
   }
 
   it("exposes secret-free SMTP settings through trading boot", async () => {
-    const endpoint = `http://127.0.0.1:${port}/management-api/email/settings`;
+    const endpoint = `http://127.0.0.1:${httpPort()}/management-api/email/settings`;
     const read = await fetch(endpoint, { headers: { cookie } });
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual({ mode: "unconfigured", editable: true, settings: null });
@@ -3309,12 +3330,12 @@ describe("startServer — what a trading boot wires behind its management routes
         },
       });
     } finally {
-      await liveFixture(port, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+      await liveFixture(httpPort(), (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
     }
   });
 
   it("sends account email through the SMTP gateway the vault holds, and sends none while it holds none", async () => {
-    const inbox = await fetch(`http://127.0.0.1:${port}/management-api/email`, {
+    const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
       headers: { cookie },
     });
     expect(inbox.status).toBe(200);
@@ -3326,7 +3347,7 @@ describe("startServer — what a trading boot wires behind its management routes
 
     const smtp = await startFakeSmtp();
     try {
-      await liveFixture(port, (tx) =>
+      await liveFixture(httpPort(), (tx) =>
         putCredential(tx, loadKeyRing(KEY_ENV), {
           purpose: "email.smtp",
           value: {
@@ -3335,7 +3356,7 @@ describe("startServer — what a trading boot wires behind its management routes
           },
         }),
       );
-      const configured = await fetch(`http://127.0.0.1:${port}/management-api/email`, {
+      const configured = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
         headers: { cookie },
       });
       expect(await configured.json()).toEqual({ mode: "smtp", count: 0, messages: [] });
@@ -3354,10 +3375,10 @@ describe("startServer — what a trading boot wires behind its management routes
 
   it("changes the default with a real library image gap and preserves its metadata", async () => {
     const current = (await (
-      await fetch(`http://127.0.0.1:${port}/api/content-languages`)
+      await fetch(`http://127.0.0.1:${httpPort()}/api/content-languages`)
     ).json()) as { defaultLanguage: string; languages: string[] };
     const image = await samplePreparedImage({ width: 9, format: "png" });
-    const saved = await liveFixture(port, (tx) =>
+    const saved = await liveFixture(httpPort(), (tx) =>
       uploadImage(
         tx,
         {
@@ -3369,19 +3390,24 @@ describe("startServer — what a trading boot wires behind its management routes
     );
 
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
-        method: "PUT",
-        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify({ defaultLanguage: "fr", languages: ["fr", "es"] }),
-      });
+      const response = await fetch(
+        `http://127.0.0.1:${httpPort()}/management-api/content-languages`,
+        {
+          method: "PUT",
+          headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+          body: JSON.stringify({ defaultLanguage: "fr", languages: ["fr", "es"] }),
+        },
+      );
 
       expect(response.status).toBe(204);
-      expect(await (await fetch(`http://127.0.0.1:${port}/api/content-languages`)).json()).toEqual({
+      expect(
+        await (await fetch(`http://127.0.0.1:${httpPort()}/api/content-languages`)).json(),
+      ).toEqual({
         defaultLanguage: "fr",
         languages: ["fr", "es"],
       });
       const stored = await fetch(
-        `http://127.0.0.1:${port}/management-api/images/${saved.image.id}`,
+        `http://127.0.0.1:${httpPort()}/management-api/images/${saved.image.id}`,
         {
           headers: { cookie },
         },
@@ -3391,19 +3417,25 @@ describe("startServer — what a trading boot wires behind its management routes
         [current.defaultLanguage]: "Bread",
       });
     } finally {
-      const restored = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
-        method: "PUT",
-        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify(current),
-      });
+      const restored = await fetch(
+        `http://127.0.0.1:${httpPort()}/management-api/content-languages`,
+        {
+          method: "PUT",
+          headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+          body: JSON.stringify(current),
+        },
+      );
       expect(restored.status).toBe(204);
     }
   }, 60_000);
 
   it("answers the content-language rules it worked out from the venue's country at boot", async () => {
-    const response = await fetch(`http://127.0.0.1:${port}/management-api/content-language-rules`, {
-      headers: { cookie },
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${httpPort()}/management-api/content-language-rules`,
+      {
+        headers: { cookie },
+      },
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       required: ["es"],
@@ -3412,7 +3444,7 @@ describe("startServer — what a trading boot wires behind its management routes
   }, 60_000);
 
   it("raises the backup-disabled alert from the backup supervisor's live status", async () => {
-    const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
       headers: { cookie },
     });
     expect(response.status).toBe(200);
@@ -3422,7 +3454,7 @@ describe("startServer — what a trading boot wires behind its management routes
 
   it("raises the Translate all notice for a finished run nobody has opened", async () => {
     const jobId = randomUUID();
-    await liveFixture(port, async (tx) => {
+    await liveFixture(httpPort(), async (tx) => {
       await tx.insert(contentSuggestionJobs).values({
         id: jobId,
         runId: randomUUID(),
@@ -3445,7 +3477,7 @@ describe("startServer — what a trading boot wires behind its management routes
       });
     });
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+      const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
         headers: { cookie },
       });
       expect(response.status).toBe(200);
@@ -3463,7 +3495,7 @@ describe("startServer — what a trading boot wires behind its management routes
         },
       ]);
     } finally {
-      await liveFixture(port, async (tx) => {
+      await liveFixture(httpPort(), async (tx) => {
         await tx.delete(contentSuggestions);
         await tx.delete(contentSuggestionJobs);
       });
@@ -3479,7 +3511,7 @@ describe("startServer — what a trading boot wires behind its management routes
     const started = backupQueue.started;
     backupQueue.gate = gate;
     try {
-      const rotation = fetch(`http://127.0.0.1:${port}/api/backup/rotate`, {
+      const rotation = fetch(`http://127.0.0.1:${httpPort()}/api/backup/rotate`, {
         method: "POST",
         headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
         body: JSON.stringify({ recoveryKey: "k".repeat(MIN_PASSPHRASE_LENGTH) }),
@@ -3488,7 +3520,9 @@ describe("startServer — what a trading boot wires behind its management routes
         timeout: POLL_TRIES * POLL_INTERVAL_MS,
       });
 
-      const kit = fetch(`http://127.0.0.1:${port}/api/backup/stream/kit`, { headers: { cookie } });
+      const kit = fetch(`http://127.0.0.1:${httpPort()}/api/backup/stream/kit`, {
+        headers: { cookie },
+      });
       await vi.waitFor(() => expect(backupQueue.handed).toBe(handed + 2), {
         timeout: POLL_TRIES * POLL_INTERVAL_MS,
       });

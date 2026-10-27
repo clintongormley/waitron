@@ -16,10 +16,18 @@ import {
   paperCustodianFingerprint,
   signPaperBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
@@ -88,8 +96,8 @@ it("the actual trading listener downloads the named node key and signed register
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
       WAITRON_ENV: "dev",
     });
-    await awaitListening(port!);
-    const response = await fetch(`http://127.0.0.1:${port}/api/box/recovery-pack`, {
+    await awaitListening(httpPort());
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/api/box/recovery-pack`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

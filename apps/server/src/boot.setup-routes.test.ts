@@ -34,7 +34,7 @@ import {
 } from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
@@ -75,7 +75,13 @@ import {
 } from "./testing/boot-harness.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort, startConfiguredServer } =
+  ephemeralServerFixture();
 
 // The setup refusal needs a stamp written after boot; its fixture shares the server's write queue.
 vi.mock("./setup-api.js", async (original) => {
@@ -227,7 +233,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
         WAITRON_TUNNEL_TOKEN: "tunnel-secret",
       });
       try {
-        await awaitListening(port);
+        await awaitListening(httpPort());
         expect(await waitForEvent(lines, "tunnel.worker_rejected")).toMatchObject({
           errorCode: "unknown",
           level: "error",
@@ -250,7 +256,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
       hostnames: ["waitron.local", "localhost"],
       now: () => new Date(),
     });
-    const server = await startServer({
+    const server = await startConfiguredServer({
       ...KEY_ENV,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_VENUE_DIR: sharedVenueDir,
@@ -290,11 +296,11 @@ describe("startServer — background listeners and sinks that fail or close", ()
         WAITRON_LOG_DIR: "/dev/null/waitron-logs",
       });
       try {
-        await awaitListening(port);
+        await awaitListening(httpPort());
         expect(await waitForEvent(lines, "log.file_unavailable")).toMatchObject({
           level: "warn",
         });
-        expect((await fetch(`http://127.0.0.1:${port}/api/node`)).status).toBe(200);
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/api/node`)).status).toBe(200);
         expect(
           lines.filter((line) => line.includes('"event":"log.file_unavailable"')),
         ).toHaveLength(1);
@@ -336,7 +342,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
         WAITRON_ENV: "preproduction",
       });
       try {
-        await awaitListening(port);
+        await awaitListening(httpPort());
         mailSettingsRead.delayMs = 50;
         // In-process, so close() starts before the reset's work does.
         const response = await managementMount.app!.request("/management-api/password-reset", {
@@ -455,7 +461,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
                 if (body.mode === "live") {
                   const owned = await ownedHourSetup(
                     (input, options) => fetch(input, { ...options, ...via }),
-                    `https://127.0.0.1:${port}`,
+                    `https://127.0.0.1:${httpPort()}`,
                     body.venue,
                     body.venue.admin.password,
                     body.configurationImport === true
@@ -478,9 +484,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
                   init = { ...init, headers, body: JSON.stringify(publication) };
                 }
               }
-              return fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init });
+              return fetch(`https://127.0.0.1:${httpPort()}${path}`, {
+                ...via,
+                method: "POST",
+                ...init,
+              });
             },
-            get: (path) => fetch(`https://127.0.0.1:${port}${path}`, via),
+            get: (path) => fetch(`https://127.0.0.1:${httpPort()}${path}`, via),
             kills,
             stateDir,
             extraPorts: drawn,
@@ -608,7 +618,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       const { via, close } = httpsVia(await readFile(join(keptStateDir, "tls", "ca.crt")));
       try {
-        const base = `https://127.0.0.1:${port}`;
+        const base = `https://127.0.0.1:${httpPort()}`;
         const deviceCookie = `${DEVICE_COOKIE}=${paired.deviceId}.${paired.token}`;
         const login = await fetch(`${base}/api/session`, {
           ...via,
@@ -704,10 +714,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       const { via, close } = httpsVia(await readFile(join(keptStateDir, "tls", "ca.crt")));
       try {
-        await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+        await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
         // A trading boot does not mount the setup surface: the path falls through to a non-JSON
         // answer rather than setup's status.
-        const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+        const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, via);
         expect(status.headers.get("content-type") ?? "").not.toContain("application/json");
       } finally {
         await close();
@@ -1717,9 +1727,9 @@ describe("startServer — the configuration export route in trading mode", () =>
           WAITRON_ENV: intent === "live" ? "dev" : "preproduction",
           ...(intent === undefined ? {} : { WAITRON_ONBOARDING_INTENT: intent }),
         });
-        await awaitListening(port);
+        await awaitListening(httpPort());
         const response = await fetch(
-          `http://127.0.0.1:${port}/management-api/configuration-export`,
+          `http://127.0.0.1:${httpPort()}/management-api/configuration-export`,
           {
             method: "POST",
             headers: { "content-type": "application/json" },

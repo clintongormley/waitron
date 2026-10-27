@@ -34,7 +34,7 @@ import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { enqueuePrintJob, esc, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { jobOrigin, locationId, seriesId } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { configureDemoPrinter, DEMO_PRINTER_KEY } from "./demo-printer.js";
 import {
   claimInvoiceDelivery,
@@ -49,7 +49,12 @@ import { freePorts } from "./testing/free-ports.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 import { savePrivacyContact } from "@waitron/provisioning";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 vi.mock("./demo-printer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./demo-printer.js")>();
@@ -218,7 +223,7 @@ describe("invoice delivery recovery at trading boot", () => {
     try {
       server = await startServer(ctx.env);
       await vi.waitFor(async () => {
-        const response = await fetch(`http://127.0.0.1:${ctx.env.WAITRON_HTTP_PORT}/health`);
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/health`);
         expect(response.status).toBe(200);
       });
       expect(() => beforeServerStarts()).toThrow(
@@ -275,7 +280,7 @@ describe("invoice delivery recovery at trading boot", () => {
       try {
         server = await startServer(ctx.env);
         await vi.waitFor(async () => {
-          const response = await fetch(`http://127.0.0.1:${ctx.env.WAITRON_HTTP_PORT}/health`);
+          const response = await fetch(`http://127.0.0.1:${httpPort()}/health`);
           expect(response.status).toBe(200);
         });
         expect(await delivery(email.id)).toMatchObject({
@@ -331,7 +336,7 @@ describe("invoice delivery recovery at trading boot", () => {
     try {
       server = await startServer(ctx.env);
       await vi.waitFor(async () => {
-        const response = await fetch(`http://127.0.0.1:${ctx.env.WAITRON_HTTP_PORT}/health`);
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/health`);
         expect(response.status).toBe(503);
       });
       expect(await delivery(ctx.paper.id)).toEqual(before);
@@ -553,6 +558,10 @@ describe("invoice email worker at trading boot", () => {
   it("joins a pending SMTP acceptance and records it before normal close returns", async () => {
     const ctx = await fixture();
     const smtp = await smtpFixture(true);
+    const competitor = createNetServer();
+    competitor.listen(0, "127.0.0.1");
+    await once(competitor, "listening");
+    ctx.env.WAITRON_HTTP_PORT = String((competitor.address() as AddressInfo).port);
     let server: StartedServer | undefined;
     let closing: Promise<void> | undefined;
     try {
@@ -571,10 +580,19 @@ describe("invoice email worker at trading boot", () => {
       expect(await delivery(email.id)).toMatchObject({ status: "sent", reportedOutcome: "sent" });
       expect(smtp.messages).toHaveLength(1);
     } finally {
-      smtp.accept();
-      await closing;
-      await server?.close();
-      await smtp.close();
+      try {
+        smtp.accept();
+        await closing;
+        await server?.close();
+      } finally {
+        try {
+          await smtp.close();
+        } finally {
+          await new Promise<void>((resolve, reject) =>
+            competitor.close((error) => (error ? reject(error) : resolve())),
+          );
+        }
+      }
     }
   });
 
@@ -728,12 +746,10 @@ describe("invoice-choice email context at trading boot", () => {
       try {
         server = await startServer(env);
         await vi.waitFor(async () =>
-          expect((await fetch(`http://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`)).status).toBe(
-            200,
-          ),
+          expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200),
         );
         const response = await fetch(
-          `http://127.0.0.1:${env.WAITRON_HTTP_PORT}/api/working-orders/${order!.id}/invoice-choice`,
+          `http://127.0.0.1:${httpPort()}/api/working-orders/${order!.id}/invoice-choice`,
           {
             method: "PUT",
             headers: {

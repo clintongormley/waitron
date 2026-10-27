@@ -12,8 +12,13 @@ import type { StartedServer } from "./boot.js";
 import * as reminderWorker from "./certificate-reminder-worker.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
 
 vi.mock("./append-only-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./append-only-watch.js")>();
@@ -31,7 +36,7 @@ vi.mock("@waitron/module", async (importOriginal) => {
   };
 });
 
-const { beforeServerStarts, startServer } = serverFixture();
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const gate = () => {
@@ -110,7 +115,7 @@ describe("the certificate reminder loop at boot", () => {
     let server: StartedServer | undefined;
     try {
       server = await startServer(f.env);
-      await awaitListening(f.port);
+      await awaitListening(httpPort());
       expect(spy).not.toHaveBeenCalled();
     } finally {
       await server?.close();
@@ -127,7 +132,7 @@ describe("the certificate reminder loop at boot", () => {
     let completed = false;
     try {
       server = await startServer(f.env);
-      await awaitListening(f.port);
+      await awaitListening(httpPort());
       expect(loop.spy).toHaveBeenCalledOnce();
       expect(loop.spy.mock.calls[0]![0]).toMatchObject({ venueLanguage: "es" });
       closing = server.close().then(() => {

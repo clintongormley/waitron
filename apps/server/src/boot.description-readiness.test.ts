@@ -12,8 +12,16 @@ import { provisionBillVenue } from "./testing/bill-venue.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { writeModuleConfig } from "./module-config.js";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -54,7 +62,7 @@ it("a trading boot without a fiscal description field accepts a department's emp
       WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
       WAITRON_ONBOARDING_INTENT: "demo",
     });
-    const reply = await fetch(`http://127.0.0.1:${port}/api/sales`, {
+    const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/sales`, {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({

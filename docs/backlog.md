@@ -5531,7 +5531,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open).
 
-- **Boot suites that release a port probe before binding still have a race (A80/#740, A907).**
+- **Process-started servers and configured-port boot cases still release probes before binding (A80/#740, A907, A1152).**
   [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
 - **`bundle-smoke` builds only the credentials and server bundles**

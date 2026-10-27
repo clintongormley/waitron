@@ -14,8 +14,16 @@ import { provisionBillVenue } from "./testing/bill-venue.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { writeModuleConfig } from "./module-config.js";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const verifactuDefault = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!
@@ -67,7 +75,7 @@ it.each(["ES-common", "GB-vat"])(
         WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
         WAITRON_ONBOARDING_INTENT: "demo",
       });
-      const response = await fetch(`http://127.0.0.1:${port}/management-api/venue-service`, {
+      const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/venue-service`, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
       });
       expect(response.status).toBe(200);
@@ -81,7 +89,7 @@ it.each(["ES-common", "GB-vat"])(
       ).toEqual([]);
       for (const row of rows) {
         const read = await fetch(
-          `http://127.0.0.1:${port}/management-api/venue-service/departments/${row.id}/receipt`,
+          `http://127.0.0.1:${httpPort()}/management-api/venue-service/departments/${row.id}/receipt`,
           { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
         );
         expect(read.status).toBe(200);

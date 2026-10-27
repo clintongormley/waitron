@@ -297,7 +297,7 @@ later binds. Nor does it know about rows an earlier test left naming a port
 Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
 server is the one caller that recovers from a port taken in that gap, because versitygw exits when
 its port is already bound and so can be started again on another (the stream loop test's section
-below, "The S3 test server knows its own server"). A Waitron server the suites start is not retried:
+below, "The S3 test server knows its own server"). A Waitron server using its configured port is not retried:
 a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
 
 ### Select a boot test's port at the real listener bind when its contract permits it
@@ -317,6 +317,25 @@ src/boot.till-clock.test.ts src/testing/free-ports.test.ts --reporter=dot` passe
 Each real-listener clock case keeps its configured port occupied and requests the actual bound
 port instead. This checks the test harness against the occupied-port condition; it does not
 identify which process took port 37003 in the original CI run or measure the race's frequency.
+
+A1152, 27 October 2026, extends this approach through
+`apps/server/src/testing/ephemeral-server-fixture.ts`. In a test file, mock
+`@hono/node-server` with `ephemeralHttpMock` from `testing/ephemeral-listener.ts`, then use
+`ephemeralServerFixture()` and its `httpPort()` for client destinations. The wrapper waits for
+the actual listener before returning. Hono's options other than the port, its request adapter,
+TLS setup and the listening callback still run. The server-write guard remains the existing
+`serverFixture` guard. `startConfiguredServer` preserves the original configured binding and
+return timing for a case that checks those contracts; it does not wait for the bind.
+
+The pending-SMTP-acceptance case in `boot.invoice-delivery.test.ts` holds a real competing socket
+on the configured port throughout boot. Before the fixture change, the same case failed with
+`EADDRINUSE` and the fatal-exit path. The source failure was main run `40487363595`, server
+shard 6, at port 46869. The controlled reproduction establishes that an occupied configured port
+can cause that failure; it does not identify the competing process in the historical run.
+The in-process boot siblings use this fixture except cases that assert configured-port,
+advertised-origin, tunnel-target, paired landing-listener or exact listener-release contracts.
+The process-started fixtures and unused-peer reservations remain separate work in
+[the CI backlog](../backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
 ### A drawn port can be one an earlier test in the same database already registered
 

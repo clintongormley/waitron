@@ -5,12 +5,20 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { startFreeSpaceWatch } from "./free-space-watch.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import type { Alert } from "@waitron/module";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const GIB = 1024 ** 3;
 
@@ -83,10 +91,10 @@ describe("the running server's free-space watch", () => {
       holder.free = GIB;
       server = await startServer(env, env);
       await vi.waitFor(async () => {
-        expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
       });
       const boxAlerts = async () => {
-        const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
           headers: { cookie: venue.managerCookie },
         });
         expect(response.status).toBe(200);

@@ -11,12 +11,17 @@ import { hashPassword, hashPin, persons, startManagementSession } from "@waitron
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import type { VenueDetailsModel } from "./venue-detail-types.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
@@ -155,14 +160,14 @@ async function startEmailBox(path: EmailPath, invitees: number) {
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     server = await startServer({ ...box.env, WAITRON_VENUE_DIR: dirname(database) }, box.env);
     await vi.waitFor(async () => {
-      expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
     });
   } catch (error) {
     await close();
     throw error;
   }
   const request = (url: string, method = "GET", body?: unknown) =>
-    fetch(`http://127.0.0.1:${port}${url}`, {
+    fetch(`http://127.0.0.1:${httpPort()}${url}`, {
       method,
       headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -333,21 +338,24 @@ describe("a box with no email server", () => {
       const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
       server = await startServer({ ...env, WAITRON_VENUE_DIR: dirname(database) }, env);
       await vi.waitFor(async () => {
-        expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
       });
-      const response = await fetch(`http://127.0.0.1:${port}/management-api/session/me/profile`, {
-        method: "PUT",
-        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify({
-          displayName: "Email Clock Admin",
-          firstNames: "Email",
-          lastNames: "Admin",
-          telephone: null,
-          email: "changed-admin@example.test",
-          locale: "en-GB",
-          currentPassword: PASSWORD,
-        }),
-      });
+      const response = await fetch(
+        `http://127.0.0.1:${httpPort()}/management-api/session/me/profile`,
+        {
+          method: "PUT",
+          headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+          body: JSON.stringify({
+            displayName: "Email Clock Admin",
+            firstNames: "Email",
+            lastNames: "Admin",
+            telephone: null,
+            email: "changed-admin@example.test",
+            locale: "en-GB",
+            currentPassword: PASSWORD,
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ emailVerificationSent: false });
       await vi.waitFor(async () => {

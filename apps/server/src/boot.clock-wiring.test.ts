@@ -13,7 +13,7 @@ import type {
 } from "@waitron/catalogue/src/content-translation-types.js";
 import { AppError } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
@@ -22,7 +22,12 @@ import { withCapturedStdout, waitForEvent } from "./testing/boot-harness.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const clocks = vi.hoisted(() => ({ archive: undefined as BackupSupervisorDeps | undefined }));
 vi.mock("./backup-supervisor.js", async (original) => {
@@ -137,10 +142,10 @@ describe("boot's authority clock wiring", () => {
       };
       server = await startServer(env, env);
       await vi.waitFor(async () => {
-        expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
       });
       const alerts = async () => {
-        const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
           headers: { cookie: venue.managerCookie },
         });
         expect(response.status).toBe(200);
@@ -175,7 +180,7 @@ describe("boot's authority clock wiring", () => {
           cutoverChanges: [],
         });
       const changed = await fetch(
-        `http://127.0.0.1:${port}/management-api/venue-details/business-day-start`,
+        `http://127.0.0.1:${httpPort()}/management-api/venue-details/business-day-start`,
         {
           method: "PUT",
           headers: {
@@ -198,16 +203,19 @@ describe("boot's authority clock wiring", () => {
           cutoverChanges: [{ effectiveBusinessDay: "2026-10-14", dayCutover: "07:00" }],
         });
 
-      const listed = await fetch(`http://127.0.0.1:${port}/management-api/content-suggestions`, {
-        headers: { cookie: venue.managerCookie },
-      });
+      const listed = await fetch(
+        `http://127.0.0.1:${httpPort()}/management-api/content-suggestions`,
+        {
+          headers: { cookie: venue.managerCookie },
+        },
+      );
       expect(listed.status).toBe(200);
       expect(await listed.json()).toMatchObject({
         service: "not_connected",
         cloudOrigin: "https://cloud.example",
         run: null,
       });
-      const translationUrl = `http://127.0.0.1:${port}/management-api/content-translations`;
+      const translationUrl = `http://127.0.0.1:${httpPort()}/management-api/content-translations`;
       const readTranslations = async () => {
         const response = await fetch(
           `${translationUrl}?language=en&target=product:${venue.cafeId}`,

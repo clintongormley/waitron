@@ -20,8 +20,13 @@ import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixture
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { awaitListening } from "./testing/boot-harness.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
 
 const holder = vi.hoisted(() => ({
   supervisorDeps: undefined as BackupSupervisorDeps | undefined,
@@ -53,7 +58,7 @@ const { readDiskUsage } = await import("./disk-usage.js");
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
-const { beforeServerStarts, startServer } = serverFixture();
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 interface Running {
   venue: Venue;
@@ -110,8 +115,8 @@ async function start(
   };
   const server: StartedServer = await startServer(env, env);
   cleanups.push(() => server.close());
-  await awaitListening(port!);
-  const origin = `http://127.0.0.1:${port}`;
+  await awaitListening(httpPort());
+  const origin = `http://127.0.0.1:${httpPort()}`;
   return {
     venue,
     origin,
