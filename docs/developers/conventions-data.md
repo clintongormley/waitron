@@ -4390,6 +4390,8 @@ interface does not provide a reset or erase operation.
 
 ## Root receipt excerpts moved on 2026-10-23
 
+_2026-10-27, A965: receipt resources now include English without changing Spain's offered receipt languages. The English-resource gap below records the earlier tree._
+
 These passages retain the root instruction receipts moved by A1026. They are excerpts
 from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
 
@@ -4481,8 +4483,8 @@ wire-protocol names, translation files (such as a module's `dashboard/strings.ts
 packages written for Spain (`country-es`, `workforce-es`, `reporting`'s modelo 303), which hold
 text official only in Spain, Spanish-specific terms, and Spain-only printed text in Spain's
 official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and
-demo data belongs in its country's pack; a receipt in
-Spain prints in the venue's receipt language, never English.
+demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
+Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
 Starter content (module seeds, core setup) is English in code and translated at setup; its words
 in other languages go in the writing package's `src/starter-content.ts`, which the guard skips by
 exact path (owner, 2026-10-20, A918); a test of a non-English screen reads its expected text from
