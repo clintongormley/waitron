@@ -1121,6 +1121,20 @@ October.
   dates, under Real Decreto-ley 15/2025. It does not mention the announced move to 2028 (not law
   as of 9 October); check the BOE before quoting a date anywhere.
 
+**Where AEAT marks its changes, checked 2026-10-27.**
+
+- The developer FAQ PDF (`FAQs-Desarrolladores.pdf`) opens with "Principales cambios de la
+  versión…", a list of what each version changed. It has not changed: the live file is still
+  version 1.3 of 4 December 2025, byte-identical (SHA-256 `73906dc8…`) to our
+  `docs/compliance/sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf` and to the watch's baseline.
+- The web FAQ pages have no change list. They carry the "Actualizadas a" date, a "Página
+  actualizada" date (21 October 2026 on every page), and a "Novedad" badge on new questions whose
+  tooltip gives the date it was added. Across all 18 pages there is one badge, on the scope page's
+  question about a company in the SII with premises in Ceuta or Melilla, dated **21 July 2026**,
+  so it predates the baseline of 2026-09-26. Removing that question, or just its badge, from
+  today's page (with the old date put back) does not reproduce the old fingerprint, so the
+  October change on that page carries no marker.
+
 **The job.**
 
 1. **Find what changed on the scope page.** Rebuild its old wording from the passages we quoted:
