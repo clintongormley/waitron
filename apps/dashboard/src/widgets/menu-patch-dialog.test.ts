@@ -1250,6 +1250,28 @@ it("drops and counts a change the venue's new content languages refuse, as they 
   );
 });
 
+it("forgets and counts an error in a language the venue switches off", async () => {
+  const document = lunch();
+  const drinks = document.root.members[1] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  drinks.names = { en: "Bar", es: "Bebidas" };
+  delete drinks.fixed;
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Drinks");
+  await type(el, "wt-input", "names-es", "x".repeat(5000));
+  expect(field(el, "wt-input", "names-es").error).not.toBe("");
+  expect(bottomMessage(el)).not.toBe("");
+  expect(el.changes).toEqual([]);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(bottomMessage(el)).toBe("");
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+});
+
 it("shows a refusal for a change the venue's content languages drop while it is being sent", async () => {
   const document = lunch();
   const drinks = document.root.members[1] as Extract<

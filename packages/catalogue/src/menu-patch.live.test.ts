@@ -5,6 +5,7 @@ import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import {
   liveVersions,
+  menuStatus,
   patchLiveMenu,
   previewMenu,
   publishMenu,
@@ -180,6 +181,21 @@ describe("patchLiveMenu", () => {
     const before = await hashOf(f.lunch);
     await patch(v1, await priceChange("5.5"));
     expect(await hashOf(f.lunch)).toBe(before);
+  });
+
+  it("leaves the menu marked changed under the patch's number when nothing else changed", async () => {
+    const statusOf = async () => (await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch);
+    expect(await statusOf()).toMatchObject({ state: "current", version: 1 });
+    const result = await patch(v1, await priceChange("5.5"));
+    const live = (await app((tx) => liveVersions(tx, [f.lunch], "format"))).get(f.lunch)!;
+    expect(await statusOf()).toEqual({
+      state: "changed",
+      clashes: 0,
+      version: result.number,
+      publishedAt: NOW.toISOString(),
+      hash: live.contentHash,
+    });
+    expect(live.contentHash).not.toBe(await hashOf(f.lunch));
   });
 
   it("leaves every other menu's live version untouched", async () => {

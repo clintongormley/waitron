@@ -10041,8 +10041,11 @@ describe("patching the live menu", () => {
     expect(dialog(el).menuId).toBe("menu-lunch");
     expect(dialog(el).menuName).toBe("Lunch Menu");
     expect(dialog(el).api).toBe(client);
-    dialog(el).open = false;
-    dialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    const closed = new Promise<void>((resolve) =>
+      dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    void dialog(el).shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await closed;
     await el.updateComplete;
     expect(dialog(el).open).toBe(false);
     await userEvent.click(patchButton(el)!);
