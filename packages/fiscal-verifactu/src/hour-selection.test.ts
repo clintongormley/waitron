@@ -889,3 +889,96 @@ it.each([
     ).toHaveLength(waits);
   },
 );
+
+function spiedEngine(f: ReturnType<typeof fixture>) {
+  const replaced: unknown[] = [];
+  const engine = f.create((selected, run) =>
+    f.store(selected, (state) =>
+      run({
+        ...state,
+        async replace(value, ...rest) {
+          replaced.push(structuredClone(value));
+          await state.replace(value, ...rest);
+        },
+      }),
+    ),
+  );
+  return { engine, replaced };
+}
+async function setupPickedAt0902() {
+  const f = fixture();
+  f.facts = { ...f.facts, waitKey: "frozen-event" };
+  f.at(at("2026-10-24T09:00:00Z"), 0);
+  await f.run(setup);
+  f.at(at("2026-10-24T09:02:00Z"), 120_000);
+  expect(await f.run(setup)).toMatchObject({ status: "selected", identity: "0D0RY" });
+  expect(f.writes).toHaveLength(2);
+  return f;
+}
+it("a resume under a clock behind its own pick refuses before writing anything", async () => {
+  const f = await setupPickedAt0902();
+  f.facts = { ...f.facts, contextKey: "owner-generation-2" };
+  f.at(at("2026-10-24T08:52:00Z"), 0);
+  const { engine, replaced } = spiedEngine(f);
+  await withOperationAuthority(setup, "administrator", async (authority) => {
+    await expect(
+      engine.resume({ binding: setup, authority, documentBinding: "a".repeat(64), validate() {} }),
+    ).rejects.toMatchObject(refusal("minute_not_later"));
+  });
+  expect(replaced).toEqual([]);
+  expect(f.writes).toHaveLength(2);
+});
+it("a new pick under a clock behind a recorded pick refuses before writing anything", async () => {
+  const f = await setupPickedAt0902();
+  f.at(at("2026-10-24T08:52:00Z"), 0);
+  const { engine, replaced } = spiedEngine(f);
+  const other = event(setup, "other");
+  await withOperationAuthority(other, "administrator", async (authority) => {
+    await expect(
+      engine.select({ binding: other, authority, comparisonId: "comparison" }),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: at("2026-10-24T09:03:00Z") },
+    });
+  });
+  expect(replaced).toEqual([]);
+  expect(f.writes).toHaveLength(2);
+});
+it("control: a new pick a minute after a recorded pick writes one wait the spy sees", async () => {
+  const f = await setupPickedAt0902();
+  f.at(at("2026-10-24T09:03:00Z"), 180_000);
+  const { engine, replaced } = spiedEngine(f);
+  const other = event(setup, "other");
+  await withOperationAuthority(other, "administrator", async (authority) => {
+    expect(
+      await engine.select({ binding: other, authority, comparisonId: "comparison" }),
+    ).toMatchObject({ status: "waiting", targetMs: at("2026-10-24T09:05:00Z") });
+  });
+  expect(replaced).toHaveLength(1);
+  expect((replaced[0] as { entries: { kind: string }[] }).entries.at(-1)).toMatchObject({
+    kind: "wait",
+    binding: other,
+    targetMs: at("2026-10-24T09:05:00Z"),
+  });
+});
+it("control: the same resume with the clock at its pick writes a resumption the spy sees", async () => {
+  const f = await setupPickedAt0902();
+  f.facts = { ...f.facts, contextKey: "owner-generation-2" };
+  f.at(at("2026-10-24T09:02:00Z"), 0);
+  const { engine, replaced } = spiedEngine(f);
+  await withOperationAuthority(setup, "administrator", async (authority) => {
+    expect(
+      await engine.resume({
+        binding: setup,
+        authority,
+        documentBinding: "a".repeat(64),
+        validate() {},
+      }),
+    ).toMatchObject({ status: "selected", identity: "0D0RY" });
+  });
+  expect(replaced).toHaveLength(1);
+  expect((replaced[0] as { entries: { kind: string }[] }).entries.at(-1)).toMatchObject({
+    kind: "resume",
+    contextKey: "owner-generation-2",
+  });
+});
