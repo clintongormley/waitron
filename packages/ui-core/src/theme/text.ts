@@ -60,8 +60,13 @@ export function sameText(a: ThemeText, b: ThemeText): boolean {
 /** The one place a typeface choice becomes a CSS font stack. */
 export function typefaceStack(family: Typeface, defaults: WaitronDefaults): string {
   switch (family) {
-    case "system":
-      return defaults.structure["--wt-font-family"]!;
+    case "system": {
+      const own = defaults.structure["--wt-font-family"];
+      if (own === undefined || own === "") {
+        throw new RangeError("no default typeface: --wt-font-family");
+      }
+      return own;
+    }
     case "serif":
       return 'ui-serif, Georgia, "Times New Roman", serif';
     default: {

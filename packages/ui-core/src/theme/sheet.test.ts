@@ -134,11 +134,21 @@ test("refuses what is not a derived value", () => {
     ["--wt-font-family", "serif; color: red"],
     ["--wt-font-family", "serif}"],
     ["--wt-font-family", "'Comic Sans'"],
+    ["--wt-font-family", '"Comic Sans'],
+    ["--wt-font-family", 'serif "x'],
+    ["--wt-font-family", 'serif, "a"b"'],
+    ["--wt-font-family", ""],
   ] as const)
     expect(withLight({ ...light, [name]: value }), value).toThrow(
       new RangeError(`not a derived value for ${name}`),
     );
   expect(withLight(missingBg)).toThrow(new RangeError("not a derived value for --wt-color-bg"));
+  const missingFamily = Object.fromEntries(
+    Object.entries(light).filter(([name]) => name !== "--wt-font-family"),
+  );
+  expect(withLight(missingFamily)).toThrow(
+    new RangeError("not a derived value for --wt-font-family"),
+  );
   expect(withLight({ ...light, "--wt-color-danger": "#ff0000" })).toThrow(
     new RangeError("not a theme token: --wt-color-danger"),
   );

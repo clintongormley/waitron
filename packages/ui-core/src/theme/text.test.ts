@@ -82,6 +82,22 @@ describe("typefaceStack", () => {
     expect(typefaceStack("serif", defaults)).toBe('ui-serif, Georgia, "Times New Roman", serif');
   });
 
+  it("refuses a missing or empty default typeface", () => {
+    const withoutFamily: Record<string, string> = { ...WAITRON_DEFAULTS.structure };
+    delete withoutFamily["--wt-font-family"];
+    for (const structure of [
+      withoutFamily,
+      { ...WAITRON_DEFAULTS.structure, "--wt-font-family": "" },
+    ]) {
+      expect(() => typefaceStack("system", { ...WAITRON_DEFAULTS, structure })).toThrow(
+        new RangeError("no default typeface: --wt-font-family"),
+      );
+    }
+    expect(typefaceStack("serif", { ...WAITRON_DEFAULTS, structure: withoutFamily })).toBe(
+      'ui-serif, Georgia, "Times New Roman", serif',
+    );
+  });
+
   it("refuses a typeface it does not name", () => {
     expect(() => typefaceStack("cursive" as Typeface, WAITRON_DEFAULTS)).toThrow(
       new RangeError("not a typeface: cursive"),
