@@ -1984,12 +1984,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
   is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
   items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
-  Slice 1 landed in #2128: the mechanism and the reasons. Slice 2, the kitchen station and the
-  device profiles, is on `feat/a918-2-station-and-profiles`. Left, each in [the
+  Slice 1 landed in #2128: the mechanism and the reasons; slice 2 in #2130: the kitchen station and
+  the device profiles. Left, each in [the
   plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 3, venue-service's
   steps, seasons, counter zone and period; slice 4, the catalogue's units and first menu. The owner
   chose the staff language for one-name starter rows (2026-10-27), so neither waits.
-
+  Follow-up from slice 2's review: three server tests still find the default station by the name
+  «Cocina» (`apps/server/src/table-signals.test.ts:89-95`, `watchers.leave.test.ts:28-35`,
+  `kitchen-print.test.ts:1253-1256`); they pass only because their venues have Spanish receipts.
+  Find it by `is_default` instead (`kitchen-print.test.ts` creates its own «Cocina» default, so it
+  needs reading, not a swap).
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
   in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
