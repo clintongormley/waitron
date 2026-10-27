@@ -29,7 +29,7 @@ import { cameraFilming } from "../test/qr-camera.js";
 import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   balanceOf,
-  BARRA,
+  BAR_PRINTER,
   billOf,
   cash,
   dialog,
@@ -39,7 +39,7 @@ import {
   emit,
   equipmentItem,
   equipmentWith,
-  LECTOR_2,
+  SECOND_READER,
   lock,
   money,
   offers,
@@ -108,7 +108,7 @@ function onPhone(overrides: Record<string, unknown> = {}, tillOver: Record<strin
     getDeviceIdentity: vi
       .fn()
       .mockResolvedValue({ deviceId: "d1", name: "Móvil", formFactor: "phone-portrait" }),
-    getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(LECTOR_2)),
+    getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(SECOND_READER)),
     previewBillPayment: vi.fn().mockResolvedValue(wholeCard),
     takeBillPayment: vi
       .fn()
@@ -136,7 +136,7 @@ async function pressPaySheet(el: TillApp, order: Element): Promise<void> {
   await flush(el);
 }
 
-const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+const THIRD_READER = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
 const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
   portable: true,
   provider: "sumup",
@@ -1155,8 +1155,8 @@ describe("till-app: a pick from the sheet", () => {
   function readers(chosen: EquipmentItem): DeviceEquipment {
     return {
       roles: [
-        roleOf("receipt", BARRA, [BARRA]),
-        roleOf("card_terminal", chosen, [LECTOR_2, LECTOR_3, LECTOR_4]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+        roleOf("card_terminal", chosen, [SECOND_READER, THIRD_READER, LECTOR_4]),
       ],
     };
   }
@@ -1168,7 +1168,7 @@ describe("till-app: a pick from the sheet", () => {
       (change: EquipmentChange) =>
         new Promise<DeviceEquipment>((resolve) => {
           const id = typeof change.selection === "object" ? change.selection.id : "";
-          const chosen = [LECTOR_2, LECTOR_3, LECTOR_4].find((each) => each.id === id)!;
+          const chosen = [SECOND_READER, THIRD_READER, LECTOR_4].find((each) => each.id === id)!;
           answers.push(() => resolve(readers(chosen)));
         }),
     );
@@ -1207,7 +1207,10 @@ describe("till-app: a pick from the sheet", () => {
 
   async function phoneSheet(overrides: Record<string, unknown>) {
     const { el } = await mountApp(
-      onPhone({ getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)), ...overrides }),
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(SECOND_READER)),
+        ...overrides,
+      }),
     );
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
@@ -1328,7 +1331,7 @@ describe("till-app: a pick from the sheet", () => {
   it("a pick answered after a read overtook it holds charging until the read after it lands", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const reads: Array<(equipment: DeviceEquipment) => void> = [];
-    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(SECOND_READER));
     const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
     await pickReader(el, "Lector 3");
     getDeviceEquipment.mockImplementation(
@@ -1340,7 +1343,7 @@ describe("till-app: a pick from the sheet", () => {
     await openRow(el);
     expect(reads).toHaveLength(1);
 
-    reads[0]!(readers(LECTOR_2));
+    reads[0]!(readers(SECOND_READER));
     await flush(el);
     answers[0]!();
     await flush(el);
@@ -1348,7 +1351,7 @@ describe("till-app: a pick from the sheet", () => {
     expect(reads).toHaveLength(2);
     expect(continueButton(el).disabled).toBe(true);
     expect(await savingNote(el)).toBe(t("pay_equipment.saving"));
-    reads[1]!(readers(LECTOR_3));
+    reads[1]!(readers(THIRD_READER));
     await flush(el);
 
     expect(continueButton(el).disabled).toBe(false);
@@ -1369,7 +1372,7 @@ describe("till-app: a pick from the sheet", () => {
         }),
     );
     const reads: Array<(equipment: DeviceEquipment) => void> = [];
-    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(SECOND_READER));
     const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
     getDeviceEquipment.mockImplementation(
       () => new Promise<DeviceEquipment>((resolve) => reads.push(resolve)),
@@ -1381,7 +1384,7 @@ describe("till-app: a pick from the sheet", () => {
     expect(reads).toHaveLength(1);
     (await nfcReader()).read(`waitron-equipment:reader:${LECTOR_4.id}`);
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
-    reads[0]!(readers(LECTOR_2));
+    reads[0]!(readers(SECOND_READER));
     await flush(el);
     expect(continueButton(el).disabled).toBe(true);
     changes[1]!.fail({ status: 403, code: "permission.denied" });
@@ -1398,7 +1401,7 @@ describe("till-app: a pick from the sheet", () => {
   it("a read after an overtaken pick that never answers is cut off, and lifts the hold", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const reads: Array<(equipment: DeviceEquipment) => void> = [];
-    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(SECOND_READER));
     const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
     await pickReader(el, "Lector 3");
     getDeviceEquipment.mockImplementation(
@@ -1414,7 +1417,7 @@ describe("till-app: a pick from the sheet", () => {
     await flush(el);
     await pressPaySheet(el, tableOrder(el));
     await openRow(el);
-    reads[0]!(readers(LECTOR_2));
+    reads[0]!(readers(SECOND_READER));
     await flush(el);
 
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -1482,8 +1485,8 @@ describe("till-app: a pick from the sheet that fails", () => {
   function equipmentOf(reader: EquipmentItem): DeviceEquipment {
     return {
       roles: [
-        roleOf("receipt", BARRA, [BARRA, COCINA]),
-        roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3, LECTOR_4]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER, COCINA]),
+        roleOf("card_terminal", reader, [SECOND_READER, THIRD_READER, LECTOR_4]),
       ],
     };
   }
@@ -1519,7 +1522,7 @@ describe("till-app: a pick from the sheet that fails", () => {
   async function phoneSheet(overrides: Record<string, unknown>) {
     const { el } = await mountApp(
       onPhone({
-        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(LECTOR_2)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(SECOND_READER)),
         ...overrides,
       }),
     );
@@ -1572,7 +1575,7 @@ describe("till-app: a pick from the sheet that fails", () => {
       const setDeviceEquipment = vi
         .fn()
         .mockRejectedValueOnce({ code: "reader.payment_in_progress", status: 409 })
-        .mockResolvedValueOnce(equipmentOf(LECTOR_3));
+        .mockResolvedValueOnce(equipmentOf(THIRD_READER));
       const el = await phoneSheet({ setDeviceEquipment });
       await pick(el, "cardReaderId", "Lector 4");
       expect((await field(el, "cardReaderId")).error).toBe(
@@ -1603,7 +1606,7 @@ describe("till-app: a pick from the sheet that fails", () => {
           refuse = () => reject({ code: "reader.payment_in_progress", status: 409 });
         }),
       )
-      .mockResolvedValueOnce(equipmentOf(LECTOR_3));
+      .mockResolvedValueOnce(equipmentOf(THIRD_READER));
     const el = await phoneSheet({ setDeviceEquipment });
     await pick(el, "cardReaderId", "Lector 4");
     (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
@@ -1620,7 +1623,7 @@ describe("till-app: a pick from the sheet that fails", () => {
 
   it("a pick with no answer reads the equipment again, shows what it says, and says it was not saved", async () => {
     const setDeviceEquipment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(SECOND_READER));
     const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
     const readsBefore = getDeviceEquipment.mock.calls.length;
     getDeviceEquipment.mockResolvedValue(equipmentOf(LECTOR_4));
@@ -1651,7 +1654,7 @@ describe("till-app: a pick from the sheet that fails", () => {
     answers[0]!.fail({ code: "device.binding_invalid", status: 400 });
     await flush(el);
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
-    answers[1]!.ok(equipmentOf(LECTOR_2));
+    answers[1]!.ok(equipmentOf(SECOND_READER));
     await flush(el);
 
     const printer = await field(el, "receiptPrinterId");
@@ -1712,7 +1715,9 @@ describe("till-app: a pick from the sheet that fails", () => {
     let answer: () => void = () => {};
     const setDeviceEquipment = vi.fn(
       () =>
-        new Promise<DeviceEquipment>((resolve) => (answer = () => resolve(equipmentOf(LECTOR_3)))),
+        new Promise<DeviceEquipment>(
+          (resolve) => (answer = () => resolve(equipmentOf(THIRD_READER))),
+        ),
     );
     const el = await phoneSheet({ setDeviceEquipment });
     await pick(el, "cardReaderId", "Lector 3");
@@ -1742,8 +1747,8 @@ describe("till-app: a pick from the presented bill's sheet", () => {
   function readers(chosen: EquipmentItem): DeviceEquipment {
     return {
       roles: [
-        roleOf("receipt", BARRA, [BARRA]),
-        roleOf("card_terminal", chosen, [LECTOR_2, LECTOR_3]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+        roleOf("card_terminal", chosen, [SECOND_READER, THIRD_READER]),
       ],
     };
   }
@@ -1787,7 +1792,7 @@ describe("till-app: a pick from the presented bill's sheet", () => {
   async function presentedSheet(setDeviceEquipment: unknown) {
     const { el } = await mountApp(
       onPhone({
-        getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(SECOND_READER)),
         getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
         setDeviceEquipment,
       }),
@@ -1805,7 +1810,8 @@ describe("till-app: a pick from the presented bill's sheet", () => {
   it("a reader pick is saved once, holds Take until answered, and Take then names it", async () => {
     let answer!: () => void;
     const setDeviceEquipment = vi.fn(
-      () => new Promise<DeviceEquipment>((resolve) => (answer = () => resolve(readers(LECTOR_3)))),
+      () =>
+        new Promise<DeviceEquipment>((resolve) => (answer = () => resolve(readers(THIRD_READER)))),
     );
     const { el, order } = await presentedSheet(setDeviceEquipment);
 
@@ -1818,7 +1824,7 @@ describe("till-app: a pick from the presented bill's sheet", () => {
     expect(text(await note(el))).toBe(t("pay_equipment.saving"));
     expect(take(el).disabled).toBe(true);
 
-    vi.mocked(api.getDeviceEquipment).mockResolvedValue(readers(LECTOR_3));
+    vi.mocked(api.getDeviceEquipment).mockResolvedValue(readers(THIRD_READER));
     answer();
     await flush(el);
     expect(await note(el)).toBeNull();
@@ -1855,7 +1861,7 @@ describe("till-app: a pick from the presented bill's sheet", () => {
   });
 
   it("an open bill's sheet opened after a pick from the presented sheet is not held", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_3));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(THIRD_READER));
     const { el, order } = await presentedSheet(setDeviceEquipment);
     await pickReader(el, "Lector 3");
     await closeSheet(el);
@@ -1876,8 +1882,8 @@ describe("till-app: a sticker scanned from the sheet", () => {
   function equipmentOf(reader: EquipmentItem, printer: EquipmentItem): DeviceEquipment {
     return {
       roles: [
-        roleOf("receipt", printer, [BARRA, PORTABLE]),
-        roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3]),
+        roleOf("receipt", printer, [BAR_PRINTER, PORTABLE]),
+        roleOf("card_terminal", reader, [SECOND_READER, THIRD_READER]),
       ],
     };
   }
@@ -1900,7 +1906,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
   ): Promise<{ el: TillApp; before: string }> {
     const { el } = await mountApp(
       onPhone({
-        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(LECTOR_2, BARRA)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(SECOND_READER, BAR_PRINTER)),
         setDeviceEquipment,
       }),
     );
@@ -1915,7 +1921,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
 
   it("a reader's sticker is sent as a scan, and the row then names the reader", async () => {
     film(formatEquipmentCode("reader", READER_ID));
-    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_3, BARRA));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(THIRD_READER, BAR_PRINTER));
     const { el } = await scanFromSheet(setDeviceEquipment);
 
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
@@ -1931,7 +1937,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
 
   it("a reader's sticker's notice shows inside the sheet, not in the toast beneath it", async () => {
     film(formatEquipmentCode("reader", READER_ID));
-    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_3, BARRA));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(THIRD_READER, BAR_PRINTER));
     const { el } = await scanFromSheet(setDeviceEquipment);
 
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
@@ -1950,7 +1956,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
     const setDeviceEquipment = vi.fn(
       () =>
         new Promise<DeviceEquipment>(
-          (resolve) => (answer = () => resolve(equipmentOf(LECTOR_3, BARRA))),
+          (resolve) => (answer = () => resolve(equipmentOf(THIRD_READER, BAR_PRINTER))),
         ),
     );
     const { el } = await scanFromSheet(setDeviceEquipment);
@@ -1966,7 +1972,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
 
   it("a printer's sticker is sent as a printer scan", async () => {
     film(formatEquipmentCode("printer", PRINTER_ID));
-    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_2, PORTABLE));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(SECOND_READER, PORTABLE));
     const { el } = await scanFromSheet(setDeviceEquipment);
 
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
@@ -1981,10 +1987,10 @@ describe("till-app: a sticker scanned from the sheet", () => {
 
   it("a reader's sticker scanned from the presented bill's sheet is sent the same way", async () => {
     film(formatEquipmentCode("reader", READER_ID));
-    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_3, BARRA));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(THIRD_READER, BAR_PRINTER));
     const { el } = await mountApp(
       onPhone({
-        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(LECTOR_2, BARRA)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(SECOND_READER, BAR_PRINTER)),
         getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
         setDeviceEquipment,
       }),
@@ -2031,8 +2037,8 @@ describe("till-app: a sticker's notice inside the sheet", () => {
   function readers(chosen: EquipmentItem): DeviceEquipment {
     return {
       roles: [
-        roleOf("receipt", BARRA, [BARRA]),
-        roleOf("card_terminal", chosen, [LECTOR_2, LECTOR_3]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+        roleOf("card_terminal", chosen, [SECOND_READER, THIRD_READER]),
       ],
     };
   }
@@ -2050,10 +2056,10 @@ describe("till-app: a sticker's notice inside the sheet", () => {
   });
 
   async function phoneSheet(overrides: Record<string, unknown> = {}) {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_3));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(THIRD_READER));
     const { el } = await mountApp(
       onPhone({
-        getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(SECOND_READER)),
         setDeviceEquipment,
         ...overrides,
       }),
@@ -2176,9 +2182,9 @@ describe("till-app: a sticker's notice inside the sheet", () => {
     const PORTABLE = equipmentItem(PRINTER_ID, "Portable printer", { portable: true });
     const slips = (chosen: EquipmentItem | null): DeviceEquipment => ({
       roles: [
-        roleOf("receipt", BARRA, [BARRA]),
-        roleOf("payment_slip", chosen, [BARRA, PORTABLE]),
-        roleOf("card_terminal", LECTOR_2, [LECTOR_2, LECTOR_3]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+        roleOf("payment_slip", chosen, [BAR_PRINTER, PORTABLE]),
+        roleOf("card_terminal", SECOND_READER, [SECOND_READER, THIRD_READER]),
       ],
     });
     const { el } = await phoneSheet({
@@ -2197,10 +2203,10 @@ describe("till-app: a sticker's notice inside the sheet", () => {
   });
 
   it("a notice from before the sheet opened is not shown in it, and the next tap is", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_3));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(THIRD_READER));
     const { el } = await mountApp(
       onPhone({
-        getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(SECOND_READER)),
         setDeviceEquipment,
       }),
     );
@@ -3098,7 +3104,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       await settle(el);
       expect(overrides.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
       await vi.advanceTimersByTimeAsync(10_000);
-      answer(equipmentWith(LECTOR_2));
+      answer(equipmentWith(SECOND_READER));
       await settle(el);
 
       expect(dialog(el)).not.toBeNull();
@@ -3810,11 +3816,17 @@ describe("the paid screen on a handheld", () => {
 
 describe("till-app: a phone's first payment picks up the one free reader (default 18)", () => {
   /** No reader chosen, and `offered` the profile's only reader. */
-  const firstUse = (offered: EquipmentItem = LECTOR_2): DeviceEquipment => ({
-    roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", null, [offered])],
+  const firstUse = (offered: EquipmentItem = SECOND_READER): DeviceEquipment => ({
+    roles: [
+      roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+      roleOf("card_terminal", null, [offered]),
+    ],
   });
   const holding = (reader: EquipmentItem): DeviceEquipment => ({
-    roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", reader, [reader])],
+    roles: [
+      roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+      roleOf("card_terminal", reader, [reader]),
+    ],
   });
   const pickOf = (id: string): EquipmentChange => ({
     role: "card_terminal",
@@ -3830,7 +3842,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
       (change: EquipmentChange) =>
         new Promise<DeviceEquipment>((resolve, reject) => {
           const id = typeof change.selection === "object" ? change.selection.id : "";
-          const reader = [LECTOR_2, LECTOR_3].find((each) => each.id === id)!;
+          const reader = [SECOND_READER, THIRD_READER].find((each) => each.id === id)!;
           answers.push({ ok: () => resolve(holding(reader)), fail: reject });
         }),
     );
@@ -3887,7 +3899,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   ] as const)(
     "on the %s path, picks up the one free reader as the sheet opens and keeps the row closed naming it",
     async (_path, over) => {
-      const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+      const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
       const { el, order } = await firstUsePhone({ ...over, setDeviceEquipment });
       expect(setDeviceEquipment).not.toHaveBeenCalled();
 
@@ -3895,7 +3907,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
       await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
       await flush(el);
 
-      expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(LECTOR_2.id));
+      expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(SECOND_READER.id));
       expect(row(el).open).toBe(false);
       expect(await summary(el)).toContain("Lector 2");
     },
@@ -3949,7 +3961,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await closeSheet(el);
     await pressPaySheet(el, tableOrder(el));
     await flush(el);
-    vi.mocked(api.getDeviceEquipment).mockResolvedValue(holding(LECTOR_2));
+    vi.mocked(api.getDeviceEquipment).mockResolvedValue(holding(SECOND_READER));
     answers[0]!.ok();
     await flush(el);
     await closeSheet(el);
@@ -3984,7 +3996,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   it("a tap arriving before the opening read answers takes the reader, and nothing is picked by itself", async () => {
     installNfc();
     const { setDeviceEquipment, answers } = heldPicks();
-    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse(LECTOR_3));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse(THIRD_READER));
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
     const opening: Array<(equipment: DeviceEquipment) => void> = [];
     getDeviceEquipment.mockImplementation(
@@ -3995,7 +4007,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
 
     (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
-    opening[0]!(firstUse(LECTOR_3));
+    opening[0]!(firstUse(THIRD_READER));
     await flush(el);
     answers[0]!.ok();
     await flush(el);
@@ -4007,7 +4019,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   it("a tap refused before the opening read answers leaves the reader to the waiter", async () => {
     installNfc();
     const { setDeviceEquipment, answers } = heldPicks();
-    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse(LECTOR_3));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse(THIRD_READER));
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
     const opening: Array<(equipment: DeviceEquipment) => void> = [];
     getDeviceEquipment.mockImplementation(
@@ -4019,7 +4031,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
     answers[0]!.fail({ code: "device.equipment_held", status: 409 });
     await flush(el);
-    for (const answer of opening) answer(firstUse(LECTOR_3));
+    for (const answer of opening) answer(firstUse(THIRD_READER));
     await flush(el);
 
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
@@ -4027,10 +4039,10 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("a phone that held Lector 2 earlier in the page and lost it picks nothing by itself", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_3));
-    const getDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(THIRD_READER));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
-    getDeviceEquipment.mockResolvedValue(firstUse(LECTOR_3));
+    getDeviceEquipment.mockResolvedValue(firstUse(THIRD_READER));
 
     await pressPaySheet(el, order);
     await flush(el);
@@ -4041,11 +4053,11 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("a reader the waiter picked earlier in the page counts as having had one", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_3));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(THIRD_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue({
       roles: [
-        roleOf("receipt", BARRA, [BARRA]),
-        roleOf("card_terminal", null, [LECTOR_2, LECTOR_3]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+        roleOf("card_terminal", null, [SECOND_READER, THIRD_READER]),
       ],
     });
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -4061,7 +4073,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
 
-    getDeviceEquipment.mockResolvedValue(firstUse(LECTOR_2));
+    getDeviceEquipment.mockResolvedValue(firstUse(SECOND_READER));
     await closeSheet(el);
     await pressPaySheet(el, tableOrder(el));
     await flush(el);
@@ -4070,7 +4082,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("a practice venue's phone, which charges its demo reader, picks up nothing", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     api = stubApi(
       onPhone(
         { getDeviceEquipment: vi.fn().mockResolvedValue(firstUse()), setDeviceEquipment },
@@ -4090,9 +4102,9 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("a reader another phone holds is never picked up by itself", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const held = {
-      ...LECTOR_2,
+      ...SECOND_READER,
       heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: null },
     };
     const { el, order } = await firstUsePhone({
@@ -4108,7 +4120,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("an opening read that never answers is cut off, and the row opens with nothing picked", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
     getDeviceEquipment.mockImplementation(
@@ -4160,7 +4172,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(row(el).open).toBe(false);
 
     const held = {
-      ...LECTOR_2,
+      ...SECOND_READER,
       heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: null },
     };
     for (const read of reads) read(firstUse(held));
@@ -4171,7 +4183,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("an earlier opening's read failing after the sheet reopened leaves the row to the newer opening", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
     const reads: Array<{ ok: (equipment: DeviceEquipment) => void; fail: (e: unknown) => void }> =
@@ -4201,9 +4213,9 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   });
 
   it("when the equipment held offers no reader but the opening read finds one, the pick is sent and the row stays open", async () => {
-    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue({
-      roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", null, [])],
+      roles: [roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]), roleOf("card_terminal", null, [])],
     });
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
     getDeviceEquipment.mockResolvedValue(firstUse());
@@ -4212,9 +4224,9 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
     await flush(el);
 
-    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(LECTOR_2.id));
+    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(SECOND_READER.id));
     expect(row(el).open).toBe(true);
-    expect((await readerField(el)).value).toBe(LECTOR_2.id);
+    expect((await readerField(el)).value).toBe(SECOND_READER.id);
   });
 
   const lookBackgrounds = new Map<string, string>();
@@ -4232,7 +4244,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
       expect(window.innerWidth).toBe(width);
       const setDeviceEquipment =
         state === "picked"
-          ? vi.fn().mockResolvedValue(holding(LECTOR_2))
+          ? vi.fn().mockResolvedValue(holding(SECOND_READER))
           : vi.fn().mockRejectedValue({ code: "device.equipment_held", status: 409 });
       // A person with no language of their own signs in to the venue's (`resolveActiveLocale`).
       const { el, order } = await firstUsePhone({ setDeviceEquipment }, theme, {
@@ -4275,20 +4287,20 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
 
 describe("till-app: why the sheet's reader has gone (default 19)", () => {
   const withReader = (reader: RoleEquipment): DeviceEquipment => ({
-    roles: [roleOf("receipt", BARRA, [BARRA]), reader],
+    roles: [roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]), reader],
   });
   const holding = (reader: EquipmentItem) =>
-    withReader(roleOf("card_terminal", reader, [reader, LECTOR_3]));
+    withReader(roleOf("card_terminal", reader, [reader, THIRD_READER]));
   const takenByMarc = withReader(
-    roleOf("card_terminal", null, [{ ...LECTOR_2, heldBy: MARC }, LECTOR_3]),
+    roleOf("card_terminal", null, [{ ...SECOND_READER, heldBy: MARC }, THIRD_READER]),
   );
-  const OFF = { ...LECTOR_2, available: false };
-  const switchedOff = withReader(roleOf("card_terminal", OFF, [OFF, LECTOR_3]));
+  const OFF = { ...SECOND_READER, available: false };
+  const switchedOff = withReader(roleOf("card_terminal", OFF, [OFF, THIRD_READER]));
   const unpaired = withReader({
-    ...roleOf("card_terminal", OFF, [OFF, LECTOR_3]),
+    ...roleOf("card_terminal", OFF, [OFF, THIRD_READER]),
     resolved: null,
   });
-  const dropped = withReader(roleOf("card_terminal", null, [LECTOR_3]));
+  const dropped = withReader(roleOf("card_terminal", null, [THIRD_READER]));
 
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
   const row = (el: TillApp) =>
@@ -4318,7 +4330,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     theme?: "light" | "dark",
     tillOver: Record<string, unknown> = {},
   ) {
-    const getDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     api = stubApi(onPhone({ getDeviceEquipment, ...overrides }, tillOver));
     const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
     const order = await openPhoneTable(el);
@@ -4418,13 +4430,13 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     expect(await reason(el)).not.toBeNull();
 
     await closeSheet(el);
-    getDeviceEquipment.mockResolvedValue(holding(LECTOR_3));
+    getDeviceEquipment.mockResolvedValue(holding(THIRD_READER));
     await pressPaySheet(el, order);
     await flush(el);
     expect(await reason(el)).toBeNull();
 
     await closeSheet(el);
-    getDeviceEquipment.mockResolvedValue(withReader(roleOf("card_terminal", null, [LECTOR_3])));
+    getDeviceEquipment.mockResolvedValue(withReader(roleOf("card_terminal", null, [THIRD_READER])));
     await pressPaySheet(el, order);
     await flush(el);
     expect(row(el).open).toBe(true);
@@ -4517,17 +4529,17 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
 
 describe("till-app: a reader refused at Take payment, and a printer that has gone (default 19)", () => {
   const TERRAZA = equipmentItem("p2", "Terraza");
-  const BARRA_OFF = { ...BARRA, available: false };
+  const BARRA_OFF = { ...BAR_PRINTER, available: false };
 
   const holding = (
-    receipt: RoleEquipment = roleOf("receipt", BARRA, [BARRA]),
+    receipt: RoleEquipment = roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
   ): DeviceEquipment => ({
-    roles: [receipt, roleOf("card_terminal", LECTOR_2, [LECTOR_2, LECTOR_3])],
+    roles: [receipt, roleOf("card_terminal", SECOND_READER, [SECOND_READER, THIRD_READER])],
   });
   const takenByMarc: DeviceEquipment = {
     roles: [
-      roleOf("receipt", BARRA, [BARRA]),
-      roleOf("card_terminal", null, [{ ...LECTOR_2, heldBy: MARC }, LECTOR_3]),
+      roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+      roleOf("card_terminal", null, [{ ...SECOND_READER, heldBy: MARC }, THIRD_READER]),
     ],
   };
   const notHeld = () => ({ code: "reader.not_held", status: 409 });
@@ -5309,7 +5321,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       ["the default, switched off", off("default"), switchedOffLine],
       [
         "listed with none set",
-        roleOf("receipt", null, [BARRA, TERRAZA]),
+        roleOf("receipt", null, [BAR_PRINTER, TERRAZA]),
         () => t("pay_equipment.printer_none"),
       ],
     ] as const)(

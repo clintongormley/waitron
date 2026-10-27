@@ -7,7 +7,7 @@ import {
   servedMenus,
   type DraftServer,
 } from "../src/widgets/test-helpers.js";
-import { BARRA, LECTOR_2, roleOf } from "./pay-equipment-fixtures.js";
+import { BAR_PRINTER, SECOND_READER, roleOf } from "./pay-equipment-fixtures.js";
 import type { TillApp } from "../src/till-app.js";
 import { resized } from "../src/screens/till-table-order-screen.test-helpers.js";
 import { currentLocale } from "../src/i18n/t.js";
@@ -34,7 +34,7 @@ import type {
 } from "../src/api/client.js";
 import { deviceZonesFixture } from "./device-zones.js";
 
-export { BARRA, LECTOR_2, equipmentItem, roleOf } from "./pay-equipment-fixtures.js";
+export { BAR_PRINTER, SECOND_READER, equipmentItem, roleOf } from "./pay-equipment-fixtures.js";
 
 /** A fresh draft server for each test, holding the bills the payment suites open. */
 export function resetBillPayDrafts(): void {
@@ -431,8 +431,8 @@ export async function press(el: TillApp, selector: string): Promise<void> {
 export function equipmentWith(reader: EquipmentItem | null): DeviceEquipment {
   return {
     roles: [
-      roleOf("receipt", BARRA, [BARRA]),
-      roleOf("card_terminal", reader, reader === null ? [LECTOR_2] : [reader]),
+      roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
+      roleOf("card_terminal", reader, reader === null ? [SECOND_READER] : [reader]),
     ],
   };
 }

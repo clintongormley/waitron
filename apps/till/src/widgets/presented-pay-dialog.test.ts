@@ -6,8 +6,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./presented-pay-dialog.js";
 import {
-  LECTOR_2,
-  LECTOR_3,
+  SECOND_READER,
+  THIRD_READER,
   twoReaderEquipment as equipmentWith,
 } from "../../test/pay-equipment-fixtures.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./presented-pay-dialog.js";
@@ -23,7 +23,7 @@ async function mount(over: Partial<TillPresentedPayDialog> = {}) {
     takesReaderCard: true,
     takesCash: true,
     takesManualCard: true,
-    equipment: equipmentWith(LECTOR_2),
+    equipment: equipmentWith(SECOND_READER),
     ...over,
   });
   return el;
@@ -158,7 +158,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
   it("charges the reader picked since, and its name follows", async () => {
     const el = await mount();
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
 
     expect(text(charge(el))).toBe(`Cobrar ${money("62.40")} en Lector 3`);
@@ -185,7 +185,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(charge(el).disabled).toBe(true);
     expect(row(el)!.open).toBe(false);
 
-    el.equipment = equipmentWith(LECTOR_2);
+    el.equipment = equipmentWith(SECOND_READER);
     await el.updateComplete;
     expect(charge(el).disabled).toBe(false);
     expect(row(el)!.open).toBe(false);
@@ -197,7 +197,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     await el.updateComplete;
     expect(row(el)!.open).toBe(true);
 
-    el.equipment = equipmentWith(LECTOR_2);
+    el.equipment = equipmentWith(SECOND_READER);
     await el.updateComplete;
     expect(row(el)!.open).toBe(true);
 
@@ -211,7 +211,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
   it("keeps the row closed while the reader is being picked up by itself, then opens it only if none came", async () => {
     const picked = await mount({ equipment: equipmentWith(null), autoPicking: true });
     expect(row(picked)!.open).toBe(false);
-    picked.equipment = equipmentWith(LECTOR_2);
+    picked.equipment = equipmentWith(SECOND_READER);
     picked.autoPicking = false;
     await picked.updateComplete;
     expect(row(picked)!.open).toBe(false);
@@ -230,7 +230,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
 
     el.open = false;
     await el.updateComplete;
-    el.equipment = equipmentWith(LECTOR_2);
+    el.equipment = equipmentWith(SECOND_READER);
     el.open = true;
     await el.updateComplete;
     expect(row(el)!.open).toBe(false);
@@ -846,7 +846,7 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
     expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
     expect(root(el).querySelector("wt-button")).toBeNull();
 
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
     await vi.advanceTimersByTimeAsync(12_000);
     await waiting(el)!.updateComplete;
@@ -871,7 +871,7 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
 
   it("after a decline, retries on the phone's reader now, as Try again on Lector 3", async () => {
     const { el, paid } = await sent();
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     el.busy = false;
     el.refusal = { code: "declined" };
     await el.updateComplete;

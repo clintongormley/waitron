@@ -466,10 +466,9 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
-  naming sites remain in the till's boot and counter-payment suites,
+  naming sites remain in the till's boot, counter-payment and handheld-payment suites,
   the server's till-API and configuration-transfer fixtures, catalogue fixtures,
   and shared station fixtures.
-  Shared equipment fixture exports and their importing suites still need English names.
   String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
   Developer/demo script names remain A975's. Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
