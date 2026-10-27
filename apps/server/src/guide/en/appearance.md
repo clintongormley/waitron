@@ -193,8 +193,8 @@ rather than one that may be the wrong one.
 Below the choices and the preview, the editor has a section headed **Advanced: set colours by
 hand**. It starts closed each time the editor opens, and its closed line says what is set by hand:
 "None set by hand. Waitron works out every colour and text size.", or a count and the colours'
-names, such as "2 set by hand: Page (light), Text (light)". While colours set by hand are hard to
-read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
+names, such as "2 set by hand: Page (light), Text (light)". While colours or text sizes set by hand
+are hard to read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
 heading to open it.
 
 Inside, a row for each of the theme's colours gives its value on light screens and on dark
@@ -246,8 +246,8 @@ Some colours set by hand have no shade that reads well. Their warning ends "Pick
 another colour set by hand is in the way, names it: with Page set to `#777777` and Text to `#888888`
 on light screens, Page's warning ends "while Text is set by hand to #888888".
 
-When two or more of the warnings each offer a fix, a line under the editor counts the colours that
-are hard to read and offers **Fix all**, which takes every fix at once, colours set by hand
+When two or more of the warnings each offer a fix, a line under the editor counts the colours and text
+sizes that are hard to read and offers **Fix all**, which takes every fix at once, colours set by hand
 included.
 
 Waitron never refuses a colour. A warning is advice: you can save the colour you chose and live
@@ -268,7 +268,7 @@ and closes the editor. **Back** leaves you in the editor with nothing saved, ask
 changed anything in the dialog. The rules for a name are under "Name a theme" below.
 
 When something is still hard to read, Save first opens the **Hard to read** dialog, with one line
-for each colour that is. It offers three choices:
+for each colour or text size that is. It offers three choices:
 
 - **Back** returns you to the editor with nothing saved.
 - **Save anyway** saves the colours as you chose them.
@@ -276,8 +276,8 @@ for each colour that is. It offers three choices:
   would leave no warning at all.
 
 Where Save asks for a name, **Save anyway** and **Fix and save** open the name dialog rather than
-saving at once. While its switch is on, the name dialog lists the colours that are still hard to
-read, so you see them before the theme goes on every screen.
+saving at once. While its switch is on, the name dialog lists the colours and text sizes that are
+still hard to read, so you see them before the theme goes on every screen.
 
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
 once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
@@ -287,14 +287,14 @@ a table's order is open on it, and otherwise follows when it next opens one, or 
 Saving a theme that is not in use changes no screen until you put it in use.
 
 If you saved anyway, the Themes card's row for that theme shows a tag such as "2 hard to read", and
-while it is the theme in use the Look card also keeps a warning line for each colour that is still
-hard to read, so the next person who opens the page sees it too.
+while it is the theme in use the Look card also keeps a warning line for each colour or text size that
+is still hard to read, so the next person who opens the page sees it too.
 
 While you edit one of the venue's own themes, the editor also offers **Save as new theme…**. It
 opens the name dialog with the theme's name followed by "(copy)", stores your choices under the name
 you give, leaves the theme you were editing as it was last saved, and closes the editor. Its **Use
-it on every screen now** switch starts on when the theme you are editing is in use. When a colour is
-still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
+it on every screen now** switch starts on when the theme you are editing is in use. When a colour or
+text size is still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
 tells you under the field when a colour code you typed is not valid, and saves nothing until you fix
 it.
 
@@ -305,7 +305,7 @@ The **Themes** card lists every theme the venue has, Waitron's first. Each row s
 the page colour of the light version and of the dark version. When the card is narrow, as on a
 phone or beside the side menu on a small screen, it leaves the colours out, and on a phone the
 status tags sit after the theme's name instead of in a column of their own. The status tags say
-which theme is **In use** and how many of a theme's colours are hard to read, such as "2 hard to
+which theme is **In use** and how many of a theme's colours and text sizes are hard to read, such as "2 hard to
 read". Waitron's theme carries the tag **built in**.
 
 A **Manager** or an **Admin** sees **Add theme** on the card, which opens the editor on Waitron's
@@ -339,7 +339,7 @@ renaming a theme changes no screen's look.
 ## Put a theme in use {#switch}
 
 **Use on every screen** asks first, with a question such as "Use Terrace on every screen?" When
-the theme has colours that are hard to read, the question lists them under "Hard to read:".
+the theme has colours or text sizes that are hard to read, the question lists them under "Hard to read:".
 **Use it** puts the theme in use, and **Back** changes nothing.
 
 Once a theme is in use, the dashboard you are using changes to it at once and other dashboards

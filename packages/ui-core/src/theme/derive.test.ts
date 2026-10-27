@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import { contrastRatio } from "./colour.js";
 import { MODES, type Mode } from "./defaults.js";
 import {
+  canFixAll,
   deriveThemeFrom,
+  fixAll,
   normaliseChoices,
   WAITRON_CHOICES,
   type DerivedTheme,
@@ -50,6 +52,7 @@ describe("Waitron's look", () => {
       handSet: { light: {}, dark: {} },
       logo: null,
       textScale: 100,
+      text: {},
     });
   });
 
@@ -162,6 +165,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       "--wt-font-size-md": "14px",
       "--wt-font-size-lg": "18px",
       "--wt-font-size-xl": "22px",
+      "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
+      "--wt-font-weight-normal": "400",
+      "--wt-font-weight-medium": "500",
+      "--wt-font-weight-bold": "600",
     });
     expect(theme.dark).toEqual({
       [P("bg")]: "#0b110d",
@@ -193,6 +200,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       "--wt-font-size-md": "14px",
       "--wt-font-size-lg": "18px",
       "--wt-font-size-xl": "22px",
+      "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
+      "--wt-font-weight-normal": "400",
+      "--wt-font-weight-medium": "500",
+      "--wt-font-weight-bold": "600",
     });
   });
 
@@ -220,6 +231,45 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
     const again = deriveTheme(LEMON);
     expect(again.light["--wt-font-size-md"]).toBe("14px");
     expect(again.dark["--wt-font-size-md"]).toBe("14px");
+  });
+
+  test("a text set by hand moves only its own tokens", () => {
+    const plain = deriveTheme({ ...DARK_GREEN, textScale: 130 });
+    const hand = deriveTheme({
+      ...DARK_GREEN,
+      textScale: 130,
+      text: { family: "serif", size: { sm: 9 }, weight: { bold: 800 } },
+    });
+    for (const mode of MODES) {
+      expect(plain[mode]["--wt-font-size-sm"]).toBe("16px");
+      expect(hand[mode]).toEqual({
+        ...plain[mode],
+        "--wt-font-size-sm": "12px",
+        "--wt-font-family": 'ui-serif, Georgia, "Times New Roman", serif',
+        "--wt-font-weight-bold": "800",
+      });
+      expect(THEME_TOKENS.filter((token) => hand[mode][token] !== plain[mode][token])).toEqual([
+        "--wt-font-size-sm",
+        "--wt-font-family",
+        "--wt-font-weight-bold",
+      ]);
+    }
+    expect(hand.warnings).toEqual(plain.warnings);
+    expect(hand.tintStrength).toEqual(plain.tintStrength);
+  });
+
+  test("a remembered settle does not carry another text choice", () => {
+    const hand = deriveTheme({
+      ...LEMON,
+      text: { family: "serif", size: { sm: 9 }, weight: { bold: 800 } },
+    });
+    expect(hand.light["--wt-font-weight-bold"]).toBe("800");
+    const again = deriveTheme(LEMON);
+    for (const mode of MODES) {
+      expect(again[mode]["--wt-font-family"]).toBe(WAITRON_DEFAULTS.structure["--wt-font-family"]);
+      expect(again[mode]["--wt-font-weight-bold"]).toBe("600");
+      expect(again[mode]["--wt-font-size-sm"]).toBe("12px");
+    }
   });
 
   test("an uppercase brand colour gives the same theme as the lowercase one", () => {
@@ -256,6 +306,42 @@ describe("the lemon brand (#f2d300), Neutral", () => {
     expect(fixed.dark[P("primary")]).toBe("#f2d300");
     expectFullList(picked);
     expectFullList(fixed);
+  });
+});
+
+describe("text warnings", () => {
+  const SMALL: ThemeChoices = { ...LEMON, text: { size: { sm: 10, md: 9 } } };
+
+  test("a text warning follows the colour warnings", () => {
+    const { warnings } = deriveTheme(SMALL);
+    expect(warnings.map((warning) => [warning.field, warning.mode, warning.fix])).toEqual([
+      ["brandColor", "light", expect.any(String)],
+      ["text.size.sm", null, 12],
+      ["text.size.md", null, 12],
+    ]);
+    expect(warnings[1]).toEqual({
+      field: "text.size.sm",
+      mode: null,
+      against: [],
+      fix: 12,
+      blockedBy: [],
+    });
+  });
+
+  test("Fix all takes the text fixes too", () => {
+    const fixed = fixAll(WAITRON_DEFAULTS, SMALL);
+    expect(fixed.brandFix.light).toBe(true);
+    expect(fixed.text.size).toEqual({ sm: 12, md: 12 });
+    expect(deriveTheme(fixed).warnings).toEqual([]);
+    expect(canFixAll(WAITRON_DEFAULTS, SMALL)).toBe(true);
+  });
+
+  test("Fix all leaves a text size that does not warn as it was", () => {
+    const fixed = fixAll(WAITRON_DEFAULTS, {
+      ...WAITRON_CHOICES,
+      text: { size: { sm: 10, lg: 30 } },
+    });
+    expect(fixed.text.size).toEqual({ sm: 12, lg: 30 });
   });
 });
 

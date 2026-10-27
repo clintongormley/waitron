@@ -35,6 +35,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const derived = deriveTheme(LUCIA);
 const lucia: ThemeView = {

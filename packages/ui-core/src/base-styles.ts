@@ -14,6 +14,11 @@ export const baseStyles = css`
     color: var(--wt-color-text);
   }
 
+  /* :where() keeps this at no specificity, so a component's own weight wins whatever its order. */
+  :where(strong, b, h1, h2, h3, h4, h5, h6, th) {
+    font-weight: var(--wt-font-weight-bold);
+  }
+
   :host([hidden]) {
     display: none;
   }

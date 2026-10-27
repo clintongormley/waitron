@@ -4,6 +4,7 @@ import {
   THEME_COLOURS,
   THEME_FONT_SIZES,
   THEME_RADII,
+  THEME_TEXT_TOKENS,
   THEME_TOKENS,
   type TextScale,
   colourToken,
@@ -35,6 +36,7 @@ describe("the token list a theme writes", () => {
     }
     for (const radius of THEME_RADII) expect(WAITRON_DEFAULTS.structure).toHaveProperty([radius]);
     for (const size of THEME_FONT_SIZES) expect(WAITRON_DEFAULTS.structure).toHaveProperty([size]);
+    for (const name of THEME_TEXT_TOKENS) expect(WAITRON_DEFAULTS.structure).toHaveProperty([name]);
   });
 
   test("the scrim and every meaning colour stay outside", () => {
@@ -53,6 +55,10 @@ describe("the token list a theme writes", () => {
       "--wt-font-size-md",
       "--wt-font-size-lg",
       "--wt-font-size-xl",
+      "--wt-font-family",
+      "--wt-font-weight-normal",
+      "--wt-font-weight-medium",
+      "--wt-font-weight-bold",
     ]);
   });
 
@@ -78,7 +84,7 @@ describe("the token list a theme writes", () => {
     expect(theme.dark).not.toHaveProperty(["--wt-color-logo-plate"]);
   });
 
-  test("the list is the colour tokens in order, then the three radii, then the four sizes", () => {
+  test("the list is the colour tokens in order, then the three radii, then the four sizes, then the typeface and three weights", () => {
     expect(colourToken("bg")).toBe("--wt-color-bg");
     expect(THEME_FONT_SIZES).toEqual([
       "--wt-font-size-sm",
@@ -90,9 +96,31 @@ describe("the token list a theme writes", () => {
       ...THEME_COLOURS.map(colourToken),
       ...THEME_RADII,
       ...THEME_FONT_SIZES,
+      ...THEME_TEXT_TOKENS,
+    ]);
+    expect(THEME_TEXT_TOKENS).toEqual([
+      "--wt-font-family",
+      "--wt-font-weight-normal",
+      "--wt-font-weight-medium",
+      "--wt-font-weight-bold",
     ]);
     expect(THEME_COLOURS[0]).toBe("bg");
     expect(THEME_COLOURS[21]).toBe("stepper-button");
+  });
+
+  // Weaker than its name: it reads packages/ui-core/src only, as text, so a copy in apps/ or
+  // another package passes.
+  test("only text.ts names the serif stack (weaker than its name: ui-core's own source only)", () => {
+    const sources = import.meta.glob<string>("../**/*.ts", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    });
+    const naming = Object.entries(sources)
+      .filter(([path, text]) => !path.endsWith(".test.ts") && text.includes("ui-serif"))
+      .map(([path]) => path);
+    expect(Object.keys(sources)).toContain("./tokens.ts");
+    expect(naming).toEqual(["./text.ts"]);
   });
 
   test("the brand family", () => {

@@ -3,6 +3,7 @@ import { applyTokens } from "@waitron/ui";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import {
   FIXTURE_LIGHT_BG,
+  SERIF_BOLD_SHEET,
   TEXT_130_SHEET,
   WAITRON_LIGHT_BG,
 } from "@waitron/ui/test/venue-theme-fixture.js";
@@ -111,6 +112,30 @@ it("the sheet carries Waitron's type and the page's colours under a theme at 130
     source.remove();
     document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
       (sheet) => sheet !== TEXT_130_SHEET,
+    );
+  }
+});
+
+it("the sheet keeps Waitron's typefaces under a theme in Serif", () => {
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, SERIF_BOLD_SHEET];
+  const source = document.createElement("div");
+  document.body.append(source);
+  applyTokens(source);
+  source.setAttribute("data-theme", "light");
+  try {
+    expect(getComputedStyle(source).getPropertyValue("--wt-font-family")).toMatch(/^ui-serif/);
+    const page = new DOMParser().parseFromString(renderNodeRecoveryPack(pack, source), "text/html");
+    const root = page.documentElement.style;
+    expect(root.getPropertyValue("--wt-font-family")).toBe(
+      WAITRON_DEFAULTS.structure["--wt-font-family"],
+    );
+    expect(root.getPropertyValue("--wt-font-family-mono")).toBe(
+      WAITRON_DEFAULTS.structure["--wt-font-family-mono"],
+    );
+  } finally {
+    source.remove();
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+      (sheet) => sheet !== SERIF_BOLD_SHEET,
     );
   }
 });

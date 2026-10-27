@@ -281,6 +281,21 @@ describe("setup-app", () => {
     }
   });
 
+  it("draws text on the page itself at the theme's Normal weight", () => {
+    const style = document.createElement("style");
+    style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+    document.head.append(style);
+    applyTokens(document.documentElement);
+    document.documentElement.style.setProperty("--wt-font-weight-normal", "800");
+    try {
+      expect(getComputedStyle(document.body).fontWeight).toBe("800");
+    } finally {
+      style.remove();
+      document.documentElement.style.removeProperty("--wt-font-weight-normal");
+      document.documentElement.removeAttribute("data-wt-theme-root");
+    }
+  });
+
   it("draws its text at the 14px body size", async () => {
     const el = await mountSetupApp();
     expect(getComputedStyle(wizard(el)).fontSize).toBe("14px");

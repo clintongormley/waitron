@@ -25,3 +25,14 @@ export const bg = (): string =>
 /** Waitron's look at 130% text; a test that adopts it on `document` removes it afterwards. */
 export const TEXT_130_SHEET: CSSStyleSheet = new CSSStyleSheet();
 TEXT_130_SHEET.replaceSync(themeSheet(deriveTheme({ ...WAITRON_CHOICES, textScale: 130 })));
+
+/** Waitron's look in Serif with Medium and Bold at 800; a test that adopts it removes it afterwards. */
+export const SERIF_BOLD_SHEET: CSSStyleSheet = new CSSStyleSheet();
+SERIF_BOLD_SHEET.replaceSync(
+  themeSheet(
+    deriveTheme({
+      ...WAITRON_CHOICES,
+      text: { family: "serif", weight: { medium: 800, bold: 800 } },
+    }),
+  ),
+);

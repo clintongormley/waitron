@@ -17,7 +17,7 @@ import {
   settleKey,
   settleMode,
 } from "./derive.js";
-import type { ThemeChoices, ThemeWarning } from "./theme.js";
+import type { ColourWarning, ThemeChoices } from "./theme.js";
 import { THEME_COLOUR_TOKENS, type ThemeColour, colourKey, handTokens } from "./tokens.js";
 
 const names = (failures: readonly RuleResult[], token: string) =>
@@ -177,9 +177,9 @@ export function warningsFor(
   choices: ThemeChoices,
   mode: Mode,
   settled: ModeResult,
-): ThemeWarning[] {
+): ColourWarning[] {
   const hand = handTokens(choices.handSet[mode]);
-  const warnings: ThemeWarning[] = [];
+  const warnings: ColourWarning[] = [];
   const brandFails = brandFailures(choices, hand, settled);
   if (brandFails.length > 0) {
     warnings.push({

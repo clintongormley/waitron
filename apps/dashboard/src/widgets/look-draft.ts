@@ -9,6 +9,7 @@ import {
   type ThemeColour,
   type ThemeLogo,
   type TextScale,
+  sameText,
 } from "@waitron/ui-core/theme";
 
 export type HandField = `handSet.${Mode}.${ThemeColour}`;
@@ -70,6 +71,7 @@ export function sameDraft(a: LookDraft, b: LookDraft): boolean {
     x.background === y.background &&
     x.corners === y.corners &&
     x.textScale === y.textScale &&
+    sameText(x.text, y.text) &&
     MODES.every(
       (mode) =>
         Boolean(x.brandFix[mode]) === Boolean(y.brandFix[mode]) &&

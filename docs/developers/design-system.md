@@ -88,9 +88,10 @@ light. Both are pinned in `packages/ui-core/src/tokens/colors.test.ts`. The dash
 inside its own (`applyTokens(document.documentElement)`, `apps/dashboard/src/main.ts:26`): the
 Appearance page's preview makes each of its two panels one inside its shadow root, with
 `data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the equipment
-label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:43-45`). The label and the
-recovery sheet take their type from Waitron's own token file (`WAITRON_DEFAULTS.structure`), never
-from the page, so a venue's text size does not reach paper.
+label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:43-45`). The label takes
+its typeface, sizes and Bold weight, and the recovery sheet its typeface and sizes, from Waitron's
+own token file (`WAITRON_DEFAULTS.structure`), never from the page; the sheet sets no weight, so it
+draws the browser's own. A venue's text size, typeface and weights therefore do not reach paper.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
@@ -111,8 +112,8 @@ even when data-theme is set` for the regression test.
 ## Retheming a deployment
 
 A venue changes its look on Settings → Appearance, which stores a theme and writes the 22 colours,
-three radii and four text sizes of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the
-venue's choices, warning about hard-to-read colours rather than refusing them. The override
+three radii, four text sizes, the typeface and three weights of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the
+venue's choices, warning about hard-to-read colours and text sizes drawn under 12 px rather than refusing them. The override
 described below is for a deployment's own stylesheet. A venue theme's sheet, built from worked-out
 values only, outranks the token layer the same way.
 
@@ -593,16 +594,29 @@ The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in e
 system font (A179, 2026-10-01 — before it the scale was 13, 15, 19 and 24px). A venue's theme
 can scale all four together, from 100% to 130% in 5% steps, rounded to whole pixels (`fontSizes`,
 `packages/ui-core/src/theme/tokens.ts`); spacing, the tap minimum and every other token stay as
-they are. The only font file any app bundles is Google Sans Medium, which the dashboard uses on its
+they are. A theme can also set the typeface — the device's own or a serif, named in `TYPEFACES`
+and turned into CSS only by `typefaceStack` (`packages/ui-core/src/theme/text.ts`) — any of the
+four sizes as the size at 100%, which Text size then scales, and the three weights from 400 to
+800. The code typeface (`--wt-font-family-mono`) and Google's button type never change. The only font file any app bundles is Google Sans Medium, which the dashboard uses on its
 Google sign-in button alone (A228; see the login section). Body text is `--wt-font-size-md`:
 `baseStyles` sets it on the host of each component that includes it, the dashboard, setup and till
 shells among them, and each of those apps'
-`index.html` sets it on `<body>` for anything drawn outside the app's own element. A size in `rem`
+`index.html` sets it on `<body>` for anything drawn outside the app's own element. That `<body>`
+also sets the Normal weight (`--wt-font-weight-normal`), which a component's text inherits unless
+it sets a weight of its own, and so does each panel of the Look card's preview for its draft. The
+weight is set there and not on each component's host, so a component drawn inside bold text stays
+bold. `baseStyles` also gives `strong`, `b`,
+`h1`–`h6` and `th` the Bold weight (`--wt-font-weight-bold`, 600) wherever a component sets none of
+its own, so a theme's Bold reaches them; components that include `baseStyles` no longer use the browser's own bold,
+700 (pages built without `baseStyles` still do: the custodian's offline page, the printed recovery sheet and the server's own pages, such as the help guide). A size in `rem`
 does not follow the scale — it is relative to the browser's 16px root, which none of the three
 changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts`,
 `packages/ui-core/src/components/wt-card.test.ts` and
 `packages/ui-core/src/components/wt-input.test.ts`, and by two cases each in the dashboard, setup
-and till app suites: one for the app's own text, one for text on the page outside it.
+and till app suites: one for the app's own text, one for text on the page outside it. The Normal
+weight is pinned on `<body>` by a case in each of those three app suites, on the preview's panels
+by `apps/dashboard/src/widgets/theme-preview.test.ts`, and a component inside bold text staying
+bold by `packages/ui-core/src/base-styles.test.ts`.
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 `--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by

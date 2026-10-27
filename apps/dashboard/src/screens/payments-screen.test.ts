@@ -265,6 +265,14 @@ describe("payments-screen", () => {
     expect(q(el, "[data-test=provider-state-zeta]")?.textContent).toContain("Not connected");
   });
 
+  it("a provider's name draws the Bold weight", async () => {
+    const { el, host } = await mount();
+    host.style.setProperty("--wt-font-weight-bold", "800");
+    const name = q(el, "[data-test=provider-acme] .provider-name")!;
+    expect(name.textContent).toContain("Acme Pay");
+    expect(getComputedStyle(name).fontWeight).toBe("800");
+  });
+
   it("shows a not-connected provider's connect form from the registry, matched by providerId", async () => {
     const { el } = await mount();
 

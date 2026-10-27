@@ -13,7 +13,7 @@ import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
   dialogClosed,
@@ -48,6 +48,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const xmas = theme("t-xmas", "Christmas", {
@@ -403,6 +404,27 @@ describe("dashboard-themes-card actions", () => {
     expect(codeMessage("theme.not_found")).toBe("This theme no longer exists.");
     expect(save(dialog).disabled).toBe(false);
     expect(changes).toEqual([]);
+  });
+
+  it("a theme with a text warning counts it and the switch dialog lists it", async () => {
+    setLocale("en-GB");
+    const small = theme("t-small", "Small text", {
+      ...WAITRON_CHOICES,
+      text: { size: { sm: 10 } },
+    });
+    const { el } = await mount({ themes: [lucia, small], inUse: "t-lucia" });
+    const tag = table(el).shadowRoot!.querySelector(
+      'tr[data-row-key="t-small"] [data-test=tag-hard-to-read]',
+    );
+    expect(tag?.textContent?.replace(/\s+/g, " ").trim()).toBe("1 hard to read");
+    await choose(el, "t-small", "use");
+    const dialog = await switchDialog(el);
+    expect([...dialog.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      fill("appearance.text_too_small", { name: "Small text", size: "10" }),
+    ]);
+    const closed = dialogClosed(dialog);
+    await userEvent.click(switchButton(dialog, "back"));
+    await closed;
   });
 
   it("Use on every screen asks once, then switches", async () => {

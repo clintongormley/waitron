@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import {
   THEME_COLOURS,
   WAITRON_CHOICES,
+  type ColourWarning,
   type ThemeChoices,
   type ThemeColour,
 } from "@waitron/ui-core/theme";
@@ -23,6 +24,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const CREAM = setHand(openDraft(LUCIA), "light", "bg", "#f8f1e1");
 
@@ -393,7 +395,9 @@ const innerLabel = (button: HTMLElementTagNameMap["wt-button"]) =>
   button.shadowRoot!.querySelector("button")!.getAttribute("aria-label");
 const linesOf = (draft: LookDraft, field: string) =>
   handWarningLines(
-    deriveTheme(draft.choices).warnings.find((warning) => warning.field === field)!,
+    deriveTheme(draft.choices).warnings.find(
+      (warning): warning is ColourWarning => warning.field === field,
+    )!,
     draft.choices,
   );
 

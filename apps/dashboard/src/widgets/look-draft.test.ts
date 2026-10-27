@@ -32,6 +32,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: { bg: "#f8f1e1" }, dark: {} },
   textScale: 100,
+  text: {},
 };
 
 describe("the Look card's draft", () => {
@@ -164,6 +165,7 @@ describe("the Look card's draft", () => {
       brandFix: { dark: true, light: true },
       brandColor: "#1e5b3a",
       textScale: 100,
+      text: {},
     });
     expect(sameDraft(a, b)).toBe(true);
     expect(sameDraft(b, a)).toBe(true);
@@ -351,5 +353,16 @@ describe("the Look card draft's text size", () => {
     const back = setTextScale(larger, 100);
     expect(sameDraft(back, waitronLook())).toBe(true);
     expect(isWaitronLook(back)).toBe(true);
+  });
+
+  it("a draft whose text differs is not the opened one", () => {
+    const small = openDraft({ ...WAITRON_CHOICES, text: { size: { sm: 10 } } });
+    expect(sameDraft(small, waitronLook())).toBe(false);
+    expect(isWaitronLook(small)).toBe(false);
+    const same = openDraft({ ...WAITRON_CHOICES, text: { size: { sm: 10 } } });
+    expect(sameDraft(small, same)).toBe(true);
+    expect(sameDraft(openDraft({ ...WAITRON_CHOICES, text: { size: {} } }), waitronLook())).toBe(
+      true,
+    );
   });
 });

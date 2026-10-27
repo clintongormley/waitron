@@ -32,6 +32,7 @@ const LEMON: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a", background: "tinted" };
@@ -619,6 +620,36 @@ describe("a theme logo's printed dots", () => {
       { id, name: `Old ${id}`, choices, updatedAt: "2026-10-01T00:00:00.000Z" },
     ]);
     expect(await inTx(readThemeInUse)).toEqual({ id, choices });
+  });
+
+  it("a stored document without text reads as nothing set by hand", async () => {
+    await setup();
+    const { text: _, ...noText } = LEMON;
+    void _;
+    const id = await insertRaw(JSON.stringify(noText), 1);
+    expect((await inTx(listCustomThemes)).themes[0]!.choices).toEqual({ ...LEMON, text: {} });
+    expect(await inTx(readThemeInUse)).toEqual({ id, choices: { ...LEMON, text: {} } });
+  });
+
+  it("a stored document with a 12.5 px size reads as unreadable", async () => {
+    await setup();
+    const id = await insertRaw(JSON.stringify({ ...LEMON, text: { size: { sm: 12.5 } } }));
+    expect((await inTx(listCustomThemes)).themes).toEqual([
+      { id, name: `Old ${id}`, choices: null, updatedAt: "2026-10-01T00:00:00.000Z" },
+    ]);
+  });
+
+  it("a document holding text is stored and read back", async () => {
+    const { manager } = await setup();
+    const a = await create(manager, "A");
+    const choices: ThemeChoices = {
+      ...LEMON,
+      text: { family: "serif", size: { sm: 10 }, weight: { bold: 800 } },
+    };
+    const saved = await saveWithDots(manager, a.id, choices);
+    expect(saved.choices).toEqual(choices);
+    expect((await inTx(listCustomThemes)).themes[0]!.choices).toEqual(choices);
+    expect(await storedTheme(a.id)).toEqual(choices);
   });
 
   it("a stored document with textScale 112 reads as unreadable", async () => {

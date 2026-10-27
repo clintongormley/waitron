@@ -126,7 +126,29 @@ test("refuses what is not a derived value", () => {
     expect(withLight({ ...light, "--wt-font-size-md": size }), size).toThrow(
       new RangeError("not a derived value for --wt-font-size-md"),
     );
+  for (const [name, value] of [
+    ["--wt-font-weight-bold", "650"],
+    ["--wt-font-weight-bold", "bold"],
+    ["--wt-font-weight-bold", "600px"],
+    ["--wt-font-weight-bold", "x600"],
+    ["--wt-font-family", "serif; color: red"],
+    ["--wt-font-family", "serif}"],
+    ["--wt-font-family", "'Comic Sans'"],
+    ["--wt-font-family", '"Comic Sans'],
+    ["--wt-font-family", 'serif "x'],
+    ["--wt-font-family", 'serif, "a"b"'],
+    ["--wt-font-family", ""],
+  ] as const)
+    expect(withLight({ ...light, [name]: value }), value).toThrow(
+      new RangeError(`not a derived value for ${name}`),
+    );
   expect(withLight(missingBg)).toThrow(new RangeError("not a derived value for --wt-color-bg"));
+  const missingFamily = Object.fromEntries(
+    Object.entries(light).filter(([name]) => name !== "--wt-font-family"),
+  );
+  expect(withLight(missingFamily)).toThrow(
+    new RangeError("not a derived value for --wt-font-family"),
+  );
   expect(withLight({ ...light, "--wt-color-danger": "#ff0000" })).toThrow(
     new RangeError("not a theme token: --wt-color-danger"),
   );
@@ -145,4 +167,25 @@ test("a theme at 130% draws 18px body text", () => {
   probe.textContent = "Text";
   root.append(probe);
   expect(getComputedStyle(probe).fontSize).toBe("18px");
+});
+
+test("a theme in Serif with Bold 800 paints them", () => {
+  adopted = new CSSStyleSheet();
+  adopted.replaceSync(
+    themeSheet(
+      deriveTheme({
+        ...WAITRON_CHOICES,
+        text: { family: "serif", weight: { medium: 800, bold: 800 } },
+      }),
+    ),
+  );
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, adopted];
+  const root = mount("light");
+  const family = document.createElement("span");
+  family.style.fontFamily = "var(--wt-font-family)";
+  const weight = document.createElement("span");
+  weight.style.fontWeight = "var(--wt-font-weight-bold)";
+  root.append(family, weight);
+  expect(getComputedStyle(family).fontFamily).toMatch(/^ui-serif/);
+  expect(getComputedStyle(weight).fontWeight).toBe("800");
 });

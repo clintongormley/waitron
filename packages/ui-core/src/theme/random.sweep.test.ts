@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { THEME_RULES, checkRules } from "./contrast-rules.js";
 import { MODES, type Mode } from "./defaults.js";
 import { type Background, WAITRON_CHOICES, type ThemeChoices, type ThemeWarning } from "./theme.js";
+import { isTextWarning } from "./text.js";
 import { colourToken, THEME_COLOURS, type ThemeColour } from "./tokens.js";
 import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
 
@@ -120,7 +121,8 @@ function holds(choices: ThemeChoices, label: string) {
     expect(stray, `${label} ${mode}`).toEqual([]);
   }
   for (const warning of theme.warnings) {
-    if (warning.fix === null) continue;
+    // The sweep sets no text, so it meets colour warnings only.
+    if (warning.fix === null || isTextWarning(warning)) continue;
     const where = `${label} ${warning.field}`;
     if (warning.field === "brandColor") {
       const flagged = deriveTheme({

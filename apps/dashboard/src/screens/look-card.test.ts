@@ -60,6 +60,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const DARK_OWN = theme("t-lucia", "Bar Lucía", {
@@ -547,6 +548,7 @@ describe("editing the Look card in place", () => {
       logo: null,
       handSet: { light: {}, dark: {} },
       textScale: 100,
+      text: {},
     });
     expect(q(el, "[data-test=saved-theme]")).not.toBeNull();
     expect(heard).toHaveBeenCalledTimes(1);
@@ -663,6 +665,24 @@ describe("editing the Look card in place", () => {
     expect(row(el, "brand")).toBe("Custom · #1e5b3a · dark screens #437e5b");
     expect(row(el, "background")).toBe("Tinted");
     expect(row(el, "corners")).toBe("Round");
+  });
+
+  it("Use Waitron's look is offered on a theme holding text set by hand, and makes Save actionable", async () => {
+    setLocale("en-GB");
+    const stored = theme("t-small", "Small text", {
+      ...WAITRON_CHOICES,
+      text: { size: { sm: 10 } },
+    });
+    const { el, saveTheme } = await mountEditing(inUse(stored));
+    expect(button(el, "save").disabled).toBe(true);
+    expect(button(el, "use-waitron").disabled).toBe(false);
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    expect(button(el, "save").disabled).toBe(false);
+    expect(button(el, "save").variant).toBe("primary");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1].text).toEqual({});
   });
 
   it("lays the editor out by the card's own width, so a 700px card squashes no preview panel", async () => {
@@ -1433,6 +1453,89 @@ describe("saving a draft that is hard to read", () => {
     expect(hardToRead(el).open).toBe(true);
     expect(dialogOf(el).open).toBe(true);
     expect(saveTheme).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("text sizes that are hard to read", () => {
+  const SMALL: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { sm: 10, md: 9 } } };
+  const small = theme("t-small", "Small text", SMALL);
+  const LINES = [
+    "Small text: 10 px is smaller than 12 px; text that small is often hard to read.",
+    "Normal text: 9 px is smaller than 12 px; text that small is often hard to read.",
+  ];
+
+  async function smallSave() {
+    const opened = await mountEditing(inUse(small));
+    await chooseSegment(opened.el, "background", "Tinted");
+    await userEvent.click(button(opened.el, "save"));
+    await opened.el.updateComplete;
+    await expect.poll(() => dialogOf(opened.el).open).toBe(true);
+    return opened;
+  }
+
+  it("a text-only fix makes Save actionable", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(small));
+    expect(text(q(el, "[data-test=fix-all-line]"))).toBe("2 text sizes are hard to read.");
+    expect(button(el, "save").disabled).toBe(true);
+    await userEvent.click(button(el, "fix-all"));
+    await el.updateComplete;
+    expect(button(el, "save").disabled).toBe(false);
+    expect(button(el, "save").variant).toBe("primary");
+    await userEvent.click(button(el, "save"));
+    // A Hard to read dialog would hold the request until one of its buttons was pressed.
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1].text).toEqual({ size: { sm: 12, md: 12 } });
+  });
+
+  it("Save opens Hard to read for a text warning alone", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await smallSave();
+    expect(dialogLines(el)).toEqual(LINES);
+    expect(dialogButton(el, "fix-and-save")).not.toBeNull();
+    const closed = dialogClosed(dialogOf(el));
+    await userEvent.click(dialogButton(el, "back")!);
+    await closed;
+    await el.updateComplete;
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(editing(el)).toBe(true);
+  });
+
+  it("Save anyway sends the small sizes", async () => {
+    const { el, saveTheme } = await smallSave();
+    await userEvent.click(dialogButton(el, "save-anyway")!);
+    await expect.poll(() => editing(el)).toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme.mock.calls[0]![1].text).toEqual({ size: { sm: 10, md: 9 } });
+  });
+
+  it("Fix and save sends the fixed sizes", async () => {
+    const { el, saveTheme } = await smallSave();
+    await userEvent.click(dialogButton(el, "fix-and-save")!);
+    await expect.poll(() => editing(el)).toBe(false);
+    expect(saveTheme).toHaveBeenCalledTimes(1);
+    expect(saveTheme.mock.calls[0]![1].text).toEqual({ size: { sm: 12, md: 12 } });
+  });
+
+  it("the saved card words a text warning saved anyway", async () => {
+    setLocale("en-GB");
+    const view = theme("t-small", "Small text", { ...WAITRON_CHOICES, text: { size: { sm: 10 } } });
+    const el = await mount(inUse(view));
+    const lines = [...el.shadowRoot!.querySelectorAll("[data-test=saved-warning]")];
+    expect(lines.map((line) => text(line))).toEqual([LINES[0]]);
+  });
+
+  it("a colour and a size together show the mixed Fix all line", async () => {
+    setLocale("en-GB");
+    const view = theme("t-lemon", "Lemon", {
+      ...WAITRON_CHOICES,
+      brandColor: "#f2d300",
+      text: { size: { sm: 10 } },
+    });
+    const { el } = await mountEditing(inUse(view));
+    expect(text(q(el, "[data-test=fix-all-line]"))).toBe(
+      "1 colour and 1 text size are hard to read.",
+    );
   });
 });
 

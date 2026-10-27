@@ -33,6 +33,7 @@ const LUCIA_DARK_FIX: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
 const LEMON_LIGHT_FIX: ThemeChoices = { ...LEMON, brandFix: { light: true } };
@@ -417,6 +418,21 @@ it("each panel draws its text at the theme's sizes", async () => {
       ]).toEqual([textScale, mode, md, sm, "12px"]);
     }
     cleanupWidgets();
+  }
+});
+
+it("each panel draws its ordinary text at the draft's Normal weight", async () => {
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme({ ...LUCIA_DARK_FIX, text: { weight: { normal: 800 } } }),
+    name: "Bar Lucía",
+  });
+  for (const mode of ["light", "dark"] as const) {
+    const box = panel(el, mode);
+    expect([
+      mode,
+      getComputedStyle(box.querySelector(".field-value")!).fontWeight,
+      getComputedStyle(box.querySelector(".nav-item:not(.selected)")!).fontWeight,
+    ]).toEqual([mode, "800", "800"]);
   }
 });
 

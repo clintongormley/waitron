@@ -213,7 +213,7 @@ export class PaymentsScreen extends LitElement {
         flex-wrap: wrap;
       }
       .provider-name {
-        font-weight: 600;
+        font-weight: var(--wt-font-weight-bold);
       }
       .badge {
         border: 1px solid var(--wt-color-border);

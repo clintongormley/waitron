@@ -979,7 +979,7 @@ rounded the way the screens draw, so Waitron's own sizes never get the note: at 
 16, 18, 23 and 29 px, exactly the limits, while the unrounded 15.6, 18.2, 23.4 and 28.6 would flag
 the small and largest sizes. **Every check re-runs at the draft's current step**, so a size fixed
 at one step can warn again at another: a Small text fixed to 9 at 130% draws 9 px at 100% and 10 or
-11 px between, and its row warns again there, offering 12, 11 or 10. Worked example at 130%: Largest text set by hand to 25
+11 px between, and its row warns again there, offering 12, 11 or 10. (2026-10-27, slice 11 plan P3: a Small text of 9 draws 9 px at 105% too, 9 × 1.05 = 9.45; the offers 12, 11 and 10 hold.) Worked example at 130%: Largest text set by hand to 25
 draws 32.5, rounded to 33 px, above 29; the fix offers 22 (22 × 1.3 = 28.6, drawn 29), since 23
 would draw 29.9, rounded to 30. Small text set by hand to 8 draws 10.4, rounded to 10 px, under 12;
 the fix offers 9 (11.7, drawn 12). The note is not a readability warning: it does not count as hard
@@ -1033,7 +1033,7 @@ All my call; the plan pins the exact numbers.
   with white text and link text `#67a0fd`, where Waitron's own dark set has `#4c8dff`, `#06101f` and
   `#78a9ff` (`colors.css:136-139`).
 - It always writes **the same list of tokens** — the 22 colours Advanced offers (section 5), the
-  three corner radii and, from slice 10, the four text sizes — filling Waitron's own value where a knob sits at its default and nothing is
+  three corner radii and, from slice 10, the four text sizes, and from slice 11 the typeface and three weights — filling Waitron's own value where a knob sits at its default and nothing is
   set by hand, so every theme has the same shape and the list doubles as the allowlist (section 14).
   Every colour the knobs work out is among the 22, so the list covers both.
 - It works in OKLCH, a colour model where "lightness" matches what the eye sees, so it can move a
@@ -1993,7 +1993,7 @@ configuration import is the second way to write the theme table (`configuration-
 and `validateCoreConfiguration` checks no theme row today (`configuration-transfer.ts:5-24`): the
 build adds the same validity check there, and an imported look that is hard to read shows its
 warnings on the card like any other. The stylesheet is built only from the derived values —
-`#rrggbb` colours and pixel radii the function itself writes, and the owner's values only after they
+`#rrggbb` colours, pixel radii and sizes, weights in hundreds and a typeface list the function itself writes, each checked against its shape by `themeSheet`, and the owner's values only after they
 pass the same `#rrggbb` check — never from an unchecked stored string, so nothing stored can break
 out of a declaration.
 
@@ -2615,7 +2615,7 @@ prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after
     `apps/till/src/widgets/basket.ts:293`, the till's bill, and
     `apps/dashboard/src/screens/payments-screen.ts:215`), so a hand-set Bold weight reaches them;
     and a rule in the shared base styles, `strong, b, h1, h2, h3, h4, h5, h6, th { font-weight:
-    var(--wt-font-weight-bold) }`, with a browser case, because neither base style sets those today
+    var(--wt-font-weight-bold) }` (wrapped in `:where()`, section 16), with a browser case, because neither base style sets those today
     (the round-7 reviewer read `packages/ui-core/src/base-styles.ts` and `packages/ui/src/base-styles.ts`)
     and the browser's own bold does not read the token: rendered in Chromium 156.0.8078.4
     (`/tmp/a841t-r7/bold.mjs`) with the Bold weight set to 800, `<strong>`, `<h1>` and `<th>`
@@ -2744,6 +2744,30 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **No text-size line in the switch or delete dialog** (owner, 2026-10-25): switching or deleting
   a theme says nothing about the tills' text size. Not taken: "Text on the tills changes size too."
   in the switch dialog, which slice 10a showed and slice 9b removed.
+- **Slice 11 in two pull requests** (lane A ruling 2026-10-27, slice 11 plan D1): 11a stores,
+  checks, derives and serves text set by hand, words its warnings wherever a warning is worded, and
+  makes every bold read the Bold weight; 11b adds the Text rows to Advanced. Not taken: one pull
+  request of fifteen tasks.
+- **"The device's own" typeface is read from Waitron's token file** (lane A ruling 2026-10-27,
+  slice 11 plan D4): `typefaceStack(family, defaults)` answers `defaults.structure["--wt-font-family"]`
+  for it. Not taken: a literal copy of that font list in `text.ts`.
+- **The Bold rule is wrapped in `:where()` and applied as written** (lane A ruling 2026-10-27,
+  slice 11 plan D10): `:where(strong, b, h1, h2, h3, h4, h5, h6, th)` reads the Bold weight, so a
+  component's own weight always wins; Waitron's own headings, bold text and table headers that set
+  no weight of their own move from the browser's 700 to Bold's 600, on the dashboard, the tills and
+  setup. The owner is asked through a "to confirm" backlog entry, not blocking. Not taken: a heading
+  weight held at 700, which no hand-set Bold would reach.
+- **Sizes are set with a stepper, "px" beside it** (lane A ruling 2026-10-27, slice 11 plan D12):
+  `wt-number-stepper` from 8 to 40, the house's whole-number field. Not taken: the plain box with
+  "px" inside that pictures 28-30 draw.
+- **One sentence for a text warning, in every place** (lane A ruling 2026-10-27, slice 11 plan D9):
+  under the row, in the Save and switch dialogs and on the saved card, "{name}: {size} px is smaller
+  than 12 px; text that small is often hard to read."
+- **Fix all and Fix and save take text fixes too** (lane A ruling 2026-10-27, slice 11 plan D8):
+  Fix all sets each warned size to its fix after the colour rounds, Fix and save is offered only
+  when no warning of either kind would be left, and the Fix all line counts colours and text sizes.
+- **No Undo line under a text fix** (lane A ruling 2026-10-27, slice 11 plan D14): the stepper shows
+  the new number in place and Cancel undoes it; the "fixed from · Undo" line stays for colours.
 
 ## 17. Risks
 

@@ -216,7 +216,7 @@ Debajo de las elecciones y de la vista previa, el editor tiene una sección titu
 fijar colores a mano**. Empieza cerrada cada vez que se abre el editor, y su línea cerrada dice qué
 está fijado a mano: «Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.»,
 o un recuento y los nombres de los colores, por ejemplo «2 fijados a mano: Página (versión clara),
-Texto (versión clara)». Mientras haya colores fijados a mano que se leen mal, la línea añade
+Texto (versión clara)». Mientras haya colores o tamaños de texto fijados a mano que se leen mal, la línea añade
 cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». Pulsa el título para
 abrirla.
 
@@ -272,7 +272,7 @@ otro color.» o, si otro color fijado a mano lo impide, lo nombra: con Página e
 fijado a mano en #888888».
 
 Cuando dos o más avisos ofrecen cada uno una corrección, una línea debajo del editor cuenta los
-colores que se leen mal y ofrece **Corregir todos**, que aplica todas las correcciones a la vez,
+colores y tamaños de texto que se leen mal y ofrece **Corregir todos**, que aplica todas las correcciones a la vez,
 también las de los colores fijados a mano.
 
 Waitron nunca rechaza un color. Un aviso es un consejo: puedes guardar el color que elegiste y
@@ -294,7 +294,7 @@ sin guardar nada, y antes te lo pregunta si cambiaste algo en el diálogo. Las r
 «Pon nombre a un tema», más abajo.
 
 Si algo sigue leyéndose mal, Guardar abre primero el diálogo **Difícil de leer**, con una línea por
-cada color afectado. Ofrece tres opciones:
+cada color o tamaño de texto afectado. Ofrece tres opciones:
 
 - **Volver** te devuelve al editor sin guardar nada.
 - **Guardar de todos modos** guarda los colores tal como los elegiste.
@@ -303,7 +303,7 @@ cada color afectado. Ofrece tres opciones:
 
 Cuando Guardar pide un nombre, **Guardar de todos modos** y **Corregir y guardar** abren el diálogo
 del nombre en lugar de guardar al momento. Mientras su interruptor está activado, el diálogo del
-nombre muestra los colores que siguen leyéndose mal, para que los veas antes de que el tema llegue
+nombre muestra los colores y tamaños de texto que siguen leyéndose mal, para que los veas antes de que el tema llegue
 a todas las pantallas.
 
 Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
@@ -316,13 +316,13 @@ Guardar un tema que no está en uso no cambia ninguna pantalla hasta que lo pone
 
 Si guardaste de todos modos, la fila de ese tema en la tarjeta Temas muestra una etiqueta como «2 se
 leen mal» y, mientras sea el tema en uso, la tarjeta Aspecto conserva además una línea de aviso por
-cada color que sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
+cada color o tamaño de texto que sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
 
 Mientras editas uno de los temas propios del local, el editor ofrece también **Guardar como tema
 nuevo…**. Abre el diálogo del nombre con el nombre del tema seguido de «(copia)», guarda tus
 elecciones con el nombre que le des, deja el tema que estabas editando tal como se guardó por última
 vez y cierra el editor. Su interruptor **Usarlo ya en todas las pantallas** empieza activado cuando
-el tema que editas está en uso. Si algún color sigue leyéndose mal, primero aparece el diálogo
+el tema que editas está en uso. Si algún color o tamaño de texto sigue leyéndose mal, primero aparece el diálogo
 **Difícil de leer**, igual que con Guardar. Como Guardar, te indica debajo del campo si un código de
 color que escribiste no es válido, y no guarda nada hasta que lo corriges.
 
@@ -333,8 +333,8 @@ La tarjeta **Temas** muestra todos los temas del local, primero el de Waitron. C
 marca y después el color de la página de la versión clara y de la versión oscura. Cuando la tarjeta
 es estrecha, como en un teléfono o junto al menú lateral en una pantalla pequeña, no muestra los
 colores, y en un teléfono las etiquetas de estado van tras el nombre del tema en lugar de en una
-columna propia. Las etiquetas de estado dicen qué tema está **En uso** y cuántos de los colores de
-un tema se leen mal, por ejemplo «2 se leen mal». El tema de Waitron lleva la etiqueta
+columna propia. Las etiquetas de estado dicen qué tema está **En uso** y cuántos de los colores y tamaños
+de texto de un tema se leen mal, por ejemplo «2 se leen mal». El tema de Waitron lleva la etiqueta
 **integrado**.
 
 Un **Encargado** o un **Administrador** ve **Añadir tema** en la tarjeta, que abre el editor con las
@@ -370,7 +370,7 @@ aspecto de ninguna pantalla.
 ## Pon un tema en uso {#switch}
 
 **Usar en todas las pantallas** pregunta antes, con una pregunta como «¿Usar Terraza en todas las
-pantallas?». Si el tema tiene colores que se leen mal, la pregunta los muestra bajo «Se leen mal:».
+pantallas?». Si el tema tiene colores o tamaños de texto que se leen mal, la pregunta los muestra bajo «Se leen mal:».
 **Usarlo** pone el tema en uso, y **Volver** no cambia nada.
 
 Cuando un tema pasa a estar en uso, el panel que estás usando cambia a él al momento y los demás

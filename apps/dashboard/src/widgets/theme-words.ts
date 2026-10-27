@@ -1,5 +1,6 @@
 import {
   type AgainstItem,
+  type ColourWarning,
   type DerivedTheme,
   MODES,
   type Mode,
@@ -9,10 +10,16 @@ import {
   type ThemeChoices,
   type ThemeColour,
   type TextScale,
+  type TextSizeKey,
+  type TextWarning,
+  type TextWeightKey,
   type ThemeWarning,
   colourKey,
+  drawnTextSize,
   groupAgainst,
+  isTextWarning,
 } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { currentContentLanguages } from "@waitron/ui";
 import { catalogues, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -43,11 +50,30 @@ export function brandFixedText(mode: Mode, colour: string): string {
   return fill(`appearance.brand_fixed_${mode}`, { colour });
 }
 
-export function fixAllText(count: number): string {
-  return fill("appearance.fix_all_count", { n: String(count) });
+export function fixAllText(colours: number, sizes = 0): string {
+  if (sizes === 0) return fill("appearance.fix_all_count", { n: String(colours) });
+  if (colours === 0) return fill("appearance.fix_all_text_count", { n: String(sizes) });
+  return fill("appearance.fix_all_mixed", {
+    colours: countOf("appearance.colour_count", colours),
+    sizes: countOf("appearance.text_size_count", sizes),
+  });
 }
 
-function handSetColour(warning: ThemeWarning): ThemeColour {
+export function textRowName(
+  field: "family" | `size.${TextSizeKey}` | `weight.${TextWeightKey}`,
+): string {
+  return t(`appearance.text.${field}`);
+}
+
+export function textWarningLine(warning: TextWarning, choices: ThemeChoices): string {
+  const key = warning.field.split(".")[2] as TextSizeKey;
+  return fill("appearance.text_too_small", {
+    name: textRowName(`size.${key}`),
+    size: String(drawnTextSize(choices, key, WAITRON_DEFAULTS)),
+  });
+}
+
+function handSetColour(warning: ColourWarning): ThemeColour {
   return warning.field.split(".")[2] as ThemeColour;
 }
 
@@ -102,7 +128,7 @@ export function againstNames(keys: readonly string[]): string {
 }
 
 /** "on": the warned colour is drawn on the key; "under": the key is drawn on it. */
-function sides(warning: ThemeWarning): { on: string[]; under: string[] } {
+function sides(warning: ColourWarning): { on: string[]; under: string[] } {
   const colour = handSetColour(warning);
   const on: string[] = [];
   const under: string[] = [];
@@ -115,7 +141,7 @@ function sides(warning: ThemeWarning): { on: string[]; under: string[] } {
   return { on, under };
 }
 
-function blockerText(warning: ThemeWarning, choices: ThemeChoices): string {
+function blockerText(warning: ColourWarning, choices: ThemeChoices): string {
   // `blockedBy` names only colours set by hand in the warning's mode.
   const handSet = choices.handSet[warning.mode] as Readonly<Record<string, string>>;
   return warning.blockedBy
@@ -128,7 +154,7 @@ function blockerText(warning: ThemeWarning, choices: ThemeChoices): string {
     .join(` ${t("appearance.and")} `);
 }
 
-export function handWarningLines(warning: ThemeWarning, choices: ThemeChoices): string[] {
+export function handWarningLines(warning: ColourWarning, choices: ThemeChoices): string[] {
   const { on, under } = sides(warning);
   const shown = screens(warning.mode);
   if (warning.fix !== null) {
@@ -203,7 +229,7 @@ export function keptNote(choices: ThemeChoices): string {
   return fill("appearance.kept_many", { n: String(names.length), names: names.join(", ") });
 }
 
-function hardToRead(warning: ThemeWarning): string {
+function hardToRead(warning: ColourWarning): string {
   return fill("appearance.hard_to_read", {
     name: themeColourName(handSetColour(warning)),
     mode: t(`appearance.mode.${warning.mode}`),
@@ -211,6 +237,7 @@ function hardToRead(warning: ThemeWarning): string {
 }
 
 export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): string {
+  if (isTextWarning(warning)) return textWarningLine(warning, choices);
   if (warning.field === "brandColor") return t(`appearance.dialog_brand_${warning.mode}`);
   const name = themeColourName(handSetColour(warning));
   const mode = t(`appearance.mode.${warning.mode}`);
@@ -229,7 +256,8 @@ export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): st
   return fill("appearance.dialog_blocked", { name, mode, blockers: blockerText(warning, choices) });
 }
 
-export function savedWarningLine(warning: ThemeWarning): string {
+export function savedWarningLine(warning: ThemeWarning, choices: ThemeChoices): string {
+  if (isTextWarning(warning)) return textWarningLine(warning, choices);
   if (warning.field === "brandColor") return t(`appearance.saved_brand_${warning.mode}`);
   return hardToRead(warning);
 }

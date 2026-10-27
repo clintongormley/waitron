@@ -316,3 +316,13 @@ it("A738 an invoice-limit refusal leaves quantity and note together unchanged", 
   expect(line.quantity).toBe("4");
   expect(line.note).toBe("Changed");
 });
+
+it("a line note's label draws the Bold weight", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(dish, "1", { note: "No salt" });
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  el.parentElement!.style.setProperty("--wt-font-weight-bold", "800");
+  const label = el.shadowRoot!.querySelector<HTMLElement>(".line-extras-label")!;
+  expect(label.textContent).toContain(":");
+  expect(getComputedStyle(label).fontWeight).toBe("800");
+});

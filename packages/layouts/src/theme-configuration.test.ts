@@ -11,6 +11,7 @@ const LEMON: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a", background: "tinted" };
@@ -110,6 +111,21 @@ describe("validateThemeConfiguration", () => {
     const { textScale: _, ...noTextScale } = LEMON;
     void _;
     const theme = JSON.stringify(noTextScale);
+    expect(refusal([{ ...row("Lemon", LEMON, 1), theme }])).toBeUndefined();
+  });
+
+  it("refuses a copy whose theme has a 41 px size", () => {
+    const theme = JSON.stringify({ ...LEMON, text: { size: { lg: 41 } } });
+    expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.theme" },
+    });
+  });
+
+  it("imports a copy whose themes have no text", () => {
+    const { text: _, ...noText } = LEMON;
+    void _;
+    const theme = JSON.stringify(noText);
     expect(refusal([{ ...row("Lemon", LEMON, 1), theme }])).toBeUndefined();
   });
 

@@ -49,6 +49,7 @@ const LEMON: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
 const LEMON_WARNING = {
@@ -184,6 +185,10 @@ describe("the custom theme routes", () => {
       [{ ...LEMON, notAThemeKey: 1 }, "theme", "unknown_key"],
       [{ ...LEMON, textScale: 1 }, "textScale", "bad_value"],
       [{ ...LEMON, textScale: 112 }, "textScale", "bad_value"],
+      [{ ...LEMON, text: { size: { sm: 7 } } }, "text.size.sm", "bad_value"],
+      [{ ...LEMON, text: { weight: { bold: 650 } } }, "text.weight.bold", "bad_value"],
+      [{ ...LEMON, text: { family: "comic" } }, "text.family", "bad_value"],
+      [{ ...LEMON, text: { colour: 1 } }, "text", "unknown_key"],
       [
         { ...LEMON, handSet: { light: { evil: "#ff0000" }, dark: {} } },
         "handSet.light",
@@ -217,6 +222,32 @@ describe("the custom theme routes", () => {
     expect(body.choices.textScale).toBe(130);
     expect(body.light["--wt-font-size-md"]).toBe("18px");
     expect(body.dark["--wt-font-size-md"]).toBe("18px");
+  });
+
+  it("a theme holding text by hand is saved and answered with it", async () => {
+    const id = await created("Lemon", LEMON);
+    const text = { family: "serif", size: { sm: 10 }, weight: { bold: 800 } };
+    const res = await save(managerCookie, id, { theme: { ...LEMON, text } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).choices.text).toEqual(text);
+    const listed = await (await list(managerCookie)).json();
+    expect(listed.themes[0].choices.text).toEqual(text);
+  });
+
+  it("a 10 px Small text is stored and answered with its warning", async () => {
+    const id = await created("Small", LEMON);
+    const theme = { ...LEMON, brandColor: null, text: { size: { sm: 10 } } };
+    const warning = { field: "text.size.sm", mode: null, against: [], fix: 12, blockedBy: [] };
+    const res = await save(managerCookie, id, { theme });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.choices.text).toEqual({ size: { sm: 10 } });
+    expect(body.warnings).toEqual([warning]);
+    for (const cookie of [managerCookie, supervisorCookie]) {
+      const listed = await list(cookie);
+      expect(listed.status).toBe(200);
+      expect((await listed.json()).themes[0].warnings).toEqual([warning]);
+    }
   });
 
   it("a text size off the list is refused, naming it", async () => {

@@ -2787,6 +2787,7 @@ describe("custom themes in a configuration copy", () => {
     logo: null,
     handSet: { light: {}, dark: {} },
     textScale: 100,
+    text: {},
   };
   const darkGreen = { ...lemon, brandColor: "#1e5b3a", background: "tinted" };
 
@@ -2989,6 +2990,18 @@ describe("custom themes in a configuration copy", () => {
     const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
     const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
     expect(lemonBar?.choices?.textScale).toBe(100);
+    expect(lemonBar?.choices).toEqual(lemon);
+  });
+
+  it("imports a copied theme with no text key", async () => {
+    const { transferred, versions } = await themedBundle("B13572491");
+    rewriteTheme(transferred, "Lemon Bar", (theme) => {
+      delete theme.text;
+    });
+    await importInto("B97531891", transferred, versions);
+    const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
+    const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
+    expect(lemonBar?.choices?.text).toEqual({});
     expect(lemonBar?.choices).toEqual(lemon);
   });
 
