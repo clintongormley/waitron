@@ -17,7 +17,7 @@ export interface OverviewRow {
   held: number;
 }
 
-/** A dish whose unit shows ("0.35 kg × Pulpo") counts as one; otherwise its quantity. */
+/** A dish whose unit shows counts as one; otherwise its quantity. */
 export function dishThousandths(
   quantity: string,
   unitName: Record<string, string> | null | undefined,

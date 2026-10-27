@@ -8546,6 +8546,9 @@ From `git grep -ln "kitchen-columns\|kitchen-cards" -- 'apps/*.ts'` outside test
   "narrow tabs/list use the same order/visibility/collapse" (plan `:101`): order and visibility are
   kept; collapse is kept for the pass's narrow **list**, where each section folds (design §3.5),
   not for tabs (**owner FYI**, and in the hand-off).
+  _2026-10-27, as built (visual check finding O2): in a tab panel Overview's list is no wider than
+  a card column, `calc(16.5 * var(--wt-font-size-md))`, so a dish's name stays near its count on a
+  tablet; at phone width (`PHONE_WIDTH`) it fills the panel._
 - **D10. The red bar** (design §3.4: "A tab holding a late card carries a red bar, as A757's zone
   tabs do"; owner, 2026-10-27, slice 9 D14: "A collapsed kitchen column that holds a late card
   carries the same red bar as slice 9c's narrow tabs"). **Late** is `lateCards` over that column's

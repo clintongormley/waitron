@@ -2756,8 +2756,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Counter custom items (A738 residual) and the payment window (A739) remain. The handheld,
   kitchen screen and pass are **A797**, designed 2026-10-18 and revised 2026-10-21 for the owner's
   Q42 answer; Q51 was answered 2026-10-24 (all recommended; the Ready warning time in each prep
-  station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
-  A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
+  station's editor), so nothing waits for it. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready

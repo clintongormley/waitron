@@ -5546,7 +5546,7 @@ under `waitron.kitchenColumns.v1.` followed by the JSON array of the server's or
 id, `"station"` and the station's id (`""` for the merged board), and never again on a refresh;
 without a device id or an origin it keeps the layout in memory only (`#columnsFor`,
 `till-station-screen.ts`). Each heading is an `h2` holding a `<button aria-expanded>` with the
-column's name, its count of cards (held cards included, 0 shown) and a decorative chevron, on
+column's name, its count (of cards, held cards included, 0 shown; Overview's is its rows to make) and a decorative chevron, on
 `--wt-color-surface` with a 1 px `--wt-color-border` and `--wt-radius-md`; a tap sends
 `toggle-column`, and the screen applies `toggleColumnCollapsed` and saves (`#onToggleColumn`). A
 collapsed column draws no cards and is a strip `--wt-tap-min` wide, its heading written top to
