@@ -1048,7 +1048,7 @@ may predate that branch:
   warning time the bar turns amber, pulses slowly, shows the minutes and puts those tables first)
   landed in #2113, from the plan's slice 7. Slice 8 (the kitchen screen's group cards: one card per
   group in Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no
-  Tickets view) is in review, built from the plan's slice 8; next, slice 8b (short names on the
+  Tickets view) landed in #2123, from the plan's slice 8; next, slice 8b (short names on the
   cards, after slice 1, landed) and slice 9, taking turns with lane G's A773-2 on the station screen
   (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
