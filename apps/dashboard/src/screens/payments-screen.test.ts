@@ -798,14 +798,12 @@ describe("reader discovery and status", () => {
   it("renders unreachable as Unknown and shows zero battery", async () => {
     const { el } = await mount(
       stubApi({
-        readerStatus: vi
-          .fn()
-          .mockResolvedValue({
-            printsOwnSlipAutomatically: false,
-            online: false,
-            unreachable: true,
-            batteryPercent: 0,
-          }),
+        readerStatus: vi.fn().mockResolvedValue({
+          printsOwnSlipAutomatically: false,
+          online: false,
+          unreachable: true,
+          batteryPercent: 0,
+        }),
       }),
     );
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Unknown");
@@ -912,18 +910,16 @@ describe("reader discovery and status", () => {
   it("shows reported details and restores focus to the row menu", async () => {
     const { el, api } = await mount(
       stubApi({
-        readerStatus: vi
-          .fn()
-          .mockResolvedValue({
-            printsOwnSlipAutomatically: false,
-            online: true,
-            model: "solo",
-            serial: "123",
-            connection: "Wi-Fi",
-            activity: "IDLE",
-            firmwareVersion: "3.3",
-            lastSeenAt: "2026-09-12T11:03:48.930Z",
-          }),
+        readerStatus: vi.fn().mockResolvedValue({
+          printsOwnSlipAutomatically: false,
+          online: true,
+          model: "solo",
+          serial: "123",
+          connection: "Wi-Fi",
+          activity: "IDLE",
+          firmwareVersion: "3.3",
+          lastSeenAt: "2026-09-12T11:03:48.930Z",
+        }),
       }),
     );
     const menu = qCell(el, "wt-row-actions")!;
@@ -1209,13 +1205,11 @@ describe("payments-screen remaining edges", () => {
   it("shows a reader that is still pairing as Pairing", async () => {
     const { el } = await mount(
       stubApi({
-        readerStatus: vi
-          .fn()
-          .mockResolvedValue({
-            printsOwnSlipAutomatically: false,
-            online: false,
-            pairingStatus: "processing",
-          }),
+        readerStatus: vi.fn().mockResolvedValue({
+          printsOwnSlipAutomatically: false,
+          online: false,
+          pairingStatus: "processing",
+        }),
       }),
     );
 
