@@ -278,6 +278,19 @@ async function makeDestinationFolders(
   return folders;
 }
 
+/** Refuses a piece whose parent folders under `base` are not all real folders: a link there leads outside the roots. */
+async function refuseUnrealParents(
+  base: string,
+  piece: string,
+  label: string,
+  io: SetAsideIo,
+): Promise<void> {
+  for (const folder of chain(base, dirname(join(base, piece))).slice(1)) {
+    const found = await notAFolder(folder, io);
+    if (found !== null) throw failed(found, label);
+  }
+}
+
 /** Renames one piece into its folder, never over anything, and syncs both parents. */
 async function movePiece(
   roots: Roots,
@@ -297,10 +310,8 @@ async function movePiece(
       },
     );
     if (present) throw failed("EEXIST", `${unit.root}/${piece}`);
-    for (const folder of chain(folders[unit.root], dirname(to))) {
-      const found = await notAFolder(folder, io);
-      if (found !== null) throw failed(found, `${unit.root}/${piece}`);
-    }
+    await refuseUnrealParents(rootDir(roots, unit.root), piece, `${unit.root}/${piece}`, io);
+    await refuseUnrealParents(folders[unit.root], piece, `${unit.root}/${piece}`, io);
     await io.mkdir(dirname(to), { recursive: true, mode: MODE });
     await io.rename(from, to);
     await syncFolder(dirname(from));
@@ -443,11 +454,15 @@ export async function resumeStartAgainSetAside(
         const expected = JSON.stringify(recordedFor(unit, piece));
         let source: Seen[] | null;
         let destination: Seen[] | null;
+        const label = `${unit.root}/${piece}`;
         try {
+          await refuseUnrealParents(rootDir(canonical, unit.root), piece, label, io);
+          await refuseUnrealParents(folders[unit.root], piece, label, io);
           source = await entriesAt(rootDir(canonical, unit.root), piece, io);
           destination = await entriesAt(folders[unit.root], piece, io);
         } catch (error) {
-          throw failed(codeOf(error), `${unit.root}/${piece}`);
+          if (error instanceof AppError) throw error;
+          throw failed(codeOf(error), label);
         }
         if (destination === null && JSON.stringify(source) === expected) {
           if ((await unrecordedSideFile(canonical, unit, piece, io)) !== null) return "stopped";

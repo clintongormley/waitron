@@ -1090,6 +1090,69 @@ it("a symlink put at a nested piece's parent inside the destination makes the re
   );
 });
 
+/** A Move of a file found inside a folder the attempt made, so the piece has parent folders of its own. */
+async function nestedFoundMove(base: string) {
+  const parent = `${RECORDS}/${randomUUID()}`;
+  const attempt = await startAgainAttempt(base, {
+    before: (roots) => put(join(roots.stateDir, parent, "owned.json"), "owned"),
+  });
+  const piece = `${parent}/found.json`;
+  await writeFile(join(attempt.roots.stateDir, piece), "found bytes");
+  const record = await prepared(attempt.roots, attempt.administratorId);
+  expect(record.listed.units.flatMap((unit) => unit.pieces)).toEqual([piece]);
+  return { roots: attempt.roots, record, parent, piece };
+}
+
+const withoutLock = (lines: string[]) =>
+  lines.filter((line) => !line.startsWith("venue/venue.lock:"));
+
+it("a link put in place of a piece's parent folder at its source makes the resume refuse and moves nothing; with the real folder back, the resume moves the piece", async () => {
+  const base = await scratch();
+  const { roots, record, parent, piece } = await nestedFoundMove(base);
+  const elsewhere = join(base, "elsewhere");
+  await fs.rename(join(roots.stateDir, parent), elsewhere);
+  await fs.symlink(elsewhere, join(roots.stateDir, parent));
+  const before = await snapshot(base);
+
+  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${piece}`,
+  });
+
+  expect(withoutLock(await snapshot(base))).toEqual(withoutLock(before));
+  expect(await readFile(join(elsewhere, "found.json"), "utf8")).toBe("found bytes");
+
+  await fs.unlink(join(roots.stateDir, parent));
+  await fs.rename(elsewhere, join(roots.stateDir, parent));
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(
+    await readFile(join(setAsideFolderPaths(roots, record.setAside!).state, piece), "utf8"),
+  ).toBe("found bytes");
+});
+
+it("a link put in place of a moved piece's parent folder in the set-aside folder makes the resume refuse, though what it leads to matches the record; with the real folder back, the resume finds it moved", async () => {
+  const base = await scratch();
+  const { roots, record, parent, piece } = await nestedFoundMove(base);
+  await moveStartAgainUnits(roots, record);
+  const moved = join(setAsideFolderPaths(roots, record.setAside!).state, parent);
+  const elsewhere = join(base, "elsewhere");
+  await fs.rename(moved, elsewhere);
+  await fs.symlink(elsewhere, moved);
+  const before = await snapshot(base);
+
+  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${piece}`,
+  });
+
+  expect(withoutLock(await snapshot(base))).toEqual(withoutLock(before));
+
+  await fs.unlink(moved);
+  await fs.rename(elsewhere, moved);
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await readFile(join(moved, "found.json"), "utf8")).toBe("found bytes");
+});
+
 it("a piece that cannot be looked at refuses naming it", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
