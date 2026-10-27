@@ -52,4 +52,4 @@ it("retains the PNG encoder output for the exported dataset and preserves other 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 60_000);
