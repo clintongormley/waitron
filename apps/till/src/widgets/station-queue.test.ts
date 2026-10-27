@@ -2682,6 +2682,27 @@ describe("the board's cards", () => {
     expect(dishesOn(ready[0]!)).toEqual(["ti-3"]);
   });
 
+  it("names the first column Waiting, in Spanish Esperando", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    expect(flat(column(el, "queued").querySelector(".column-title")!)).toBe("Waiting");
+    const previousLocale = currentLocale();
+    setLocale("es");
+    try {
+      const spanish = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups,
+        stationId: "st-1",
+      });
+      const title = flat(column(spanish.el, "queued").querySelector(".column-title")!);
+      expect(title).toBe(t("station.state.queued"));
+      expect(title).not.toBe("Waiting");
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("gives a party one card per sent group and the dishes with no group their own, oldest first", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [
