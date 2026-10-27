@@ -294,6 +294,41 @@ describe("the Text rows' layout", () => {
     };
   }
 
+  async function sizeLineAt(width: number, error: string) {
+    const el = await mount(draftOf({ size: { sm: 14 } }), {
+      errors: error === "" ? {} : { "text.size.sm": error },
+    });
+    el.style.width = `${width}px`;
+    await el.updateComplete;
+    await stepper(el, "sm").updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const row = q(el, '[data-test="text-row-size.sm"]')!;
+    return {
+      field: stepper(el, "sm").shadowRoot!.querySelector("[part=field]")!,
+      px: row.querySelector('.size > [aria-hidden="true"]')!,
+      tag: q(el, '[data-test="text-status-size.sm"]')!,
+      gap: parseFloat(getComputedStyle(row.querySelector(".size")!).columnGap),
+    };
+  }
+  const middle = (rect: DOMRect) => (rect.top + rect.bottom) / 2;
+
+  for (const [viewport, width] of [
+    [1280, 800],
+    [390, 300],
+  ] as const) {
+    for (const error of ["", "Enter a whole number from 8 to 40."]) {
+      it(`at ${viewport} px, "px" sits beside the size box and centred on it, ${error ? "with" : "without"} an error, and the tag stays on the box's line`, async () => {
+        await page.viewport(viewport, 900);
+        const { field, px, tag, gap } = await sizeLineAt(width, error);
+        expect(box(px).left - box(field).right).toBeGreaterThanOrEqual(gap - 1);
+        expect(box(px).left - box(field).right).toBeLessThanOrEqual(gap + 1);
+        expect(Math.abs(middle(box(px)) - middle(box(field)))).toBeLessThanOrEqual(2);
+        expect(box(tag).left).toBeGreaterThan(box(px).right);
+        expect(Math.abs(middle(box(tag)) - middle(box(field)))).toBeLessThanOrEqual(2);
+      });
+    }
+  }
+
   it("at phone width each row puts the value under its name", async () => {
     await page.viewport(390, 900);
     const { name, value } = await rowAt(390);

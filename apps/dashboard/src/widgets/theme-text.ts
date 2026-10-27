@@ -90,18 +90,25 @@ export class ThemeTextRows extends LitElement {
       .value.hand wt-combobox::part(field) {
         font-weight: var(--wt-font-weight-bold);
       }
+      /* By baseline, not centre: a control's error grows its host downwards, and its baseline is
+         still the text in its box. */
       .line {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: baseline;
         gap: var(--wt-space-2);
         min-width: 0;
       }
       .size {
         display: inline-flex;
-        align-items: center;
+        align-items: baseline;
         gap: var(--wt-space-2);
         white-space: nowrap;
+      }
+      /* The stepper keeps its box's width while it shows an error, so "px" and the tag stay beside
+         the box; the error, kept on one line by the nowrap above, runs on underneath them. */
+      .size > wt-number-stepper {
+        width: var(--wt-stepper-field-width);
       }
       .status {
         color: var(--wt-color-text-muted);
