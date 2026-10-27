@@ -1,5 +1,7 @@
 # Getting to production — sandbox access, certificates, go-live
 
+> **27 October 2026:** [A1157 rechecks the revised AEAT FAQ](research/2026-10-27-a1157-faq.md). The original research below remains historical.
+
 Researched **2026-07-20**, substantially revised **2026-07-26** against AEAT, FNMT and BOE
 primary sources. Companion to [verifactu-findings.md](verifactu-findings.md) and
 [who-to-ask.md](who-to-ask.md). For the action list rather than the reasoning, see

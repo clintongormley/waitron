@@ -790,6 +790,11 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Decisions and deliberate limits
 
+- **27 October 2026, A1157:** Keep the normalized text and source files alongside the library's
+  watched fingerprints, updated by `--refresh`; keep date stamps in the comparison (owner: “we
+  should keep one for comparison”). The exact October scope-page edit remains unrecovered.
+  [Current-rule review and archive limits](../compliance/research/2026-10-27-a1157-faq.md).
+
 - **A948, owner decision 2026-10-27: enable full invoices in every environment now.** No
   environment flag remains. A555, A444, applicable B2B delivery, physical paper/QR checks and
   the asesor's manual-remedy approval were dropped as prerequisites to the switch, not closed.
@@ -1091,76 +1096,3 @@ installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-
 their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
 say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
 no compatibility code: until then any installation may be reset (CLAUDE.md §3).
-
-## A1157. AEAT revised its Veri\*Factu FAQ on 21 October 2026
-
-Queued 2026-10-27 by the owner from
-[waitron-io/verifactu#148](https://github.com/waitron-io/verifactu/issues/148): "investigate and
-update our test suite to make sure we are compliant".
-
-**What the alert says.** The weekly `VeriFactu source watch` run of 2026-10-27 found new
-fingerprints for the FAQ index and all 18 FAQ pages. Nothing else it watches changed: not the
-technical index, the developer FAQ PDF, the service, hash, QR or validation PDFs, the error-code
-list, or the schemas. The run of 2026-10-20 passed, so the pages changed between 20 and 27
-October.
-
-**What was measured on 2026-10-27** (with `meaningfulHtml` from the library's
-`scripts/source-watch.mjs`, the function that produces the fingerprints):
-
-- The FAQ index. The Wayback Machine copy of 2026-09-20
-  (`https://web.archive.org/web/20260920230700id_/https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes.html`)
-  reproduces the pinned fingerprint `8524695…` exactly, and today's page reproduces the new one
-  `2809aa3…`. The only difference in their text is `(Actualizadas a 21 de julio de 2026)` becoming
-  `(Actualizadas a 21 de octubre de 2026)`.
-- The 18 pages. Putting `21 de julio de 2026` back in place of `21 de octubre de 2026` in today's
-  text reproduces the pinned fingerprint exactly for 17 of them, so the date is all that changed on
-  those. The 18th, `cuestiones-generales-ambitos-aplicacion` (who Veri\*Factu applies to, and from
-  when), does not reproduce: its wording has changed. The Wayback Machine holds no copy of any of
-  the 18 pages, so the old text of that one is not available to diff against.
-- That page still gives 1 January 2027 (companies) and 1 July 2027 (everyone else) as the start
-  dates, under Real Decreto-ley 15/2025. It does not mention the announced move to 2028 (not law
-  as of 9 October); check the BOE before quoting a date anywhere.
-
-**Where AEAT marks its changes, checked 2026-10-27.**
-
-- The developer FAQ PDF (`FAQs-Desarrolladores.pdf`) opens with "Principales cambios de la
-  versión…", a list of what each version changed. It has not changed: the live file is still
-  version 1.3 of 4 December 2025, byte-identical (SHA-256 `73906dc8…`) to our
-  `docs/compliance/sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf` and to the watch's baseline.
-- The web FAQ pages have no change list. They carry the "Actualizadas a" date, a "Página
-  actualizada" date (21 October 2026 on every page), and a "Novedad" badge on new questions whose
-  tooltip gives the date it was added. Across all 18 pages there is one badge, on the scope page's
-  question about a company in the SII with premises in Ceuta or Melilla, dated **21 July 2026**,
-  so it predates the baseline of 2026-09-26. Removing that question, or just its badge, from
-  today's page (with the old date put back) does not reproduce the old fingerprint, so the
-  October change on that page carries no marker.
-
-**The job.**
-
-1. **Find what changed on the scope page.** Rebuild its old wording from the passages we quoted:
-   grep this repo's `docs/compliance/` (`verifactu-findings.md`, `research/`, `asesor-questions.md`,
-   `getting-to-production.md`, `regional-language-rules.md`) and the library's `research_notes/`,
-   `COMPLIANCE-AUDIT.md` and `PROVENANCE.md` for quotations from it, and compare each with today's
-   text. Say plainly which changes could be found and which could not.
-2. **Check every claim that rests on that page**, in both repositories, against today's wording,
-   with a provenance row (quote, then paraphrase) for anything that moved. Citations of the other
-   17 pages stand, because their text is unchanged.
-3. **Update the tests.** For each change that affects what Waitron or the library must do, write
-   the failing test first, in the library and in `packages/fiscal-verifactu` or wherever the
-   behaviour lives, then the change. If nothing on the page changes behaviour, record that finding
-   with its evidence instead of inventing a test.
-4. **Close the alert.** In the library, run `node scripts/source-watch.mjs --refresh`, commit the
-   new baseline with the finding it represents, and close #148 with a comment that states the
-   experiment above and its result.
-5. **Keep an archive to compare against** (owner, 2026-10-27: "we should keep one for
-   comparison"). The watch has stored only fingerprints since it was added in the library's #10,
-   which is why the scope page's old text could not be recovered. From now on it keeps, in the
-   library repository, the normalised text of every HTML source and a copy of every PDF and
-   schema it watches, updated by `--refresh` alongside the fingerprints, so the next alert can
-   show exactly what changed. Seed the archive from
-   `~/waitron-campaign-shared/veri-factu-sources-2026-10-27/`: a copy, taken 2026-10-27, of
-   every source the watch follows (the AEAT pages, PDFs and schemas, and a tarball of each
-   watched GitHub repository at its watched commit), plus the Wayback copy of the FAQ index from
-   2026-09-20. Its `MANIFEST.tsv` records that 24 of the copies match the 2026-09-26 baseline
-   fingerprints and the 19 FAQ pages do not. Ignoring the date stamp is the wrong fix: a new date is
-   AEAT telling us it revised the pages.

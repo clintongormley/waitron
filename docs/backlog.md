@@ -196,12 +196,6 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A1157. AEAT revised its Veri\*Factu FAQ on 21 October 2026 — find what changed and make sure our tests still match.**
-  Raised by the weekly source watch in [waitron-io/verifactu#148](https://github.com/waitron-io/verifactu/issues/148).
-  Measured 2026-10-27: 17 of the 18 FAQ pages and the FAQ index changed only their "updated on" date; the
-  "scope of application" page (`cuestiones-generales-ambitos-aplicacion`) has new wording, and no archived copy of its old text exists.
-  If the work changes fiscal code, the owner lands it.
-  [Detail](backlog/fiscal.md#a1157-aeat-revised-its-verifactu-faq-on-21-october-2026).
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
   Still open: the producer's name and NIF (Task 8 of the plan), then slices 1b to 6, and A993's plan.

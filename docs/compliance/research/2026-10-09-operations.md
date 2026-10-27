@@ -1,5 +1,7 @@
 # Asesor research, 2026-10-09: printing, installation numbers, backups, practice environments, conflicts and e-invoicing
 
+> **27 October 2026:** [A1157 rechecks the revised AEAT FAQ](2026-10-27-a1157-faq.md). The original research below remains historical.
+
 **Provenance.** Researched 2026-10-09 by a research agent; every Spanish quote was checked word for word, by script, against the raw text downloaded from the URL given (BOE and AEAT pages fetched with curl, PDFs through pdftotext, DGT rulings read on PETETE, where any ruling opens at `https://petete.tributos.hacienda.gob.es/consultas/?num_consulta=<number>`). The downloads were kept in the session's scratch directory and are not committed; re-fetch from the URL to re-check a quote. Section numbers (1.1, 1.2 …) are those of the advisor questionnaire of 6 October 2026; the mapping to Q-numbers is in [asesor-questions.md](../asesor-questions.md#the-shortened-list-2026-10-09).
 
 ## Summary

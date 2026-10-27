@@ -1,5 +1,7 @@
 # Verifactu — verified findings
 
+> **27 October 2026:** [A1157 rechecks the revised AEAT FAQ](research/2026-10-27-a1157-faq.md). The original research below remains historical.
+
 > **Implementation pointer, 2026-10-14:** W41s-4's unpublished branch replaces the local
 > installation counter and restore-time clock floor with supplied allocations. References below
 > to that counter describe the earlier implementation. See the approved
