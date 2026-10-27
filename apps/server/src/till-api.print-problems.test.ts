@@ -16,8 +16,8 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// The printing problems the groups read answers with; what counts as a problem is pinned in
-// `print-problems.test.ts`.
+// The printing problems the groups read answers with, and the retired print-problems route's 404;
+// what counts as a problem is pinned in `print-problems.test.ts`.
 let venue: BillVenue;
 let stationId: string;
 
