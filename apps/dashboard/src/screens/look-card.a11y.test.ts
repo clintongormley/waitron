@@ -1,5 +1,5 @@
-import { page, userEvent } from "vitest/browser";
-import { afterEach, expect, it, vi } from "vitest";
+import { commands, page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   mediaTestReference,
   mediaTestRendition,
@@ -334,9 +334,12 @@ const cases = ["light", "dark"].flatMap((mode) =>
   ),
 );
 
-afterEach(() => {
+// Folds open at once rather than over their animation; a case about motion turns it back on first.
+beforeEach(() => commands.emulateReducedMotion("reduce"));
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
+  await commands.emulateReducedMotion(null);
 });
 
 it.each(cases)("Look card: $state, $locale / $mode", async ({ mode, locale, state }) => {

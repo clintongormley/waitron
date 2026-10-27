@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
@@ -61,10 +61,15 @@ const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const christmas = theme("t-xmas", "Christmas", CHRISTMAS);
 const LIST: ThemeList = { themes: [lucia, christmas], inUse: lucia.id };
 
-beforeEach(() => setLocale("en-GB"));
-afterEach(() => {
+// Folds open at once rather than over their animation; a case about motion turns it back on first.
+beforeEach(async () => {
+  setLocale("en-GB");
+  await commands.emulateReducedMotion("reduce");
+});
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
+  await commands.emulateReducedMotion(null);
 });
 
 async function mountEditing(list: ThemeList = LIST) {

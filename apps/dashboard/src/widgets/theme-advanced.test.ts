@@ -49,11 +49,15 @@ const LUCIA: ThemeChoices = {
 };
 const CREAM = setHand(openDraft(LUCIA), "light", "bg", "#f8f1e1");
 
-beforeEach(() => setLocale("en-GB"));
-
-afterEach(() => {
+// Folds open at once rather than over their animation; a case about motion turns it back on first.
+beforeEach(async () => {
+  setLocale("en-GB");
+  await commands.emulateReducedMotion("reduce");
+});
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
+  await commands.emulateReducedMotion(null);
 });
 
 async function mount(draft: LookDraft, extra: Partial<ThemeAdvanced> = {}) {
