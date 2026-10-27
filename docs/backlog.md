@@ -1087,6 +1087,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
+- **A1150. Allergens and diet labels come from the live product on every screen** (owner,
+  2026-10-27). Needs its own design before it is built. Today the till's menu and product info
+  read them from the published menu version, while the kitchen screen, the table's allergy check
+  and order lines read the live product (`apps/server/src/line-nutrition.ts`). So the two disagree
+  until the menu is published again, and nothing says which is which. The owner chose one source,
+  the live product, the way availability already works. The design covers every reader of a
+  version's `allergens`, `dietaryDeclarations` and `diet`, the publish warnings and change list
+  that compare them, and the guide's wording. The menu patch editor (branch
+  `feat/patch-live-menu`) leaves allergens out because of this decision.
+
 ### Service periods, opening hours and departments
 
 - **A1070. The department dialog's Transfers panel heading is an `h2`, the dialog title's level,
