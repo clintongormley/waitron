@@ -1159,8 +1159,12 @@ can refuse the start four ways:
   are the marker's and that `parseFirstSetupState` accepts (`surveyStartAgainLeftovers`,
   `packages/provisioning/src/first-setup-start-again-leftovers.ts`).
 - `setup.start_again_incomplete`, unchanged, with A1042's explanation, for everything else: the
-  setup record gone, changed or unparseable, a found link, device file or lock file, any other
-  reason the finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries.
+  setup record gone, changed or unparseable, a start-again note the survey cannot read (the case
+  run held bytes that are not JSON), a found link, device file or lock file, any other reason the
+  finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries. For each of these
+  `classifyStartAgainRefusal` hands back the finisher's own error, so the survey's reason for
+  explaining is dropped (for that note, `setup.attempt_invalid`) and the refusal carries the
+  finisher's reason, such as `unlisted file: venue/venue.db`.
 
 The form is drawn only for `setup.start_again_files_found`, and only when the request's socket is
 TLS (`isSecure`, `apps/server/src/recovery-start-again.ts`); over anything else the page shows the
@@ -1203,8 +1207,10 @@ them; a probe that fails with `EXDEV` removes the empty folders it made and refu
 `setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
 raises the note, renames the pieces (a database's main file last, never over anything) and runs
 A1042's finisher. Any failure after the record is written refuses
-`setup.start_again_move_unfinished`, keeping the cause as the error's `reason`, which the route
-does not log; a failure before it (the probe, the list check, the guess counter, the password or
+`setup.start_again_move_unfinished`, keeping the cause as the error's `reason`: a Waitron
+error's own reason (or its code), otherwise `move failed:` with the system error code and the path
+the error names, written relative to its folder (`state/…` or `venue/…`) and left out when it lies
+outside both; a failure before it (the probe, the list check, the guess counter, the password or
 the record write, for example) keeps its own code. A plain `waitron.sh reset` keeps the choices and the set-aside folder; `reset
 --all` removes them. A backup recovery's check of the box's files skips `first-setup-set-aside` in
 each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
@@ -1217,13 +1223,21 @@ and it is later than the box's clock.
 
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
-recorded Keep from disk. `/recovery-api/status` still reports `setup.start_again_files_found`
-until that next start. After a Move, the answer names the set-aside folder and the process
+recorded Keep from disk. After a Move, the answer names the set-aside folder and the process
 restarts once the answer is written, as Retry does. A Move refused
 `setup.start_again_move_unfinished` answers 409 with that code's recovery page and no list or form,
-does not restart, and the process keeps serving that page on `GET /`. The choice is logged
+does not restart, and the process keeps serving that page on `GET /`; every later `POST
+/recovery-api/start-again` in that process answers 409 with the same page without choosing again,
+so a stale form cannot record a second choice over the unfinished Move. After a Keep and after
+`setup.start_again_move_unfinished`, `/recovery-api/status` still reports
+`setup.start_again_files_found` until the next start. The choice is logged
 `recovery.start_again_choice` (the choice, the attempt id and the number of found units) only after
-it has taken effect.
+it has taken effect. A failure the page answers with `notFinished` ("Start again could not
+finish …"), and `setup.start_again_move_unfinished`, are logged `recovery.start_again_choice_failed`
+with Waitron's error code (null when the error is not a Waitron error) and, when there is one, a
+`reason`: the Waitron error's own reason, or else the system error code and the path the error
+names, written and left out as above. The move-unfinished page is drawn before that line is
+logged, so a logger that throws still leaves `GET /` on it.
 
 The one sentence on this page that says something is removed is the Move choice's `moveDetail`
 ("… and the rest of the interrupted setup is removed."), the owner's approved exception of

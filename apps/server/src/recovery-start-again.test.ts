@@ -660,8 +660,48 @@ describe("mountStartAgainChoice", () => {
     });
     expect(log).toHaveBeenCalledExactlyOnceWith("warn", "recovery.start_again_choice_failed", {
       errorCode: "setup.start_again_move_unfinished",
+      reason: "set-aside failed",
     });
     expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "an errno and a path under the venue root",
+      error: Object.assign(new Error("io"), { code: "EIO", path: "/box/venue/venue.db-wal" }),
+      reason: "EIO venue/venue.db-wal",
+    },
+    {
+      name: "an errno and a path under the state root",
+      error: Object.assign(new Error("io"), { code: "EACCES", path: "/box/state/a/b.json" }),
+      reason: "EACCES state/a/b.json",
+    },
+    {
+      name: "a path under a root with no errno",
+      error: Object.assign(new Error("io"), { path: "/box/venue/venue.db" }),
+      reason: "unknown venue/venue.db",
+    },
+    {
+      name: "an errno and a path outside both roots, which is left out",
+      error: Object.assign(new Error("io"), { code: "EIO", path: "/box/statement/x" }),
+      reason: "EIO",
+    },
+    {
+      name: "a code's own reason",
+      error: new AppError(
+        "setup.start_again_incomplete",
+        {},
+        { reason: "set-aside failed: EIO state/x" },
+      ),
+      reason: "set-aside failed: EIO state/x",
+    },
+  ])("the failed-choice warning carries $name", async (row) => {
+    const { app, log } = mounted({ choose: () => Promise.reject(row.error) });
+    await post(app, { ...FORM, choice: "move" });
+    expect(log).toHaveBeenCalledExactlyOnceWith("warn", "recovery.start_again_choice_failed", {
+      errorCode: row.error instanceof AppError ? row.error.code : null,
+      reason: row.reason,
+    });
   });
 
   it("the full-disk reading is taken over both roots", async () => {

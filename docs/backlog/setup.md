@@ -509,7 +509,13 @@ files include, at any depth, a symbolic link or special file, a lock file (`venu
 20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses `setup.start_again_incomplete`
 for a reason other than found files, the box shows A1042's `setup.start_again_incomplete` page:
 the explanation and what reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
-`packages/provisioning/src/first-setup-start-again-leftovers.ts`). A finisher refusal with any
+`packages/provisioning/src/first-setup-start-again-leftovers.ts`). The same page is shown when
+the start-again note (`<state>/first-setup-start-again.json`) cannot be read: the survey reads it
+to work out the Move's floor, and a note it cannot read makes it explain (the case run held bytes
+that are not JSON). In every one of these cases `classifyStartAgainRefusal` hands back the
+finisher's own refusal, so the survey's reason for explaining is dropped and the start's
+`recovery.serving_refused_start` log line carries the finisher's reason instead (in the run,
+`unlisted file: venue/venue.db` where the survey's was `setup.attempt_invalid`). A finisher refusal with any
 other code is not one of the start's refusals, so that start carries on past it instead
 (`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
 for these boxes, is still open to the owner.

@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { verifyPassword } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -31,10 +31,28 @@ type Choice = Extract<StartAgainSurvey, { kind: "choice" }>;
 
 const turns = {};
 
-const reasonOf = (error: unknown) =>
-  error instanceof AppError
-    ? (error.reason ?? error.code)
-    : `move failed: ${String((Object(error) as { code?: unknown }).code ?? "unknown")}`;
+/**
+ * The path an error names, as `state/...` or `venue/...`; undefined when it names none or one
+ * outside both roots, which could carry the machine's own folder names.
+ */
+export function rootRelativePath(roots: Roots, error: unknown): string | undefined {
+  const path: unknown = (Object(error) as { path?: unknown }).path;
+  if (typeof path !== "string") return undefined;
+  const under = (
+    [
+      ["state", roots.stateDir],
+      ["venue", roots.venueDir],
+    ] as const
+  ).find(([, root]) => path.startsWith(`${root}${sep}`));
+  return under === undefined ? undefined : `${under[0]}/${relative(under[1], path)}`;
+}
+
+const reasonOf = (roots: Roots, error: unknown) => {
+  if (error instanceof AppError) return error.reason ?? error.code;
+  const where = rootRelativePath(roots, error);
+  const code = String((Object(error) as { code?: unknown }).code ?? "unknown");
+  return `move failed: ${code}${where === undefined ? "" : ` ${where}`}`;
+};
 
 async function assertNotKept(stateDir: string, survey: Choice): Promise<void> {
   const records = await readStartAgainChoices(stateDir, survey);
@@ -134,7 +152,11 @@ export async function chooseStartAgainLeftovers(input: {
         await finishStartAgainDeletion(roots);
       } catch (error) {
         // The Move is recorded, so no refusal may say the files are unchanged or nothing was saved.
-        throw new AppError("setup.start_again_move_unfinished", {}, { reason: reasonOf(error) });
+        throw new AppError(
+          "setup.start_again_move_unfinished",
+          {},
+          { reason: reasonOf(roots, error) },
+        );
       }
       return { choice: "move", setAside };
     } finally {

@@ -489,8 +489,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A1142: a cut-off Start again beside found files the Move cannot handle gets only the
   explanation.** A link, device or lock file, a finisher's `setup.start_again_incomplete` for any
-  other reason, or more than 20,000 found entries: no Keep or Move (owner question Q2, built with
-  A). Left open by A1098.
+  other reason, more than 20,000 found entries, or a start-again note the box cannot read: no Keep
+  or Move (owner question Q2, built with A). Left open by A1098.
   [Detail](backlog/setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation)
 
 - **A1143: files a Move set aside have no way back in the app.** Recover from backup takes only a

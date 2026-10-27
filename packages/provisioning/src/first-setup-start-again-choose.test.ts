@@ -28,7 +28,7 @@ import {
   START_AGAIN_CHOICES_DIR,
   writeStartAgainChoice,
 } from "./first-setup-start-again-choice.js";
-import { chooseStartAgainLeftovers } from "./first-setup-start-again-choose.js";
+import { chooseStartAgainLeftovers, rootRelativePath } from "./first-setup-start-again-choose.js";
 import { START_AGAIN_GUESSES_FILE } from "./first-setup-start-again-guesses.js";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
@@ -61,7 +61,7 @@ vi.mock("./first-setup-start-again-leftovers.js", async (original) => {
  * `write`: the next note raise writes through a folder that refuses to open its temporary file;
  * `throw`: it rejects with a plain error instead, as no current step after the record does.
  */
-let failNoteWrite: false | "write" | "throw" = false;
+let failNoteWrite: false | "write" | "throw" | "throwAt" = false;
 vi.mock("./first-setup-start-again-note.js", async (original) => {
   const real = await original<typeof import("./first-setup-start-again-note.js")>();
   return {
@@ -71,6 +71,10 @@ vi.mock("./first-setup-start-again-note.js", async (original) => {
       failNoteWrite = false;
       if (mode === false) return real.raiseStartAgainNote(...args);
       if (mode === "throw") return Promise.reject(Object.assign(new Error("EIO"), { code: "EIO" }));
+      if (mode === "throwAt")
+        return Promise.reject(
+          Object.assign(new Error("EIO"), { code: "EIO", path: join(args[0], "note", "x.json") }),
+        );
       const [stateDir, next] = args;
       return real.raiseStartAgainNote(stateDir, next, {
         ...fsPromises,
@@ -868,6 +872,29 @@ it("a plain error after the Move's record is refused setup.start_again_move_unfi
     reason: "move failed: EIO",
   });
   expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["move"]);
+});
+
+it("rootRelativePath names a path under either root by its root, and leaves out any other", () => {
+  const roots = { stateDir: "/box/state", venueDir: "/box/venue" };
+  const at = (path?: unknown) => Object.assign(new Error("io"), { path });
+  expect(rootRelativePath(roots, at("/box/state/a/b.json"))).toBe("state/a/b.json");
+  expect(rootRelativePath(roots, at("/box/venue/venue.db"))).toBe("venue/venue.db");
+  expect(rootRelativePath(roots, at("/box/statement/x"))).toBeUndefined();
+  expect(rootRelativePath(roots, at("/elsewhere/x"))).toBeUndefined();
+  expect(rootRelativePath(roots, at())).toBeUndefined();
+  expect(rootRelativePath(roots, "not an error")).toBeUndefined();
+});
+
+it("a plain error naming a path after the Move's record carries that path relative to its root", async () => {
+  const f = await found({
+    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
+  });
+  failNoteWrite = "throwAt";
+
+  await expect(choose(f, "move")).rejects.toMatchObject({
+    code: "setup.start_again_move_unfinished",
+    reason: "move failed: EIO state/note/x.json",
+  });
 });
 
 it("no log call and no thrown error carries the administrator's name or email", async () => {

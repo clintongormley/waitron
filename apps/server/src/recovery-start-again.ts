@@ -3,6 +3,7 @@ import { TLSSocket } from "node:tls";
 import type { Context, Hono } from "hono";
 import {
   chooseStartAgainLeftovers,
+  rootRelativePath,
   type StartAgainSurvey,
   type StartAgainUnit,
 } from "@waitron/provisioning";
@@ -14,6 +15,7 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
@@ -396,10 +398,25 @@ async function refusalFor(error: unknown, deps: StartAgainDeps, log?: Logger): P
       }
     }
   }
+  logChoiceFailed(error, deps, log);
+  return new Refusal(409, { kind: "notFinished" });
+}
+
+/** The cause a warning may carry: a code's own reason, else an errno and a root-relative path. */
+function failureReason(error: unknown, deps: StartAgainDeps): string | undefined {
+  if (isAppError(error)) return error.reason;
+  const errno = errnoOf(error);
+  const where = rootRelativePath(deps.roots, error);
+  if (where === undefined) return errno;
+  return `${errno ?? "unknown"} ${where}`;
+}
+
+function logChoiceFailed(error: unknown, deps: StartAgainDeps, log?: Logger): void {
+  const reason = failureReason(error, deps);
   log?.("warn", "recovery.start_again_choice_failed", {
     errorCode: isAppError(error) ? error.code : null,
+    ...(reason === undefined ? {} : { reason }),
   });
-  return new Refusal(409, { kind: "notFinished" });
 }
 
 /** Each root's folder named as the found-files list names it: `state/...` or `venue/...`. */
@@ -427,6 +444,9 @@ export function mountStartAgainChoice(
 ): void {
   const choose = deps.choose ?? chooseStartAgainLeftovers;
   const now = deps.now ?? (() => new Date());
+  // A recorded Move that did not finish is resumed by the next start, so no second choice may be
+  // recorded over it from a stale form.
+  let moveUnfinished = false;
 
   app.post("/recovery-api/start-again", async (c) => {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
@@ -435,6 +455,8 @@ export function mountStartAgainChoice(
     const page = async (status: 200 | Refusal["status"], view: Omit<StartAgainView, "locale">) =>
       c.html(await render({ ...view, locale }), status);
     const code = "setup.start_again_files_found" as const;
+    if (moveUnfinished)
+      return page(409, { code: "setup.start_again_move_unfinished", secure: isSecure(c) });
 
     let chosen: Form["choice"];
     let result: Awaited<ReturnType<typeof choose>>;
@@ -455,8 +477,11 @@ export function mountStartAgainChoice(
       });
     } catch (error) {
       if (isAppError(error) && hasCode(error, "setup.start_again_move_unfinished")) {
-        log?.("warn", "recovery.start_again_choice_failed", { errorCode: error.code });
-        return page(409, { code: error.code, secure: true });
+        moveUnfinished = true;
+        // Drawn first: the draw holds the page on this code, which a throwing logger must not skip.
+        const answer = await page(409, { code: error.code, secure: true });
+        logChoiceFailed(error, deps, log);
+        return answer;
       }
       const refusal = error instanceof Refusal ? error : await refusalFor(error, deps, log);
       if (isAppError(error) && hasCode(error, "password.throttled"))

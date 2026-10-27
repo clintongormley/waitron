@@ -1499,6 +1499,42 @@ describe("recoveryApp's Start again choice", () => {
     }
   });
 
+  it("a logger that throws on the failed-choice warning still leaves GET / on the move-unfinished page", async () => {
+    const unfinished = OPERATOR_TEXT["setup.start_again_move_unfinished"]!["en-GB"];
+    const throwingOnFailure: RecoveryDeps["log"] = (_level, event) => {
+      if (event === "recovery.start_again_choice_failed") throw new Error("log sink failed");
+    };
+    const { app: surface } = app(
+      () => Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
+      throwingOnFailure,
+    );
+    await choose(surface, "move");
+    const page = await (await surface.request("/", {}, tls())).text();
+    expect(page).toContain(escapeHtml(unfinished.title));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(page).not.toContain('type="password"');
+  });
+
+  it("after a Move that failed after its record, a later Keep or Move is answered with the move-unfinished page and chooses nothing", async () => {
+    const unfinished = OPERATOR_TEXT["setup.start_again_move_unfinished"]!["en-GB"];
+    const chooser = vi
+      .fn<NonNullable<StartAgain["choose"]>>()
+      .mockRejectedValueOnce(new AppError("setup.start_again_move_unfinished", {}))
+      .mockImplementation(MOVED);
+    const { app: surface, onFinished } = app(chooser);
+    expect((await choose(surface, "move")).status).toBe(409);
+    for (const choice of ["move", "keep"] as const) {
+      const again = await choose(surface, choice);
+      expect(again.status, choice).toBe(409);
+      const page = await again.text();
+      expect(page, choice).toContain(escapeHtml(unfinished.title));
+      expect(page, choice).not.toContain(escapeHtml(KEPT.title));
+      expect(page, choice).not.toContain(FORM_ACTION);
+    }
+    expect(chooser).toHaveBeenCalledOnce();
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
   it("a logger that throws on the recorded choice still restarts after a Move", async () => {
     const { app: surface, onFinished } = app(MOVED, throwingOnChoice);
     await choose(surface, "move");

@@ -204,7 +204,7 @@ export {
   writeStartAgainChoice,
   type StartAgainChoiceRecord,
 } from "./first-setup-start-again-choice.js";
-export { chooseStartAgainLeftovers } from "./first-setup-start-again-choose.js";
+export { chooseStartAgainLeftovers, rootRelativePath } from "./first-setup-start-again-choose.js";
 export {
   START_AGAIN_FORGIVE_MS,
   START_AGAIN_FREE_GUESSES,
