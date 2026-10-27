@@ -90,7 +90,6 @@ import {
   priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
-  refuseUnavailableFullInvoice,
   refuseOrderPaymentMarked,
   refuseRefundInProgress,
   storedOrderTotal,
@@ -1084,7 +1083,6 @@ async function beginBillPayment(
     expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
-  await refuseUnavailableFullInvoice(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   const held = await readPaymentMoney(tx, [workingOrderId]);

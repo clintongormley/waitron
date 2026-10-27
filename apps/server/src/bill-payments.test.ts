@@ -486,7 +486,7 @@ describe("invoice selection before reserving new bill money", () => {
   );
 
   it.each(["cash", "manual", "reader"] as const)(
-    "retains the public F1 refusal before a %s reservation above the F2 ceiling",
+    "accepts a saved F1 before a %s reservation above the F2 ceiling",
     async (method) => {
       const billId = await tabWith("Caña");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
@@ -499,12 +499,22 @@ describe("invoice selection before reserving new bill money", () => {
           countryCode: "ES",
         },
       });
-      const before = await snapshot(billId);
-      const error = await captureError(() =>
-        pay(billId, { ...venue.cfg, simplifiedInvoiceLimit: decimal("2.00") }, method),
+      const result = await pay(
+        billId,
+        { ...venue.cfg, simplifiedInvoiceLimit: decimal("2.00") },
+        method,
       );
-      expect(error).toMatchObject({ code: "sale.full_invoice_unavailable" });
-      expect(await snapshot(billId)).toEqual(before);
+      expect(result.payment).toMatchObject({ state: "received", applied: "1.00" });
+      expect(result.invoice).toBeUndefined();
+      const saved = await snapshot(billId);
+      expect(saved.order[0]).toMatchObject({
+        status: "open",
+        invoiceType: "F1",
+        recipientTaxId: "B12345674",
+      });
+      expect(saved.billPayments).toHaveLength(1);
+      expect(saved.billPayments[0]).toMatchObject({ state: "received", applied: 100 });
+      expect(saved.providerPayments).toHaveLength(method === "cash" ? 0 : 1);
     },
   );
 });

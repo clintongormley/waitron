@@ -282,10 +282,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Revisit when something else needs those patterns.
   [Detail](backlog/fiscal.md#packagesfiscal-verifactu-restates-rules-the-validator-owns)
 
-- **A1e. Simplified and full invoices use separate series** — BUILT, PUBLIC F1 DISABLED (2026-10-06); and **A231. Full invoices at the till** — GATED IMPLEMENTATION LANDED (2026-10-06).
-  **Next action:** verify physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4 choice (A555),
-  obtain the asesor's manual-remedy approval and settle applicable B2B delivery before enabling public F1.
-  [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
+- **A231/A948. Full invoices at the till** — table bill payments and unpaid departures can issue F1; counter sales and collection remain refused until A555 carries the delivery choice.
+  **Next action:** complete A555, A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and applicable B2B delivery as separate work. The owner removed these as switch prerequisites on 2026-10-27.
+  [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
 - **A554. Should any screen show the address an invoice email went to?** An owner question, open.
   [Detail](backlog/fiscal.md#a554-should-any-screen-show-the-address-an-invoice-email-went-to).

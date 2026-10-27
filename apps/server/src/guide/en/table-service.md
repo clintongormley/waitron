@@ -1,5 +1,15 @@
 # Table service
 
+## Issue a full invoice {#full-invoice}
+
+When a table customer needs an invoice in their name, choose **Full invoice** for the bill and
+enter their Spanish tax number, legal name and complete address before its final payment. The
+saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
+issues the invoice; recording an unpaid departure also issues it, leaving the amount unpaid.
+
+Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
+use that bill's payments. Placing a counter order alone does not issue an invoice.
+
 ## Trust the box before opening the till {#certificate-trust}
 
 The till's **This device hasn't trusted the till yet** page follows your browser's preferred

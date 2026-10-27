@@ -12773,7 +12773,7 @@ describe("till-app", () => {
           status: 409,
         }),
       ).toBe(
-        "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+        "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
       );
     });
 

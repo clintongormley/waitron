@@ -2026,7 +2026,7 @@ describe("till-app simplified-invoice limit", () => {
     expect(c.store.total).toBe("3.00");
     expect(c.store.lines).toHaveLength(1);
     expect(said(el)).toBe(
-      "El pedido pasaría de 3,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+      "El pedido pasaría de 3,00 €, el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
     );
   });
 
@@ -2186,7 +2186,7 @@ describe("till-app simplified-invoice limit", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(said(el)).toBe(
-      "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+      "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
     );
     expect(c.store.lines).toHaveLength(1);
   });
@@ -2202,7 +2202,7 @@ describe("till-app simplified-invoice limit", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(banner(el)!.textContent).toBe(
-      "Este pedido supera el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido",
+      "Este pedido supera el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
     );
   });
 

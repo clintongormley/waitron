@@ -1,5 +1,17 @@
 # Servicio en mesa
 
+## Emitir una factura completa {#full-invoice}
+
+Cuando un cliente de una mesa necesita una factura a su nombre, elige **Factura completa** para
+la cuenta e introduce su NIF español, su razón social y su dirección completa antes del último
+pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
+la cuenta se emite la factura; al registrar que se han ido sin pagar también se emite y queda
+pendiente de pago.
+
+El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
+en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
+no emite una factura.
+
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
 La página de la caja **Este dispositivo todavía no confía en la caja** usa el idioma compatible

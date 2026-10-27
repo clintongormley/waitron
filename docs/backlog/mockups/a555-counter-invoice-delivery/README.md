@@ -16,3 +16,6 @@ Start with [the phone email choice](email-en-light-390.png), then [payment confi
 Each scene also has a desktop rendering: replace `390` in its filename with `1280`. All 48 PNGs cover the six scenes in both languages, both themes and both widths. [mockups.html](mockups.html) is the self-contained drawing source; its `scene`, `lang` and `theme` query parameters select a view. The layout condenses the existing recipient address fields for this illustration; it does not propose removing those fields. All customer, invoice, order and equipment data are synthetic.
 
 The recommended choice is A in the design's one owner question: select the original before payment. B would add “Choose delivery later” and a durable undelivered task; that alternative is described in the design, not implemented or pictured as approved behavior. The final F1 switch still requires the separate A444/B2B work and the owner's paper/QR and adviser confirmations.
+
+2026-10-27: A948 enables prepared table and unpaid-departure F1 paths. These drawings remain
+a proposal for counter delivery; counter payment still refuses F1 until A555 is built.

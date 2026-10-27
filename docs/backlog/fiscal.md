@@ -247,7 +247,7 @@ intra-community and import boxes (32–39); a libro-registro / Pre303 export.
 passport, residence certificate and so on, enumerated in
 `@waitron/verifactu`'s AEAT XSD (`SuministroInformacion.xsd`) — and choosing wrongly files a record
 into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
-that call. A231 adds the saved Spanish-recipient choice around issuance, with public F1 disabled. Foreign
+that call. A231 adds the saved Spanish-recipient choice around issuance. Foreign
 recipient support remains outside that build; `recordSubstitution` still has no HTTP route.
 
 ## `packages/fiscal-verifactu` restates rules the validator owns
@@ -261,20 +261,24 @@ recipient support remains outside that build; `recordSubstitution` still has no 
   widens an audited fiscal library's public surface and the drift guard already closes the risk.
   Revisit when something else needs those patterns.
 
-## A1e. Simplified and full invoices use separate series — BUILT, PUBLIC F1 DISABLED (2026-10-06)
+<a id="a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06"></a>
+
+## A1e. Simplified and full invoices use separate series
 
 A231 [#1256](https://github.com/clintongormley/waitron/pull/1256) adds the `full` purpose beside
 `standard` and `rectificative`, provisions its series, and makes core require it for F1 and F3.
-Public F1 issuance remains disabled; no route calls `recordSubstitution`. The separate-series
+Table bill payments and unpaid departures can issue F1; no route calls `recordSubstitution`. The separate-series
 basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-findings.md).
-**Next action:** complete A231's enablement gates below. Asesor Q5(d) remains open for F3 and R5.
+**Next action:** complete A231's remaining paths and qualification below. Asesor Q5(d) remains open for F3 and R5.
 
-## A231. Full invoices at the till — GATED IMPLEMENTATION LANDED (2026-10-06)
+<a id="a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06"></a>
+
+## A231. Full invoices at the till
 
 The owner authorised the gated implementation, which landed as
 [#1256](https://github.com/clintongormley/waitron/pull/1256), squash `2d972685530676fbe7c182760f0d96f461214e47`.
-Existing preproduction venues require a reset for the schema change. Public F1 issuance remains
-disabled. The [design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md) and
+Existing preproduction venues require a reset for that schema change. A948 enables the prepared
+F1 paths in every environment, with no environment switch. The [design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md) and
 [implementation plan](../superpowers/plans/2026-10-03-full-invoices-at-till.md) retain the decisions
 and dated implementation receipts.
 
@@ -290,17 +294,18 @@ refusal, including its could-not-open operator advice; provenance, HTTP400/domai
 unchanged-database and empty-staging checks remain. This is preproduction format rejection,
 with no backward-compatibility implementation.
 
-**Next action:** verify physical 58/80 mm paper and QR output, settle what paying at the counter
-does with an email or A4 choice (A555), obtain the asesor's manual-remedy approval and settle
-applicable B2B delivery before enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
-offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
-and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Enabling it also means: the
-server sends `fullInvoices: true` in `GET /api/till` (`apps/server/src/till-setup.ts`), so the till
-draws its Full invoice buttons again (A741); `sale.over_simplified_limit` is reworded, since it
-says the till cannot issue a full invoice; and someone decides whether the server should go on
-accepting a saved F1 choice (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which
-lifts its check on an order growing past the limit. A741 left that last one unchanged. Follow the
-campaign's current queue order; this landing does not start another fiscal item.
+The till offers **Full invoice**. A saved Spanish recipient can be invoiced through table bill
+payments or an unpaid departure. Email and A4 originals use the existing delivery queue. Direct
+counter cash/manual-card sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`) and
+unissued counter collection still refuse F1 with `sale.full_invoice_unavailable` until A555.
+Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
+zone setting creates no separate public issuance route. Zero-total F1 counter requests retain
+the same refusal. A saved F1 choice still permits the bill to grow above the simplified ceiling;
+the existing recipient checks and F1 series selection remain in place.
+
+**Next action:** complete A555, A444, the physical 58/80 mm paper and QR checks, the asesor's
+manual-remedy confirmation and applicable B2B delivery as separate work. F3 conversion, F1's
+R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
 
 ## A555. Counter full-invoice delivery through payment — DESIGN PROPOSED (2026-10-21)
 
@@ -316,8 +321,9 @@ replace the final invoice's selected original. None remains an ordinary F2 recei
 alternative of choosing F1 delivery later is the owner's one design decision.
 
 **Next action:** approve or revise the complete design, then plan/build against the released
-A739 seams. A444 and B2B delivery remain separate steps before public F1 is enabled. The physical
-58/80 mm paper/QR checks and the adviser's manual-remedy confirmation still gate that switch.
+A739 seams. A444, B2B delivery, physical 58/80 mm paper/QR checks and the adviser's
+manual-remedy confirmation remain separate work; the owner removed them as switch prerequisites
+on 2026-10-27.
 This design does not close A554's saved-email-address question, change the consent decision or
 add invoice PDF storage.
 
@@ -346,8 +352,9 @@ The plan's source observations are **READ ONLY / runtime UNVERIFIED** at
 proposals; no product test, renderer, fiscal or legal verification was run. A1003 is now landed
 (PR #1973); preserve its refusal/rollback boundary. Recheck released A696 clock, F/A739 Pay,
 A555/A948 delivery and A947 minute-allocation contracts before their dependent build steps.
-Public F1 and A231/A741/physical/manual-remedy/B2B gates remain separate. The €5,000 F1 example
-is a future enabled path; €220 F2 stays within existing limits. The plan places a precise
+A948 enables existing table-payment and unpaid-departure F1 paths; transfer closure remains
+unbuilt. Physical/manual-remedy/B2B qualification remains separate. The €5,000 transfer example
+is still a future path; €220 F2 stays within existing limits. The plan places a precise
 RUNNER H2 approval gate before later work reaches protected fiscal behavior, and keeps golden
 huella/inmutabilidad unedited. Design approval does not waive that gate.
 
@@ -621,7 +628,7 @@ records each outcome and its limits; the library probe PR is
 Q33–Q41 and [the findings, §16](../compliance/verifactu-findings.md#16-aeat-test-service-observations-for-conflict-recovery-added-2026-10-05-w41s-1)
 now carry the test-system receipts and their limits. The legal questions remain open.
 W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264). A231 #1256 has
-landed with public F1 disabled. **Next action:** continue the approved dependent W41s tasks in campaign order,
+landed before A948 enabled the prepared table and unpaid-departure F1 paths. **Next action:** continue the approved dependent W41s tasks in campaign order,
 keeping each task's fiscal and adviser gates.
 **Update, 2026-10-06 (W41s-3, landed):** Task 3 landed as
 [#1289](https://github.com/clintongormley/waitron/pull/1289), with the owner's approval of its
@@ -760,8 +767,9 @@ The question is now [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.
-Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A555
-and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
+A948 enables table and unpaid-departure F1 issuance. Counter delivery (A555), the physical
+58/80 mm paper and QR checks and the asesor's approval remain open separately. The F1
+taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan.
 
@@ -1005,6 +1013,13 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Decisions and deliberate limits
 
+- **A948, owner decision 2026-10-27: enable full invoices in every environment now.** No
+  environment flag remains. A555, A444, applicable B2B delivery, physical paper/QR checks and
+  the asesor's manual-remedy approval were dropped as prerequisites to the switch, not closed.
+  Counter sales, integrated-card payment and unissued counter collection retain their F1 refusal
+  until A555 carries original delivery through payment. Saved F1 choices may grow above the
+  simplified-invoice ceiling.
+
 - **Backup access is independent of a retained setup's password (A731; owner, 2026-10-15).**
   Authenticate the selected backup with its own named node key, plus the archive key or source
   credentials it needs. Keep unrelated local records opaque and retain their files. A key that
@@ -1102,7 +1117,8 @@ check against a second clock, and dropped the installation code from the sheet; 
   reconcile query across a rename takes its header name from whichever of its rows comes first
   (`packages/fiscal-verifactu/src/reconcile.ts`).
 - **Full invoices by email or on A4: the owner's answers in place of the asesor's (2026-10-07, A231d's
-  plan Task 0.1, so A231p could be built).** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](../compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
+  plan Task 0.1, so A231p could be built).** The owner dropped the enablement prerequisites on
+  2026-10-27 (A948 above); the asesor is still asked to confirm these as [Q44](../compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
   1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.
   2. Consent to email: staff ask the customer and record the answer on the till. The customer does not sign or confirm anything themselves.
      **Gap found 2026-10-09 (A448):** for a consumer, TRLGDCU art. 63.3 requires the request for consent to «precisar la forma en la que se procederá a recibir la factura electrónica, así como la posibilidad de que el destinatario que haya dado su consentimiento pueda revocarlo y la forma en la que podrá realizarse dicha revocación». The till's question must say both.

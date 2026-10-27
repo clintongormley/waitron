@@ -19,8 +19,6 @@ import {
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 
-// The dashboard's PDF download of a full invoice, against synthetic full invoices written through
-// the core (public F1 issuance stays disabled).
 let venue: OrderVenue;
 let managerDashboard = "";
 let fullSeriesId = "";

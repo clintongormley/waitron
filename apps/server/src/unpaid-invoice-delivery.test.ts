@@ -119,7 +119,6 @@ async function state(tx: Transaction) {
   };
 }
 
-// Select a synthetic F1 after the unchanged public gate; the core still writes the real invoice.
 async function syntheticSelection(orderId: string) {
   const selected = await withTransaction(suite.db, (tx) =>
     selection.selectOrderInvoice(tx, venue.backend, venue.cfg, orderId, decimal("3.00")),
@@ -240,15 +239,24 @@ describe("unpaid invoice delivery", () => {
   });
 
   it.each(["email", "a4"] as const)(
-    "retains the public F1 refusal for %s without writing an invoice or delivery",
+    "issues the saved F1 and reserves its %s original without a synthetic selection",
     async (kind) => {
       const { orderId } = await bill(kind);
-      const before = await withTransaction(suite.db, state);
-      await expect(withTransaction(suite.db, (tx) => issue(tx, orderId))).rejects.toMatchObject({
-        code: "sale.full_invoice_unavailable",
-        params: {},
-      });
-      expect(await withTransaction(suite.db, state)).toEqual(before);
+      const result = await withTransaction(suite.db, (tx) => issue(tx, orderId));
+      const after = await withTransaction(suite.db, state);
+      expect(after.sales).toEqual([
+        expect.objectContaining({ id: result.saleId, counterpartyTaxId: "B12345674", total: 300 }),
+      ]);
+      expect(after.deliveries).toEqual([
+        expect.objectContaining({
+          saleId: result.saleId,
+          medium: kind,
+          designation: "original",
+          status: "queued",
+        }),
+      ]);
+      expect(after.settlements).toEqual([]);
+      expect(after.jobs).toEqual([]);
     },
   );
 });
