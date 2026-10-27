@@ -1980,11 +1980,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
   is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
   items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
-  Slice 1 landed in #2128: the mechanism and the reasons. Left, each
-  in [the plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 2, the
-  kitchen station and device profiles; slice 3, venue-service's steps, seasons, counter zone and
-  period; slice 4, the catalogue's units and first menu. Slices 3 and 4 wait for the owner's answer
-  to the plan's FYI A.
+  Slice 1 landed in #2128: the mechanism and the reasons. Slice 2, the kitchen station and the
+  device profiles, is on `feat/a918-2-station-and-profiles`. Left, each in [the
+  plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 3, venue-service's
+  steps, seasons, counter zone and period; slice 4, the catalogue's units and first menu. The owner
+  chose the staff language for one-name starter rows (2026-10-27), so neither waits.
 
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
