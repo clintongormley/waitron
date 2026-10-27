@@ -173,8 +173,9 @@ supervisor can see them. A configuration export carries them, so a new box set u
 them. If you set it up with **New tax ID**, check them here: they are still the old business's until
 you change them.
 
-Waitron shows the page in the emails it sends staff, on the sign-in page, in **Account settings** and
-in the `README.txt` of a data download. A change shows in the next email or download; a page already
+Waitron shows the page in the emails it sends staff to set up an account, reset a password or
+confirm a new email address, on the sign-in page, in **Account settings** and in the `README.txt` of
+a data download. A change shows in the next email or download; a page already
 open shows it once reloaded, except **Account settings**, which follows it at once. For now, only the
 **Privacy** card shows the privacy email.
 

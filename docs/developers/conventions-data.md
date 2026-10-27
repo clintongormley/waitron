@@ -2660,12 +2660,12 @@ every other part, and the venue's name and privacy page for the README (the page
 in the first, the caller checked again in the second after the files are built — and resolve the
 session with `touch: false`, so they answer on a full disk with a change waiting. Since S2c, the
 actions part (`apps/server/src/personal-data-actions.ts`) reads in `withWriteLock` turns of its own
-between the two, while the files are built, also with no drain. The cases are "a person's own personal-data download answers on a full disk with a change
-waiting", "an admin's personal-data download of another person answers on a full disk with a
-change waiting, and writes nothing" and "an admin's personal-data download of a person with a
-drawer opening looks its sale number up on a full disk", all in
-`apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one `withTransaction`
-per route.
+between the two, while the files are built, also with no drain. The cases are "a person's own
+personal-data download answers on a full disk with a change waiting", "an admin's personal-data
+download of another person answers on a full disk with a change waiting, and writes nothing" and
+"an admin's personal-data download of a person with a drawer opening looks its sale number up on a
+full disk", all in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to
+one `withTransaction` per route.
 
 Since A980 S3, an admin's invoice-customer search and download
 (`GET /management-api/invoice-customers/personal-data` and its `/export`, in
@@ -2679,9 +2679,12 @@ nothing" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exce
 `withTransaction` per route.
 
 Since A980 S1b, `GET /management-api/google/config` reads the venue's privacy page through
-`withTransaction`, so on a full disk with a change waiting it answers 507 and the sign-in page shows
-neither the Google button nor the link. This is accepted: the page's locales read and password
-sign-in already go through `withTransaction` there (the S1b plan's decision 3).
+`withTransaction`, so on a full disk with a change waiting it should answer 507, through the
+change-log drain measured below (M2 under "What refused them", and M1 under "The dashboard's
+full-disk reads", where a passive read answered 507 that way) and the error boundary's full-disk
+status; this route was read, not run. The sign-in page then shows no privacy link and offers no
+working Google sign-in. This is accepted: the page's locales read and password sign-in already go
+through `withTransaction` there (the S1b plan's decision 3).
 
 Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in

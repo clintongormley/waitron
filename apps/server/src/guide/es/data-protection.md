@@ -181,8 +181,9 @@ cambiarlos, y un supervisor puede verlos. Una exportación de la configuración 
 un equipo nuevo preparado a partir de ella los muestra. Si lo preparas con **NIF nuevo**, revísalos
 aquí: siguen siendo los del negocio anterior hasta que los cambies.
 
-Waitron muestra la página en los correos que envía al personal, en la página de inicio de sesión, en
-**Configuración de la cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en el
+Waitron muestra la página en los correos que envía al personal para crear una cuenta, restablecer
+una contraseña o confirmar un correo nuevo, en la página de inicio de sesión, en **Configuración de
+la cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en el
 siguiente correo o la siguiente descarga; una página ya abierta lo muestra al volver a cargarla,
 salvo **Configuración de la cuenta**, que lo sigue al momento. Por ahora, solo la tarjeta
 **Privacidad** muestra el correo de privacidad.
