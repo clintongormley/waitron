@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
 import type { TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -31,7 +31,7 @@ afterEach(cleanupWidgets);
 
 it("sends the captured simulator outcome once the operator switches back from declined", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
     cardProvider: "simulator",
@@ -50,7 +50,7 @@ it("sends the captured simulator outcome once the operator switches back from de
 
 it("Hold at the order stage of a pay-later flow opens the label prompt instead of placing", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
     mode: "ticket_then_pay",
