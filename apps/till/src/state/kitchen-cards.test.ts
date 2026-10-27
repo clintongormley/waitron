@@ -206,6 +206,35 @@ describe("kitchenCards", () => {
   });
 });
 
+describe("a card's course sections", () => {
+  const starters = { id: "co-start", name: "Starters", displayOrder: 1 };
+  const salads = { id: "co-salad", name: "Salads", displayOrder: 1 };
+  const mains = { id: "co-main", name: "Mains", displayOrder: 2 };
+
+  it("orders courseless first, then by course, a tie by first read; its items and taps follow", () => {
+    const card = one(
+      bill("wo-1", [
+        dish("steak", "20:40", { course: mains }),
+        dish("soup", "20:40", { course: starters }),
+        dish("caesar", "20:40", { course: salads }),
+        dish("bread", "20:40"),
+        dish("croquetas", "20:40", { course: starters }),
+      ]),
+    );
+    const drawn = ["bread", "soup", "croquetas", "caesar", "steak"];
+
+    expect(card.sections.map((section) => section.course?.id ?? null)).toEqual([
+      null,
+      "co-start",
+      "co-salad",
+      "co-main",
+    ]);
+    expect(card.sections.flatMap((section) => section.items.map((item) => item.id))).toEqual(drawn);
+    expect(ids(card)).toEqual(drawn);
+    expect(dishesAt(card, "queued")).toEqual(drawn);
+  });
+});
+
 describe("headingStage and dishesAt", () => {
   it("names the stage a heading tap moves, and the dishes it moves", () => {
     const mixed = one(

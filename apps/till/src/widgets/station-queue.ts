@@ -17,6 +17,7 @@ import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
 import {
+  type CourseSection,
   type KitchenCard,
   type MergedQueueGroup,
   dishesAt,
@@ -28,7 +29,6 @@ import {
 import type {
   KitchenNotice,
   KitchenNoticeKind,
-  StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
   TicketState,
@@ -60,17 +60,7 @@ const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
 
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
-interface CourseSection {
-  course: StationQueueCourse | null;
-  items: StationQueueItem[];
-}
-
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
-
-/** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
-function courseOrder(course: StationQueueCourse | null): number {
-  return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
-}
 
 function afterPeriodWords(period: string): string {
   return t("station.after_period").replace("{period}", () => period);
@@ -694,24 +684,6 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  /** Item order WITHIN a course is preserved (the server already ordered by `queued_at, line_no`). A
-   * missing/undefined course is treated as the null course, so an older/partial payload still groups
-   * cleanly. */
-  #courseSections(items: readonly StationQueueItem[]): CourseSection[] {
-    const byCourse = new Map<string | null, CourseSection>();
-    for (const item of items) {
-      const course = item.course ?? null;
-      const key = course?.id ?? null;
-      let section = byCourse.get(key);
-      if (section === undefined) {
-        section = { course, items: [] };
-        byCourse.set(key, section);
-      }
-      section.items.push(item);
-    }
-    return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
-  }
-
   /** Never a fresh `Date.now()` call, so every render in one tick sees the identical `now`. */
   #clockNow(): number {
     return this.now ?? this.#clock.now;
@@ -942,7 +914,7 @@ export class TillStationQueue extends LitElement {
     const labels = [...new Set(card.orders.map((order) => order.label).filter((label) => !!label))];
     const row = (item: StationQueueItem) =>
       this.#renderLine(card, card.orderOf.get(item.id)!, item, this.#stateWord(card, item));
-    const sections = this.#courseSections(card.items);
+    const { sections } = card;
     // One shared course is named in the heading; its dishes keep their `.course` wrapper (D5).
     const sharedCourse = sections.length === 1 ? sections[0]!.course : null;
     // On a card merging bills, each bill's facts and actions name their bill (D11).

@@ -1,10 +1,17 @@
 import { BAND_RANK, classifyBand, stringToThousandths } from "@waitron/shared";
 import type {
   QueueGroup,
+  StationQueueCourse,
   StationQueueGroup,
   StationQueueItem,
   TicketState,
 } from "../api/client.js";
+
+/** One course's dishes on a card, in the read's order. */
+export interface CourseSection {
+  course: StationQueueCourse | null;
+  items: StationQueueItem[];
+}
 
 /** A merged queue's order: one station's lines of it, so `stationId` names whose. */
 export type MergedQueueGroup = StationQueueGroup & { stationId?: string };
@@ -16,7 +23,9 @@ export interface KitchenCard {
   orders: MergedQueueGroup[];
   /** The group the dishes were sent in; null for a counter order, a bill with no party, or dishes moved in. */
   group: QueueGroup | null;
-  /** In the read's order. */
+  /** Its dishes by course, courseless first: the order the card draws them. */
+  sections: CourseSection[];
+  /** The sections' dishes in turn, so every tap names them in the order a cook reads them. */
   items: StationQueueItem[];
   /** Each dish's own bill, by item id: a dish carries no order id, and a card may span bills. */
   orderOf: ReadonlyMap<string, MergedQueueGroup>;
@@ -27,6 +36,27 @@ export interface KitchenCard {
 }
 
 const STAGE_RANK: Record<TicketState, number> = { queued: 0, preparing: 1, ready: 2 };
+
+/** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
+function courseOrder(course: StationQueueCourse | null): number {
+  return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
+}
+
+/** A missing course counts as none, so an older payload still groups; a tie keeps the read's order. */
+function courseSections(items: readonly StationQueueItem[]): CourseSection[] {
+  const byCourse = new Map<string | null, CourseSection>();
+  for (const item of items) {
+    const course = item.course ?? null;
+    const key = course?.id ?? null;
+    let section = byCourse.get(key);
+    if (section === undefined) {
+      section = { course, items: [] };
+      byCourse.set(key, section);
+    }
+    section.items.push(item);
+  }
+  return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
+}
 
 const fired = (item: StationQueueItem) => item.firedAt !== null;
 
@@ -57,7 +87,16 @@ export function kitchenCards(orders: readonly MergedQueueGroup[]): KitchenCard[]
       if (draft === undefined) {
         const orderOf = new Map<string, MergedQueueGroup>();
         draft = {
-          card: { key, orders: [], group, items: [], orderOf, column: "queued", since: null },
+          card: {
+            key,
+            orders: [],
+            group,
+            sections: [],
+            items: [],
+            orderOf,
+            column: "queued",
+            since: null,
+          },
           orderOf,
           readIndex,
         };
@@ -72,6 +111,8 @@ export function kitchenCards(orders: readonly MergedQueueGroup[]): KitchenCard[]
 
   const sorted = [...drafts.values()];
   for (const { card } of sorted) {
+    card.sections = courseSections(card.items);
+    card.items = card.sections.flatMap((section) => section.items);
     card.column = leastAdvanced(card.items);
     const times = card.items.filter(fired).map((item) => Date.parse(item.queuedAt));
     card.since = times.length === 0 ? null : Math.min(...times);

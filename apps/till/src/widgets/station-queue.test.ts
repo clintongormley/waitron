@@ -3411,6 +3411,56 @@ describe("till-station-queue: a card's heading and whole-ticket taps", () => {
       { itemIds: ["ti-waiting"], stationId: "st-2", to: "preparing" },
     ]);
   });
+
+  describe("a tap sends its dishes in the order the card draws them", () => {
+    const starters = { id: "co-start", name: "Starters", displayOrder: 1 };
+    const mains = { id: "co-main", name: "Mains", displayOrder: 2 };
+    // Read mains first, so the read's order and the card's differ.
+    const coursed = (bumpMode: StationQueueGroup["bumpMode"]) =>
+      ageBill(
+        7,
+        [
+          ageDish("ti-steak", 15, { course: mains }),
+          ageDish("ti-soup", 15, { course: starters }),
+          ageDish("ti-bread", 15, { course: null }),
+          ageDish("ti-salad", 15, { course: starters }),
+        ],
+        { bumpMode },
+      );
+    const drawn = (el: TillStationQueue) =>
+      [...cardOf(el, 7).querySelectorAll<HTMLElement>("[data-item]")].map(
+        (node) => node.dataset.item,
+      );
+    const inCardOrder = ["ti-bread", "ti-soup", "ti-salad", "ti-steak"];
+
+    it("a heading tap", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [coursed("line")],
+        stationId: "st-1",
+        now: AGE_NOW,
+      });
+      expect(drawn(el)).toEqual(inCardOrder);
+      const taps = listen(el);
+      head(el, 7)!.click();
+      expect(taps.details()).toEqual([
+        { itemIds: inCardOrder, stationId: "st-1", to: "preparing" },
+      ]);
+    });
+
+    it("a whole-ticket dish tap", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [coursed("ticket")],
+        stationId: "st-1",
+        now: AGE_NOW,
+      });
+      expect(drawn(el)).toEqual(inCardOrder);
+      const taps = listen(el);
+      el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-steak"]')!.click();
+      expect(taps.details()).toEqual([
+        { itemIds: inCardOrder, stationId: "st-1", to: "preparing" },
+      ]);
+    });
+  });
 });
 
 describe("till-station-queue: a card's layout", () => {
