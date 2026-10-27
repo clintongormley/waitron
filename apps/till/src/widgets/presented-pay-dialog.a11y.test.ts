@@ -19,8 +19,8 @@ const item = (id: string, name: string, extra: Partial<EquipmentItem> = {}): Equ
   heldBy: null,
   ...extra,
 });
-const LECTOR_2 = item("r2", "Lector 2", { portable: true, provider: "sumup" });
-const BARRA = item("p1", "Barra");
+const READER_2 = item("r2", "Lector 2", { portable: true, provider: "sumup" });
+const BAR_PRINTER = item("p1", "Barra");
 const role = (name: RoleEquipment["role"], chosen: EquipmentItem): RoleEquipment => ({
   role: name,
   selection: "item",
@@ -31,7 +31,7 @@ const role = (name: RoleEquipment["role"], chosen: EquipmentItem): RoleEquipment
   choices: [chosen],
 });
 const equipment: DeviceEquipment = {
-  roles: [role("receipt", BARRA), role("card_terminal", LECTOR_2)],
+  roles: [role("receipt", BAR_PRINTER), role("card_terminal", READER_2)],
 };
 
 const pressed = async (el: TillPresentedPayDialog, selector: string) => {
@@ -107,7 +107,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
   });
 
   it("has no violations with no reader and the row opened", async () => {
-    const { el, host } = await mount({ equipment: { roles: [role("receipt", BARRA)] } });
+    const { el, host } = await mount({ equipment: { roles: [role("receipt", BAR_PRINTER)] } });
     const row = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
       "till-pay-equipment",
     )!;

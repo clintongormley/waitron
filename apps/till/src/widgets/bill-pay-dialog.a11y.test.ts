@@ -72,7 +72,7 @@ const rowBackgrounds = new Map<string, string>();
 const noticeBackgrounds = new Map<string, string>();
 const tableBackgrounds = new Map<string, string>();
 
-const LECTOR_2: EquipmentItem = {
+const READER_2: EquipmentItem = {
   id: "r2",
   name: "Lector 2",
   portable: true,
@@ -81,7 +81,7 @@ const LECTOR_2: EquipmentItem = {
   heldBy: null,
   provider: "sumup",
 };
-const BARRA: EquipmentItem = {
+const BAR_PRINTER: EquipmentItem = {
   id: "p1",
   name: "Barra",
   portable: false,
@@ -99,7 +99,7 @@ const role = (name: RoleEquipment["role"], item: EquipmentItem): RoleEquipment =
   choices: [item],
 });
 const equipment: DeviceEquipment = {
-  roles: [role("receipt", BARRA), role("card_terminal", LECTOR_2)],
+  roles: [role("receipt", BAR_PRINTER), role("card_terminal", READER_2)],
 };
 const shareOf3: AllocationPreview = {
   kind: "allocated",
@@ -798,7 +798,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       cardReader: "stripe_terminal",
       takesReaderCard: true,
       takesCash: true,
-      equipment: { roles: [role("receipt", BARRA)] },
+      equipment: { roles: [role("receipt", BAR_PRINTER)] },
     });
     const row = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
       "till-pay-equipment",

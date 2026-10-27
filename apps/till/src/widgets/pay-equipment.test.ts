@@ -22,8 +22,8 @@ const HELD = item("r4", "Lector 4", {
   provider: "sumup",
   heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" },
 });
-const BARRA = item("p1", "Barra");
-const TERRAZA = item("p2", "Terraza");
+const BAR_PRINTER = item("p1", "Barra");
+const TERRACE_PRINTER = item("p2", "Terraza");
 
 function role(name: RoleEquipment["role"], overrides: Partial<RoleEquipment> = {}): RoleEquipment {
   return {
@@ -53,7 +53,7 @@ const byDefault = (it: EquipmentItem, choices: EquipmentItem[]): Partial<RoleEqu
 });
 
 function equipment(
-  receipt: Partial<RoleEquipment> = chosen(BARRA, [BARRA, TERRAZA]),
+  receipt: Partial<RoleEquipment> = chosen(BAR_PRINTER, [BAR_PRINTER, TERRACE_PRINTER]),
   reader: Partial<RoleEquipment> = chosen(L2, [L2, L1, L3, HELD]),
 ): DeviceEquipment {
   return {
@@ -116,7 +116,10 @@ describe("till-pay-equipment", () => {
 
     it("marks a printer from the profile's default", async () => {
       const el = await mount({
-        equipment: equipment(byDefault(TERRAZA, [BARRA, TERRAZA]), byDefault(L1, [L1])),
+        equipment: equipment(
+          byDefault(TERRACE_PRINTER, [BAR_PRINTER, TERRACE_PRINTER]),
+          byDefault(L1, [L1]),
+        ),
       });
       expect(summary(el)).toBe("Lector 1 · ticket en Terraza (predeterminada)");
     });
@@ -130,13 +133,13 @@ describe("till-pay-equipment", () => {
       const off = item("p1", "Barra", { available: false });
       const offReader = item("r2", "Lector 2", { available: false, provider: "sumup" });
       const el = await mount({
-        equipment: equipment(chosen(off, [BARRA]), chosen(offReader, [L1])),
+        equipment: equipment(chosen(off, [BAR_PRINTER]), chosen(offReader, [L1])),
       });
       expect(summary(el)).toBe("sin lector · sin impresora");
     });
 
     it("says sin impresora when printers are listed but none is set", async () => {
-      const el = await mount({ equipment: equipment({ choices: [BARRA] }) });
+      const el = await mount({ equipment: equipment({ choices: [BAR_PRINTER] }) });
       expect(summary(el)).toBe("Lector 2 · sin impresora");
     });
 
@@ -153,14 +156,14 @@ describe("till-pay-equipment", () => {
     it("reads in English", async () => {
       setLocale("en");
       const el = await mount({
-        equipment: equipment(byDefault(TERRAZA, [TERRAZA]), chosen(L2, [L2])),
+        equipment: equipment(byDefault(TERRACE_PRINTER, [TERRACE_PRINTER]), chosen(L2, [L2])),
       });
       expect(q(el, "[data-pay-equipment-heading]")!.textContent!.trim()).toBe("Reader and printer");
       expect(summary(el)).toBe("Lector 2 · ticket at Terraza (default)");
       expect(q(el, "[data-pay-equipment-change]")!.textContent!.trim()).toBe("Change");
       const none = await mount({ equipment: equipment({}, {}) });
       expect(summary(none)).toBe("no reader · no ticket");
-      const unset = await mount({ equipment: equipment({ choices: [TERRAZA] }) });
+      const unset = await mount({ equipment: equipment({ choices: [TERRACE_PRINTER] }) });
       expect(summary(unset)).toBe("Lector 2 · no printer");
       const reading = await mount({ equipment: null });
       expect(summary(reading)).toBe("Reading…");
@@ -244,7 +247,7 @@ describe("till-pay-equipment", () => {
       const off = item("p1", "Barra", { available: false });
       const el = await mount({
         open: true,
-        equipment: equipment(chosen(off, [BARRA, TERRAZA]), byDefault(L1, [L1, L2])),
+        equipment: equipment(chosen(off, [BAR_PRINTER, TERRACE_PRINTER]), byDefault(L1, [L1, L2])),
       });
       expect(box(el, "receiptPrinterId")!.value).toBe("");
       expect(box(el, "receiptPrinterId")!.hint).toBe("");
@@ -388,8 +391,8 @@ describe("till-pay-equipment", () => {
       q(el, "[data-pay-printer-warning]")?.textContent!.trim();
 
     it.each([
-      ["chosen", chosen(OFF, [BARRA, TERRAZA])],
-      ["by default", byDefault(OFF, [BARRA, TERRAZA])],
+      ["chosen", chosen(OFF, [BAR_PRINTER, TERRACE_PRINTER])],
+      ["by default", byDefault(OFF, [BAR_PRINTER, TERRACE_PRINTER])],
     ] as const)(
       "a switched-off printer %s leaves the printer field empty and warns no ticket will print",
       async (_how, receipt) => {
@@ -404,7 +407,10 @@ describe("till-pay-equipment", () => {
     );
 
     it("printers listed with none set warns there is no ticket printer", async () => {
-      const el = await mount({ open: true, equipment: equipment({ choices: [BARRA, TERRAZA] }) });
+      const el = await mount({
+        open: true,
+        equipment: equipment({ choices: [BAR_PRINTER, TERRACE_PRINTER] }),
+      });
       expect(box(el, "receiptPrinterId")!.value).toBe("");
       expect(warning(el)).toBe(t("pay_equipment.printer_none"));
     });
@@ -414,7 +420,7 @@ describe("till-pay-equipment", () => {
       expect(warning(ready)).toBeUndefined();
       const fromDefault = await mount({
         open: true,
-        equipment: equipment(byDefault(TERRAZA, [BARRA, TERRAZA])),
+        equipment: equipment(byDefault(TERRACE_PRINTER, [BAR_PRINTER, TERRACE_PRINTER])),
       });
       expect(warning(fromDefault)).toBeUndefined();
       const none = await mount({ open: true, equipment: equipment({}) });
@@ -422,7 +428,7 @@ describe("till-pay-equipment", () => {
     });
 
     it("the warning sits under the printer field, and shows only while the row is open", async () => {
-      const el = await mount({ equipment: equipment(chosen(OFF, [BARRA, TERRAZA])) });
+      const el = await mount({ equipment: equipment(chosen(OFF, [BAR_PRINTER, TERRACE_PRINTER])) });
       expect(warning(el)).toBeUndefined();
       el.open = true;
       await el.updateComplete;
