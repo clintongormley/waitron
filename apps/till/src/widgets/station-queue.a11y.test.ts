@@ -450,6 +450,35 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("the board's narrow tabs: the narrow tabs have no violations", async () => {
+    await page.viewport(390, 844);
+    const props = {
+      groups,
+      stationId: "st-1",
+      columns: {
+        order: ["overview", "waiting", "preparing", "ready"],
+        hidden: [],
+        collapsed: [],
+      },
+      now: Date.parse("2026-08-17T10:20:00.000Z"),
+      reducedMotion: true,
+    } satisfies Partial<TillStationQueue>;
+    const first = await mountWidget<TillStationQueue>("till-station-queue", props, theme);
+    const second = await mountWidget<TillStationQueue>("till-station-queue", props, theme);
+    const page390 = document.createElement("div");
+    document.body.append(page390);
+    page390.append(first.host, second.host);
+    await Promise.all([first.el.updateComplete, second.el.updateComplete]);
+    for (const { el } of [first, second]) {
+      expect(el.shadowRoot!.querySelectorAll('[role="group"][data-column-tabs]')).toHaveLength(1);
+    }
+    try {
+      await expectNoA11yViolations(page390);
+    } finally {
+      page390.remove();
+    }
+  });
+
   it("a board with a collapsed column has no violations", async () => {
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

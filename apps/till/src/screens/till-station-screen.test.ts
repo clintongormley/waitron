@@ -2816,6 +2816,35 @@ describe("till-station-screen 15-second refresh", () => {
       expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
     });
 
+    it("the board's narrow tabs: the chosen tab survives the screen's 15-second refresh", async () => {
+      await page.viewport(390, 844);
+      const api = stubApi({
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ printersDown: [], items: kitchenQueue, notices: [] })
+          .mockResolvedValue(later),
+      });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+      await flush(el);
+      const board = queueWidget(el)!;
+      const pressed = () =>
+        [
+          ...board.shadowRoot!.querySelectorAll<HTMLElement>(
+            '[data-column-tab][aria-pressed="true"]',
+          ),
+        ].map((button) => button.dataset.columnTab);
+      board.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="preparing"]')!.click();
+      await board.updateComplete;
+      expect(pressed()).toEqual(["preparing"]);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await board.updateComplete;
+      expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+      expect(queueWidget(el)).toBe(board);
+      expect(board.groups).toEqual(barQueue);
+      expect(pressed()).toEqual(["preparing"]);
+    });
+
     it("the Columns window: a refresh that drops its station closes it", async () => {
       const board = (id: string, name: string, queue: StationQueueGroup[]) => ({
         id,

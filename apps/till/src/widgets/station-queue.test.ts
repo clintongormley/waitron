@@ -4266,6 +4266,140 @@ describe("the board's narrow tabs", () => {
     expect(tabs(el)).toHaveLength(0);
     expect(shadow(el).querySelector(".empty")!.textContent!.trim()).toBe(t("station.empty"));
   });
+
+  const chosen = (el: TillStationQueue) =>
+    tabs(el)
+      .filter((button) => button.getAttribute("aria-pressed") === "true")
+      .map((button) => button.dataset.columnTab);
+  const choose = async (el: TillStationQueue, key: string) => {
+    tab(el, key).click();
+    await el.updateComplete;
+  };
+  const hiding = (hidden: ColumnKey[], collapsed: ColumnKey[] = []) => ({
+    ...layout(collapsed),
+    hidden,
+  });
+
+  it("the board's narrow tabs: the chosen tab survives new orders", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    await choose(el, "preparing");
+    el.groups = [...board(), ageBill(5, [ageDish("w3", 18, { name: "Burger" })])];
+    await el.updateComplete;
+    expect(chosen(el)).toEqual(["preparing"]);
+    expect(tab(el, "waiting").textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `${t("station.state.queued")} · 3`,
+    );
+  });
+
+  it("the board's narrow tabs: the chosen tab survives a wide spell", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    await choose(el, "ready");
+    await page.viewport(1280, 900);
+    await vi.waitFor(() => expect(shadow(el).querySelector(".kanban")).not.toBeNull());
+    await page.viewport(390, 844);
+    await vi.waitFor(() => expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull());
+    expect(chosen(el)).toEqual(["ready"]);
+    expect(panels(el)[0]!.dataset.column).toBe("ready");
+  });
+
+  it("the board's narrow tabs: a hidden column has no tab, and a chosen column that is hidden gives way to the first", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(hiding(["waiting"]));
+    expect(tabs(el).map((button) => button.dataset.columnTab)).toEqual([
+      "overview",
+      "preparing",
+      "ready",
+    ]);
+    await choose(el, "ready");
+    el.columns = hiding(["waiting", "ready"]);
+    await el.updateComplete;
+    expect(tabs(el).map((button) => button.dataset.columnTab)).toEqual(["overview", "preparing"]);
+    expect(chosen(el)).toEqual(["overview"]);
+    expect(panels(el).map((panel) => panel.dataset.tabPanel)).toEqual(["overview"]);
+  });
+
+  it("the board's narrow tabs: with Overview hidden, Waiting is the first tab and chosen", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    await choose(el, "preparing");
+    await choose(el, "overview");
+    expect(chosen(el)).toEqual(["overview"]);
+    el.columns = hiding(["overview"]);
+    await el.updateComplete;
+    expect(tabs(el)[0]!.dataset.columnTab).toBe("waiting");
+    expect(chosen(el)).toEqual(["waiting"]);
+    expect(panels(el)[0]!.dataset.column).toBe("queued");
+  });
+
+  it("the board's narrow tabs: with every column hidden there are no tabs, and Columns stays", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(hiding(["overview", "waiting", "preparing", "ready"]));
+    expect(tabs(el)).toHaveLength(0);
+    expect(panels(el)).toHaveLength(0);
+    expect(shadow(el).querySelector("[data-columns-open]")).not.toBeNull();
+  });
+
+  it("the board's narrow tabs: a collapsed column keeps its tab and shows its cards there, and nothing is asked of the layout", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(layout(["ready"]));
+    const asked: unknown[] = [];
+    el.addEventListener("toggle-column", (event) => asked.push((event as CustomEvent).detail));
+    expect(tabs(el).map((button) => button.dataset.columnTab)).toContain("ready");
+    await choose(el, "ready");
+    expect(chosen(el)).toEqual(["ready"]);
+    expect(
+      [...panels(el)[0]!.querySelectorAll<HTMLElement>("[data-card]")].map((c) => c.dataset.order),
+    ).toEqual(["4"]);
+    expect(asked).toEqual([]);
+    expect(el.columns.collapsed).toEqual(["ready"]);
+  });
+
+  it("the board's narrow tabs: Enter and Space choose a tab", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    tab(el, "ready").focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(chosen(el)).toEqual(["ready"]));
+    tab(el, "waiting").focus();
+    await userEvent.keyboard(" ");
+    await vi.waitFor(() => expect(chosen(el)).toEqual(["waiting"]));
+  });
+
+  it("the board's narrow tabs: the tabs read in Spanish", async () => {
+    const english = { overview: t("station.overview"), waiting: t("station.state.queued") };
+    const dish = (name: string, minute: number, extra: Partial<StationQueueItem> = {}) =>
+      ageDish(`${name}-${minute}`, minute, { name, ...extra });
+    // Picture 03's scene (plan slice 9c); its two held cards sit in Waiting until a Held column.
+    const scene = [
+      ageBill(2, [
+        dish("Sirloin", 0, { state: "preparing" }),
+        dish("Burger", 0, { state: "preparing" }),
+      ]),
+      ageBill(11, [dish("Croquettes", 8, { quantity: "2.000", state: "ready" })]),
+      ageBill(5, [dish("Spicy potatoes", 12, { quantity: "2.000" })]),
+      ageBill(9, [dish("Pork shoulder", 17), dish("Spicy potatoes", 17)]),
+      ageBill(4, [
+        dish("Pork shoulder", 0, { quantity: "2.000", firedAt: null }),
+        dish("Spicy potatoes", 1, { firedAt: null }),
+      ]),
+      ageBill(7, [dish("Rib steak", 0, { firedAt: null })]),
+    ];
+    await pageAt(390, 844);
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountBoard(layout(), scene);
+      const text = (button: HTMLElement) => button.textContent!.replace(/\s+/g, " ").trim();
+      expect(t("station.overview")).not.toBe(english.overview);
+      expect(t("station.state.queued")).not.toBe(english.waiting);
+      expect(text(tabs(el)[0]!)).toBe(`${t("station.overview")} · 4`);
+      expect(text(tab(el, "waiting"))).toBe(`${t("station.state.queued")} · 4`);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
 });
 
 describe("the board's header row and hidden columns", () => {
