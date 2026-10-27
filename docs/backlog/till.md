@@ -2284,6 +2284,22 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
+**2026-10-27 approved update (owner, about 02:01/02:05/02:12 CET).**
+Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+and [implementation plan](../superpowers/plans/2026-10-27-a739-approved-payment-flow.md).
+Plan and build are approved; the driver executes inline after E/A948 #2122 lands, preserving F1
+in every environment. Dismissed Receipt / Full invoice / None means None, without pending work,
+recovery item, timer or zone fallback. Each reader's “Prints its own slip automatically” setting
+defaults false: true excludes Waitron slips; false offers Print card slip initially unticked.
+No provider printing control or hardware qualification gate. Cash/manual card have no Waitron slip.
+Keep Park · Pay, all four amount modes/journeys, next tender after each part, the settling edit's
+own choice, separate Print/Email and table closure, A790/A796 equipment scope and A582 payment help.
+Issued F1 delivery stays available; F2-to-F3 replacement stays with A556, with receipt/reprint
+options retained. No protected fiscal/guard changes beyond the named 21 October slip-copy EXPECTED
+addition. This publishes the plan and updated static boards; product/runtime acceptance remains.
+**All earlier notes and body below remain verbatim history; conflicting open questions and
+no-rebuild/native-control/pending-choice/F1-off proposals are superseded.**
+
 **2026-10-27 precedence.** The [current amendment](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and [eight four-case boards](mockups/a739-owner-receipt-flow/README.md) supersede conflicting history
 below. The owner's 2026-10-26 ~07:00 YES requires an initially unticked native-reader checkbox;

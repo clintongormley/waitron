@@ -1,3 +1,104 @@
+# 2026-10-27 approved contract: payment first, dismissal means None
+
+**Authoritative addendum.** The owner approved the revised pay screen at about 02:12 CET,
+after answering dismissal at 02:01 and reader settings at 02:05. These answers take precedence
+over every conflicting question, proposal, gate and estimate below, in the companion revision,
+and in the older mockups. Approval to plan and build is already given. The driver implements
+inline after the dependencies below; there is no further design-approval step.
+
+You open **Park · Pay**, then choose **An amount / Split equally / Items / Whole bill**, with
+**Whole bill** selected on the right. Keep cash entry/change, counter part payments through the
+bill-payment path, order-bound card outcomes and recovery, the three practice-reader choices,
+Demo-reader retirement, and A796's Change/QR/NFC equipment interaction. A partial payment shows
+what remains and asks for the next tender. Confirmed final settlement and successful local
+issuance, including a settling edit or genuine zero-total completion, open **Receipt / Full
+invoice / None**. Closing the table remains a separate action with its existing service checks.
+
+Each card reader has the saved setting **Prints its own slip automatically**, default **false**.
+True means no Waitron card slip. False offers **Print card slip** at payment, initially unticked.
+This setting describes the reader; Waitron does not control its printer. There is no provider
+print toggle, hardware-control qualification prerequisite, unknown-capability fallback or disabled
+native-print checkbox. Cash never prints payment slips. Manual card remains excluded. Freeze the
+accepted slip intent, reader setting, eligible printer and language before starting the payment;
+only confirmed received money admits the slip. Keep historical amount/balance snapshots, replay,
+reconciliation, copy audit, printer-role checks and warnings without undoing received money.
+
+Receipt and Full invoice have independent, explicit **Print** and **Email** actions. Selection,
+folding equipment and typing an address do neither. Receipt shows the folded default-printer row;
+Full invoice also shows the appropriate recipient facts. Delivery uses a valid recorded document.
+Server history determines original/copy across paper and email; failed or uncertain attempts keep
+their existing recovery rules. A lost command answer is reconciled using that command's identity.
+None or dismissal cancels no accepted slip, print or email. Documents and their retries never
+charge, issue again or open the drawer; cash/manual-card payment retains its separately audited,
+authorized drawer action and money/device/person/zone checks.
+
+**If the final choice disappears, assume None.** Leaving, connection loss, finishing the bill or
+absence of an active initiating session creates no durable pending document choice, recovery item,
+timer or zone-policy fallback. No disappearance write is needed: absence of an accepted delivery
+command means None. Payment and accepted-delivery recovery still persist their own facts. An edit
+that settles the bill owns a fresh choice in its active editing session, including management;
+it never borrows the last partial payer's intent. With no active editor, use None. You can later
+open the existing paid-view or Orders document actions deliberately, including on a closed bill.
+
+**Fiscal precedence.** Build only from main after E/A948 [PR #2122](https://github.com/clintongormley/waitron/pull/2122)
+lands. Preserve its F1 enablement in every environment, including production; add no F1-off boundary.
+Keep its actual route scope, including any counter restriction still owned by A555. An already-issued
+F1 can be printed/emailed using its recorded identity; A790's Receipt/Invoice choices are renderings
+of that same full invoice. Once F2 has issued, Full invoice instead needs a new F3 replacement
+under **A556**. A739 does not build that integration or call `recordSubstitution`. Keep actionable
+receipt/reprint options while that dependency remains; do not offer a pretend replacement Save,
+charge again, defer original issuance or overwrite F2/customer snapshots. Keep existing valid
+pre-issuance identity paths so A948's F1 flow continues to work. A556 retains recipient/address,
+source linkage, replay, authority, no-debt presentation and delivery integration for replacement.
+
+No authority is granted to change fiscal writers, hashes, chains, number allocation,
+`recordSubstitution`, alta builders, `registerSif`, `restoreFiscal`, golden tests or guards.
+The sole existing guard exception is the owner's 21 October addition of
+`bill_payment_slip_copies` to `scripts/append-only-triggers.test.ts`'s `EXPECTED`.
+Use unpublished `feat/a739-payment-window` at `3e45abdc69c0305100304d4501ca96812ba87a0b`
+as a retained-work reference, not a branch to merge blindly. Regenerate its needed migrations
+from fresh main; retain the existing checks and changed-test inventories.
+
+A790 keeps its document routing, separate Equipment Invoice setting and dashboard-memory scope;
+A796 keeps the one Equipment Receipt setting, takeover, save and concurrency rules. A582's payment
+help belongs in the rebuilt window. Updated static boards accompany this publication; running UI
+acceptance remains part of implementation.
+The [approved implementation plan](../plans/2026-10-27-a739-approved-payment-flow.md) names the cuts,
+interfaces, focused TDD checks and dependencies. Publishing this plan does not finish A739.
+
+## Sources for this addendum
+
+These are owner instructions and source-reading evidence, **not runtime verification**.
+
+- Owner answers: `/Users/clintongormley/waitron-campaign-f/questions.md:1043–1060`
+  (02:01/02:05/02:12), and the A948 overlap note at `:1065–1066`;
+  `/Users/clintongormley/waitron-campaign-f/queue.md:72–74`, `RUNNER.md:75–139`.
+- At documentation base `63a0ccc59ccfa65c1292616cc0571d8643cda1bc`:
+  `packages/payments/src/schema/card-readers.ts:6`,
+  `packages/payments/src/device-readers.ts:161`, `apps/server/src/payments-api.ts:578`
+  are the reader storage, equipment projection and edit route to extend;
+  `packages/payments/src/configuration-transfer.ts:1` exports payment policy, not hardware readers.
+- At that base: `apps/server/src/bill-payments.ts:656–816`,
+  `apps/server/src/receipt-print.ts:256–283`, `apps/server/src/invoice-selection.ts:87`,
+  `apps/server/src/invoice-delivery.ts:42`, `apps/server/src/orders-api.ts:281`
+  identify issuance/delivery separation, zone automatic delivery to suppress for A739,
+  saved invoice identity, delivery history and later reprint.
+- Retained source at `3e45abdc69c0305100304d4501ca96812ba87a0b`:
+  `apps/server/src/payment-receipt-context.ts:139–279`,
+  `apps/server/src/payment-slip-print.ts:243–400`,
+  `packages/db/src/schema/order-payment-contexts.ts:16`,
+  `packages/db/src/schema/bill-payment-slip-copies.ts:6` identify reusable payment recovery,
+  slip snapshot/admission and copy audit, whose old final-choice coupling must be replaced.
+- Scope contracts: [A790](2026-10-19-a790-document-and-printer-choice-design.md),
+  [A796](2026-10-19-a796-handheld-payments-design.md),
+  [A582](2026-10-18-a582-help-mode-design.md), and
+  [historical artwork README](../../backlog/mockups/a739-owner-receipt-flow/README.md).
+
+**Everything below is preserved verbatim as historical material. Its open questions, native-control
+proposals, pending-choice proposals and F1-off statements are superseded by this approved addendum.**
+
+---
+
 # 2026-10-27 precedence: reader checkbox answer and remaining decisions
 
 **Design amendment only; no rebuild before complete revision agreement.** Owner, 2026-10-26 ~07:00:

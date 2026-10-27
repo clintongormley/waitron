@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="7360" viewBox="0 0 390 7360" role="img" aria-labelledby="title desc">
   <title id="title">A739 owner payment and receipt flow</title>
-  <desc id="desc">Four scenarios: counter payment, three table payers, settling edit, later full invoice. Static target with fiscal dependency. Technical defaults remain proposed.</desc>
+  <desc id="desc">Four scenarios: counter payment, three table payers, settling edit, later full invoice. Static target with fiscal dependency. Approved defaults: reader setting false; dismissed choice None.</desc>
   <rect width="390" height="7360" fill="#101216" />
   <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
     <text x="16" y="36" font-size="12" font-weight="600" fill="#78a9ff">WAITRON / A739</text>
     <text x="16" y="70" font-size="22" font-weight="600" fill="#eceef2">Pay, then choose</text>
-    <text x="16" y="98" font-size="12" font-weight="400" fill="#a1a7b3">2026-10-22 · Owner-directed target</text>
+    <text x="16" y="98" font-size="12" font-weight="400" fill="#a1a7b3">2026-10-27 · Owner-approved target</text>
     <text x="16" y="120" font-size="12" font-weight="400" fill="#a1a7b3">Static design · not running product</text>
     <g transform="translate(0 0)" data-design-section="1">
       <text x="16" y="180" font-size="18" font-weight="600" fill="#eceef2">01  Counter · EUR30</text>
@@ -15,7 +15,7 @@
       <rect x="16" y="232" width="358" height="548" rx="16" fill="#191c22" stroke="#333945" />
       <text x="32" y="260" font-size="12" font-weight="600" fill="#78a9ff">1A · BEFORE CARD</text>
       <text x="32" y="290" font-size="18" font-weight="600" fill="#eceef2">Counter · EUR30.00</text>
-      <text x="32" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Known no-paper reader · Order 41</text>
+      <text x="32" y="314" font-size="12" font-weight="400" fill="#a1a7b3">Reader setting off · Order 41</text>
       <text x="32" y="336" font-size="14" font-weight="400" fill="#eceef2">An amount · Split equally · Items</text>
       <text x="32" y="358" font-size="14" font-weight="400" fill="#eceef2">● Whole bill</text>
       <text x="32" y="388" font-size="18" font-weight="600" fill="#eceef2">To pay now EUR30.00</text>
@@ -24,7 +24,7 @@
       <rect x="32" y="478" width="326" height="52" rx="8" fill="#191c22" stroke="#333945" />
       <rect x="44" y="494" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
       <text x="74" y="509" font-size="12" font-weight="600" fill="#eceef2">Print card slip</text>
-      <text x="32" y="542" font-size="12" font-weight="400" fill="#a1a7b3">Shown checked; default unchecked proposed.</text>
+      <text x="32" y="542" font-size="12" font-weight="400" fill="#a1a7b3">Shown checked; starts unchecked.</text>
       <text x="32" y="564" font-size="12" font-weight="400" fill="#a1a7b3">Tick before Card to request the slip.</text>
       <rect x="32" y="594" width="326" height="56" rx="8" fill="#262a33" stroke="#333945" />
       <text x="44" y="617" font-size="14" fill="#eceef2">▸ Slip printer · Bar receipt</text>
@@ -113,7 +113,7 @@
       <text x="44" y="2456" font-size="14" font-weight="600" fill="#a1a7b3">Email · needs recorded invoice</text>
       <g aria-label="Disabled" />
       <text x="32" y="2486" font-size="12" font-weight="400" fill="#f2b24c">No delayed F2 issue. No second charge.</text>
-      <text x="32" y="2508" font-size="12" font-weight="400" fill="#f2b24c">This preview does not enable F1 / F3.</text>
+      <text x="32" y="2508" font-size="12" font-weight="400" fill="#f2b24c">A556 replacement only; F1 stays live.</text>
     </g>
     <g transform="translate(0 -210)" data-design-section="2">
       <text x="16" y="2762" font-size="18" font-weight="600" fill="#eceef2">02  Table · Three EUR10 payers</text>
@@ -146,7 +146,7 @@
       <rect x="32" y="3464" width="326" height="48" rx="8" fill="#4c8dff" />
       <text x="44" y="3494" font-size="14" font-weight="600" fill="#06101f">Cash · EUR10.00</text>
       <rect x="32" y="3524" width="326" height="48" rx="8" fill="#191c22" stroke="#333945" />
-      <text x="44" y="3554" font-size="14" font-weight="600" fill="#78a9ff">▸ Reader · Bar · Known no paper</text>
+      <text x="44" y="3554" font-size="14" font-weight="600" fill="#78a9ff">▸ Reader · Bar · Setting off</text>
       <rect x="32" y="3584" width="326" height="52" rx="8" fill="#191c22" stroke="#333945" />
       <rect x="44" y="3600" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
       <text x="74" y="3615" font-size="12" font-weight="600" fill="#eceef2">Print card slip</text>
@@ -210,9 +210,9 @@
       <text x="44" y="5288" font-size="14" font-weight="400" fill="#eceef2">○ None</text>
       <text x="32" y="5312" font-size="12" font-weight="400" fill="#f2b24c">Nothing inherited from the EUR10 payer.</text>
       <text x="32" y="5334" font-size="12" font-weight="400" fill="#f2b24c">Ask the active editor, including office.</text>
-      <text x="32" y="5356" font-size="12" font-weight="400" fill="#f2b24c">No one answers: policy not yet agreed.</text>
-      <text x="32" y="5386" font-size="12" font-weight="400" fill="#a1a7b3">Proposed: choice pending, no timer.</text>
-      <text x="32" y="5408" font-size="12" font-weight="400" fill="#a1a7b3">No zone fallback remains unapproved.</text>
+      <text x="32" y="5356" font-size="12" font-weight="400" fill="#f2b24c">No active editor: None.</text>
+      <text x="32" y="5386" font-size="12" font-weight="400" fill="#a1a7b3">Leave or lose connection: None.</text>
+      <text x="32" y="5408" font-size="12" font-weight="400" fill="#a1a7b3">Reprint later from till or Orders.</text>
     </g>
     <g transform="translate(0 -630)" data-ui-card="3C">
       <rect x="16" y="5538" width="358" height="568" rx="16" fill="#191c22" stroke="#333945" />
@@ -303,28 +303,30 @@
       <text x="32" y="7774" font-size="12" font-weight="400" fill="#f2b24c">Do not automatically send another.</text>
     </g>
     <g data-design-section="reader-paper-proposal">
-      <text x="16" y="6900" font-size="12" font-weight="600" fill="#78a9ff">Reader · Native target starts OFF</text>
+      <text x="16" y="6900" font-size="12" font-weight="600" fill="#78a9ff">Reader setup · Approved defaults</text>
       <text x="16" y="6922" font-size="12" fill="#a1a7b3">EUR10 card on EUR30 · EUR20 left</text>
       <rect x="16" y="6944" width="358" height="88" rx="8" fill="#191c22" stroke="#333945" />
-      <text x="32" y="6966" font-size="12" font-weight="600" fill="#eceef2">Own-paper · Native control unavailable</text>
-      <g role="checkbox" aria-checked="false" aria-disabled="true" aria-label="Unticked; disabled; native control unverified">
-        <rect x="32" y="6972" width="20" height="20" rx="4" fill="#262a33" stroke="#7a8291" />
-        <text x="62" y="6988" font-size="12" fill="#a1a7b3">Print on reader</text>
+      <text x="32" y="6966" font-size="12" font-weight="600" fill="#eceef2">Card reader settings · Default OFF</text>
+      <g role="checkbox" aria-checked="false" aria-label="Prints its own slip automatically">
+        <rect x="32" y="6972" width="20" height="20" rx="4" fill="#191c22" stroke="#333945" />
+      <text x="62" y="6988" font-size="12" fill="#eceef2">Prints its own slip automatically</text>
       </g>
-      <text x="32" y="7010" font-size="12" fill="#a1a7b3">Target · Disabled · No extra Waitron slip</text>
+      <text x="32" y="7010" font-size="12" fill="#a1a7b3">You set this once per reader.</text>
       <rect x="16" y="7044" width="358" height="88" rx="8" fill="#191c22" stroke="#333945" />
-      <text x="32" y="7066" font-size="12" font-weight="600" fill="#eceef2">Known no-paper reader · Before Card</text>
-      <rect x="32" y="7078" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
-      <text x="62" y="7094" font-size="14" fill="#eceef2">Print card slip</text>
-      <text x="32" y="7116" font-size="12" fill="#a1a7b3">Requested EUR10 slip keeps EUR20 left.</text>
+      <text x="32" y="7066" font-size="12" font-weight="600" fill="#eceef2">At payment · Reader setting OFF</text>
+      <g role="checkbox" aria-checked="false" aria-label="Print card slip">
+        <rect x="32" y="7072" width="20" height="20" rx="4" fill="#191c22" stroke="#333945" />
+      <text x="62" y="7088" font-size="12" fill="#eceef2">Print card slip</text>
+      </g>
+      <text x="32" y="7110" font-size="12" fill="#a1a7b3">Starts off · Tick before Card.</text>
       <rect x="16" y="7144" width="358" height="88" rx="8" fill="#262a33" stroke="#333945" />
-      <text x="32" y="7166" font-size="12" font-weight="600" fill="#eceef2">Reader paper capability unknown</text>
-      <text x="32" y="7188" font-size="14" fill="#a1a7b3">Waitron slip unavailable</text>
-      <text x="32" y="7210" font-size="12" fill="#a1a7b3">Never guess that it has no paper.</text>
+      <text x="32" y="7166" font-size="12" font-weight="600" fill="#eceef2">Reader setting ON · Own paper</text>
+      <text x="32" y="7188" font-size="12" fill="#eceef2">No Waitron card slip offered</text>
+      <text x="32" y="7210" font-size="12" fill="#a1a7b3">Waitron sends no reader print toggle.</text>
       <text x="16" y="7254" font-size="12" fill="#a1a7b3">Cash: EUR10 of EUR30, EUR20 left; no slip.</text>
-      <text x="16" y="7276" font-size="12" fill="#a1a7b3">Target: prove adapter and reader control.</text>
-      <text x="16" y="7298" font-size="12" fill="#a1a7b3">Pending: no timer/zone fallback. Unapproved.</text>
-      <text x="16" y="7320" font-size="12" fill="#a1a7b3">Fallback + full approval: still unapproved.</text>
+      <text x="16" y="7276" font-size="12" fill="#a1a7b3">Leave or lose connection: None.</text>
+      <text x="16" y="7298" font-size="12" fill="#a1a7b3">No pending item, timer or zone fallback.</text>
+      <text x="16" y="7320" font-size="12" fill="#a1a7b3">Full invoice stays live; A556: replacement.</text>
     </g>
   </g>
 </svg>

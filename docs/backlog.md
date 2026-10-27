@@ -2090,12 +2090,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — Park · Pay and one payment window.** The 26 October reader-slip answer requires
-  an initially unticked native-reader checkbox. The [27 October amendment](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
-  leaves native control qualification and its temporary unavailable-control policy, unanswered
-  document-choice recovery and complete revision approval open. No cash slips; keep the four
-  payment journeys, separate Print/Email, A790/A796 settings, A582 help badges and the separate
-  A556/F1/F3 fiscal gates. No rebuild before agreement.
+- **A739 — Park · Pay and one payment window.** Owner approved plan and build on 27 October
+  at about 02:12 CET. [Approved contract](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+  and [implementation plan](superpowers/plans/2026-10-27-a739-approved-payment-flow.md): dismissed
+  final choice means None, with no pending recovery; reader setting “Prints its own slip
+  automatically” defaults false, with an initially unticked Waitron slip choice otherwise.
+  Cash/manual card have no Waitron slip. Keep all four journeys, separate Print/Email and table
+  closure, A790/A796 settings and A582 payment help. Build after E/A948 #2122 lands, preserving
+  F1 in every environment; F2-to-F3 replacement remains A556. Plan publication only; product
+  implementation and runtime acceptance remain; the updated boards accompany this plan.
   [Four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
   [historical detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window).
 

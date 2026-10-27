@@ -1,3 +1,19 @@
+# 2026-10-27 approved precedence
+
+The [authoritative approved addendum](2026-10-22-a739-owner-payment-and-receipt-flow.md)
+and [implementation plan](../plans/2026-10-27-a739-approved-payment-flow.md) supersede the
+questions and proposals below. The owner approved payment first, next tender after each part,
+and Receipt / Full invoice / None after settlement or a settling edit, with separate Print/Email.
+Dismissal means None, with no durable pending choice, recovery item, timer or zone fallback.
+The reader setting **Prints its own slip automatically** defaults false; true excludes a Waitron
+slip, false offers its initially unticked payment checkbox. Cash/manual card have no Waitron slip.
+There is no provider print control or qualification gate. Build after A948 #2122 lands and preserve
+F1 in every environment. F2-to-F3 replacement remains A556; delivery of an issued F1 stays available.
+Approval is already given, with inline execution by the driver. All text below remains verbatim
+history, including superseded approval questions and F1-off/pending/native-control proposals.
+
+---
+
 # 2026-10-27 precedence: owner flow and reader-checkbox answer
 
 The [current A739 amendment](2026-10-22-a739-owner-payment-and-receipt-flow.md) takes precedence.
