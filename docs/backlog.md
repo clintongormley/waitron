@@ -3118,7 +3118,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `apps/dashboard/src/widgets/color-field.ts`); the Text rows' typeface and weight dropdowns widen
   to their error's width (a weight box from 74 to 190 px), moving the tag right. Slice 11b fixed the
   size rows only (the stepper held to its box's width, the row lined up by baseline,
-  `apps/dashboard/src/widgets/theme-text.ts`); the same approach may fit both.
+  `apps/dashboard/src/widgets/theme-text.ts`); the same approach may fit both. Its cost: a size
+  row's error now wraps at the number box's width, about 94 px, six short lines in Spanish at 130%;
+  a wider message needs a change to `wt-number-stepper` itself (#2140's finish-branch).
 
 - **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
   design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
