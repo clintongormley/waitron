@@ -1,6 +1,6 @@
-import { AppError, decimal, toScale, type ContentLanguages } from "@waitron/shared";
+import { AppError, decimal, isAppError, toScale, type ContentLanguages } from "@waitron/shared";
 import "./errors.js";
-import type { MenuDocument } from "./menu-document-types.js";
+import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
 import { PATCH_FIELDS, type MenuPatchChange, type MenuPatchTarget } from "./menu-patch-types.js";
 import { isProductPrice } from "./modifier-limits.js";
 import {
@@ -11,12 +11,18 @@ import { VAT_CLASSES } from "./vat-rates.js";
 
 type Copy = Record<string, unknown>;
 
-/** Every copy of the target the document holds, and the key that mirrors its price when the menu
- * sets one. */
+const asCopies = (values: readonly object[]): Copy[] => values as Copy[];
+
+/** Every copy of the target that takes a change to the field, the key holding its price, the key
+ * mirroring that price when the menu sets one, and whether its presentation repeats its wording. */
 interface Located {
   copies: Copy[];
-  priceMirror: string;
+  priceKey?: "unitPrice" | "price";
+  priceMirror?: "grossPrice" | "menuPrice";
+  presentation?: true;
 }
+
+const WORDING = new Set(["name", "customerName", "kitchenName"]);
 
 const TRANSLATED = new Set(["customerName", "names", "description"]);
 
@@ -25,6 +31,11 @@ function invalid(change: number, field: string, reason?: string): AppError<"menu
     "menu_patch.invalid",
     reason === undefined ? { change, field } : { change, field, reason },
   );
+}
+
+function refusalFrom(error: unknown, change: number, field: string): AppError {
+  if (!isAppError(error)) throw error;
+  return invalid(change, field, error.code);
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -74,9 +85,9 @@ function checkedValue(change: number, field: string, value: unknown): unknown {
       if (typeof value !== "string") throw invalid(change, field);
       return value.trim() === "" ? null : value.trim();
     case "image":
-      if (value !== null && (typeof value !== "string" || value === ""))
-        throw invalid(change, field);
-      return value;
+      if (value === null) return null;
+      if (typeof value !== "string" || value.trim() === "") throw invalid(change, field);
+      return value.trim();
     case "price":
       if (typeof value !== "string" || !isProductPrice(value)) throw invalid(change, field);
       return value;
@@ -90,7 +101,7 @@ function checkedValue(change: number, field: string, value: unknown): unknown {
       try {
         validateOptionalTranslations(value);
       } catch (error) {
-        throw invalid(change, field, (error as AppError).code);
+        throw refusalFrom(error, change, field);
       }
       return value;
   }
@@ -110,24 +121,87 @@ export function parseMenuPatch(body: unknown): MenuPatchChange[] {
   });
 }
 
-function locate(document: MenuDocument, target: MenuPatchTarget): Located | undefined {
+function sectionCopies(
+  members: readonly DocumentMember[],
+  sectionId: string,
+  field: string,
+): Copy[] {
+  return members.flatMap((member): Copy[] =>
+    member.kind === "section"
+      ? [
+          ...(member.sectionId === sectionId && !Object.hasOwn(member.fixed ?? {}, field)
+            ? [member as Copy]
+            : []),
+          ...sectionCopies(member.members, sectionId, field),
+        ]
+      : [],
+  );
+}
+
+function locate(
+  document: MenuDocument,
+  target: MenuPatchTarget,
+  field: string,
+): Located | undefined {
+  const modifiers = () => Object.values(document.offers).flatMap((offer) => offer.offeredModifiers);
+  let located: Located;
   switch (target.kind) {
     case "offer": {
       const offer = document.offers[target.menuItemId];
-      return offer === undefined ? undefined : { copies: [offer], priceMirror: "grossPrice" };
+      located = {
+        copies: offer === undefined ? [] : [offer],
+        priceKey: "unitPrice",
+        priceMirror: "grossPrice",
+      };
+      break;
     }
     case "variant": {
       const variant = document.offers[target.menuItemId]?.variants.find(
         (candidate) => candidate.id === target.variantId,
       );
-      return variant === undefined ? undefined : { copies: [variant], priceMirror: "menuPrice" };
+      located = {
+        copies: variant === undefined ? [] : [variant],
+        priceKey: "unitPrice",
+        priceMirror: "menuPrice",
+      };
+      break;
     }
-    default:
-      return undefined;
+    case "extra":
+      located = {
+        copies: asCopies(
+          modifiers().flatMap((list) =>
+            list.kind === "extras" && list.id === target.listId
+              ? list.items.filter((item) => item.productId === target.productId)
+              : [],
+          ),
+        ),
+        priceKey: "price",
+        presentation: true,
+      };
+      break;
+    case "option_label":
+      located = {
+        copies: modifiers().flatMap((list) =>
+          list.kind === "options" && list.id === target.listId
+            ? list.labels.filter((label) => label.id === target.labelId)
+            : [],
+        ),
+      };
+      break;
+    case "list":
+      located = {
+        copies: modifiers().filter(
+          (list) => list.kind === target.listKind && list.id === target.listId,
+        ),
+      };
+      break;
+    case "section":
+      located = {
+        copies: sectionCopies(document.root.members, target.sectionId, field),
+      };
   }
+  return located.copies.length === 0 ? undefined : located;
 }
-
-const keyOf = (field: string): string => (field === "price" ? "unitPrice" : field);
 
 /** The value a field holds now at the first copy a patch would change; `undefined` when the
  * document does not hold the target. */
@@ -136,7 +210,8 @@ export function patchFieldValue(
   target: MenuPatchTarget,
   field: string,
 ): unknown {
-  return locate(document, target)?.copies[0]![keyOf(field)];
+  const located = locate(document, target, field);
+  return located?.copies[0]![field === "price" ? located.priceKey! : field];
 }
 
 /** A patched copy of `document`, which is never changed and may be deep-frozen. */
@@ -147,7 +222,7 @@ export function applyMenuPatch(
 ): MenuDocument {
   const patched = structuredClone(document);
   parseMenuPatch(changes).forEach(({ target, field, value }, index) => {
-    const located = locate(patched, target);
+    const located = locate(patched, target, field);
     if (located === undefined) throw invalid(index, "target");
     for (const copy of located.copies as Copy[]) {
       if (TRANSLATED.has(field)) {
@@ -159,16 +234,27 @@ export function applyMenuPatch(
             languages,
           );
         } catch (error) {
-          throw invalid(index, field, (error as AppError).code);
+          throw refusalFrom(error, index, field);
         }
-        copy[field] = merged;
+        // A section's names are never null.
+        copy[field] = merged === null && field === "names" ? {} : merged;
       } else if (field === "price") {
         const price = toScale(decimal(value as string), 2);
-        copy.unitPrice = price;
-        if (copy[located.priceMirror] !== null) copy[located.priceMirror] = price;
+        copy[located.priceKey!] = price;
+        if (located.priceMirror !== undefined && copy[located.priceMirror] !== null)
+          copy[located.priceMirror] = price;
       } else {
         copy[field] = value;
       }
+      if (located.presentation && WORDING.has(field))
+        copy.presentation = {
+          name: copy.name,
+          customerName: copy.customerName,
+          kitchenName: copy.kitchenName,
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        };
     }
   });
   return patched;
