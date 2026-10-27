@@ -593,6 +593,14 @@ it("with the database present, a stopped recovery's later floor wins over a dama
   });
 });
 
+it("with the database present, a stopped recovery's summary past a damaged public record still refuses setup.attempt_invalid", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  await writeFile(join(f.roots.stateDir, "module-operation-public.json"), "{damaged");
+  await expect(presentOver(f, f.service)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
+});
+
 it("with the database present, a stopped recovery's Start again without the setup password is refused setup.start_again_password_required, and nothing changes", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);

@@ -63,6 +63,8 @@ export interface StartAgainSummaryRequest {
 }
 type Seat = NonNullable<InitialSetupContribution["startAgainFloor"]>;
 type UnreadableRecord = StartAgainUnreadable["records"][number];
+const PUBLIC_RECORD = "state/module-operation-public.json";
+const DOCUMENTS = "state/first-fiscal-documents/";
 const UNREADABLE_ORDER: readonly UnreadableRecord[] = [
   "series-picks",
   "public-record",
@@ -94,6 +96,7 @@ async function gatherStartAgainFloor(
   modules: readonly WaitronModule[] | undefined,
   deletion: { discarding?: string },
   recoveryFloor: Floor | null,
+  databaseMissing: boolean,
 ) {
   const attempts = [state, ...state.previous];
   const names = [
@@ -104,11 +107,26 @@ async function gatherStartAgainFloor(
   if (modules === undefined) unavailable();
   let recoveryRecordDamaged = false;
   const unreadable = new Set<UnreadableRecord>();
+  // Only the database-missing path reads past a damaged public record or documents file; with the
+  // database present they keep today's refusals (A1099 plan, difference D-4).
+  const unreadableRecord = (error: unknown, damaged: boolean, record: UnreadableRecord) => {
+    if (!databaseMissing || !damaged || !(error instanceof AppError)) throw error;
+    unreadable.add(record);
+  };
   const inputs: { module: string; seat: Seat; input: Parameters<Seat>[0] }[] = [];
   for (const module of names) {
     const seat = initialSetupFor(modules, module)?.startAgainFloor;
     if (seat === undefined) continue;
-    const publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
+    let publicEvidence: unknown[] = [];
+    try {
+      publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
+    } catch (error) {
+      unreadableRecord(
+        error,
+        originals.find((entry) => entry.name === PUBLIC_RECORD)?.bytes != null,
+        "public-record",
+      );
+    }
     const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
     let recovery: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
     let seen = originals;
@@ -128,9 +146,32 @@ async function gatherStartAgainFloor(
         entry.name === recoveryName ? { name: entry.name, bytes: null } : entry,
       );
     }
-    const document =
-      recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(module, state, seen));
-    if (document !== undefined) publicEvidence.push(document);
+    let document = recovery?.statement;
+    if (document == null)
+      try {
+        document = await readFirstFiscalDeliverySnapshot(module, state, seen);
+      } catch (error) {
+        unreadableRecord(
+          error,
+          seen.some((entry) => entry.name.startsWith(DOCUMENTS) && entry.bytes !== null),
+          "fiscal-documents",
+        );
+      }
+    const evidence = [
+      ...publicEvidence.map((item) => ({ item, record: "public-record" as const })),
+      ...(document === undefined ? [] : [{ item: document, record: "fiscal-documents" as const }]),
+    ];
+    const usable = !databaseMissing
+      ? evidence
+      : evidence.filter(({ item, record }) => {
+          try {
+            seat({ attempts: [], preparations: [], publicEvidence: [item] });
+            return true;
+          } catch (error) {
+            unreadableRecord(error, true, record);
+            return false;
+          }
+        });
     const picks = await readSeriesPicks(roots, module, seat);
     if (picks.unreadable) unreadable.add("series-picks");
     inputs.push({
@@ -144,7 +185,7 @@ async function gatherStartAgainFloor(
             input: attempt.inputs[module],
           })),
         preparations: picks.preparations,
-        publicEvidence,
+        publicEvidence: usable.map(({ item }) => item),
       },
     });
   }
@@ -374,6 +415,7 @@ export function createFirstSetupResolutionActions(
             host.modules,
             found === undefined ? {} : { discarding: found.id },
             found?.kind === "stopped" ? found.floor : null,
+            inspection.database === "missing",
           );
           return summaryOf(retained.state, gathered, recovery);
         }),
@@ -474,6 +516,7 @@ export function createFirstSetupResolutionActions(
             host.modules,
             discarding,
             found?.kind === "stopped" ? found.floor : null,
+            missing,
           );
           // Only the database-missing and recovery-discard paths carry a damaged name record in
           // the summary the person confirms, so any other path refuses one.

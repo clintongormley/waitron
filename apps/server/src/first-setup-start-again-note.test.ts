@@ -49,6 +49,7 @@ import { expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { PASSWORD, request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
+import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import {
@@ -956,6 +957,261 @@ it("with the database present, a damaged kept picks file still refuses Start aga
   expect(await folderTrees(f)).toEqual(before);
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+function publicRecordFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  return join(f.stateDir, "module-operation-public.json");
+}
+
+function documentsFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"], name: string) {
+  return join(f.stateDir, "first-fiscal-documents", name);
+}
+
+async function createDamaged(path: string) {
+  await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  await writeFile(path, "{damaged");
+}
+
+async function damagedRecordsAttempt(
+  damage: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
+) {
+  const base = await missingDatabase([], damage, stampAfterName);
+  const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
+  const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
+  return { ...base, timeFloorMs };
+}
+
+it.each([
+  {
+    which: "a damaged public record",
+    records: ["public-record"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) =>
+      createDamaged(publicRecordFile(f)),
+  },
+  {
+    which: "a public record holding evidence the module cannot use",
+    records: ["public-record"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      const state = (await f.store.read())!;
+      await writeFile(
+        publicRecordFile(f),
+        JSON.stringify({
+          version: 1,
+          modules: {},
+          history: [
+            {
+              attemptId: state.frozen.attemptId,
+              revision: state.revision,
+              ownerGeneration: state.ownerGeneration,
+              module: f.module,
+              current: { unusable: true },
+            },
+          ],
+        }),
+      );
+    },
+  },
+  {
+    which: "a damaged documents file with the recovery record removed",
+    records: ["fiscal-documents"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      await rm(recoveryRecord(f));
+      await createDamaged(documentsFile(f, `${f.module}.json`));
+    },
+  },
+  {
+    which: "a stray documents file with the recovery record removed",
+    records: ["fiscal-documents"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      await rm(recoveryRecord(f));
+      await writeFile(documentsFile(f, "stray.json"), "{}");
+    },
+  },
+  {
+    which: "a damaged picks file and a damaged public record",
+    records: ["series-picks", "public-record"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      await damagePicks(f);
+      await createDamaged(publicRecordFile(f));
+    },
+  },
+])(
+  "with the database missing, $which reaches the confirmation, and the note keeps a time floor with no name",
+  async ({ records, damage }) => {
+    const base = await damagedRecordsAttempt(damage);
+    expect(base.timeFloorMs).toBeGreaterThan(base.floorMs);
+    const shown = await summaryThenStartAgain(base);
+    expect(shown).toEqual({
+      reached: "named",
+      lastName: base.name,
+      unreadable: { records, floorMs: base.timeFloorMs },
+    });
+    expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+      version: 1,
+      floorMs: base.timeFloorMs,
+      lastName: null,
+      module: "fiscal-verifactu",
+    });
+    await expectStartAgainDeleted(base.f);
+  },
+);
+
+async function expectRefusedUnchanged(
+  f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
+  run: () => Promise<unknown>,
+  code: string,
+) {
+  const before = await attemptFiles(f);
+  await expect(run()).rejects.toMatchObject({ code });
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+}
+
+it.each(["first-setup.json", "first-setup-claim.json"])(
+  "with the database missing, a damaged %s beside a damaged picks file is refused setup.owner_required at the password step, and nothing changes",
+  async (file) => {
+    const { f } = await abandonedAttempt();
+    await damagePicks(f);
+    await rm(join(f.venueDir, "venue.db"));
+    await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    await expectRefusedUnchanged(
+      f,
+      () =>
+        f.host.owner.recoverFirstSetupOwner({
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision!,
+          ownerGeneration: inspected.ownerGeneration!,
+          clientClaimNonce: randomBytes(32).toString("base64url"),
+          password: PASSWORD,
+        }),
+      "setup.owner_required",
+    );
+  },
+);
+
+it.each(["first-setup.json", "first-setup-claim.json"])(
+  "with the database present, a damaged %s beside a damaged picks file is refused setup.attempt_conflict, and nothing changes",
+  async (file) => {
+    const { f, actions, startRequest } = await abandonedAttempt();
+    await damagePicks(f);
+    await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    await expectRefusedUnchanged(
+      f,
+      () =>
+        actions.startAgainFirstSetup({
+          ...startRequest,
+          inspectionId: inspected.inspectionId,
+          revision: startRequest.revision,
+          ownerGeneration: startRequest.ownerGeneration,
+        }),
+      "setup.attempt_conflict",
+    );
+  },
+);
+
+it("a corrupt venue database beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).not.toBe("missing");
+  await expectRefusedUnchanged(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...startRequest,
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision!,
+        ownerGeneration: inspected.ownerGeneration!,
+      }),
+    "setup.not_ready",
+  );
+});
+
+it.each(["module-operation-public.json", "first-fiscal-documents/stray.json"])(
+  "with the database present, a damaged %s still refuses Start again setup.not_ready, and nothing changes",
+  async (file) => {
+    const { f, actions, startRequest } = await abandonedAttempt();
+    await createDamaged(join(f.stateDir, file));
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    await expectRefusedUnchanged(
+      f,
+      () =>
+        actions.startAgainFirstSetup({
+          ...startRequest,
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision!,
+          ownerGeneration: inspected.ownerGeneration!,
+        }),
+      "setup.not_ready",
+    );
+  },
+);
+
+it("with the database missing, an outside evidence file configured beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
+  const base = await missingDatabase([], damagePicks, stampAfterName);
+  const { f, owner, request: startAgain } = base;
+  const outsidePath = join(f.root, "outside-history.json");
+  await writeFile(outsidePath, "{}");
+  const resolution = createFirstSetupResolutionInspection({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    store: f.store,
+    expectedMigrationSets: f.modules.map((module) => module.migrations.name),
+    publicEvidencePaths: [outsidePath],
+  });
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, resolution } });
+  const current = await resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown).toMatchObject({ unreadable: { records: ["series-picks"] } });
+  await expectRefusedUnchanged(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...startAgain,
+        ...ids,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      }),
+    "setup.not_ready",
+  );
+});
+
+it("with the database missing, a damaged note beside a damaged picks file is shown, then Start again is refused setup.attempt_invalid after its confirmation record", async () => {
+  const base = await missingDatabase(
+    [],
+    async (f) => {
+      await damagePicks(f);
+      await createDamaged(join(f.stateDir, NOTE));
+    },
+    stampAfterName,
+  );
+  const { f, actions, owner, ids, request: startAgain } = base;
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  const shown = await answered.json();
+  expect(shown).toMatchObject({ unreadable: { records: ["series-picks"] } });
+  const before = await attemptFiles(f);
+  const note = await readFile(join(f.stateDir, NOTE));
+  await expect(
+    actions.startAgainFirstSetup({
+      ...startAgain,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  // Start again writes its confirmation record before it raises the note (backlog entry (iii)).
+  expect(await readdir(join(f.stateDir, CONFIRMATIONS))).toHaveLength(1);
+  expect(await readFile(join(f.stateDir, NOTE))).toEqual(note);
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  expect(await attemptFiles(f)).toEqual(before);
 });
 
 it("the password-required refusal answers 403 over HTTPS", async () => {

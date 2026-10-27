@@ -1,5 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { lstat, mkdtemp, readFile, writeFile, unlink, rm, realpath } from "node:fs/promises";
+import {
+  lstat,
+  mkdtemp,
+  readdir,
+  readFile,
+  writeFile,
+  unlink,
+  rm,
+  realpath,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -154,6 +164,7 @@ async function startAgainMissingDatabase(
   host: Host,
   folders: { stateDir: string; venueDir: string },
   resolution: Host["resolution"] = host.resolution,
+  stamp?: () => Promise<void>,
 ) {
   const inspected = await host.resolution.inspectFirstSetupResolution();
   const recovered = await host.owner.recoverFirstSetupOwner({
@@ -163,6 +174,7 @@ async function startAgainMissingDatabase(
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
+  await stamp?.();
   const current = await resolution.inspectFirstSetupResolution();
   const ids = {
     inspectionId: current.inspectionId,
@@ -193,6 +205,8 @@ async function fixture(
     stray?: boolean;
     source?: "local" | "outside";
     outsideChange?: "replace" | "remove";
+    /** Every file and folder of the attempt is stamped with this time after the password step. */
+    stampAtMs?: number;
   },
 ) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "retired-hour-assignments-")));
@@ -305,6 +319,13 @@ async function fixture(
           publicEvidencePaths: [outsidePath],
         })
       : oldHost.resolution,
+    retained?.stampAtMs === undefined
+      ? undefined
+      : async () => {
+          const at = new Date(retained.stampAtMs!);
+          await stampTree(anchor.stateDir, at);
+          await stampTree(anchor.venueDir, at);
+        },
   );
   const host = createFirstSetupModuleHost({
     ...anchor,
@@ -335,6 +356,26 @@ async function fixture(
     password: PASSWORD,
     shown,
   };
+}
+async function stampTree(path: string, at: Date) {
+  const found = await lstat(path).catch(() => null);
+  if (found === null) return;
+  if (found.isDirectory())
+    for (const entry of await readdir(path)) await stampTree(join(path, entry), at);
+  await utimes(path, at, at);
+}
+/** Two hours after the retired name, so the time floor is later than the name's own floor. */
+const STAMP_AT_MS = instant(1) + 2 * 3_600_000;
+/** The first minute after the newest file time plus the chooser's 150-second wait bound. */
+const TIME_FLOOR_MS = (Math.floor((STAMP_AT_MS + 150_000) / 60_000) + 1) * 60_000;
+async function expectTimeFloorNote(f: Awaited<ReturnType<typeof fixture>>) {
+  expect(TIME_FLOOR_MS).toBeGreaterThan(instant(1) + 60_000);
+  expect(await readStartAgainNote(join(f.root, "state"))).toEqual({
+    version: 1,
+    floorMs: TIME_FLOOR_MS,
+    lastName: null,
+    module: MODULE,
+  });
 }
 /** A fixture whose Start again is refused: the abandoned attempt stays, and no note or marker is written. */
 async function expectStartAgainRefused(made: Promise<unknown>, code: string) {
@@ -590,25 +631,31 @@ it("a damaged recovery document does not hide the rest of the history: the note 
   });
   await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), false);
 });
-it("a damaged recovery document beside another file in the documents folder still refuses with a domain refusal", async () => {
-  await expectStartAgainRefused(
-    fixture(43, request.taxId, "production", false, 1, {
-      document: true,
-      damage: "syntax",
-      stray: true,
-    }),
-    "setup.attempt_invalid",
-  );
+it("a damaged recovery document beside another file in the documents folder reaches the confirmation, and the note takes the time floor", async () => {
+  const f = await fixture(43, request.taxId, "production", false, 1, {
+    document: true,
+    damage: "syntax",
+    stray: true,
+    stampAtMs: STAMP_AT_MS,
+  });
+  expect(f.shown).toMatchObject({
+    recoveryRecordDamaged: true,
+    unreadable: { records: ["fiscal-documents"], floorMs: TIME_FLOOR_MS },
+  });
+  await expectTimeFloorNote(f);
 });
-it("a damaged recovery document beside invalid public evidence still refuses with a domain refusal", async () => {
-  await expectStartAgainRefused(
-    fixture(43, request.taxId, "production", false, 1, {
-      document: true,
-      damage: "syntax",
-      legacy: { version: 1, modules: {}, history: [null] },
-    }),
-    "setup.attempt_invalid",
-  );
+it("a damaged recovery document beside invalid public evidence reaches the confirmation, and the note takes the time floor", async () => {
+  const f = await fixture(43, request.taxId, "production", false, 1, {
+    document: true,
+    damage: "syntax",
+    legacy: { version: 1, modules: {}, history: [null] },
+    stampAtMs: STAMP_AT_MS,
+  });
+  expect(f.shown).toMatchObject({
+    recoveryRecordDamaged: true,
+    unreadable: { records: ["public-record"], floorMs: TIME_FLOOR_MS },
+  });
+  await expectTimeFloorNote(f);
 });
 it("Start again is refused while an outside hour-history file is configured", async () => {
   await expectStartAgainRefused(
@@ -623,12 +670,20 @@ it.each([
   null,
   { version: 1, modules: {}, history: [null] },
   { version: 1, modules: {}, history: [], extra: true },
-])("invalid public evidence refuses Start again with a domain refusal %#", async (legacy) => {
-  await expectStartAgainRefused(
-    fixture(43, request.taxId, "production", false, 1, { legacy }),
-    "setup.attempt_invalid",
-  );
-});
+])(
+  "invalid public evidence reaches the confirmation, and the note takes the time floor %#",
+  async (legacy) => {
+    const f = await fixture(43, request.taxId, "production", false, 1, {
+      legacy,
+      stampAtMs: STAMP_AT_MS,
+    });
+    expect(f.shown).toMatchObject({
+      unreadable: { records: ["public-record"], floorMs: TIME_FLOOR_MS },
+    });
+    expect("recoveryRecordDamaged" in f.shown).toBe(false);
+    await expectTimeFloorNote(f);
+  },
+);
 it.each(["reuse", "later"])(
   "ordinary hour preparation retains earlier abandoned events for %s",
   async (which) => {
