@@ -1156,12 +1156,18 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-- **The menu patch window's open points (left open by A1151).** Its **Reload** re-reads the live
-  menu but not the venue's content languages; its "no longer fit" count is a running total since
-  the window opened, and a change the live version already holds is removed without being counted;
-  a review found (not run) that a field typed equal to the live value can be rewritten in the live
-  value's spelling ("3" → "3.00") whenever the live read is delivered again. `apps/dashboard/src/widgets/menu-patch-dialog.ts` is
-  about 950 lines: split it before adding to it.
+- **The menu patch window's Reload re-reads the live menu but not the venue's content languages
+  (left open by A1151).**
+
+- **The menu patch window's "no longer fit" count is a running total since the window opened (left
+  open by A1151).** A change the live version already holds is removed without being counted.
+
+- **A field typed equal to the live value can be redrawn in the live value's spelling (left open
+  by A1151).** After a content-language change, or a Reload onto the version already shown, the
+  menu patch window redraws a typed "3" as "3.00". Found by reading the code, not run.
+
+- **Split the menu patch window's file before adding to it (left open by A1151).**
+  `apps/dashboard/src/widgets/menu-patch-dialog.ts` is large; split it before more is added to it.
 
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info

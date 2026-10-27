@@ -216,7 +216,7 @@ another one can hold a photograph of its own for its folder. The library lists t
 photograph still blocks deletion while the include shows its sections directly; turn **Show as a
 folder** on to see the photo field.
 
-A published menu also holds every photograph its last publish included, even after you remove the
+A published menu also holds every photograph its live version includes, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by
 **(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
 to release it. If the menu also has versions scheduled to go live later, publishing now is

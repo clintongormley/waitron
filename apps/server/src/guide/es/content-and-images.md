@@ -222,7 +222,7 @@ elige **Editar** en el ⋮ de esa inclusión, después **Quitar imagen**, y guar
 bloqueando la eliminación mientras la inclusión muestra sus secciones directamente; activa
 **Mostrar como carpeta** para ver el campo de la foto.
 
-Una carta publicada también retiene todas las fotografías que incluía su última publicación, aunque
+Una carta publicada también retiene todas las fotografías que incluye su versión publicada, aunque
 quites la fotografía de un producto o de una sección. La biblioteca muestra esa carta por su nombre,
 seguido de **(Carta publicada)**, y su enlace abre la carta. Vuelve a publicar la carta sin la
 fotografía para liberarla. Si la carta tiene además versiones programadas para entrar en vigor más

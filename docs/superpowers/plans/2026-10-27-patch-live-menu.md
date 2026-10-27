@@ -106,7 +106,9 @@ in `apps/dashboard`, Vitest (browser mode for the dashboard).
   `change` is the index; `field` is `"target"`, `"field"` or the field's name; `reason` is the
   code a validator underneath threw (e.g. `content.translation_invalid`), so the dashboard can
   show that code's own wording. Register it in `errors.ts` beside `menu_publication.*`. A body
-  that is not an array refuses with `change: -1, field: "changes"`.
+  that is not an array refuses with `change: -1, field: "changes"`. (2026-10-27, finish-branch
+  review: a body whose `changes` is not a list is now refused `management.request_invalid` with
+  `field: "changes"`, like the route's other body checks.)
 
 Value rules:
 - `name`, `internalName`: string, trimmed, non-blank.
@@ -320,6 +322,8 @@ Write rules:
   depend on; there is no per-write invalidation to add).
 - Code messages (exact English; Spanish to match in meaning and register):
   - `menu_patch.base_changed`: "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept."
+    (2026-10-27, finish-branch review: the code message no longer holds `{liveNumber}`; the
+    numbered sentence is the `strings.ts` key `menu_patch.base_changed_live`, filled by the dialog.)
   - `menu_patch.unchanged`: "These values are already live. Nothing was saved."
   - `menu_patch.not_published`: "This menu has never been published, so there is nothing live to patch. Publish it first."
   - `menu_patch.invalid`: "Check this value."

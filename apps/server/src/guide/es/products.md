@@ -287,7 +287,10 @@ Elige o quita una imagen igual que en el editor de productos. Un plato con varia
 precio y con la clase de IVA de cada variante, así que corrígelos en sus variantes; corregir el
 plato nunca las cambia. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
 todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
-extra se corrige en cada sitio por separado.
+extra se corrige en cada sitio por separado. Una sección que aparece dentro de la carpeta
+de una carta incluida conserva el nombre o la imagen que le fija esa carpeta, y el nombre en un
+idioma que las carpetas fijan en todos los sitios donde aparece la sección se muestra desactivado y
+no se puede cambiar aquí.
 
 Una corrección no puede cambiar nada más. Los alérgenos y las etiquetas dietéticas se declaran en
 el propio producto; consulta
@@ -295,9 +298,9 @@ el propio producto; consulta
 cambiar la unidad, la disponibilidad, el curso ni la categoría, el orden de los elementos, los
 colores ni qué elementos y secciones tiene la carta.
 
-Cada elemento que cambias se marca **Con cambios**. **Revisar 1 corrección**, o **Revisar** seguido
-del número de correcciones, muestra cada una como el valor anterior → el nuevo. Elige **Seguir
-editando** para volver, o **Publicar ahora**. Esto es lo que hace publicar una corrección:
+Cada elemento que cambias se marca con un punto, y un elemento con un campo que corregir, con
+**!**. **Revisar 1 corrección**, o **Revisar** seguido del número de correcciones, muestra cada una
+como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **Publicar la corrección**. Esto es lo que hace publicar una corrección:
 
 - Se publica al momento como una versión nueva de esta carta, con el número siguiente. Las líneas
   que se añaden a los pedidos desde entonces usan los valores corregidos. Las líneas que ya están
@@ -316,9 +319,11 @@ editando** para volver, o **Publicar ahora**. Esto es lo que hace publicar una c
 - La próxima publicación normal vuelve a crear la carta a partir de los productos, así que vuelve a
   poner los valores anteriores, salvo que corrijas también los productos.
 
-Un campo que vuelve a su valor publicado no cuenta como corrección. Si otra
-versión se ha publicado mientras corregías, **Publicar ahora** se rechaza: **Volver a cargar** abre
-la versión publicada ahora y conserva las correcciones que todavía encajan en ella.
+Un campo que vuelve a su valor publicado no cuenta como corrección. Si otra versión se publica
+mientras tienes correcciones o un campo que corregir en la ventana, la ventana sigue mostrando la
+versión que corregías y lo indica, y **Publicar la corrección** se rechaza: **Volver a cargar** abre
+la versión publicada ahora y conserva las correcciones que todavía encajan en ella. Si se publica
+sin ninguna de las dos cosas, la ventana pasa sola a la versión nueva.
 
 ## Reutiliza las elecciones {#reusable-choices}
 

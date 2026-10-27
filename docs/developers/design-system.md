@@ -5055,7 +5055,10 @@ after "All printers ›" inside its `nav`; A405 plans to turn its details into a
 
 The menu editor (`apps/dashboard/src/screens/menus-screen.ts`) reads "Menus ›" above the menu's
 name, then its live version in brackets — "(Live: version 2 · <time>)", or "(Unpublished)" for a
-menu never published. A state resolved on one of the page's own tabs marks that tab rather than
+menu never published. While the menu has a live version, a secondary "Patch live menu…" button
+follows those words, with a help-mode badge over its top trailing corner whose box links to the
+guide's patch section. The heading's wrapped rows leave half a badge's height between them, help on
+or off, so turning help on moves nothing. A state resolved on one of the page's own tabs marks that tab rather than
 adding a link to it: while a menu has unpublished changes, or has never been published, its
 Preview tab reads "Preview*", drawn
 in `--wt-color-primary-text` whether it is selected or not, and is named "Preview, unpublished
@@ -5064,6 +5067,18 @@ clashes says so on a line under the heading, as a link to its own Price override
 `--wt-color-danger`, and as plain words on the Price overrides tab itself. Guards:
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
 beside it.
+
+The button opens the patch dialog (`apps/dashboard/src/widgets/menu-patch-dialog.ts`), a wide
+`wt-modal` headed "Patch version N of <menu>". Its edit step puts a search box above a tree of the
+live version's items on the leading side, and the picked item's form on the other side; the two
+stack where there is no room for both. Until an item is picked, the form's place reads "Pick an
+item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
+item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
+The footer holds Close and "Review N changes". The review step lists each change as "<item>:
+<field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
+"Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live
+version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to
+either step's footer, with the refusal's sentence above the buttons.
 
 The Preview clash link opens Price overrides with Clashes selected, including in a new tab.
 That explicit destination overrides a remembered price filter once after the rows load. Later
