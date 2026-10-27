@@ -1,49 +1,49 @@
-import { sql } from "drizzle-orm";
-import { catalogues, locationCatalogues } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { catalogues, locationCatalogues, locations, tenants } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
-import { getCountryPack, resolveInstalledStartingContentLanguages } from "@waitron/country-packs";
+import {
+  getCountryPack,
+  resolveInstalledStarterLanguages,
+  resolveInstalledStartingContentLanguages,
+  starterName,
+  starterNames,
+} from "@waitron/country-packs";
 import { catalogueSettings } from "./schema/settings.js";
 import type { VatClass } from "./vat-rates.js";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
 import { unitSeedStates, units } from "./schema/units.js";
+import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
-// Full display name shown in the dashboard; the short abbreviation is frozen onto sold lines.
-const UNIT_NAMES = {
-  g: { en: "Gram", es: "Gramo", ca: "Gram", "ca-ES-valencia": "Gram", gl: "Gramo", eu: "Gramo" },
-  kg: {
-    en: "Kilogram",
-    es: "Kilogramo",
-    ca: "Quilogram",
-    "ca-ES-valencia": "Quilogram",
-    gl: "Quilogramo",
-    eu: "Kilogramo",
+/** The starter units, by their English staff names; their words in other languages are in
+ * `starter-content.ts`. */
+export const STARTER_UNITS = [
+  { seedKey: "g", staffName: "Gram", staffAbbreviation: "g", precision: 0, hardwareUnit: "g" },
+  {
+    seedKey: "kg",
+    staffName: "Kilogram",
+    staffAbbreviation: "kg",
+    precision: 3,
+    hardwareUnit: "kg",
   },
-  mg: {
-    en: "Milligram",
-    es: "Miligramo",
-    ca: "Mil·ligram",
-    "ca-ES-valencia": "Mil·ligram",
-    gl: "Miligramo",
-    eu: "Miligramo",
+  {
+    seedKey: "mg",
+    staffName: "Milligram",
+    staffAbbreviation: "mg",
+    precision: 0,
+    hardwareUnit: "mg",
   },
-  ml: {
-    en: "Millilitre",
-    es: "Mililitro",
-    ca: "Mil·lilitre",
-    "ca-ES-valencia": "Mil·lilitre",
-    gl: "Mililitro",
-    eu: "Mililitro",
+  {
+    seedKey: "ml",
+    staffName: "Millilitre",
+    staffAbbreviation: "ml",
+    precision: 0,
+    hardwareUnit: null,
   },
-  l: { en: "Litre", es: "Litro", ca: "Litre", "ca-ES-valencia": "Litre", gl: "Litro", eu: "Litro" },
-} as const;
-const UNIT_ABBR = {
-  g: { en: "g", es: "g", ca: "g", "ca-ES-valencia": "g", gl: "g", eu: "g" },
-  kg: { en: "kg", es: "kg", ca: "kg", "ca-ES-valencia": "kg", gl: "kg", eu: "kg" },
-  mg: { en: "mg", es: "mg", ca: "mg", "ca-ES-valencia": "mg", gl: "mg", eu: "mg" },
-  ml: { en: "ml", es: "ml", ca: "ml", "ca-ES-valencia": "ml", gl: "ml", eu: "ml" },
-  l: { en: "l", es: "l", ca: "l", "ca-ES-valencia": "l", gl: "l", eu: "l" },
-} as const;
+  { seedKey: "l", staffName: "Litre", staffAbbreviation: "l", precision: 3, hardwareUnit: null },
+] as const;
+
+export const FIRST_MENU_NAME = "Menu";
 
 // The pale blue swatch of CATEGORY_PALETTE (packages/ui/src/category-color.ts).
 const NEW_VENUE_DEFAULT_COLOR = "#abcced";
@@ -52,16 +52,18 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the venue's initial menu and content languages",
     async run(tx, node) {
-      const location = await tx.execute<{
-        catalogue_id: string | null;
-        province: string | null;
-        country: string;
-      }>(sql`
-        select l.catalogue_id, l.province, t.country from locations l
-        cross join tenants t
-        where l.id = ${node.locationId}`);
-      const country = location.rows[0]?.country;
-      const area = location.rows[0]?.province;
+      const [location] = await tx
+        .select({
+          catalogueId: locations.catalogueId,
+          area: locations.province,
+          invoiceLocales: locations.invoiceLocales,
+          country: tenants.country,
+        })
+        .from(locations)
+        .innerJoin(tenants, eq(tenants.id, 1))
+        .where(eq(locations.id, node.locationId));
+      const country = location?.country;
+      const area = location?.area;
       const defaultProductVatClass =
         (country === undefined ? undefined : getCountryPack(country)?.defaultProductVatClass) ??
         "general";
@@ -92,65 +94,33 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         .values({ id: 1 })
         .onConflictDoNothing({ target: unitSeedStates.id })
         .returning({ id: unitSeedStates.id });
+      const starter = resolveInstalledStarterLanguages({
+        country,
+        area,
+        receiptLocale: location?.invoiceLocales[0],
+      });
       if (claimed.length > 0) {
-        await tx.insert(units).values([
-          {
-            seedKey: "g",
-            staffName: "Gram",
-            staffAbbreviation: "g",
-            name: UNIT_NAMES.g,
-            abbreviation: UNIT_ABBR.g,
-            precision: 0,
-            hardwareUnit: "g",
-            measure: true,
-          },
-          {
-            seedKey: "kg",
-            staffName: "Kilogram",
-            staffAbbreviation: "kg",
-            name: UNIT_NAMES.kg,
-            abbreviation: UNIT_ABBR.kg,
-            precision: 3,
-            hardwareUnit: "kg",
-            measure: true,
-          },
-          {
-            seedKey: "mg",
-            staffName: "Milligram",
-            staffAbbreviation: "mg",
-            name: UNIT_NAMES.mg,
-            abbreviation: UNIT_ABBR.mg,
-            precision: 0,
-            hardwareUnit: "mg",
-            measure: true,
-          },
-          {
-            seedKey: "ml",
-            staffName: "Millilitre",
-            staffAbbreviation: "ml",
-            name: UNIT_NAMES.ml,
-            abbreviation: UNIT_ABBR.ml,
-            precision: 0,
-            hardwareUnit: null,
-            measure: true,
-          },
-          {
-            seedKey: "l",
-            staffName: "Litre",
-            staffAbbreviation: "l",
-            name: UNIT_NAMES.l,
-            abbreviation: UNIT_ABBR.l,
-            precision: 3,
-            hardwareUnit: null,
-            measure: true,
-          },
-        ]);
+        await tx.insert(units).values(
+          STARTER_UNITS.map(({ staffName: english, staffAbbreviation, ...unit }) => {
+            const name = starterNames(STARTER_UNIT_NAMES, english, starter.languages);
+            return {
+              ...unit,
+              staffName: starterName(STARTER_UNIT_NAMES, english, starter.staffLanguage),
+              staffAbbreviation,
+              name,
+              abbreviation: Object.fromEntries(
+                Object.keys(name).map((language) => [language, staffAbbreviation]),
+              ),
+              measure: true,
+            };
+          }),
+        );
       }
-      let catalogueId = location.rows[0]?.catalogue_id ?? null;
+      let catalogueId = location?.catalogueId ?? null;
       if (catalogueId === null) {
         const [created] = await tx
           .insert(catalogues)
-          .values({ name: "Menu" })
+          .values({ name: starterName(STARTER_MENU_NAMES, FIRST_MENU_NAME, starter.staffLanguage) })
           .returning({ id: catalogues.id, name: catalogues.name });
         catalogueId = created!.id;
         await createMenuShell(tx, catalogueId, created!.name);

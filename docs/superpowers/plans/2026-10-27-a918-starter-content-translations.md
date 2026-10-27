@@ -7,8 +7,8 @@ rulings" at the end. Nothing was built when this was written; no code was change
 slice (below); this document holds full tasks for **slice 1** only, and a short paragraph for each
 later slice, whose task list is written when it is picked up. **Slices 3 and 4 wait for the owner's
 answer to FYI A**; slices 1 and 2 do not. (2026-10-27: the owner answered FYI A with its default,
-the staff language; slices 3 and 4 no longer wait. Slices 2 and 3 each have their own task list
-below.)
+the staff language; slices 3 and 4 no longer wait. Slices 2, 3 and 4 each have their own task list
+below; slices 1 to 3 landed in #2128, #2130 and #2137.)
 
 **No migration.** Every table that holds starter words already has the storage this design needs:
 the two kinds of row that carry a name per language (void and comp reasons, units) keep a language
@@ -221,7 +221,8 @@ developer's English demo in Madrid (receipts `en-GB`).
 
 1. **The starter file is `src/starter-content.ts` in the package whose seed writes the words.** It
    holds only data: one exported object per kind of starter, keyed by the starter's English text
-   (units by their existing `seedKey`), each value the starter's words in the other languages. Typed
+   (units by their existing `seedKey`; 2026-10-27, slice 4: units are keyed by their English staff
+   name instead, slice 4 decision 1), each value the starter's words in the other languages. Typed
    with the `StarterTranslations` type from `@waitron/country-packs` (decision 5), so a missing
    language is a type error. English stays in the seed's code, where the rule allows it, and is the
    key, because the code already finds starters by English (`NOT_SERVED_REASON`,
@@ -369,7 +370,9 @@ Waitron's own, unchecked by a native speaker (owner FYI D).
     «Invierno», «Mostrador» and «Abierto», for everyone, that waiter included (the seeds write only
     rows that are absent, decision 2, so no existing venue's rows change). Slice 4 does the same to
     the first menu (a new venue's «Carta» where today it is "Menu") and the units' staff names
-    («Gramo» where today it is "Gram").
+    («Gramo» where today it is "Gram"). (2026-10-27, slice 4 review I1: a unit's staff name shows
+    only in the unit editor, the translation gap report and as a blank name's fallback; the units
+    list and product screens show each person's own language, so that waiter still reads "Gram".)
   - *The regional languages.* Bar Ejemplo in Valencia gets its reasons in Valencian, Spanish and
     English, but one kitchen station «Cocina» and the Spanish names above, because those rows hold
     one name and its staff screens are Spanish.
@@ -1581,6 +1584,468 @@ Critical, 2 Important, 6 Minor. The driver took all of them as the check propose
 
 ---
 
+# Slice 4 — `feat/a918-4-catalogue-starters`
+
+Written 2026-10-27 when the slice was picked up, from main `c69f793bb` (slice 3 landed in #2137).
+This is the last slice: it moves the five units' words and the first menu's name into
+`packages/catalogue/src/starter-content.ts`, writes them in the venue's languages at setup, and
+closes A918 in the docs and the backlog.
+
+**Review path: light, by the planner's reading; the driver may raise it to FULL.** No risk trigger:
+`@waitron/catalogue` gains no export (its tests read the new file from inside the package) and no
+dependency (it already depends on `@waitron/country-packs`, `packages/catalogue/package.json:18`),
+and no type another package reads changes, so there is no cross-package contract. No fiscal
+invariant, tenant isolation, migration, grant, permission or concurrency change. Printed text does
+not change: every unit abbreviation stays the same letters, pinned by a case (Task 1). The
+plan-versus-spec review and the Codex run-it seat run as on every branch.
+
+**The owner's answers** (2026-10-27, relayed): FYI A is the default (a one-name row gets the staff
+language, the same for everyone; existing venues keep their rows); B to F are the defaults (a
+language map holds the venue's content languages that the file carries, plus English always).
+
+## Task 0 results (run 2026-10-27 on `c69f793bb`)
+
+The measurements in items 2, 3 and 5 used a throwaway change in this slice's worktree, discarded
+afterwards with `git checkout -- .` (nothing from it is committed): the catalogue seed read
+`l.invoice_locales` beside its existing `l.province, t.country`, took
+`resolveInstalledStarterLanguages`' `staffLanguage` and `languages`, wrote the units' staff names
+«Gramo», «Kilogramo», «Miligramo», «Mililitro», «Litro» and the first menu «Carta» when the staff
+language was `es`, and cut each unit's `name` and `abbreviation` maps to English plus the venue's
+starting content languages. It also renamed the home layout's `HOME_SECTION_NAME` to the marker
+`"ZZHOME"`. Each run was `pnpm exec vitest run …` in the package named, with
+`TESTCONTAINERS_RYUK_DISABLED=true`.
+
+1. **A configuration import replaces `units`, `unit_seed_states`, `catalogues`, `sections`,
+   `menu_details`, `location_catalogues` and `content_languages`; no seed runs after it.** The
+   catalogue declares five of them (`packages/catalogue/src/configuration-transfer.ts:159-180`),
+   and core declares `catalogues` and `location_catalogues` (`packages/db/src/configuration-transfer.ts:65`,
+   `:75`). `importConfigurationTables` first sets the target location's `catalogue_id` to null
+   (`packages/provisioning/src/configuration-transfer.ts:709-715`), deletes every row of every
+   declared table (`:720-732`), inserts the bundle's rows, then points the location at the
+   bundle's default menu under its new id (`:792-796`). It runs as `beforeCommit`, after every
+   seed (`packages/provisioning/src/venue-apply.ts:487`; callers `apps/server/src/boot.ts:1387`,
+   `packages/provisioning/src/first-setup-command-deployment.ts:328`). So an imported venue keeps
+   the exporting venue's units and menu names, in whatever language they were. **The seed's
+   write-once guard survives it**: the bundle carries the exporting venue's `unit_seed_states`
+   row and its `catalogue_id`, so a later run of the seed claims nothing and creates no menu.
+   Pinned today by `apps/server/src/configuration-transfer.test.ts:8145-8189` (the imported units
+   and the seed marker equal the source's).
+2. **No unit's full name or staff name reaches a receipt, invoice, kitchen ticket or filed record,
+   so nothing splits off for the owner.** Read: pricing freezes the unit's abbreviation onto
+   `working_order_lines.unit_name` (`packages/catalogue/src/pricing.ts:221-222`, `:308-309`) through
+   `prepareUnitSnapshot`, which keeps only the default language's abbreviation, falling back to the
+   staff abbreviation (`packages/catalogue/src/unit-presentation.ts:5-12`, `:19-23`); the receipt
+   prints that map (`apps/server/src/receipt-figures.ts:205-213`, `receipt-document.ts:332-351`),
+   the kitchen ticket reads the same column (`apps/server/src/kitchen-print.ts:193`, `:238`, `:301-303`),
+   the invoice its sale-line copy (`apps/server/src/invoice-document.ts:74`). The full name map is
+   stored in `working_line_contexts.unit_name` (`packages/venue-service/src/operations.ts:1461`),
+   whose one reader rebuilds a line's product for pricing (`apps/server/src/working-order.ts:5083-5086`).
+   Measured: with every seeded unit's `name` values and `staff_name` set to the marker `ZZNAME`
+   (abbreviations untouched), ten server files that sell seeded units or render receipts, tickets
+   and invoices (`kitchen-print`, `till-sale`, `working-order`, `cancel-invoiced-order`,
+   `till-api.fiscal-sale-paths`, `tabs`, `move-merge`, `till-api.receipt`, `invoice-pdf`,
+   `receipt-document`) printed `Tests 871 passed (871)` with no `ZZNAME` in the output, while the
+   control, `packages/catalogue/src/provisioning.test.ts`, failed showing `"es": "ZZNAME"`. That
+   covers what those files check, not every printed path.
+3. **Where the first menu's names are shown.**
+   - `catalogues.name`: the dashboard's menus list (`apps/dashboard/src/screens/menus-screen.ts:2186`)
+     and the till's offers (`apps/till/src/api/client.ts:503`); it is copied into
+     `working_line_contexts.menu_name` (`operations.ts:1456`), read back only at
+     `working-order.ts:5094`. Not printed (item 2's files). A manager's rename changes the menu
+     and its root together (`updateMenuDetails`, `packages/catalogue/src/operations.ts:837-870`).
+   - The root section's `internal_name` (the same text, `menu-structure.ts:39`): the till shows it
+     on a folder tile when the menu is included in another menu and its `names` have no text in the
+     staff screen's language (`apps/till/src/widgets/menu-browser.ts:537-538`,
+     `packages/catalogue/src/menu-document.ts:197-217`), and the translation gap report names the
+     row by it (`packages/catalogue/src/content-translation-candidates.ts:87-90`).
+   - The root section's `names` (left `{}`): **not shown to customers.** No receipt, invoice or
+     ticket prints a section (item 2's readers print lines only). It is shown to staff on that same
+     folder tile, and the gap report lists the first menu as missing customer text in each enabled
+     language (`content-translation-candidates.ts:26-30`, `:87-90`), as it does today. So it stays
+     `{}` (decision 5 below).
+   - The home layout's `internal_name` "Home": **shown nowhere.** `readMenuHome` returns no name
+     (`packages/catalogue/src/menu-home.ts:75-95`), a home layout cannot be edited or
+     given members by the section writes (`packages/catalogue/src/sections.ts:88-93`, `:192-193`), and the gap report leaves it out
+     (`content-translation-candidates.ts:26-30`). Measured: with it renamed `"ZZHOME"`, every test
+     in `@waitron/catalogue` and `apps/server` that does not read a unit's or menu's starter name
+     passed (item 5), and no `ZZHOME` appeared in either log.
+4. **Code that finds a starter by its English name: none in production code.**
+   `git grep -n -E "[\"'](Menu|Home|Gram|Kilogram|Milligram|Millilitre|Litre)[\"']" -- apps packages scripts`,
+   outside tests, translation files and browser apps, prints only the seed's own words
+   (`packages/catalogue/src/provisioning.ts`), `HOME_SECTION_NAME` (`menu-structure.ts:28`), a
+   configuration fixture (`apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`),
+   and two test helpers that write their own rows (`apps/server/src/testing/floor-today-venue.ts:174`,
+   `seed-units.ts:24`). Seeded units are found by `seed_key`, never by name (`getSeededUnit`,
+   `packages/catalogue/src/units.ts:141-148`, called at `operations.ts:1041`, `:1253`; `isEachUnit`,
+   `units.ts:42-44`). The demo finds the provisioned menu through its period, not its name
+   (`apps/server/scripts/demo-seed/seed-catalogue.ts:105-113`), renames it to its own words
+   (`:115-126`) and creates its own units (`:150-164`); `dev-setup.ts` names no unit or menu. The
+   one name lookup in a test helper is the helper's own menu, "Test offers"
+   (`apps/server/src/testing/zone-offers.ts:46`, `:187`).
+5. **Tests.** (a) With the prototype: `@waitron/catalogue`, whole: `Tests 2 failed | 2572 passed (2574)`,
+   both in `src/provisioning.test.ts` (the units case at `:175-270` and the staff-pairs case at
+   `:273-302`; they are the rows of "Changed test checks"). `apps/server`, whole (1051 files, the
+   30 under `scripts/` included, so the demo's): `Test Files 1051 passed (1051)`,
+   `Tests 24778 passed | 25 skipped (24803)`. `@waitron/composition` `Tests 132 passed (132)`;
+   `packages/bookings/src/routes.test.ts` 26 passed; `packages/fiscal-verifactu/src/throwaway-allocation.test.ts`
+   18 passed. `@waitron/provisioning`: `Tests 7 failed | 1848 passed (1855)`, the seven command-line
+   cases slice 3 recorded (`cli-owned-entry` 5, `cli-same-hour-entry` 1,
+   `first-setup-command-import` 1); on the clean tree the same three files print
+   `Tests 7 failed | 10 passed (17)`, so they predate this slice. A zero is only evidence if the
+   tests reach the changed code, so a control: with the prototype throwing when the staff
+   language is `es`, five server files (`configuration-transfer`, `till-api.receipt`,
+   `kitchen-print`, `units-api`, `till-sale`) printed `Tests 291 failed | 116 passed (407)`, four
+   of the five files failing with that error. Unlike slice 3, no list ordered by name moved a
+   test: «Carta» did not change which row any server test took. The browser suites were not run:
+   none runs the seed (`git grep -l -E 'CATALOGUE_PROVISIONING|applyVenue'` over `apps/dashboard`,
+   `apps/till`, `apps/setup` and `packages/*/src/dashboard` prints only `applyVenueTheme` callers).
+   (b) Tests that SEND a starter's name, or find a unit or menu by name: none whose meaning changes.
+   `apps/server/src/catalogue-api.full-manifest.test.ts:404-407` creates a menu called "Menu", and
+   `units-api.test.ts:135`, `:161`, `:181`, `:618`, `order-state-counts.test.ts:95`, `:117`,
+   `till-api.sell-published.test.ts:674` and `working-order.test.ts:7586` create units called
+   "Millilitre" or "Kilogram"; neither name is unique (`catalogues.name`,
+   `packages/db/src/schema/catalogue.ts:30`; `units` has one unique key, `seed_key`,
+   `packages/catalogue/src/schema/units.ts:23`), so those requests mean the same beside «Carta» or
+   «Gramo». The grep: `git grep -n -E "[\"'](Menu|Home|Gram|Kilogram|Milligram|Millilitre|Litre)[\"']" -- '*.test.ts'`
+   outside the browser apps and `dashboard/` folders; every other hit is a test's own unit or
+   menu, written as data.
+6. **The English-only guard scans `@waitron/catalogue`** (it is in `GENERIC_PACKAGES`,
+   `packages/db/src/english-only.ts:28`), tests included. With a file of the planned shape (the
+   five units' `es`, `ca`, `ca-ES-valencia`, `gl` words and `{ Menu: { es: "Carta" } }`) at
+   `packages/catalogue/src/starter-content.ts`, `pnpm exec vitest run scripts/english-only.test.ts`
+   printed `Tests 1921 passed (1921)`. The same content as `src/starter-words-probe.ts`, which the
+   guard does scan, printed `Tests 1922 passed (1922)` (one more file, and its words pass on their
+   own, as slice 1's probe 3 found for the reasons); adding `{ es: "Mesa" }` to it failed naming
+   `18: mesa`. Both files were deleted. So the real file passes the guard, and the skip at
+   `english-only.ts:105`, `:237` is what makes it legitimate under the rule.
+
+**Guides and docs.** `git grep` of the unit words over `apps/server/src/guide/` finds only examples
+of a unit a manager names ("such as **Kilogram** and **kg**", `guide/en/content-and-images.md:37`;
+«Kilogramo» in the Spanish twin, `:37`) and the weight units named in general
+(`guide/en/products.md:38-45`); no guide names the first menu. Neither guide changes. The root
+`CLAUDE.md` line (`:373-375`) and its twin in `conventions-data.md` (`:4485-4487`) name no starter
+and have no list to shorten, so neither changes. The English-only audit never listed the units or
+the first menu (its real-venue table, `docs/backlog/english-only-audit.md:130-137`), so it gains no
+note about them; its `:25` queue pointer to A918 does get a dated note (Task 3, review M5).
+
+## Decisions (slice 4)
+
+1. **One file, two objects**, `packages/catalogue/src/starter-content.ts`:
+   `STARTER_UNIT_NAMES`, keyed by each unit's English staff name, with today's `es`, `ca`,
+   `ca-ES-valencia` and `gl` words (`provisioning.ts:12-39`), typed
+   `as const satisfies StarterTranslations<StarterContentLanguage>` (a language map, as slice 1's
+   reasons); and `STARTER_MENU_NAMES = { Menu: { es: "Carta" } }`, typed for the staff languages
+   but English, as slice 3's one-name objects. **Keyed by the English, not by `seedKey`**:
+   `starterNames` writes its key under `en` and `starterName` returns it for English staff
+   (`packages/country-packs/src/starter-languages.ts:40-62`), so a `seedKey` key would store
+   `en: "g"` as a unit's English name; and since code finds a seeded unit only by `seed_key`
+   (Task 0 item 4), the key does not affect any lookup. The `eu` words go: no installed pack's
+   area starts a venue in Basque (`STARTER_CONTENT_LANGUAGES`, `starter-languages.ts:9`, and the
+   test that pins it, decision 5 of the plan). A unit's staff name in Spanish is the same entry's
+   `es` word: one word, as a Spanish venue's units show today. Words:
+
+   | English (the key) | `es` | `ca` | `ca-ES-valencia` | `gl` | Source |
+   | --- | --- | --- | --- | --- | --- |
+   | Gram | Gramo | Gram | Gram | Gramo | `provisioning.ts:13` |
+   | Kilogram | Kilogramo | Quilogram | Quilogram | Quilogramo | `:14-21` |
+   | Milligram | Miligramo | Mil·ligram | Mil·ligram | Miligramo | `:22-29` |
+   | Millilitre | Mililitro | Mil·lilitre | Mil·lilitre | Mililitro | `:30-37` |
+   | Litre | Litro | Litre | Litre | Litro | `:38` |
+   | Menu (the first menu) | Carta | | | | **new** (owner FYI D: unchecked by a native speaker; the pull request lists it) |
+
+2. **The English stays in code**: `provisioning.ts` keeps a `STARTER_UNITS` list (`seedKey`, the
+   English staff name, the staff abbreviation, `precision`, `hardwareUnit`, `measure`, as today's
+   five inserts at `:96-147`) and `FIRST_MENU_NAME = "Menu"`; `UNIT_NAMES` and `UNIT_ABBR` go.
+   Neither constant is exported from the package index: nothing outside reads them (slice 3's
+   review M10).
+3. **One read of the venue, in the seed.** Today's raw select (`:55-62`, a cross join to the one
+   `tenants` row) becomes a drizzle select of `locations.catalogueId`, `locations.province`,
+   `locations.invoiceLocales` and `tenants.country`, inner-joined to `tenants` id 1, as slice 1's
+   adjustments seed (`packages/adjustments/src/provisioning.ts:83-91`). With one tenant row the two
+   joins give the same row; with none, both give no row, so the seed's behaviour there is today's.
+   `resolveInstalledStarterLanguages({ country, area, receiptLocale: invoiceLocales[0] })` gives
+   `languages` (the same list `resolveInstalledStartingContentLanguages` gives, `starter-languages.ts:34`)
+   and `staffLanguage`; the existing call stays for `defaultLanguage`. Why not slice 3's left join:
+   that kept venue-service's test venues with no tenant row on Spanish steps; the catalogue's
+   tests all seed a tenant (`provisioning.test.ts:30`), and setup's first action writes it
+   (`packages/provisioning/src/venue-plan.ts:164`).
+4. **Each unit**: `staffName` is `starterName(STARTER_UNIT_NAMES, english, staffLanguage)`;
+   `staffAbbreviation` is unchanged; `name` is `starterNames(STARTER_UNIT_NAMES, english, languages)`;
+   `abbreviation` holds the staff abbreviation under every language `name` holds. The
+   abbreviations are not in the file because they are the same letters in every language; building
+   them from the name map's languages keeps the two maps on the same languages, so the gap report,
+   which counts a unit missing in a language when either is blank (`docs/developers/products.md:302-305`),
+   shows no new half-filled unit.
+5. **The first menu**: `catalogues.name` is `starterName(STARTER_MENU_NAMES, FIRST_MENU_NAME, staffLanguage)`,
+   passed to `createMenuShell` as today, so the root section's `internal_name` follows. **The
+   root's `names` stays `{}`**: no customer sees it (Task 0 item 3), the till's folder tile then
+   falls back to the internal name, which is the same for everyone as the owner chose for one-name
+   rows (filling `{ en: "Menu", es: "Carta" }` would show an English-speaking waiter "Menu" on that
+   tile while the menus list says «Carta»), and the gap report keeps asking a manager for the menu's
+   customer names, as today. This departs from the M10b fold (which fills it "if a screen or receipt shows it"):
+   Task 0 found the till's folder tile and the gap report show it, to staff only; filling it would
+   split the one-name menu across languages, so it stays `{}` (review I2; the owner may overrule).
+   **The home layout stays "Home", in code, and `createMenuShell` does
+   not change**: it is shown nowhere (Task 0 item 3), so it is not starter content as this plan
+   defines it ("words a person reads"); and so `createMenuShell` needs no language for the menus a
+   manager adds, whose root takes the name the manager typed (`operations.ts:325-342`).
+6. **No migration.** Every column written exists today.
+
+## What changes, and for whom
+
+- **Bar Ejemplo, Valencia, `es-ES` receipts** (staff `es`; content `ca-ES-valencia`, `es`, `en`):
+  its units' staff names are «Gramo», «Kilogramo», «Miligramo», «Mililitro», «Litro», where today
+  they are "Gram"…. The staff name shows in three places: the unit editor's Staff name field
+  (`apps/dashboard/src/widgets/unit-form.ts:364-370`), the translation gap report's unit rows
+  (`packages/catalogue/src/content-translation-candidates.ts:101`), and as the fallback wherever a
+  unit's name is blank. The units list and the product screens show `name` in each person's screen
+  language (the till shows only the abbreviation, `apps/till/src/widgets/product-name.ts:50-56`) (`unitPresentation`, `packages/catalogue/src/unit-presentation.ts:14-23`),
+  so an English-speaking manager still reads "Gram" there and a Spanish-speaking one «Gramo», as
+  today (review I1). Each unit's `name` holds
+  English, Valencian and Spanish (today also `ca`, `gl`, `eu`), its `abbreviation` the same three
+  languages, each the staff abbreviation. Its first menu is «Carta» (today "Menu"), its root
+  section «Carta», the root's customer names empty, the home layout "Home". A receipt still prints
+  "0.35 kg".
+- **Bar Exemple, Barcelona, `ca-ES` receipts** (staff `es`, the screens have no Catalan): the same
+  Spanish staff names (shown in the same three places) and «Carta»; the maps hold English, Catalan and Spanish.
+- **A Madrid demo with `en-GB` receipts** (staff `en`): staff names "Gram"… and the menu "Menu",
+  as today; maps hold English and Spanish. The demo then renames the menu and makes its own units,
+  as today.
+- **London** (the British pack is closed to setup, `packages/country-gb/src/united-kingdom.ts:13`;
+  reachable from the command-line tool and tests): English staff names and "Menu"; maps hold
+  English only.
+- **The command-line tool `waitron-provision`** with `en-US`, `en` or `EN-GB` receipts in Spain:
+  Spanish staff names and «Carta» (the staff language takes the receipt language only when it is
+  exactly `es-ES` or `en-GB`), as slices 2 and 3 found for their rows.
+- **An existing venue** keeps every row: units are written only on the first claim of
+  `unit_seed_states`, the menu only while `locations.catalogue_id` is null (`provisioning.ts:90-95`,
+  `:149-160`).
+- **A manager who later enables a language a venue did not start with** (Catalan in Madrid) finds
+  the five units listed as missing it in the gap report, where today they carry Catalan words
+  (owner FYI B). The pull request says so.
+- **A venue imported from an export** keeps the exporting venue's units and menu (Task 0 item 1).
+
+## Global constraints (slice 4)
+
+Slice 1's global constraints hold, with these differences: Spanish, Catalan and Galician appear
+only in `packages/catalogue/src/starter-content.ts` and the docs that name the words; tests read
+expected words from that file (`expected[english].es`, through a variable typed
+`StarterTranslations<StarterContentLanguage>` so a string index compiles, slice 1's M9). Two words
+already in `provisioning.test.ts`, a test's own edits («pieza» at `:260`, «Masa» at `:294`), are not
+starter words; Task 1 replaces them with English test data ("piece" alone in the map, "Mass"), the
+checks after them comparing against the same new values (review M7). No migration, no error code, no receipt, invoice,
+filed-record or report change. New test file: `packages/catalogue/src/starter-content.test.ts`; no
+new server test file, no manifest change. Every implementer runs `pnpm format:check` before each
+commit.
+
+## Changed test checks (slice 4)
+
+The owner's decision changes what a Spanish venue's units and first menu are called, and FYI B
+narrows the units' maps. These are the only existing assertions that may change; each is named in
+its task's commit and the pull request lists them. Any other existing assertion that has to change
+is a STOP: say why in the handover. Line numbers are on `c69f793bb`.
+
+| Where | Now | Becomes | Task |
+| --- | --- | --- | --- |
+| `packages/catalogue/src/provisioning.test.ts:181-257` ("seeds the five units once…", a Madrid `es-ES` venue, `:176`) | each unit's `name` and `abbreviation` hold `en`, `es`, `ca`, `ca-ES-valencia`, `gl`, `eu`, the words spelled | `name` is `{ en: english, es: expected[english].es }`; `abbreviation` is `{ en: abbr, es: abbr }`; precision, hardware unit and measure unchanged; the test's own edit at `:260` becomes `{ en: "piece" }` and its check at `:265-268` the same value (review M7) | 1 |
+| `packages/catalogue/src/provisioning.test.ts:285-291` ("authors seeded staff pairs…", Madrid `es-ES`, `:274`) | staff names "Gram", "Kilogram", "Litre", "Milligram", "Millilitre" | `expected[english].es` for each; abbreviations unchanged; the test's own edit «Masa» at `:294` and its check at `:299` become "Mass" (review M7) | 1 |
+
+Predicted **unchanged**, each run unedited in its task: every other case in
+`packages/catalogue/src/provisioning.test.ts` (languages, VAT default, colour, "preserves authored
+languages and reuses the initial menu", `:150-173`, which checks roles, not names); the rest of
+`@waitron/catalogue`; `apps/server/src/configuration-transfer.test.ts` (the units round trip,
+`:8145-8189`, compares source with target); `apps/server/src/first-fiscal-setup.e2e.test.ts`;
+`apps/server/scripts/demo-seed/seed.test.ts` and `seed-catalogue.test.ts`; `units-api.test.ts`;
+`catalogue-api.full-manifest.test.ts`; and every other `apps/server` file (Task 0 item 5).
+
+## Task 1: the starter file and the units
+
+Files: `packages/catalogue/src/starter-content.ts` (new), `starter-content.test.ts` (new),
+`provisioning.ts`, `provisioning.test.ts`.
+
+1. Tests first.
+   - `starter-content.test.ts` (no database): `Object.keys(STARTER_UNIT_NAMES)` equals
+     `STARTER_UNITS.map((unit) => unit.staffName)` (every starter has an entry, every entry is a
+     starter, decision 6 of the plan); and for each of `es`, `ca`, `ca-ES-valencia`, `gl`, the five
+     words are non-empty and equal to their trimmed form (the seed writes them straight into
+     `units`, without the `unitStaffText` check a manager's edit goes through, `units.ts:103`).
+   - `provisioning.test.ts`: the two rows of "Changed test checks", with
+     `const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES;`. Run them
+     **unedited first**, as evidence the old values are what the seed writes today.
+   - `provisioning.test.ts`, a new `it.each` "seeds each unit in the staff language with a name in
+     each content language", one row per venue, through the existing `venue(country, province,
+     receipt)` helper (`:29-44`), each row stating its expected staff language and languages as
+     literals: Valencia `ES`/`"Valencia"`/`es-ES` → `es`, `["ca-ES-valencia", "es", "en"]`;
+     Barcelona `ES`/`"Barcelona"`/`ca-ES` → `es`, `["ca", "es", "en"]`; Madrid `ES`/`"Madrid"`/`en-GB`
+     → `en`, `["es", "en"]`; London `GB`/`"London"`/`en-GB` → `en`, `["en"]`; and a fifth row, Madrid
+     with receipts `["en-GB", "es-ES"]` → `en`, `["es", "en"]`, so reading any receipt language but
+     the first is caught (review M2; Task 1 changes `venue()` to take a list as well as one language). For each seeded unit
+     (`toEqual`, ordered by `seed_key`): `staffName` is `english` for `en` and
+     `expected[english][staffLanguage]` otherwise; `staffAbbreviation` is today's letters; `name`
+     equals `Object.fromEntries(languages.map((l) => [l, l === "en" ? english : expected[english][l]]))`;
+     `abbreviation` equals the same languages, each mapped to the staff abbreviation.
+   - The abbreviation pin, in the same file: "every seeded abbreviation is its staff abbreviation in
+     every language", over the same five venues: for each unit, the keys of `abbreviation` equal
+     the keys of `name`, and every value equals `staffAbbreviation`. It is what keeps printed text
+     unchanged (Task 0 item 2).
+   Run `pnpm --filter @waitron/catalogue exec vitest run src/starter-content.test.ts src/provisioning.test.ts`;
+   expected: `starter-content.test.ts` fails to load (no `./starter-content.js`); in
+   `provisioning.test.ts` the two changed rows fail receiving the six-language maps and "Gram"…, the
+   Valencia and Barcelona rows fail receiving "Gram" and a map holding `gl`, the two Madrid rows and
+   London fail receiving maps holding `ca`, `gl`, `eu`. The abbreviation pin passes from the start
+   (today's maps already hold the staff letters): its red is the step 4 control.
+2. Code.
+   - `starter-content.ts`: `STARTER_UNIT_NAMES` (decision 1; the comment says it is keyed by the
+     English staff names `provisioning.ts` seeds). `STARTER_MENU_NAMES` waits for Task 2.
+   - `provisioning.ts`: export `STARTER_UNITS` (decision 2, for the key test only, not from
+     `index.ts`); the select of decision 3; the units written as decision 4, inside the existing
+     `claimed.length > 0` branch (`:95`), so the write-once guard is unchanged. Drop `UNIT_NAMES`,
+     `UNIT_ABBR` and their comment at `:11` (cut on touch).
+   Re-run step 1's command: all pass; read the `Tests` line.
+3. Unedited: `pnpm --filter @waitron/catalogue exec vitest run` whole (read the `Tests` line: no
+   other failure), and `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/units-api.test.ts src/till-api.receipt.test.ts src/kitchen-print.test.ts scripts/demo-seed/seed.test.ts`.
+   `pnpm --filter @waitron/catalogue typecheck`.
+4. Controls, each run and reverted:
+   - Write every staff name with `"en"` instead of the read staff language: the Valencia and
+     Barcelona rows fail, receiving "Gram".
+   - Write `name` with `STARTER_CONTENT_LANGUAGES` instead of the venue's `languages`: the Valencia
+     row fails, receiving `ca` and `gl` keys.
+   - Give the `kg` unit's `es` abbreviation the text `"kgs"`: the abbreviation pin fails.
+   - Delete the `Litre` entry from `STARTER_UNIT_NAMES`: the key case fails; the Valencia, Barcelona
+     and Madrid rows fail with a `TypeError` reading the missing entry; London passes (review M1).
+   - Put `eu: "Gramo"` into one entry: `pnpm --filter @waitron/catalogue typecheck` fails with
+     TS2353 (no test checks it; the type does, review M3).
+   - Before deleting `UNIT_NAMES`, a one-off `node` check that each new entry equals today's
+     `UNIT_NAMES[seedKey]` without `en` and `eu`; the command and its output go in the commit
+     message (review M3).
+
+## Task 2: the first menu
+
+Files: `packages/catalogue/src/starter-content.ts`, `starter-content.test.ts`, `provisioning.ts`,
+`provisioning.test.ts`.
+
+1. Tests first.
+   - `starter-content.test.ts`: `Object.keys(STARTER_MENU_NAMES)` equals `[FIRST_MENU_NAME]`, and
+     its `es` word is non-empty and trimmed.
+   - `provisioning.test.ts`, a new `it.each` "names the first menu in the staff language", over the
+     same five venues as Task 1, each expecting: the location's menu (`locations.catalogueId`) has
+     `catalogues.name` equal to `FIRST_MENU_NAME` for `en` and `STARTER_MENU_NAMES.Menu.es` for
+     `es`; its `menu_root` section's `internalName` is the same text and its `names` equal `{}`;
+     its `home_layout` section's `internalName` is `"Home"` (decision 5, pinned as decided
+     behaviour). `FIRST_MENU_NAME` is imported from `./provisioning.js`; the test spells "Menu"
+     and "Home" only as English.
+   Run `pnpm --filter @waitron/catalogue exec vitest run src/starter-content.test.ts src/provisioning.test.ts`;
+   expected: the key case fails to compile or load (no `STARTER_MENU_NAMES`, no `FIRST_MENU_NAME`);
+   once they exist, the Valencia and Barcelona rows fail receiving "Menu"; the two Madrid rows and London
+   rows pass (today's name) and stay as controls.
+2. Code: `STARTER_MENU_NAMES` (decision 1); `export const FIRST_MENU_NAME = "Menu"` in
+   `provisioning.ts`, the menu insert at `:151-154` naming
+   `starterName(STARTER_MENU_NAMES, FIRST_MENU_NAME, staffLanguage)` from the one read of Task 1.
+   `createMenuShell` and `HOME_SECTION_NAME` are not touched. Re-run: all pass.
+3. Control: name the menu with `"en"`: the Valencia and Barcelona rows fail with "Menu". Restore.
+4. Unedited: `pnpm --filter @waitron/catalogue exec vitest run` whole, and
+   `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/first-fiscal-setup.e2e.test.ts src/catalogue-api.full-manifest.test.ts scripts/demo-seed/seed.test.ts scripts/demo-seed/seed-catalogue.test.ts scripts/dev-setup.test.ts`.
+   `pnpm --filter @waitron/catalogue typecheck`. Then coverage of the two changed source files only:
+   `pnpm --filter @waitron/catalogue exec vitest run --coverage --coverage.include=src/starter-content.ts --coverage.include=src/provisioning.ts`;
+   read the per-file table: both at 100% lines and branches (CI's coverage job judges the package).
+
+## Task 3: the docs, the backlog and the English-only check
+
+Files: `docs/developers/conventions-data.md`, `docs/backlog.md`, `docs/backlog/architecture.md`.
+Also `docs/backlog/english-only-audit.md` (one dated note, step 3b). The root `CLAUDE.md` and the
+guides do not change (Task 0, "Guides and docs").
+
+1. `docs/developers/conventions-data.md:108-123`: the "So far that holds for…" sentence names every
+   starter, ending "…and for the units and the first menu (`packages/catalogue/src/starter-content.ts`),
+   A918", and says the one-name rows (the station, the profiles, the steps, the seasons, the zone,
+   the period, the first menu and the units' staff names) are written in the staff language.
+   Replace the last sentence ("The units, and the first menu with its root section and home layout,
+   are still written from code (A918's open slice).") with: "A starter unit's abbreviation is the same
+   letters in every language, so it is not in the file: its map holds the staff abbreviation under
+   each language its name holds. The first menu's root section takes the menu's name and starts
+   with no customer-facing names; the home layout's internal name, "Home", is shown nowhere and
+   stays English in code." Nothing is left "still written from code". `:147`: "The fixes are queued
+   as A918 and A963–A977" becomes "as A963–A977".
+2. `docs/backlog.md`:
+   - Delete the A918 entry (`:1996-2016`), its "slice 3 (branch …)" wording with it. Its slice-2
+     follow-up becomes its own short entry in the same place, in its own words: "**Three server
+     tests find the default kitchen station by the name «Cocina» (left open by A918 slice 2,
+     #2130).**" with the three file references and the `kitchen-print.test.ts` note it carries
+     today (`:2012-2016`).
+   - A new entry under "Menus and the catalogue" (`:617`), beside the `EACH_UNIT` id entry
+     (`:1055-1058`): "**`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general
+     code (left open by A918 slice 4, #<this PR>).** `packages/catalogue/src/units.ts:28-36` is never written into
+     a venue, but the receipt reads its abbreviations to decide whether a line prints a unit
+     (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text:
+     its own pull request waits for the owner."
+   - `:5704` (A913): "the items below and A918. A918 and A963–A965 come first" becomes "the items
+     below. A963–A965 come first"; `:5739` (A972): drop "After A918."; `:5764` (A977): "after A918
+     and A963–A975" becomes "after A963–A975", and `:5766`'s "(A918)" stays as the decision's name.
+   These go in this pull request, not a push to `main` after the merge.
+3. `docs/backlog/architecture.md`:
+   - The "Point 1 → A918" bullet (`:417-427`) is finished: delete it (the backlog's rule, a change
+     that finishes an entry deletes it, `docs/backlog.md:6316-6321`). Its trap was fixed in slice 2.
+   - `:411-412`'s intro ("Point 1 follows from … A918's answer") says Point 1 was A918, finished
+     2026-10-27, its decision under Decisions and deliberate limits (review M5).
+   - `:477` (A972): drop "After A918."; `:508` (A977): "after A918 and A963–A975 land" becomes
+     "after A963–A975 land".
+   - Under "Decisions and deliberate limits" (`:634`), a new entry, because the root `CLAUDE.md`
+     and `conventions-data.md` cite A918 as the decision's name (`docs/backlog.md:6322-6323`):
+     "**A918 starter content in the venue's languages (owner, 2026-10-20 and 2026-10-27).**" with
+     the owner's two answers quoted from this plan ("The owner's decision" and slice 3's FYI A
+     answer, B to F the defaults), one sentence each on what they mean (a translation file per
+     writing package; one-name rows in the staff language, the same for everyone, existing venues
+     keep theirs; language maps hold the venue's content languages the file carries, plus English),
+     and `conventions-data.md#general-code-is-english-only` as its lasting pointer (this plan a
+     secondary one; the entry carries the owner's words itself, review M6).
+3b. `docs/backlog/english-only-audit.md:25` ("are A918 and A963–A977"): a dated note as at its
+   `:3-7`, saying A918 finished 2026-10-27 (review M5; round 3 I1).
+4. The English-only check of the diff, outside the plans folder:
+   `LC_ALL=en_US.UTF-8 git diff -U0 main...HEAD -- . ':!docs/superpowers/plans' | /usr/bin/grep -E '^\+\+\+ |^\+.*(Gramo|Kilogramo|Quilogram|Miligramo|Mil·ligram|Mililitro|Mil·lilitre|Litro|Carta|Cocina|[áéíóúñ¿·])'`:
+   hits only in `packages/catalogue/src/starter-content.ts` and in the docs lines that name the
+   words («Cocina» in the new backlog entry), plus file headers. A hit in a test file or in
+   `provisioning.ts` is a defect.
+5. `pnpm exec vitest run scripts/guide-links.test.ts scripts/claude-md-pointers.test.ts`.
+
+Root guards before `/finish-branch`: the plan's list (below). At the end of the slice:
+`git diff --stat main...HEAD -- packages/fiscal-verifactu packages/core packages/db apps/server/src`
+prints nothing.
+
+## Review rulings (slice 4)
+
+The fresh plan review (`~/waitron-campaign-b/a918-4-plan-review.md`, on `a5d1d7924`) found 0
+Critical, 2 Important and 7 Minor; it ran a prototype of Tasks 1-2 in a throwaway copy (the two
+listed checks were the only existing failures; the new cases failed against today's seed). The
+driver took all nine, folded above: I1 (where a unit's staff name actually shows; FYI A gains a dated note, and the pull
+request and the Decisions entry carry the same wording), I2 (the root's
+names stay `{}`, stated as a departure from M10b), M1 (the Litre control's failure), M2 (a
+two-language receipt row), M3 (the `eu` and moved-words controls), M4 (top decision 1's dated
+note), M5 (two more A918 pointers), M6 (the backlog entries' wording), M7 ("starter unit", English
+test data). Review path: light (the review agreed).
+
+A narrow round-3 check of that fold (`~/waitron-campaign-b/a918-4-plan-round3.md`, on `66a20b5f5`)
+found 0 Critical, 1 Important and 6 Minor, all folded: I1 (the audit's dated note made consistent
+with Task 0 and Task 3, and moved to its own step 3b), M1 (the changed-checks table names the
+English test data), M2 (the `venue()` change is a step), M3 ("five venues"), M4 (the till shows only
+the abbreviation), M5 (FYI A's dated note), M6 (the M10b quotation and "the owner may overrule").
+
+## Review focus (slice 4)
+
+- **Languages**: Valencia's maps hold `ca-ES-valencia`, `es`, `en`, never `ca` or `gl`; a `ca-ES`
+  venue's staff names are Spanish; an `en-GB` one's English; London's maps English alone.
+- **Printed text**: every abbreviation equals its staff abbreviation in every language, the pin
+  fails when one does not, and the two maps share their languages.
+- **Write-once**: units only on the first claim of `unit_seed_states`, the menu only while the
+  location has none; an imported venue keeps the exporting venue's.
+- **The first menu**: «Carta» for `es`, its root's names `{}`, "Home" untouched, `createMenuShell`
+  unchanged; decision 5's reasons hold.
+- **No Spanish outside the starter file and the docs** (Task 3 step 4).
+- **The backlog**: A918 gone, its follow-up and the `EACH_UNIT` entry added, the decision recorded
+  where its citations point.
+- **Codex run-it seat**: one review (light path); two if the driver takes the FULL path.
+
+---
+
 # Later slices (task lists written when each is picked up)
 
 **Slice 2 — `feat/a918-2-station-and-profiles`.** (Its task list is above, under "Slice 2"; this paragraph is the plan as first written.) The station's word moves into
@@ -1652,7 +2117,7 @@ merges these tables (review M10c). It extends `conventions-data.md`'s sentence a
 Changed checks: venue-service and server cases pinning "Spring", "Counter" or "Open" for a Spanish
 venue, read from the file. Visible: seasons, zone and period in Spanish in a Spanish venue.
 
-**Slice 4 — `feat/a918-4-catalogue-starters`. Waits for the owner's answer to FYI A** (answered 2026-10-27 with the default, so it no longer waits), because the
+**Slice 4 — `feat/a918-4-catalogue-starters`.** (Its task list is above, under "Slice 4"; this paragraph is the plan as first written.) **Waits for the owner's answer to FYI A** (answered 2026-10-27 with the default, so it no longer waits), because the
 first menu's name and the units' staff names are one-name fields that are English today ("Menu",
 `catalogue/src/provisioning.ts:153`; "Gram"…, `:99-139`). The units' language maps follow FYI B
 and do not wait. The paragraph below is the default's. `packages/catalogue/src/starter-content.ts` holds the

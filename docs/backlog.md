@@ -1098,6 +1098,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   till's `product-name.ts` with nothing pinning them equal.
   [Detail](backlog/catalogue.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
 
+- **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
+  A918 slice 4, #2141).** `packages/catalogue/src/units.ts:28-36` is never written into a venue, but the
+  receipt reads its abbreviations to decide whether a line prints a unit
+  (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
+  own pull request waits for the owner.
+
 - **The combined end-to-end journey has not been walked**
   [Detail](backlog/catalogue.md#the-combined-end-to-end-journey-has-not-been-walked)
 
@@ -2034,27 +2040,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
   responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
 
-- **A918. Starter content in the venue's languages at setup (left open by A758-1).**
-  Starter content Waitron writes into a new venue (a module's seed or a core setup step) is English,
-  translated when the box is set up (owner, 2026-10-19). The owner chose (2026-10-20): each module
-  ships a translation file of its starter names, setup writes every language the venue uses from it, and the English-only check is to allow
-  those files. It
-  covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons, the counter zone, the starter period, units and the first menu, and
-  is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
-  items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
-  Slice 1 landed in #2128: the mechanism and the reasons; slice 2 in #2130: the kitchen station and
-  the device profiles; slice 3 (branch `feat/a918-3-venue-service-starters`): the service steps,
-  the default seasons, the counter zone and the starter period, written in the staff language from
-  `packages/venue-service/src/starter-content.ts`, and setup's opening-hours check and the demo
-  find the period by any of its starter names. Left, in [the
-  plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 4, the
-  catalogue's units and first menu. The owner chose the staff language for one-name starter rows
-  (2026-10-27), so it does not wait.
-  Follow-up from slice 2's review: three server tests still find the default station by the name
-  «Cocina» (`apps/server/src/table-signals.test.ts:89-95`, `watchers.leave.test.ts:28-35`,
-  `kitchen-print.test.ts:1253-1256`); they pass only because their venues have Spanish receipts.
-  Find it by `is_default` instead (`kitchen-print.test.ts` creates its own «Cocina» default, so it
-  needs reading, not a swap).
+- **Three server tests find the default kitchen station by the name «Cocina» (left open by A918
+  slice 2, #2130).** `apps/server/src/table-signals.test.ts:89-95`, `watchers.leave.test.ts:28-35`
+  and `kitchen-print.test.ts:1253-1256` pass only because their venues have Spanish receipts. Find
+  it by `is_default` instead (`kitchen-print.test.ts` creates its own «Cocina» default, so it needs
+  reading, not a swap).
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
   in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
@@ -5776,7 +5766,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
   ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's answers became the
-  items below and A918. A918 and A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  items below. A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A963. A full invoice's address: Spain's rule moves to Spain's pack, the till stores a country
   code.** `apps/server/src/invoice-selection.ts` refuses an address not ending «España» with a
@@ -5811,7 +5801,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A972. Demo data per country pack and region — DESIGN FIRST, then ask the owner.** Spain's
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
-  moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  moves into `country-es`, plus region demos ("catalán demo in Catalunya"). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot/counter suites,
   shared equipment helper exports and imports, server till-API and configuration-transfer fixtures,
@@ -5836,7 +5826,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   backend fixtures need their own English wording change in the Cloud repository.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A977. Widen the English-only guard to every text file, after A918 and A963–A975.** Accented
+- **A977. Widen the English-only guard to every text file, after A963–A975.** Accented
   letters too; a shrinking-only list of test folders still to clean. Exempt homes include a
   package's `src/starter-content.ts` (A918). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 

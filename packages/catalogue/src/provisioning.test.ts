@@ -1,6 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  catalogues,
   CORE_MIGRATIONS,
   locationCatalogues,
   locations,
@@ -10,15 +11,18 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
+import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { CATALOGUE_PROVISIONING } from "./provisioning.js";
+import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
 import { contentLanguages, menuDetails } from "./schema/menu.js";
 import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
 import { sections } from "./schema/sections.js";
 import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
+import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES;
 
 /**
  * Every write and read below goes through its drizzle table. A row's `id` comes from the table's
@@ -26,7 +30,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] }
  * raw `select` hands back the string, where the column's read mapping hands back the map or the list
  * these assertions are written against.
  */
-async function venue(country: string, province: string, receipt: string) {
+async function venue(country: string, province: string, receipt: string | string[]) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ country }).where(eq(tenants.id, 1));
   const [location] = await suite.db
@@ -34,7 +38,7 @@ async function venue(country: string, province: string, receipt: string) {
     .values({
       name: "Venue",
       province,
-      invoiceLocales: [receipt],
+      invoiceLocales: typeof receipt === "string" ? [receipt] : receipt,
       operationDescription: "Hospitality",
     })
     .returning({ id: locations.id });
@@ -181,75 +185,40 @@ describe("catalogue provisioning", () => {
     expect(await storedUnits()).toEqual([
       {
         seed_key: "g",
-        name: {
-          en: "Gram",
-          es: "Gramo",
-          ca: "Gram",
-          "ca-ES-valencia": "Gram",
-          gl: "Gramo",
-          eu: "Gramo",
-        },
-        abbreviation: { en: "g", es: "g", ca: "g", "ca-ES-valencia": "g", gl: "g", eu: "g" },
+        name: { en: "Gram", es: expected["Gram"]!.es },
+        abbreviation: { en: "g", es: "g" },
         precision: 0,
         hardware_unit: "g",
         measure: true,
       },
       {
         seed_key: "kg",
-        name: {
-          en: "Kilogram",
-          es: "Kilogramo",
-          ca: "Quilogram",
-          "ca-ES-valencia": "Quilogram",
-          gl: "Quilogramo",
-          eu: "Kilogramo",
-        },
-        abbreviation: { en: "kg", es: "kg", ca: "kg", "ca-ES-valencia": "kg", gl: "kg", eu: "kg" },
+        name: { en: "Kilogram", es: expected["Kilogram"]!.es },
+        abbreviation: { en: "kg", es: "kg" },
         precision: 3,
         hardware_unit: "kg",
         measure: true,
       },
       {
         seed_key: "l",
-        name: {
-          en: "Litre",
-          es: "Litro",
-          ca: "Litre",
-          "ca-ES-valencia": "Litre",
-          gl: "Litro",
-          eu: "Litro",
-        },
-        abbreviation: { en: "l", es: "l", ca: "l", "ca-ES-valencia": "l", gl: "l", eu: "l" },
+        name: { en: "Litre", es: expected["Litre"]!.es },
+        abbreviation: { en: "l", es: "l" },
         precision: 3,
         hardware_unit: null,
         measure: true,
       },
       {
         seed_key: "mg",
-        name: {
-          en: "Milligram",
-          es: "Miligramo",
-          ca: "Mil·ligram",
-          "ca-ES-valencia": "Mil·ligram",
-          gl: "Miligramo",
-          eu: "Miligramo",
-        },
-        abbreviation: { en: "mg", es: "mg", ca: "mg", "ca-ES-valencia": "mg", gl: "mg", eu: "mg" },
+        name: { en: "Milligram", es: expected["Milligram"]!.es },
+        abbreviation: { en: "mg", es: "mg" },
         precision: 0,
         hardware_unit: "mg",
         measure: true,
       },
       {
         seed_key: "ml",
-        name: {
-          en: "Millilitre",
-          es: "Mililitro",
-          ca: "Mil·lilitre",
-          "ca-ES-valencia": "Mil·lilitre",
-          gl: "Mililitro",
-          eu: "Mililitro",
-        },
-        abbreviation: { en: "ml", es: "ml", ca: "ml", "ca-ES-valencia": "ml", gl: "ml", eu: "ml" },
+        name: { en: "Millilitre", es: expected["Millilitre"]!.es },
+        abbreviation: { en: "ml", es: "ml" },
         precision: 0,
         hardware_unit: null,
         measure: true,
@@ -257,14 +226,13 @@ describe("catalogue provisioning", () => {
     ]);
     await suite.db
       .update(units)
-      .set({ name: { en: "piece", es: "pieza" } })
+      .set({ name: { en: "piece" } })
       .where(eq(units.seedKey, "g"));
     await suite.db.delete(units).where(eq(units.seedKey, "mg"));
     const otherNode = await seedNode(suite.db, node.locationId);
     await run(otherNode);
     expect((await storedUnits()).find((unit) => unit.seed_key === "g")?.name).toEqual({
       en: "piece",
-      es: "pieza",
     });
     expect((await storedUnits()).map((unit) => unit.seed_key)).not.toContain("mg");
   });
@@ -283,20 +251,118 @@ it("authors seeded staff pairs independently and preserves staff edits on reseed
       .from(units)
       .orderBy(asc(units.seedKey));
   expect(await staffPairs()).toEqual([
-    { seedKey: "g", staffName: "Gram", staffAbbreviation: "g" },
-    { seedKey: "kg", staffName: "Kilogram", staffAbbreviation: "kg" },
-    { seedKey: "l", staffName: "Litre", staffAbbreviation: "l" },
-    { seedKey: "mg", staffName: "Milligram", staffAbbreviation: "mg" },
-    { seedKey: "ml", staffName: "Millilitre", staffAbbreviation: "ml" },
+    { seedKey: "g", staffName: expected["Gram"]!.es, staffAbbreviation: "g" },
+    { seedKey: "kg", staffName: expected["Kilogram"]!.es, staffAbbreviation: "kg" },
+    { seedKey: "l", staffName: expected["Litre"]!.es, staffAbbreviation: "l" },
+    { seedKey: "mg", staffName: expected["Milligram"]!.es, staffAbbreviation: "mg" },
+    { seedKey: "ml", staffName: expected["Millilitre"]!.es, staffAbbreviation: "ml" },
   ]);
   await suite.db
     .update(units)
-    .set({ staffName: "Masa", staffAbbreviation: "M", name: {}, abbreviation: {} })
+    .set({ staffName: "Mass", staffAbbreviation: "M", name: {}, abbreviation: {} })
     .where(eq(units.seedKey, "kg"));
   await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
   expect((await staffPairs()).find((unit) => unit.seedKey === "kg")).toEqual({
     seedKey: "kg",
-    staffName: "Masa",
+    staffName: "Mass",
     staffAbbreviation: "M",
   });
 });
+
+// Each venue the two sides could treat differently: a regional content language that is not `ca`
+// (Valencia), a receipt language the staff screens cannot show (Barcelona's `ca-ES`), a receipt
+// language that overrides the area (Madrid's `en-GB`, alone and first of two), one language (London).
+const STARTER_VENUES: readonly [string, string, string | string[], "es" | "en", string[]][] = [
+  ["ES", "Valencia", "es-ES", "es", ["ca-ES-valencia", "es", "en"]],
+  ["ES", "Barcelona", "ca-ES", "es", ["ca", "es", "en"]],
+  ["ES", "Madrid", "en-GB", "en", ["es", "en"]],
+  ["ES", "Madrid", ["en-GB", "es-ES"], "en", ["es", "en"]],
+  ["GB", "London", "en-GB", "en", ["en"]],
+];
+
+const STARTER_UNIT_ROWS = [
+  { seedKey: "g", english: "Gram", abbreviation: "g" },
+  { seedKey: "kg", english: "Kilogram", abbreviation: "kg" },
+  { seedKey: "l", english: "Litre", abbreviation: "l" },
+  { seedKey: "mg", english: "Milligram", abbreviation: "mg" },
+  { seedKey: "ml", english: "Millilitre", abbreviation: "ml" },
+];
+
+async function seededUnits() {
+  return suite.db
+    .select({
+      seedKey: units.seedKey,
+      staffName: units.staffName,
+      staffAbbreviation: units.staffAbbreviation,
+      name: units.name,
+      abbreviation: units.abbreviation,
+    })
+    .from(units)
+    .orderBy(asc(units.seedKey));
+}
+
+it.each(STARTER_VENUES)(
+  "seeds each %s/%s (receipts %j) unit in the %s staff language with a name in each of %j",
+  async (country, province, receipt, staffLanguage, languages) => {
+    const node = await venue(country, province, receipt);
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    expect(await seededUnits()).toEqual(
+      STARTER_UNIT_ROWS.map(({ seedKey, english, abbreviation }) => ({
+        seedKey,
+        staffName: staffLanguage === "en" ? english : expected[english]![staffLanguage],
+        staffAbbreviation: abbreviation,
+        name: Object.fromEntries(
+          languages.map((language) => [
+            language,
+            language === "en" ? english : expected[english]![language as StarterContentLanguage],
+          ]),
+        ),
+        abbreviation: Object.fromEntries(languages.map((language) => [language, abbreviation])),
+      })),
+    );
+  },
+);
+
+it.each(STARTER_VENUES)(
+  "gives every seeded %s/%s (receipts %j) unit its staff abbreviation in every language it names",
+  async (country, province, receipt) => {
+    const node = await venue(country, province, receipt);
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const seeded = await seededUnits();
+    expect(seeded).toHaveLength(STARTER_UNIT_ROWS.length);
+    for (const unit of seeded) {
+      expect(Object.keys(unit.abbreviation).sort()).toEqual(Object.keys(unit.name).sort());
+      for (const text of Object.values(unit.abbreviation)) {
+        expect(text).toBe(unit.staffAbbreviation);
+      }
+    }
+  },
+);
+
+it.each(STARTER_VENUES)(
+  "names the first menu of %s/%s (receipts %j) in the %s staff language",
+  async (country, province, receipt, staffLanguage) => {
+    const node = await venue(country, province, receipt);
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const name = staffLanguage === "en" ? FIRST_MENU_NAME : STARTER_MENU_NAMES[FIRST_MENU_NAME].es;
+    const [location] = await suite.db
+      .select({ catalogueId: locations.catalogueId })
+      .from(locations)
+      .where(eq(locations.id, node.locationId));
+    const menus = await suite.db
+      .select({ name: catalogues.name })
+      .from(catalogues)
+      .where(eq(catalogues.id, location!.catalogueId!));
+    expect(menus).toEqual([{ name }]);
+    const owned = await suite.db
+      .select({ role: sections.role, internalName: sections.internalName, names: sections.names })
+      .from(sections)
+      .where(eq(sections.ownerMenuId, location!.catalogueId!))
+      .orderBy(asc(sections.role));
+    // The home layout is shown nowhere, so it keeps its English name in code (A918 slice 4, decision 5).
+    expect(owned).toEqual([
+      { role: "home_layout", internalName: "Home", names: {} },
+      { role: "menu_root", internalName: name, names: {} },
+    ]);
+  },
+);

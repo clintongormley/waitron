@@ -403,23 +403,12 @@ unscoped on purpose so a stray booking under another location cannot block a tab
 owner answered points 2–8 on 2026-10-20 (the campaign's questions file has the words): 2, 4, 7 and 8
 as recommended; 3, 5 and 6 in the owner's own words, recorded in
 [conventions-data.md](../developers/conventions-data.md#general-code-is-english-only). Point 1
-follows from the owner's 2026-10-19 rule and A918's answer. The items
+was A918; its decision is under "Decisions and deliberate limits" below. The items
 below carry them out, one pull request each unless an item says otherwise. File and line references
 are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every item follows the rule
 for its own diff (grep it for non-English text before pushing — the guard will not see most of it
 until A977).
 
-- **Point 1 → A918** (its own backlog entry): starter content in English, translated at setup from a
-  translation file each module ships. The kitchen station «Cocina»
-  (`packages/provisioning/src/venue-apply.ts:308`), the service steps
-  (`packages/venue-service/src/service-steps.ts:110–138`, A900), the device profiles
-  (`packages/layouts/src/device-profile.ts:131–152`). Trap: the demo seed finds
-  the default station by its Spanish name (`apps/server/scripts/demo-seed/seed-catalogue.ts:46–56`);
-  find it by `is_default`, as `dev-setup.ts` does. (2026-10-27, A918 slice 2: the station and the
-  profiles now take their words from `packages/provisioning/src/starter-content.ts`, and the demo
-  finds the default station by `is_default`.) (2026-10-27, A918 slice 3: the service steps, the
-  default seasons, the counter zone and the starter period now take their words from
-  `packages/venue-service/src/starter-content.ts`, in the staff language.)
 - **A963 — points 3(4) and 4.** Move the full-invoice address rule (`apps/server/src/invoice-selection.ts:20–46`:
   ends «España», five-digit postcode) into Spain's country pack beside the tax-ID check general code
   already asks it for. The till stops appending «España»
@@ -469,7 +458,7 @@ until A977).
   Catalunya"): say which regions get their own and which share Spain's default; setup picks the demo from the venue's country and region the way it already
   derives other geography values (A833 landed: setup and the demo start only for a country with a
   pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
-  Día» in an English slot (`menu.ts:840`) are fixed there. After A918.
+  Día» in an English slot (`menu.ts:840`) are fixed there.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
@@ -501,7 +490,7 @@ until A977).
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the
   Waitron fixture's wording change does not update those files.
-- **A977 — point 8, after A918 and A963–A975 land.** Widen `scripts/english-only.test.ts` to every
+- **A977 — point 8, after A963–A975 land.** Widen `scripts/english-only.test.ts` to every
   text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
   `fiscal-verifactu`, translation files, a package's `src/starter-content.ts`), add an accented-letter check, and keep a list of test
   folders still to clean that may only get shorter. Fix the wrong comment at
@@ -626,6 +615,21 @@ Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adap
   size). Any query that binds one value per row can still meet it.
 
 ## Decisions and deliberate limits
+
+**A918 starter content in the venue's languages (owner, 2026-10-19, 2026-10-20 and 2026-10-27).**
+The owner: "These default starter names in the general module should be in English only, and
+should be translated into Spanish and catalán etc when the box is set up only" (2026-10-19); "each
+module ships a translation file of its starter names (beside its screen translations), and setup
+writes every language the venue uses from it; the English-only check is taught to allow those
+files …" (2026-10-20); and, relayed on 2026-10-27, that rows holding one name "are written at
+setup in the venue's staff language, the same for everyone; existing venues keep their rows".
+So each package that writes starter words keeps them in its `src/starter-content.ts`, keyed by the
+English; a field holding a name per language gets English plus the venue's starting content
+languages the file carries; a field holding one name gets the staff language. A unit's staff name
+shows only in the unit editor, the translation gap report and where a unit's name is blank; the
+units list and product screens show each person's own language. The rule's home is
+[conventions-data.md](../developers/conventions-data.md#general-code-is-english-only); the
+reasoning is in `docs/superpowers/plans/2026-10-27-a918-starter-content-translations.md`.
 
 **A646 module controls and Google access (owner, 2026-10-17).** The revised design is agreed:
 Enabled-default catalogue, Add a module selects Disabled, row-menu Configure/Disable, a Configure
