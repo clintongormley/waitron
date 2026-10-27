@@ -5973,11 +5973,16 @@ export class TillApp extends LitElement {
     return this.#zoneMenuMemory;
   }
 
+  /** The box this app talks to, which names the venue in the device's own memories. */
+  #serverOrigin(): string {
+    return this.router?.current ?? location.origin;
+  }
+
   /** The same object while the origin and device stay, so a redraw does not reset the Floor's view. */
   #floorViewChoices(): FloorViewChoices | undefined {
     const deviceId = this.deviceId;
     if (deviceId === undefined) return undefined;
-    const origin = this.router?.current ?? location.origin;
+    const origin = this.#serverOrigin();
     const kept = this.#floorViewMemory;
     if (kept?.origin === origin && kept.deviceId === deviceId) return kept.choices;
     let storage: Storage | null = null;
@@ -5994,7 +5999,7 @@ export class TillApp extends LitElement {
   #zoneMenuIdentity(zoneId: string | undefined): ZoneMenuIdentity | undefined {
     if (zoneId === undefined || zoneId === "" || this.deviceId === undefined) return undefined;
     return {
-      origin: this.router?.current ?? location.origin,
+      origin: this.#serverOrigin(),
       deviceId: this.deviceId,
       profileId: this.deviceZoneSelection?.profileId ?? this.activeProfileId,
       zoneId,
@@ -18571,6 +18576,7 @@ export class TillApp extends LitElement {
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}
+          .serverOrigin=${this.#serverOrigin()}
           .canMoveStation=${this.capabilities.includes("take-orders")}
         ></till-station-screen>`;
   }
@@ -18774,6 +18780,7 @@ export class TillApp extends LitElement {
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}
+          .serverOrigin=${this.#serverOrigin()}
         ></till-station-screen>`;
       case "expo":
         return html`<till-expo-screen

@@ -14117,6 +14117,15 @@ describe("till-app", () => {
       expect(station(el)!.getAttribute("slot")).toBe("drill");
     });
 
+    it("the till's Station screen gets the till's own columns scope", async () => {
+      const el = await toShellCounter();
+      emit(shell(el)!, "show-station");
+      await el.updateComplete;
+      expect(station(el)).not.toBeNull();
+      expect(station(el)!.serverOrigin).toBe(location.origin);
+      expect(station(el)!.deviceId).toBe("till-dev");
+    });
+
     it("pushes the expo drill-in from the shell's Pass affordance", async () => {
       const el = await toShellCounter();
       emit(shell(el)!, "show-expo");
