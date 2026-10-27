@@ -15,8 +15,8 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
   forgottenAfterMinutes: 15,
 };
 
-// One item in each of the three kitchen states, so the kanban columns and the rail cards can be
-// asserted from a single mount.
+// One item in each of the three kitchen states, so the three columns can be asserted from a single
+// mount.
 const groupA: StationQueueGroup = {
   kitchenNote: null,
   orderId: "wo-1",
@@ -123,7 +123,6 @@ describe("till-station-queue", () => {
   it("rail shows other stations' dishes and their progress without bump controls", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [withElsewhere],
-      view: "rail",
       stationId: "st-1",
     });
     const section = el.shadowRoot!.querySelector('[data-elsewhere="wo-1"]')!;
@@ -143,7 +142,6 @@ describe("till-station-queue", () => {
   it("rail omits the other-stations section when its list is empty or absent", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [{ ...withElsewhere, elsewhere: [] }, groupB],
-      view: "rail",
       stationId: "st-1",
     });
     expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
@@ -166,7 +164,6 @@ describe("till-station-queue", () => {
     try {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withElsewhere],
-        view: "rail",
         stationId: "st-1",
       });
       const section = el.shadowRoot!.querySelector(".elsewhere")!;
@@ -221,7 +218,6 @@ describe("till-station-queue", () => {
   it("rail view renders one ticket card per order with its number and label", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     const tickets = el.shadowRoot!.querySelectorAll(".ticket");
@@ -235,7 +231,6 @@ describe("till-station-queue", () => {
   it("rail: each line shows its quantity × dish name (the cook's line), not a bare line number", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain("2× Paella");
@@ -256,7 +251,6 @@ describe("till-station-queue", () => {
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [fractional],
-      view: "rail",
       stationId: "st-1",
     });
     expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain(
@@ -299,7 +293,6 @@ describe("till-station-queue", () => {
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [counted],
-      view: "rail",
       stationId: "st-1",
     });
     const text = (id: string) =>
@@ -334,61 +327,41 @@ describe("till-station-queue", () => {
       ["en-GB", [28], "#27 (was 28)"],
       ["es-ES", [28], "#27 (antes 28)"],
       ["en-GB", [28, 30], "#27 (was 28, 30)"],
-    ])(
-      "follow the number on the ticket head and on the board card's head (%s, %j)",
-      async (locale, formerNumbers, text) => {
-        const previousLocale = currentLocale();
-        setLocale(locale);
-        try {
-          const rail = await mountWidget<TillStationQueue>("till-station-queue", {
-            groups: [moved(formerNumbers)],
-            view: "rail",
-            stationId: "st-1",
-          });
-          expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe(text);
-          const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
-            groups: [moved(formerNumbers)],
-            view: "kanban",
-            stationId: "st-1",
-          });
-          const heads = kanban.el.shadowRoot!.querySelectorAll("[data-card] .ticket-head .number");
-          expect([...heads].map(flat)).toEqual([text]);
-          expect(kanban.el.shadowRoot!.querySelector("[data-item] .number")).toBeNull();
-        } finally {
-          setLocale(previousLocale);
-        }
-      },
-    );
+    ])("follow the number on the card's head (%s, %j)", async (locale, formerNumbers, text) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [moved(formerNumbers)],
+          stationId: "st-1",
+        });
+        const heads = el.shadowRoot!.querySelectorAll("[data-card] .ticket-head .number");
+        expect([...heads].map(flat)).toEqual([text]);
+        expect(el.shadowRoot!.querySelector("[data-item] .number")).toBeNull();
+      } finally {
+        setLocale(previousLocale);
+      }
+    });
 
     it("leave a plain number on an order that never moved", async () => {
-      const rail = await mountWidget<TillStationQueue>("till-station-queue", {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [moved()],
-        view: "rail",
         stationId: "st-1",
       });
-      expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe("#27");
-      const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [moved()],
-        view: "kanban",
-        stationId: "st-1",
-      });
-      expect(flat(kanban.el.shadowRoot!.querySelector("[data-card] .ticket-head .number")!)).toBe(
-        "#27",
-      );
+      expect(flat(el.shadowRoot!.querySelector("[data-card] .ticket-head .number")!)).toBe("#27");
     });
 
     it.each([
       [390, undefined],
       [390, [28, 30]],
     ])(
-      "leave a kanban cell's dish name uncut at %s px wide (former numbers %j)",
+      "leave a card's dish name uncut at %s px wide (former numbers %j)",
       async (width, formerNumbers) => {
         const previous = { width: innerWidth, height: innerHeight };
         await page.viewport(width, 844);
         try {
           const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
             groups: [{ ...moved(formerNumbers), label: "Mesa 91" }],
-            view: "kanban",
             stationId: "st-1",
           });
           const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
@@ -464,13 +437,12 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("rail: renders the dish then its two options as indented '+ name' sub-text", async () => {
+    it("renders the dish then its two options as indented '+ name' sub-text", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withModifiers],
-        view: "rail",
         stationId: "st-9",
       });
-      const item = el.shadowRoot!.querySelector('[data-item="ti-9"]')!;
+      const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-9"]')!;
       expect(item.textContent).toContain("1× Cortado");
       expect(item.textContent).toContain("+ Grande");
       expect(item.textContent).toContain("+ Leche avena");
@@ -479,21 +451,9 @@ describe("till-station-queue", () => {
       expect(html.indexOf("Grande")).toBeLessThan(html.indexOf("Leche avena"));
     });
 
-    it("kanban: renders the same indented options beneath the cell's dish", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [withModifiers],
-        stationId: "st-9",
-      });
-      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-9"]')!;
-      expect(cell.textContent).toContain("1× Cortado");
-      expect(cell.textContent).toContain("+ Grande");
-      expect(cell.textContent).toContain("+ Leche avena");
-    });
-
     it("a modifier-free item renders flat, with no modifiers sub-text at all (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // the top-level fixture — no item here carries `modifiers`
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-modifiers")).toHaveLength(0);
@@ -519,7 +479,6 @@ describe("till-station-queue", () => {
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withExtraNutrition],
-        view: "rail",
         stationId: "st-9",
       });
       const milkName = allergenName("milk", currentLocale());
@@ -564,24 +523,14 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("rail: renders the note as sub-text beneath the dish", async () => {
+    it("renders the note as sub-text beneath the dish", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withCustomisation],
-        view: "rail",
         stationId: "st-c",
       });
-      const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
+      const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-c"]')!;
       expect(item.textContent).toContain("1× Chuletón");
       expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
-    });
-
-    it("kanban: renders the same note beneath the cell's dish", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [withCustomisation],
-        stationId: "st-c",
-      });
-      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-c"]')!;
-      expect(cell.querySelector("[data-note]")!.textContent).toContain("sin sal");
     });
 
     it("an EMPTY note renders no customisation row (an empty string is not a note)", async () => {
@@ -591,7 +540,6 @@ describe("till-station-queue", () => {
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [emptyNote],
-        view: "rail",
         stationId: "st-c",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
@@ -606,7 +554,6 @@ describe("till-station-queue", () => {
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [noNote],
-        view: "rail",
         stationId: "st-c",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
@@ -616,7 +563,6 @@ describe("till-station-queue", () => {
     it("a plain item (no note) renders no customisation row at all (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // the top-level fixture — no item carries a note
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-customisation")).toHaveLength(0);
@@ -674,29 +620,18 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("rail: shows the dish's own localised 'Milk' contains chip", async () => {
+    it("shows the dish's own localised 'Milk' contains chip", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
-        view: "rail",
         stationId: "st-a",
       });
-      const item = el.shadowRoot!.querySelector('[data-item="ti-a"]')!;
+      const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
       expect(item.textContent).toMatch(/milk/i);
-    });
-
-    it("kanban: shows the dish's own contains chip beneath the cell's dish", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [withAllergens],
-        stationId: "st-a",
-      });
-      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
-      expect(cell.textContent).toMatch(/milk/i);
     });
 
     it("omits the retired not-reviewed warning when the dish's own allergens are pending", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [pendingItem],
-        view: "rail",
         stationId: "st-p",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-p"]')!;
@@ -707,7 +642,6 @@ describe("till-station-queue", () => {
     it("a plain item with no as-served profile renders no allergen row (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // the top-level fixture — no item carries asServed
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-allergens")).toHaveLength(0);
@@ -720,11 +654,10 @@ describe("till-station-queue", () => {
       items: [{ ...groupA.items[0]!, asServed: { allergens: { gluten: {} }, pending: false } }],
     };
 
-    for (const view of ["kanban", "rail"] as const) {
-      it(`${view}: starts with the dish, carries its allergens and ends with the bump label`, async () => {
+    {
+      it("starts with the dish, carries its allergens and ends with the bump label", async () => {
         const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
           groups: [paella],
-          view,
           stationId: "st-1",
         });
         const line = el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-item="ti-1"]')!;
@@ -793,7 +726,6 @@ describe("till-station-queue", () => {
     it("shows vegan + vegetarian badges for a plant-only plate", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [veganItem],
-        view: "rail",
         stationId: "st-v",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-v"]')!;
@@ -805,7 +737,6 @@ describe("till-station-queue", () => {
     it("shows a contains-meat chip and no positive badge for a meat plate", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [meatItem],
-        view: "rail",
         stationId: "st-m",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-m"]')!;
@@ -816,7 +747,6 @@ describe("till-station-queue", () => {
     it("shows the NEUTRAL 'not reviewed' state for a pending diet, never a positive claim", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [pendingDiet],
-        view: "rail",
         stationId: "st-pd",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-pd"]')!;
@@ -827,7 +757,6 @@ describe("till-station-queue", () => {
     it("renders no diet row for an item carrying no asServedDiet (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // no item carries asServedDiet
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-diet")).toHaveLength(0);
@@ -934,7 +863,6 @@ describe("till-station-queue", () => {
   it("rail: a SETTLED (collectable) order shows a per-order collect button; a placed one does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     // groupB (wo-2) is settled → the Mode-P handover is offered; groupA (wo-1) is placed → not.
@@ -947,7 +875,6 @@ describe("till-station-queue", () => {
   it("rail: tapping the collect button emits mark-collected { orderId }, composed and bubbling", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     let captured: CustomEvent | undefined;
@@ -970,7 +897,6 @@ describe("till-station-queue", () => {
   it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route, §3d)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups, // groupB (wo-2) is settled → normally collectable
-      view: "rail",
       stationId: "st-1",
       advanceOnly: true,
     });
@@ -980,7 +906,6 @@ describe("till-station-queue", () => {
   it("rail: showReprint renders a per-order reprint button on every card; off by default", async () => {
     const off = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     expect(off.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
@@ -988,7 +913,6 @@ describe("till-station-queue", () => {
     // Both a placed and a settled order get it: reprint is status-independent, unlike collect.
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
       showReprint: true,
     });
@@ -1011,7 +935,6 @@ describe("till-station-queue", () => {
   it("rail: tapping the reprint button emits reprint-order { orderId }, composed and bubbling", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
       showReprint: true,
     });
@@ -1028,7 +951,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue, B: 7 min → warm
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       now,
     });
     const tickets = el.shadowRoot!.querySelectorAll(".ticket");
@@ -1040,7 +962,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:01:00.000Z"); // A: 1 min → fresh
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
     });
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-fresh")).toBe(true);
@@ -1050,7 +971,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
     });
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-forgotten")).toBe(true);
@@ -1060,7 +980,7 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      now, // default view: the board
+      now,
     });
     const card = el.shadowRoot!.querySelector('[data-item="ti-1"]')!.closest("[data-card]")!;
     expect(card.classList.contains("age-overdue")).toBe(true);
@@ -1070,7 +990,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
       reducedMotion: false,
     });
@@ -1083,7 +1002,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
       reducedMotion: true,
     });
@@ -1097,7 +1015,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue, not forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
       reducedMotion: false,
     });
@@ -1160,19 +1077,11 @@ const coursedOrder: StationQueueGroup = {
 };
 
 describe("till-station-queue — KDS-2 courses & fire", () => {
-  it.each([
-    ["waiter", "rail"],
-    ["kitchen", "rail"],
-    ["expo", "rail"],
-    ["waiter", "kanban"],
-    ["kitchen", "kanban"],
-    ["expo", "kanban"],
-  ] as const)(
-    "A773 waiter authority: legacy %s mode cannot start held food in %s",
-    async (fireControl, view) => {
+  it.each(["waiter", "kitchen", "expo"] as const)(
+    "A773 waiter authority: legacy %s mode cannot start held food",
+    async (fireControl) => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [coursedOrder, partyOrder],
-        view,
         ...{ fireControl },
         stationId: "st-1",
       });
@@ -1196,7 +1105,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: groups a card's lines by course, header per named course, ordered null-course-first then by displayOrder", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const sections = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-course]")];
@@ -1210,7 +1118,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: a HELD course's line renders greyed (held) and non-advanceable — a span, never a bump button", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const held = el.shadowRoot!.querySelector('[data-item="it-main"]')!;
@@ -1222,7 +1129,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: a held line does not emit an advance when clicked (it is not a bump target)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const spy = vi.fn();
@@ -1234,7 +1140,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: a FIRED course's line stays advanceable (KDS-1 behaviour is unchanged for fired items)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const spy = vi.fn();
@@ -1246,7 +1151,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("A773 waiter authority: a held course cannot request cooking from the station", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1266,7 +1170,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("A773 waiter authority: released and unassigned courses have no Fire button", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1278,7 +1181,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("waiter fire: the display shows no fire button even for a held course (the tab screen fires — Task 7)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "waiter" },
     });
@@ -1291,7 +1193,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("kanban: a held line renders greyed and non-advanceable in its state column too", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      stationId: "st-1", // default kanban view
+      stationId: "st-1",
     });
     const held = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="it-main"]')!;
     expect(held.classList.contains("held")).toBe(true);
@@ -1310,7 +1212,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("advanceOnly: held food has no Fire button and stays non-advanceable", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
       advanceOnly: true,
@@ -1916,7 +1817,6 @@ describe("till-station-queue — a seated party's groups", () => {
   it("A773 waiter authority: held groups cannot request cooking from the station", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1940,7 +1840,6 @@ describe("till-station-queue — a seated party's groups", () => {
     async (fireControl) => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [partyOrder],
-        view: "rail",
         stationId: "st-1",
         ...{ fireControl },
       });
@@ -1951,7 +1850,6 @@ describe("till-station-queue — a seated party's groups", () => {
   it("advanceOnly: a device display never offers Fire on a held group", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
       advanceOnly: true,
@@ -1971,7 +1869,6 @@ describe("till-station-queue — a seated party's groups", () => {
   it("a card with no party keeps its course sections beside a party's card", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder, partyOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1990,7 +1887,6 @@ describe("till-station-queue — printing problems", () => {
   it("rail: a card whose ticket has not printed says so; another card does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled, groupB],
-      view: "rail",
       stationId: "st-1",
     });
     const card = el.shadowRoot!.querySelector('[data-order="5"]')!;
@@ -2003,7 +1899,6 @@ describe("till-station-queue — printing problems", () => {
   it("rail: Reprint is on the troubled card only where the widget shows Reprint", async () => {
     const operator = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled],
-      view: "rail",
       stationId: "st-1",
       showReprint: true,
     });
@@ -2012,7 +1907,6 @@ describe("till-station-queue — printing problems", () => {
     ).not.toBeNull();
     const device = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled],
-      view: "rail",
       stationId: "st-1",
       advanceOnly: true,
     });
@@ -2125,19 +2019,15 @@ describe("till-station-queue — a merged queue's station labels", () => {
       .shadowRoot!.querySelector(`[data-item="${itemId}"] [data-line-station]`)
       ?.textContent?.trim();
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: each dish names its own group's station",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: merged,
-        stationNames,
-        view,
-      });
-      expect(label(el, "ti-1")).toBe("Cocina");
-      expect(label(el, "ti-2")).toBe("Cocina");
-      expect(label(el, "ti-3")).toBe("Barra");
-    },
-  );
+  it("each dish names its own group's station", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: merged,
+      stationNames,
+    });
+    expect(label(el, "ti-1")).toBe("Cocina");
+    expect(label(el, "ti-2")).toBe("Cocina");
+    expect(label(el, "ti-3")).toBe("Barra");
+  });
 
   it("shows no station label without station names", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -2170,7 +2060,6 @@ describe("till-station-queue — a merged queue's station labels", () => {
         { ...queuedAtBar, stationId: "st-2", bumpMode: "line" as const },
       ],
       stationNames,
-      view: "rail",
     });
     const item = vi.fn();
     const ticket = vi.fn();
@@ -2236,65 +2125,36 @@ describe("till-station-queue — a merged queue's station labels", () => {
       expect(ticket).toHaveBeenCalledOnce();
     };
 
-    it("rail: the ticket-mode card shows the mark once and the line-mode card none", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: mixed,
-        stationNames,
-        view: "rail",
-      });
-      const kitchen = el.shadowRoot!.querySelector('article[data-order="5"]')!;
-      const bar = el.shadowRoot!.querySelector('article[data-order="6"]')!;
-      const marks = kitchen.querySelectorAll(mark);
-      expect(marks).toHaveLength(1);
-      expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
-      expect(readable(marks[0]!)).toBe(true);
-      // The control: the hidden label the mark stands beside is still there, and is not readable.
-      const hidden = kitchen.querySelector('button[data-item="ti-1"] .visually-hidden')!;
-      expect(hidden.textContent).toBe("Advance ticket #5");
-      expect(readable(hidden)).toBe(false);
-      expect(bar.querySelector(mark)).toBeNull();
-      expect(bar.querySelector('button[data-item="ti-4"] .visually-hidden')!.textContent).toBe(
-        "Advance #6",
-      );
-      tap(el);
-    });
-
     it("rail: a ticket-mode card with no dish left to bump shows no mark", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [{ ...groupB, stationId: "st-1", bumpMode: "ticket" as const }],
         stationNames,
-        view: "rail",
       });
       expect(el.shadowRoot!.querySelector('article[data-order="6"]')).not.toBeNull();
       expect(el.shadowRoot!.querySelector(mark)).toBeNull();
     });
 
-    it.each(["rail", "kanban"] as const)(
-      "%s: a ticket-mode order whose only unfinished dish is held shows no mark",
-      async (view) => {
-        const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
-        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-          groups: [
-            {
-              ...groupB,
-              stationId: "st-1",
-              bumpMode: "ticket" as const,
-              items: [...groupB.items, held],
-            },
-          ],
-          stationNames,
-          view,
-        });
-        expect(el.shadowRoot!.querySelector('[data-item="ti-held"]')).not.toBeNull();
-        expect(el.shadowRoot!.querySelector(mark)).toBeNull();
-      },
-    );
+    it("a ticket-mode order whose only unfinished dish is held shows no mark", async () => {
+      const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          {
+            ...groupB,
+            stationId: "st-1",
+            bumpMode: "ticket" as const,
+            items: [...groupB.items, held],
+          },
+        ],
+        stationNames,
+      });
+      expect(el.shadowRoot!.querySelector('[data-item="ti-held"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(mark)).toBeNull();
+    });
 
-    it("board: the ticket-mode card shows the mark once and the line-mode card none", async () => {
+    it("the ticket-mode card shows the mark once and the line-mode card none", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: mixed,
         stationNames,
-        view: "kanban",
       });
       const card = (itemId: string) =>
         el.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest("[data-card]")!;
@@ -2303,20 +2163,26 @@ describe("till-station-queue — a merged queue's station labels", () => {
       expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
       expect(readable(marks[0]!)).toBe(true);
       expect(readable(card("ti-1").querySelector(".visually-hidden")!)).toBe(false);
+      // The control: the hidden label the mark stands beside is still there, and is not readable.
+      const hidden = card("ti-1").querySelector('button[data-item="ti-1"] .visually-hidden')!;
+      expect(hidden.textContent).toBe("Advance ticket #5");
+      expect(readable(hidden)).toBe(false);
       expect(card("ti-5")).toBe(card("ti-1"));
       expect(card("ti-4").querySelector(mark)).toBeNull();
+      expect(
+        card("ti-4").querySelector('button[data-item="ti-4"] .visually-hidden')!.textContent,
+      ).toBe("Advance #6");
       expect(el.shadowRoot!.querySelectorAll(mark)).toHaveLength(1);
       tap(el);
     });
 
-    it.each(["rail", "kanban"] as const)("%s: the mark reads in Spanish", async (view) => {
+    it("the mark reads in Spanish", async () => {
       const previousLocale = currentLocale();
       setLocale("es-ES");
       try {
         const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
           groups: mixed,
           stationNames,
-          view,
         });
         const marks = [...el.shadowRoot!.querySelectorAll(mark)];
         expect(marks.length).toBeGreaterThan(0);
@@ -2440,81 +2306,68 @@ describe("till-station-queue — moving a dish to another station", () => {
       (button) => button.dataset.moveStation,
     );
 
-  it.each(["kanban", "rail"] as const)("%s: draws no Move without canMove", async (view) => {
+  it("draws no Move without canMove", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view,
     });
     expect(moveButtons(el)).toEqual([]);
   });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: draws Move on held and fired queued dishes only, never on a started dish or an extra",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [order],
-        stationId: "st-1",
-        view,
-        canMove: true,
-      });
-      expect(moveButtons(el).sort()).toEqual(["ti-fired", "ti-held"]);
-      const button = el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!;
-      expect(button.tagName).toBe("WT-BUTTON");
-      expect(button.getAttribute("size")).toBe("sm");
-      expect(button.getAttribute("variant")).toBe("secondary");
-      expect(button.getAttribute("aria-label")).toBe(`${t("table.move_station")} · Paella`);
-      expect(button.textContent!.trim()).toBe(t("table.move_station"));
-      expect(button.closest("[data-item]")).toBeNull();
-    },
-  );
+  it("draws Move on held and fired queued dishes only, never on a started dish or an extra", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      canMove: true,
+    });
+    expect(moveButtons(el).sort()).toEqual(["ti-fired", "ti-held"]);
+    const button = el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!;
+    expect(button.tagName).toBe("WT-BUTTON");
+    expect(button.getAttribute("size")).toBe("sm");
+    expect(button.getAttribute("variant")).toBe("secondary");
+    expect(button.getAttribute("aria-label")).toBe(`${t("table.move_station")} · Paella`);
+    expect(button.textContent!.trim()).toBe(t("table.move_station"));
+    expect(button.closest("[data-item]")).toBeNull();
+  });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: pressing Move asks to move that dish from this station, and bumps nothing",
-    async (view) => {
-      const { el, host } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [order],
-        stationId: "st-1",
-        view,
-        canMove: true,
-      });
-      const moves: CustomEvent[] = [];
-      host.addEventListener("move-station", (e) => moves.push(e as CustomEvent));
-      const bumps = vi.fn();
-      el.addEventListener("advance-ticket-item", bumps);
-      el.addEventListener("advance-ticket", bumps);
-      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
-      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-held"]')!.click();
-      expect(moves.map((e) => e.detail)).toEqual([
-        { workingOrderId: "wo-m", lineId: "wol-fired", name: "Paella", stationId: "st-1" },
-        { workingOrderId: "wo-m", lineId: "wol-held", name: "Solomillo", stationId: "st-1" },
-      ]);
-      expect(moves.every((e) => e.bubbles && e.composed)).toBe(true);
-      expect(bumps).not.toHaveBeenCalled();
-    },
-  );
+  it("pressing Move asks to move that dish from this station, and bumps nothing", async () => {
+    const { el, host } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      canMove: true,
+    });
+    const moves: CustomEvent[] = [];
+    host.addEventListener("move-station", (e) => moves.push(e as CustomEvent));
+    const bumps = vi.fn();
+    el.addEventListener("advance-ticket-item", bumps);
+    el.addEventListener("advance-ticket", bumps);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-held"]')!.click();
+    expect(moves.map((e) => e.detail)).toEqual([
+      { workingOrderId: "wo-m", lineId: "wol-fired", name: "Paella", stationId: "st-1" },
+      { workingOrderId: "wo-m", lineId: "wol-held", name: "Solomillo", stationId: "st-1" },
+    ]);
+    expect(moves.every((e) => e.bubbles && e.composed)).toBe(true);
+    expect(bumps).not.toHaveBeenCalled();
+  });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: a merged queue's Move names the dish's own station, not the widget's",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [{ ...order, stationId: "st-2" }],
-        stationNames: new Map([["st-2", "Barra"]]),
-        stationId: "st-1",
-        view,
-        canMove: true,
-      });
-      const moved = vi.fn();
-      el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
-      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
-      expect(moved).toHaveBeenCalledWith({
-        workingOrderId: "wo-m",
-        lineId: "wol-fired",
-        name: "Paella",
-        stationId: "st-2",
-      });
-    },
-  );
+  it("a merged queue's Move names the dish's own station, not the widget's", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...order, stationId: "st-2" }],
+      stationNames: new Map([["st-2", "Barra"]]),
+      stationId: "st-1",
+      canMove: true,
+    });
+    const moved = vi.fn();
+    el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
+    expect(moved).toHaveBeenCalledWith({
+      workingOrderId: "wo-m",
+      lineId: "wol-fired",
+      name: "Paella",
+      stationId: "st-2",
+    });
+  });
 });
 
 describe("till-station-queue — where Move sits", () => {
@@ -2547,12 +2400,10 @@ describe("till-station-queue — where Move sits", () => {
     const plain = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view: "kanban",
     });
     const movable = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view: "kanban",
       canMove: true,
     });
     expect(box(movable.el, '[data-item="ti-a"]').width).toBe(
@@ -2564,7 +2415,6 @@ describe("till-station-queue — where Move sits", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view: "rail",
       canMove: true,
     });
     const own = box(el, '[data-item="ti-a"]');
@@ -2575,70 +2425,64 @@ describe("till-station-queue — where Move sits", () => {
 });
 
 describe("station move attribution", () => {
-  it.each(["en-GB", "es-ES"] as const)(
-    "shows the mover on rail and kanban cards in %s",
-    async (locale) => {
-      const previous = currentLocale();
-      setLocale(locale);
-      try {
-        for (const view of ["rail", "kanban"] as const) {
-          const movedAt = new Date(2026, 9, 10, 20, 12).toISOString();
-          const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-            view,
-            stationId: "st-1",
-            canMove: true,
-            groups: [
-              {
-                ...groupA,
-                items: [
-                  {
-                    ...groupA.items[0]!,
-                    lastMove: {
-                      fromStationName: "Grill $&",
-                      personName: "Luis",
-                      deviceName: "Till 2",
-                      movedAt,
-                    },
+  it.each(["en-GB", "es-ES"] as const)("shows the mover on the card in %s", async (locale) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      {
+        const movedAt = new Date(2026, 9, 10, 20, 12).toISOString();
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          stationId: "st-1",
+          canMove: true,
+          groups: [
+            {
+              ...groupA,
+              items: [
+                {
+                  ...groupA.items[0]!,
+                  lastMove: {
+                    fromStationName: "Grill $&",
+                    personName: "Luis",
+                    deviceName: "Till 2",
+                    movedAt,
                   },
-                  {
-                    ...groupA.items[1]!,
-                    lastMove: {
-                      fromStationName: "Bar",
-                      personName: "Ana",
-                      deviceName: null,
-                      movedAt,
-                    },
+                },
+                {
+                  ...groupA.items[1]!,
+                  lastMove: {
+                    fromStationName: "Bar",
+                    personName: "Ana",
+                    deviceName: null,
+                    movedAt,
                   },
-                  {
-                    ...groupB.items[0]!,
-                    lastMove: {
-                      fromStationName: "Grill",
-                      personName: null,
-                      deviceName: "Kitchen display",
-                      movedAt,
-                    },
+                },
+                {
+                  ...groupB.items[0]!,
+                  lastMove: {
+                    fromStationName: "Grill",
+                    personName: null,
+                    deviceName: "Kitchen display",
+                    movedAt,
                   },
-                  { ...groupB.items[0]!, id: "unmoved" },
-                ],
-              },
-            ],
-          });
-          const prefix = locale === "es-ES" ? "Pasado de" : "Moved from";
-          const text = (id: string) =>
-            el
-              .shadowRoot!.querySelector(`[data-item="${id}"] [data-last-move]`)
-              ?.textContent?.trim();
-          const time = "20:12";
-          expect(text("ti-1")).toBe(`${prefix} Grill $& · Luis · Till 2 · ${time}`);
-          expect(text("ti-2")).toBe(`${prefix} Bar · Ana · ${time}`);
-          expect(text("ti-3")).toBe(`${prefix} Grill · Kitchen display · ${time}`);
-          expect(text("unmoved")).toBeUndefined();
-        }
-      } finally {
-        setLocale(previous);
+                },
+                { ...groupB.items[0]!, id: "unmoved" },
+              ],
+            },
+          ],
+        });
+        const prefix = locale === "es-ES" ? "Pasado de" : "Moved from";
+        const text = (id: string) =>
+          el.shadowRoot!.querySelector(`[data-item="${id}"] [data-last-move]`)?.textContent?.trim();
+        const time = "20:12";
+        expect(text("ti-1")).toBe(`${prefix} Grill $& · Luis · Till 2 · ${time}`);
+        expect(text("ti-2")).toBe(`${prefix} Bar · Ana · ${time}`);
+        expect(text("ti-3")).toBe(`${prefix} Grill · Kitchen display · ${time}`);
+        expect(text("unmoved")).toBeUndefined();
       }
-    },
-  );
+    } finally {
+      setLocale(previous);
+    }
+  });
 });
 
 describe("till-station-queue — a dish sent after its period", () => {
@@ -2668,7 +2512,6 @@ describe("till-station-queue — a dish sent after its period", () => {
     (
       await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [lateOrder(items)],
-        view: "rail",
         stationId: "st-1",
         ...extra,
       })
@@ -2747,9 +2590,7 @@ describe("till-station-queue — a dish sent after its period", () => {
   });
 
   it("board: marks a marked dish within its card, and not an unmarked one", async () => {
-    const el = await mount([line("tortilla", starters, "Lunch"), line("bread", starters)], {
-      view: "kanban",
-    });
+    const el = await mount([line("tortilla", starters, "Lunch"), line("bread", starters)]);
     expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(1);
     expect(rows(el)).toEqual([["After Lunch — agreed", "tortilla", "bread"]]);
   });
@@ -2758,7 +2599,7 @@ describe("till-station-queue — a dish sent after its period", () => {
     const previous = currentLocale();
     setLocale("es-ES");
     try {
-      const el = await mount([line("tortilla", starters, "Lunch $&")], { view: "kanban" });
+      const el = await mount([line("tortilla", starters, "Lunch $&")]);
       const expected = t("station.after_period").replace("{period}", () => "Lunch $&");
       expect(expected).not.toContain("After");
       expect(

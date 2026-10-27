@@ -112,7 +112,6 @@ export class TillStationQueue extends LitElement {
         text-align: center;
       }
 
-      /* KANBAN — three state columns that flow to fill the width and wrap on a narrow till. */
       .kanban {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
@@ -603,8 +602,6 @@ export class TillStationQueue extends LitElement {
   @property({ attribute: false }) groups: MergedQueueGroup[] = [];
   /** Unacknowledged corrections for this station, oldest first as the server sends them. */
   @property({ attribute: false }) notices: KitchenNotice[] = [];
-  /** Unread: the board is the only drawing. */
-  @property() view: "kanban" | "rail" = "kanban";
   /** The station these items are AT; a bump without one (its own or its group's) sends nothing. */
   @property() stationId?: string;
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */

@@ -43,7 +43,7 @@ const groups: StationQueueGroup[] = [
     orderNumber: 5,
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
-    status: "settled", // collectable — surfaces the rail card's collect button for the a11y sweep
+    status: "settled", // collectable — surfaces the card's collect button for the a11y sweep
     thresholds: DEFAULT_THRESHOLDS,
     bumpMode: "line",
     items: [
@@ -183,7 +183,7 @@ const notices: KitchenNotice[] = [
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)", (theme) => {
-  it("has no violations on the KANBAN board (picker + three columns of bump controls)", async () => {
+  it("has no violations on the board (picker + three columns of cards)", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
       { api: stubApi() },
@@ -193,27 +193,13 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the TICKET RAIL (toggle switches the widget, age-coloured cards)", async () => {
-    const { el, host } = await mountWidget<TillStationScreen>(
-      "till-station-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations on the rail with held food and no station Fire button", async () => {
+  it("has no violations on the board with held food and no station Fire button", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
       { api: stubApi(), ...{ fireControl: "kitchen" } },
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 
@@ -364,7 +350,7 @@ function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
 describe.each(["light", "dark"] as const)(
   "till-station-screen device mode a11y (%s theme)",
   (theme) => {
-    it("has no violations on the enrolled device queue (no picker, view toggle only)", async () => {
+    it("has no violations on the enrolled device queue (no picker)", async () => {
       const { el, host } = await mountWidget<TillStationScreen>(
         "till-station-screen",
         { api: deviceStubApi(), deviceMode: true },
@@ -568,27 +554,22 @@ describe.each(["light", "dark"] as const)(
         }),
       });
 
-    it.each(["kanban", "rail"] as const)(
-      "has no violations on the merged %s with its station labels and the lines above it",
-      async (view) => {
-        const { el, host } = await mountWidget<TillStationScreen>(
-          "till-station-screen",
-          { api: threeStations(), deviceMode: true },
-          theme,
-        );
-        await flush(el);
-        el.shadowRoot!.querySelector<HTMLElement>("[data-merge-toggle]")!.click();
-        if (view === "rail")
-          el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-        await el.updateComplete;
-        const queue = el.shadowRoot!.querySelector("till-station-queue")!;
-        await queue.updateComplete;
-        expect(el.shadowRoot!.querySelectorAll("till-station-queue")).toHaveLength(1);
-        expect(queue.shadowRoot!.querySelector("[data-line-station]")).not.toBeNull();
-        expect(queue.shadowRoot!.querySelector("[data-notice-station]")).not.toBeNull();
-        await expectNoA11yViolations(host);
-      },
-    );
+    it("has no violations on the merged board with its station labels and the lines above it", async () => {
+      const { el, host } = await mountWidget<TillStationScreen>(
+        "till-station-screen",
+        { api: threeStations(), deviceMode: true },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-merge-toggle]")!.click();
+      await el.updateComplete;
+      const queue = el.shadowRoot!.querySelector("till-station-queue")!;
+      await queue.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll("till-station-queue")).toHaveLength(1);
+      expect(queue.shadowRoot!.querySelector("[data-line-station]")).not.toBeNull();
+      expect(queue.shadowRoot!.querySelector("[data-notice-station]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
   },
 );
 

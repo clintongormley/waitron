@@ -57,7 +57,7 @@ const kitchenQueue: StationQueueGroup[] = [
     orderNumber: 5,
     label: "Mesa 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
-    status: "settled", // a Mode-P pickup — collectable from the rail lens (the handover test below)
+    status: "settled", // a Mode-P pickup — collectable (the handover test below)
     thresholds: DEFAULT_THRESHOLDS,
     bumpMode: "line",
     items: [
@@ -194,19 +194,6 @@ describe("till-station-screen", () => {
     expect(api.getStationQueue).toHaveBeenLastCalledWith("st-2");
     expect(queueWidget(el)!.groups).toEqual(barQueue);
     expect(el.shadowRoot!.querySelector('[data-station="st-2"]')!.classList).toContain("active");
-  });
-
-  it("kanban is the default view; the toggle flips the widget to rail and back", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
-    await flush(el);
-    expect(queueWidget(el)!.view).toBe("kanban");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
-    expect(queueWidget(el)!.view).toBe("rail");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
-    expect(queueWidget(el)!.view).toBe("kanban");
   });
 
   it("hands the widget each station's orders with their own bump mode", async () => {
@@ -532,13 +519,10 @@ describe("till-station-screen", () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 
-  it("operator mode shows the per-order Reprint button in the rail (deviceMode === false, R-K)", async () => {
+  it("operator mode shows the per-order Reprint button on its card (deviceMode === false, R-K)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    // The reprint action is a rail-card control, so switch to the rail lens first.
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     expect(queueWidget(el)!.shadowRoot!.querySelector('[data-reprint="wo-1"]')).not.toBeNull();
   });
 
@@ -546,8 +530,6 @@ describe("till-station-screen", () => {
     const api = stubApi();
     const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     // Stopped at the screen (it owns the reprint), so the app never double-handles it.
     const escaped = vi.fn();
     host.addEventListener("reprint-order", escaped);
@@ -566,8 +548,6 @@ describe("till-station-screen", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
@@ -583,8 +563,6 @@ describe("till-station-screen", () => {
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
     await flush(el);
     const alert = el.shadowRoot!.querySelector('[role="alert"]');
@@ -692,7 +670,7 @@ describe("till-station-screen", () => {
     expect(queueWidget(el)!.groups).toEqual([]);
   });
 
-  it("suppresses its own header + Back when embedded, keeping the view toggle", async () => {
+  it("suppresses its own header + Back when embedded, keeping the out-of-date banner", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -701,7 +679,7 @@ describe("till-station-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-back]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull(); // body function stays
+    expect(el.shadowRoot!.querySelector(".actions .stale")).not.toBeNull();
   });
 
   it("renders its header when standalone (default)", async () => {
@@ -963,16 +941,13 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
 
   it("device mode hides the Collect button on a settled order (no device collect route, §3d)", async () => {
     // boundStation's kitchenQueue is a SETTLED Mode-P order → collectable on the OPERATOR path; in device
-    // mode the advance-only widget must not render the handover button. Switch to the rail lens (where
-    // the per-order collect lives) and assert it is absent from the widget's shadow.
+    // mode the advance-only widget must not render the handover button.
     const api = deviceApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
       deviceMode: true,
     });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     expect(queueWidget(el)!.shadowRoot!.querySelector("[data-collect]")).toBeNull();
   });
 
@@ -1030,21 +1005,16 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       ...{ fireControl: "kitchen" },
     });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     expect(queueWidget(el)!.shadowRoot!.querySelector("[data-fire]")).toBeNull();
   });
 
   it("device mode hides the Reprint button (session-guarded route, no device session — R-K)", async () => {
-    // Switch to the rail lens, where reprint would live.
     const api = deviceApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
       deviceMode: true,
     });
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
     expect(queueWidget(el)!.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
   });
 
@@ -1459,11 +1429,10 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
     });
 
-    it("as the only station, keeps its toggles and its dish until the queue is empty, then guides", async () => {
+    it("as the only station, keeps its dish until the queue is empty, then guides", async () => {
       const { el, api } = await mountDevice({
         stations: [switchedOff("st-deli", "Deli", deliQueue)],
       });
-      expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
       const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
       expect(queue.groups).toEqual(deliQueue);
@@ -1480,7 +1449,6 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       await flush(el);
       expect(api.deviceAdvance).toHaveBeenCalledWith("ti-3", "preparing");
       expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-choose-again]")).not.toBeNull();
       expect(el.shadowRoot!.querySelectorAll("[data-station-unavailable]")).toHaveLength(1);
     });
@@ -1535,7 +1503,6 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       "This station is no longer available: Deli",
       "This station is no longer available: Barra",
     ]);
-    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).toBeNull();
     const guidance = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-again]")!;
     expect(guidance.textContent!.trim()).toBe(
@@ -1580,11 +1547,10 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     }
   });
 
-  it("with one station still available, offers its view toggle and no guidance", async () => {
+  it("with one station still available, offers the merge switch and no guidance", async () => {
     const { el } = await mountDevice({
       stations: [gone("st-deli", "Deli"), available("st-1", "Cocina", kitchenQueue)],
     });
-    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
   });
@@ -1608,6 +1574,21 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     );
     await flush(el);
     expect(sectionQueue(sections(el)[0]!)!.notices).toEqual([]);
+  });
+
+  it("offers no Board or Tickets switch, on a till or a kitchen display", async () => {
+    const { el: till } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: stubApi(),
+    });
+    await flush(till);
+    expect(till.shadowRoot!.querySelector("till-station-queue")).not.toBeNull();
+    expect(till.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
+    const { el: display } = await mountDevice({
+      stations: [available("st-1", "Kitchen", kitchenQueue), available("st-2", "Bar", barQueue)],
+    });
+    expect(display.shadowRoot!.querySelector("till-station-queue")).not.toBeNull();
+    expect(display.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
+    expect(display.shadowRoot!.querySelector("[data-merge-toggle]")).not.toBeNull();
   });
 
   describe("the merged view (A12b)", () => {
@@ -1655,12 +1636,10 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       await el.updateComplete;
     }
 
-    it("offers the switch with two stations, beside the view toggle, and opens stacked", async () => {
+    it("offers the switch with two stations, in the actions row, and opens stacked", async () => {
       const { el } = await mountFor("dev-1");
       expect(toggle(el)!.textContent!.trim()).toBe("Merged");
-      expect(toggle(el)!.parentElement).toBe(
-        el.shadowRoot!.querySelector("[data-view-toggle]")!.parentElement,
-      );
+      expect(toggle(el)!.parentElement).toBe(el.shadowRoot!.querySelector(".actions"));
       expect(sections(el)).toHaveLength(3);
     });
 

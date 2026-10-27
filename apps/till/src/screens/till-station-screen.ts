@@ -121,8 +121,8 @@ export class TillStationScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* A sibling of the header, never inside it, so the view toggle and the out-of-date banner survive
-         when an embedded card host drops the header. */
+      /* A sibling of the header, never inside it, so the out-of-date banner survives when an embedded
+         card host drops the header. */
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -204,7 +204,7 @@ export class TillStationScreen extends LitElement {
   @property({ attribute: false }) initialDeviceStation?: DeviceStationScreen;
   /** Keys the remembered stacked-or-merged choice, so each kitchen display keeps its own. */
   @property({ attribute: false }) deviceId?: string;
-  /** Mounted inside a card host, which supplies the header; the view toggle and the out-of-date banner stay. */
+  /** Mounted inside a card host, which supplies the header; the out-of-date banner stays. */
   @property({ type: Boolean }) embedded = false;
   @property({ type: Boolean }) canMoveStation = false;
 
@@ -226,7 +226,6 @@ export class TillStationScreen extends LitElement {
   @state() private printersDown: StationPrinterDown[] = [];
   @state() private notices: KitchenNotice[] = [];
   @state() private deviceStations: DeviceStationScreen["stations"] = [];
-  @state() private view: "kanban" | "rail" = "kanban";
   @state() private merged = false;
   /**
    * UNLIKE the advance/collect levers, a failed reprint is not swallowed: it changes no order state,
@@ -543,10 +542,6 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
-  #toggleView(): void {
-    this.view = this.view === "kanban" ? "rail" : "kanban";
-  }
-
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
@@ -848,7 +843,6 @@ export class TillStationScreen extends LitElement {
     if (this.deviceStations.length > 0 && !this.deviceStations.some(drawsQueue))
       return this.#renderQueueSurface({
         showBack: false,
-        showViews: false,
         body: html`${this.deviceStations.map((station) => this.#unavailable(station.name))}
           <p class="choose-again" data-choose-again>${t("kitchen_screen.choose_again")}</p>`,
       });
@@ -892,7 +886,6 @@ export class TillStationScreen extends LitElement {
         .groups=${queue}
         .notices=${drawn.flatMap((station) => station.notices)}
         .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
-        .view=${this.view}
         .advanceOnly=${true}
         .canMove=${this.#canMove()}
       ></till-station-queue>`;
@@ -948,7 +941,6 @@ export class TillStationScreen extends LitElement {
 
   #renderQueueSurface(opts: {
     showBack: boolean;
-    showViews?: boolean;
     showMerge?: boolean;
     body: TemplateResult;
   }): TemplateResult {
@@ -983,18 +975,6 @@ export class TillStationScreen extends LitElement {
               </header>`
         }
         <div class="actions">
-          ${
-            opts.showViews === false
-              ? nothing
-              : html`<wt-button
-                  class="view-toggle"
-                  data-view-toggle
-                  variant="secondary"
-                  @click=${() => this.#toggleView()}
-                >
-                  ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
-                </wt-button>`
-          }
           ${
             opts.showMerge === true
               ? html`<wt-button
@@ -1084,7 +1064,6 @@ export class TillStationScreen extends LitElement {
       <till-station-queue
         .groups=${station.queue}
         .notices=${station.notices}
-        .view=${this.view}
         .stationId=${station.id}
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}

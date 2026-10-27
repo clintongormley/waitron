@@ -17,38 +17,32 @@ afterEach(() => {
 });
 
 describe("A669 boards station", () => {
-  it.each(["rail", "kanban"] as const)(
-    "marks only the assigned card in a merged %s queue",
-    async (view) => {
-      const group = allergyQueue();
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [
-          { ...group, stationId: "grill", items: [group.items[0]!] },
-          {
-            ...group,
-            orderId: "bill-2",
-            orderNumber: 13,
-            stationId: "bar",
-            items: [group.items[1]!],
-          },
-        ],
-        stationNames: new Map([
-          ["grill", "Grill"],
-          ["bar", "Bar"],
-        ]),
-        view,
-      });
-      const ticked = el.shadowRoot!.querySelector('[data-item="ticked"]')!;
-      const unticked = el.shadowRoot!.querySelector('[data-item="unticked"]')!;
-      expect(ticked.querySelector("[data-line-station]")!.textContent).toBe("Grill");
-      expect(unticked.querySelector("[data-line-station]")!.textContent).toBe("Bar");
-      expect(ticked.closest(".ticket")!.querySelector("[data-allergy-marker]")).not.toBeNull();
-      expect(unticked.closest(".ticket")!.querySelector("[data-allergy-marker]")).toBeNull();
-      if (view === "kanban") {
-        expect(ticked.closest("[data-card]")).not.toBe(unticked.closest("[data-card]"));
-      }
-    },
-  );
+  it("marks only the assigned card in a merged queue", async () => {
+    const group = allergyQueue();
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        { ...group, stationId: "grill", items: [group.items[0]!] },
+        {
+          ...group,
+          orderId: "bill-2",
+          orderNumber: 13,
+          stationId: "bar",
+          items: [group.items[1]!],
+        },
+      ],
+      stationNames: new Map([
+        ["grill", "Grill"],
+        ["bar", "Bar"],
+      ]),
+    });
+    const ticked = el.shadowRoot!.querySelector('[data-item="ticked"]')!;
+    const unticked = el.shadowRoot!.querySelector('[data-item="unticked"]')!;
+    expect(ticked.querySelector("[data-line-station]")!.textContent).toBe("Grill");
+    expect(unticked.querySelector("[data-line-station]")!.textContent).toBe("Bar");
+    expect(ticked.closest(".ticket")!.querySelector("[data-allergy-marker]")).not.toBeNull();
+    expect(unticked.closest(".ticket")!.querySelector("[data-allergy-marker]")).toBeNull();
+    expect(ticked.closest("[data-card]")).not.toBe(unticked.closest("[data-card]"));
+  });
 
   it.each(["es-ES", "es-MX"])(
     "keeps the marker and captured Spanish block together in %s",
@@ -56,7 +50,6 @@ describe("A669 boards station", () => {
       setLocale(language);
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [allergyQueue()],
-        view: "rail",
       });
       expect(
         el.shadowRoot!.querySelector("[data-allergy-marker]")!.getAttribute("aria-label"),
@@ -78,7 +71,6 @@ describe("A669 boards station", () => {
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [group],
-      view: "rail",
     });
     const block = el.shadowRoot!.querySelector("[data-kitchen-allergy]");
     expect(block).not.toBeNull();
@@ -88,40 +80,36 @@ describe("A669 boards station", () => {
     expect(block!.querySelector(".kitchen-allergy-note, .kitchen-allergy-clash")).toBeNull();
   });
 
-  for (const view of ["rail", "kanban"] as const)
-    for (const language of ["en", "es"] as const)
-      it(`shows frozen instructions only on the assigned ${view} dish in ${language}`, async () => {
-        setLocale(language);
-        const group = allergyQueue();
-        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-          groups: [group],
-          view,
-        });
-        const line = el.shadowRoot!.querySelector('[data-item="ticked"]')!;
-        const instructions = line.querySelector("[data-kitchen-allergy]");
-        expect(instructions).not.toBeNull();
-        expect(instructions!.textContent).toContain(allergyBlock.who);
-        expect(line.textContent).toContain(allergyBlock.labels[language].avoids[0]);
-        expect(line.textContent).toContain(allergyBlock.labels[language].clashes[0]);
-        expect(line.textContent).toContain(allergyBlock.note);
-        expect(line.textContent).toContain("Dish's own note");
-        expect(line.querySelector("script, guest")).toBeNull();
-        expect(
-          el.shadowRoot!.querySelector('[data-item="unticked"] [data-kitchen-allergy]'),
-        ).toBeNull();
-        const markers = el.shadowRoot!.querySelectorAll("[data-allergy-marker]");
-        expect(markers).toHaveLength(1);
-        expect(markers[0]!.getAttribute("aria-label")).toBe(t("kitchen_allergy.marker"));
-        if (view === "kanban") {
-          expect(
-            line.closest("[data-card]")!.querySelector(".ticket-head [data-allergy-marker]"),
-          ).not.toBeNull();
-        }
-        group.items[0]!.allergy = null;
-        el.groups = [{ ...group }];
-        await el.updateComplete;
-        expect(el.shadowRoot!.querySelector("[data-allergy-marker]")).toBeNull();
+  for (const language of ["en", "es"] as const)
+    it(`shows frozen instructions only on the assigned dish in ${language}`, async () => {
+      setLocale(language);
+      const group = allergyQueue();
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [group],
       });
+      const line = el.shadowRoot!.querySelector('[data-item="ticked"]')!;
+      const instructions = line.querySelector("[data-kitchen-allergy]");
+      expect(instructions).not.toBeNull();
+      expect(instructions!.textContent).toContain(allergyBlock.who);
+      expect(line.textContent).toContain(allergyBlock.labels[language].avoids[0]);
+      expect(line.textContent).toContain(allergyBlock.labels[language].clashes[0]);
+      expect(line.textContent).toContain(allergyBlock.note);
+      expect(line.textContent).toContain("Dish's own note");
+      expect(line.querySelector("script, guest")).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector('[data-item="unticked"] [data-kitchen-allergy]'),
+      ).toBeNull();
+      const markers = el.shadowRoot!.querySelectorAll("[data-allergy-marker]");
+      expect(markers).toHaveLength(1);
+      expect(markers[0]!.getAttribute("aria-label")).toBe(t("kitchen_allergy.marker"));
+      expect(
+        line.closest("[data-card]")!.querySelector(".ticket-head [data-allergy-marker]"),
+      ).not.toBeNull();
+      group.items[0]!.allergy = null;
+      el.groups = [{ ...group }];
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-allergy-marker]")).toBeNull();
+    });
 
   it.each(["light", "dark"] as const)(
     "uses the danger token and accessible markers in %s",
@@ -130,7 +118,6 @@ describe("A669 boards station", () => {
         "till-station-queue",
         {
           groups: [allergyQueue()],
-          view: "rail",
           notices: [allergyNotice("changed"), allergyNotice("removed")],
         },
         theme,
@@ -148,7 +135,6 @@ describe("A669 boards station", () => {
     setLocale("en");
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [allergyQueue()],
-      view: "rail",
       notices: [allergyNotice("changed"), allergyNotice("removed")],
     });
     const changed = el.shadowRoot!.querySelector('[data-notice="allergy-changed"]')!;

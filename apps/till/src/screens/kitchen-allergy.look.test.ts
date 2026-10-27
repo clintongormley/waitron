@@ -20,10 +20,10 @@ describe("A669 kitchen blocks LOOK", () => {
         it(`${language} ${theme} ${width}`, async () => {
           await page.viewport(width, 900);
           setLocale(language);
-          for (const surface of ["rail", "kanban", "all", "pass", "monitor"] as const) {
+          for (const surface of ["board", "all", "pass", "monitor"] as const) {
             cleanupWidgets();
             let el: TillStationQueue | TillExpoScreen;
-            if (surface === "rail" || surface === "kanban") {
+            if (surface === "board") {
               const group = allergyQueue();
               group.items[0]!.allergy = {
                 ...group.items[0]!.allergy!,
@@ -33,7 +33,6 @@ describe("A669 kitchen blocks LOOK", () => {
                 "till-station-queue",
                 {
                   groups: [group],
-                  view: surface,
                   notices: [allergyNotice("changed"), allergyNotice("removed")],
                 },
                 theme,

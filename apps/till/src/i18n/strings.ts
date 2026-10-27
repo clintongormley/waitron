@@ -629,8 +629,7 @@ export const en = {
   // Placing and prep
   "action.place": "Send",
   "action.send_to_prep": "Send to prep",
-  // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
-  // rendered as `${n} ${t(key)}`.
+  // Station display. `station.min` is a suffix word, rendered as `${n} ${t(key)}`.
   "kitchen_screen.station": "Station screen",
   "kitchen_screen.pass": "Pass screen",
   "kitchen_screen.pass_monitor": "Pass monitor",
@@ -649,8 +648,6 @@ export const en = {
   "station.moved_from": "Moved from {station}",
   "station.after_period": "After {period} — agreed",
   "station.empty": "Nothing in the kitchen",
-  "station.view_kanban": "Board",
-  "station.view_rail": "Tickets",
   "station.view_merged": "Merged",
   "station.view_stacked": "Stacked",
   "station.min": "min",
@@ -2405,8 +2402,6 @@ export const es: Record<StringKey, string> = {
   "station.moved_from": "Pasado de {station}",
   "station.after_period": "Tras {period} — aceptado",
   "station.empty": "Nada en cocina",
-  "station.view_kanban": "Tablero",
-  "station.view_rail": "Comandas",
   "station.view_merged": "Todo junto",
   "station.view_stacked": "Por estación",
   "station.min": "min",
