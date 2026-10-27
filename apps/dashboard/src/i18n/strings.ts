@@ -2952,6 +2952,10 @@ export const en = {
   "menu_patch.open_orders_note": "Lines already on open orders keep their old price and VAT class.",
   "menu_patch.queued_note": "The version going live on {date} does not include these changes.",
   "menu_patch.queued_note_many": "The versions going live on {dates} do not include these changes.",
+  "menu_patch.needs_correcting": "Needs correcting",
+  "menu_patch.fix_items": "Correct the fields marked on {items} to continue.",
+  "menu_patch.fault":
+    "This is a fault in Waitron: it could not match one of these changes to the live menu. Nothing was put live. Reload to start again from the live menu; changes that still fit are kept.",
   "menu_patch.products_note":
     "The next normal publish from the products puts the old values back unless you fix the products too.",
   "menu_patch.keep_editing": "Keep editing",
@@ -6467,7 +6471,11 @@ export const es: Record<StringKey, string> = {
     "Las líneas que ya están en pedidos abiertos mantienen su precio y su clase de IVA anteriores.",
   "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",
   "menu_patch.queued_note_many":
-    "Las versiones que se publican el {dates} no incluyen estas correcciones.",
+    "Las versiones que se publican en estas fechas no incluyen estas correcciones: {dates}.",
+  "menu_patch.needs_correcting": "Necesita corrección",
+  "menu_patch.fix_items": "Corrige los campos marcados en {items} para continuar.",
+  "menu_patch.fault":
+    "Es un fallo de Waitron: no ha podido relacionar una de estas correcciones con la carta publicada. No se ha publicado nada. Vuelve a cargar para empezar de nuevo desde la carta publicada; se conservan las correcciones que todavía encajan.",
   "menu_patch.products_note":
     "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, salvo que corrijas también los productos.",
   "menu_patch.keep_editing": "Seguir editando",

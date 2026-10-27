@@ -4,8 +4,9 @@ import type {
   FrozenOfferVariant,
   MenuDocument,
 } from "@waitron/catalogue/src/menu-document-types.js";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
-import { changeLines, reviewNotes } from "./menu-patch-review.js";
+import { changeLines, placeRefusal, refusalWords, reviewNotes } from "./menu-patch-review.js";
 import { documentProduct, documentSection, menuDocument } from "./test-helpers.js";
 
 const languages = { defaultLanguage: "en", languages: ["en", "es"] };
@@ -192,4 +193,58 @@ it("always notes open orders and the products, and names each queued version by 
     "The versions going live on 3 Nov 2026, 08:00 and 10 Nov 2026, 08:00 do not include these changes.",
     products,
   ]);
+});
+
+const price = { target: soup, field: "price", value: "4.00" };
+const kitchen = { target: soup, field: "kitchenName", value: "SOPA" };
+
+function refused(code: string, params: Record<string, unknown>): Error {
+  return Object.assign(new Error(code), { code, params });
+}
+
+it("places a refused value under the field of the change it names", () => {
+  expect(
+    placeRefusal(refused("menu_patch.invalid", { change: 1, field: "kitchenName" }), [
+      price,
+      kitchen,
+    ]),
+  ).toEqual({ change: kitchen, message: "Check this value." });
+  expect(
+    placeRefusal(
+      refused("menu_patch.invalid", {
+        change: 0,
+        field: "price",
+        reason: "content.translation_invalid",
+      }),
+      [price],
+    ),
+  ).toEqual({ change: price, message: codeMessage("content.translation_invalid") });
+});
+
+it("leaves at the bottom a refusal that names no change the form shows", () => {
+  for (const params of [
+    { change: 0, field: "target" },
+    { change: 5, field: "price" },
+  ])
+    expect(placeRefusal(refused("menu_patch.invalid", params), [price])).toEqual({
+      refusal: { code: "menu_patch.invalid", params },
+    });
+  expect(placeRefusal(refused("menu_patch.unchanged", { menuId: "m" }), [price])).toEqual({
+    refusal: { code: "menu_patch.unchanged", params: { menuId: "m" } },
+  });
+  expect(placeRefusal(new Error("unreachable"), [price])).toEqual({
+    refusal: { code: "server.internal", params: {} },
+  });
+});
+
+it("words a bottom refusal, filling its placeholders and calling an unplaced value a fault", () => {
+  expect(refusalWords({ code: "menu_patch.base_changed", params: { liveNumber: 4 } })).toBe(
+    "Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+  );
+  expect(refusalWords({ code: "menu_patch.base_changed", params: {} })).toContain(
+    "Version {liveNumber} went live",
+  );
+  expect(refusalWords({ code: "menu_patch.invalid", params: { change: 0, field: "target" } })).toBe(
+    "This is a fault in Waitron: it could not match one of these changes to the live menu. Nothing was put live. Reload to start again from the live menu; changes that still fit are kept.",
+  );
 });

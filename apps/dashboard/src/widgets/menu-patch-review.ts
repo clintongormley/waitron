@@ -2,6 +2,7 @@ import { formatMoney, type ContentLanguages } from "@waitron/shared";
 import type { MenuDocument } from "@waitron/catalogue/src/menu-document-types.js";
 import { patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
 import type { MenuPatchChange } from "@waitron/catalogue/src/menu-patch-types.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -24,20 +25,51 @@ const CHILD_KINDS = new Set(["variant", "extra", "option_label"]);
 
 /** Each item's name by `targetKey`; a variant, extras item or options label carries its holder's,
  * since the same name can sit under several. */
-function itemNames(
-  nodes: readonly PatchTreeNode[],
-  holder = "",
-  names = new Map<string, string>(),
-) {
+function namesIn(nodes: readonly PatchTreeNode[], holder = "", names = new Map<string, string>()) {
   for (const node of nodes) {
     if (node.target !== null)
       names.set(
         targetKey(node.target),
         CHILD_KINDS.has(node.target.kind) ? `${holder} › ${node.label}` : node.label,
       );
-    itemNames(node.children, node.label, names);
+    namesIn(node.children, node.label, names);
   }
   return names;
+}
+
+/** Each item of `document` by `targetKey`, named as the review list names it. */
+export function itemNames(document: MenuDocument): Map<string, string> {
+  return namesIn(patchTree(document, ""));
+}
+
+export interface Refusal {
+  code: string;
+  params: Record<string, unknown>;
+}
+
+/** Where a refused save's message goes: under the field of the change it names, else the bottom
+ * message. */
+export function placeRefusal(
+  error: unknown,
+  sent: readonly MenuPatchChange[],
+): { change: MenuPatchChange; message: string } | { refusal: Refusal } {
+  const code = codeOf(error);
+  const params = (error as { params?: Record<string, unknown> }).params ?? {};
+  const change = code === "menu_patch.invalid" ? sent[params.change as number] : undefined;
+  if (change === undefined || change.field !== params.field) return { refusal: { code, params } };
+  return {
+    change,
+    message: codeMessage((params.reason as string | undefined) ?? "menu_patch.invalid"),
+  };
+}
+
+/** A bottom refusal's sentence. A `menu_patch.invalid` reaches the bottom only when it names no
+ * change the dialog sent, which only a fault in Waitron produces. */
+export function refusalWords({ code, params }: Refusal): string {
+  if (code === "menu_patch.invalid") return t("menu_patch.fault");
+  return codeMessage(code).replace(/\{(\w+)\}/g, (whole, name: string) =>
+    name in params ? String(params[name]) : whole,
+  );
 }
 
 function words(field: string, value: unknown, isNew: boolean): string {
@@ -61,7 +93,7 @@ export function changeLines(
   changes: readonly MenuPatchChange[],
   languages: ContentLanguages,
 ): string[] {
-  const names = itemNames(patchTree(document, ""));
+  const names = itemNames(document);
   return changes.flatMap(({ target, field, value }) => {
     const item = names.get(targetKey(target))!;
     const label = t(FIELD_LABELS[field]!);

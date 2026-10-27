@@ -20,6 +20,7 @@ import {
   type TextSearch,
 } from "@waitron/shared";
 import { parseMenuPatch, patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
+import type { MenuDocument } from "@waitron/catalogue/src/menu-document-types.js";
 import { PATCH_FIELDS } from "@waitron/catalogue/src/menu-patch-types.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -49,7 +50,15 @@ import {
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
 import { MenuPatchDraft, patchTree, targetKey, type PatchTreeNode } from "./menu-patch-draft.js";
-import { changeLines, reviewNotes } from "./menu-patch-review.js";
+import {
+  changeLines,
+  itemNames,
+  placeRefusal,
+  refusalWords,
+  reviewNotes,
+  type Refusal,
+} from "./menu-patch-review.js";
+import { conjunctionList } from "../i18n/list.js";
 import { localTimeWords } from "./menu-publications.js";
 
 const TRANSLATED = new Set(["customerName", "names", "description"]);
@@ -101,17 +110,10 @@ function refusedLanguage(
   );
 }
 
-interface Refusal {
-  code: string;
-  params: Record<string, unknown>;
-}
-
-/** `codeMessage` leaves a refusal's placeholders unfilled. */
-function refusalWords({ code, params }: Refusal): string {
-  return codeMessage(code).replace(/\{(\w+)\}/g, (_whole, name: string) => String(params[name]));
-}
-
 const changeKey = (change: MenuPatchChange) => `${targetKey(change.target)}/${change.field}`;
+
+/** The target key of a `changeKey`; field names hold no "/". */
+const targetOf = (key: string) => key.slice(0, key.lastIndexOf("/"));
 
 function matching(nodes: readonly PatchTreeNode[], search: TextSearch): PatchTreeNode[] {
   return nodes.flatMap((node) => {
@@ -214,6 +216,10 @@ export class MenuPatchDialog extends LitElement {
         height: var(--wt-space-2);
         border-radius: var(--wt-radius-full);
         background: var(--wt-color-primary);
+      }
+      .flag {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
       }
       .hidden {
         ${visuallyHiddenStyles}
@@ -374,8 +380,13 @@ export class MenuPatchDialog extends LitElement {
     if (this.#draft === null)
       this.#draft = new MenuPatchDraft(answer.document, currentContentLanguages());
     else {
+      if (answer.versionId !== this.live!.versionId) {
+        // The move a Reload would make has happened.
+        if (this.refusal?.code === "menu_patch.base_changed") this.refusal = null;
+        this.reloadFailure = null;
+      }
       this.dropped += this.#draft.rebase(answer.document).dropped;
-      this.#forgetSettled();
+      this.#forgetSettled(answer.document);
       this.#scope!.changed();
     }
     this.live = answer;
@@ -388,16 +399,30 @@ export class MenuPatchDialog extends LitElement {
   }
 
   /** After a rebase, a field neither staged nor refused shows the newer live value again. */
-  #forgetSettled(): void {
-    const staged = new Set(
-      this.#draft!.changes().map((change) => `${targetKey(change.target)}/${change.field}`),
-    );
+  #forgetSettled(document: MenuDocument): void {
+    const staged = new Set(this.#draft!.changes().map(changeKey));
+    const items = itemNames(document);
     for (const [key, typed] of this.#typed)
-      if (typed.error === "" && !staged.has(key)) this.#typed.delete(key);
+      if (!items.has(targetOf(key)) || (typed.error === "" && !staged.has(key)))
+        this.#typed.delete(key);
+  }
+
+  /** The names of the items holding a field with an error, in the order they were edited. */
+  #itemsToCorrect(): string[] {
+    const items = itemNames(this.live!.document);
+    const keys = [...this.#typed]
+      .filter(([, typed]) => typed.error !== "")
+      .map(([key]) => targetOf(key));
+    return [...new Set(keys)].map((key) => items.get(key)!);
   }
 
   #close(): void {
     this.open = false;
+  }
+
+  #needsCorrecting(target: MenuPatchTarget): boolean {
+    const prefix = `${targetKey(target)}/`;
+    return [...this.#typed].some(([key, typed]) => typed.error !== "" && key.startsWith(prefix));
   }
 
   #hasErrors(): boolean {
@@ -438,20 +463,19 @@ export class MenuPatchDialog extends LitElement {
   }
 
   async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<void> {
-    const code = codeOf(error);
-    const params = (error as { params?: Record<string, unknown> }).params ?? {};
-    const change = code === "menu_patch.invalid" ? sent[params.change as number] : undefined;
-    if (change === undefined || change.field !== params.field) {
-      this.refusal = { code, params };
+    const placed = placeRefusal(error, sent);
+    if ("refusal" in placed) {
+      this.refusal = placed.refusal;
       return;
     }
+    const { change, message } = placed;
     const key = changeKey(change);
     this.#draft!.clear(change.target, change.field);
     this.#scope!.changed();
     this.#typed.set(key, {
       // Every staged change was typed into its field.
       value: this.#typed.get(key)!.value,
-      error: codeMessage((params.reason as string | undefined) ?? "menu_patch.invalid"),
+      error: message,
       language: TRANSLATED.has(change.field)
         ? refusedLanguage(change.target, change.field, change.value as Record<string, string>)
         : null,
@@ -579,15 +603,17 @@ export class MenuPatchDialog extends LitElement {
   #renderFooter(): TemplateResult | typeof nothing {
     if (!this.#showsDraft()) return nothing;
     const action = saveActionState(this.#scope);
-    const errors = this.#hasErrors();
+    const toCorrect = this.#itemsToCorrect();
+    const errors = toCorrect.length > 0;
     const bottom = [
       ...(this.refusal === null ? [] : [refusalWords(this.refusal)]),
       ...(this.reloadFailure === null ? [] : [codeMessage(this.reloadFailure)]),
-      ...(errors ? [t("form.fix_fields")] : []),
+      ...(errors ? [fill("menu_patch.fix_items", { items: conjunctionList(toCorrect) })] : []),
     ].join(" ");
     const count = this.changes.length;
     const reload =
-      this.refusal?.code === "menu_patch.base_changed"
+      this.refusal?.code === "menu_patch.base_changed" ||
+      this.refusal?.code === "menu_patch.invalid"
         ? html`<wt-button
             slot="secondary"
             variant="secondary"
@@ -741,6 +767,14 @@ export class MenuPatchDialog extends LitElement {
         this.#draft!.changed(target)
           ? html`<span class="dot" data-test="changed"
               ><span class="hidden">${t("menu_patch.changed")}</span></span
+            >`
+          : nothing
+      }
+      ${
+        this.#needsCorrecting(target)
+          ? html`<span class="flag" data-test="needs-correcting"
+              ><span aria-hidden="true">!</span
+              ><span class="hidden">${t("menu_patch.needs_correcting")}</span></span
             >`
           : nothing
       }
