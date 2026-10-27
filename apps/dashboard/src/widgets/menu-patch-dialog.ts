@@ -22,7 +22,11 @@ import {
   type AppError,
   type TextSearch,
 } from "@waitron/shared";
-import { parseMenuPatch, patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
+import {
+  fixedLanguages,
+  parseMenuPatch,
+  patchFieldValue,
+} from "@waitron/catalogue/src/menu-patch.js";
 import type { MenuDocument } from "@waitron/catalogue/src/menu-document-types.js";
 import { PATCH_FIELDS } from "@waitron/catalogue/src/menu-patch-types.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
@@ -265,13 +269,16 @@ export class MenuPatchDialog extends LitElement {
   @state() private picked: string | null = null;
   @state() private step: "edit" | "review" = "edit";
   @state() private busy = false;
-  /** A refusal that names no field the form shows; it stays until the next save. */
+  /** A refusal that names no field the form shows. */
   @state() private refusal: Refusal | null = null;
   /** Why the last Reload failed, shown beside the refusal that offered it. */
   @state() private reloadFailure: string | null = null;
   /** How many staged changes newer live versions have dropped since the dialog opened. */
   @state() private dropped = 0;
   @state() private queued: LocalTime[] = [];
+  /** The newest live version delivered while the draft held work; the draft stays on `live` until
+   * Reload, or until a later delivery finds nothing staged and no field showing an error. */
+  @state() private newer: LiveMenu | null = null;
 
   #draft: MenuPatchDraft | null = null;
   /** What each field shows, keyed `<target key>/<field>`, once the person has edited it: their own
@@ -281,7 +288,9 @@ export class MenuPatchDialog extends LitElement {
   #watching: string | null = null;
   /** A live version or language change that arrived while a patch was being sent. Applying it then
    * could drop a change the answer's refusal still has to place, so it waits for the answer. */
-  #held: { answer: LiveMenu | null } | null = null;
+  #held: { answer?: LiveMenu | null; languages: boolean; reload?: boolean } | null = null;
+  /** The `changeKey` of the change a bottom "no longer fits" refusal names. */
+  #refusedKey: string | null = null;
   #scope: DraftScope<MenuPatchChange[]> | undefined;
   #leave: LeaveCoordinator | undefined;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -312,8 +321,8 @@ export class MenuPatchDialog extends LitElement {
       hostConnected: () => {
         unsubscribe = subscribeContentLanguages(() => {
           if (this.live === null) return;
-          if (this.busy) this.#held ??= { answer: this.live };
-          else this.#applyLive(this.live);
+          if (this.busy) this.#held = { ...this.#held, languages: true };
+          else this.#revalidate();
         });
       },
       hostDisconnected: () => unsubscribe!(),
@@ -347,7 +356,9 @@ export class MenuPatchDialog extends LitElement {
     this.reloadFailure = null;
     this.dropped = 0;
     this.queued = [];
+    this.newer = null;
     this.#held = null;
+    this.#refusedKey = null;
     this.#draft = null;
     this.#typed = new Map();
     this.#scope?.dispose();
@@ -397,9 +408,20 @@ export class MenuPatchDialog extends LitElement {
     ]);
   }
 
-  #applyLive(answer: LiveMenu | null): void {
+  /** Takes a live read from the subscription or, with `reload`, from Reload, which moves the draft
+   * even when it holds work. A later live version has a higher number (`nextNumber`,
+   * `refuseOvertaken` and `requeueAfter`, `packages/catalogue/src/menu-publication.ts`), so an
+   * answer numbered below the newest one known is a late read and is ignored. */
+  #applyLive(answer: LiveMenu | null, reload = false): void {
     if (this.busy) {
-      this.#held = { answer };
+      const held = this.#held;
+      const late = answer !== null && held?.answer != null && answer.number < held.answer.number;
+      this.#held = {
+        languages: false,
+        ...held,
+        ...(late ? {} : { answer }),
+        reload: held?.reload === true || reload,
+      };
       return;
     }
     if (answer === null) {
@@ -407,19 +429,70 @@ export class MenuPatchDialog extends LitElement {
       return;
     }
     this.notPublished = false;
-    if (this.#draft === null)
+    if (this.#draft === null) {
       this.#draft = new MenuPatchDraft(answer.document, currentContentLanguages());
-    else {
-      if (answer.versionId !== this.live!.versionId) {
-        // The move a Reload would make has happened.
-        if (this.refusal?.code === "menu_patch.base_changed") this.refusal = null;
-        this.reloadFailure = null;
-      }
-      this.dropped += this.#draft.rebase(answer.document, currentContentLanguages()).dropped;
-      this.dropped += this.#forgetSettled(answer.document);
-      this.#scope!.changed();
+      this.live = answer;
+      return;
     }
-    this.live = answer;
+    const offered =
+      this.refusal?.code === "menu_patch.base_changed"
+        ? (this.refusal.params.liveNumber as number)
+        : 0;
+    if (answer.number > Math.max(this.newer?.number ?? 0, this.live!.number, offered))
+      this.reloadFailure = null;
+    const newest = this.newer !== null && this.newer.number > answer.number ? this.newer : answer;
+    if (newest.number > this.live!.number) {
+      if (!reload && (this.changes.length > 0 || this.#hasErrors())) {
+        this.newer = newest;
+        return;
+      }
+      // A failed Reload offered the version a refused send named, and the refusal still stands
+      // while the draft is short of it.
+      if (newest.number >= offered) {
+        this.reloadFailure = null;
+        if (this.refusal?.code === "menu_patch.base_changed") this.refusal = null;
+      }
+      this.newer = null;
+      this.live = newest;
+    } else if (!reload) return;
+    // Reload checks the draft again even on the version shown: the venue's languages may differ.
+    this.#revalidate();
+  }
+
+  /** Checks the draft against the shown version with the venue's content languages as they are. */
+  #revalidate(): void {
+    const { document } = this.live!;
+    this.dropped += this.#draft!.rebase(document, currentContentLanguages()).dropped;
+    this.#typeFixedNames(document);
+    this.dropped += this.#forgetSettled(document);
+    this.#retireRefusal();
+    this.#scope!.changed();
+    this.requestUpdate();
+  }
+
+  /** A staged name change holds the live text in each language every folder fixes; its field takes
+   * that text too, so the field shows what a send carries once a later version frees it. */
+  #typeFixedNames(document: MenuDocument): void {
+    const languages = currentContentLanguages();
+    for (const change of this.#draft!.changes()) {
+      const typed = this.#typed.get(changeKey(change));
+      if (change.field !== "names" || typed === undefined) continue;
+      const value = change.value as Record<string, string>;
+      const fixed = fixedLanguages(document, change.target, "names", languages);
+      typed.value = {
+        ...(typed.value as Record<string, string>),
+        ...Object.fromEntries(fixed.map((language) => [language, value[language] ?? ""])),
+      };
+    }
+  }
+
+  /** A "no longer fits" refusal goes once the change it names is no longer staged. */
+  #retireRefusal(): void {
+    if (
+      this.refusal?.code === "menu_patch.invalid" &&
+      !this.#draft!.changes().some((change) => changeKey(change) === this.#refusedKey)
+    )
+      this.refusal = null;
   }
 
   override connectedCallback(): void {
@@ -500,11 +573,13 @@ export class MenuPatchDialog extends LitElement {
     if (session !== this.#session) return;
     this.busy = false;
     if ("error" in outcome) {
-      await this.#refused(outcome.error, sent);
-      if (this.#held === null) return;
-      const { answer } = this.#held;
+      const onField = await this.#refused(outcome.error, sent);
+      const held = this.#held;
       this.#held = null;
-      this.#applyLive(answer);
+      if (held?.languages) this.#revalidate();
+      if (held?.answer === undefined) return;
+      if (held.reload) await this.#reloaded(held.answer, !onField);
+      else this.#applyLive(held.answer);
       return;
     }
     this.#scope!.commit(submitted);
@@ -515,11 +590,17 @@ export class MenuPatchDialog extends LitElement {
     this.#close();
   }
 
-  async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<void> {
+  /** Returns whether the refusal went under a field, which then has focus. */
+  async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<boolean> {
     const placed = placeRefusal(error, sent);
     if ("refusal" in placed) {
       this.refusal = placed.refusal;
-      return;
+      const named = sent[placed.refusal.params.change as number];
+      this.#refusedKey =
+        placed.refusal.code === "menu_patch.invalid" && named !== undefined
+          ? changeKey(named)
+          : null;
+      return false;
     }
     const { change, message } = placed;
     const key = changeKey(change);
@@ -538,9 +619,11 @@ export class MenuPatchDialog extends LitElement {
     this.step = "edit";
     await this.updateComplete;
     await focusFirstInvalid(this.renderRoot.querySelector('[data-test="form"]')!);
+    return true;
   }
 
-  /** Moves the draft onto the version now live, as a newer live version arriving on its own does. */
+  /** Moves the draft onto the newest live version known: the one read now, or a newer one the
+   * subscription delivered while the read was out. */
   async #reload(): Promise<void> {
     const session = this.#session;
     const read = await this.api.getLiveMenu(this.menuId).then(
@@ -552,20 +635,49 @@ export class MenuPatchDialog extends LitElement {
       this.reloadFailure = codeOf(read.error);
       return;
     }
-    this.refusal = null;
+    // A read answered during a send waits for the send's answer, still as a Reload.
+    if (this.busy) this.#applyLive(read.answer, true);
+    else {
+      this.refusal = null;
+      await this.#reloaded(read.answer);
+    }
+  }
+
+  /** The Reload button is usually gone afterwards, so with `focus` focus moves to Review, or to
+   * Close while Review is unavailable. Without it, focus stays on the refused field unless the
+   * version moved onto removed that field. */
+  async #reloaded(answer: LiveMenu | null, focus = true): Promise<void> {
     this.reloadFailure = null;
-    this.step = "edit";
-    this.#applyLive(read.answer);
+    this.#applyLive(answer, true);
+    if (!focus) {
+      await this.updateComplete;
+      if ((this.renderRoot as ShadowRoot).activeElement !== null) return;
+    }
+    await this.#toStep(
+      "edit",
+      saveActionState(this.#scope).unchanged || this.#hasErrors()
+        ? '[data-test="close"]'
+        : '[data-test="review"]',
+    );
   }
 
   #liveValue(target: MenuPatchTarget, field: string): unknown {
     return patchFieldValue(this.live!.document, target, field, currentContentLanguages());
   }
 
-  /** What the field shows: the person's own text, which every staged value has, else the live one. */
+  /** What the field shows: the person's own text, which every staged value has, else the live one;
+   * a name language every folder fixes always shows the live text, which no patch changes. */
   #shown(target: MenuPatchTarget, field: string): unknown {
     const typed = this.#typed.get(`${targetKey(target)}/${field}`);
-    return typed === undefined ? this.#liveValue(target, field) : typed.value;
+    if (typed === undefined) return this.#liveValue(target, field);
+    const languages = currentContentLanguages();
+    const fixed = fixedLanguages(this.live!.document, target, field, languages);
+    if (fixed.length === 0) return typed.value;
+    const live = (this.#liveValue(target, field) ?? {}) as Record<string, string>;
+    return {
+      ...(typed.value as Record<string, string>),
+      ...Object.fromEntries(fixed.map((language) => [language, live[language] ?? ""])),
+    };
   }
 
   #change(target: MenuPatchTarget, field: string, raw: unknown): void {
@@ -601,6 +713,7 @@ export class MenuPatchDialog extends LitElement {
           : null,
       });
     }
+    this.#retireRefusal();
     this.#scope!.changed();
     this.requestUpdate();
   }
@@ -661,24 +774,25 @@ export class MenuPatchDialog extends LitElement {
     const action = saveActionState(this.#scope);
     const toCorrect = this.#itemsToCorrect();
     const errors = toCorrect.length > 0;
+    const refusals = this.#refusals();
     const bottom = [
-      ...(this.refusal === null ? [] : [refusalWords(this.refusal)]),
+      ...refusals.map(refusalWords),
       ...(this.reloadFailure === null ? [] : [codeMessage(this.reloadFailure)]),
       ...(errors ? [fill("menu_patch.fix_items", { items: conjunctionList(toCorrect) })] : []),
     ].join(" ");
     const count = this.changes.length;
-    const reload =
-      this.refusal?.code === "menu_patch.base_changed" ||
-      this.refusal?.code === "menu_patch.invalid"
-        ? html`<wt-button
-            slot="secondary"
-            variant="secondary"
-            data-test="reload"
-            ?disabled=${this.busy}
-            @click=${() => void this.#reload()}
-            >${t("menu_patch.reload")}</wt-button
-          >`
-        : nothing;
+    const reload = refusals.some(
+      ({ code }) => code === "menu_patch.base_changed" || code === "menu_patch.invalid",
+    )
+      ? html`<wt-button
+          slot="secondary"
+          variant="secondary"
+          data-test="reload"
+          ?disabled=${this.busy}
+          @click=${() => void this.#reload()}
+          >${t("menu_patch.reload")}</wt-button
+        >`
+      : nothing;
     return html`<wt-form-actions slot="footer" .error=${bottom}>
       ${
         this.step === "edit"
@@ -716,6 +830,22 @@ export class MenuPatchDialog extends LitElement {
               >`
       }
     </wt-form-actions>`;
+  }
+
+  /** The bottom refusals: the last save's, and a `menu_patch.base_changed` for a newer live version
+   * the subscription delivered, which takes the place of a refused save's own unless that names a
+   * later version. */
+  #refusals(): Refusal[] {
+    const newer: Refusal[] =
+      this.newer === null
+        ? []
+        : [{ code: "menu_patch.base_changed", params: { liveNumber: this.newer.number } }];
+    if (this.refusal === null) return newer;
+    if (this.refusal.code === "menu_patch.base_changed" && newer.length > 0)
+      return (this.refusal.params.liveNumber as number) > this.newer!.number
+        ? [this.refusal]
+        : newer;
+    return [this.refusal, ...newer];
   }
 
   #renderDropped(): TemplateResult | typeof nothing {
@@ -765,17 +895,17 @@ export class MenuPatchDialog extends LitElement {
     return html`${this.#renderDropped()}
       <div class="layout">
         <div class="side">
-          ${textField(
-            { busy: false, locales: [], error: () => "" },
-            "search",
-            t("menu_patch.search"),
-            this.search,
-            (value) => {
-              this.search = value;
-            },
-            false,
-            t("menu_patch.search_placeholder"),
-          )}
+          <wt-input
+            name="menu-patch-search"
+            type="search"
+            label=${t("menu_patch.search")}
+            placeholder=${t("menu_patch.search_placeholder")}
+            .value=${this.search}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.search = event.detail.value;
+            }}
+          ></wt-input>
           ${
             shown.length === 0
               ? html`<p class="message" data-test="no-matches">${t("menu_patch.no_matches")}</p>`
@@ -901,7 +1031,8 @@ export class MenuPatchDialog extends LitElement {
         );
       case "customerName":
       case "names":
-      case "description":
+      case "description": {
+        const fixed = fixedLanguages(this.live!.document, target, field, languages);
         return html`${optionalTextFields(
           context,
           name!,
@@ -916,7 +1047,9 @@ export class MenuPatchDialog extends LitElement {
           change,
           field === "customerName" ? (this.#shown(target, "name") as string) : "",
           languages.defaultLanguage,
+          (locale) => (fixed.includes(locale) ? t("menu_patch.folder_fixed") : ""),
         )}`;
+      }
       case "kitchenName":
         return textField(
           context,

@@ -2951,6 +2951,7 @@ export const en = {
   "menu_patch.review_heading": "Check the changes before putting them live",
   "menu_patch.change_line": "{item}: {field} {from} → {to}",
   "menu_patch.empty": "(empty)",
+  "menu_patch.folder_fixed": "The included folder sets this name.",
   "menu_patch.no_image": "no image",
   "menu_patch.current_image": "current image",
   "menu_patch.new_image": "new image",
@@ -2966,6 +2967,8 @@ export const en = {
   "menu_patch.keep_editing": "Keep editing",
   "menu_patch.put_live": "Put live now",
   "menu_patch.reload": "Reload",
+  "menu_patch.base_changed_live":
+    "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   "menu_patch.dropped_one": "1 change no longer fits the live version and was dropped.",
   "menu_patch.dropped_many": "{count} changes no longer fit the live version and were dropped.",
   "menu_publications.version": "Version {number}",
@@ -6474,6 +6477,7 @@ export const es: Record<StringKey, string> = {
   "menu_patch.review_heading": "Revisa las correcciones antes de publicarlas",
   "menu_patch.change_line": "{item}: {field} {from} → {to}",
   "menu_patch.empty": "(vacío)",
+  "menu_patch.folder_fixed": "La carpeta incluida fija este nombre.",
   "menu_patch.no_image": "sin imagen",
   "menu_patch.current_image": "imagen actual",
   "menu_patch.new_image": "imagen nueva",
@@ -6489,8 +6493,10 @@ export const es: Record<StringKey, string> = {
   "menu_patch.products_note":
     "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, salvo que corrijas también los productos.",
   "menu_patch.keep_editing": "Seguir editando",
-  "menu_patch.put_live": "Publicar ahora",
+  "menu_patch.put_live": "Publicar la corrección",
   "menu_patch.reload": "Volver a cargar",
+  "menu_patch.base_changed_live":
+    "La versión {liveNumber} se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
   "menu_patch.dropped_one": "1 corrección ya no encaja en la versión publicada y se ha descartado.",
   "menu_patch.dropped_many":
     "{count} correcciones ya no encajan en la versión publicada y se han descartado.",

@@ -10146,6 +10146,24 @@ describe("patching the live menu", () => {
     expect(dialog(el).open).toBe(true);
   });
 
+  it("keeps the patch dialog's close inside the screen", async () => {
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    await userEvent.click(patchButton(el)!);
+    await el.updateComplete;
+    const outside = vi.fn();
+    el.parentElement!.addEventListener("wt-close", outside);
+    onTestFinished(() => el.parentElement?.removeEventListener("wt-close", outside));
+    const closed = new Promise<void>((resolve) =>
+      dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    void dialog(el).shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await closed;
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(false);
+    expect(outside).not.toHaveBeenCalled();
+  });
+
   it("reads the menu's state again after a patch, showing the new version as changed", async () => {
     const client = currentLunch();
     const el = await mountLunch(client);

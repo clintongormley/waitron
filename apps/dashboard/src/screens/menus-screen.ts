@@ -3339,6 +3339,7 @@ export class MenusScreen extends LitElement {
       menuName=${this.#menuName()}
       .open=${this.patching}
       @wt-close=${(event: Event) => {
+        event.stopPropagation();
         // The picture picker's modal inside the dialog closes with a composed wt-close too.
         this.patching = (
           event.currentTarget as HTMLElementTagNameMap["dashboard-menu-patch-dialog"]

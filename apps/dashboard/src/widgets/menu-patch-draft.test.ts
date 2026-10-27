@@ -404,4 +404,56 @@ describe("MenuPatchDraft", () => {
     });
     expect(draft.changes()).toEqual([]);
   });
+
+  it("on rebase lets go of a name change only in a language every folder now fixes, and sends the fixed text", () => {
+    const drinksWith = (fixed: boolean) => {
+      const document = menuDocument([documentSection("sec-drinks", "Drinks", [])], {});
+      const drinks = document.root.members[0] as Extract<
+        MenuDocument["root"]["members"][number],
+        { kind: "section" }
+      >;
+      drinks.names = { en: fixed ? "Bar" : "Drinks", es: "Bebidas" };
+      if (fixed) drinks.fixed = { names: { en: "Bar" } };
+      return document;
+    };
+    const target = { kind: "section", sectionId: "sec-drinks" } as const;
+    const draft = new MenuPatchDraft(drinksWith(false), languages);
+    draft.set({ target, field: "names", value: { en: "Refreshments", es: "Bebidas" } });
+    draft.set({
+      target: { kind: "section", sectionId: "sec-drinks" },
+      field: "internalName",
+      value: "Bar drinks",
+    });
+    expect(draft.changes()).toHaveLength(2);
+    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 1 });
+    expect(draft.changes()).toEqual([{ target, field: "internalName", value: "Bar drinks" }]);
+    draft.set({ target, field: "names", value: { en: "Refreshments", es: "Copas" } });
+    expect(draft.changes()).toContainEqual({
+      target,
+      field: "names",
+      value: { en: "Bar", es: "Copas" },
+    });
+    // The fixed language already holds the live text, so nothing typed is lost.
+    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 0 });
+  });
+
+  it("on rebase does not count as dropped a name change still staged in another language once one is fixed", () => {
+    const drinksWith = (fixed: boolean) => {
+      const document = menuDocument([documentSection("sec-drinks", "Drinks", [])], {});
+      const drinks = document.root.members[0] as Extract<
+        MenuDocument["root"]["members"][number],
+        { kind: "section" }
+      >;
+      drinks.names = { en: fixed ? "Bar" : "Drinks", es: "Bebidas" };
+      if (fixed) drinks.fixed = { names: { en: "Bar" } };
+      return document;
+    };
+    const target = { kind: "section", sectionId: "sec-drinks" } as const;
+    const draft = new MenuPatchDraft(drinksWith(false), languages);
+    draft.set({ target, field: "names", value: { en: "Refreshments", es: "Copas" } });
+    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 0 });
+    expect(draft.changes()).toEqual([
+      { target, field: "names", value: { en: "Bar", es: "Copas" } },
+    ]);
+  });
 });

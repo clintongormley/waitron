@@ -214,6 +214,17 @@ const changedDot = (el: MenuPatchDialog, label: string) =>
 
 const soup = { kind: "offer", menuItemId: "mi-soup" } as const;
 
+const newerNotice = (number: number) =>
+  `Version ${number} went live while you were patching. Reload to patch it instead; changes that still fit are kept.`;
+
+/** Waits for the notice that version `number` went live while the draft held work, checks the
+ * dialog still shows version 3, then presses Reload. */
+async function reloadOnto(el: MenuPatchDialog, number: number): Promise<void> {
+  await vi.waitFor(() => expect(bottomMessage(el)).toContain(newerNotice(number)));
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  await press(el, "reload");
+}
+
 it("names the live version's number and the menu in its heading", async () => {
   const el = await mount();
   expect(modal(el).open).toBe(true);
@@ -240,11 +251,14 @@ it("lists the menu with each dish's variants, then the extras and options", asyn
 
 it("narrows the tree to the items whose name matches the search, keeping their place", async () => {
   const el = await mount();
-  await type(el, "wt-input", "search", "LEMON");
+  const search = field(el, "wt-input", "menu-patch-search");
+  expect(search.type).toBe("search");
+  expect(search.placeholder).toBe("Search dishes, extras and sections");
+  await type(el, "wt-input", "menu-patch-search", "LEMON");
   expect(treeLabels(el)).toEqual(["Drinks", "Lemonade", "Small", "Large"]);
-  await type(el, "wt-input", "search", "bre");
+  await type(el, "wt-input", "menu-patch-search", "bre");
   expect(treeLabels(el)).toEqual(["Extras and options", "Toppings", "Bread"]);
-  await type(el, "wt-input", "search", "nothing like it");
+  await type(el, "wt-input", "menu-patch-search", "nothing like it");
   expect(treeLabels(el)).toEqual([]);
   expect(el.shadowRoot!.querySelector('[data-test="no-matches"]')!.textContent!.trim()).toBe(
     "No items match the search.",
@@ -255,7 +269,7 @@ it("finds a name whatever its accents", async () => {
   const el = await mount(
     stubApi({ getLiveMenu: vi.fn(async () => live(3, lunch("Sopa de calabacín"))) }),
   );
-  await type(el, "wt-input", "search", "calabacin");
+  await type(el, "wt-input", "menu-patch-search", "calabacin");
   expect(treeLabels(el)).toEqual(["Starters", "Sopa de calabacín"]);
 });
 
@@ -487,19 +501,120 @@ it("leaves out a field no copy of the section takes", async () => {
   expect(fieldNames(el)).toEqual(["internal-name", "names-en", "names-es"]);
 });
 
-it("keeps staged changes and what is being typed when a newer live version arrives", async () => {
+/** Lunch whose Starters is shown only through a folder that fixes its English name. */
+function startersFixedInEnglish(): MenuDocument {
+  const document = lunch();
+  const starters = document.root.members[0] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  starters.names = { en: "Fixed English", es: "Entrantes" };
+  starters.fixed = { names: { en: "Fixed English" } };
+  return document;
+}
+
+it("draws a name language every copy's folder fixes as disabled, and reviews only what changes", async () => {
+  const document = startersFixedInEnglish();
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Starters");
+  const shown = (name: string) => {
+    const input = field(el, "wt-input", name);
+    return { value: input.value, disabled: input.disabled, hint: input.hint };
+  };
+  expect([shown("names-en"), shown("names-es")]).toEqual([
+    { value: "Fixed English", disabled: true, hint: "The included folder sets this name." },
+    { value: "Entrantes", disabled: false, hint: "" },
+  ]);
+  await type(el, "wt-input", "names-es", "Para empezar");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Starters: Customer-facing name (ES) Entrantes → Para empezar"]);
+});
+
+it("lets go of a section name typed only in a language a newer version's folder fixes", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, before))
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const api = stubApi({ liveData: data, getLiveMenu });
+  const el = await mount(api);
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(el.changes).toEqual([]);
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  expect(field(el, "wt-input", "names-en").disabled).toBe(true);
+  expect(footerButton(el, "review")!.disabled).toBe(true);
+  await type(el, "wt-input", "names-es", "Para empezar");
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-starters" },
+      field: "names",
+      value: { en: "Fixed English", es: "Para empezar" },
+    },
+  ]);
+});
+
+it("shows a newer version's folder name in its locked language beside a staged change to another", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, before))
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "Para empezar");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  expect(field(el, "wt-input", "names-es").value).toBe("Para empezar");
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-starters" },
+      field: "names",
+      value: { en: "Fixed English", es: "Para empezar" },
+    },
+  ]);
+});
+
+it("says in Spanish that the included folder sets a fixed name", async () => {
+  setLocale("es");
+  const document = startersFixedInEnglish();
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Starters");
+  expect(field(el, "wt-input", "names-en").hint).toBe("La carpeta incluida fija este nombre.");
+});
+
+it("keeps staged changes and what is being typed when reloaded onto a newer live version", async () => {
   const data = new LiveData();
   const getLiveMenu = vi
     .fn()
     .mockResolvedValueOnce(live(3))
-    .mockResolvedValueOnce(live(4, lunch("Broth")));
+    .mockResolvedValue(live(4, lunch("Broth")));
   const el = await mount(stubApi({ liveData: data, getLiveMenu }));
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
   await type(el, "wt-input", "name", "");
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(treeLabels(el)).toContain("Broth");
   expect(changedDot(el, "Broth")).not.toBeNull();
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
@@ -526,30 +641,37 @@ it("forgets the typing behind a change a newer version drops", async () => {
   const data = new LiveData();
   const newer = lunch();
   newer.offers["mi-soup"]!.offeredModifiers = [];
-  const getLiveMenu = vi
-    .fn()
-    .mockResolvedValueOnce(live(3))
-    .mockResolvedValueOnce(live(4, newer))
-    .mockResolvedValueOnce(live(5));
+  let current = live(3);
+  const getLiveMenu = vi.fn(async () => current);
   const el = await mount(stubApi({ liveData: data, getLiveMenu }));
   await pick(el, "Toppings");
   await type(el, "wt-input", "name", "Add-ons");
   await pick(el, "Soup");
   await type(el, "wt-input", "name", "Broth");
+  current = live(4, newer);
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(el.changes).toEqual([{ target: soup, field: "name", value: "Broth" }]);
   expect(field(el, "wt-input", "name").value).toBe("Broth");
   expect(treeLabels(el)).not.toContain("Toppings");
+  current = live(5);
   data.invalidate([{ type: "menu_versions", id: "v-5" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu"));
+  await vi.waitFor(() => expect(bottomMessage(el)).toBe(newerNotice(5)));
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
   await pick(el, "Toppings");
   expect(field(el, "wt-input", "name").value).toBe("Toppings");
 });
 
 it("keeps following the live menu, and its staged changes, when moved on the page", async () => {
   const data = new LiveData();
-  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4));
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockResolvedValueOnce(live(3))
+    .mockResolvedValue(live(4));
   const el = await mount(stubApi({ liveData: data, getLiveMenu }));
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
@@ -558,7 +680,8 @@ it("keeps following the live menu, and its staged changes, when moved on the pag
   parent.append(el);
   await flush(el);
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
 });
 
@@ -746,22 +869,24 @@ it("puts the changes live against the version read, then says so and closes", as
   expect(modal(el).open).toBe(false);
 });
 
-it("goes quiet and puts nothing live when a newer version already holds the change", async () => {
+it("goes quiet and puts nothing live when reloaded onto a newer version that holds the change", async () => {
   const data = new LiveData();
   const newer = lunch();
   newer.offers["mi-soup"]!.unitPrice = "4.00";
-  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4, newer));
   const api = stubApi({ liveData: data, getLiveMenu });
   const el = await mount(api);
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await press(el, "review");
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
-  expect(reviewLines(el)).toEqual([]);
-  expect(footerButton(el, "put-live")!.disabled).toBe(true);
-  expect(footerButton(el, "put-live")!.variant).toBe("secondary");
-  footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(el.changes).toEqual([]);
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "close"));
+  expect(footerButton(el, "review")!.disabled).toBe(true);
+  expect(footerButton(el, "review")!.variant).toBe("secondary");
+  footerButton(el, "review")!.dispatchEvent(new MouseEvent("click"));
   await flush(el);
   expect(api.patchLiveMenu).not.toHaveBeenCalled();
 });
@@ -952,18 +1077,19 @@ it("explains a reload that fails and offers it again", async () => {
   expect(bottomMessage(el)).toBe("");
 });
 
-it("says when a newer live version arriving on its own drops changes", async () => {
+it("says when reloading onto a newer live version that arrived on its own drops changes", async () => {
   const data = new LiveData();
   const newer = lunch();
   newer.offers["mi-soup"]!.offeredModifiers = [];
-  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4, newer));
   const el = await mount(stubApi({ liveData: data, getLiveMenu }));
   await pick(el, "Toppings");
   await type(el, "wt-input", "name", "Add-ons");
   await pick(el, "Bread");
   await type(el, "wt-input", "name", "Toast");
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
     "2 changes no longer fit the live version and were dropped.",
   );
@@ -1155,7 +1281,7 @@ it("stops holding back Review for a refused field whose item a newer version no 
   const data = new LiveData();
   const newer = lunch();
   newer.root.members = newer.root.members.slice(1);
-  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4, newer));
   const el = await mount(stubApi({ liveData: data, getLiveMenu }));
   await pick(el, "Salad");
   await type(el, "wt-input", "name", "");
@@ -1163,18 +1289,19 @@ it("stops holding back Review for a refused field whose item a newer version no 
   await type(el, "wt-input", "name", "Lemon soda");
   expect(footerButton(el, "review")!.disabled).toBe(true);
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(footerButton(el, "review")!.disabled).toBe(false);
   expect(bottomMessage(el)).toBe("");
 });
 
-it("drops a newer-version refusal once a newer live version arrives on its own", async () => {
+it("drops a failed reload's message once a version newer than the refusal named arrives, then reloads onto it", async () => {
   const data = new LiveData();
   const getLiveMenu = vi
     .fn()
     .mockResolvedValueOnce(live(3))
     .mockRejectedValueOnce(new Error("the box is unreachable"))
-    .mockResolvedValueOnce(live(4));
+    .mockResolvedValue(live(5));
   const el = await mount(
     stubApi({
       liveData: data,
@@ -1195,8 +1322,11 @@ it("drops a newer-version refusal once a newer live version arrives on its own",
   await press(el, "put-live");
   await press(el, "reload");
   expect(bottomMessage(el)).toContain(codeMessage("server.internal"));
-  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  data.invalidate([{ type: "menu_versions", id: "v-5" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toBe(newerNotice(5)));
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
   expect(bottomMessage(el)).toBe("");
   expect(footerButton(el, "reload")).toBeNull();
 });
@@ -1315,7 +1445,7 @@ it("shows a refusal for a change the venue's content languages drop while it is 
   }
 });
 
-it("moves onto a newer live version that arrives while a patch is being sent, once it is refused", async () => {
+it("offers a newer live version that arrives while a patch is being sent, once it is refused", async () => {
   const data = new LiveData();
   const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4));
   let refuse!: (error: Error) => void;
@@ -1337,7 +1467,8 @@ it("moves onto a newer live version that arrives while a patch is being sent, on
   await flush(el);
   expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
   refuse(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
 });
@@ -1380,7 +1511,8 @@ it("counts a refused change as dropped when a newer version held during the send
   await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
   await flush(el);
   refuse(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   await flush(el);
   expect(treeLabels(el)).not.toContain("Salad");
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
@@ -1391,7 +1523,7 @@ it("counts a refused change as dropped when a newer version held during the send
   expect(footerButton(el, "review")!.disabled).toBe(false);
 });
 
-it("counts a field showing an error as dropped when a newer version removes its item", async () => {
+it("counts a field showing an error as dropped when reloaded onto a newer version without its item", async () => {
   const data = new LiveData();
   const getLiveMenu = vi
     .fn()
@@ -1402,7 +1534,8 @@ it("counts a field showing an error as dropped when a newer version removes its 
   await type(el, "wt-input", "name", "");
   expect(bottomMessage(el)).toBe("Correct the fields marked on Salad to continue.");
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
-  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await reloadOnto(el, 4);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
     "1 change no longer fits the live version and was dropped.",
   );
@@ -1433,5 +1566,512 @@ it("keeps a newer version held during the send when the content languages change
   refuse(refusal("menu_patch.unchanged", { menuId: "menu-lunch" }));
   await flush(el);
   await flush(el);
+  expect(bottomMessage(el)).toBe(`${codeMessage("menu_patch.unchanged")} ${newerNotice(4)}`);
+  await reloadOnto(el, 4);
   expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+});
+
+it("keeps correcting the version read when a newer one goes live with changes staged, and says so", async () => {
+  const data = new LiveData();
+  const newer = lunch();
+  newer.offers["mi-soup"]!.unitPrice = "5.00";
+  let current = live(3);
+  const getLiveMenu = vi.fn(async () => current);
+  const patchLiveMenu = vi.fn().mockRejectedValue(
+    refusal("menu_patch.base_changed", {
+      menuId: "menu-lunch",
+      baseVersionId: "v-3",
+      liveVersionId: "v-4",
+      liveNumber: 4,
+    }),
+  );
+  const el = await mount(stubApi({ liveData: data, getLiveMenu, patchLiveMenu }));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  current = live(4, newer);
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  expect(reviewLines(el)).toEqual(["Soup: Price €3.00 → €4.00"]);
+  const notice =
+    "Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept.";
+  expect(bottomMessage(el)).toBe(notice);
+  expect(footerButton(el, "reload")).not.toBeNull();
+  await press(el, "put-live");
+  expect(patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [{ target: soup, field: "price", value: "4.00" }],
+  });
+  expect(bottomMessage(el)).toBe(notice);
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "reload")).toBeNull();
+});
+
+it("never moves back to an older version that a delayed Reload reads", async () => {
+  const data = new LiveData();
+  let answerReload!: (value: LiveMenu) => void;
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockReturnValueOnce(new Promise((resolve) => (answerReload = resolve)))
+    .mockResolvedValue(live(5));
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  data.invalidate([{ type: "menu_versions", id: "v-5" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(3));
+  await flush(el);
+  answerReload(live(4));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("retires a no-longer-fits refusal once the content languages drop the change it was about", async () => {
+  const document = lunch();
+  const drinks = document.root.members[1] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  drinks.names = { en: "Bar", es: "Bebidas" };
+  drinks.fixed = { names: { en: "Bar" } };
+  const patchLiveMenu = vi.fn(async () => {
+    throw refusal("menu_patch.invalid", { change: 0, field: "target" });
+  });
+  const el = await mount(
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, document)), patchLiveMenu }),
+  );
+  await pick(el, "Drinks");
+  await type(el, "wt-input", "names-es", "Copas");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(bottomMessage(el)).toContain("no longer fits");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await flush(el);
+  expect(el.changes).toEqual([]);
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "put-live")!.disabled).toBe(true);
+  expect(footerButton(el, "put-live")!.variant).toBe("secondary");
+  footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
+  await flush(el);
+  expect(patchLiveMenu).toHaveBeenCalledTimes(1);
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+});
+
+it("leaves a typed value alone when the version shown is delivered again", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi.fn(async () => live());
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "3");
+  expect(field(el, "wt-price-input", "price").value).toBe("3");
+  data.invalidate([{ type: "menu_versions", id: "v-3" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(field(el, "wt-price-input", "price").value).toBe("3");
+});
+
+it("moves onto the version a Reload reads even when the read comes back during a send", async () => {
+  let answerReload!: (value: LiveMenu) => void;
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockReturnValueOnce(new Promise((resolve) => (answerReload = resolve)));
+  const baseChanged = refusal("menu_patch.base_changed", {
+    menuId: "menu-lunch",
+    baseVersionId: "v-3",
+    liveVersionId: "v-4",
+    liveNumber: 4,
+  });
+  let refuseSecond!: (error: Error) => void;
+  const patchLiveMenu = vi
+    .fn()
+    .mockRejectedValueOnce(baseChanged)
+    .mockReturnValueOnce(new Promise((_resolve, reject) => (refuseSecond = reject)));
+  const el = await mount(stubApi({ getLiveMenu, patchLiveMenu }));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  await press(el, "put-live");
+  expect(patchLiveMenu).toHaveBeenCalledTimes(2);
+  answerReload(live(4));
+  await flush(el);
+  refuseSecond(baseChanged);
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("keeps focus inside the dialog when Reload takes it back to editing", async () => {
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4));
+  const el = await mount(
+    stubApi({
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  footerButton(el, "reload")!.focus();
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "review"));
+});
+
+it("retires a no-longer-fits refusal once the change it was about is typed back to the live value", async () => {
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", { change: 1, field: "target" });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(bottomMessage(el)).toContain("no longer fits");
+  await press(el, "keep-editing");
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "3");
+  expect(bottomMessage(el)).toContain("no longer fits");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "SALAD COCINA");
+  expect(el.changes).toEqual([]);
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "reload")).toBeNull();
+});
+
+it("names the higher of a delivered newer version and the one a refused send names", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4));
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-5",
+          liveNumber: 5,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toBe(newerNotice(4)));
+  await press(el, "put-live");
+  expect(bottomMessage(el)).toBe(newerNotice(5));
+});
+
+it("keeps a failed Reload's message when the version it offered is delivered again", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockResolvedValueOnce(live(4))
+    .mockRejectedValueOnce(new Error("the box is unreachable"))
+    .mockResolvedValue(live(4));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toBe(newerNotice(4)));
+  await press(el, "reload");
+  expect(bottomMessage(el)).toContain(codeMessage("server.internal"));
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(4));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  expect(bottomMessage(el)).toContain(codeMessage("server.internal"));
+});
+
+/** Pressing Reload, then Put live before the read returns; the read answers version 4 during the
+ * send, and `refuseSecond` then answers the send. */
+async function reloadThenSend(
+  el: MenuPatchDialog,
+  answerReload: () => (value: LiveMenu) => void,
+  document = lunch(),
+) {
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  await press(el, "put-live");
+  answerReload()(live(4, document));
+  await flush(el);
+}
+
+function reloadDuringSend() {
+  let answerReload!: (value: LiveMenu) => void;
+  let refuseSecond!: (error: Error) => void;
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockReturnValueOnce(new Promise((resolve) => (answerReload = resolve)));
+  const patchLiveMenu = vi
+    .fn()
+    .mockRejectedValueOnce(
+      refusal("menu_patch.base_changed", {
+        menuId: "menu-lunch",
+        baseVersionId: "v-3",
+        liveVersionId: "v-4",
+        liveNumber: 4,
+      }),
+    )
+    .mockReturnValueOnce(new Promise((_resolve, reject) => (refuseSecond = reject)));
+  return {
+    api: stubApi({ getLiveMenu, patchLiveMenu }),
+    answerReload: () => answerReload,
+    refuseSecond: (error: Error) => refuseSecond(error),
+  };
+}
+
+it.each([
+  ["a network error", () => new Error("the box is unreachable"), "server.internal"],
+  [
+    "menu_patch.unchanged",
+    () => refusal("menu_patch.unchanged", { menuId: "menu-lunch" }),
+    "menu_patch.unchanged",
+  ],
+])(
+  "keeps a send's own refusal (%s) when a Reload read during the send moves the draft",
+  async (_name, error, code) => {
+    const { api, answerReload, refuseSecond } = reloadDuringSend();
+    const el = await mount(api);
+    await pick(el, "Soup");
+    await type(el, "wt-price-input", "price", "4");
+    await reloadThenSend(el, answerReload);
+    refuseSecond(error());
+    await flush(el);
+    expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+    expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+    expect(bottomMessage(el)).toBe(codeMessage(code));
+  },
+);
+
+it("leaves focus on the refused field when a Reload read during the send moves the draft", async () => {
+  const { api, answerReload, refuseSecond } = reloadDuringSend();
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await reloadThenSend(el, answerReload);
+  refuseSecond(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
+  expect(el.shadowRoot!.activeElement).toBe(field(el, "wt-input", "kitchen-name"));
+  expect(bottomMessage(el)).toBe("Correct the fields marked on Salad to continue.");
+});
+
+it("shows in a section name's field the fixed text a newer version put in its staged change", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  let current = live(3, before);
+  const el = await mount(stubApi({ liveData: data, getLiveMenu: vi.fn(async () => current) }));
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "Para empezar");
+  current = live(4, startersFixedInEnglish());
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  current = live(5, before);
+  data.invalidate([{ type: "menu_versions", id: "v-5" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toContain(newerNotice(5)));
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
+  expect(field(el, "wt-input", "names-en").disabled).toBe(false);
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-starters" },
+      field: "names",
+      value: { en: "Fixed English", es: "Para empezar" },
+    },
+  ]);
+});
+
+it("keeps a failed Reload's message when the version a refused send named is delivered", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockRejectedValueOnce(new Error("the box is unreachable"))
+    .mockResolvedValue(live(4));
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  expect(bottomMessage(el)).toContain(codeMessage("server.internal"));
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(3));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  expect(bottomMessage(el)).toBe(`${newerNotice(4)} ${codeMessage("server.internal")}`);
+});
+
+it("shows a newer version's folder name in its locked language in a field still showing an error", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  let current = live(3, before);
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu: vi.fn(async () => current),
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", { change: 0, field: "names" });
+      }),
+    }),
+  );
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "Para empezar");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(el.changes).toEqual([]);
+  current = live(4, startersFixedInEnglish());
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  await type(el, "wt-input", "names-es", "Para comenzar");
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+});
+
+it("drops a failed Reload's message once the version it offered is delivered to a draft typed back to live", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockRejectedValueOnce(new Error("the box is unreachable"))
+    .mockResolvedValue(live(4));
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  expect(bottomMessage(el)).toContain(codeMessage("server.internal"));
+  await press(el, "keep-editing");
+  await type(el, "wt-price-input", "price", "3");
+  expect(el.changes).toEqual([]);
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "reload")).toBeNull();
+});
+
+it("keeps a send's refusal naming a later version than a Reload read during the send answered", async () => {
+  const { api, answerReload, refuseSecond } = reloadDuringSend();
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await reloadThenSend(el, answerReload);
+  refuseSecond(
+    refusal("menu_patch.base_changed", {
+      menuId: "menu-lunch",
+      baseVersionId: "v-3",
+      liveVersionId: "v-5",
+      liveNumber: 5,
+    }),
+  );
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(bottomMessage(el)).toBe(newerNotice(5));
+  expect(footerButton(el, "reload")).not.toBeNull();
+});
+
+it("keeps focus inside the dialog when a Reload read during the send removes the refused field's item", async () => {
+  const { api, answerReload, refuseSecond } = reloadDuringSend();
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await reloadThenSend(el, answerReload, withoutSalad());
+  refuseSecond(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(treeLabels(el)).not.toContain("Salad");
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "review"));
 });

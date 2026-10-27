@@ -144,6 +144,29 @@ it("words a translated field once per language whose text changed", () => {
   ]);
 });
 
+it("never words a change to a name language every copy's folder fixes", () => {
+  const document = lunch();
+  const starters = document.root.members[0] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  starters.names = { en: "Fixed English", es: "Entrantes" };
+  starters.fixed = { names: { en: "Fixed English" } };
+  expect(
+    changeLines(
+      document,
+      [
+        {
+          target: { kind: "section", sectionId: "sec-starters" },
+          field: "names",
+          value: { en: "New English", es: "Para empezar" },
+        },
+      ],
+      languages,
+    ),
+  ).toEqual(["Starters: Customer-facing name (ES) Entrantes → Para empezar"]);
+});
+
 it("words a picture as added, replaced or removed", () => {
   const bread = { kind: "extra", listId: "l-toppings", productId: "p-bread" } as const;
   expect(
@@ -237,12 +260,12 @@ it("leaves at the bottom a refusal that names no change the form shows", () => {
   });
 });
 
-it("words a bottom refusal, filling its placeholders and saying when a change no longer fits", () => {
+it("words a bottom refusal, naming the version that went live and saying when a change no longer fits", () => {
   expect(refusalWords({ code: "menu_patch.base_changed", params: { liveNumber: 4 } })).toBe(
     "Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   );
-  expect(refusalWords({ code: "menu_patch.base_changed", params: {} })).toContain(
-    "Version {liveNumber} went live",
+  expect(refusalWords({ code: "menu_patch.base_changed", params: {} })).toBe(
+    "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   );
   expect(refusalWords({ code: "menu_patch.invalid", params: { change: 0, field: "target" } })).toBe(
     "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",

@@ -179,8 +179,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
   },
   "menu_patch.base_changed": {
-    en: "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
-    es: "La versión {liveNumber} se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
+    en: "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+    es: "Otra versión se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
   },
   "menu_patch.unchanged": {
     en: "These values are already live. Nothing was saved.",

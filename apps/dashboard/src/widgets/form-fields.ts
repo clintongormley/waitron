@@ -194,7 +194,7 @@ export function defaultLanguageHint(
  * rather than stored. Given `defaultLanguage`, every other language falls back to the default
  * language's text first, as `resolveContentText` (`packages/shared/src/content-languages.ts`) does.
  * A `placeholder` given per language is each field's whole fallback, and `defaultLanguage` adds
- * nothing to it.
+ * nothing to it. A language `locked` answers a hint for is drawn disabled, with that hint.
  */
 export function optionalTextFields(
   context: FieldContext,
@@ -204,20 +204,25 @@ export function optionalTextFields(
   change: (value: Record<string, string>) => void,
   placeholder: string | ((locale: string) => string) = "",
   defaultLanguage?: string,
+  locked: (locale: string) => string = () => "",
 ) {
-  return context.locales.map((locale) =>
-    textField(
-      context,
+  return context.locales.map((locale) => {
+    const lockedHint = locked(locale);
+    return textField(
+      lockedHint === "" ? context : { ...context, busy: true },
       `${key}-${locale}`,
       `${label} (${locale})`,
       languageText(value, locale),
       (text) => change(withLanguageText(value, locale, text)),
       false,
-      typeof placeholder === "function"
-        ? placeholder(locale)
-        : defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
-    ),
-  );
+      lockedHint !== ""
+        ? ""
+        : typeof placeholder === "function"
+          ? placeholder(locale)
+          : defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
+      lockedHint,
+    );
+  });
 }
 
 export function switchField(

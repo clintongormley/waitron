@@ -1,6 +1,6 @@
 import { formatMoney, type ContentLanguages } from "@waitron/shared";
 import type { MenuDocument } from "@waitron/catalogue/src/menu-document-types.js";
-import { patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
+import { fixedLanguages, patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
 import type { MenuPatchChange } from "@waitron/catalogue/src/menu-patch-types.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
@@ -66,9 +66,9 @@ export function placeRefusal(
 /** A bottom refusal's sentence. */
 export function refusalWords({ code, params }: Refusal): string {
   if (code === "menu_patch.invalid") return t("menu_patch.no_longer_fits");
-  return codeMessage(code).replace(/\{(\w+)\}/g, (whole, name: string) =>
-    name in params ? String(params[name]) : whole,
-  );
+  if (code === "menu_patch.base_changed" && typeof params.liveNumber === "number")
+    return fill("menu_patch.base_changed_live", { liveNumber: String(params.liveNumber) });
+  return codeMessage(code);
 }
 
 function words(field: string, value: unknown, isNew: boolean): string {
@@ -86,7 +86,7 @@ function words(field: string, value: unknown, isNew: boolean): string {
 }
 
 /** Each change as "{item}: {field} {old} → {new}"; a translated field once per language whose
- * text it changes. */
+ * text it changes, never in a language every copy's folder fixes, which the patch leaves alone. */
 export function changeLines(
   document: MenuDocument,
   changes: readonly MenuPatchChange[],
@@ -101,8 +101,11 @@ export function changeLines(
       const before = (old as Record<string, string> | null) ?? {};
       // The dialog stages every content language's text, a blank one as "".
       const after = value as Record<string, string>;
+      const fixed = fixedLanguages(document, target, field, languages);
       return languages.languages
-        .filter((language) => (before[language] ?? "") !== after[language])
+        .filter(
+          (language) => !fixed.includes(language) && (before[language] ?? "") !== after[language],
+        )
         .map((language) =>
           fill("menu_patch.change_line", {
             item,

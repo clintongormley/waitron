@@ -7,6 +7,7 @@ import type {
 } from "@waitron/catalogue/src/menu-document-types.js";
 import {
   applyMenuPatch,
+  fixedLanguages,
   parseMenuPatch,
   patchFieldValue,
 } from "@waitron/catalogue/src/menu-patch.js";
@@ -140,6 +141,14 @@ function sameTranslations(
   return a.length === Object.keys(b).length && a.every(([language, text]) => b[language] === text);
 }
 
+/** Whether `settled` no longer holds some text `staged` held in a language. */
+function lostText(staged: MenuPatchChange, settled: MenuPatchChange): boolean {
+  const after = settled.value as Record<string, string>;
+  return Object.entries(staged.value as Record<string, string>).some(
+    ([language, text]) => after[language] !== text,
+  );
+}
+
 /** The changes staged in the patch dialog, each against the live version it was read from. */
 export class MenuPatchDraft {
   private readonly staged = new Map<string, MenuPatchChange>();
@@ -179,6 +188,23 @@ export class MenuPatchDraft {
     return value === live;
   }
 
+  /** `change` holding the live text in each name language every folder fixes, which no patch
+   * changes (`applyMenuPatch` lays the folders' names back on top). */
+  private settled(change: MenuPatchChange): MenuPatchChange {
+    const value = change.value;
+    if (change.field !== "names" || typeof value !== "object" || value === null) return change;
+    const fixed = fixedLanguages(this.document, change.target, "names", this.languages);
+    if (fixed.length === 0) return change;
+    const live = patchFieldValue(this.document, change.target, "names", this.languages) as
+      Record<string, string> | undefined;
+    if (live === undefined) return change;
+    const settled = { ...(value as Record<string, string>) };
+    for (const language of fixed)
+      if (live[language] === undefined) delete settled[language];
+      else settled[language] = live[language];
+    return { ...change, value: settled };
+  }
+
   private stage(change: MenuPatchChange): void {
     const target = targetKey(change.target);
     const key = `${target}/${change.field}`;
@@ -196,7 +222,8 @@ export class MenuPatchDraft {
     else this.perTarget.set(target, left);
   }
 
-  set(change: MenuPatchChange): void {
+  set(given: MenuPatchChange): void {
+    const change = this.settled(given);
     if (this.isLive(change)) this.unstage(`${targetKey(change.target)}/${change.field}`);
     else this.stage(change);
   }
@@ -216,12 +243,19 @@ export class MenuPatchDraft {
 
   /** Moves the draft onto a newer live version, judged with `languages`. A change that version
    * already holds goes without being counted; one `applyMenuPatch` refuses on it is dropped and
-   * counted. */
+   * counted, and so is one left holding only the live text once a name language every folder now
+   * fixes takes the live text in place of what was typed. */
   rebase(document: MenuDocument, languages = this.languages): { dropped: number } {
     this.document = document;
     this.languages = languages;
-    for (const [key, change] of this.staged) if (this.isLive(change)) this.unstage(key);
-    let dropped = 0;
+    const dropped = new Set<string>();
+    for (const [key, staged] of this.staged) {
+      const change = this.settled(staged);
+      if (this.isLive(change)) {
+        if (change !== staged && lostText(staged, change)) dropped.add(key);
+        this.unstage(key);
+      } else this.staged.set(key, change);
+    }
     for (;;) {
       const entries = [...this.staged];
       try {
@@ -230,13 +264,14 @@ export class MenuPatchDraft {
           entries.map(([, change]) => change),
           this.languages,
         );
-        return { dropped };
+        return { dropped: dropped.size };
       } catch (error) {
         if (!isAppError(error) || !hasCode(error, "menu_patch.invalid")) throw error;
         // Each refusal names the first change it could not apply, so dropping it and retrying
         // finds every refused change.
-        this.unstage(entries[error.params.change]![0]);
-        dropped += 1;
+        const [key] = entries[error.params.change]!;
+        this.unstage(key);
+        dropped.add(key);
       }
     }
   }
