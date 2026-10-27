@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jsonFile } from "@waitron/module";
 import { hashSessionToken, registerModulePermissions } from "@waitron/identity";
+import { savePrivacyContact } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import {
@@ -120,6 +122,23 @@ describe("the invoice customer download, end to end", () => {
         anyEmail: expected.invoices.some((invoice) => invoice.emails.length > 0),
       }),
     );
+  });
+
+  it("ends the README with the venue's saved privacy page, and names none once it is cleared", async () => {
+    const page = "https://example.com/privacy";
+    const store = (privacyNoticeUrl: string | null) =>
+      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl }));
+    onTestFinished(async () => {
+      await store(null);
+    });
+    const readmeLines = async () =>
+      strFromU8((await unzipped(await ask("12345678Z")))["README.txt"]!)
+        .trimEnd()
+        .split("\n");
+    await store(page);
+    expect((await readmeLines()).at(-1)!.endsWith(page)).toBe(true);
+    await store(null);
+    expect((await readmeLines()).some((line) => line.includes("https://"))).toBe(false);
   });
 
   it("gives the same invoices.json for each spelling of Jordi's number, and the company its own", async () => {

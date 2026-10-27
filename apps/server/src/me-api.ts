@@ -69,7 +69,6 @@ export interface MeApiDeps {
   credentialKeyRing: TotpKeyRing;
   accountActionCodeKey?: Buffer;
   accountActionBaseUrl?: string;
-  privacyNoticeUrl?: string;
   sendAccountEmail?: AccountEmailSender;
   now?: () => Date;
 }
@@ -127,7 +126,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       modules,
       serverParts: [...timeRecordPersonalData(modules), ...actionsPersonalData(deps.db)],
       venueLocale: deps.venueLocale,
-      privacyNoticeUrl: deps.privacyNoticeUrl,
       now: deps.now,
     },
     log,

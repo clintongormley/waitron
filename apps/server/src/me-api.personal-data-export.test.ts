@@ -19,6 +19,7 @@ import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/
 import { decimal, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
+import { savePrivacyContact } from "@waitron/provisioning";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { mountMeApi } from "./me-api.js";
 
@@ -35,10 +36,7 @@ const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PATH = "/management-api/me/personal-data/export";
 
 // Leaves `now` unset, so the route's own clock is exercised.
-function mounted(
-  modules: string[],
-  patch: { venueLocale?: string; privacyNoticeUrl?: string } = {},
-): Hono {
+function mounted(modules: string[], patch: { venueLocale?: string } = {}): Hono {
   const app = new Hono();
   mountMeApi(
     app,
@@ -57,7 +55,7 @@ function mounted(
 
 async function download(
   modules: string[],
-  patch: { venueLocale?: string; privacyNoticeUrl?: string } = {},
+  patch: { venueLocale?: string } = {},
   beforeRequest?: (personId: string) => Promise<void>,
 ): Promise<Record<string, string>> {
   await seedTenant(suite.db);
@@ -204,9 +202,8 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
 
   it("passes the venue's language and the privacy notice's address to the README", async () => {
     const url = "https://venue.example/privacy";
-    const files = await download(["core", "identity"], {
-      venueLocale: "es-ES",
-      privacyNoticeUrl: url,
+    const files = await download(["core", "identity"], { venueLocale: "es-ES" }, async () => {
+      await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: url }));
     });
     const readme = files["README.txt"]!.trimEnd().split("\n");
     expect(readme[0]).toBe(PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"));
