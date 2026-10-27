@@ -21,7 +21,7 @@ const HELD = item("r4", "Lector 4", {
   provider: "sumup",
   heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" },
 });
-const BARRA = item("p1", "Barra", { portable: false });
+const BAR_PRINTER = item("p1", "Barra", { portable: false });
 
 function role(name: RoleEquipment["role"], overrides: Partial<RoleEquipment> = {}): RoleEquipment {
   return {
@@ -39,9 +39,9 @@ function role(name: RoleEquipment["role"], overrides: Partial<RoleEquipment> = {
 const equipment: DeviceEquipment = {
   roles: [
     role("receipt", {
-      default: BARRA,
+      default: BAR_PRINTER,
       resolved: { id: "p1", name: "Barra", available: true },
-      choices: [BARRA],
+      choices: [BAR_PRINTER],
     }),
     role("payment_slip"),
     role("cash_drawer"),
