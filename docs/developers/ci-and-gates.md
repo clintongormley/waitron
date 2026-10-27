@@ -1075,7 +1075,7 @@ and other completed results cannot supply the baseline. A missing baseline or fa
 selects the full suite and image. The API call uses `gtimeout` or `timeout` with a 30-second
 deadline and a five-second kill grace; neither command available also selects the full run.
 A docs push runs the packages and can publish when its range includes code with no eligible run.
-For example, if a code merge's run is queued and you push only `docs/note.md`, the later run
+For example, if a code merge's run is queued and you push only `docs/backlog.md`, the later run
 reports `code=false` and skips package suites and publishing. The earlier code run keeps its
 independent concurrency group and continues checking that code.
 
