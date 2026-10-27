@@ -1602,9 +1602,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Kitchen paper prints its times in the server process's time zone (left open by A808, 2026-10-27).**
   The time line and the reprint heading go through `hhmm`, which reads `Date#getHours` and
   `getMinutes` (`apps/server/src/kitchen-ticket.ts`). `deploy/Dockerfile` and `deploy/compose.yml`
-  set no `TZ` (`rg -n '\bTZ\b|localtime|zoneinfo' deploy` finds nothing), so on a box that is UTC,
-  not the venue's own zone (`locations.time_zone`). A696 covers invoices and receipts only. Decide
-  with the owner whether kitchen paper moves to the venue's zone.
+  set no `TZ` (`rg -n '\bTZ\b|localtime|zoneinfo' deploy` finds nothing), and a local probe of the
+  base image printed `UTC` (`docs/developers/testing-guide.md`); an operator's appliance was not
+  measured. The venue's own zone is `locations.time_zone`. A696 covers invoices and receipts only.
+  Decide with the owner whether kitchen paper moves to the venue's zone.
+
+- **A reprint covering several sends prints the earliest send time (left open by A808,
+  2026-10-27).** `planKitchenTickets` (`apps/server/src/kitchen-print.ts`) prints the earliest send
+  on each reprinted ticket. Ask the owner whether it should be the latest, or one time per send.
+
+- **A kitchen-note change gives a slip and a notice per bill, not per party (left open by A807,
+  2026-10-27).** A party with two bills gets two slips per printer and two notices per station
+  ([decision](backlog/kitchen.md#decisions-and-deliberate-limits)). Ask the owner whether a party
+  should get one.
 
 - **A1086. On a kitchen ticket nothing marks where a run of dishes sent after their period ends.**
   The late-send mark prints only above the run (`emitGrouped`, `apps/server/src/kitchen-ticket.ts`),

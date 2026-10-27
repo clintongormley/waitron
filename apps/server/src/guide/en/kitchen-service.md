@@ -51,7 +51,7 @@ with a correction when its current instructions differ.
 
 Changing or removing the order's kitchen note gives your station one notice listing every dish it
 affects, and **Got it** clears it. Each kitchen printer prints one slip listing the dishes of the
-stations it serves.
+stations it serves. A table with more than one bill gets one notice and one slip for each bill.
 
 ## Keep advance HOLD instructions with the work {#held-work}
 
@@ -78,7 +78,7 @@ check the station's outstanding notices separately. Splitting dishes between bil
 copies with the resulting kitchen work; it does not replace the guest's instructions.
 
 A reprint's heading shows when it was reprinted (`*** REPRINT 15:20 ***`). The time under the
-order number stays the time the dishes were sent.
+order number stays the time the first of its dishes was sent.
 
 ## Keep food visible until service ends {#service-lifetime}
 

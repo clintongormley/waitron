@@ -1839,8 +1839,8 @@ async function readReprintTargets(
 
 /**
  * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket's heading carries the
- * reprint time, read once for the whole reprint, and its time line keeps the time its dishes were
- * sent ({@link FiredItem.sentAt}). Fired and HOLD sections for one
+ * reprint time, read once for the whole reprint, and its time line keeps the earliest time its
+ * dishes were sent ({@link FiredItem.sentAt}). Fired and HOLD sections for one
  * printer go as one job, cut once, linked to every station either carries, whatever stations each
  * covers; for a station printer, separate jobs could clear an earlier failure for dishes the later
  * section does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An

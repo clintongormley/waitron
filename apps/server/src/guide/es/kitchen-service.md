@@ -55,7 +55,8 @@ original y lleva una corrección cuando las instrucciones actuales son distintas
 
 Cambiar o quitar la nota para cocina del pedido da a tu estación un solo aviso con todos los platos
 afectados, y **Entendido** lo retira. Cada impresora de cocina imprime un solo ticket con los
-platos de las estaciones a las que sirve.
+platos de las estaciones a las que sirve. Una mesa con más de una cuenta recibe un aviso y un ticket
+por cada cuenta.
 
 ## Conserva las instrucciones anticipadas del trabajo en espera {#held-work}
 
@@ -86,7 +87,7 @@ conserva las copias con el trabajo de cocina resultante; no sustituye las instru
 persona.
 
 La cabecera de una reimpresión indica cuándo se reimprimió (`*** REPRINT 15:20 ***`). La hora
-bajo el número de pedido sigue siendo la hora a la que se enviaron los platos.
+bajo el número de pedido sigue siendo la hora a la que se envió el primero de sus platos.
 
 ## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
 

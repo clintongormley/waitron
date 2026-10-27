@@ -22,8 +22,10 @@ The campaign's per-item test-change and source-reservation rules apply to the fu
   in the supplied reservation state. Do not touch their same functions, lines or entries before landing or explicit release. Plan publication does not release
   reservations. Re-read landed code and adjust this plan's reading references before BUILD.
   **2026-10-27:** A807/A808 landed. Kitchen-note change slips are built inside `printCorrectionSlips` by
-  `formatKitchenNoteChangeSlip`; the reprint heading is the literal `` `*** REPRINT ${hhmm(reprintedAt)} ***` `` in
-  `kitchen-ticket.ts`. The wording inventory's line numbers have moved.
+  `formatKitchenNoteChangeSlip`; the reprint heading is the literal `` `*** REPRINT ${hhmm(ticket.reprintedAt)} ***` `` in
+  `kitchen-ticket.ts`. A kitchen-note change is no longer a `CorrectionSlip` kind: its words are in
+  `kitchenNoteChangeHeading` and `emitKitchenNoteChange`. Line numbers into `kitchen-print.ts` and
+  `kitchen-ticket.ts` in this plan predate A807/A808; find the code by function name.
 - A756 owns printing settings; A773 owns course headings and coordination cues. Reuse their landed behavior and interfaces. Do not implement their pending
   work here. A966–A968 wait for A964 **implementation**, not this plan landing.
 - No new locale setting, migration, compatibility path or backfill. If implementation reveals a genuine need for one, stop that decision and identify the
