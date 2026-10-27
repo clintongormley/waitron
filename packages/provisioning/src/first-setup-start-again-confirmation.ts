@@ -141,8 +141,11 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     !(REACHED as readonly unknown[]).includes(shown.reached) ||
     (shown.lastName !== null && typeof shown.lastName !== "string") ||
     (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true) ||
-    // With the database present, the only Start again that writes a record discards a recovery.
-    (database === "present" && !Object.hasOwn(shown, "recovery"))
+    // With the database present, a Start again writes a record only when it discards a recovery
+    // or goes past damaged name records.
+    (database === "present" &&
+      !Object.hasOwn(shown, "recovery") &&
+      !Object.hasOwn(shown, "unreadable"))
   )
     throw invalid();
   return {

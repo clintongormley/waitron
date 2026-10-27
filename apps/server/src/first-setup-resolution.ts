@@ -53,6 +53,7 @@ export interface StartAgainFirstSetupRequest {
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   confirmRecoveryDiscard?: { shown: StartAgainSummary };
+  confirmUnreadable?: { shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
 }
 export interface StartAgainSummaryRequest {

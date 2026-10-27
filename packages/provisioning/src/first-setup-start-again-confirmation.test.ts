@@ -359,6 +359,22 @@ it("a confirmation that discards a stopped recovery past unreadable name records
   ).toEqual({ version: 1, ...present });
 });
 
+it("a record with the database present is written when it showed a damaged picks file and no backup recovery", async () => {
+  const dir = await stateDir();
+  const present = {
+    ...record,
+    database: "present" as const,
+    shown: {
+      ...record.shown,
+      unreadable: { records: ["series-picks"] as const, floorMs: unreadable.floorMs },
+    },
+  };
+  await writeStartAgainConfirmation(dir, present);
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
+  ).toEqual({ version: 1, ...present });
+});
+
 it.each([
   ["missing records", { floorMs: unreadable.floorMs }],
   ["empty records", { records: [], floorMs: unreadable.floorMs }],

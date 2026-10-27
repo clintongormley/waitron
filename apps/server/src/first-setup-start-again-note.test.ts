@@ -714,6 +714,44 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
   expect(reached).toEqual([{ shown }, { shown: damaged }]);
 });
 
+it("the Start again route takes confirmUnreadable only in its exact shape, with a shown unreadable", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const reached: unknown[] = [];
+  const app = routes(f, {
+    ...actions,
+    startAgainFirstSetup: async (body) => {
+      reached.push(body.confirmUnreadable);
+    },
+  });
+  const unreadable = { records: ["series-picks"], floorMs: 1_792_162_020_000 };
+  const shown = { reached: "named", lastName: name, unreadable };
+  const send = (confirmUnreadable: unknown) =>
+    sendStartAgain(app, owner, { ...ids, register: request.register, confirmUnreadable });
+  for (const malformed of [
+    null,
+    "yes",
+    [],
+    {},
+    { shown, extra: 1 },
+    { nothingFiledOrSold: true, shown },
+    { shown: { reached: "named", lastName: name } },
+    { shown: { ...shown, extra: 1 } },
+    { shown: { ...shown, unreadable: { ...unreadable, extra: 1 } } },
+    { shown: { ...shown, unreadable: { records: [], floorMs: unreadable.floorMs } } },
+    { shown: { ...shown, unreadable: { ...unreadable, floorMs: 1.5 } } },
+    { shown: { ...shown, unreadable: null } },
+  ]) {
+    const refused = await send(malformed);
+    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+  expect(reached).toEqual([]);
+  const passed = await send({ shown });
+  expect(passed.status, await passed.clone().text()).toBe(200);
+  expect(reached).toEqual([{ shown }]);
+});
+
 it("the Start again route takes a shown unreadable only in its exact shape, and passes it on", async () => {
   const { f, name, actions, owner, ids, request } = await missingDatabase();
   const reached: unknown[] = [];

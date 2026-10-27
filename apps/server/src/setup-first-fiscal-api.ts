@@ -84,6 +84,11 @@ function recoveryDiscardConfirmation(value: unknown) {
   if (shown.recovery === undefined) invalid();
   return { shown };
 }
+function unreadableConfirmation(value: unknown) {
+  const shown = shownSummary(exact(value, ["shown"]).shown);
+  if (shown.unreadable === undefined) invalid();
+  return { shown };
+}
 function shownSummary(value: unknown): StartAgainSummary {
   const shown = exact(
     value,
@@ -968,6 +973,7 @@ export function mountFirstSetupResolutionApi(
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
           ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
+          ...(Object.hasOwn(rawBody, "confirmUnreadable") ? ["confirmUnreadable"] : []),
           ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
             ? ["recoveryRecordDamagedShown"]
             : []),
@@ -992,6 +998,9 @@ export function mountFirstSetupResolutionApi(
         const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
           ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
           : undefined;
+        const confirmUnreadable = Object.hasOwn(body, "confirmUnreadable")
+          ? unreadableConfirmation(body.confirmUnreadable)
+          : undefined;
         try {
           await options.startAgain!({
             inspectionId: text(body.inspectionId),
@@ -1000,6 +1009,7 @@ export function mountFirstSetupResolutionApi(
             register,
             ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
             ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+            ...(confirmUnreadable === undefined ? {} : { confirmUnreadable }),
             ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
               ? { recoveryRecordDamagedShown: true as const }
               : {}),
