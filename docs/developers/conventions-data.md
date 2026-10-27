@@ -3624,7 +3624,7 @@ after a second clock on another machine agrees within 30 seconds
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). The minute is strictly later than every name in the history it can read
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
-the surviving database"), later than the name the box's start-again note keeps
+the surviving database"), no earlier than the box's start-again note's floor
 (`apps/server/src/hour-recovery-host.test.ts`, "a restore with the clock set back behind the
 start-again note is refused, not given a repeated name") and begins no earlier than the backup's newest record or creation time
 (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"), and is taken 90 to 150
@@ -4706,7 +4706,9 @@ against a clock on another machine (within 30 seconds, no confirmation) and stri
 every name in the history it can read and no earlier than the start-again note's floor
 (`first-setup-start-again.json` in the state folder, which only `waitron.sh reset --all` removes;
 owner, 2026-10-24, A1042; a Start again Move raises the floor, if lower, to the first whole minute
-at least 150 seconds after the moved files' newest modification time, A1098); a setup or restore waits 90 to 150 seconds first. Guard for the note:
+at least 150 seconds after the moved files' newest modification time, A1098; a Start again past a
+damaged name record raises it, if lower, to the start of the minute after the attempt's newest file
+time plus 150 seconds, A1099); a setup or restore waits 90 to 150 seconds first. Guard for the note:
 `scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
 note, its confirmation and choice records or the set-aside folder as text, so a path built from pieces escapes it, and it never sees code that empties the whole
 state folder without naming the file. The one

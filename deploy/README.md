@@ -355,14 +355,16 @@ Both forms wipe every volume in the table above. Plain `reset` keeps five things
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
   certificate signed by it. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`.
-- `first-setup-start-again.json`, the start-again note: the last invoice series name chosen by a
-  first setup that someone abandoned with **Start again**, and the earliest moment a later name may
-  be taken. The box
-  never issues a production series name at or before it, so keeping it stops a reset box from
-  reusing that name.
+- `first-setup-start-again.json`, the start-again note: the earliest moment a later invoice
+  series name may be taken after a first setup that someone abandoned with **Start again**, and
+  the last name that setup chose. When a record of that setup's names was damaged, the note may hold
+  no name, only a moment worked out from the setup's file times. The box never issues a
+  production series name before that moment, so keeping the note stops a reset box from reusing
+  a name.
 - `first-setup-start-again-confirmations/`, one small record for each Start again that someone
-  confirmed while the venue database was missing, or that discarded a stopped backup recovery: who
-  confirmed, when, and what the repair page showed them.
+  confirmed while the venue database was missing, that discarded a stopped backup recovery, or
+  that went past a damaged record of the invoice series names the box chose: who confirmed, when,
+  and what the repair page showed them.
 - `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
   at Start again.
 - `first-setup-set-aside/`, the files a Move set aside rather than deleted.

@@ -51,11 +51,14 @@ API before ordinary database opens or staged restore/reset work. It offers inspe
 a backup (under `/setup-api/first-setup/resolution/backup/`), Start again and publication-only
 Finish (`apps/server/src/setup-first-fiscal-api.ts`, `setup-first-backup-api.ts`). Start again runs
 over HTTPS only: it deletes the interrupted attempt, keeps a small note of the last invoice series
-name it chose, if any (`first-setup-start-again.json` in the state folder), and ends the process so
-its supervisor starts it again.
+name it chose, if any, and the earliest moment a later name may be taken
+(`first-setup-start-again.json` in the state folder), and ends the process so its supervisor starts
+it again. When a record of the attempt's names is damaged, the note may hold no name, only a moment
+worked out from the attempt's file times.
 With the venue database missing, it also needs the setup password and a confirmation that nothing
-was filed or sold. With the venue database present, discarding a stopped backup recovery also needs
-the setup password and a confirmation of the recovery's details the page showed. To finish over HTTPS, recover ownership, retrieve the staged publication
+was filed or sold. With the venue database present, discarding a stopped backup recovery, or going
+past a damaged record of the invoice series names the box chose, also needs the setup password and
+a confirmation of what the page showed. To finish over HTTPS, recover ownership, retrieve the staged publication
 reference, confirm the current document and submit the unchanged publication inputs.
 
 Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will
