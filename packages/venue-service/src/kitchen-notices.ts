@@ -21,8 +21,19 @@ import "./errors.js";
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
 export type KitchenNoticeDirection = (typeof KITCHEN_NOTICE_DIRECTIONS)[number];
 
+export interface KitchenNoticeDish {
+  lineName: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  quantity: Decimal;
+  note: string | null;
+  wasStarted: boolean;
+}
+
 export interface KitchenNotice {
   orderNoteChange?: KitchenNoteChange;
+  /** On a kitchen-note change, the dishes it affects at this station, identical ones merged. */
+  dishes?: KitchenNoticeDish[];
   allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;
@@ -65,6 +76,13 @@ const NOTICE_LIMIT = 50;
 
 /** Notices recorded in one call share a timestamp; the row id keeps them in the order given. */
 const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
+
+/**
+ * The rows of one kitchen-note change for one order, written by one {@link recordKitchenNotices}
+ * call, share this key and show as one notice; any other row's key is its own id. Values, not JSON
+ * text, are compared, so key order cannot split a change.
+ */
+const FOLD_KEY = sql<string>`case when ${kitchenNotices.orderNoteChange} is null then ${kitchenNotices.id} else json_array(${kitchenNotices.workingOrderId}, ${kitchenNotices.createdAt}, json_extract(${kitchenNotices.orderNoteChange}, '$.before'), json_extract(${kitchenNotices.orderNoteChange}, '$.after')) end`;
 
 /** Copy line presentation before deleting a line: notices outlive the work they describe. */
 export async function recordKitchenNotices(
@@ -244,6 +262,7 @@ export async function listStationsNotices(
       reroutedTo: kitchenNotices.reroutedTo,
       createdAt: kitchenNotices.createdAt,
       insertionOrder: INSERTION_ORDER.as("insertion_order"),
+      foldKey: FOLD_KEY.as("fold_key"),
       newest:
         sql<number>`row_number() over (partition by ${kitchenNotices.stationId}, ${allergy} order by ${kitchenNotices.createdAt} desc, ${INSERTION_ORDER} desc)`.as(
           "newest",
@@ -260,30 +279,96 @@ export async function listStationsNotices(
       ),
     )
     .as("ranked");
+  // A note change's notice is kept whole when any of its rows is among the newest fifty.
+  const keep = Object.fromEntries(
+    Object.keys(ranked._.selectedFields).map((key) => [
+      key,
+      ranked[key as keyof typeof ranked._.selectedFields],
+    ]),
+  ) as typeof ranked._.selectedFields;
+  const folded = tx
+    .select({
+      ...keep,
+      foldNewest:
+        sql<number>`min(${ranked.newest}) over (partition by ${ranked.stationId}, ${ranked.foldKey})`.as(
+          "fold_newest",
+        ),
+    })
+    .from(ranked)
+    .as("folded");
   const rows = await tx
     .select()
-    .from(ranked)
+    .from(folded)
     .where(
       or(
-        inArray(ranked.kind, ["allergy_changed", "allergy_removed"]),
-        lte(ranked.newest, NOTICE_LIMIT),
+        inArray(folded.kind, ["allergy_changed", "allergy_removed"]),
+        lte(folded.foldNewest, NOTICE_LIMIT),
       ),
     )
-    .orderBy(ranked.createdAt, asc(ranked.insertionOrder));
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rank is not part of a notice
-  for (const { newest, insertionOrder, orderNoteChange, allergyBlock, ...row } of rows) {
-    byStation.get(row.stationId)!.push({
+    .orderBy(folded.createdAt, asc(folded.insertionOrder));
+  const notices = new Map<string, KitchenNotice>();
+  /* eslint-disable @typescript-eslint/no-unused-vars -- the ranks and key are not part of a notice */
+  for (const {
+    newest,
+    foldNewest,
+    insertionOrder,
+    foldKey,
+    orderNoteChange,
+    allergyBlock,
+    ...row
+  } of rows) {
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+    const quantity = thousandthsToDecimal(row.quantity);
+    const dish: KitchenNoticeDish = {
+      lineName: row.lineName,
+      unitName: row.unitName,
+      soldInEach: row.soldInEach,
+      quantity,
+      note: row.note,
+      wasStarted: row.wasStarted,
+    };
+    const key = `${row.stationId}|${foldKey}`;
+    const notice = notices.get(key);
+    if (notice !== undefined) {
+      const same = notice.dishes!.find(
+        (other) =>
+          other.lineName === dish.lineName &&
+          other.soldInEach === dish.soldInEach &&
+          other.note === dish.note &&
+          other.wasStarted === dish.wasStarted &&
+          sameNames(other.unitName, dish.unitName),
+      );
+      if (same === undefined) notice.dishes!.push(dish);
+      else
+        same.quantity = thousandthsToDecimal(
+          decimalToThousandths(same.quantity) + decimalToThousandths(quantity),
+        );
+      continue;
+    }
+    const created: KitchenNotice = {
       ...row,
-      quantity: thousandthsToDecimal(row.quantity),
-      ...(orderNoteChange === null ? {} : { orderNoteChange }),
+      quantity,
+      ...(orderNoteChange === null ? {} : { orderNoteChange, dishes: [dish] }),
       ...(row.kind === "allergy_changed" || row.kind === "allergy_removed" ? { allergyBlock } : {}),
-    });
+    };
+    notices.set(key, created);
+    byStation.get(row.stationId)!.push(created);
+  }
+  for (const notice of notices.values()) {
+    if (notice.dishes !== undefined) Object.assign(notice, notice.dishes[0]);
   }
   return byStation;
 }
 
+function sameNames(a: Record<string, string> | null, b: Record<string, string> | null): boolean {
+  if (a === null || b === null) return a === b;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
 /**
- * Clears a notice from its station. Acknowledging one twice keeps the first time. With `stationId`,
+ * Clears a notice from its station, every dish of a kitchen-note change included. Acknowledging
+ * one twice keeps the first time. With `stationId`,
  * a notice at any other station is `kitchen_notice.not_found`, as a kitchen display bound to that
  * station must not clear another's.
  */
@@ -294,7 +379,7 @@ export async function acknowledgeKitchenNotice(
   scope: { stationId?: string } = {},
 ): Promise<void> {
   const [notice] = await tx
-    .select({ acknowledgedAt: kitchenNotices.acknowledgedAt })
+    .select({ stationId: kitchenNotices.stationId, foldKey: FOLD_KEY })
     .from(kitchenNotices)
     .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenNotices.stationId))
     .where(
@@ -305,9 +390,14 @@ export async function acknowledgeKitchenNotice(
       ),
     );
   if (notice === undefined) throw new AppError("kitchen_notice.not_found", { noticeId: id });
-  if (notice.acknowledgedAt !== null) return;
   await tx
     .update(kitchenNotices)
     .set({ acknowledgedAt: nowIso() })
-    .where(eq(kitchenNotices.id, id));
+    .where(
+      and(
+        eq(kitchenNotices.stationId, notice.stationId),
+        eq(FOLD_KEY, notice.foldKey),
+        isNull(kitchenNotices.acknowledgedAt),
+      ),
+    );
 }

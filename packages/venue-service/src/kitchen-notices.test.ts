@@ -1513,3 +1513,299 @@ it.each(["03:00", "07:00"])(
     }
   },
 );
+
+describe("A807 one notice per kitchen-note change", () => {
+  const change = { orderNoteChange: { before: "A", after: "B" } };
+  const at = (
+    stationId: string,
+    workingOrderLineId: string,
+    quantity = ONE,
+    wasStarted = false,
+  ) => ({
+    workingOrderLineId,
+    stationId,
+    quantity,
+    wasStarted,
+  });
+  const rawRows = () =>
+    db
+      .select({
+        id: kitchenNotices.id,
+        stationId: kitchenNotices.stationId,
+        acknowledgedAt: kitchenNotices.acknowledgedAt,
+      })
+      .from(kitchenNotices)
+      .orderBy(sql`rowid`);
+  const dishNames = (notice: { dishes?: { lineName: string }[] }) =>
+    notice.dishes?.map((dish) => dish.lineName);
+  const sameTime = async (when = new Date().toISOString()) => {
+    await db.update(kitchenNotices).set({ createdAt: when });
+  };
+
+  it("lists one notice per station, its dishes in the order recorded", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 4, null);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          at(v.grill, order.burgerLineId),
+          at(v.grill, order.lemonadeLineId),
+          at(v.bar, order.burgerLineId),
+        ],
+        "changed",
+        change,
+      ),
+    );
+    const [first] = await rawRows();
+
+    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.grill, v.bar]));
+
+    const grill = notices.get(v.grill)!;
+    expect(grill).toHaveLength(1);
+    expect(dishNames(grill[0]!)).toEqual(["BRGR", "Lemonade"]);
+    expect(grill[0]!.id).toBe(first!.id);
+    expect(grill[0]!.lineName).toBe("BRGR");
+    expect(grill[0]!.dishes![0]).toEqual({
+      lineName: "BRGR",
+      unitName: null,
+      soldInEach: false,
+      quantity: ONE,
+      note: "no onions",
+      wasStarted: false,
+    });
+    const bar = notices.get(v.bar)!;
+    expect(bar.map(dishNames)).toEqual([["BRGR"]]);
+  });
+
+  it.each([0, 1])(
+    "clears every dish of the notice at that station from row %i, keeping the first time",
+    async (pick) => {
+      {
+        const v = await venue();
+        const order = await seedOrder(v.locationId, 4, null);
+        await inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [
+              at(v.grill, order.burgerLineId),
+              at(v.grill, order.lemonadeLineId),
+              at(v.bar, order.burgerLineId),
+            ],
+            "changed",
+            change,
+          ),
+        );
+        const rows = await rawRows();
+
+        await inTx((tx) =>
+          acknowledgeKitchenNotice(tx, v.cfg, rows[pick]!.id, { stationId: v.grill }),
+        );
+
+        const after = await rawRows();
+        expect(after.map((row) => row.acknowledgedAt !== null)).toEqual([true, true, false]);
+        expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+        expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toHaveLength(1);
+
+        const first = "2026-01-01T00:00:00.000Z";
+        await db
+          .update(kitchenNotices)
+          .set({ acknowledgedAt: first })
+          .where(eq(kitchenNotices.stationId, v.grill));
+        await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, rows[1 - pick]!.id));
+        expect((await rawRows()).slice(0, 2).map((row) => row.acknowledgedAt)).toEqual([
+          first,
+          first,
+        ]);
+      }
+    },
+  );
+
+  // Each pair differs in exactly one part of what makes a fold; both rows' times are set equal.
+  it.each([
+    {
+      part: "the order",
+      second: { order: "other" as const, orderNoteChange: { before: "A", after: "B" } },
+    },
+    {
+      part: "the note before",
+      second: { order: "same" as const, orderNoteChange: { before: "X", after: "B" } },
+    },
+    {
+      part: "the note after",
+      second: { order: "same" as const, orderNoteChange: { before: "A", after: null } },
+    },
+  ])("keeps two notices for changes that differ in $part", async ({ second }) => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 4, null);
+    const other = await seedOrder(v.locationId, 5, null);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [at(v.grill, order.burgerLineId)],
+        "changed",
+        change,
+      ),
+    );
+    const target = second.order === "same" ? order : other;
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        target.orderId,
+        [at(v.grill, target.lemonadeLineId)],
+        "changed",
+        {
+          orderNoteChange: second.orderNoteChange,
+        },
+      ),
+    );
+    await sameTime();
+
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notices.map(dishNames)).toEqual([["BRGR"], ["Lemonade"]]);
+  });
+
+  it("keeps two notices for the same change recorded a millisecond apart", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 4, null);
+    for (const lineId of [order.burgerLineId, order.lemonadeLineId])
+      await inTx((tx) =>
+        recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, lineId)], "changed", change),
+      );
+    const [one, two] = await rawRows();
+    const now = Date.now();
+    await db
+      .update(kitchenNotices)
+      .set({ createdAt: new Date(now).toISOString() })
+      .where(eq(kitchenNotices.id, one!.id));
+    await db
+      .update(kitchenNotices)
+      .set({ createdAt: new Date(now + 1).toISOString() })
+      .where(eq(kitchenNotices.id, two!.id));
+
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notices.map(dishNames)).toEqual([["BRGR"], ["Lemonade"]]);
+  });
+
+  it("folds two writes of the same change at the same moment into one notice", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 4, null);
+    for (const lineId of [order.burgerLineId, order.lemonadeLineId])
+      await inTx((tx) =>
+        recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, lineId)], "changed", change),
+      );
+    await sameTime();
+
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notices.map(dishNames)).toEqual([["BRGR", "Lemonade"]]);
+  });
+
+  it("merges identical dishes, adding their quantities, and keeps started and differently noted ones apart", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 4, null);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          at(v.grill, order.burgerLineId, ONE),
+          at(v.grill, order.lemonadeLineId, ONE),
+          at(v.grill, order.burgerLineId, TWO),
+          at(v.grill, order.burgerLineId, ONE, true),
+          at(v.grill, order.burgerLineId, ONE),
+        ],
+        "changed",
+        change,
+      ),
+    );
+    const rows = await rawRows();
+    await db
+      .update(kitchenNotices)
+      .set({ note: "extra cheese" })
+      .where(eq(kitchenNotices.id, rows[4]!.id));
+
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(
+      notice!.dishes!.map(({ lineName, quantity, note, wasStarted }) => [
+        lineName,
+        quantity,
+        note,
+        wasStarted,
+      ]),
+    ).toEqual([
+      ["BRGR", thousandthsToDecimal(3000), "no onions", false],
+      ["Lemonade", ONE, null, false],
+      ["BRGR", ONE, "no onions", true],
+      ["BRGR", ONE, "extra cheese", false],
+    ]);
+    expect(notice!.quantity).toEqual(thousandthsToDecimal(3000));
+  });
+
+  it("keeps a note change's notice whole at the fifty limit", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          at(v.grill, order.burgerLineId),
+          at(v.grill, order.lemonadeLineId),
+          at(v.grill, order.pizzaLineId),
+        ],
+        "changed",
+        change,
+      ),
+    );
+    const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+    await sameTime(ago(2));
+    for (let index = 0; index < 48; index += 1)
+      await noticeAt(v.grill, order.orderId, ago(1), `V${index}`);
+
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notices).toHaveLength(49);
+    expect(dishNames(notices[0]!)).toEqual(["BRGR", "Lemonade", "PZ (LRG PZ)"]);
+  });
+
+  it("gives other changed notices no dish list", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    await inTx((tx) =>
+      recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, order.burgerLineId)], "changed", {
+        direction: "added",
+      }),
+    );
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [at(v.grill, order.lemonadeLineId)],
+        "changed",
+        {
+          cancelledExtra: "Cheese",
+        },
+      ),
+    );
+
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notices).toHaveLength(2);
+    for (const notice of notices) expect(notice).not.toHaveProperty("dishes");
+  });
+});
