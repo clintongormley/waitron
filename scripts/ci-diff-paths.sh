@@ -13,7 +13,6 @@ if [[ "$EVENT" != push || "$REF" != refs/heads/main ]]; then
   exit
 fi
 
-# Missing or refused main runs cannot own the earlier code range.
 deadline=$(command -v gtimeout || command -v timeout || true)
 if [[ -z "$deadline" ]]; then
   echo "no timeout command: running everything" >&2

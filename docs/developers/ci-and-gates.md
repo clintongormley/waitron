@@ -1079,9 +1079,9 @@ For example, if a code merge's run is queued and you push only `docs/note.md`, t
 reports `code=false` and skips package suites and publishing. The earlier code run keeps its
 independent concurrency group and continues checking that code.
 
-If the earlier run later fails, its failure remains the signal for that code. A passing docs run
-does not qualify the earlier tree. The next code push runs the full package suite over the
-current tree, even if its nearest eligible baseline is a passing docs run. For an immediate
+If the earlier run later fails or is cancelled, keep that result with the code's validation
+record. A passing docs run does not qualify the earlier tree. The next code push runs the full
+package suite over the current tree, even if its nearest eligible baseline is a passing docs run. For an immediate
 recheck without another code change, use manual recovery below. Keep the earlier run's ID with
 your checkpoint until you have read its final result; a queued baseline is not a passing check.
 Pull requests retain their merge-base scope; release tags and manual dispatches run everything.
@@ -1103,7 +1103,8 @@ the baseline mechanism has no event on which to recover a dropped run.
 
 `scripts/ci-main-recovery.test.mjs` runs the extracted classification step against a real Git
 history and the real package classifier, with the runs API replaced by fixtures. It checks a
-missing code run followed by docs, failed baseline reads, ancestry, manual recovery and PR scope.
+missing code run followed by docs, queued and running ancestors, nearest-ancestor choice,
+self-exclusion, failed baseline reads, ancestry, manual recovery and PR scope.
 Its trigger, token wiring and publishing assertions read workflow text; they do not run Actions.
 
 ### Separated pushes overlap, so publishing asks before it takes `:main`

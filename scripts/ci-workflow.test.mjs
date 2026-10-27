@@ -2100,7 +2100,7 @@ describe("main push package gates", () => {
     ["docs behind a queued code run", "false", false],
     ["docs behind a cancelled code run", "true", true],
     ["a code push", "true", true],
-  ])("runs package shards for %s according to the classifier", (_name, code, expected) => {
+  ])("evaluates shard gates with the supplied code output for %s", (_name, code, expected) => {
     expect(testShardJobs.length).toBeGreaterThan(0);
     for (const { id, body } of testShardJobs) {
       const line = body.find((entry) => /^ {4}if:/.test(entry));

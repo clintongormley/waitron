@@ -239,7 +239,6 @@ jobs:
           # The `image` job runs on it; a main push also runs it on `code` alone.
           deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
-          # Main always tests the full tree when this range contains code.
           if [ "$EVENT" != "pull_request" ]; then
             scope="global"
             packages=""

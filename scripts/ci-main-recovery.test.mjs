@@ -193,6 +193,16 @@ describe("main CI recovery", () => {
     expect(result.values.code).toBe("false");
     expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
   });
+  it("ignores its own in-progress run beside an eligible code ancestor", () => {
+    const result = classifyRun({
+      runs: [
+        successful(docsHead, { status: "in_progress", conclusion: null }),
+        successful(codeHead),
+      ],
+    });
+    expect(result.values).toMatchObject({ code: "false", scope: "global", deploy: "false" });
+    expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
+  });
   it.each(["cancelled", "failure", "timed_out", "skipped", "neutral", "action_required"])(
     "includes earlier code when its only run completed with %s",
     (conclusion) => {
@@ -214,14 +224,17 @@ describe("main CI recovery", () => {
       ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
     },
   );
-  it("rechecks the full tree on the next code push after an earlier run fails and a docs run passes", () => {
-    expect(
-      classifyRun({
-        sha: nextCodeHead,
-        runs: [successful(docsHead), successful(codeHead, { conclusion: "failure" })],
-      }).values,
-    ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
-  });
+  it.each(["failure", "cancelled"])(
+    "rechecks the full tree on the next code push after an earlier %s and a passing docs run",
+    (conclusion) => {
+      expect(
+        classifyRun({
+          sha: nextCodeHead,
+          runs: [successful(docsHead), successful(codeHead, { conclusion })],
+        }).values,
+      ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
+    },
+  );
   it("can read the baseline when coreutils exposes only gtimeout", () => {
     expect(classifyRun({ gtimeoutOnly: true, runs: [successful(codeHead)] }).values.code).toBe(
       "false",
