@@ -74,8 +74,6 @@ import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery
 import { runInvoiceEmailPass } from "./invoice-email-worker.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
-// The till's invoice delivery routes over HTTP, against synthetic full invoices written through the
-// core (public F1 issuance stays disabled).
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

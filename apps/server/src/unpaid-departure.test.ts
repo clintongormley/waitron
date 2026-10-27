@@ -20,6 +20,7 @@ import {
   saleReceiptGuests,
   saleSettlements,
   sales,
+  tenants,
   unpaidDepartures,
   withTransaction,
 } from "@waitron/db";
@@ -253,8 +254,11 @@ function nextInvoiceNumbers(): { id: string; next: number }[] {
 }
 
 describe("recording that a table left without paying", () => {
-  it("does not issue a saved full-invoice choice while original delivery is unavailable", async () => {
+  it("issues a saved full invoice when the party leaves without paying", async () => {
     const party = await seatedWith(venue, "Botella tinto");
+    await inTx(venue, (tx) =>
+      tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
     await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, party.tabId, {
       revision: await inTx(venue, (tx) => readOrderRevision(tx, party.tabId)),
       invoiceType: "F1",
@@ -265,19 +269,29 @@ describe("recording that a table left without paying", () => {
         countryCode: "ES",
       },
     });
-    const before = nextInvoiceNumbers();
-
     const answer = await depart(party.partyId, {
       expectedPartyRevision: party.revision,
       reason: REASON,
     });
 
-    expect(answer).toEqual({
-      status: 409,
-      json: { code: "sale.full_invoice_unavailable", params: {} },
-    });
-    expect(nextInvoiceNumbers()).toEqual(before);
-    await expectNothingWritten(party.partyId, party.tabId);
+    expect(answer.status, JSON.stringify(answer)).toBe(200);
+    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(
+      venue.db.all(sql`select tipo_factura from registros_facturacion
+      where sale_id in (select id from sales where working_order_id = ${party.tabId})`),
+    ).toEqual([{ tipo_factura: "F1" }]);
+    expect(
+      venue.db.all(sql`select counterparty_tax_id from sales
+      where working_order_id = ${party.tabId}`),
+    ).toEqual([{ counterparty_tax_id: "B12345674" }]);
+    expect(await salesOf(party.tabId)).toEqual([
+      { id: expect.any(String), total: 3000, settledAt: null },
+    ]);
+    expect(await departuresOf(party.tabId)).toEqual([
+      expect.objectContaining({ workingOrderId: party.tabId, amount: 3000, reason: REASON }),
+    ]);
+    expect(await partyState(party.partyId)).toEqual({ state: "closed", closedBy: supervisorId });
+    expect(await tableHeldBy(party.tableId)).toBeNull();
   });
 
   it("invoices the open bill in full, leaves it unpaid, records who and why, and frees the table", async () => {

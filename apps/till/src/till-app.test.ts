@@ -12764,6 +12764,12 @@ describe("till-app", () => {
         .replace(/\s/g, " ");
     }
 
+    it("explains that a Find a bill collection still cannot issue a counter F1", async () => {
+      expect(await findBillPayRefused({ code: "sale.full_invoice_unavailable", status: 409 })).toBe(
+        "El cobro de mostrador todavía no puede emitir una factura completa. Usa una cuenta de mesa y sus pagos.",
+      );
+    });
+
     it("tells the operator a Find a bill collection is over the simplified-invoice limit, naming the limit", async () => {
       expect(
         await findBillPayRefused({
@@ -12773,7 +12779,7 @@ describe("till-app", () => {
           status: 409,
         }),
       ).toBe(
-        "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+        "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
       );
     });
 

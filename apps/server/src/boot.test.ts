@@ -1925,7 +1925,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(till.status).toBe(200);
       expect(await till.json()).toMatchObject({
         simplifiedInvoiceLimit: "3000.00",
-        fullInvoices: false,
+        fullInvoices: true,
       });
 
       const theme = await fetch(`http://127.0.0.1:${port}/api/theme`);

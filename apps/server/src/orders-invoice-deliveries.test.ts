@@ -37,9 +37,6 @@ import { readSettledTicket } from "./till-sale.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { mountOrdersApi } from "./orders-api.js";
 
-// The dashboard's Print invoice (any active printer at the sale's location) and the order detail's
-// delivery status, against synthetic full invoices written through the core (public F1 issuance
-// stays disabled).
 const EMAIL = "cliente@example.test";
 let venue: OrderVenue;
 let fullSeriesId = "";

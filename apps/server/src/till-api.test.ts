@@ -1379,7 +1379,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       setupRevision: expect.stringMatching(/^[0-9a-f]{64}$/),
       // This suite's configuration carries no regime limit.
       simplifiedInvoiceLimit: null,
-      fullInvoices: false,
+      fullInvoices: true,
       themeHash: "e5b913bdac6111b271019fdd50363b9b68977f24809cb00fb7a0cb54c2e72146",
     });
     // Nothing sensitive: no pin, certificate, connection string or AEAT verification url reaches the

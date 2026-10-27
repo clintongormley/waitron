@@ -225,7 +225,7 @@ describe("a counter sale", () => {
   it("does not file an explicit walk-up F1 request as F2", async () => {
     const boot = await send(limited, venue.cookie, "GET", "/api/till");
     expect(boot.status).toBe(200);
-    expect(boot.json.fullInvoices).toBe(false);
+    expect(boot.json.fullInvoices).toBe(true);
 
     const before = written();
     const id = randomUUID();

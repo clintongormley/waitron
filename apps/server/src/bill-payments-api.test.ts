@@ -2969,27 +2969,38 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(await paymentRows(billId)).toHaveLength(1);
   });
 
-  it("refuses an F1 bill before taking cash while original delivery is unavailable", async () => {
-    const billId = await tabWith("Chuletón");
-    await inTx((tx) =>
-      tx
-        .update(workingOrders)
-        .set({
-          invoiceType: "F1",
-          recipientTaxId: "B12345674",
-          recipientLegalName: "Cliente SL",
-          recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
-          recipientCountryCode: "ES",
-        })
-        .where(eq(workingOrders.id, billId)),
-    );
+  it("issues a saved F1 bill offline when its cash payment completes", async () => {
+    const offline = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    try {
+      const billId = await tabWith("Chuletón");
+      await inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({
+            invoiceType: "F1",
+            recipientTaxId: "B12345674",
+            recipientLegalName: "Cliente SL",
+            recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+            recipientCountryCode: "ES",
+          })
+          .where(eq(workingOrders.id, billId)),
+      );
 
-    const refused = await contribute(billId, "25.00");
+      const paid = await contribute(billId, "25.00");
 
-    expect(refused.status).toBe(409);
-    expect(refused.json).toEqual({ code: "sale.full_invoice_unavailable", params: {} });
-    expect(await paymentRows(billId)).toEqual([]);
-    expect(await saleOf(billId)).toEqual([]);
+      expect(paid.status).toBe(200);
+      expect(paid.json).toMatchObject({ outcome: "received", invoice: { total: "25.00" } });
+      expect(await paymentRows(billId)).toHaveLength(1);
+      expect(await saleOf(billId)).toEqual([
+        expect.objectContaining({ counterpartyTaxId: "B12345674", total: 2500 }),
+      ]);
+      expect(
+        suite.db.all(sql`select tipo_factura from registros_facturacion
+      where sale_id = ${(await saleOf(billId))[0]!.id}`),
+      ).toEqual([{ tipo_factura: "F1" }]);
+    } finally {
+      offline.mockRestore();
+    }
   });
 
   it("files nothing while anything is outstanding, then exactly one record", async () => {

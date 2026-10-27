@@ -118,11 +118,11 @@ describe("Find a bill", () => {
   it.each([
     [
       "en",
-      "This would take the order over €3,010.00, the most this till accepts without a full invoice naming the customer, which it cannot issue. Take something off the order.",
+      "This would take the order over €3,010.00, the limit for a simplified invoice. Choose Full invoice on a table bill, or remove items.",
     ],
     [
       "es",
-      "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+      "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
     ],
   ])("words an over-limit refusal naming the limit in %s", async (locale, sentence) => {
     setLocale(locale);
