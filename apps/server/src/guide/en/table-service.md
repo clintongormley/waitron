@@ -164,7 +164,8 @@ under it.
 ## Give a table a short name {#short-names}
 
 A phone or tablet shows a table's short name in the bar's table buttons and the Ready bar, where
-space is tight. In the dashboard's **Floor plan**, each table has a **Short name** under its
+space is tight, and the cards on the [kitchen screen](kitchen-service.md#kitchen-screen) name their
+table by it. In the dashboard's **Floor plan**, each table has a **Short name** under its
 **Name**, filled in from the name: "T1" for "Terrace 1", "Win" for "Window", and a name of four
 characters or fewer as it is. It follows the name until you type your own, of up to five characters,
 which cannot contain "+" because the till uses it for tables joined together. Two tables of the

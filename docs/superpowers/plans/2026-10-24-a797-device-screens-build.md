@@ -6882,10 +6882,10 @@ and `grep -n '\.label' apps/till/src/widgets/station-queue.ts` (ran), each line 
   table by its saved short name, else its label, exactly as the floor read's `shortName`
   (`working-order.ts:8372`, `r.short_name ?? r.label`); today's names never (the Ready bar's rule,
   `tightName`, `apps/till/src/state/floor-today.ts:87-97`). **Absent** when the bill is at no table
-  (a counter order, a delivered order whose table was let go, a party holding none), the read's
-  `optional(...)` habit. Read once per call for every bill before the row loop (CLAUDE.md §3: shared
-  data resolved once, not per line). The server sends names, not one joined string, so the till
-  joins them by one rule (D3).
+  (a counter order, a party holding none), the read's `optional(...)` habit; a delivered order whose
+  table was let go sends the name kept (D3). Read once per call for every bill before the row loop
+  (CLAUDE.md §3: shared data resolved once, not per line). The server sends names, not one joined
+  string, so the till joins them by one rule (D3).
 - **D2. A counter order is a bill with no party; the read already says so.** `party` is absent on a
   bill of no party (`working-order.ts:7395`), and the schema says "a counter order has none"
   (`packages/db/src/schema/orders.ts`, `partyId`). Of the writes to a bill's party (ran `grep -rn

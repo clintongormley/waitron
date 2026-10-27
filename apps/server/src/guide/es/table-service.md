@@ -171,14 +171,15 @@ logotipo, **Con la tecnología de Waitron** debajo.
 ## Dar a una mesa un nombre corto {#short-names}
 
 Un móvil o una tableta muestra el nombre corto de una mesa en los botones de mesa de la barra y en
-la barra Listo, donde hay poco espacio. En el **Plano de sala** del panel, cada mesa tiene un
-**Nombre corto** debajo de su **Nombre**, que se rellena a partir del nombre: «T1» para «Terraza 1»,
-«Ven» para «Ventana», y un nombre de cuatro caracteres o menos tal cual. Sigue al nombre hasta que
-escribes uno propio, de hasta cinco caracteres, que no puede llevar «+» porque la caja lo usa para
-las mesas unidas. Dos mesas del local no pueden compartir un nombre corto, aunque cambien las
-mayúsculas: si Guardar dice «Terraza 1 ya usa T1», escribe otro, como «Tb1». **Añadir mesas**
-muestra los nombres cortos que dará, y deja escribirlos cuando eliges nombres personalizados;
-**Añadir mesa unida** pide uno.
+la barra Listo, donde hay poco espacio, y las tarjetas de la [pantalla de
+cocina](kitchen-service.md#kitchen-screen) nombran su mesa por él. En el **Plano de sala** del
+panel, cada mesa tiene un **Nombre corto** debajo de su **Nombre**, que se rellena a partir del
+nombre: «T1» para «Terraza 1», «Ven» para «Ventana», y un nombre de cuatro caracteres o menos tal
+cual. Sigue al nombre hasta que escribes uno propio, de hasta cinco caracteres, que no puede llevar
+«+» porque la caja lo usa para las mesas unidas. Dos mesas del local no pueden compartir un nombre
+corto, aunque cambien las mayúsculas: si Guardar dice «Terraza 1 ya usa T1», escribe otro, como
+«Tb1». **Añadir mesas** muestra los nombres cortos que dará, y deja escribirlos cuando eliges
+nombres personalizados; **Añadir mesa unida** pide uno.
 
 ## Ver qué mesas tienen comida lista {#ready-bar}
 

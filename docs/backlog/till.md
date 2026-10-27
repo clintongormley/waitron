@@ -1049,7 +1049,8 @@ may predate that branch:
   landed in #2113, from the plan's slice 7. Slice 8 (the kitchen screen's group cards: one card per
   group in Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no
   Tickets view) landed in #2123, from the plan's slice 8. Slice 8b (short names on the cards, and
-  "Counter #12") is in review, from the plan's slice 8b; next, slice 9, taking turns with lane G's
+  "Counter #12" for a counter order at no table) is in review, from the plan's slice 8b; next,
+  slice 9, taking turns with lane G's
   A773-2 on the station screen (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for

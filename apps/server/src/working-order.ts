@@ -7389,7 +7389,8 @@ export interface StationQueueGroup {
   orderNumber: number;
   label: string | null;
   /** The short names, else labels, of the tables the bill is at: its party's, as
-   *  {@link billPartyTables} chooses them, or a counter order's delivery table; absent when none. */
+   *  {@link billPartyTables} chooses them, or a counter order's delivery table, or the name kept
+   *  once that delivery table was let go; absent when none. */
   tableShortNames?: string[];
   queuedAt: string;
   /** The station queue offers Collect on a `settled` order alone; a placed counter order is handed
@@ -7611,7 +7612,8 @@ export async function listStationQueue(
   return (await listStationQueues(tx, [stationId])).get(stationId)!;
 }
 
-/** {@link StationQueueGroup.tableShortNames} for each bill that is at a table, keyed by bill. */
+/** {@link StationQueueGroup.tableShortNames} for each bill that is at a table, or whose delivery
+ *  table was let go, keyed by bill. */
 async function readBillTableShortNames(
   tx: Transaction,
   bills: readonly {

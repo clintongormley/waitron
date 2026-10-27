@@ -1653,7 +1653,8 @@ export interface StationQueueGroup {
   orderNumber: number;
   label: string | null;
   /** The short names, else labels, of the tables the bill is at: its party's, or the table a
-   *  counter order is delivered to; absent when none. */
+   *  counter order is delivered to, or the name kept once that table was let go; absent when
+   *  none. */
   tableShortNames?: string[];
   queuedAt: string;
   /** The order's own status. Abandoned and collected orders are excluded server-side, so a `settled`

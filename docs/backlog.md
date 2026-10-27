@@ -133,7 +133,8 @@ come after the list above:
   from the build plan's slice 7. Slice 8 (the kitchen screen's group cards: one card per group in
   Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no Tickets
   view) landed in #2123, from the build plan's slice 8. Slice 8b (a kitchen card names its table
-  by the table's short name, and a counter order "Counter #12") is in review, from the build
+  by the table's short name, and a counter order at no table "Counter #12") is in
+  review, from the build
   plan's slice 8b; next, slice 9, taking turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
@@ -2784,6 +2785,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Read only: after their waits both set `orderParty` from their own read without checking a newer
   one (`till-app.ts`), until the next command's `party.out_of_date` reloads; check the revision as
   `#rememberOrderParty` does. Believed to predate A797 slice 3 (ba517141a, c9ad7a634).
+
+- **A1140. Splitting a counter order delivered to a table leaves the new bill with no delivery
+  table.** The split bill takes its table's name as its label but not its delivery table
+  (`apps/server/src/bill-actions.ts`, `createOpenOrder` beside `orderTableLabel`), so since A797
+  slice 8b its kitchen card reads "Counter #13 Terrace 4" where the original reads "#12 T4". Left
+  open by slice 8b (its plan's D3): copy the delivery table on a split.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
