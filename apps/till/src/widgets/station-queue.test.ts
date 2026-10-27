@@ -3483,4 +3483,47 @@ describe("till-station-queue: a card's layout", () => {
       });
     },
   );
+  const twoCards = async () => {
+    await pageAt(1280, 800);
+    const mounted = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        ageBill(7, [ageDish("waiting", 15)]),
+        ageBill(8, [ageDish("ready", 15, { state: "ready" })]),
+      ],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const head = (order: number) =>
+      cardOf(mounted.el, order).querySelector<HTMLElement>(".ticket-head")!;
+    expect(head(7).matches("button")).toBe(true);
+    expect(head(8).matches("button")).toBe(false);
+    return { el: mounted.el, head };
+  };
+
+  it("a heading button's words sit at its vertical centre", async () => {
+    const { head } = await twoCards();
+    const words = [...head(7).querySelectorAll(":scope > :not(.visually-hidden)")].map(rect);
+    const middle =
+      (Math.min(...words.map((w) => w.top)) + Math.max(...words.map((w) => w.bottom))) / 2;
+    const box = rect(head(7));
+    expect(box.height).toBeGreaterThan(Math.max(...words.map((w) => w.height)) + 2);
+    expect(Math.abs(middle - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1);
+  });
+
+  it("a Ready card's heading is as tall as a Waiting card's", async () => {
+    const { head } = await twoCards();
+    expect(Math.abs(rect(head(8)).height - rect(head(7)).height)).toBeLessThanOrEqual(1);
+  });
+
+  it("a heading is ruled off from its dishes in the card's border colour and width", async () => {
+    const { el, head } = await twoCards();
+    el.style.setProperty("--wt-color-border", "rgb(13, 14, 15)");
+    for (const order of [7, 8]) {
+      const style = getComputedStyle(head(order));
+      const card = getComputedStyle(cardOf(el, order));
+      expect(style.borderBottomStyle).toBe("solid");
+      expect(style.borderBottomColor).toBe("rgb(13, 14, 15)");
+      expect(style.borderBottomWidth).toBe(card.borderLeftWidth);
+    }
+  });
 });

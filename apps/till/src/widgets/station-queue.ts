@@ -155,16 +155,17 @@ export class TillStationQueue extends LitElement {
 
       .ticket-head {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+        border: none;
+        border-bottom: 1px solid var(--wt-color-border);
       }
 
       button.ticket-head {
         width: 100%;
-        min-height: var(--wt-tap-min);
         margin: 0;
         padding: 0;
-        border: none;
         background: none;
         color: var(--wt-color-text);
         font: inherit;
@@ -257,10 +258,6 @@ export class TillStationQueue extends LitElement {
         align-items: flex-start;
         gap: var(--wt-space-1);
         margin-bottom: var(--wt-space-1);
-      }
-
-      .movable > .line {
-        align-self: stretch;
       }
 
       /* The dish row: qty× name. */
