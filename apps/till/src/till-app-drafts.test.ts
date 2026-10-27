@@ -38,6 +38,7 @@ import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   FreshDraftLineInput,
   OrderGroup,
+  PrintProblem,
   TableState,
   TableParty,
   TillApi,
@@ -272,7 +273,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     })),
     getPartyBills: vi.fn().mockResolvedValue([]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({
       revision: 3,
       hasGroups: false,
@@ -282,7 +283,6 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       ungrouped: [],
       reminder: null,
     }),
-    listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),
     listDrafts: server.listDrafts,
     saveDraft: server.saveDraft,
@@ -1962,7 +1962,9 @@ describe("till-app: sending the draft", () => {
 
     async function arranged(overrides: Record<string, unknown> = {}) {
       const { el } = await mountApp({
-        listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: destinations }),
+        listGroups: vi
+          .fn()
+          .mockResolvedValue({ revision: 3, groups: destinations, printProblems: [] }),
         ...overrides,
       });
       await openTable(el);
@@ -2138,7 +2140,9 @@ describe("till-app: sending the draft", () => {
       when: "save" | "submit" | "party",
       overrides: Record<string, unknown> = {},
     ) {
-      const listGroups = vi.fn().mockResolvedValue({ revision: 3, groups: [mains, desserts] });
+      const listGroups = vi
+        .fn()
+        .mockResolvedValue({ revision: 3, groups: [mains, desserts], printProblems: [] });
       const { el } = await mountApp({
         listGroups,
         readCurrentOrders: vi.fn().mockResolvedValue(current),
@@ -2165,6 +2169,7 @@ describe("till-app: sending the draft", () => {
         listGroups.mockResolvedValue({
           revision: 4,
           groups: [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts],
+          printProblems: [],
         });
         api.getTablesState!.mockResolvedValue([
           { ...table4, party: { ...table4.party!, revision: 4 } },
@@ -2223,6 +2228,37 @@ describe("till-app: sending the draft", () => {
         expect(api.submitDraft).toHaveBeenCalledTimes(when === "save" ? 0 : 1);
       },
     );
+
+    it("shows the printing problems the recovery read with the groups", async () => {
+      const problems: PrintProblem[] = [
+        {
+          workingOrderId: "wo-4",
+          stationId: "st-1",
+          stationName: "Cocina",
+          since: "2026-09-27T10:00:00Z",
+        },
+      ];
+      const { el, store, detail, listGroups } = await raced("submit");
+      expect(tableOrder(el)!.printProblems).toEqual([]);
+      api.submitDraft!.mockReset().mockImplementationOnce(() => {
+        listGroups.mockResolvedValue({
+          revision: 4,
+          groups: [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts],
+          printProblems: problems,
+        });
+        api.getTablesState!.mockResolvedValue([
+          { ...table4, party: { ...table4.party!, revision: 4 } },
+          table7,
+        ]);
+        throw { code: "group.not_held", status: 409, groupId: mains.id };
+      });
+      const groupReads = listGroups.mock.calls.length;
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await vi.waitFor(() => expect(banner(el)?.textContent).toContain("Group 7"));
+      expect(listGroups).toHaveBeenCalledTimes(groupReads + 1);
+      expect(tableOrder(el)!.printProblems).toEqual(problems);
+    });
 
     it("keeps the Floor on the repair's newer floor when a floor read started before it answers last", async () => {
       const { el, detail, store } = await raced("submit");
@@ -2288,6 +2324,7 @@ describe("till-app: sending the draft", () => {
           api.listGroups!.mockResolvedValue({
             revision: snapshot === "older-groups" ? 2 : 4,
             groups: [desserts],
+            printProblems: [],
           });
           api.readCurrentOrders!.mockResolvedValue({
             ...current,
@@ -2314,7 +2351,11 @@ describe("till-app: sending the draft", () => {
     it("keeps restored held targets after a delayed group refusal", async () => {
       const { el, store, before, detail } = await raced("submit");
       api.submitDraft!.mockReset().mockImplementationOnce(() => {
-        api.listGroups!.mockResolvedValue({ revision: 4, groups: [mains, desserts] });
+        api.listGroups!.mockResolvedValue({
+          revision: 4,
+          groups: [mains, desserts],
+          printProblems: [],
+        });
         api.getTablesState!.mockResolvedValue([
           { ...table4, party: { ...table4.party!, revision: 4 } },
           table7,
@@ -2428,7 +2469,7 @@ describe("till-app: sending the draft", () => {
     it("retains the local candidate when the authoritative draft revision moved", async () => {
       const { el, store, before, detail } = await raced("submit");
       api.submitDraft!.mockReset().mockImplementationOnce(() => {
-        api.listGroups!.mockResolvedValue({ revision: 4, groups: [desserts] });
+        api.listGroups!.mockResolvedValue({ revision: 4, groups: [desserts], printProblems: [] });
         const own = server.drafts[0]!;
         server.drafts = [
           {
@@ -2533,7 +2574,7 @@ describe("till-app: sending the draft", () => {
       summary: "1 × Steak",
     };
     const { el } = await mountApp({
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held] }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held], printProblems: [] }),
       readCurrentOrders: vi.fn().mockResolvedValue(
         current({
           revision: 3,
@@ -3546,7 +3587,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
   ) {
     const mounted = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), courses: placementCourses }),
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups, printProblems: [] }),
       readCurrentOrders: vi.fn().mockResolvedValue({
         revision: 3,
         hasGroups,
@@ -3731,9 +3772,9 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
       listGroups: vi.fn(async (partyId: string) => {
-        if (partyId === "v7") return { revision: 9, groups: [held] };
+        if (partyId === "v7") return { revision: 9, groups: [held], printProblems: [] };
         await new Promise<void>((resolve) => (answerGroups = resolve));
-        return { revision: 3, groups: [] };
+        return { revision: 3, groups: [], printProblems: [] };
       }),
     });
     server.save("v1", {
@@ -3868,9 +3909,9 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     const { el } = await mountApp({
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
       listGroups: vi.fn(async (partyId: string) => {
-        if (partyId !== "v9") return { revision: 3, groups: [] };
+        if (partyId !== "v9") return { revision: 3, groups: [], printProblems: [] };
         await new Promise<void>((resolve) => (answerGroups = resolve));
-        return { revision: 1, groups: [held] };
+        return { revision: 1, groups: [held], printProblems: [] };
       }),
     });
     await openTable(el);
@@ -10097,6 +10138,7 @@ describe("held-line move editing authority", () => {
       listGroups: vi.fn().mockResolvedValue({
         revision: 3,
         groups: [orderGroup("g3", 3, "held"), orderGroup("g4", 4, "held")],
+        printProblems: [],
       }),
       readCurrentOrders: vi.fn().mockResolvedValue(
         current({

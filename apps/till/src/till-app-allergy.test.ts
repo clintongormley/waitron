@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
-import type { TillApi } from "./api/client.js";
+import type { PrintProblem, TillApi } from "./api/client.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
@@ -78,7 +78,7 @@ describe("A669 live table editor", () => {
     await openTable(el);
     await addDish(el);
     api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
-    api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [], printProblems: [] });
     api.readCurrentOrders!.mockResolvedValue({
       revision: 4,
       hasGroups: false,
@@ -157,7 +157,7 @@ describe("A669 live table editor", () => {
     await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
     await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
     api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
-    api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [], printProblems: [] });
     api.readCurrentOrders!.mockResolvedValue({
       revision: 4,
       hasGroups: false,
@@ -176,6 +176,54 @@ describe("A669 live table editor", () => {
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1]![1].expectedPartyRevision).toBe(4);
     expect(save.mock.calls[1]![1].submissionId).not.toBe(save.mock.calls[0]![1].submissionId);
+  });
+
+  it("shows the printing problems the refresh after a stale editor refusal reads with the groups", async () => {
+    const problems: PrintProblem[] = [
+      {
+        workingOrderId: "wo-4",
+        stationId: "st-1",
+        stationName: "Cocina",
+        since: "2026-09-27T10:00:00Z",
+      },
+    ];
+    const read = vi.fn().mockResolvedValue(allergyView("none"));
+    const save = vi.fn().mockImplementationOnce(async () => {
+      read.mockResolvedValue({
+        ...allergyView("none"),
+        snapshot: { ...allergyView("none").snapshot, revision: 4 },
+      });
+      throw { code: "party.out_of_date" };
+    });
+    const { el } = await mountApp({ readPartyAllergy: read, savePartyAllergy: save });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    expect(screen.printProblems).toEqual([]);
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [], printProblems: problems });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    const groupReads = api.listGroups!.mock.calls.length;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+    await flush(el);
+    expect(api.listGroups).toHaveBeenCalledTimes(groupReads + 1);
+    expect(screen.printProblems).toEqual(problems);
   });
 
   it("cancels an editor opening read when navigation leaves its party", async () => {
@@ -380,7 +428,7 @@ describe("A669 live table editor", () => {
     };
     read.mockResolvedValue(latest);
     api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
-    api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [], printProblems: [] });
     api.readCurrentOrders!.mockResolvedValue({
       revision: 4,
       hasGroups: false,
@@ -710,7 +758,7 @@ it.each([
 
 it("refreshes party metadata before using a newer allergy revision without replacing the draft", async () => {
   const getTablesState = vi.fn().mockResolvedValue([table4]);
-  const listGroups = vi.fn().mockResolvedValue({ revision: 5, groups: [] });
+  const listGroups = vi.fn().mockResolvedValue({ revision: 5, groups: [], printProblems: [] });
   const readCurrentOrders = vi.fn().mockResolvedValue({
     revision: 5,
     hasGroups: false,
@@ -775,7 +823,7 @@ describe("a floor read started before the metadata re-read and answering after i
       }),
     );
   const newerParty = {
-    listGroups: vi.fn().mockResolvedValue({ revision: 5, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 5, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({
       revision: 5,
       hasGroups: false,

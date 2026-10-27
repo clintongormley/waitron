@@ -4185,7 +4185,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
         lines: [...bill120, tiramisu],
         revision: 0,
       }),
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held] }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held], printProblems: [] }),
       readCurrentOrders: vi.fn().mockResolvedValue(currentOrders),
       getPartyBills: vi.fn(async () => [
         billOf({ total: "126.00", outstanding: paid ? "120.00" : "126.00", hasPayments: paid }),

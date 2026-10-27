@@ -284,7 +284,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markTableCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     markServed: vi.fn().mockResolvedValue({ revision: 4 }),
     unmarkServed: vi.fn().mockResolvedValue({ revision: 4 }),
@@ -4930,7 +4930,7 @@ describe("till-app: the order's groups", () => {
   it("reads the party's groups with the order's lines and gives them to the screen", async () => {
     const groups = [groupOf("g1", 1, "held")];
     const { el } = await mountApp({
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups, printProblems: [] }),
     });
     const order = await openMesa(el);
     expect(api.listGroups).toHaveBeenCalledWith("v1");
@@ -4941,7 +4941,7 @@ describe("till-app: the order's groups", () => {
     const groups = [groupOf("g1", 1, "held")];
     const { el } = await mountApp({
       ...onTablet(),
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups, printProblems: [] }),
     });
     const screen = await toFloor(el);
     emit(screen, "open-table", { tableId: "t4", seated: true });
@@ -5544,7 +5544,7 @@ describe("till-app: the order's groups", () => {
           lines: lines.map((line) => ({ ...line })),
           revision: 0,
         })),
-        listGroups: vi.fn(async () => ({ revision, groups: listed() })),
+        listGroups: vi.fn(async () => ({ revision, groups: listed(), printProblems: [] })),
         readCurrentOrders: vi.fn(async (): Promise<CurrentOrders> => ({
           revision,
           hasGroups: listed().length > 0,
@@ -6637,7 +6637,11 @@ describe("till-app: submitting the draft", () => {
       groups,
       /** The floor lists the party at the revision the server holds. */
       getTablesState: vi.fn(async () => [seated({}, { revision }), table7, table9]),
-      listGroups: vi.fn(async () => ({ revision, groups: groups.map((group) => ({ ...group })) })),
+      listGroups: vi.fn(async () => ({
+        revision,
+        groups: groups.map((group) => ({ ...group })),
+        printProblems: [],
+      })),
       submitDraft: vi.fn(async (partyId: string, draftId: string, submission: SubmitArgs[2]) => {
         if (submission.expectedPartyRevision !== revision)
           throw { code: "party.out_of_date", partyId: "v1" };
@@ -6851,6 +6855,7 @@ describe("till-app: submitting the draft", () => {
             vi.mocked(api.listGroups).mockResolvedValue({
               revision: 4,
               groups: [firedGroup("g1", "1 × Beer")],
+              printProblems: [],
             });
             return { ...drafts.apply(...args), tabId: "wo-4", revision: 4, groups: [] };
           }),
@@ -6889,7 +6894,11 @@ describe("till-app: submitting the draft", () => {
     it("keeps a later addition's rest a later addition", async () => {
       const prior = firedGroup("g-prior", "1 × Coffee");
       const { el } = await mountApp(
-        onRecordedBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
+        onRecordedBill({
+          listGroups: vi
+            .fn()
+            .mockResolvedValue({ revision: 3, groups: [prior], printProblems: [] }),
+        }),
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
@@ -6916,9 +6925,11 @@ describe("till-app: submitting the draft", () => {
       });
       const { el } = await mountApp(
         onRecordedBill({
-          listGroups: vi
-            .fn()
-            .mockResolvedValue({ revision: 3, groups: [held("g-a", 1), held("g-b", 2)] }),
+          listGroups: vi.fn().mockResolvedValue({
+            revision: 3,
+            groups: [held("g-a", 1), held("g-b", 2)],
+            printProblems: [],
+          }),
         }),
       );
       const order = await openMesa(el);
@@ -7133,20 +7144,37 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
       since: "2026-09-27T10:02:00Z",
     },
   ];
+  const groupsWith = (printProblems: PrintProblem[]) => ({
+    revision: 3,
+    groups: [],
+    printProblems,
+  });
 
   it("reads them with the order and gives them to the screen", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
     });
     const order = await openMesa(el);
-    expect(api.listPrintProblems).toHaveBeenCalledWith("v1");
+    expect(api.listGroups).toHaveBeenCalledWith("v1");
+    expect(order.printProblems).toEqual(problems);
+  });
+
+  it("takes them from the groups read and makes no separate printing-problems request", async () => {
+    const listPrintProblems = vi.fn();
+    const { el } = await mountApp({
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
+      listPrintProblems,
+    });
+    const order = await openMesa(el);
+    expect(api.listGroups).toHaveBeenCalledWith("v1");
+    expect(listPrintProblems).not.toHaveBeenCalled();
     expect(order.printProblems).toEqual(problems);
   });
 
   it("gives them to an order shown as a card too", async () => {
     const { el } = await mountApp({
       ...onTablet(),
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
     });
     const screen = await toFloor(el);
     emit(screen, "open-table", { tableId: "t4", seated: true });
@@ -7156,7 +7184,8 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 
   it("a failed read shows none, and the order still opens", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openMesa(el);
     expect(order.printProblems).toEqual([]);
@@ -7165,10 +7194,10 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 
   it("Reprint reprints each bill through the kitchen reprint, then reads again, and the notice clears once none is left", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi
+      listGroups: vi
         .fn()
-        .mockResolvedValueOnce({ problems })
-        .mockResolvedValue({ problems: [] }),
+        .mockResolvedValueOnce(groupsWith(problems))
+        .mockResolvedValue(groupsWith([])),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
     });
     const order = await openMesa(el);
@@ -7176,14 +7205,14 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
     emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
     await flush(el);
     expect(vi.mocked(api.reprintOrder).mock.calls).toEqual([["wo-4"], ["wo-check"]]);
-    expect(api.listPrintProblems).toHaveBeenCalledTimes(2);
+    expect(api.listGroups).toHaveBeenCalledTimes(2);
     expect(order.printProblems).toEqual([]);
     expect(banner(el)).toBeNull();
   });
 
   it("a refused Reprint says why and reads again", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
       reprintOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
     });
     const order = await openMesa(el);
@@ -7191,7 +7220,7 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
     await flush(el);
     expect(api.reprintOrder).toHaveBeenCalledOnce();
     expect(banner(el)!.textContent).toContain(codeMessage("working_order.not_found"));
-    expect(api.listPrintProblems).toHaveBeenCalledTimes(2);
+    expect(api.listGroups).toHaveBeenCalledTimes(2);
   });
 
   const reprintButton = (order: TillTableOrderScreen) =>
@@ -7200,7 +7229,7 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
   it("a second press while a Reprint runs sends nothing", async () => {
     let finish!: () => void;
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
       reprintOrder: vi.fn(
         () => new Promise<void>((resolve) => (finish = () => resolve(undefined))),
       ),
@@ -7217,7 +7246,7 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 
   it("while the server still reports them, the bills sent again show as sent and offer no Reprint", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
     });
     const order = await openMesa(el);
@@ -7235,7 +7264,7 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 
   it("a Reprint refused part way marks only the bills that were sent", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
       reprintOrder: vi
         .fn()
         .mockResolvedValueOnce(undefined)
@@ -7251,20 +7280,20 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 
   it("opening the table again reads the problems afresh and offers Reprint again", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
     });
     const order = await openMesa(el);
     emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4", "wo-check"] });
     await flush(el);
     expect(order.reprintSent).toEqual(["wo-4", "wo-check"]);
-    const reads = vi.mocked(api.listPrintProblems).mock.calls.length;
+    const reads = vi.mocked(api.listGroups).mock.calls.length;
     emit(order, "back-to-floor");
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     const reopened = tableOrder(el)!;
-    expect(api.listPrintProblems).toHaveBeenCalledTimes(reads + 1);
+    expect(api.listGroups).toHaveBeenCalledTimes(reads + 1);
     expect(reopened.reprintSent).toEqual([]);
     await reopened.updateComplete;
     expect(reprintButton(reopened)).not.toBeNull();
@@ -7272,7 +7301,7 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 
   it("a Reprint that fails with no code says so in general words", async () => {
     const { el } = await mountApp({
-      listPrintProblems: vi.fn().mockResolvedValue({ problems }),
+      listGroups: vi.fn().mockResolvedValue(groupsWith(problems)),
       reprintOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openMesa(el);
@@ -7804,6 +7833,7 @@ describe("till-app: Current orders", () => {
                 lineIds: group.rows.map((row) => row.lineId),
                 summary: group.rows[0]!.name,
               })),
+              printProblems: [],
             })),
             [action === "fire" ? "fireGroup" : "markServed"]: send,
           });
@@ -8115,6 +8145,7 @@ describe("till-app: Current orders", () => {
               lineIds: group.rows.map((row) => row.lineId),
               summary: group.rows[0]!.name,
             })),
+            printProblems: [],
           })),
           reorderGroups: vi.fn(async () => {
             moved = true;
@@ -8188,7 +8219,7 @@ describe("till-app: Current orders", () => {
       const group: OrderGroup = { ...held, courseIds: [], lineIds: ["line-1"], summary: "Vino ×1" };
       const { el } = await mountApp({
         readCurrentOrders: vi.fn().mockResolvedValue({ ...orders, reminder: null, groups: [held] }),
-        listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [group] }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [group], printProblems: [] }),
       });
       const order = await openMesa(el);
       const panel = await visiblePanel(order);
@@ -8577,6 +8608,7 @@ describe("till-app: Current orders", () => {
             summary: "1 × Pulpo",
           },
         ],
+        printProblems: [],
       }),
       moveLinesToGroup,
     });

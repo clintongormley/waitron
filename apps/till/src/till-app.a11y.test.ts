@@ -301,7 +301,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         },
       ]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
       getPartyBills: vi.fn().mockResolvedValue([]),
       ...(({ listDrafts, saveDraft, submitDraft }) => ({ listDrafts, saveDraft, submitDraft }))(
         draftServer(),

@@ -3829,6 +3829,7 @@ export class TillApp extends LitElement {
     this.#applyTables(tablesRead, tables);
     this.orderParty = party;
     this.tabGroups = groups.groups;
+    this.printProblems = groups.printProblems;
     this.currentOrders = orders;
   }
 
@@ -11029,7 +11030,6 @@ export class TillApp extends LitElement {
       return;
     }
     const groups = this.#readGroups();
-    const problems = this.#readPrintProblems();
     const orders = this.#readCurrentOrders();
     try {
       const tab = await this.api.getTabLines(this.activeTabId);
@@ -11040,8 +11040,7 @@ export class TillApp extends LitElement {
       if (read !== this.#tabLinesRead) return;
       this.tabLines = [];
     }
-    const partyGroups = await groups;
-    const partyProblems = await problems;
+    const { groups: partyGroups, printProblems: partyProblems } = await groups;
     const partyOrders = await orders;
     if (read !== this.#tabLinesRead) return;
     this.tabGroups = partyGroups ?? [];
@@ -11061,17 +11060,6 @@ export class TillApp extends LitElement {
       return await this.api.readCurrentOrders(party.id);
     } catch {
       return null;
-    }
-  }
-
-  /** A failed read shows no problem: the notice is advice, and ordering never waits on it. */
-  async #readPrintProblems(): Promise<PrintProblem[]> {
-    const party = this.orderParty;
-    if (party === null) return [];
-    try {
-      return (await this.api.listPrintProblems(party.id)).problems;
-    } catch {
-      return [];
     }
   }
 
@@ -11098,14 +11086,15 @@ export class TillApp extends LitElement {
   }
 
   /** The groups' revision is not kept: a command sends the revision the party was shown at. A failed
-   * read answers null. */
-  async #readGroups(): Promise<OrderGroup[] | null> {
+   * read answers null groups and no printing problem. */
+  async #readGroups(): Promise<{ groups: OrderGroup[] | null; printProblems: PrintProblem[] }> {
     const party = this.orderParty;
-    if (party === null) return [];
+    if (party === null) return { groups: [], printProblems: [] };
     try {
-      return (await this.api.listGroups(party.id)).groups;
+      const { groups, printProblems } = await this.api.listGroups(party.id);
+      return { groups, printProblems };
     } catch {
-      return null;
+      return { groups: null, printProblems: [] };
     }
   }
 
@@ -11835,6 +11824,7 @@ export class TillApp extends LitElement {
       this.#applyTables(tablesRead, tables);
       this.orderParty = party;
       this.tabGroups = groups.groups;
+      this.printProblems = groups.printProblems;
       this.currentOrders = orders;
       this.#groupsUnread = false;
       this.#groupsReadFor = partyId;

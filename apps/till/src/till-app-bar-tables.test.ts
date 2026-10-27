@@ -281,7 +281,7 @@ function stubApi(formFactor: FormFactor, overrides: Record<string, unknown> = {}
     })),
     getPartyBills: vi.fn().mockResolvedValue([]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({
       revision: 3,
       hasGroups: false,
@@ -291,7 +291,6 @@ function stubApi(formFactor: FormFactor, overrides: Record<string, unknown> = {}
       ungrouped: [],
       reminder: null,
     }),
-    listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
     listDrafts: server.listDrafts,
     saveDraft: server.saveDraft,
     submitDraft: server.submitDraft,
