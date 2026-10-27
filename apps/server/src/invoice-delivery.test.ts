@@ -32,7 +32,7 @@ import {
 import { recordSale } from "@waitron/core";
 import { readPrivacyContact, savePrivacyContact } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
-import type { TrustedClock } from "@waitron/fiscal";
+import type { FiledReceipt, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import {
@@ -42,6 +42,7 @@ import {
 } from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
 import { runInvoiceEmailPass, runInvoiceEmailLoop } from "./invoice-email-worker.js";
+import { readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as documentFixture } from "./testing/full-invoice-fixture.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -2139,6 +2140,57 @@ describe("invoice email worker pass", () => {
       reported_outcome: "unknown",
     });
     expect(JSON.stringify(await rows())).not.toContain("private data");
+  });
+
+  it("sends the privacy facts as stored, changed and cleared between passes", async () => {
+    const { sale, delivery } = await queued();
+    const filed: FiledReceipt = { verificationUrl: "https://example.com/verify", vatBreakdown: [] };
+    const backend = { filedReceiptFor: async () => filed } as unknown as FiscalBackend;
+    const sent: unknown[] = [];
+    const pass = () =>
+      runInvoiceEmailPass({
+        db: suite.db,
+        holder: "server-one",
+        now: () => new Date("2026-12-01T00:00:00.000Z"),
+        readDocument: documentFor,
+        readPrivacy: (tx, queuedEmail) => readInvoiceEmailPrivacy(backend, tx, queuedEmail.saleId),
+        send: async (message) => {
+          sent.push(message.privacy);
+          return { status: "sent" };
+        },
+      });
+    const store = (privacyEmail: string | null, privacyNoticeUrl: string | null) =>
+      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyEmail, privacyNoticeUrl }));
+    const queueCopy = async () => {
+      const copy = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, email()),
+      );
+      await dueAtStart(copy.id);
+      return copy.id;
+    };
+
+    await store("privacy@example.com", "https://example.com/privacy");
+    expect(await pass()).toEqual({ processed: true, deliveryId: delivery.id });
+    await store("rights@example.com", "https://example.com/rights");
+    const second = await queueCopy();
+    expect(await pass()).toEqual({ processed: true, deliveryId: second });
+    await store(null, null);
+    const third = await queueCopy();
+    expect(await pass()).toEqual({ processed: true, deliveryId: third });
+
+    expect(sent).toEqual([
+      {
+        privacyEmail: "privacy@example.com",
+        privacyNoticeUrl: "https://example.com/privacy",
+        taxRecord: true,
+      },
+      {
+        privacyEmail: "rights@example.com",
+        privacyNoticeUrl: "https://example.com/rights",
+        taxRecord: true,
+      },
+      { privacyEmail: null, privacyNoticeUrl: null, taxRecord: true },
+    ]);
   });
 
   it("sanitises a privacy read failure without a send or an automatic replay", async () => {
