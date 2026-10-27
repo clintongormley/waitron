@@ -13,7 +13,7 @@ import type { VatClass } from "./vat-rates.js";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
 import { unitSeedStates, units } from "./schema/units.js";
-import { STARTER_UNIT_NAMES } from "./starter-content.js";
+import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
 /** The starter units, by their English staff names; their words in other languages are in
  * `starter-content.ts`. */
@@ -42,6 +42,8 @@ export const STARTER_UNITS = [
   },
   { seedKey: "l", staffName: "Litre", staffAbbreviation: "l", precision: 3, hardwareUnit: null },
 ] as const;
+
+export const FIRST_MENU_NAME = "Menu";
 
 // The pale blue swatch of CATEGORY_PALETTE (packages/ui/src/category-color.ts).
 const NEW_VENUE_DEFAULT_COLOR = "#abcced";
@@ -92,18 +94,18 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         .values({ id: 1 })
         .onConflictDoNothing({ target: unitSeedStates.id })
         .returning({ id: unitSeedStates.id });
+      const starter = resolveInstalledStarterLanguages({
+        country,
+        area,
+        receiptLocale: location?.invoiceLocales[0],
+      });
       if (claimed.length > 0) {
-        const { languages, staffLanguage } = resolveInstalledStarterLanguages({
-          country,
-          area,
-          receiptLocale: location?.invoiceLocales[0],
-        });
         await tx.insert(units).values(
           STARTER_UNITS.map(({ staffName: english, staffAbbreviation, ...unit }) => {
-            const name = starterNames(STARTER_UNIT_NAMES, english, languages);
+            const name = starterNames(STARTER_UNIT_NAMES, english, starter.languages);
             return {
               ...unit,
-              staffName: starterName(STARTER_UNIT_NAMES, english, staffLanguage),
+              staffName: starterName(STARTER_UNIT_NAMES, english, starter.staffLanguage),
               staffAbbreviation,
               name,
               abbreviation: Object.fromEntries(
@@ -118,7 +120,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       if (catalogueId === null) {
         const [created] = await tx
           .insert(catalogues)
-          .values({ name: "Menu" })
+          .values({ name: starterName(STARTER_MENU_NAMES, FIRST_MENU_NAME, starter.staffLanguage) })
           .returning({ id: catalogues.id, name: catalogues.name });
         catalogueId = created!.id;
         await createMenuShell(tx, catalogueId, created!.name);

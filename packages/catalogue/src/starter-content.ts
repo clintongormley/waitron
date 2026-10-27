@@ -1,4 +1,8 @@
-import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
+import type {
+  StarterContentLanguage,
+  StarterStaffLanguage,
+  StarterTranslations,
+} from "@waitron/country-packs";
 
 /** The starter units' names in each language a new venue can start with, keyed by the English
  * staff name `provisioning.ts` seeds. */
@@ -24,3 +28,9 @@ export const STARTER_UNIT_NAMES = {
   },
   Litre: { es: "Litro", ca: "Litre", "ca-ES-valencia": "Litre", gl: "Litro" },
 } as const satisfies StarterTranslations<StarterContentLanguage>;
+
+/** The first menu's name, keyed by the English name in `provisioning.ts`. A one-name row holds the
+ * staff language only, so this carries each staff language but English. */
+export const STARTER_MENU_NAMES = {
+  Menu: { es: "Carta" },
+} as const satisfies StarterTranslations<Exclude<StarterStaffLanguage, "en">>;

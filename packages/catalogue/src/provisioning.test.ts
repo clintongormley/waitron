@@ -1,6 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  catalogues,
   CORE_MIGRATIONS,
   locationCatalogues,
   locations,
@@ -12,13 +13,13 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { CATALOGUE_PROVISIONING } from "./provisioning.js";
+import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
 import { contentLanguages, menuDetails } from "./schema/menu.js";
 import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
 import { sections } from "./schema/sections.js";
 import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
-import { STARTER_UNIT_NAMES } from "./starter-content.js";
+import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES;
@@ -335,5 +336,33 @@ it.each(STARTER_VENUES)(
         expect(text).toBe(unit.staffAbbreviation);
       }
     }
+  },
+);
+
+it.each(STARTER_VENUES)(
+  "names the first menu of %s/%s (receipts %j) in the %s staff language",
+  async (country, province, receipt, staffLanguage) => {
+    const node = await venue(country, province, receipt);
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const name = staffLanguage === "en" ? FIRST_MENU_NAME : STARTER_MENU_NAMES[FIRST_MENU_NAME].es;
+    const [location] = await suite.db
+      .select({ catalogueId: locations.catalogueId })
+      .from(locations)
+      .where(eq(locations.id, node.locationId));
+    const menus = await suite.db
+      .select({ name: catalogues.name })
+      .from(catalogues)
+      .where(eq(catalogues.id, location!.catalogueId!));
+    expect(menus).toEqual([{ name }]);
+    const owned = await suite.db
+      .select({ role: sections.role, internalName: sections.internalName, names: sections.names })
+      .from(sections)
+      .where(eq(sections.ownerMenuId, location!.catalogueId!))
+      .orderBy(asc(sections.role));
+    // The home layout is shown nowhere, so it keeps its English name in code (plan, slice 4 decision 5).
+    expect(owned).toEqual([
+      { role: "home_layout", internalName: "Home", names: {} },
+      { role: "menu_root", internalName: name, names: {} },
+    ]);
   },
 );
