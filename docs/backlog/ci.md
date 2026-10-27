@@ -3,6 +3,20 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## Recovery activation child exits before the process-death point
+
+In A972 cut 2's [CI40594569075, server shard 7](https://github.com/clintongormley/waitron/actions/runs/40594569075/job/122507317494),
+`src/hour-recovery-placement-1.test.ts:847` failed “refuses publication after archive process
+death inside the uncommitted activation”. Its child returned `signal: null` and empty stdout
+instead of the expected SIGKILL and activation marker. The log and retained blob contain the
+assertion diff but omit the child's other error properties. The cause is unknown; a local
+single-case pass does not establish a repair.
+
+Keep the SIGKILL, activation marker, rollback/publication assertions and existing deadlines.
+Capture the child's exit code, stderr and stdout when this assertion fails, then reproduce
+the specific refusal before changing the fixture or product. This test has no diff in the
+demo-name change; that source observation alone does not classify the failure as pre-existing.
+
 ## Tests that read a built command's error output fail under Claude Code
 
 The command's stderr

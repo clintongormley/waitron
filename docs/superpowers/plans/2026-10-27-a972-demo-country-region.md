@@ -489,10 +489,24 @@ controls pass. Setup and till bundles build and pass the identity-present,
 demo-data-absent checker. This cut uses the approved low-risk review path.
 
 Changed existing checks are confined to the catalogue, floor, options, seed,
-integration, Madrid comparison and country-es data suites. They replace plain
+integration, Madrid comparison, installed-demo database and country-es data suites. They replace plain
 name strings with the authorized English/Spanish values or read the new pair
 shape. Modifier order/defaults, kitchen routing, menu inclusion, variants, prices,
 customer translations, credentials and sale assertions remain. The frozen
 comparison retains its original manifest checks before applying the explicit
 name allowances. Full package coverage and the final landing result belong to
 the current-head CI and campaign ledger.
+
+### Cut 2 installed-demo expectation correction — 2026-10-27
+
+The first PR CI failed the installed-demo database case's old salad-name lookup.
+The focused command must include `pnpm --filter @waitron/server exec vitest run src/demo-seed.db.test.ts`, as well as the wrapper's `src/demo-seed.test.ts`.
+The old lookup failure reproduces locally. The corrected case reads the independent
+pack-owned expected names, still requires the Spanish staff value and Catalan
+content default, and retains every fiscal assertion in its sibling case. The
+related six-case run passes. No product or fiscal writer changes for this correction.
+
+That CI also failed an unchanged recovery process-death case before its child
+printed the activation marker. Its cause remains unknown and is recorded in the
+[CI backlog](../../backlog/ci.md#recovery-activation-child-exits-before-the-process-death-point);
+a local single-case pass is not a repair claim. Retain the original assertions.

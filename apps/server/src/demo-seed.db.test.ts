@@ -3,7 +3,7 @@
  * venue, then `seedInstalledDemo`, which the setup route runs next.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readContentLanguages } from "@waitron/catalogue";
 import { getCountryPack } from "@waitron/country-packs";
+import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parseModuleConfig } from "@waitron/module";
@@ -86,6 +87,17 @@ it("provisions Spain's demo business and files its practice sales under the demo
 });
 
 it("names a Barcelona demo's dishes in its Spanish-speaking admin's language, with Catalan the content default", async () => {
+  const expected = JSON.parse(
+    await readFile(
+      new URL("plain-names.json", DEMO_BASELINE_FIXTURE_ROOTS["casa-delgado-es"]),
+      "utf8",
+    ),
+  ) as {
+    products: Record<string, { customerEnglish: string; staff: Record<"en" | "es", string> }>;
+  };
+  const salad = Object.values(expected.products).find(
+    (product) => product.customerEnglish === "Mixed salad",
+  )!;
   const identity = getCountryPack("ES")!.demo!;
   const venue: VenueRequest = {
     country: "ES",
@@ -129,10 +141,10 @@ it("names a Barcelona demo's dishes in its Spanish-speaking admin's language, wi
     await seedInstalledDemo(suite.db, result, venue);
 
     const { rows: products } = await suite.db.execute<{ name: string }>(
-      sql`select name from products where name in ('Ensalada mixta', 'Mixed salad')`,
+      sql`select name from products where name in (${salad.staff.es}, ${salad.staff.en})`,
     );
     const languages = await withTransaction(suite.db, (tx) => readContentLanguages(tx, "es"));
-    expect(products.map((p) => p.name)).toEqual(["Ensalada mixta"]);
+    expect(products.map((p) => p.name)).toEqual([salad.staff.es]);
     expect(languages.defaultLanguage).toBe("ca");
   } finally {
     await rm(stateDir, { recursive: true, force: true });
