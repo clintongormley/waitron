@@ -3178,7 +3178,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const groups = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return listOrderGroups(tx, partyId);
+        return {
+          ...(await listOrderGroups(tx, partyId)),
+          printProblems: await listPrintProblems(tx, partyId),
+        };
       });
       return c.json(groups);
     }),

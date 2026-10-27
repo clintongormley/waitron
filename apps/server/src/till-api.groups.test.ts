@@ -841,6 +841,7 @@ describe("GET /api/parties/:id/groups", () => {
           summary: "1 × Croquetas",
         },
       ],
+      printProblems: [],
     });
   });
 
