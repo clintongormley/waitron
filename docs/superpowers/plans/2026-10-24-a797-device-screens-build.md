@@ -218,8 +218,9 @@ with lane G. **Migration:** no. _Expanded into tasks below (2026-10-26)._
 
 ### Slice 8b — Short names on kitchen cards (FULL; a station read changes)
 
-**Goal:** the station read carries each table's short name; the card shows it. **Dependencies:**
-slices 1 and 8. **Migration:** no.
+**Goal:** the station read carries each table's short name; the card shows it. The read also says
+whether a bill is a counter order, so a counter card reads "Counter #12" (slice 8, D5).
+**Dependencies:** slices 1 and 8. **Migration:** no.
 
 ### Slice 9 — The Columns controller and collapse (LIGHT)
 
@@ -233,7 +234,9 @@ collapse ("Ready · 3"). **Risks:** whichever lane builds it first, the other us
 
 **Goal:** corner → Columns («Columnas»): Move up / Move down («Subir», «Bajar») and a Show switch
 («Mostrar») per column. A new dialog with staged input takes a draft scope and a
-`*.unsaved.test.ts` (CLAUDE.md §3). **Dependencies:** slice 9. **Migration:** no.
+`*.unsaved.test.ts` (CLAUDE.md §3). The one-row header of picture 03 (the station's name, its
+Open/Closed chip and the header line) comes with the corner's Columns (slice 8, D9).
+**Dependencies:** slice 9. **Migration:** no.
 
 ### Slice 9c — Overview and the narrow tabs (LIGHT)
 

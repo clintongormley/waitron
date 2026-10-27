@@ -56,6 +56,7 @@ describe("the user guides", () => {
         "held-work",
         "reprints",
         "service-lifetime",
+        "kitchen-screen",
         "after-period",
         "request-cooking",
         "delete-prep-station",

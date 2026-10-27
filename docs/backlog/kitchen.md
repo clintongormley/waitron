@@ -81,14 +81,12 @@ Left open:
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. A773 assigns requests to cook held work to the waiter.
 
-## Three follow-ups 3c-1 left
+## Two follow-ups 3c-1 left
 
-- **Three follow-ups 3c-1 left:** the kitchen screen's column view has no per-order card, so it
-  does not show the rest of the order (a station that needs that context uses the card view);
-  units added to a discounted pay-first dish held in a group get a held kitchen record of their own
-  while the dish has none — observed on `main`, its history not checked, and whether it is wanted
-  remains open; and a device's made-here stations do not travel in configuration export, because
-  devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
+- **Two follow-ups 3c-1 left:** units added to a discounted pay-first dish held in a group get a
+  held kitchen record of their own while the dish has none — observed on `main`, its history not
+  checked, and whether it is wanted remains open; and a device's made-here stations do not travel
+  in configuration export, because devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
   from an export sets them again on the Devices screen.
 
 ## A following extra has different names on paper and on screen

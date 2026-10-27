@@ -130,8 +130,11 @@ come after the list above:
   the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md). Slice 7
   (the Ready bar's warning: once a ready dish has waited its station's Ready warning time the bar
   turns amber, pulses slowly, shows the minutes and puts those tables first) landed in #2113,
-  from the build plan's slice 7; slice 8 (the kitchen screen's group cards) is next, taking
-  turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
+  from the build plan's slice 7. Slice 8 (the kitchen screen's group cards: one card per group in
+  Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no Tickets
+  view) is in review, built from the build plan's slice 8; next, slice 8b (short names on the
+  cards, after slice 1, landed) and slice 9, taking turns with lane G's A773-2 on the station
+  screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1610,8 +1613,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Mark a new dish as urgent** — owner, 2026-09-27.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
 
-- **Three follow-ups 3c-1 left:** — left open by the product folders work.
-  [Detail](backlog/kitchen.md#three-follow-ups-3c-1-left)
+- **Two follow-ups 3c-1 left:** — left open by the product folders work.
+  [Detail](backlog/kitchen.md#two-follow-ups-3c-1-left)
 
 - **A following extra has different names on paper and on screen.** — left open by the product
   folders work.

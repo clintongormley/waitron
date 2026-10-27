@@ -322,6 +322,10 @@ concerns. The band along its top is its age: green, then amber, then red; a forg
 A757's fast speed.
 - **Tap a dish** to move it on one step; **tap the card's heading** to move every dish on it one
   step. A card sits in the column of its least advanced dish. No Fire button (A773).
+  _2026-10-26, slice 8: a heading tap moves the dishes holding the card back, not a dish already
+  further on; a whole-ticket station's dish tap moves that card's dishes at its stage; the card ages
+  from its own fired dishes and keeps whole minutes; the header line sits above the columns until
+  slice 9b's header row; see the build plan's slice 8, D4, D6, D8, D9._
 - **The Tickets view goes**, with its Board/Tickets switch: the card is the ticket. Merged/Stacked
   stays for a screen showing several stations.
 - **Tap a column's heading to collapse it** (Q42 (e)): a collapsed column keeps its heading and
@@ -709,7 +713,7 @@ edits the same files)
   members' short names joined for a today's join; see the build plan's slice 1, D8.)
 - A larger text size for kitchen screens read from a distance; a "My tables" filter on the handheld
   floor; whether a dish leaves a station's Ready column on its own; the venue's bump mode once a dish
-  tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order).
+  tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order). (2026-10-26, slice 8: traced and settled in the build plan's slice 8, D8.)
 - The wording of the fixed bottom bar and the opening rule's edge cases (a table with only served
   dishes opens on Order).
 
