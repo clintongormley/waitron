@@ -225,9 +225,9 @@ describe("spreadBillDiscount", () => {
     });
 
     it("takes €1.00 off Croquettes ×3 at €3.33 as 2 × €3.00 and 1 × €2.99 (€8.99)", () => {
-      const croquetas = line("croquetas", 1, "3.33", "3", true);
-      const reduction = percentReduction(croquetas.gross, 1000);
-      const result = spreadBillDiscount([croquetas], reduction).get("croquetas")!;
+      const croquettes = line("croquetas", 1, "3.33", "3", true);
+      const reduction = percentReduction(croquettes.gross, 1000);
+      const result = spreadBillDiscount([croquettes], reduction).get("croquetas")!;
       expect(result.reduction).toBe("1.00");
       expect(result.rows).toEqual([
         { quantity: "2.000", unitGross: "3.00" },
