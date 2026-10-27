@@ -6,6 +6,7 @@ export interface StartAgainPageText {
   filesFound: string;
   more: (n: number) => string;
   password: string;
+  choiceLegend: string;
   keepTitle: string;
   keepDetail: string;
   moveTitle: string;
@@ -42,6 +43,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     filesFound: "Files found:",
     more: (n) => `and ${n} more`,
     password: "Administrator password",
+    choiceLegend: "What should the box do? *",
     keepTitle: "Keep everything and stop.",
     keepDetail: "Nothing is moved. This page stays until Waitron is reinstalled on this box.",
     moveTitle: "Move these files aside and finish Start again.",
@@ -83,6 +85,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     filesFound: "Archivos encontrados:",
     more: (n) => `y ${n} más`,
     password: "Contraseña de administrador",
+    choiceLegend: "¿Qué debe hacer el equipo? *",
     keepTitle: "Conservarlo todo y parar.",
     keepDetail:
       "No se mueve nada. Esta página sigue hasta que se reinstale Waitron en este equipo.",
@@ -206,7 +209,12 @@ export function renderStartAgainSection(input: {
   const { survey, locale, secure, now, message, chosen } = input;
   const text = START_AGAIN_PAGE_TEXT[locale];
   const list = foundList(survey, text);
-  if (!secure) return `${list}<p>${escapeHtml(text.insecureForm)}</p>\n`;
+  const bottom =
+    message === undefined
+      ? ""
+      : `<p id="start-again-message">${escapeHtml(bottomText(message, text))}</p>\n`;
+  if (message?.kind === "moved") return `${list}${bottom}`;
+  if (!secure) return `${list}<p>${escapeHtml(text.insecureForm)}</p>\n${bottom}`;
 
   const passwordError =
     message?.kind === "passwordMissing"
@@ -227,15 +235,12 @@ export function renderStartAgainSection(input: {
       : "";
   const fieldError = (id: string, value: string | null) =>
     value === null ? "" : `<p id="${id}">${escapeHtml(value)}</p>\n`;
-  const bottom =
-    message === undefined
-      ? ""
-      : `<p id="start-again-message">${escapeHtml(bottomText(message, text))}</p>\n`;
 
   return `${list}<form method="post" action="/recovery-api/start-again">
 <p><label for="start-again-password">${escapeHtml(text.password)} *</label></p>
 <p><input type="password" id="start-again-password" name="password" autocomplete="current-password" required${passwordInvalid}></p>
 ${fieldError("start-again-password-error", passwordError)}<fieldset${choiceInvalid}>
+<legend>${escapeHtml(text.choiceLegend)}</legend>
 <p><label><input type="radio" name="choice" value="keep" required${checked("keep")}> <strong>${escapeHtml(text.keepTitle)}</strong></label></p>
 <p>${escapeHtml(text.keepDetail)}</p>
 <p><label><input type="radio" name="choice" value="move" required${checked("move")}> <strong>${escapeHtml(text.moveTitle)}</strong></label></p>

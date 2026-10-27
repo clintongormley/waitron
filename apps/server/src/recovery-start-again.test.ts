@@ -112,6 +112,44 @@ describe("renderStartAgainSection", () => {
     expect(secure).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].insecureForm));
   });
 
+  it("with secure: false, draws the bottom message under the insecure-form text, and still no password box", () => {
+    for (const locale of LANGS) {
+      const text = START_AGAIN_PAGE_TEXT[locale];
+      const html = render({ locale, secure: false, message: { kind: "insecure" } });
+      const message = `<p id="start-again-message">${escapeHtml(text.insecure)}</p>`;
+      expect(html, locale).toContain(message);
+      expect(html.indexOf(message), locale).toBeGreaterThan(
+        html.indexOf(escapeHtml(text.insecureForm)),
+      );
+      expect(html, locale).not.toMatch(/<input\b/);
+      expect(html, locale).not.toMatch(/<form\b/);
+    }
+  });
+
+  it("names the choice group with a legend marked required, in both languages", () => {
+    expect(START_AGAIN_PAGE_TEXT["en-GB"].choiceLegend).toBe("What should the box do? *");
+    expect(START_AGAIN_PAGE_TEXT["es-ES"].choiceLegend).toBe("¿Qué debe hacer el equipo? *");
+    for (const locale of LANGS) {
+      const html = render({ locale });
+      const legend = `<fieldset>\n<legend>${escapeHtml(START_AGAIN_PAGE_TEXT[locale].choiceLegend)}</legend>`;
+      expect(html, locale).toContain(legend);
+      expect(html.indexOf(legend), locale).toBeLessThan(html.indexOf('type="radio"'));
+      expect(html.indexOf(legend), locale).toBeGreaterThan(html.indexOf('type="password"'));
+    }
+  });
+
+  it("a moved answer draws no form: no password, no radios, no Continue", () => {
+    for (const locale of LANGS) {
+      const text = START_AGAIN_PAGE_TEXT[locale];
+      const html = render({ locale, message: { kind: "moved", folder: "state/<i>aside</i>" } });
+      expect(html, locale).toContain(
+        `<p id="start-again-message">${escapeHtml(text.moved("state/<i>aside</i>"))}</p>`,
+      );
+      expect(html, locale).not.toMatch(/<form\b|<input\b|<button\b|<fieldset\b/);
+      expect(html, locale).not.toContain(escapeHtml(text.continue));
+    }
+  });
+
   it("shows 50 paths and 'and N more'", () => {
     const units = Array.from({ length: 53 }, (_, i) =>
       fileUnit("state", `found-${String(i).padStart(2, "0")}.json`),
@@ -195,7 +233,6 @@ describe("renderStartAgainSection", () => {
         [{ kind: "notFinished" }, text.notFinished],
         [{ kind: "throttled", minutes: 1 }, `${text.throttled(1)} ${text.forgotten}`],
         [{ kind: "throttled", minutes: 4 }, `${text.throttled(4)} ${text.forgotten}`],
-        [{ kind: "moved", folder: "state/<i>aside</i>" }, text.moved("state/<i>aside</i>")],
       ];
       for (const [message, expected] of bottomOnly) {
         const html = render({ locale, message });

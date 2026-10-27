@@ -62,7 +62,7 @@ const ALLOWED: ReadonlyArray<{ file: string; lines: number; reason: string }> = 
     file: "apps/server/src/recovery-start-again.ts",
     lines: 1,
     reason:
-      "an HTML string the server builds for the page a box serves when it cannot start, with no script or front-end bundle; the server does not depend on @waitron/ui or @waitron/ui-core",
+      "an HTML string the server builds for the page a box serves when it cannot start; it loads no script or front-end bundle, so no field primitive can run on it",
   },
 ];
 
