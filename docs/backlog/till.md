@@ -1052,7 +1052,7 @@ may predate that branch:
   "Counter #12" for a counter order at no table) landed in #2126, from the plan's slice 8b. Slice 9
   (a kitchen screen's columns collapse by a tap on their heading, which shows the column's count,
   and are remembered on the device; the one Columns store A773-2 reuses,
-  `apps/till/src/state/kitchen-columns.ts`) is in review, from the plan's slice 9; next, slices 9b
+  `apps/till/src/state/kitchen-columns.ts`) landed in #2129, from the plan's slice 9; next, slices 9b
   (the corner's Columns) and 9c (Overview and the narrow tabs), taking turns with lane G's A773-2
   on the station screen (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
