@@ -900,7 +900,7 @@ async function payAsFullInvoice(billId: string, cents: number) {
         invoiceType: "F1",
         recipientTaxId: "B12345674",
         recipientLegalName: "Client SL",
-        recipientAddress: "Calle Mayor 2, 08001 Barcelona, Barcelona, España",
+        recipientAddress: "2 Main Street, 08001 Barcelona, Barcelona",
         recipientCountryCode: "ES",
       })
       .where(eq(workingOrders.id, billId));

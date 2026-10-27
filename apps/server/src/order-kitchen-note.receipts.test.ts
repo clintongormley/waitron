@@ -141,7 +141,7 @@ describe("whole-order instructions and issued customer documents", () => {
         taxId: "B12345674",
         legalName: "Invoice customer",
         countryCode: "ES",
-        address: "High Street 2, 28013 Madrid, Madrid, España",
+        address: "2 High Street, 28013 Madrid, Madrid",
       },
     });
     const fiscal = vi.spyOn(v.backend, "recordSale");
