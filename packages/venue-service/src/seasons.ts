@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
@@ -24,6 +25,8 @@ import {
 } from "./season-weeks.js";
 import { departmentDayRanges, departmentDays, seasons } from "./schema/seasons.js";
 import { departments } from "./schema/service.js";
+import { STARTER_SEASON_NAMES } from "./starter-content.js";
+import { readStarterStaffLanguage } from "./starter-language.js";
 import "./errors.js";
 
 const SEASON_COLUMNS = {
@@ -41,12 +44,23 @@ export async function readSeasons(tx: Transaction, cfg: VenueScope): Promise<Sea
     .orderBy(asc(seasons.startsOn));
 }
 
-export async function ensureDefaultSeasons(tx: Transaction, cfg: VenueScope): Promise<Season[]> {
+export async function ensureDefaultSeasons(
+  tx: Transaction,
+  cfg: VenueScope,
+  staffLanguage?: StarterStaffLanguage,
+): Promise<Season[]> {
   const existing = await readSeasons(tx, cfg);
   if (existing.length > 0) return existing;
+  const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
   const inserted = await tx
     .insert(seasons)
-    .values(DEFAULT_SEASONS.map((season) => ({ ...season, locationId: cfg.locationId })))
+    .values(
+      DEFAULT_SEASONS.map((season) => ({
+        ...season,
+        name: starterName(STARTER_SEASON_NAMES, season.name, language),
+        locationId: cfg.locationId,
+      })),
+    )
     .returning(SEASON_COLUMNS);
   // "The rows emitted by the RETURNING clause appear in an arbitrary order" (sqlite.org/lang_returning.html).
   return byStart(inserted);
@@ -149,8 +163,9 @@ export async function saveSeasons(
       .where(and(eq(seasons.locationId, cfg.locationId), inArray(seasons.id, [...deleted])));
   // Two passes, so a swap of two names or two starts never meets a unique index mid-way. No
   // temporary name is trimmed and no temporary start passes `parseSeasonStart`; every writer stores
-  // only values that are: this function, `ensureDefaultSeasons`' `DEFAULT_SEASONS`, and the import,
-  // whose `validateSeasonWeeks` refuses anything else.
+  // only values that are: this function, `ensureDefaultSeasons` (its starts from `DEFAULT_SEASONS`,
+  // its names from `starter-content.ts`, whose test holds them trimmed), and the import, whose
+  // `validateSeasonWeeks` refuses anything else.
   const moving = changed.filter((entry) => {
     const own = stored.get(entry.id!)!;
     return own.name !== entry.name || own.startsOn !== entry.startsOn;

@@ -18,7 +18,9 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { starterName } from "@waitron/country-packs";
 import { readLocationClock } from "@waitron/reporting";
 import {
   locationId as brandLocationId,
@@ -30,7 +32,12 @@ import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
 import { departmentDays, seasons, zoneDays } from "./schema/seasons.js";
-import { parseSeasonStart, type SeasonChange, type SeasonEntry } from "./season-rules.js";
+import {
+  DEFAULT_SEASONS,
+  parseSeasonStart,
+  type SeasonChange,
+  type SeasonEntry,
+} from "./season-rules.js";
 import {
   readDepartmentSeasonWeeks,
   readZoneSeasonWeeks,
@@ -45,6 +52,7 @@ import {
   temporaryStart,
 } from "./seasons.js";
 import type { ServiceRange } from "./service-day.js";
+import { STARTER_SEASON_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -104,6 +112,68 @@ describe("ensureDefaultSeasons", () => {
     const result = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
     expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01", colour: "grey" }]);
     expect(await withTransaction(db, (tx) => readSeasons(tx, { locationId }))).toEqual(result);
+  });
+
+  const staffVenue = async (tenant: boolean, province: string | null, locale: string) => {
+    if (tenant) await seedTenant(db);
+    const [row] = await db
+      .insert(locations)
+      .values({
+        name: "Staff language",
+        province,
+        invoiceLocales: [locale],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    return brandLocationId(row!.id);
+  };
+  const starterSeasons = (language: "es" | "en") =>
+    DEFAULT_SEASONS.map(({ name, startsOn, colour }) => ({
+      name: starterName(STARTER_SEASON_NAMES, name, language),
+      startsOn,
+      colour,
+    }));
+
+  it.each([
+    {
+      title: "no tenant row, es-ES receipts",
+      tenant: false,
+      province: null,
+      locale: "es-ES",
+      language: "es",
+    },
+    {
+      title: "Spanish tenant, Valencia, es-ES receipts",
+      tenant: true,
+      province: "Valencia",
+      locale: "es-ES",
+      language: "es",
+    },
+    {
+      title: "Spanish tenant, Madrid, en-GB receipts",
+      tenant: true,
+      province: "Madrid",
+      locale: "en-GB",
+      language: "en",
+    },
+  ] as const)(
+    "names the default seasons in the staff language: $title gives $language",
+    async ({ tenant, province, locale, language }) => {
+      const locationId = await staffVenue(tenant, province, locale);
+      const written = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+      const stripped = written.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }));
+      expect(stripped).toEqual(starterSeasons(language));
+    },
+  );
+
+  it("gives a venue whose seasons are all written by a later call the staff language", async () => {
+    const locationId = await staffVenue(false, null, "es-ES");
+    const saved = await withTransaction(db, (tx) =>
+      saveSeasons(tx, { locationId }, { save: [], delete: [] }, AT, 0),
+    );
+    expect(saved.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }))).toEqual(
+      starterSeasons("es"),
+    );
   });
 
   it("reads only the asked location's seasons, ordered by start", async () => {

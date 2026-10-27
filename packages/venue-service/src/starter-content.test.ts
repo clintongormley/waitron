@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { starterName } from "@waitron/country-packs";
 import { OPEN_PERIOD_NAME } from "./menu-timetable.js";
 import { COUNTER_ZONE_NAME } from "./provisioning.js";
 import { DEFAULT_SEASONS } from "./season-rules.js";
@@ -26,4 +27,18 @@ describe("starter-content", () => {
   it("has an entry for the starter period, and none for anything else", () => {
     expect(Object.keys(STARTER_PERIOD_NAMES)).toEqual([OPEN_PERIOD_NAME]);
   });
+
+  it.each(["es", "en"] as const)(
+    "names the four default seasons distinctly, non-empty and trimmed in %s",
+    (language) => {
+      const names = DEFAULT_SEASONS.map((season) =>
+        starterName(STARTER_SEASON_NAMES, season.name, language),
+      );
+      expect(new Set(names).size).toBe(names.length);
+      for (const name of names) {
+        expect(name).not.toBe("");
+        expect(name).toBe(name.trim());
+      }
+    },
+  );
 });
