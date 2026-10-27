@@ -713,6 +713,12 @@ silent while it waits. On a recurrence, read the bounded checkout's log: a low-s
 (`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
 out of time, not in which phase.
 
+On 27 October, [main run 40555390596](https://github.com/clintongormley/waitron/actions/runs/40555390596)
+failed in bookings job `122371062426`. Both checkout attempts logged a running `git fetch`
+then "has timed out after 2 minutes", before dependency installation or tests. The log gives
+no transfer progress or lower-level network error. The cause of that wait remains unverified;
+retain this failure when comparing later runs rather than treating a fresh pass as its diagnosis.
+
 
 ## Profile provisioning's busiest shard after the A679 split
 

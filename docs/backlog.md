@@ -5439,7 +5439,8 @@ values rather than PIN substrings inside random IDs. See the
   Artifact uploads now have bounded retries (A1100); the remaining sites are setup-node, cache, Docker and CodeQL.
   [Detail](backlog/ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935).
 
-- **Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)**
+- **Whether the checkout stalls were a GitHub-side incident remains unverified (A935).**
+  The 27 October bookings checkout exhausted both attempts before running tests.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
 
 - **Profile provisioning's busiest shard after the A679 split.**
@@ -5829,7 +5830,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   All five build cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
-  suites, server till-API and configuration-transfer fixtures, catalogue and shared station fixtures,
+  suites, server till-API and configuration-transfer fixtures, shared station fixtures,
   and file names. Keep fixture text with A976.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
