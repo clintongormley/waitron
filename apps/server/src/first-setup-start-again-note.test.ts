@@ -1053,7 +1053,7 @@ it("with the database present and no password, a damaged kept picks file asks fo
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
-it("until Task 10b, with the database present and the setup password, a damaged kept picks file is refused setup.attempt_invalid, and nothing changes", async () => {
+it("with the database present and the setup password, a damaged kept picks file without confirmUnreadable is refused setup.attempt_conflict, and nothing changes", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await damagePicks(f);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
@@ -1079,17 +1079,19 @@ it("until Task 10b, with the database present and the setup password, a damaged 
       },
       register: startRequest.register,
     }),
-  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await folderTrees(f)).toEqual(before);
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
 /** `extraSeat` installs a copy of the frozen module, seat and all, under a name the attempt never froze. */
-async function presentDamagedPicks(options: { seat?: boolean; extraSeat?: boolean } = {}) {
+async function presentDamagedPicks(
+  options: { seat?: boolean; extraSeat?: boolean; damaged?: boolean } = {},
+) {
   const base = await abandonedAttempt();
   const { f } = base;
-  await damagePicks(f);
+  if (options.damaged !== false) await damagePicks(f);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const recovered = await f.host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
@@ -1143,7 +1145,7 @@ async function presentDamagedPicks(options: { seat?: boolean; extraSeat?: boolea
   return { ...base, actions, owner, ids, timeFloorMs };
 }
 
-it("with the database present and the setup password, a damaged kept picks file gets a summary naming it, and Start again still refuses until Task 10b", async () => {
+it("with the database present and the setup password, a damaged kept picks file gets a summary naming it, and Start again without confirming it is refused setup.attempt_conflict", async () => {
   const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
   const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
   expect(answered.status, await answered.clone().text()).toBe(200);
@@ -1155,9 +1157,133 @@ it("with the database present and the setup password, a damaged kept picks file 
   const before = await folderTrees(f);
   await expect(
     actions.startAgainFirstSetup({ ...ids, owner, register: startRequest.register }),
-  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await folderTrees(f)).toEqual(before);
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
+});
+
+async function expectPresentNothingWritten(
+  f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
+  before: Awaited<ReturnType<typeof folderTrees>>,
+) {
+  expect(await folderTrees(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+}
+
+it("with the database present, the exact shown summary past a damaged kept picks file starts again, the note keeps a time floor with no name, and the confirmation record holds it", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const app = routes(f, actions);
+  const shown = (await (
+    await postSummary(app, ids, ownerHeaders(owner))
+  ).json()) as StartAgainSummary;
+  expect(timeFloorMs).toBeGreaterThan(EPOCH_MS + (decodeMinuteIdentity(name) + 1) * MINUTE_MS);
+  const accepted = await sendStartAgain(app, owner, {
+    ...ids,
+    register: startRequest.register,
+    confirmUnreadable: { shown },
+  });
+  expect(accepted.status, await accepted.clone().text()).toBe(200);
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  const files = await readdir(join(f.stateDir, CONFIRMATIONS));
+  expect(files).toHaveLength(1);
+  const record = JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8"));
+  expect(record).toMatchObject({ database: "present" });
+  expect(record.shown).toEqual(shown);
+  expect(record.shown).toEqual({
+    reached: "named",
+    lastName: name,
+    unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+  });
+  await expectStartAgainDeleted(f);
+});
+
+it.each([
+  [
+    "lacks the unreadable records",
+    (shown: StartAgainSummary) =>
+      Object.fromEntries(
+        Object.entries(shown).filter(([key]) => key !== "unreadable"),
+      ) as StartAgainSummary,
+  ],
+  [
+    "shows a floor one minute earlier",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs - MINUTE_MS },
+    }),
+  ],
+  [
+    "shows a floor one minute later",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs + MINUTE_MS },
+    }),
+  ],
+])(
+  "with the database present, a Start again whose confirmUnreadable summary %s is refused setup.attempt_conflict, and nothing is written",
+  async (_label, change) => {
+    const { f, actions, owner, ids, startRequest } = await presentDamagedPicks();
+    const shown = await actions.startAgainSummary({ ...ids, owner });
+    expect(shown.unreadable).toBeDefined();
+    const before = await folderTrees(f);
+    await expect(
+      actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        register: startRequest.register,
+        confirmUnreadable: { shown: change(shown) },
+      }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    await expectPresentNothingWritten(f, before);
+  },
+);
+
+it("with the database present and an intact picks file, confirmUnreadable is refused setup.attempt_conflict, and nothing is written", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks({
+    damaged: false,
+  });
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: startRequest.register,
+      confirmUnreadable: {
+        shown: {
+          reached: "named",
+          lastName: name,
+          unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+        },
+      },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectPresentNothingWritten(f, before);
+});
+
+it("with the database missing, confirmUnreadable beside the confirmation is refused setup.attempt_conflict, and nothing is written", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+  const { f, actions, owner, ids, request } = base;
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown.unreadable).toBeDefined();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...request,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      confirmUnreadable: { shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await folderTrees(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
 it("with the database present, a damaged kept picks file still needs the recovered owner before the summary answers", async () => {

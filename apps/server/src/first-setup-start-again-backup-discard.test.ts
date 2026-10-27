@@ -599,6 +599,26 @@ it("with the database present, a stopped recovery's discard past a damaged picks
   ]);
 });
 
+it("with the database present, a stopped recovery's discard past a damaged picks file with confirmUnreadable beside confirmRecoveryDiscard is refused setup.attempt_conflict, and nothing changes", async () => {
+  const { f, startAgain } = await damagedPicksDiscard((nameMs) => ({
+    listedMs: nameMs + MINUTE_MS,
+    picksMs: nameMs + 120 * MINUTE_MS,
+  }));
+  expect(startAgain.shown.unreadable).toBeDefined();
+  const last = (await f.workspace.readChain()).at(-1)!;
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  await expect(
+    startAgain.actions.startAgainFirstSetup({
+      ...startAgain.ids,
+      owner: startAgain.owner,
+      confirmRecoveryDiscard: { shown: startAgain.shown },
+      confirmUnreadable: { shown: startAgain.shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectNothingWritten(f, before);
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+});
+
 it("with the database present, a stopped recovery's later floor wins over a damaged picks file's time floor", async () => {
   const { f, startAgain, recoveryFloorMs, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
     listedMs: nameMs - 120 * MINUTE_MS,
@@ -748,6 +768,55 @@ it.each([
     await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
       code: "setup.not_ready",
     });
+  },
+);
+
+it.each([
+  ["without confirmUnreadable", false],
+  ["with confirmUnreadable", true],
+] as const)(
+  "with the database present, Start again finishing an abandoned recovery not yet emptied beside a damaged picks file %s is refused setup.attempt_invalid, and nothing is written",
+  async (_label, confirm) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    const planted = join(f.record.target.target.stateDir, "planted");
+    await symlink("/nonexistent", planted);
+    await expect((await presentOver(f, f.service)).run()).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+    await unlink(planted);
+    await writeFile(join(f.roots.stateDir, "module-preparation-state.json"), "{damaged");
+    const { owner, ids } = await signedIn(f.host);
+    const actions = createFirstSetupResolutionActions({
+      ...f.roots,
+      host: databasePresent(f.host),
+      backupRecovery: f.service,
+    });
+    const recorded = await confirmations(f.roots.stateDir);
+    expect(recorded).toHaveLength(1);
+    const note = await readStartAgainNote(f.roots.stateDir);
+    const last = (await f.workspace.readChain()).at(-1)!;
+    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+    const shown: StartAgainSummary = {
+      reached: "claimed",
+      lastName: null,
+      unreadable: { records: ["series-picks"], floorMs: EPOCH_MS },
+    };
+    await expect(
+      actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        ...(confirm ? { confirmUnreadable: { shown } } : {}),
+      }),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect({ venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) }).toEqual(
+      before,
+    );
+    expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
+    expect(await confirmations(f.roots.stateDir)).toEqual(recorded);
+    expect(await readStartAgainNote(f.roots.stateDir)).toEqual(note);
+    expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   },
 );
 

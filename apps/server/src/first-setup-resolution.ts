@@ -451,6 +451,7 @@ export function createFirstSetupResolutionActions(
             "register",
             "confirmMissingDatabase",
             "confirmRecoveryDiscard",
+            "confirmUnreadable",
             "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
@@ -467,6 +468,11 @@ export function createFirstSetupResolutionActions(
           if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
           const discardsStopped = !missing && found?.kind === "stopped";
           if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
+          if (
+            request.confirmUnreadable !== undefined &&
+            (missing || request.confirmRecoveryDiscard !== undefined)
+          )
+            conflict();
           if (missing) {
             // D3a: with the database missing, any status but complete, and only once confirmed.
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
@@ -547,17 +553,21 @@ export function createFirstSetupResolutionActions(
             found?.kind === "stopped" ? found.floor : null,
             missing,
           );
-          // Only the database-missing and recovery-discard paths carry a damaged name record in
-          // the summary the person confirms, so any other path refuses one.
-          if (gathered.unreadable !== undefined && !missing && !discardsStopped)
-            throw new AppError("setup.attempt_invalid", {});
           const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
           const finishing = found?.kind === "unemptied";
+          const presentUnreadable =
+            !missing && !discardsStopped && gathered.unreadable !== undefined;
+          // No summary is shown while an abandoned journal is being finished, so nothing confirms a
+          // damaged name record on that path.
+          if (finishing && presentUnreadable) throw new AppError("setup.attempt_invalid", {});
+          if (presentUnreadable !== (request.confirmUnreadable !== undefined)) conflict();
           const confirmation = request.confirmMissingDatabase;
           const shown =
-            missing || discardsStopped ? summaryOf(state, gathered, recovery) : undefined;
+            missing || discardsStopped || presentUnreadable
+              ? summaryOf(state, gathered, recovery)
+              : undefined;
           if (
             missing &&
             (confirmation?.nothingFiledOrSold !== true ||
@@ -565,6 +575,8 @@ export function createFirstSetupResolutionActions(
           )
             conflict();
           if (discardsStopped && !isDeepStrictEqual(request.confirmRecoveryDiscard?.shown, shown))
+            conflict();
+          if (presentUnreadable && !isDeepStrictEqual(request.confirmUnreadable?.shown, shown))
             conflict();
           const backup = options.backupRecovery;
           const refuseRunning = async (): Promise<never> => {
@@ -575,7 +587,7 @@ export function createFirstSetupResolutionActions(
           // No await between this check and the first write: the record and the note change the
           // recovery's originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
-          if ((missing || discardsStopped) && !finishing) {
+          if ((missing || discardsStopped || presentUnreadable) && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
             await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),
