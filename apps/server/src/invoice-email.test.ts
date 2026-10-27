@@ -6,8 +6,14 @@ import { setTimeout as deadline } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import nodemailer from "nodemailer";
-import { createInvoiceEmailSender, createRoutedInvoiceEmailSender } from "./invoice-email.js";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import {
+  createInvoiceEmailSender,
+  createRoutedInvoiceEmailSender,
+  readInvoiceEmailPrivacy,
+} from "./invoice-email.js";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
+import { savePrivacyContact } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -485,5 +491,70 @@ describe("invoice email privacy notice", () => {
     } finally {
       await rig.close();
     }
+  });
+});
+
+describe("readInvoiceEmailPrivacy reads the privacy facts", () => {
+  const saleId = "0193a4f2-7c1e-7b3a-9d4e-5f6a7b8c9d0e";
+  const filed: FiledReceipt = { verificationUrl: "https://example.com/verify", vatBreakdown: [] };
+  /** A backend that answers `filedReceiptFor` alone, recording the sale it was asked about. */
+  function backendAnswering(receipt: FiledReceipt | undefined) {
+    const asked: string[] = [];
+    const backend = new Proxy({} as FiscalBackend, {
+      get(_target, prop) {
+        if (prop === "filedReceiptFor") {
+          return (_tx: Transaction, saleId: string) => {
+            asked.push(saleId);
+            return Promise.resolve(receipt);
+          };
+        }
+        throw new Error(`unexpected backend read: ${String(prop)}`);
+      },
+    });
+    return { backend, asked };
+  }
+
+  it.each([
+    {
+      name: "the stored values and a filed record",
+      taxpayer: true,
+      receipt: filed,
+      expected: {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+        taxRecord: true,
+      },
+    },
+    {
+      name: "the stored values and no filed record",
+      taxpayer: true,
+      receipt: undefined,
+      expected: {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+        taxRecord: false,
+      },
+    },
+    {
+      name: "no taxpayer row",
+      taxpayer: false,
+      receipt: filed,
+      expected: { privacyNoticeUrl: null, privacyEmail: null, taxRecord: true },
+    },
+  ])("reads $name", async ({ taxpayer, receipt, expected }) => {
+    if (taxpayer) {
+      await seedTenant(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        await savePrivacyContact(tx, {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        });
+      });
+    }
+    const { backend, asked } = backendAnswering(receipt);
+    expect(
+      await withTransaction(suite.db, (tx) => readInvoiceEmailPrivacy(backend, tx, saleId)),
+    ).toEqual(expected);
+    expect(asked).toEqual([saleId]);
   });
 });

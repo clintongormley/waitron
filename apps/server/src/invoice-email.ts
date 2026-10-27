@@ -4,7 +4,10 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import type { FiscalBackend } from "@waitron/fiscal";
+import { readPrivacyContact } from "@waitron/provisioning";
+import { saleId as brandSaleId } from "@waitron/shared";
 import type { KeyRing } from "@waitron/credentials";
 import type { OnboardingIntent } from "./trading-config.js";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
@@ -22,6 +25,20 @@ export type InvoiceEmailSender = (message: {
   document: ReceiptDocumentInput;
   privacy?: InvoiceEmailPrivacy;
 }) => Promise<InvoiceDeliveryOutcome>;
+
+export async function readInvoiceEmailPrivacy(
+  backend: FiscalBackend,
+  tx: Transaction,
+  saleId: string,
+): Promise<InvoiceEmailPrivacy> {
+  const contact = await readPrivacyContact(tx);
+  const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
+  return {
+    privacyNoticeUrl: contact?.privacyNoticeUrl ?? null,
+    privacyEmail: contact?.privacyEmail ?? null,
+    taxRecord: filed !== undefined,
+  };
+}
 
 function privacyNotice(document: ReceiptDocumentInput, privacy: InvoiceEmailPrivacy | undefined) {
   if (privacy === undefined) return undefined;

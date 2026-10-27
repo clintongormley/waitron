@@ -8,7 +8,7 @@ import {
   type InvoiceDelivery,
   type InvoiceDeliveryOutcome,
 } from "./invoice-delivery.js";
-import type { InvoiceEmailSender } from "./invoice-email.js";
+import type { InvoiceEmailPrivacy, InvoiceEmailSender } from "./invoice-email.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { realSleep } from "./loop.js";
 
@@ -17,6 +17,7 @@ type InvoiceEmailPassDeps = {
   holder: string;
   now: () => Date;
   readDocument: (tx: Transaction, delivery: InvoiceDelivery) => Promise<ReceiptDocumentInput>;
+  readPrivacy?: (tx: Transaction, delivery: InvoiceDelivery) => Promise<InvoiceEmailPrivacy>;
   send: InvoiceEmailSender;
 };
 
@@ -90,13 +91,17 @@ export async function runInvoiceEmailPass(
   let outcome: InvoiceDeliveryOutcome;
   try {
     // Commit the claim first; the projection transaction ends before rendering or transport.
-    const document = await withTransaction(deps.db, (tx) => deps.readDocument(tx, delivery));
+    const { document, privacy } = await withTransaction(deps.db, async (tx) => {
+      const document = await deps.readDocument(tx, delivery);
+      return { document, privacy: await deps.readPrivacy?.(tx, delivery) };
+    });
     outcome = await deps.send({
       recipient: delivery.recipient!,
       document: {
         ...document,
         duplicate: delivery.designation === "duplicate",
       },
+      ...(privacy === undefined ? {} : { privacy }),
     });
   } catch {
     outcome = { status: "unknown", failureCode: "transport_failed" };

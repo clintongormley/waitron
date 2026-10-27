@@ -46,6 +46,8 @@ import { writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { freePorts } from "./testing/free-ports.js";
+import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
+import { savePrivacyContact } from "@waitron/provisioning";
 
 const { beforeServerStarts, startServer } = serverFixture();
 
@@ -440,7 +442,73 @@ async function pdfText(message: string) {
   }
 }
 
+function textPart(message: string) {
+  const boundary = /boundary="?([^"\r\n;]+)"?/.exec(message)?.[1];
+  expect(boundary).toBeDefined();
+  const part = message
+    .split(`--${boundary}`)
+    .find((section) => /^Content-Type: text\/plain/im.test(section.split("\r\n\r\n")[0]!));
+  expect(part).toBeDefined();
+  const [headers, ...body] = part!.replace(/^\r\n/, "").split("\r\n\r\n");
+  const value = body.join("\r\n\r\n").replace(/\r\n$/, "");
+  if (/Content-Transfer-Encoding: base64/i.test(headers!))
+    return Buffer.from(value.replace(/\s/g, ""), "base64").toString("utf8").replace(/\r\n/g, "\n");
+  return value
+    .replace(/=\r\n/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/(?:=[\dA-F]{2})+/g, (run) =>
+      Buffer.from(run.replaceAll("=", ""), "hex").toString("utf8"),
+    );
+}
+
 describe("invoice email worker at trading boot", () => {
+  it("sends the invoice customers' privacy notice in the text, read from the stored values", async () => {
+    const ctx = await fixture();
+    await withTransaction(suite.db, async (tx) => {
+      await savePrivacyContact(tx, {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+      });
+    });
+    const [taxpayer] = await suite.db.select({ legalName: tenants.legalName }).from(tenants);
+    const smtp = await smtpFixture();
+    let server: StartedServer | undefined;
+    try {
+      const email = await queuedEmail(ctx, smtp.smtp, true);
+      server = await startServer(ctx.env);
+      await vi.waitFor(
+        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 }),
+        { timeout: 5_000 },
+      );
+      expect(smtp.messages).toHaveLength(1);
+      const words = INVOICE_EMAIL_NOTICE_WORDS.es;
+      expect(textPart(smtp.messages[0]!).split("\n\n").slice(1)).toEqual([
+        [
+          words.purpose.replace("{venue}", () => taxpayer!.legalName),
+          words.contact.replace(
+            "{contacts}",
+            () => "privacy@example.com, https://example.com/privacy",
+          ),
+        ].join("\n"),
+      ]);
+      const text = await pdfText(smtp.messages[0]!);
+      for (const saved of [
+        "F/1",
+        "Saved customer",
+        "Saved customer address",
+        "Saved issuer address",
+        "Café",
+        "1,00",
+        "DUPLICADO",
+      ]) {
+        expect(text).toContain(saved);
+      }
+    } finally {
+      await server?.close();
+      await smtp.close();
+    }
+  });
+
   it("sends a queued duplicate through stored SMTP with the saved invoice facts", async () => {
     const ctx = await fixture();
     const smtp = await smtpFixture();

@@ -1,3 +1,4 @@
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -29,6 +30,7 @@ import {
   PRINTER_DELETED,
 } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
+import { readPrivacyContact, savePrivacyContact } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
@@ -2137,6 +2139,55 @@ describe("invoice email worker pass", () => {
       reported_outcome: "unknown",
     });
     expect(JSON.stringify(await rows())).not.toContain("private data");
+  });
+
+  it("reads the privacy facts after the document, in its transaction, and sends them", async () => {
+    const { sale } = await queued();
+    const privacy = {
+      privacyNoticeUrl: "https://example.com/privacy",
+      privacyEmail: "privacy@example.com",
+      taxRecord: true,
+    };
+    const reads: { read: string; saleId: string; stored?: unknown }[] = [];
+    const sent: unknown[] = [];
+    let outsideWrite: Promise<unknown> | undefined;
+    // Bound here, outside the pass, so the write queues as another caller's rather than the body's.
+    const writeOutside = AsyncResource.bind(() =>
+      withTransaction(suite.db, (outside) =>
+        savePrivacyContact(outside, { privacyEmail: "privacy@example.com" }),
+      ),
+    );
+    await runInvoiceEmailPass({
+      db: suite.db,
+      holder: "server-one",
+      now: () => start,
+      readDocument: async (tx, delivery) => {
+        reads.push({ read: "document", saleId: delivery.saleId });
+        // Queued behind the projection's write turn: a second transaction would let it in first.
+        outsideWrite = writeOutside();
+        return documentFor(tx, delivery);
+      },
+      readPrivacy: async (tx, delivery) => {
+        const read: (typeof reads)[number] = { read: "privacy", saleId: delivery.saleId };
+        reads.push(read);
+        read.stored = (await readPrivacyContact(tx))?.privacyEmail;
+        return privacy;
+      },
+      send: async (message) => {
+        sent.push(message.privacy);
+        return { status: "sent" };
+      },
+    });
+    expect((await outsideWrite) as unknown).toEqual({
+      privacyNoticeUrl: null,
+      privacyEmail: "privacy@example.com",
+    });
+    expect(reads).toEqual([
+      { read: "document", saleId: sale.saleId },
+      { read: "privacy", saleId: sale.saleId, stored: null },
+    ]);
+    expect(sent).toEqual([privacy]);
+    expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
   });
   async function within<T>(promise: Promise<T>): Promise<T> {
     let timer!: ReturnType<typeof setTimeout>;
