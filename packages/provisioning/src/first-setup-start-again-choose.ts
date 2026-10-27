@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { verifyPassword } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -24,7 +24,7 @@ import {
   setAsideDestinations,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
-import { parseState, type FirstSetupState } from "./first-setup-state.js";
+import { readFirstSetupRecord, type FirstSetupState } from "./first-setup-state.js";
 import "./errors.js";
 
 type Roots = { stateDir: string; venueDir: string };
@@ -64,9 +64,12 @@ async function assertNotKept(stateDir: string, survey: Choice): Promise<void> {
 /** The setup record the survey just accepted; the survey under the lock proves it unchanged. */
 async function setupRecord(roots: Roots, survey: Choice): Promise<FirstSetupState> {
   try {
-    const bytes = await fs.readFile(join(roots.stateDir, "first-setup.json"), "utf8");
-    const state = parseState(JSON.parse(bytes), roots.venueDir, roots.stateDir);
-    if (state.frozen.attemptId === survey.attemptId && state.frozenDigest === survey.frozenDigest)
+    const state = await readFirstSetupRecord(roots.venueDir, roots.stateDir);
+    if (
+      state !== null &&
+      state.frozen.attemptId === survey.attemptId &&
+      state.frozenDigest === survey.frozenDigest
+    )
       return state;
   } catch {
     // Read below as a box that is no longer ready.

@@ -406,6 +406,15 @@ function validateAttempt(value: unknown): asserts value is Attempt {
   publicValue(value.inputs);
   publicValue(value.result);
 }
+/** The state folder's setup record, parsed; null when there is none. One that cannot be read or parsed throws. */
+export async function readFirstSetupRecord(
+  venueDir: string,
+  stateDir: string,
+): Promise<FirstSetupState | null> {
+  const value = await readDurableHostJson(join(stateDir, "first-setup.json"), STATE_LIMIT);
+  return value === null ? null : parseState(value, venueDir, stateDir);
+}
+
 export function parseState(value: unknown, venueDir: string, stateDir: string): FirstSetupState {
   if (
     !keys(value, ["version", "venueDir", "stateDir", "previous", ...ATTEMPT_KEYS]) ||

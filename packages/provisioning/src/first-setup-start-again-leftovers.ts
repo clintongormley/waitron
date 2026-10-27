@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
@@ -8,7 +8,7 @@ import {
   type StartAgainFinding,
 } from "./first-setup-start-again-deletion.js";
 import { readStartAgainNote } from "./first-setup-start-again-note.js";
-import { parseState } from "./first-setup-state.js";
+import { readFirstSetupRecord, type FirstSetupState } from "./first-setup-state.js";
 import "./errors.js";
 
 export interface StartAgainEntry {
@@ -202,17 +202,15 @@ async function unitOf(
 }
 
 async function setupRecordParses(roots: Roots, attemptId: string, frozenDigest: string) {
-  const bytes = await readFile(join(roots.stateDir, SETUP_RECORD)).catch((error: unknown) => {
-    throw missing(error) ? new Explain("setup record gone") : error;
-  });
+  let state: FirstSetupState | null;
   try {
-    const state = parseState(JSON.parse(bytes.toString("utf8")), roots.venueDir, roots.stateDir);
-    if (state.frozen.attemptId !== attemptId || state.frozenDigest !== frozenDigest)
-      throw new Explain("setup record names another attempt");
-  } catch (error) {
-    if (error instanceof Explain) throw error;
+    state = await readFirstSetupRecord(roots.venueDir, roots.stateDir);
+  } catch {
     throw new Explain("setup record unparseable");
   }
+  if (state === null) throw new Explain("setup record gone");
+  if (state.frozen.attemptId !== attemptId || state.frozenDigest !== frozenDigest)
+    throw new Explain("setup record names another attempt");
 }
 
 /**
