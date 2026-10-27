@@ -22,6 +22,13 @@ The till entry’s
 no longer matches “Three till handlers still leave a failed list refresh unhandled”.
 Retarget the link during the till backlog cleanup; keep the open handlers entry.
 
+Two other index links need the same cleanup: A555 still targets the fiscal detail's old
+`design-proposed-2026-10-21` heading, while that heading now says `DESIGN APPROVED`;
+the payments link still names “The card refund path records only after the provider call,
+with a fresh key each time”, while its detail now says “The reconciler's card reversal records
+only after the provider call, with a fresh key each time”. Retarget both without changing
+their open work, then check the index's local heading links.
+
 ## Retain failure screenshots for long browser test names
 
 A failed waiting-list refresh case

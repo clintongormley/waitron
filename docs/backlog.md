@@ -207,7 +207,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Implementation and runtime acceptance remain open; the separate FULL fiscal PR finishes green for the owner to land.
   [Detail](backlog/fiscal.md#a696-invoice-issue-dates-and-record-offsets-follow-the-process-zone).
 
-- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** The sourced rule proposal awaits one owner decision before implementation. Fiscal: the owner lands it.
+- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Owner approved automatic dating without staff choice on 27 October. Design/plan published; build waits for the exact protected filing-field permission and A696/A739 integration. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
 - **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.
   [Detail](backlog/fiscal.md#structured-b2b-invoices-before-the-applicable-2027-or-2028-date).

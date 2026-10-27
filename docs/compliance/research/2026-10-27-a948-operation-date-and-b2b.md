@@ -1,5 +1,11 @@
 # A948: the meal's operation date and business-invoice delivery
 
+> **27 October, owner answer about 07:45 CET:** the meal-end date is approved, with **no staff
+> date choice or confirmation**. This supersedes that part of the proposal below; the earlier
+> research body remains historical. Follow the [implementation design](../../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md)
+> and [plan](../../superpowers/plans/2026-10-27-a444-meal-completion-date.md), whose filing-field
+> permission and A696/A739 integration gates remain open. S4 remains with the adviser.
+
 Researched on 27 October 2026. A948's switch has landed; this note addresses its two separate
 follow-ups. The operation-date rule below is a proposal for the owner, not an approved change
 or an adviser answer. The B2B timing conclusion comes from the current BOE texts and AEAT's

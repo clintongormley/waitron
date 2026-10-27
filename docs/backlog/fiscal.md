@@ -22,12 +22,15 @@ fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 se
 
 ## A444. A full invoice for a meal past midnight should carry the day the meal ends
 
-A231's provisional rule uses the day the bill was opened. The
-[27 October proposal](../compliance/research/2026-10-27-a948-operation-date-and-b2b.md)
-recommends the meal-completion date, confirmed before first F1 issuance and retained through
-recovery. The owner must approve the rule before implementation; the restaurant-service
+A231's provisional rule uses the day the bill was opened. On 27 October the owner approved
+the meal-end date with no staff date choice or confirmation. The
+[implementation design](../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md) and
+[plan](../superpowers/plans/2026-10-27-a444-meal-completion-date.md) capture the earliest qualifying
+existing final-service action automatically and retain it through payment recovery. Build waits
+for the precise protected filing-field exception and released A696/A739 paths. No mandatory extra
+Bill requested action is introduced. The unrecorded physical-end limit is explicit; the restaurant
 analogy remains [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) for the adviser.
-A696/A739 integration and fiscal owner landing remain separate. Earlier issued dates stay saved.
+Earlier issued dates stay saved; the eventual fiscal PR is for the owner to land.
 
 ## Structured B2B invoices before the applicable 2027 or 2028 date
 
