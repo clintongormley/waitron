@@ -229,16 +229,19 @@ it.each([
   });
   expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
 });
-it("words the names floor in the page's language, in the given time zone", () => {
+it("words the names floor in the page's language, in the given time zone, with no line break inside the date or the time", () => {
   const floorMs = Date.parse("2026-10-16T13:45:00Z");
   expect(namesFromText("en-GB", floorMs, "Europe/Madrid")).toBe(
-    "New series names can start from 16 Oct 2026, 15:45.",
+    "New series names can start from 16\u00a0Oct\u00a02026, 15:45.",
   );
   expect(namesFromText("es-ES", floorMs, "Europe/Madrid")).toBe(
-    "Los nuevos nombres de serie podrán empezar el 16 oct 2026 a las 15:45.",
+    "Los nuevos nombres de serie podrán empezar el 16\u00a0oct\u00a02026 a las 15:45.",
   );
   expect(namesFromText("en-GB", floorMs, "UTC")).toBe(
-    "New series names can start from 16 Oct 2026, 13:45.",
+    "New series names can start from 16\u00a0Oct\u00a02026, 13:45.",
+  );
+  expect(namesFromText("en-US", floorMs, "UTC")).toBe(
+    "New series names can start from Oct\u00a016,\u00a02026, 1:45\u00a0PM.",
   );
 });
 it.each(["complete"] as const)("refuses %s work before inspection", async (status) => {
@@ -436,6 +439,11 @@ it.each([
       recoveryRecordDamagedShown: true,
       confirmUnreadable: { shown: { ...unreadable, recoveryRecordDamaged: true } },
     },
+  },
+  {
+    name: "only the recovery-key record, so no confirmUnreadable",
+    summary: { ...shown, recoveryRecordDamaged: true as const },
+    sent: { recoveryRecordDamagedShown: true },
   },
 ])(
   "retireDamagedRecord sends back the summary it was given, for $name",

@@ -140,7 +140,8 @@ export const initialOwnerStrings = {
 
 export function namesFromText(locale: string, floorMs: number, timeZone?: string): string {
   const at = new Date(floorMs);
+  const unbroken = (text: string) => text.replaceAll(" ", "\u00a0");
   return initialOwnerStrings[locale.startsWith("es") ? "es" : "en"].namesFrom
-    .replace("{date}", at.toLocaleDateString(locale, { dateStyle: "medium", timeZone }))
-    .replace("{time}", at.toLocaleTimeString(locale, { timeStyle: "short", timeZone }));
+    .replace("{date}", unbroken(at.toLocaleDateString(locale, { dateStyle: "medium", timeZone })))
+    .replace("{time}", unbroken(at.toLocaleTimeString(locale, { timeStyle: "short", timeZone })));
 }
