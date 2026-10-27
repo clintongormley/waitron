@@ -150,7 +150,12 @@ describe("the README in a person's own personal-data download", () => {
   );
 
   it("names the venue generically when there is no tenant row", async () => {
+    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }));
     suite.db.run(sql`delete from tenants`);
-    expect(lines(await readme(mounted()))[0]).toBe("Your data held by the venue");
+    const text = lines(await readme(mounted()));
+    expect(text[0]).toBe("Your data held by the venue");
+    const noticeWords = PERSONAL_DATA_README_WORDS.en.notice.replace("{url}", "");
+    expect(text.some((line) => line.includes(noticeWords))).toBe(false);
+    expect(text.some((line) => line.includes(PRIVACY))).toBe(false);
   });
 });
