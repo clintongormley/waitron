@@ -782,11 +782,16 @@ export class MenuPatchDialog extends LitElement {
     this.requestUpdate();
   }
 
-  /** Where the form is stacked under the tree, it is scrolled to; focus stays on what was pressed. */
+  /** Where the form is stacked under the tree, it is scrolled to. Focus stays on a pressed tree
+   * item; a pressed variant link goes with its dish's form, so focus moves to the new form's
+   * heading. */
   async #pick(target: MenuPatchTarget): Promise<void> {
+    const pressed = (this.renderRoot as ShadowRoot).activeElement;
     this.picked = targetKey(target);
     await this.updateComplete;
-    this.renderRoot.querySelector('[data-test="form"]')?.scrollIntoView({ block: "nearest" });
+    const form = this.renderRoot.querySelector('[data-test="form"]')!;
+    form.scrollIntoView({ block: "nearest" });
+    if (pressed !== null && !pressed.isConnected) form.querySelector("h3")!.focus();
   }
 
   get #taxes() {
@@ -1041,7 +1046,7 @@ export class MenuPatchDialog extends LitElement {
     const offer = target.kind === "offer" ? this.live!.document.offers[target.menuItemId]! : null;
     const variants = offer?.variants ?? [];
     return html`<div class="form" data-test="form">
-      <h3>${label}</h3>
+      <h3 tabindex="-1">${label}</h3>
       ${fields.map((field) => this.#renderField(target, field))}
       ${
         variants.length === 0

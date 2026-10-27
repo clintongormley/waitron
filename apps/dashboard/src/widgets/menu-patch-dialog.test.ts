@@ -2384,3 +2384,20 @@ it("says under the picture why a refused picture was refused, as its chooser's d
     .element(page.elementLocator(choose.shadowRoot!.querySelector("button")!))
     .toHaveAccessibleDescription("");
 });
+
+it("moves focus to the variant's form when a dish's link to it is followed", async () => {
+  const el = await mount();
+  await pick(el, "Lemonade");
+  const link = form(el).querySelectorAll<HTMLElement>('[data-test="variant-link"]')[1]!;
+  await userEvent.click(link);
+  await el.updateComplete;
+  expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Large");
+  expect(el.shadowRoot!.activeElement).toBe(form(el).querySelector("h3"));
+});
+
+it("keeps focus on a tree item when it is picked", async () => {
+  const el = await mount();
+  await userEvent.click(node(el, "Lemonade"));
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(node(el, "Lemonade"));
+});
