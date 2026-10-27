@@ -237,7 +237,7 @@ it("leaves at the bottom a refusal that names no change the form shows", () => {
   });
 });
 
-it("words a bottom refusal, filling its placeholders and calling an unplaced value a fault", () => {
+it("words a bottom refusal, filling its placeholders and saying when a change no longer fits", () => {
   expect(refusalWords({ code: "menu_patch.base_changed", params: { liveNumber: 4 } })).toBe(
     "Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   );
@@ -245,6 +245,6 @@ it("words a bottom refusal, filling its placeholders and calling an unplaced val
     "Version {liveNumber} went live",
   );
   expect(refusalWords({ code: "menu_patch.invalid", params: { change: 0, field: "target" } })).toBe(
-    "This is a fault in Waitron: it could not match one of these changes to the live menu. Nothing was put live. Reload to start again from the live menu; changes that still fit are kept.",
+    "One of these changes no longer fits the live menu, for example because the menu's languages or its live version changed while you were editing. Nothing was put live. Reload to read the live menu again; changes that still fit it are kept.",
   );
 });

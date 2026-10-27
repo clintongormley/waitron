@@ -63,10 +63,9 @@ export function placeRefusal(
   };
 }
 
-/** A bottom refusal's sentence. A `menu_patch.invalid` reaches the bottom only when it names no
- * change the dialog sent, which only a fault in Waitron produces. */
+/** A bottom refusal's sentence. */
 export function refusalWords({ code, params }: Refusal): string {
-  if (code === "menu_patch.invalid") return t("menu_patch.fault");
+  if (code === "menu_patch.invalid") return t("menu_patch.no_longer_fits");
   return codeMessage(code).replace(/\{(\w+)\}/g, (whole, name: string) =>
     name in params ? String(params[name]) : whole,
   );

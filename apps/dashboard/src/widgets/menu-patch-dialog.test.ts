@@ -824,7 +824,7 @@ it("explains a refusal that names no field shown, at the bottom, and keeps Put l
     ],
     [
       refusal("menu_patch.invalid", { change: 0, field: "target" }),
-      "This is a fault in Waitron: it could not match one of these changes to the live menu. Nothing was put live. Reload to start again from the live menu; changes that still fit are kept.",
+      "One of these changes no longer fits the live menu, for example because the menu's languages or its live version changed while you were editing. Nothing was put live. Reload to read the live menu again; changes that still fit it are kept.",
     ],
     [new Error("the box is unreachable"), codeMessage("server.internal")],
   ] as const) {
@@ -834,8 +834,8 @@ it("explains a refusal that names no field shown, at the bottom, and keeps Put l
     await press(el, "review");
     await press(el, "put-live");
     expect(bottomMessage(el)).toBe(message);
-    // Only the fault offers to start again from the live menu.
-    expect(footerButton(el, "reload") !== null).toBe(message.startsWith("This is a fault"));
+    // Only the change that no longer fits offers to read the live menu again.
+    expect(footerButton(el, "reload") !== null).toBe(message.startsWith("One of these changes"));
     expect(reviewLines(el)).toEqual(["Soup: Price €3.00 → €4.00"]);
     expect(footerButton(el, "put-live")!.disabled).toBe(false);
     expect(el.open).toBe(true);
