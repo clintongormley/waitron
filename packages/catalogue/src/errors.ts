@@ -121,6 +121,10 @@ declare module "@waitron/shared" {
       time: string;
       occurrences: { at: string; offset: string }[];
     };
+    /** A patch to a live menu version was refused. `change` is the index of the change (-1 when
+     * the body is not a list); `field` is "target", "field" or the field's name; `reason` is the
+     * code the value's own check threw, for the dashboard to word. */
+    "menu_patch.invalid": { change: number; field: string; reason?: string };
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };
     /** A home display setting is outside what its device takes (device-home.ts). */
