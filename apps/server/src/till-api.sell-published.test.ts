@@ -973,10 +973,12 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     });
     const served = (await (
       await send(v, "GET", `/api/service-zones/${tables.zoneId}/offers`)
-    ).json()) as { offers: { productId: string; ordering: unknown }[] };
-    expect(served.offers.find((offer) => offer.productId === bacon.productId)?.ordering).toBe(
-      "not_sold_separately",
-    );
+    ).json()) as { offers: { productId: string; menuId: string; ordering: unknown }[] };
+    expect(
+      served.offers.find(
+        (offer) => offer.productId === bacon.productId && offer.menuId === tables.menuId,
+      )?.ordering,
+    ).toBe("not_sold_separately");
 
     // A held group's kitchen item waits unfired: `fired_at` stays empty until the group is fired.
     const ticketed = () =>
