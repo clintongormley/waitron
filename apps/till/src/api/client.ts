@@ -1607,6 +1607,15 @@ export type KitchenNoticeKind =
 export interface KitchenNotice {
   allergyBlock?: KitchenAllergyBlock | null;
   orderNoteChange?: { before: string | null; after: string | null };
+  /** On a kitchen-note change, the dishes it affects at this station, identical ones merged. */
+  dishes?: {
+    lineName: string;
+    unitName: Record<string, string> | null;
+    soldInEach: boolean;
+    quantity: string;
+    note: string | null;
+    wasStarted: boolean;
+  }[];
   id: string;
   stationId: string;
   workingOrderId: string;

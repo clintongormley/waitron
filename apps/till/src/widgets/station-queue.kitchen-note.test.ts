@@ -138,4 +138,65 @@ describe("kitchen instructions on station work", () => {
       expect(acknowledged.mock.calls[0]![0].detail).toEqual({ noticeId: "removed" });
     },
   );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "A807 lists every dish of one note-change notice and acknowledges it once in %s",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 900);
+      const dish = { unitName: null, soldInEach: true, note: null, wasStarted: false };
+      const many = {
+        ...notice,
+        orderNoteChange: { before: "Old train", after: "New train" },
+        dishes: [
+          { ...dish, lineName: "Burger", quantity: "1.000", note: "No onions" },
+          { ...dish, lineName: "Croquetas", quantity: "2.000", wasStarted: true },
+          { ...dish, lineName: "Flan", quantity: "1.000" },
+        ],
+      } satisfies KitchenNotice;
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [group],
+        notices: [many],
+      });
+      el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')?.click();
+      await el.updateComplete;
+
+      const rows = el.shadowRoot!.querySelectorAll("[data-notice]");
+      expect(rows).toHaveLength(1);
+      const dishes = [...rows[0]!.querySelectorAll<HTMLElement>("[data-notice-dish]")];
+      expect(dishes.map((row) => row.querySelector(".notice-line")!.textContent!.trim())).toEqual([
+        "1× Burger",
+        "2× Croquetas",
+        "1× Flan",
+      ]);
+      expect(rows[0]!.querySelectorAll(".notice-line")).toHaveLength(3);
+      expect(dishes[0]!.textContent).toContain("No onions");
+      const started = locale === "en-GB" ? "Started" : es["station.notice.started"];
+      expect(dishes.map((row) => row.querySelector(".notice-started")?.textContent)).toEqual([
+        undefined,
+        started,
+        undefined,
+      ]);
+      expect(rows[0]!.querySelectorAll(".notice-started")).toHaveLength(1);
+      const button = rows[0]!.querySelector("wt-button")!;
+      for (const name of ["1× Burger", "2× Croquetas", "1× Flan"])
+        expect(button.getAttribute("aria-label")).toContain(name);
+
+      const body = rows[0]!.querySelector<HTMLElement>(".notice-body")!.getBoundingClientRect();
+      const boxes = dishes.map((row) => row.getBoundingClientRect());
+      for (let index = 1; index < boxes.length; index += 1)
+        expect(boxes[index]!.top).toBeGreaterThan(boxes[index - 1]!.top);
+      for (const [index, box] of boxes.entries()) {
+        expect(box.width).toBeCloseTo(body.width, 0);
+        expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(dishes[index]!.scrollWidth).toBeLessThanOrEqual(dishes[index]!.clientWidth);
+      }
+
+      const acknowledged = vi.fn();
+      el.addEventListener("acknowledge-notice", acknowledged);
+      await userEvent.click(button);
+      expect(acknowledged).toHaveBeenCalledTimes(1);
+      expect(acknowledged.mock.calls[0]![0].detail).toEqual({ noticeId: notice.id });
+    },
+  );
 });
