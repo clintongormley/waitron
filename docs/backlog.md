@@ -2508,6 +2508,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   of slice 5 as too large for it.
   [Detail](backlog/till.md#a436--a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
 
+- **A kitchen display forgets its chosen language on a reload** (seen 2026-10-27 in A797 slice 9's
+  LOOK; open). Pick Español on a kitchen display, reload, and every heading is English again; a
+  till keeps the signed-in person's saved language. By the code, not a run of `main`: on a kitchen
+  display `#onLocaleSelected` (`apps/till/src/till-app.ts`) only switches the screen, since there is
+  no session to save the pick to, and `#preLoginLocale` returns the venue's language whenever
+  `deviceMode` is set. Decide whether a kitchen display keeps its pick on the device, as it keeps
+  its collapsed columns.
+
 - **Loose ends left by A366 slice 5 Part A (#1479).**
   Two device choices can lose a switched-off entry.
   [Detail](backlog/till.md#loose-ends-left-by-a366-slice-5-part-a-1479)
