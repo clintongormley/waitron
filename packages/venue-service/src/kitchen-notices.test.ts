@@ -1796,6 +1796,58 @@ describe("A807 one notice per kitchen-note change", () => {
     ]);
   });
 
+  it("keeps a measured dish apart at whole quantities and merges whole dishes sold in each", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 5, null);
+    const [fish] = await db
+      .insert(workingOrderLines)
+      .values({
+        workingOrderId: order.orderId,
+        lineNo: 4,
+        name: "Hake",
+        descriptions: { en: "Hake fillet" },
+        unitName: { en: "kg" },
+        quantity: 2000,
+        unitPriceGross: 4400,
+        vatClass: "reduced",
+        lineTotal: 8800,
+      })
+      .returning({ id: workingOrderLines.id });
+    const half = thousandthsToDecimal(500);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          at(v.grill, fish!.id),
+          at(v.grill, fish!.id),
+          at(v.grill, order.burgerLineId, half),
+          at(v.grill, order.burgerLineId),
+          at(v.grill, order.burgerLineId),
+          at(v.grill, order.lemonadeLineId),
+          at(v.grill, order.lemonadeLineId),
+        ],
+        "changed",
+        change,
+      ),
+    );
+    await db
+      .update(kitchenNotices)
+      .set({ unitName: { en: "glass" }, soldInEach: true })
+      .where(eq(kitchenNotices.lineName, "Lemonade"));
+
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notice!.dishes!.map(({ lineName, quantity }) => [lineName, quantity])).toEqual([
+      ["Hake", ONE],
+      ["Hake", ONE],
+      ["BRGR", half],
+      ["BRGR", thousandthsToDecimal(2000)],
+      ["Lemonade", thousandthsToDecimal(2000)],
+    ]);
+  });
+
   it("keeps a note change's notice whole at the fifty limit", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 1, null);
