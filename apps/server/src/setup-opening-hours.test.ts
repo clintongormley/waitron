@@ -14,13 +14,14 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   seasons,
+  STARTER_PERIOD_NAMES,
   VENUE_SERVICE_PROVISIONING,
 } from "@waitron/venue-service";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-async function seed(withMenu = true) {
+async function seed(withMenu = true, receiptLocale = "en-GB") {
   const db = suite.db;
   await seedTenant(db);
   const [menu] = await db.insert(catalogues).values({ name: "First menu" }).returning();
@@ -28,7 +29,7 @@ async function seed(withMenu = true) {
     .insert(locations)
     .values({
       name: "First venue",
-      invoiceLocales: ["en-GB"],
+      invoiceLocales: [receiptLocale],
       operationDescription: "Hospitality",
       catalogueId: withMenu ? menu!.id : null,
     })
@@ -48,6 +49,19 @@ async function seed(withMenu = true) {
 describe("setup's saved first opening hours", () => {
   it("reports the default department's actual seeded weekday hours", async () => {
     const { cfg, department } = await seed();
+    expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
+  });
+
+  it("reports a Spanish venue's seeded weekday hours under its staff language's period name", async () => {
+    const { cfg, department } = await seed(true, "es-ES");
+    expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
+  });
+
+  // Decided behaviour (A918 slice 3, decision 5): no column marks the starter period, so the
+  // check matches its name in any staff language, even in a venue that did not start with it.
+  it("reads an English venue's period renamed to the Spanish starter name as the starter period", async () => {
+    const { cfg, department } = await seed();
+    await suite.db.update(menuPeriods).set({ name: STARTER_PERIOD_NAMES.Open.es });
     expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
   });
 
@@ -76,6 +90,12 @@ describe("setup's saved first opening hours", () => {
 
   it("has no first-Open summary for an authored period", async () => {
     const { cfg } = await seed();
+    await suite.db.update(menuPeriods).set({ name: "Lunch" });
+    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+  });
+
+  it("has no first-Open summary for an authored period in a Spanish venue", async () => {
+    const { cfg } = await seed(true, "es-ES");
     await suite.db.update(menuPeriods).set({ name: "Lunch" });
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });

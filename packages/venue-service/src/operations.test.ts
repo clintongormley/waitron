@@ -58,6 +58,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { departments, zoneSalePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
+import { STARTER_PERIOD_NAMES } from "./starter-content.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import {
@@ -273,6 +274,27 @@ describe("order flow from sale policies", () => {
 });
 
 describe("new department service periods", () => {
+  it("names a new department's period in a Spanish venue's staff language", async () => {
+    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const [row] = await db
+      .insert(locations)
+      .values({
+        name: `Spanish ${randomUUID()}`,
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+        catalogueId: menu.id,
+      })
+      .returning({ id: locations.id });
+    const id = brandLocationId(row!.id);
+    const department = await scoped((tx) =>
+      createDepartment(tx, { locationId: id }, { name: "Restaurant", orderStart: "counter" }),
+    );
+    const periods = await db.execute(
+      sql`select name, menu_id from menu_periods where department_id = ${department.id}`,
+    );
+    expect(periods.rows).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es, menu_id: menu.id }]);
+  });
+
   it("places the location's menu in Open on weekdays, and leaves a menu-less location without periods", async () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
     const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));

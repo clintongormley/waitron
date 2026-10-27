@@ -1,7 +1,11 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import { locationId } from "@waitron/shared";
-import { departments, readOpeningHoursModel } from "@waitron/venue-service";
+import {
+  departments,
+  readOpeningHoursModel,
+  STARTER_OPEN_PERIOD_NAMES,
+} from "@waitron/venue-service";
 
 export async function readSetupOpeningHours(
   db: Database,
@@ -24,7 +28,7 @@ export async function readSetupOpeningHours(
   const department = model.departments.find(({ id }) => id === first.id);
   if (!department?.active || department.periods.length !== 1) return undefined;
   const period = department.periods[0]!;
-  if (period.name !== "Open") return undefined;
+  if (!STARTER_OPEN_PERIOD_NAMES.includes(period.name)) return undefined;
   const matches =
     department.seasonWeeks.length > 0 &&
     department.seasonWeeks.every(({ week }) =>

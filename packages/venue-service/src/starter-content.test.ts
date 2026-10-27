@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { starterName } from "@waitron/country-packs";
-import { OPEN_PERIOD_NAME } from "./menu-timetable.js";
+import { OPEN_PERIOD_NAME, STARTER_OPEN_PERIOD_NAMES } from "./menu-timetable.js";
 import { COUNTER_ZONE_NAME } from "./provisioning.js";
 import { DEFAULT_SEASONS } from "./season-rules.js";
 import { STARTER_STEPS } from "./service-steps.js";
@@ -26,6 +26,10 @@ describe("starter-content", () => {
 
   it("has an entry for the starter period, and none for anything else", () => {
     expect(Object.keys(STARTER_PERIOD_NAMES)).toEqual([OPEN_PERIOD_NAME]);
+  });
+
+  it("matches the starter period by its English name and each staff language's", () => {
+    expect(STARTER_OPEN_PERIOD_NAMES).toEqual(["Open", STARTER_PERIOD_NAMES.Open.es]);
   });
 
   it.each(["es", "en"] as const)(

@@ -24,7 +24,7 @@ import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
-import { STARTER_ZONE_NAMES } from "./starter-content.js";
+import { STARTER_PERIOD_NAMES, STARTER_ZONE_NAMES } from "./starter-content.js";
 import { departments } from "./schema/service.js";
 import {
   deviceProfileKitchenScreenStations,
@@ -89,12 +89,17 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
   it("names the default department after the venue", async () => {
     await seedTenant(db);
+    const [menu] = await db
+      .insert(catalogues)
+      .values({ name: "First menu" })
+      .returning({ id: catalogues.id });
     const [location] = await db
       .insert(locations)
       .values({
         name: "La Plaza",
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurante",
+        catalogueId: menu!.id,
       })
       .returning({ id: locations.id });
     const locationId = brandLocationId(location!.id);
@@ -109,6 +114,10 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       select z.name from zone_service_policies p join floor_zones z on z.id = p.zone_id
       where p.location_id = ${locationId} and p.is_counter_default = 1`);
     expect(zones.rows).toEqual([{ name: STARTER_ZONE_NAMES.Counter.es }]);
+    const periods = await db.execute<{ name: string }>(sql`
+      select p.name from menu_periods p join departments d on d.id = p.department_id
+      where d.location_id = ${locationId}`);
+    expect(periods.rows).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
   });
 
   describe("the starter service steps", () => {

@@ -54,6 +54,7 @@ import {
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
+import { readStarterStaffLanguage } from "./starter-language.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -211,13 +212,14 @@ export async function createDepartment(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
-  await addStarterServiceSteps(tx, cfg, row!.id);
+  const staffLanguage = await readStarterStaffLanguage(tx, cfg);
+  await addStarterServiceSteps(tx, cfg, row!.id, staffLanguage);
   const [location] = await tx
     .select({ menuId: locations.catalogueId })
     .from(locations)
     .where(eq(locations.id, cfg.locationId));
   if (location?.menuId !== null && location?.menuId !== undefined)
-    await placeOpenPeriod(tx, cfg, row!.id, location.menuId);
+    await placeOpenPeriod(tx, cfg, row!.id, location.menuId, staffLanguage);
   return row!;
 }
 

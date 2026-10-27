@@ -161,7 +161,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
-        await placeOpenPeriod(tx, node, counterDepartmentId, menuId);
+        await placeOpenPeriod(tx, node, counterDepartmentId, menuId, staffLanguage);
       }
       // A profile that takes orders and has no scope yet orders in the counter's department,
       // starting there. A kitchen display takes no orders, so it gets none. A scope already saved
