@@ -45,10 +45,10 @@ coordinate with the other venues and follow any wait before selecting the series
 Opening a backup pauses ordinary setup even if its key is refused. Retry recovery on this page,
 or restart the box to return to ordinary setup. Going back or refreshing the page does not resume it.
 
-Keep the recovery page open until the recovery finishes. The recovery stops if the box restarts,
-if 15 minutes pass without a recovery step, or within five minutes of leaving the page or closing
-its tab. If it had saved progress, the repair page then shows it as stopped and does not offer
-**Recover from backup** beside it; **Start again** deletes it. Do not erase a retained operation
+Keep the recovery page open, and able to reach the box, until the recovery finishes. The recovery
+stops if the box restarts, or within five minutes of leaving the page or closing its tab. If it had
+saved progress, the repair page then shows it as stopped and does not offer **Recover from backup**
+beside it; **Start again** deletes it. Do not erase a retained operation
 by hand to make another source fit. The bilingual [backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md)
 walks through the controls. It is served with the other guides during normal operation; the
 repair-only listener does not link to or serve those guides.

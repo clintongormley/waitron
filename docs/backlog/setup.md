@@ -657,13 +657,13 @@ reading when it places the recovery. Next step: measure that on a box.
 
 ## Decisions and deliberate limits
 
-**DECIDED (owner, 2026-10-26 ~15:45, option B; built as A1130): a renewal from the open backup
-recovery page extends the recovery session's 15 minutes.** The page renews every 30 seconds while it
-is open (`apps/setup/src/first-setup-backup-session.ts`), so the session that holds the decrypted
-backup key stays alive for as long as the tab stays open. The owner accepted that cost so that
-someone still filling in the recovery form at minute 15 is not told the recovery stopped. Without
-renewals or steps, the session still ends after 15 minutes
-(`apps/server/src/first-setup-backup-recovery.test.ts`).
+**DECIDED (owner, 2026-10-26 ~15:45; built as A1130): a renewal from the open backup recovery page
+extends the recovery session's 15 minutes.** The page renews every 30 seconds while it is open
+(`apps/setup/src/first-setup-backup-session.ts`), so the session that holds the decrypted backup key
+can stay alive with no time limit while the open page's renewals keep reaching the box. The owner
+accepted that cost so that someone still filling in the recovery form at minute 15 is not told the
+recovery stopped. Without renewals or steps, the session still ends after 15 minutes
+(`apps/server/src/first-setup-backup-lease.test.ts`).
 
 **DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database
 proof (or, with the database missing, after the person's recorded confirmation) and keeps one small
