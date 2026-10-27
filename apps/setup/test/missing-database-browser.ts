@@ -23,6 +23,11 @@ export async function click(app: SetupApp, name: string) {
 }
 export const namedSummary: StartAgainSummary = { reached: "named", lastName: "0CNQT" };
 export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
+export const namesFloorMs = Date.parse("2026-10-16T13:45:00Z");
+export const namesDamagedSummary: StartAgainSummary = {
+  ...namedSummary,
+  unreadable: { records: ["series-picks"], floorMs: namesFloorMs },
+};
 /** 25 Oct 2026 at 14:35 and 14:41 in the browser's own zone, so the shown times are fixed. */
 export const recoveryStartedAt = new Date(2026, 9, 25, 14, 35).toISOString();
 export const recoveryLastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();

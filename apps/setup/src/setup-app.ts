@@ -7,10 +7,11 @@ import type {
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
   StartAgainSummary,
+  StartAgainUnreadableRecord,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
 import { shownAt } from "./screens/first-setup-backup-screen.js";
-import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import { initialOwnerStrings, namesFromText } from "./screens/initial-owner-strings.js";
 import {
   LeaveController,
   ThemeChoiceController,
@@ -74,6 +75,11 @@ import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
+const damagedRecordLine = {
+  "series-picks": "seriesPicksDamaged",
+  "public-record": "publicRecordDamaged",
+  "fiscal-documents": "fiscalDocumentsDamaged",
+} as const satisfies Record<StartAgainUnreadableRecord, keyof (typeof initialOwnerStrings)["en"]>;
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
@@ -2556,12 +2562,23 @@ export class SetupApp extends LitElement {
               ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
               : nothing
           }
+          ${(ask?.unreadable?.records ?? []).map(
+            (record) =>
+              html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
+          )}
           ${
             !missing && this.firstStoppedSummary?.recovery
               ? stoppedBlock(this.firstStoppedSummary.recovery)
               : nothing
           }
           <p>${t.startAgainHelp}</p>
+          ${
+            ask?.unreadable
+              ? html`<p data-test="names-from">
+                  ${namesFromText(currentLocale(), ask.unreadable.floorMs)}
+                </p>`
+              : nothing
+          }
           <label
             ><input
               data-test="retire-confirmed"
