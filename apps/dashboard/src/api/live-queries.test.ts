@@ -204,6 +204,7 @@ it.each([
   ["getVenueDefaults", [], "locations"],
   ["getVenueDefaults", [], "catalogue_settings"],
   ["getVenuePrivacy", [], "tenants"],
+  ["getGoogleConfig", [], "tenants"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_tables"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_table_parts"],

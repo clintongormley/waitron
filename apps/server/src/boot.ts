@@ -2039,7 +2039,6 @@ async function bootServer(
       origin: config.managementOrigin,
       googleOidc: config.googleOidc,
       venueLocale,
-      privacyNoticeUrl: config.privacyNoticeUrl,
       credentialKeyRing: totpKeyRing,
       tableRemovals,
       sendAccountEmail,

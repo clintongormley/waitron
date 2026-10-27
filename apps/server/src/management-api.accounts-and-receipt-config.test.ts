@@ -34,7 +34,7 @@ import {
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { planVenue } from "@waitron/provisioning";
+import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
 import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -1639,16 +1639,46 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   const json = { "content-type": "application/json" };
 
   it("reports whether Google sign-in is configured, with the privacy notice address", async () => {
+    await setupTenant();
     const off = await mountWith({}).request("/management-api/google/config");
     expect(await off.json()).toEqual({ configured: false });
-    const on = await mountWith({
-      googleOidc: GOOGLE_OIDC,
-      privacyNoticeUrl: "https://example.test/privacy",
-    }).request("/management-api/google/config");
+    await withTransaction(suite.db, (tx) =>
+      savePrivacyContact(tx, { privacyNoticeUrl: "https://example.test/privacy" }),
+    );
+    const on = await mountWith({ googleOidc: GOOGLE_OIDC }).request(
+      "/management-api/google/config",
+    );
     expect(await on.json()).toEqual({
       configured: true,
       privacyNoticeUrl: "https://example.test/privacy",
     });
+  });
+
+  it("answers the venue's saved privacy page on each request, and never its privacy email", async () => {
+    const app = mountWith({ googleOidc: GOOGLE_OIDC });
+    const config = async (): Promise<unknown> => {
+      const res = await app.request("/management-api/google/config");
+      expect(res.status).toBe(200);
+      return res.json();
+    };
+    const store = (privacyNoticeUrl: string | null, privacyEmail?: string) =>
+      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail }));
+
+    expect(await config()).toEqual({ configured: true });
+    await setupTenant();
+    expect(await config()).toEqual({ configured: true });
+    await store("https://example.com/privacy", "privacy@example.com");
+    expect(await config()).toEqual({
+      configured: true,
+      privacyNoticeUrl: "https://example.com/privacy",
+    });
+    await store("https://example.com/other");
+    expect(await config()).toEqual({
+      configured: true,
+      privacyNoticeUrl: "https://example.com/other",
+    });
+    await store(null);
+    expect(await config()).toEqual({ configured: true });
   });
 
   it("refuses every Google route with google.invalid when Google is not configured", async () => {
