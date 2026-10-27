@@ -2457,7 +2457,8 @@ only by that screen's own tests: SumUp's affiliate badge by the "the affiliate
 help is hidden until help is on, then hangs over the heading's top trailing corner" case in
 `packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; the till's screen badges by
 the `*.help.test.ts` files beside the counter, floor and table-order screens, `menu-browser.ts` and
-`till-shell.ts`; nothing checks a new one.
+`till-shell.ts`; the menu editor's Patch live menu badge by the cases under "patching the live
+menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new one.
 
 ### Forms
 
@@ -5066,7 +5067,7 @@ changes" for a screen reader (`marked` on the `wt-tabs` item). A menu whose publ
 clashes says so on a line under the heading, as a link to its own Price overrides tab in
 `--wt-color-danger`, and as plain words on the Price overrides tab itself. Guards:
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
-beside it.
+beside it; the patch button and its badge: "patching the live menu" in `menus-screen.test.ts`.
 
 The button opens the patch dialog (`apps/dashboard/src/widgets/menu-patch-dialog.ts`), a wide
 `wt-modal` headed "Patch version N of <menu>". Its edit step puts a search box above a tree of the

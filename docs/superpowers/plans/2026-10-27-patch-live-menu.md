@@ -142,7 +142,8 @@ Write rules for this task:
     all enabled blank and nothing else stored → `null`.
   - `"refuses a field outside the list, naming the change"`: index 1 with `"unit"`, `"allergens"`,
     `"dietaryDeclarations"`, `"color"` → `{ change: 1, field: "field" }`; unknown target kind →
-    `field: "target"`; a non-array body → `{ change: -1, field: "changes" }`.
+    `field: "target"`; a non-array body → `{ change: -1, field: "changes" }`. (2026-10-27, finish-branch review: now `management.request_invalid` with
+    `field: "changes"`; see Task 1's interface note.)
   - `"refuses each bad value under its field"`: price `"abc"` and `"-1"`, vatClass `"luxury"`,
     blank name, a non-string kitchen name, a non-object customer name, an unknown language key
     (with `reason`), an empty-string image, a missing variant.
