@@ -1,19 +1,27 @@
+import { eq } from "drizzle-orm";
+import {
+  resolveInstalledStarterLanguages,
+  starterName,
+  starterNames,
+} from "@waitron/country-packs";
+import { locations, tenants } from "@waitron/db";
 import type { PersonRoleValue } from "@waitron/identity";
 import type { ModuleProvisioning } from "@waitron/module";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import type { AdjustmentReasonInput } from "./operations.js";
+import { STARTER_REASON_NAMES } from "./starter-content.js";
 
 const EVERY: PersonRoleValue[] = ["staff", "supervisor", "manager", "admin"];
 const SUPERVISOR_UP: PersonRoleValue[] = ["supervisor", "manager", "admin"];
 const MANAGER_UP: PersonRoleValue[] = ["manager", "admin"];
 
 type Starter = Omit<AdjustmentReasonInput, "name" | "names"> & {
-  names: { en: string };
+  english: string;
 };
 
 function voidReason(en: string, noteRequired = false): Starter {
   return {
-    names: { en },
+    english: en,
     kind: "void",
     actions: ["cancel"],
     maxPercentBp: null,
@@ -34,7 +42,7 @@ function compReason(
   },
 ): Starter {
   return {
-    names: { en },
+    english: en,
     kind: "comp",
     actions,
     maxPercentBp,
@@ -68,15 +76,29 @@ const STARTERS: readonly Starter[] = [
 export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the starter void and comp reasons",
-    async run(tx) {
+    async run(tx, node) {
       if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
-      for (const starter of STARTERS) {
+      const [venue] = await tx
+        .select({
+          country: tenants.country,
+          area: locations.province,
+          invoiceLocales: locations.invoiceLocales,
+        })
+        .from(locations)
+        .innerJoin(tenants, eq(tenants.id, 1))
+        .where(eq(locations.id, node.locationId));
+      const { languages, staffLanguage } = resolveInstalledStarterLanguages({
+        country: venue?.country,
+        area: venue?.area,
+        receiptLocale: venue?.invoiceLocales[0] ?? null,
+      });
+      for (const { english, ...starter } of STARTERS) {
         await createAdjustmentReason(tx, {
           ...starter,
-          name: starter.names.en,
-          names: { ...starter.names },
+          name: starterName(STARTER_REASON_NAMES, english, staffLanguage),
+          names: starterNames(STARTER_REASON_NAMES, english, languages),
         });
       }
       return "default cancel reason ready";

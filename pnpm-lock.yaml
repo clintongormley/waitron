@@ -539,6 +539,9 @@ importers:
 
   packages/adjustments:
     dependencies:
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
       '@waitron/dashboard-kit':
         specifier: workspace:*
         version: link:../dashboard-kit
