@@ -18,7 +18,14 @@ import {
   typeTextSize,
   type LookDraft,
 } from "./look-draft.js";
-import { cleanupWidgets, computedColour, dotOf, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  computedColour,
+  dotOf,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "./test-helpers.js";
 import { advancedSummary, handWarningLines, themeColourName } from "./theme-words.js";
 import type { HandAction, ThemeAdvanced } from "./theme-advanced.js";
 import "./theme-advanced.js";
@@ -67,9 +74,7 @@ const workedOut = (el: ThemeAdvanced, mode: string, key: string) =>
   );
 
 async function open(el: ThemeAdvanced): Promise<void> {
-  const d = disclosure(el);
-  await userEvent.click(d.shadowRoot!.querySelector("button.header")!);
-  await d.updateComplete;
+  await openDisclosure(disclosure(el));
   await el.updateComplete;
 }
 
@@ -178,12 +183,14 @@ describe("events", () => {
     await open(el);
     const seen = actions(el);
     const input = picker(el, "dark", "surface");
+    await openFoldsAround(input);
     input.value = "#223344";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await nextFrame();
     expect(seen).toEqual([{ kind: "pick", mode: "dark", key: "surface", colour: "#223344" }]);
 
     const inner = codeField(el, "light", "text").shadowRoot!.querySelector("input")!;
+    await openFoldsAround(inner);
     await page.elementLocator(inner).fill("#abc");
     expect(seen.at(-1)).toEqual({ kind: "type", mode: "light", key: "text", text: "#abc" });
 
@@ -191,6 +198,7 @@ describe("events", () => {
     expect(link.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
       "Use worked-out colour: Page, light screens",
     );
+    await openFoldsAround(link);
     await userEvent.click(link);
     expect(seen.at(-1)).toEqual({ kind: "worked-out", mode: "light", key: "bg" });
 
@@ -198,6 +206,7 @@ describe("events", () => {
     expect(reset.variant).toBe("secondary");
     expect(reset.textContent!.trim()).toBe("Reset all to worked-out");
     expect(reset.disabled).toBe(false);
+    await openFoldsAround(reset);
     await userEvent.click(reset);
     expect(seen.at(-1)).toEqual({ kind: "reset-all" });
     expect(seen).toHaveLength(4);
@@ -289,9 +298,10 @@ describe("layout", () => {
     await page.viewport(width, 900);
     const el = await mount(CREAM);
     if (section !== undefined) el.style.width = `${section}px`;
-    await open(el);
-    await nextFrame();
     const row = q(el, `[data-test=hand-row-${key}]`);
+    await openFoldsAround(row);
+    await el.updateComplete;
+    await nextFrame();
     const [light, dark] = [...row.querySelectorAll<HTMLElement>(".value")];
     return { el, row, name: row.querySelector<HTMLElement>(".name")!, light: light!, dark: dark! };
   }
@@ -359,6 +369,7 @@ describe("layout", () => {
         expect(style.borderBottomStyle, row.dataset.test).toBe("solid");
         expect(parseFloat(style.borderBottomWidth), row.dataset.test).toBeGreaterThan(0);
       }
+      await openFoldsAround(q(el, "[data-test=reset-all]"));
       const reset = box(q(el, "[data-test=reset-all]"));
       expect(Math.abs(reset.right - box(q(el, ".table")).right)).toBeLessThanOrEqual(1);
     });
@@ -427,6 +438,7 @@ describe("warnings under the rows", () => {
     expect(fix.size).toBe("sm");
     expect(innerLabel(fix)).toBe("Use #526a5b: Secondary text, light screens");
     const seen = actions(el);
+    await openFoldsAround(fix);
     await userEvent.click(fix);
     expect(seen).toEqual([{ kind: "fix", mode: "light", key: "text-muted", fix: "#526a5b" }]);
 
@@ -492,6 +504,7 @@ describe("the fixed line", () => {
     expect(undo.textContent!.trim()).toBe("Undo");
     expect(innerLabel(undo)).toBe("Undo: Secondary text, light screens");
     const seen = actions(el);
+    await openFoldsAround(undo);
     await userEvent.click(undo);
     expect(seen).toEqual([{ kind: "undo", mode: "light", key: "text-muted" }]);
   });
@@ -509,6 +522,7 @@ describe("the fixed line", () => {
 
   async function at(el: ThemeAdvanced, width: number) {
     el.style.width = `${width}px`;
+    await openFoldsAround(words(el));
     await nextFrame();
     await nextFrame();
     // elementFromPoint sees only what is inside the viewport.
@@ -601,6 +615,7 @@ describe("one pick per frame", () => {
   it("sends a waiting pick before any other action, and nothing more at the frame", async () => {
     const el = await mount(CREAM);
     await open(el);
+    await openFoldsAround(workedOut(el, "light", "bg")!);
     const seen = actions(el);
     const before = frames.length;
     pick(el, "#111111");

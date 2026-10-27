@@ -9,7 +9,13 @@ import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeLogoPrint, ThemeView } from "../api/client.js";
 import { fill, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "../widgets/test-helpers.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -88,21 +94,16 @@ const inAdvanced = (el: Card, selector: string) =>
   advanced(el).shadowRoot!.querySelector<HTMLElement>(selector);
 
 async function openAdvanced(el: Card) {
-  const disclosure = inAdvanced(
-    el,
-    "[data-test=advanced]",
-  ) as HTMLElementTagNameMap["wt-disclosure"];
-  if (!disclosure.open) {
-    await userEvent.click(disclosure.shadowRoot!.querySelector("button.header")!);
-    await disclosure.updateComplete;
-  }
-  expect(disclosure.open).toBe(true);
+  await openDisclosure(
+    inAdvanced(el, "[data-test=advanced]") as HTMLElementTagNameMap["wt-disclosure"],
+  );
 }
 
 async function typeHand(el: Card, mode: string, key: string, value: string) {
-  await openAdvanced(el);
   const field = inAdvanced(el, `wt-input[name="handSet.${mode}.${key}"]`)!;
-  await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
+  const inner = field.shadowRoot!.querySelector("input")!;
+  await openFoldsAround(inner);
+  await page.elementLocator(inner).fill(value);
   await el.updateComplete;
 }
 
@@ -238,6 +239,7 @@ const states: Record<
       await openAdvanced(el);
       const rows = inAdvanced(el, "dashboard-theme-text")!;
       expect(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')).not.toBeNull();
+      await openFoldsAround(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')!);
       return "dashboard-theme-advanced";
     },
   },
@@ -247,6 +249,8 @@ const states: Record<
       await openAdvanced(el);
       expect(inAdvanced(el, "[data-test=hand-warning-light-text]")).not.toBeNull();
       expect(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")).not.toBeNull();
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-text]")!);
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")!);
       return "dashboard-theme-advanced";
     },
   },
@@ -256,6 +260,7 @@ const states: Record<
       await press(el, "fix-all");
       await openAdvanced(el);
       await expect.poll(() => inAdvanced(el, "[data-test=hand-fixed-light-text]")).toBeTruthy();
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-fixed-light-text]")!);
       return "dashboard-theme-advanced";
     },
   },

@@ -12,7 +12,12 @@ import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "../widgets/test-helpers.js";
 import { advancedSummary, handNames, keptNote } from "../widgets/theme-words.js";
 import "./look-card.js";
 
@@ -110,14 +115,12 @@ async function settle(el: Card) {
 }
 
 async function openAdvanced(el: Card) {
-  const d = disclosure(el);
-  await userEvent.click(d.shadowRoot!.querySelector("button.header")!);
-  await d.updateComplete;
+  await openDisclosure(disclosure(el));
 }
 
 async function typeHand(el: Card, mode: string, key: string, value: string) {
-  if (!disclosure(el).open) await openAdvanced(el);
   const inner = handCode(el, mode, key).shadowRoot!.querySelector("input")!;
+  await openFoldsAround(inner);
   await page.elementLocator(inner).fill(value);
   await settle(el);
 }
@@ -179,6 +182,7 @@ describe("the Look card's Advanced section", () => {
     const { el } = await mountEditing();
     await typeHand(el, "light", "bg", "#f8f1e1");
     expect(button(el, "save").disabled).toBe(false);
+    await openFoldsAround(workedOut(el, "light", "bg"));
     await userEvent.click(workedOut(el, "light", "bg"));
     await settle(el);
     expect(button(el, "save").variant).toBe("secondary");
@@ -204,6 +208,7 @@ describe("the Look card's Advanced section", () => {
     expect(button(el, "save").disabled).toBe(true);
     expect(button(el, "save-as-new").disabled).toBe(true);
 
+    await openFoldsAround(workedOut(el, "light", "bg"));
     await userEvent.click(workedOut(el, "light", "bg"));
     await settle(el);
     expect(handCode(el, "light", "bg").error).toBe("");
@@ -419,6 +424,7 @@ function mountChoices(choices: ThemeChoices) {
 async function press(el: Card, name: string) {
   const target = inAdvanced(el, name) ?? q(el, `[data-test=${name}]`);
   expect(target, name).not.toBeNull();
+  await openFoldsAround(target!);
   await userEvent.click(target!);
   await settle(el);
 }
@@ -441,6 +447,7 @@ describe("fixes and Undo in Advanced", () => {
     const { el } = await mountChoices(CREAM_SAGE);
     await openAdvanced(el);
     await press(el, "hand-fix-light-text-muted");
+    await openFoldsAround(inAdvanced(el, "hand-undo-light-text-muted")!);
     const input = picker(el, "light", "text-muted");
     input.value = "#123456";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -891,9 +898,9 @@ describe("a card action taken while a picked colour waits for its frame", () => 
     [mode, key, colour]: [string, string, string],
     action: () => Promise<void>,
   ) {
-    if (!disclosure(el).open) await openAdvanced(el);
-    const release = holdFrames();
     const input = picker(el, mode, key);
+    await openFoldsAround(input);
+    const release = holdFrames();
     input.value = colour;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await action();
@@ -999,17 +1006,18 @@ describe("text set by hand in Advanced", () => {
     await textRows(el).updateComplete;
   }
   async function typeSize(el: Card, key: string, value: string) {
-    if (!disclosure(el).open) await openAdvanced(el);
     const inner = sizeBox(el, key).shadowRoot!.querySelector("input")!;
+    await openFoldsAround(inner);
     await page.elementLocator(inner).fill(value);
     await settleText(el);
   }
   async function choose(el: Card, name: string, value: string) {
-    if (!disclosure(el).open) await openAdvanced(el);
+    await openFoldsAround(choice(el, name));
     await chooseOption(choice(el, name), value);
     await settleText(el);
   }
   async function pressText(el: Card, name: string) {
+    await openFoldsAround(inText(el, `[data-test="${name}"]`)!);
     await userEvent.click(inText(el, `[data-test="${name}"]`)!);
     await settleText(el);
   }
@@ -1192,7 +1200,7 @@ describe("a refused text setting and Advanced's closed line", () => {
     await textRows(el).updateComplete;
   }
   async function choose(el: Card, name: string, value: string) {
-    if (!disclosure(el).open) await openAdvanced(el);
+    await openFoldsAround(choice(el, name));
     await chooseOption(choice(el, name), value);
     await settleText(el);
   }

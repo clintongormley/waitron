@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -79,6 +79,39 @@ export function cleanupWidgets(): void {
   history.replaceState(originalHistoryState, "", originalUrl);
   document.body.style.background = "";
   document.documentElement.style.background = "";
+}
+
+/** Clicks a closed wt-disclosure's header and waits for it to render open; does nothing when open. */
+export async function openDisclosure(
+  disclosure: HTMLElementTagNameMap["wt-disclosure"],
+): Promise<void> {
+  if (!disclosure.open) {
+    await userEvent.click(disclosure.shadowRoot!.querySelector("button.header")!);
+    await disclosure.updateComplete;
+  }
+  expect(disclosure.open).toBe(true);
+}
+
+/**
+ * Opens, outermost first, every wt-disclosure that holds `node`, crossing shadow roots. A
+ * disclosure reached as a shadow root's host is skipped: `node` is in its header, not its body,
+ * and opening it would make a click on that header close it.
+ */
+export async function openFoldsAround(node: Element): Promise<void> {
+  const folds: HTMLElementTagNameMap["wt-disclosure"][] = [];
+  let at: Element | null = node;
+  while (at) {
+    const parent: Element | null = at.parentElement;
+    if (parent) {
+      if (parent.localName === "wt-disclosure")
+        folds.push(parent as HTMLElementTagNameMap["wt-disclosure"]);
+      at = parent;
+    } else {
+      const root = at.getRootNode();
+      at = root instanceof ShadowRoot ? root.host : null;
+    }
+  }
+  for (const fold of folds.reverse()) await openDisclosure(fold);
 }
 
 /**

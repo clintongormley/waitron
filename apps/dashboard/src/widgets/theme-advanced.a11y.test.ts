@@ -1,11 +1,16 @@
 import { afterEach, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { en, es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import { openDraft, setHand, typeHandCode, type LookDraft } from "./look-draft.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  openDisclosure,
+} from "./test-helpers.js";
 import type { ThemeAdvanced } from "./theme-advanced.js";
 import "./theme-advanced.js";
 
@@ -103,8 +108,7 @@ it.each(cases)(
     const strings = locale === "es-ES" ? es : en;
     expect(disclosure.heading).toBe(strings["appearance.advanced"]);
     if (open) {
-      await userEvent.click(disclosure.shadowRoot!.querySelector("button.header")!);
-      await disclosure.updateComplete;
+      await openDisclosure(disclosure);
       await el.updateComplete;
     }
     expect(disclosure.open).toBe(open);

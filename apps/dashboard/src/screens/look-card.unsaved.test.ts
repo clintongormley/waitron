@@ -11,7 +11,13 @@ import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogClosed,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "../widgets/test-helpers.js";
 import type { ImageUpload } from "../widgets/image-upload.js";
 import "./look-card.js";
 
@@ -237,17 +243,17 @@ async function settle(card: Card) {
   await advanced(card).updateComplete;
 }
 async function openAdvanced(card: Card) {
-  if (disclosure(card).open) return;
-  await userEvent.click(disclosure(card).shadowRoot!.querySelector("button.header")!);
-  await disclosure(card).updateComplete;
+  await openDisclosure(disclosure(card));
 }
 async function typeHand(card: Card, mode: string, key: string, value: string) {
-  await openAdvanced(card);
   const field = inAdvanced(card, `wt-input[name="handSet.${mode}.${key}"]`)!;
-  await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
+  const inner = field.shadowRoot!.querySelector("input")!;
+  await openFoldsAround(inner);
+  await page.elementLocator(inner).fill(value);
   await settle(card);
 }
 async function pressInAdvanced(card: Card, name: string) {
+  await openFoldsAround(inAdvanced(card, `[data-test=${name}]`)!);
   await userEvent.click(inAdvanced(card, `[data-test=${name}]`)!);
   await settle(card);
 }
@@ -464,11 +470,9 @@ describe("text set by hand in an unsaved draft", () => {
   const textRows = (card: Card) =>
     inAdvanced(card, "dashboard-theme-text") as HTMLElementTagNameMap["dashboard-theme-text"];
   async function chooseBold(card: Card, value: string) {
-    await openAdvanced(card);
-    await chooseOption(
-      textRows(card).shadowRoot!.querySelector('wt-combobox[name="text.weight.bold"]')!,
-      value,
-    );
+    const bold = textRows(card).shadowRoot!.querySelector('wt-combobox[name="text.weight.bold"]')!;
+    await openFoldsAround(bold);
+    await chooseOption(bold, value);
     await settle(card);
     await textRows(card).updateComplete;
   }
@@ -481,11 +485,11 @@ describe("text set by hand in an unsaved draft", () => {
     // 600 is Waitron's own Bold, but picked it is set by hand.
     expect(unload()).toBe(true);
     expect(save(card).disabled).toBe(false);
-    await userEvent.click(
-      textRows(card).shadowRoot!.querySelector<HTMLElement>(
-        '[data-test="text-worked-out-weight.bold"]',
-      )!,
-    );
+    const workedOut = textRows(card).shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="text-worked-out-weight.bold"]',
+    )!;
+    await openFoldsAround(workedOut);
+    await userEvent.click(workedOut);
     await settle(card);
     expect(unload()).toBe(false);
     expect(save(card).disabled).toBe(true);
