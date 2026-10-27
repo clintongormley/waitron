@@ -305,6 +305,60 @@ describe("reading and patching a menu's live version", () => {
     });
   });
 
+  it("refuses a body without a list of changes before reading the menu", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    for (const changes of [undefined, null, "changes", price(itemId, "4.50")])
+      expect(
+        await json(await patch(app, menuId, { baseVersionId: crypto.randomUUID(), changes }), 400),
+      ).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "changes" } },
+      });
+  });
+
+  it("refuses a dish id its menu only inherits, leaving every object's prototype alone", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const base = await json<LiveMenu>(await live(app, menuId), 200);
+    const before = await publicationTables();
+    const holders = [
+      Object.prototype,
+      Object,
+      Object.prototype.hasOwnProperty,
+    ] as unknown as Record<string, unknown>[];
+    try {
+      for (const inherited of ["__proto__", "constructor", "hasOwnProperty"])
+        expect(
+          await json(
+            await patch(app, menuId, {
+              baseVersionId: base.versionId,
+              changes: [
+                price(itemId, "4.50"),
+                {
+                  target: { kind: "offer", menuItemId: inherited },
+                  field: "kitchenName",
+                  value: "Everywhere",
+                },
+              ],
+            }),
+            400,
+          ),
+        ).toMatchObject({
+          error: { code: "menu_patch.invalid", params: { change: 1, field: "target" } },
+        });
+      expect(({} as Record<string, unknown>).kitchenName).toBeUndefined();
+      expect(holders.map((holder) => Object.hasOwn(holder, "kitchenName"))).toEqual([
+        false,
+        false,
+        false,
+      ]);
+      expect(await publicationTables()).toEqual(before);
+    } finally {
+      for (const holder of holders) delete holder.kitchenName;
+    }
+  });
+
   it("gives each refusal from the patch its own status, writing nothing", async () => {
     const app = mountApp();
     const { menuId, itemId } = await lunchWithSoup(app);

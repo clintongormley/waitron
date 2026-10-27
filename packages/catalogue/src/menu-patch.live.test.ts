@@ -347,8 +347,8 @@ describe("patchLiveMenu", () => {
 
     it("a malformed patch", async () => {
       await refuses(() => patch(v1, "not a list"), {
-        code: "menu_patch.invalid",
-        params: { change: -1, field: "changes" },
+        code: "management.request_invalid",
+        params: { field: "changes" },
       });
     });
 

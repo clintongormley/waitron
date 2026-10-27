@@ -15,7 +15,8 @@ import { addMember, createSectionIn } from "./sections.js";
 import { updateMenuDetails } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { liveVersions, previewMenu, publishMenu } from "./menu-publication.js";
-import { applyMenuPatch, parseMenuPatch, patchFieldValue } from "./menu-patch.js";
+import { readMenuStructure } from "./menu-structure.js";
+import { applyMenuPatch, fixedLanguages, parseMenuPatch, patchFieldValue } from "./menu-patch.js";
 import { PATCH_FIELDS, type MenuPatchChange } from "./menu-patch-types.js";
 import type { DocumentMember, FrozenOfferedModifier, MenuDocument } from "./menu-document-types.js";
 
@@ -271,6 +272,38 @@ describe("applyMenuPatch", () => {
         code: "menu_patch.invalid",
         params: { change: 0, field: "target" },
       });
+    }
+  });
+
+  it("refuses an id the document's dishes only inherit, as one it does not hold", async () => {
+    const { f, document } = await liveLunch();
+    const holders: Record<string, unknown>[] = [
+      Object.prototype as Record<string, unknown>,
+      Object as unknown as Record<string, unknown>,
+      Object.prototype.hasOwnProperty as unknown as Record<string, unknown>,
+    ];
+    try {
+      for (const inherited of ["__proto__", "constructor", "hasOwnProperty"]) {
+        const targets = [
+          { kind: "offer", menuItemId: inherited },
+          { kind: "variant", menuItemId: inherited, variantId: f.large },
+        ] as const;
+        for (const target of targets) {
+          expect(
+            refusal(() =>
+              applyMenuPatch(document, [{ target, field: "kitchenName", value: "X" }], languages),
+            ),
+          ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "target" } });
+          expect(patchFieldValue(document, target, "kitchenName", languages)).toBeUndefined();
+        }
+      }
+      expect(holders.map((holder) => Object.hasOwn(holder, "kitchenName"))).toEqual([
+        false,
+        false,
+        false,
+      ]);
+    } finally {
+      for (const holder of holders) delete holder.kitchenName;
     }
   });
 
@@ -650,6 +683,81 @@ describe("applyMenuPatch on every copy", () => {
   });
 });
 
+describe("a section shown through folders fixing different languages", () => {
+  /** Lunch shows Drinks through a folder fixing its English name, and inside Bar through one
+   * fixing its Spanish name. */
+  async function eachFolderFixesOneLanguage(tx: Transaction, f: MenusFixture): Promise<void> {
+    await writeContentLanguages(tx, languages);
+    await updateMenuDetails(tx, f.drinksMenu, {
+      names: { en: "Base English", es: "Base Spanish" },
+    });
+    const structure = await readMenuStructure(tx, f.lunch);
+    const member = structure.root.members.find(
+      (candidate) => candidate.ref.kind === "section" && candidate.ref.sectionId === f.drinks,
+    )!;
+    await setIncludeFolder(tx, f.lunchRoot, member.id, {
+      showAsFolder: true,
+      overrides: { names: { en: "Fixed English" } },
+    });
+    const bar = await createSectionIn(tx, f.lunchRoot, {
+      internalName: "Bar",
+      names: { en: "Bar" },
+    });
+    const second = await addMember(tx, bar.id, section(f.drinks));
+    await setIncludeFolder(tx, bar.id, second.id, {
+      showAsFolder: true,
+      overrides: { names: { es: "Fixed Spanish" } },
+    });
+  }
+
+  it("reads each language from a copy that takes it, so editing one leaves the other's copies alone", async () => {
+    const { f, document } = await liveLunch(eachFolderFixesOneLanguage);
+    const target = { kind: "section", sectionId: f.drinks } as const;
+    expect(sectionCopies(document.root.members, f.drinks).map((copy) => copy.names)).toEqual([
+      { en: "Fixed English", es: "Base Spanish" },
+      { en: "Base English", es: "Fixed Spanish" },
+    ]);
+    const live = patchFieldValue(document, target, "names", languages) as Record<string, string>;
+    expect(live).toEqual({ en: "Base English", es: "Base Spanish" });
+    expect(fixedLanguages(document, target, "names", languages)).toEqual([]);
+    const patched = applyMenuPatch(
+      document,
+      parseMenuPatch([{ target, field: "names", value: { ...live, es: "Changed Spanish" } }]),
+      languages,
+    );
+    expect(sectionCopies(patched.root.members, f.drinks).map((copy) => copy.names)).toEqual([
+      { en: "Fixed English", es: "Changed Spanish" },
+      { en: "Base English", es: "Fixed Spanish" },
+    ]);
+  });
+
+  it("names a language every copy fixes, and shows its fixed text", async () => {
+    const { f, document } = await liveLunch(async (tx, f) => {
+      await writeContentLanguages(tx, languages);
+      await updateMenuDetails(tx, f.drinksMenu, {
+        names: { en: "Base English", es: "Base Spanish" },
+      });
+    });
+    const target = { kind: "section", sectionId: f.drinks } as const;
+    const [only] = sectionCopies(document.root.members, f.drinks);
+    only!.names = { en: "Fixed English", es: "Base Spanish" };
+    only!.fixed = { names: { en: "Fixed English" } };
+    expect(fixedLanguages(document, target, "names", languages)).toEqual(["en"]);
+    expect(patchFieldValue(document, target, "names", languages)).toEqual({
+      en: "Fixed English",
+      es: "Base Spanish",
+    });
+    expect(fixedLanguages(document, target, "internalName", languages)).toEqual([]);
+    const lemonade = await menuItem(f, f.lemonade);
+    expect(
+      fixedLanguages(document, { kind: "offer", menuItemId: lemonade }, "customerName", languages),
+    ).toEqual([]);
+    expect(
+      fixedLanguages(document, { kind: "section", sectionId: "nope" }, "names", languages),
+    ).toEqual([]);
+  });
+});
+
 describe("parseMenuPatch", () => {
   const offer = { kind: "offer", menuItemId: "item-1" };
 
@@ -742,11 +850,11 @@ describe("parseMenuPatch", () => {
     }
   });
 
-  it("refuses a body that is not a list of changes", () => {
+  it("refuses a body that is not a list of changes as a malformed request", () => {
     for (const body of [null, {}, "changes", { changes: [] }]) {
       expect(refusal(() => parseMenuPatch(body))).toEqual({
-        code: "menu_patch.invalid",
-        params: { change: -1, field: "changes" },
+        code: "management.request_invalid",
+        params: { field: "changes" },
       });
     }
   });
@@ -805,5 +913,7 @@ describe("patchFieldValue", () => {
     expect(
       patchFieldValue(document, { kind: "section", sectionId: "nope" }, "internalName"),
     ).toBeUndefined();
+    for (const field of ["unit", "__proto__", "constructor", "names"])
+      expect(patchFieldValue(document, dish, field)).toBeUndefined();
   });
 });

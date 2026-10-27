@@ -121,9 +121,9 @@ declare module "@waitron/shared" {
       time: string;
       occurrences: { at: string; offset: string }[];
     };
-    /** A patch to a live menu version was refused. `change` is the index of the change (-1 when
-     * the body is not a list); `field` is "changes" (with `change: -1`), "target", "field" or the field's name; `reason` is the
-     * code the value's own check threw, for the dashboard to word. */
+    /** A patch to a live menu version was refused. `change` is the index of the change; `field` is
+     * "target", "field" or the field's name; `reason` is the code the value's own check threw, for
+     * the dashboard to word. */
     "menu_patch.invalid": { change: number; field: string; reason?: string };
     /** A patch names a menu with no live version. */
     "menu_patch.not_published": { menuId: string };

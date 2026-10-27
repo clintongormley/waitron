@@ -1128,9 +1128,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         requireString(body.baseVersionId, "baseVersionId"),
         "MenuVersionId",
       );
+      const changes = body.changes;
+      if (!Array.isArray(changes))
+        throw new AppError("management.request_invalid", { field: "changes" });
       return c.json(
         await gated(c, sessionId, (tx, personId) =>
-          patchLiveMenu(tx, menuId, baseVersionId, body.changes, personId, {
+          patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
           }),
         ),
