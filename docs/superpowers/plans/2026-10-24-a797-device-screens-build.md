@@ -6,7 +6,8 @@
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
 List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
 The handheld's bar**, **slice 6 — Ready warning time, data**, **slice 7 — The Ready bar's
-warning**, **slice 8 — Kitchen group cards** and **slice 8b — Short names on kitchen cards** in full tasks; each other slice is expanded into
+warning**, **slice 8 — Kitchen group cards**, **slice 8b — Short names on kitchen cards** and
+**slice 9 — The Columns controller and collapse** in full tasks; each other slice is expanded into
 tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
@@ -228,7 +229,7 @@ whether a bill is a counter order, so a counter card reads "Counter #12" (slice 
 A773-2's interface (`readColumnState`, `saveColumnState`, `moveColumn`, `toggleColumnCollapsed`,
 `setColumnVisible`, key `waitron.kitchenColumns.v1.`; A773-2 plan lines 101, 289–291); heading-tap
 collapse ("Ready · 3"). **Risks:** whichever lane builds it first, the other uses it (design §7).
-**Dependencies:** slice 8. **Migration:** no.
+**Dependencies:** slice 8. **Migration:** no. _Expanded into tasks below (2026-10-27)._
 
 ### Slice 9b — The corner Columns panel (LIGHT)
 
@@ -7091,6 +7092,512 @@ From the fresh plan review (2026-10-27). **Files:** `apps/server/src/working-ord
   with the table's full name; the card and the Ready bar may order one party's separate tables
   differently.
 - After merge: the backlog's "landed in #N" commit; the ledger; then slice 9.
+
+---
+
+## Slice 9 — The Columns controller and collapse (one PR, branch `feat/a797-9-columns-controller`)
+
+**What it changes.** On a kitchen screen (a kitchen display, or the till's Station screen), **tap a
+column's heading to collapse it**: the column shrinks to a narrow strip that keeps its heading and
+count, "› Ready · 3" written top to bottom, and one tap opens it again (design §3.3, picture 03's
+Ready). Each heading now shows its column's count of cards beside its name ("Waiting 2", picture 03).
+Which columns are collapsed is **remembered on the device**, per station, and survives a reload or a
+restart (design §3.3, §3.6, worked example 4). Underneath, slice 9 builds the **one device-scoped
+store** of each screen's column order, shown columns and collapsed columns that design §7 and
+A773-2's plan name (`readColumnState`, `saveColumnState`, `moveColumn`, `toggleColumnCollapsed`,
+`setColumnVisible`, key `waitron.kitchenColumns.v1.`; A773-2 plan `:101`, `:289-291`), at the path
+A773-2's Task 7b looks for, so lane G uses it unchanged. The board draws the stored order (which
+nothing in this slice changes yet). The corner's Columns panel with Move up / Move down and Show
+(slice 9b), the one-row header (9b), Overview and the narrow tabs (9c), and the Held column
+(A773-2) are not built here.
+
+**Review path: LIGHT.** No server read, route, schema or shared type changes: the layout is kept in
+the device's browser (design §5, "Columns … are kept in the device's browser … Nothing on the
+server"). The changed files are under `apps/till/src/`, the guides and the docs. None of the risk
+triggers applies: the key names the device the server proved (`identity.deviceId` from
+`getDeviceIdentity`, `apps/till/src/till-app.ts:4280-4285`, read) and grants nothing.
+**Migration: none.** No venue reset.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-27 against `main` at
+`469e4e966` (this worktree's base); **(read)** means read in the code at that commit. The probe
+ran in a throwaway worktree (`git worktree add --detach /tmp/a797-9-probe.fFlN/wt 469e4e966`),
+removed afterwards; its diff and logs were copied to
+`/Users/clintongormley/waitron-campaign-c/a797-9-probe/` (`probe.diff`, `base1.txt`, `tsc1.txt`,
+`run1.txt`, `run2-control.txt`). None of the probe code is in this branch.
+
+### The turn with lane G's A773-2 (ran)
+
+`gh pr list --state open` → `[]`: no open pull request at all. `git ls-remote origin | grep -i a773`
+→ only old `refs/pull/*` heads, no branch. Lane G's queue has no A773-2 line
+(`grep -n "A773-2" ~/waitron-campaign-g/queue.md` → nothing); lane F's queue records A773-2's PR A
+landed as #1944 (`509e8d42a` on `main`, `git log --oneline | grep 1944`) and holds no later A773-2
+PR. No code on `main` holds a column store (`grep -rln "kitchenColumns\|ColumnState\|ColumnScope"
+apps packages --include='*.ts'` → nothing). So slice 9 takes the turn on `station-queue.ts` and
+`till-station-screen.ts`, builds the controller (design §7: "the Columns controller **only if A797's
+has not landed**" is A773-2's condition for building its own), and leaves `till-expo-screen.ts`
+alone. The closing step posts one line for lane G in lane C's questions file.
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `grep -rn "COLUMNS\|column-title\|data-column\|\.kanban\|\.column\b" apps/till/src/widgets/station-queue.ts`
+(ran), `grep -rn "<till-station-queue\|<till-station-screen" apps --include='*.ts' | grep -v '\.test\.ts'`
+(ran: two widget mounts in the screen, two screen mounts in the app, nothing else) and
+`grep -rn "localStorage" apps/till/src --include='*.ts' | grep -v '\.test\.ts'` (ran), each line
+read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `apps/till/src/widgets/station-queue.ts:63` `COLUMNS` | `["queued", "preparing", "ready"]`: the drawn order, and the kitchen-state order `#stateWord` compares (`:1002`) | stays the state order only; the drawn order comes from the store (D6, D8) |
+| same file `:107-126` `.kanban`, `.column`, `.column-title` | a grid, `repeat(auto-fit, minmax(11rem, 1fr))`; the title an `h2`, small bold muted capitals | a wrapping flex row; a collapsed column a `--wt-tap-min` strip; the title inside a heading button (D9, D10) |
+| same file `:895-905` `#board` | one `section[data-column]` per `COLUMNS` entry, its title, its cards | one per stored key it can draw, in stored order; a collapsed one draws its heading and count and no cards (D6, D9) |
+| same file `:996-1006` `#stateWord` | a dish ahead of its card's column says its state, by `COLUMNS.indexOf` | unchanged: state order, never drawn order (D8) |
+| `apps/till/src/screens/till-station-screen.ts:205-206` `deviceId`, `:50` `viewKey`, `:305-323` `#rememberedMerged`, `#toggleMerged` | the device's Merged/Stacked choice in `localStorage`, each access in a `try` | unchanged; the precedent for guarded access |
+| same file `:849-855` (one station), `:924-940` `#deviceSection` (stacked), `:858-891` `#mergedBody` (merged), `:1029-1072` `#body`, `#queue` (till) | the four places a `till-station-queue` is drawn | each hands the widget its station's columns and handles `toggle-column` (D5, D11) |
+| same file `:942-957` `#renderQueueSurface` | binds the widget's events on the screen's section | gains `@toggle-column` (D11) |
+| `apps/till/src/till-app.ts:18567-18574` (kitchen display), `:18768-18777` (the till's Station drill) | mount the screen with `.deviceId` | also `.storageScope` (D12) |
+| same file `:2911`, `:5977-5992` `#floorViewChoices` | slice 5's per-device memory: built once per `(origin, deviceId)`, `origin` = `this.router?.current ?? location.origin` | the precedent for `storageScope` (D5, D12) |
+| `apps/till/src/state/floor-view-memory.ts:14-56` | key `waitron.floorView.${JSON.stringify([origin, deviceId, zoneId])}`; refused storage swallowed | the precedent for the key's shape and failure handling (D2, D4) |
+| `apps/till/src/i18n/strings.ts` en `:679-681`, es `:2433-2435` `station.state.*` | the column names | read, unchanged: no new words (D13) |
+| `apps/till/src/widgets/station-queue.test.ts:2684`, `:2702`, `:2710` | read `.column-title`'s text as exactly the column's name | unchanged: the name keeps its own span (D9; the probe) |
+
+### Plan decisions for slice 9
+
+- **D1. Slice 9 builds all five of A773-2's functions now, at the path A773-2 names.** A new
+  `apps/till/src/state/kitchen-columns.ts` (A773-2 Task 7b: "create till `state/kitchen-columns.ts`
+  and `.test.ts`", plan `:288`), exporting exactly A773-2's contract 13 and Task 7b interfaces
+  (plan `:101`, `:290`):
+  ```ts
+  export type ColumnKey = "overview" | "held" | "toFire" | "inProgress" | "ready" | "waiting" | "preparing";
+  export interface ColumnScope { venueId: string; deviceId: string; screen: "pass" | "pass_monitor" | "station"; stationId?: string }
+  export interface ColumnState { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] }
+  export function readColumnState(storage: Pick<Storage, "getItem">, scope: ColumnScope, defaults: ColumnState): ColumnState;
+  export function saveColumnState(storage: Pick<Storage, "setItem">, scope: ColumnScope, state: ColumnState): void;
+  export function moveColumn(state: ColumnState, key: ColumnKey, direction: "up" | "down"): ColumnState;
+  export function toggleColumnCollapsed(state: ColumnState, key: ColumnKey): ColumnState;
+  export function setColumnVisible(state: ColumnState, key: ColumnKey, visible: boolean): ColumnState;
+  /** The station screen's columns in slice 9: Waiting, Preparing, Ready, all shown, none collapsed. */
+  export const STATION_COLUMNS: ColumnState;
+  ```
+  `moveColumn` and `setColumnVisible` have no control in this slice; they are built and tested now
+  as pure functions because A773-2's interface names them and design §7 says the controller "meets
+  A773-2's interface … whichever lane builds it", so lane G's Task 7b reuses one module rather than
+  adding a second. They are reached by their own tests, so coverage holds; slice 9b wires them to
+  the corner's Columns. No UI wiring is built for them here.
+- **D2. The key and the stored value.** Key `waitron.kitchenColumns.v1.` followed by
+  `JSON.stringify([venueId, deviceId, screen, stationId ?? ""])` (A773-2: "an encoded JSON tuple of
+  venue/proven-device/screen/station-or-empty"; the JSON array is slice 5's way of keeping an id
+  with a dot from running into the next part, `floor-view-memory.ts:21`). Value
+  `JSON.stringify({ version: 1, order, hidden, collapsed })`. **No identity, no storage:** a scope
+  whose `venueId` or `deviceId` is `""` reads the defaults without calling `getItem` and saves
+  nothing (A773-2: "never … allow absent identity to share storage"; CLAUDE.md §3: an empty value is
+  a value, so the reader refuses it). No profile in the key, so a profile switch keeps the device's
+  layout (A773-2 Task 7b's first test); the station by id, so a renamed station keeps it.
+- **D3. Reading a stored value.** The registered keys are `defaults.order`. A value that is not
+  JSON, not an object, of another `version`, or whose `order`, `hidden` or `collapsed` is not an
+  array of strings, reads as a fresh copy of the defaults. Otherwise: `order` keeps registered keys
+  only, first occurrence of each; **each registered key missing from it is put back at its default
+  place** — right after the nearest key before it in `defaults.order` that is present, or first
+  when none is — taken in default order; `hidden` and `collapsed` keep registered keys only, once
+  each. A773-2's contract says "append missing registered keys in default order"; this places them
+  instead, so when slice 9c registers Overview (first by default, design §3.3) and A773-2 registers
+  Held (before Waiting), a device that already saved a layout gets Overview first and Held before
+  Waiting rather than both after Ready. The result is still deterministic (A773-2 Task 7b's test
+  asks that). **Lane G FYI.** A bad value is not removed (the read is given `getItem` only); the
+  next save overwrites it.
+- **D4. Storage that throws.** `getItem` throwing reads the defaults; `setItem` throwing is
+  swallowed (a full or refused store); neither throws to the caller (A773-2: "Storage failure leaves
+  a usable in-memory view"; slice 5's handling, `floor-view-memory.ts:29-33`, `:51-55`). The screen
+  keeps the state in memory (D11), so a tap still collapses the column for as long as the screen is
+  open.
+- **D5. What one stored layout covers.** `screen: "station"` for both the kitchen display and the
+  till's Station screen; they are different devices, so their keys differ by `deviceId`.
+  `venueId` is **the server's origin**, `this.router?.current ?? location.origin`, as slice 5 names
+  the venue (its D8: "the till has no venue id of its own", `apps/till/src/api/client.ts` `TillInfo`,
+  read); a LIGHT slice adds no read. A failover to another box would change the origin and show
+  that box's defaults; today a venue has one node (CLAUDE.md §5). `deviceId` is the device the
+  server proved (above). `stationId` is: on the till, the station picked; on a kitchen display with
+  one station, that station; stacked, each section's own station; **the merged board, none**
+  (stored under `""`), because it is one board across the device's stations, so collapsing Ready
+  there does not collapse it on each station's stacked board.
+- **D6. The station screen registers Waiting, Preparing and Ready** (`STATION_COLUMNS`: order
+  `["waiting", "preparing", "ready"]`, nothing hidden or collapsed). A773-2's station registers
+  "Overview/Held/Waiting/Preparing/Ready" (plan `:101`): slice 9c adds `overview` and A773-2 adds
+  `held` to these defaults, and D3 places them on a saved layout. The widget maps `waiting` to the
+  `queued` state and `preparing`, `ready` to themselves; `data-column` keeps the state names (slice
+  8, D14). A key the widget cannot draw yet (`overview`, `held`, `toFire`, `inProgress`) is skipped.
+- **D7. `hidden` is kept but not drawn until slice 9b.** The board draws `order` and `collapsed`. No
+  control in slice 9 can hide a column, and slice 9b brings the Show switch and the hiding
+  together, so there is never a layout that hides a column with no way to bring it back (A773-2:
+  "Columns remain reachable"). `toggleColumnCollapsed` keeps `hidden` as it was, so a saved value
+  round-trips.
+- **D8. The kitchen-state order is not the drawn order.** A card's column and a dish's state word
+  (`#stateWord`, `:996-1006`) keep comparing states in `queued → preparing → ready` order through
+  `COLUMNS`, so a device that puts Ready first (slice 9b) still has a Preparing dish on a Waiting
+  card say "Preparing".
+- **D9. The heading.** `<h2 class="column-heading">` holding `<button class="column-toggle"
+  data-column-toggle=${key} aria-expanded=…>`, inside it `<span class="column-title">` (the name,
+  unchanged text, so the three tests that read it still pass), `<span class="column-count"
+  data-column-count>` (the number of cards in the column, held cards included; picture 03 counts
+  cards: Preparing "1" over one card of two dishes; design §3.3 "Ready · 3") and a decorative
+  `wt-icon` (`aria-hidden`): `column-open`, a down chevron, while open; `column-closed`, a right
+  chevron, while collapsed, both registered by the widget as its notice icons are (`:43-54`). Open:
+  name at the start, count and chevron at the end (picture 03). Collapsed: the column draws its
+  heading and **no cards** (not in the page, so nothing hidden in it is focusable), as a strip
+  `--wt-tap-min` wide stretched to its row's height, the button's text running top to bottom
+  (`writing-mode: vertical-rl`) and reading "Ready · 3", the " · " `aria-hidden` so the name reads
+  "Ready 3". The count shows at 0 too. The button is at least `--wt-tap-min` tall, takes the text
+  colour, no fill, and the same focus ring as a dish. **Not `wt-disclosure`:** that folds a body
+  downward under a heading row with a 900 ms height transition and holds its own `open`
+  (`docs/developers/design-system.md:826`, `:610`); this column folds sideways into a strip and its
+  state belongs to the screen's store. Its button follows the same `<button aria-expanded>`
+  pattern. Nothing animates, so reduced motion needs nothing.
+- **D10. The board's layout becomes a wrapping flex row**: `.kanban { display: flex; flex-wrap: wrap;
+  align-items: stretch }`, an open column `flex: 1 1 11rem` (today's minimum width, `:109`, kept
+  as it is), a collapsed one `flex: 0 0 var(--wt-tap-min)`. A grid of `auto-fit` columns cannot
+  give one column a narrow width. **The probe (ran)** made this change with nothing collapsed and
+  every station suite passed (below). Below about 1000 px slice 9c replaces the columns with tabs;
+  until then a collapsed column at 390 px is a strip in the wrapped row, and the LOOK records it.
+- **D11. The widget stays a pure view; the screen owns the layout.** `till-station-queue` gains
+  `columns: ColumnState` (default `STATION_COLUMNS`) and sends `toggle-column` `{ key }`
+  (`bubbles: true, composed: true`; an app-owned widget names its own events plainly, CLAUDE.md
+  §3) without changing anything itself. `till-station-screen` stops the event, applies
+  `toggleColumnCollapsed`, keeps the result, saves it, and redraws. It keeps one `Map` of layouts
+  keyed by D2's storage key (or `memory|${stationId ?? ""}` when it has no scope), filled **once
+  per key, the first time that station's board is drawn**, never re-read on a 15-second refresh
+  (A773-2: "Never reset layout on polling"). It reaches `localStorage` inside a `try`, as
+  `#rememberedMerged` does (`:305-313`).
+- **D12. The till app hands both screens `storageScope: { venueId, deviceId }`** (A773-2's name for
+  this pair, plan `:100`), built once per `(origin, deviceId)` and kept, as `#floorViewChoices`
+  is (`till-app.ts:5977-5992`), so a redraw hands the same object; `undefined` while there is no
+  `deviceId`. A screen given no `storageScope` (a screen mounted alone in a test, or no device yet)
+  keeps its layouts in memory only, so no existing station suite starts writing to the test
+  browser's `localStorage`.
+- **D13. No new words.** The heading is today's `station.state.*` ("Waiting" «Esperando",
+  "Preparing" «Preparando», "Ready" «Listo», `strings.ts:679-681`, `:2433-2435`), a number and a
+  " · "; the collapse is said by `aria-expanded`. No string is added or removed, in either language.
+- **D14. A collapsed column holding a late card shows no mark in slice 9.** The header line's
+  "1 late" (slice 8, D9) still counts it, and design §3.3 asks for heading and count only. Slice 9c
+  gives a narrow tab with a late card a red bar (design §3.4); whether a collapsed column should
+  carry the same bar is an **owner question** (the closing step asks it), because a cook who
+  collapsed Waiting no longer sees a forgotten card pulse.
+- **D15. What A773-2 builds on.** It reuses `kitchen-columns.ts` as its Task 7b says ("Reuse lane
+  C's released Columns controller"), adds `held` to `STATION_COLUMNS`, builds the pass's and
+  monitor's scopes with the `storageScope` its pass reads return, and its Task 7b tests that need
+  the corner's Columns (show/hide, up/down, hidden-all) are slice 9b's or its own. Its one
+  difference from this module is D3's placement of a missing key.
+
+### Changed test checks (from the probe; the implementer confirms each)
+
+**Probe (ran):** D6, D9 and D10 crudely in the widget (`probe.diff`): the board drawn from a
+`columns` property in its order, each heading a button holding `.column-title` and
+`.column-count`, a collapsed column drawn without cards, the flex row. Free memory 82 % (ran
+`memory_pressure`). In `apps/till`, `pnpm typecheck` → exit 0 (`tsc1.txt`), and
+`pnpm exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout`:
+before, `Test Files 10 passed (10)`, `Tests 581 passed (581)` (`base1.txt`); with the probe, the
+same, `Tests 581 passed (581)` (`run1.txt`). **Control (ran):** the same probe with Ready collapsed
+by default → `Test Files 3 failed | 7 passed (10)`, `Tests 20 failed | 561 passed (581)`
+(`run2-control.txt`), so these suites do read the columns' contents and a collapse they did not ask
+for is seen.
+
+**So no existing check changes.** The probe did not run the till app's suites (`src/till-app`,
+40 files at slice 8's count); Task 4's run judges them, and any failure there is a STOP.
+
+**Fixture-only:** none expected.
+
+Any other failure, in any suite a task names, is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **A stored layout from a later version or a hand-edited value** (wrong `version`, `order` a
+   string, a key repeated, an unknown key, a registered key missing): sanitised as D3 says, never
+   a thrown error (Task 1).
+2. **Storage that throws** on read and on write: the column still collapses and reopens for as
+   long as the screen is open (D4, D11; Tasks 1, 3).
+3. **Two stations stacked on one kitchen display, then merged, then stacked again:** each stacked
+   station keeps its own collapsed columns and the merged board its own (D5; Task 3).
+4. **A 15-second refresh** after a collapse: the column stays collapsed and storage is not read
+   again (D11; Task 3).
+5. **The till's Station screen, switching station with the picker:** each station's layout
+   (D5; Task 3).
+6. **A device with no `deviceId`**, and a screen with no `storageScope`: nothing written to
+   storage (D2, D12; Tasks 1, 3, 4).
+7. **Reordered columns** (a stored order with Ready first): the board follows it, and a dish's
+   state word still follows kitchen order (D6, D8; Task 2).
+8. **Keyboard:** Tab reaches each heading; Enter and Space collapse and reopen; the focus ring
+   shows; `aria-expanded` follows (D9; Tasks 2, 6).
+9. **Dark theme, Spanish («Listo · 3»), 1280, 1024 and 390 px:** the strip, its top-to-bottom
+   heading and its count (D9, D10; Task 6).
+10. **A collapsed column holding a forgotten card:** nothing pulses in view; the header line still
+    says "1 late" (D14; Task 6).
+
+---
+
+**Task order and why.** The pure store first (Task 1), so the widget and screen read a real
+module; the widget draws the stored order and collapse (Task 2); the screen keeps and saves each
+station's layout (Task 3); the app hands it the device's scope (Task 4); the docs (Task 5); the
+LOOK (Task 6). Each leaves the tree green and is sized well under 100 tool calls.
+
+### Task 1: The columns store, in one pure module
+
+**Files:**
+- Create: `apps/till/src/state/kitchen-columns.ts` (D1–D4, D6's `STATION_COLUMNS`)
+- Test: `apps/till/src/state/kitchen-columns.test.ts`
+
+- [ ] **Step 1: Failing tests**, in one `describe("A773 columns state: the device's kitchen
+  columns")` (A773-2's Task 7b runs `-t 'A773 columns state'`, plan `:292`, so its run finds these),
+  each with a `Map`-backed fake storage (`getItem`/`setItem` spies) and a scope
+  `{ venueId: "https://box.local", deviceId: "dev-1", screen: "station", stationId: "st-1" }`:
+  1. "reads the defaults when nothing is stored" — `STATION_COLUMNS`, equal and not the same
+     object.
+  2. "keeps a saved layout for its venue, device, screen and station only" — save Ready collapsed,
+     read it back equal; the same read with each of `venueId`, `deviceId`, `screen` (`"pass"`) and
+     `stationId` (`"st-2"`) changed → defaults; `stationId` absent and `""` read one layout.
+  3. "stores under the versioned key, as JSON" — the one `setItem` key is
+     `waitron.kitchenColumns.v1.["https://box.local","dev-1","station","st-1"]` and its value parses
+     to `{ version: 1, order, hidden, collapsed }`.
+  4. "never reads or writes without a venue and a device" — `venueId: ""`, then `deviceId: ""`:
+     neither spy called, defaults read.
+  5. "reads the defaults for a value it cannot trust" — `it.each` over `"not json"`, `"null"`,
+     `"[]"`, `{ version: 2, … }`, `{ version: 1, order: "ready", hidden: [], collapsed: [] }`,
+     `{ version: 1, order: [1], hidden: [], collapsed: [] }`, and one missing `collapsed`.
+  6. "drops unknown and repeated keys, and puts back a missing one at its default place" — with
+     defaults order `["overview", "waiting", "preparing", "ready"]` (a case's own, as 9c will
+     register), stored order `["ready", "waiting", "ready", "toFire"]`, hidden
+     `["ready", "held", "ready"]`, collapsed `["waiting", "nonsense"]` → order
+     `["overview", "ready", "waiting", "preparing"]`, hidden `["ready"]`, collapsed `["waiting"]`
+     (D3: Overview has no key before it, so first; Preparing goes after Waiting).
+  7. "a store that throws reads the defaults and saves nothing, without throwing" — `getItem` and
+     `setItem` each throwing.
+  8. "moves a column one place up or down, never past either end" — middle up and down; first up
+     and last down return a state equal to the input; an unregistered key changes nothing; the
+     input is not changed (check a frozen copy).
+  9. "collapses a column and opens it again" — `toggleColumnCollapsed` twice; `hidden` and
+     `order` untouched.
+  10. "hides a column and shows it again" — `setColumnVisible(…, false)` then `true`; hiding twice
+      leaves one entry.
+- [ ] **Step 2: Run; expect FAIL** (the module does not exist) `pnpm --filter @waitron/till exec vitest run src/state/kitchen-columns.test.ts`
+  (memory first: `memory_pressure | grep free`).
+- [ ] **Step 3: Implement** D1–D4. Every function returns new arrays; `JSON.parse` inside a `try`.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count: every case above).
+- [ ] **Step 5:** `pnpm --filter @waitron/till typecheck`; `pnpm exec eslint apps/till/src/state/kitchen-columns.ts apps/till/src/state/kitchen-columns.test.ts`;
+  `pnpm format:check`; ledger; `git commit -s -m "A797-9: one store for each kitchen screen's columns on the device"`
+
+### Task 2: The board draws the device's column order and collapsed columns
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (`columns: ColumnState` property, default
+  `STATION_COLUMNS`; `#board` maps `columns.order` to the states it can draw (D6) and draws each
+  heading per D9, a collapsed column without cards; `toggle-column` `{ key }` on a heading tap
+  (D11); icons `column-open`, `column-closed` in the widget's `registerIcons` call; styles per D9
+  and D10 with `--wt-*` tokens only; `COLUMNS` stays for `#stateWord`, D8)
+- Test: `apps/till/src/widgets/station-queue.test.ts` (a `describe("the board's columns")`, its
+  builders as the "the board's cards" describe's, `:2639-2677`), `apps/till/src/widgets/station-queue.a11y.test.ts`
+
+- [ ] **Step 1: Failing tests:**
+  1. "draws the columns in the order it is given" — `columns.order` `["ready", "waiting",
+     "preparing"]` → the `[data-column]` sections read `["ready", "queued", "preparing"]`.
+  2. "leaves out the columns it cannot draw yet" — order `["overview", "held", "waiting",
+     "preparing", "ready"]` → three sections.
+  3. "each heading names its column and counts its cards" — two cards in Waiting (one held, slice
+     8's D3), none in Preparing: `[data-column-count]` reads "2" and "0"; `.column-title` still reads
+     exactly `t("station.state.queued")`.
+  4. "a collapsed column keeps its heading and count and draws no cards" — `collapsed: ["ready"]`
+     with one Ready card: no `[data-card]` in `[data-column="ready"]`, its flattened heading reads
+     `` `${t("station.state.ready")} · 1` ``, its button `aria-expanded="false"`, the others `"true"`.
+  5. "tapping a heading asks for its column to collapse or open, and changes nothing itself" —
+     `userEvent.click` on Ready's `[data-column-toggle]` → one `toggle-column` `{ key: "ready" }`,
+     the cards still drawn; with Ready collapsed, a click sends the same and it stays collapsed.
+  6. "Enter on a focused heading asks the same" — `userEvent.keyboard("{Enter}")`.
+  7. "a collapsed column is a narrow strip with its heading top to bottom" — at 1280 px (the
+     layout suite's `page.viewport`), set `--wt-tap-min: 44px` on the widget: Ready's section is
+     44 px wide, its button's computed `writing-mode` is `vertical-rl`, and Waiting is wider than
+     Ready.
+  8. "a dish ahead of its card still says its state when Ready is drawn first" — Review focus 7.
+  9. a11y, in `station-queue.a11y.test.ts`'s both-theme `describe`: "a board with a collapsed column
+     has no violations" (`reducedMotion: true`, a fixed `now`).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts`.
+- [ ] **Step 3: Implement** D6, D8–D10. No `rem` or `em` added (`11rem` is today's value, D10).
+- [ ] **Step 4: Run; expect PASS**, then the probe's command
+  `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout`
+  → every test passes, `Tests` = 581 plus this task's new cases (the probe's base, `base1.txt`). A
+  failure is a STOP (the probe changed no check), then
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts` from
+  the root.
+- [ ] **Step 5:** typecheck till; eslint the changed files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9: a kitchen column's heading shows its count and collapses it"`
+
+### Task 3: The station screen keeps each station's columns on the device
+
+**Files:**
+- Modify: `apps/till/src/screens/till-station-screen.ts` (`storageScope?: { venueId: string;
+  deviceId: string }` property; the layouts `Map` and `#columnsFor(stationId?: string)` per D11;
+  `@toggle-column` on `#renderQueueSurface`'s section → `#onToggleColumn`: `stopPropagation`,
+  `toggleColumnCollapsed`, keep, `saveColumnState` when there is a scope, `requestUpdate`; each of
+  the four widget mounts gets `.columns=${this.#columnsFor(id)}` with D5's station id, the merged
+  board none; the event carries no station, so each mount binds its own handler with its id)
+- Test: `apps/till/src/screens/till-station-screen.test.ts` (a `describe("the device's kitchen
+  columns")`; `afterEach` removes every `localStorage` key starting `waitron.kitchenColumns.`, as
+  the merged-view describe removes its keys, `:1595-1599`)
+
+- [ ] **Step 1: Failing tests** (`storageScope: { venueId: "https://box.local", deviceId: "dev-1" }`
+  unless a case says otherwise; collapse by clicking the widget's `[data-column-toggle="ready"]`):
+  1. "a collapsed column stays collapsed when the screen opens again" — operator mode: collapse
+     Ready, remove the screen, mount another with the same scope → Ready collapsed; the stored key
+     is D2's with `"st-1"`.
+  2. "each station picked on the till keeps its own columns" — collapse Ready on st-1, pick st-2
+     (`[data-station="st-2"]`): Ready open; back to st-1: collapsed.
+  3. "a kitchen display keeps each stacked station's columns, and the merged board's apart" —
+     device mode, two stations (the merged-view describe's `twoStations`, `:1605-1618`): collapse
+     Ready in st-1's section only; merge (`[data-merge-toggle]`): Ready open; collapse Waiting
+     there; unmerge: st-1's Ready collapsed, st-2's open, Waiting open in both.
+  4. "a refresh keeps the collapse and does not read the store again" — under the 15-second
+     refresh describe's fake timers (`:2551-2556`): collapse, advance 15 s, flush: still collapsed;
+     a `vi.spyOn(Storage.prototype, "getItem")` counting `waitron.kitchenColumns.` keys sees no
+     further read.
+  5. "with no scope it collapses for this screen only and stores nothing" — no `storageScope`:
+     collapse works; no `waitron.kitchenColumns.` key in `localStorage`.
+  6. "a store that refuses still collapses" — `Storage.prototype.setItem` throwing (restored after):
+     Ready collapses, no `[role=alert]`.
+  7. "the column tap stops at the screen" — as "the event stops at the screen" does (`:4990`):
+     a listener above the screen never sees `toggle-column`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen.test.ts -t "the device's kitchen columns"`.
+- [ ] **Step 3: Implement** D5, D11.
+- [ ] **Step 4: Run; expect PASS**, then the whole file, `src/screens/till-station-screen.a11y.test.ts`
+  and Task 2's Step 4 command (read each `Tests` count; a failure is a STOP).
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9: a kitchen screen remembers each station's collapsed columns on the device"`
+
+### Task 4: The till app hands both kitchen screens the device's scope
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` (a `#kitchenColumnsScope()` beside `#floorViewChoices`
+  (`:5977-5992`), cached in a field beside `#floorViewMemory` (`:2911`): `{ venueId: origin,
+  deviceId }` per D12, the same object while both stay; `.storageScope=${…}` on both
+  `<till-station-screen>` mounts, `:18567-18574` and `:18768-18777`)
+- Test: `apps/till/src/till-app-boot-and-counter.test.ts` (beside the kitchen display boot case
+  that finds `till-station-screen`, "keeps an enrolled station screen on its station board", `:347-385`), `apps/till/src/till-app.test.ts` (with its
+  `station(el)` helper, `:577-582`)
+
+- [ ] **Step 1: Failing tests:**
+  1. "a kitchen display's station screen keeps its columns under this box and device" — the
+     display boot (`deviceId: "station-device"`): `station.storageScope` equals `{ venueId:
+     location.origin, deviceId: "station-device" }` (the test app's router answers the page's own
+     origin; if it answers another, use that, read from `el.router.current`); after
+     `el.requestUpdate()` and a flush, the same object (`toBe`).
+  2. "the till's Station screen gets the till's own scope" — open the Station drill as an existing
+     `till-app.test.ts` case does (find it with `grep -n 'station(el)' src/till-app.test.ts`): its
+     `storageScope.deviceId` is the till's device id.
+  3. No case for "no device yet": both mounts are drawn only after the identity read set
+     `deviceId` (`till-app.ts:4280-4285`; the kitchen display boots from it, the Station drill
+     needs a sign-in). Write the scope as one expression, `this.deviceId === undefined ? undefined
+     : …`, as `#floorViewChoices` guards (`:5978-5979`), and if the till's coverage job reports
+     that branch unreached, find a mount that reaches it or record the gap in the ledger and the PR;
+     never an ignore comment (Global constraints).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-boot-and-counter.test.ts src/till-app.test.ts -t "scope"`.
+- [ ] **Step 3: Implement** D12.
+- [ ] **Step 4: Run; expect PASS**, then `pnpm --filter @waitron/till exec vitest run src/till-app`
+  (memory first; at slice 8's probe `Tests 4393 passed (4393)` over 40 files; a new failure is a
+  STOP: the probe did not run these).
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9: the till app names the box and device a kitchen screen's columns belong to"`
+
+### Task 5: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/kitchen-service.md` (`## Work the kitchen screen
+  {#kitchen-screen}`, `:120-135`), `apps/server/src/guide/es/kitchen-service.md` (the same section,
+  `:137-156`), `docs/developers/design-system.md` (`### The kitchen screen's cards`, `:5471`: a
+  paragraph on the headings and collapse), `docs/backlog.md` (the A797 entry, `:120-140`),
+  `docs/backlog/till.md` (A797's entry, `:1032-1062`), this plan's slice 9b outline (one sentence:
+  9b wires `moveColumn` and `setColumnVisible` from `kitchen-columns.ts` and draws `hidden`, D7),
+  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.3's collapse bullet: a dated
+  pointer)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+- [ ] **Step 1: Guides.** English, two sentences after the paragraph's column sentence: tap a
+  column's heading to collapse it to a narrow strip that keeps its name and how many cards it holds
+  ("**Ready · 3**"); tap it again to open it; the screen remembers which columns are collapsed,
+  for each station, even after it restarts. Spanish the same, with «Listo · 3» (read the column
+  words from `strings.ts`'s `es` block, `:2433-2435`, before writing); Spanish only in the Spanish
+  file.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md**, one paragraph in "The kitchen screen's cards": the columns are
+  drawn in the device's stored order (`readColumnState`, `apps/till/src/state/kitchen-columns.ts`,
+  key and scope per D2 and D5); each heading is a `<button aria-expanded>` with the name and the
+  count of cards; a collapsed column draws no cards and is a `--wt-tap-min` strip with its heading
+  top to bottom; the kitchen-state order, not the drawn order, decides a dish's state word.
+- [ ] **Step 4: Backlog.** Both A797 entries: slice 9 (the kitchen screen's columns collapse by
+  their heading and are remembered on the device; the one Columns store A773-2 reuses) in review;
+  next, slices 9b and 9c. After the merge, a docs-only commit on `main` says "landed in #N". Open no
+  new entry unless the LOOK finds something this slice does not fix (its number from
+  `~/waitron-campaign-shared/next-item-number`: read it, use it, write the next back).
+- [ ] **Step 5: Design file**, after §3.3's "Tap a column's heading" bullet: "_2026-10-27, slice 9:
+  the heading shows the column's count of cards open and collapsed; collapsed columns are kept per
+  station on the device, the merged board apart; a collapsed column holding a late card has no
+  mark of its own yet; see the build plan's slice 9, D5, D9, D14._"
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-9 — guides, design system and backlog for collapsing kitchen columns"`
+
+### Task 6 (visual): LOOK at collapsed and open columns
+
+Dispatched as one subagent, not an implementer (it changes no code), with `run_in_background:
+false`, as slice 8's LOOK was run (its scripts: `/Users/clintongormley/waitron-campaign-c/a797-8-scripts/`).
+It writes its report to `/Users/clintongormley/waitron-campaign-c/a797-9-look-report.md`.
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-9-columns-controller`; `wa-wt ls` for
+  the URLs. Enrol one browser context as a kitchen display showing the demo's kitchen station
+  screen, and one till context signed in, as slice 8's LOOK did. Make food so every column holds a
+  card, one of them late (slice 8's LOOK Step 2: lower the station's Waiting, Overdue and
+  Forgotten after to 1, 2 and 3 minutes, noting the values first and putting them back after).
+- [ ] **Step 2: Look** with the workspace's Playwright Chromium (the script in
+  `/Users/clintongormley/waitron-campaign-c/a797-9-scripts/`, never in the worktree, its process id
+  recorded), at **1280 px** and **1024 px** on the kitchen display and **390 px** on the till's
+  Station screen, **light and dark**, **English and Spanish**:
+  - every column open: each heading's name, count and chevron;
+  - Ready collapsed: the strip, "› Ready · N" top to bottom («Listo · N»), the other columns wider;
+  - Waiting collapsed with a late card in it: the header line still says "1 late" (D14);
+  - **reload the page**: what was collapsed is still collapsed; a 15-second refresh changes nothing;
+  - keyboard: Tab to a heading, the focus ring, Enter collapses and opens;
+  - with reduced motion asked for: nothing moves on collapse;
+  - a two-station display stacked, then merged (if the demo allows one), each with its own collapsed
+    columns;
+  - set the 1280 px light English picture with Ready collapsed beside picture 03
+    (`docs/backlog/mockups/a797-device-screens/03-kitchen-screen.png`) and describe each difference
+    in the report: Overview, Held, the corner's Columns, the one-row header and m:ss timers are
+    expected (later slices; slice 8 D6, D9); anything else about the headings, the counts or the
+    strip is a finding.
+- [ ] **Step 3: Save** each picture as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-9-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, and describe what was seen in the report, the
+  ledger and the PR body. Put back every demo setting changed.
+- [ ] **Step 4: Stop** what you started: the script's process by its recorded id, then
+  `wa-wt down waitron-feat-a797-9-columns-controller`.
+
+### Closing slice 9
+
+- Focused runs per task as above; CI runs the till's package suites and coverage (and the
+  server's for the guides). Read the `changes` job's outputs and the till's coverage or merge job
+  on the current head before calling the PR green. Code this slice leaves unreached is deleted,
+  never excluded (Global constraints).
+- `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read and one
+  Codex run-it review.
+- PR body. First line: no venue reset. Then: **What a cook sees** (the count in each heading; tap a
+  heading to collapse it to a strip and again to open it; remembered per station on the device);
+  **What A773-2 reuses** (`kitchen-columns.ts`, its five functions, D1, D15); **Decisions** D1–D15
+  in one line each; **Changed test checks** (none, with the probe's receipt); **LOOK**.
+- **Owner question** (lane C's questions file, with a worked example and the strip's picture from
+  the LOOK): D14 — should a collapsed column holding a late card carry a red bar, as slice 9c's
+  narrow tabs will? Recommended: yes, the same rule as the tabs, built in 9c with them.
+- **Owner FYI** (one line each in the PR and the questions file): D5 (layouts kept per station on
+  the device, the merged board apart; a failover box starts from the defaults); D7 (nothing can hide
+  a column until 9b).
+- In lane C's questions file, one line for lane G: slice 9 holds `station-queue.ts` and
+  `till-station-screen.ts` until it lands; `apps/till/src/state/kitchen-columns.ts` is the Columns
+  controller A773-2's Task 7b reuses, with one difference from its contract text, D3 (a missing
+  key goes back to its default place, not to the end).
+- After merge: delete the branch local and remote and check the remote one is gone; the backlog's
+  "landed in #N" commit; update the ledger; then slice 9b or 9c, in turn with lane G.
 
 ---
 
