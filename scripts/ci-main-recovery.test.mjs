@@ -53,6 +53,10 @@ writeFileSync(join(fixture, "docs/note.md"), "A later docs push.\n");
 git("add", ".");
 git("commit", "-m", "later docs");
 const docsHead = git("rev-parse", "HEAD");
+writeFileSync(join(fixture, "apps/server/src/mail.ts"), "export const ready = 'recovered';\n");
+git("add", ".");
+git("commit", "-m", "next code push");
+const nextCodeHead = git("rev-parse", "HEAD");
 git("remote", "add", "origin", fixture);
 git("fetch", "origin", "main");
 symlinkSync(join(root, "scripts"), join(fixture, "scripts"));
@@ -77,7 +81,11 @@ for (const [name, source] of Object.entries({
 }
 writeFileSync(
   join(bin, "gh"),
-  '#!/usr/bin/env bash\nprintf "%s\\n" "$@" >> "$WT_GH_ARGS"\n[ "$WT_GH_STATUS" = 0 ] || exit "$WT_GH_STATUS"\nprintf "%s" "$WT_RUNS" | jq -r "$4"\n',
+  `#!/usr/bin/env bash
+printf "%s\\n" "$@" >> "$WT_GH_ARGS"
+[ "$WT_GH_STATUS" = 0 ] || exit "$WT_GH_STATUS"
+printf "%s" "$WT_RUNS" | jq --arg endpoint "$2" 'if ($endpoint | contains("status=success")) then .workflow_runs |= map(select(.status == "completed" and .conclusion == "success")) else . end' | jq -r "$4"
+`,
 );
 chmodSync(join(bin, "gh"), 0o755);
 
@@ -157,15 +165,62 @@ describe("main CI recovery", () => {
   it("includes a code merge with no run when the next push changes only docs", () => {
     const result = classifyRun();
     expect(result.values).toMatchObject({ code: "true", scope: "global", packages: "" });
-    expect(result.args).toContain(
-      "actions/workflows/ci.yml/runs?branch=main&status=success&per_page=100",
-    );
+    expect(result.args).toContain("actions/workflows/ci.yml/runs?branch=main&per_page=100");
   });
   it("keeps a docs push cheap once its code ancestor has succeeded", () => {
     expect(classifyRun({ runs: [successful(codeHead)] }).values).toMatchObject({
       code: "false",
       scope: "global",
     });
+  });
+  it.each(["queued", "in_progress"])(
+    "keeps a docs push cheap while its code ancestor's own run is %s",
+    (status) => {
+      const result = classifyRun({
+        runs: [successful(codeHead, { status, conclusion: null }), successful(baseline)],
+      });
+      expect(result.values).toMatchObject({ code: "false", scope: "global", deploy: "false" });
+      expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
+    },
+  );
+  it("selects the nearest ancestor even when an older manual run appears first", () => {
+    const result = classifyRun({
+      runs: [
+        successful(baseline, { event: "workflow_dispatch" }),
+        successful(codeHead, { status: "queued", conclusion: null }),
+      ],
+    });
+    expect(result.values.code).toBe("false");
+    expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
+  });
+  it.each(["cancelled", "failure", "timed_out", "skipped", "neutral", "action_required"])(
+    "includes earlier code when its only run completed with %s",
+    (conclusion) => {
+      expect(
+        classifyRun({ runs: [successful(codeHead, { conclusion }), successful(baseline)] }).values,
+      ).toMatchObject({ code: "true", scope: "global", deploy: "false" });
+    },
+  );
+  it.each(["queued", "in_progress", "completed"])(
+    "runs a code push in full behind a %s ancestor run",
+    (status) => {
+      expect(
+        classifyRun({
+          sha: codeHead,
+          runs: [
+            successful(baseline, { status, conclusion: status === "completed" ? "success" : null }),
+          ],
+        }).values,
+      ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
+    },
+  );
+  it("rechecks the full tree on the next code push after an earlier run fails and a docs run passes", () => {
+    expect(
+      classifyRun({
+        sha: nextCodeHead,
+        runs: [successful(docsHead), successful(codeHead, { conclusion: "failure" })],
+      }).values,
+    ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
   });
   it("can read the baseline when coreutils exposes only gtimeout", () => {
     expect(classifyRun({ gtimeoutOnly: true, runs: [successful(codeHead)] }).values.code).toBe(
@@ -183,7 +238,28 @@ describe("main CI recovery", () => {
     ["unknown commit", { runs: [successful("a".repeat(40))] }],
     ["malformed commit", { runs: [successful("HEAD~1")] }],
     ["failed run", { runs: [successful(codeHead, { conclusion: "failure" })] }],
-    ["pending run", { runs: [successful(codeHead, { status: "in_progress" })] }],
+    [
+      "inconsistent pending conclusion",
+      { runs: [successful(codeHead, { status: "in_progress" })] },
+    ],
+    [
+      "queued current commit",
+      { runs: [successful(docsHead, { status: "queued", conclusion: null })] },
+    ],
+    [
+      "queued PR",
+      {
+        runs: [successful(codeHead, { status: "queued", conclusion: null, event: "pull_request" })],
+      },
+    ],
+    [
+      "queued different branch",
+      {
+        runs: [
+          successful(codeHead, { status: "queued", conclusion: null, head_branch: "feature" }),
+        ],
+      },
+    ],
     ["pull request", { runs: [successful(codeHead, { event: "pull_request" })] }],
     ["different branch", { runs: [successful(codeHead, { head_branch: "feature" })] }],
     ["same commit", { runs: [successful(docsHead)] }],

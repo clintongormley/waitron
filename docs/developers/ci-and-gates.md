@@ -996,8 +996,9 @@ and run on every push, so a regression in a skipped path is caught there only as
 exercise it.
 
 A merge to `main` runs the unfiltered suite whenever its `code` output is true. The range starts
-at a successful ancestral CI run, so even a docs merge runs the suite when that range includes
-unchecked code. A range containing only inert paths, documentation or machinery neither
+at the nearest ancestor with its own queued, running or successful main CI run. Earlier code
+stays with that run, so a docs push does not repeat its package suites while it waits.
+A range containing only inert paths, documentation or machinery neither
 `ROOT_SCOPE_CONSUMERS` nor `GLOBAL_ROOT_FILES` lists can skip it. That run verifies the narrowing.
 Read the `changes` job's `code`, `scope` and `packages` outputs
 before treating a green PR as evidence about the workspace. Designed and built in #27.
@@ -1066,12 +1067,23 @@ returned `total_count: 0`. The following docs commit `5ca72a619` had CI run `398
 which skipped the server suite and image. Why GitHub created no run is unverified. This differs
 from the cancellation above: there is no run to rerun.
 
-Main pushes now compare against a successful ancestral CI run instead of the preceding push.
-`scripts/ci-diff-paths.sh` reads the latest 100 successful main CI runs, accepts only completed
-push or manual runs on main, and checks ancestry locally. A missing baseline or failed API read
+Main pushes compare against the nearest eligible ancestor instead of the preceding push.
+`scripts/ci-diff-paths.sh` reads the latest 100 main CI runs. It accepts push or manual runs on
+main that are queued, in progress or completed successfully, then checks ancestry locally.
+It selects by ancestry even when a newer manual run names an older commit. Failed, cancelled
+and other completed results cannot supply the baseline. A missing baseline or failed API read
 selects the full suite and image. The API call uses `gtimeout` or `timeout` with a 30-second
 deadline and a five-second kill grace; neither command available also selects the full run.
-A docs push can therefore run the packages and publish when earlier code has not completed CI.
+A docs push runs the packages and can publish when its range includes code with no eligible run.
+For example, if a code merge's run is queued and you push only `docs/note.md`, the later run
+reports `code=false` and skips package suites and publishing. The earlier code run keeps its
+independent concurrency group and continues checking that code.
+
+If the earlier run later fails, its failure remains the signal for that code. A passing docs run
+does not qualify the earlier tree. The next code push runs the full package suite over the
+current tree, even if its nearest eligible baseline is a passing docs run. For an immediate
+recheck without another code change, use manual recovery below. Keep the earlier run's ID with
+your checkpoint until you have read its final result; a queued baseline is not a passing check.
 Pull requests retain their merge-base scope; release tags and manual dispatches run everything.
 
 If a main run is missing, start a full validation of current main. Let an existing manual recovery
