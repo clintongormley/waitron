@@ -829,7 +829,15 @@ describe("mountStartAgainChoice", () => {
 
   it.each([
     {
+      name: "a Keep",
+      choice: "keep",
+      choose: () => Promise.resolve({ choice: "keep" as const }),
+      status: 200,
+      body: "<main>setup.start_again_kept</main>",
+    },
+    {
       name: "a finished Move",
+      choice: "move",
       choose: () =>
         Promise.resolve({
           choice: "move" as const,
@@ -843,6 +851,7 @@ describe("mountStartAgainChoice", () => {
     },
     {
       name: "a Move that did not finish",
+      choice: "move",
       choose: () => Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
       status: 409,
       body: "<main>setup.start_again_move_unfinished</main>",
@@ -863,7 +872,7 @@ describe("mountStartAgainChoice", () => {
       (view) => `<main>${view.code}</main>`,
       log,
     );
-    const response = await post(app, { ...FORM, choice: "move" });
+    const response = await post(app, { ...FORM, choice: row.choice });
     expect(response.status).toBe(row.status);
     expect(await response.text()).toBe(row.body);
     expect(log).toHaveBeenCalledOnce();

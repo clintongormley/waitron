@@ -505,29 +505,31 @@ export function mountStartAgainChoice(
       });
     }
     // Outside the catch: the choice is recorded, so a failure to draw must not say nothing changed.
-    // Logged only after the choice has taken effect, so a throwing logger cannot undo it.
-    const logChoice = () =>
-      log?.("info", "recovery.start_again_choice", {
-        choice: result.choice,
-        attemptId: deps.survey.attemptId,
-        units: deps.survey.units.length,
-      });
+    // Logged after the answer is drawn: a throwing logger must neither skip the draw that holds the
+    // page on its answer nor turn the answer into a 500.
+    const logChoice = () => {
+      try {
+        log?.("info", "recovery.start_again_choice", {
+          choice: result.choice,
+          attemptId: deps.survey.attemptId,
+          units: deps.survey.units.length,
+        });
+      } catch {
+        // The choice is answered either way.
+      }
+    };
     if (result.choice === "keep") {
       onKept?.();
+      const answer = await page(200, { code: "setup.start_again_kept", secure: true });
       logChoice();
-      return page(200, { code: "setup.start_again_kept", secure: true });
+      return answer;
     }
     moved = { kind: "moved", folder: movedFolder(result.setAside) };
     const outgoing = outgoingOf(c);
     if (outgoing === undefined) void deps.onFinished();
     else outgoing.once("finish", () => void deps.onFinished());
-    // Drawn first: the draw holds the page on the moved answer, which a throwing logger must not skip.
     const answer = await page(200, { code, secure: true, message: moved });
-    try {
-      logChoice();
-    } catch {
-      // The choice is answered; a failed log line must not turn the answer into a 500.
-    }
+    logChoice();
     return answer;
   });
 }

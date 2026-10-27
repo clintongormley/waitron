@@ -1244,8 +1244,9 @@ it has taken effect. A failure the page answers with `notFinished` ("Start again
 finish …"), and `setup.start_again_move_unfinished`, are logged `recovery.start_again_choice_failed`
 with Waitron's error code (null when the error is not a Waitron error) and, when there is one, a
 `reason`: the Waitron error's own reason, or else the system error code and the path the error
-names, written and left out as above. The move-unfinished page, and the moved answer, are drawn
-before their line is logged, so a logger that throws still leaves `GET /` on them.
+names, written and left out as above. The kept page, the move-unfinished page and the moved answer
+are drawn before their line is logged, and a logger that throws is ignored there, so it neither
+turns the answer into a 500 nor leaves `GET /` off it.
 
 The one sentence on this page that says something is removed is the Move choice's `moveDetail`
 ("… and the rest of the interrupted setup is removed."), the owner's approved exception of
