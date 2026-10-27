@@ -103,10 +103,9 @@ export class ThemeTextRows extends LitElement {
         display: inline-flex;
         align-items: baseline;
         gap: var(--wt-space-2);
-        white-space: nowrap;
       }
       /* The stepper keeps its box's width while it shows an error, so "px" and the tag stay beside
-         the box; the error, kept on one line by the nowrap above, runs on underneath them. */
+         the box. */
       .size > wt-number-stepper {
         width: var(--wt-stepper-field-width);
       }

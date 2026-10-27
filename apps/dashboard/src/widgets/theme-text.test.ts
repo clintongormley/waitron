@@ -329,6 +329,36 @@ describe("the Text rows' layout", () => {
     }
   }
 
+  it("at 390 px in Spanish with saved Small text 18 at 130%, a size's error wraps inside its row", async () => {
+    setLocale("es-ES");
+    await page.viewport(390, 900);
+    const choices = { ...WAITRON_CHOICES, textScale: 130 as const, text: { size: { sm: 18 } } };
+    const derived = deriveTheme(choices);
+    const { el, host } = await mountWidget<ThemeTextRows>(
+      "dashboard-theme-text",
+      {
+        draft: openDraft(choices),
+        derived,
+        errors: { "text.size.sm": t("appearance.bad_text_px") },
+      },
+      "light",
+    );
+    for (const [token, value] of Object.entries(derived.light)) {
+      host.style.setProperty(token, String(value));
+    }
+    el.style.width = "300px";
+    await el.updateComplete;
+    await stepper(el, "sm").updateComplete;
+    await document.fonts.ready;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const error = stepper(el, "sm").shadowRoot!.querySelector("[data-error]")!;
+    expect(error.textContent).toBe(es["appearance.bad_text_px"]);
+    const words = document.createRange();
+    words.selectNodeContents(error);
+    const row = box(q(el, '[data-test="text-row-size.sm"]')!);
+    expect(words.getBoundingClientRect().right).toBeLessThanOrEqual(row.right + 1);
+  });
+
   it("at phone width each row puts the value under its name", async () => {
     await page.viewport(390, 900);
     const { name, value } = await rowAt(390);
