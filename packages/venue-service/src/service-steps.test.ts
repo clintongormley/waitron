@@ -105,10 +105,9 @@ describe("a new department's starter steps", () => {
       names: ["Set up", "Take order", "Anything else?"],
     },
     {
-      title:
-        "a department created in a Spanish venue starts with Montar mesa, Tomar nota and ¿Algo más?",
+      title: "a department created in a Spanish venue starts with the file's Spanish names",
       locales: ["es-ES", "en-GB"],
-      names: ["Montar mesa", "Tomar nota", "¿Algo más?"],
+      names: spanishSteps,
     },
     {
       title:
