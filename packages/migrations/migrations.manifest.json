@@ -18,6 +18,9 @@
       "membership_clearances",
       "bill_payment_lines",
       "unpaid_departures",
+      "order_portions",
+      "sale_line_portions",
+      "order_portion_events",
       "order_amendments",
       "order_group_events",
       "order_draft_events"

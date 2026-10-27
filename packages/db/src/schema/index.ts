@@ -5,6 +5,7 @@ export * from "./nodes.js";
 export * from "./series.js";
 export * from "./orders.js";
 export * from "./order-amendments.js";
+export * from "./order-portions.js";
 export * from "./dining-tables.js";
 export * from "./floor-plans.js";
 export * from "./parties.js";
