@@ -5467,6 +5467,15 @@ describe("the Columns window on the till", () => {
     expect(columnsWindow(el)).toBeNull();
   });
 
+  it("the Columns window: the device getting its first id closes it", async () => {
+    const { el } = await mountOperator({ deviceId: undefined });
+    await openColumns(el);
+    expect(columnsWindow(el)).not.toBeNull();
+    el.deviceId = "dev-1";
+    await flush(el);
+    expect(columnsWindow(el)).toBeNull();
+  });
+
   it("the Columns window: Back to another station closes it", async () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
     const { el } = await mountOperator();

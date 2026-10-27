@@ -317,16 +317,13 @@ export class TillStationScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("deviceId")) this.merged = this.#rememberedMerged();
-    if (
-      (["api", "deviceMode", "deviceId"] as const).some(
-        (key) => changed.has(key) && changed.get(key) !== undefined,
-      )
-    ) {
+    const scopeKeys = ["api", "deviceMode", "deviceId"] as const;
+    if (scopeKeys.some((key) => changed.has(key) && changed.get(key) !== undefined)) {
       this.#moveGeneration++;
       this.#moveOpening = false;
       this.moving = null;
-      this.columnsWindow = null;
     }
+    if (scopeKeys.some((key) => changed.has(key))) this.columnsWindow = null;
     if (this.columnsWindow !== null && !this.#drawnBoards().includes(this.columnsWindow.stationId))
       this.columnsWindow = null;
   }
