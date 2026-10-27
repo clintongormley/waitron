@@ -1599,20 +1599,16 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Keep-sellable (owner decision): changing the default demotes the OLD default to a member so the
-  // location keeps selling it — "which menus does this location sell?" and "which one opens first?" are
-  // independent choices. Casa was the default, Día a member; after making Día the default, both are
-  // still sellable, Día now flagged default.
   it("setLocationDefaultCatalogue changes the default and keeps the old default sellable", async () => {
     await asTenant(async (tx) => {
-      const casa = await createCatalogue(tx, { name: "Casa" });
-      const dia = await createCatalogue(tx, { name: "Día" });
-      await assignCatalogueToLocation(tx, locationId, casa.id);
-      await addCatalogueToLocation(tx, locationId, dia.id);
-      await setLocationDefaultCatalogue(tx, locationId, dia.id);
+      const house = await createCatalogue(tx, { name: "Casa" });
+      const day = await createCatalogue(tx, { name: "Día" });
+      await assignCatalogueToLocation(tx, locationId, house.id);
+      await addCatalogueToLocation(tx, locationId, day.id);
+      await setLocationDefaultCatalogue(tx, locationId, day.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
-        { id: dia.id, name: "Día", isDefault: true },
-        { id: casa.id, name: "Casa", isDefault: false },
+        { id: day.id, name: "Día", isDefault: true },
+        { id: house.id, name: "Casa", isDefault: false },
       ]);
     });
   });
@@ -1620,10 +1616,10 @@ describe("catalogue operations", () => {
   // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
   it("setLocationDefaultCatalogue sets the default when the location had none", async () => {
     await asTenant(async (tx) => {
-      const casa = await createCatalogue(tx, { name: "Casa" });
-      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      const house = await createCatalogue(tx, { name: "Casa" });
+      await setLocationDefaultCatalogue(tx, locationId, house.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
-        { id: casa.id, name: "Casa", isDefault: true },
+        { id: house.id, name: "Casa", isDefault: true },
       ]);
     });
   });
@@ -1633,11 +1629,11 @@ describe("catalogue operations", () => {
   // DIRECTLY.
   it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
     await asTenant(async (tx) => {
-      const casa = await createCatalogue(tx, { name: "Casa" });
-      await assignCatalogueToLocation(tx, locationId, casa.id);
-      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      const house = await createCatalogue(tx, { name: "Casa" });
+      await assignCatalogueToLocation(tx, locationId, house.id);
+      await setLocationDefaultCatalogue(tx, locationId, house.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
-        { id: casa.id, name: "Casa", isDefault: true },
+        { id: house.id, name: "Casa", isDefault: true },
       ]);
       const members = await tx.execute<{ count: number }>(
         sql`select count(*) as count from location_catalogues where location_id = ${locationId}`,
@@ -1651,9 +1647,9 @@ describe("catalogue operations", () => {
     ["setLocationDefaultCatalogue", setLocationDefaultCatalogue],
   ] as const)("%s with an id naming nothing", (_name, write) => {
     it("refuses an unknown location with location.not_found", async () => {
-      const casa = await asTenant((tx) => createCatalogue(tx, { name: "Casa" }));
+      const house = await asTenant((tx) => createCatalogue(tx, { name: "Casa" }));
       const missing = crypto.randomUUID();
-      await expect(asTenant((tx) => write(tx, missing, casa.id))).rejects.toMatchObject({
+      await expect(asTenant((tx) => write(tx, missing, house.id))).rejects.toMatchObject({
         code: "location.not_found",
         params: { locationId: missing },
       });

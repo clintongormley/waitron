@@ -992,6 +992,10 @@ failing test first.
 
 ## Decisions and deliberate limits
 
+- Changing the catalogue that opens first keeps the previous default sellable as a member.
+  Which catalogues you sell and which opens first are independent choices. The default-change
+  case in `packages/catalogue/src/operations.test.ts` checks both catalogues and their default flags.
+
 - **Sold-out tiles (A292, #1310, 2026-10-06).** A sold-out painted tile's stripe is
   `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
   palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
