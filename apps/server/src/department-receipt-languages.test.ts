@@ -60,7 +60,7 @@ describe("department receipt languages", () => {
       storageLanguages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
     });
   });
-  it("retains an unlabelled current locale without inventing labelled English copies", async () => {
+  it("retains a saved English receipt language without offering new English copies", async () => {
     expect(await read("en-GB", ["en", "ca"])).toEqual({
       receiptLanguage: "en-GB",
       languages: ["en-GB", "ca-ES"],

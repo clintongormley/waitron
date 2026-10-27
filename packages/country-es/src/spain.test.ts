@@ -271,20 +271,73 @@ describe("receipt language", () => {
 });
 
 describe("receipt labels", () => {
-  it("labels exactly the pack's receipt languages", () => {
-    expect(Object.keys(SPAIN.receiptLabels ?? {}).sort()).toEqual([...SPAIN.invoiceLocales].sort());
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+    "A965 labels keeps the internal sample values in %s",
+    (locale) => {
+      expect(SPAIN.receiptLabels?.[locale]).toMatchObject({
+        sampleTableLabel: "Mesa 6",
+        sampleItemName: "Café y tostada",
+        sampleInvoiceNumber: "MUESTRA/1",
+        sampleFooter: "Café, jamón, niño, pingüino · 5 €",
+      });
+    },
+  );
+
+  it("A965 labels supplies English receipt words without offering an English receipt in Spain", () => {
+    expect(SPAIN.receiptLabels?.["en-GB"]).toMatchObject({
+      invoice: "Invoice",
+      fullInvoice: "Full invoice",
+      netUnitPrice: "Net unit price",
+      date: "Date",
+      operationDate: "Operation date",
+      vat: "VAT",
+      cash: "Cash",
+      change: "Change",
+      tip: "Tip",
+      charged: "Charged",
+      refund: "Refund",
+      discount: "Discount",
+      duplicate: "DUPLICATE",
+      practice: "PRACTICE - NO REAL CHARGE",
+      invoiceHeading: "INVOICE",
+      paymentHeading: "PAYMENT RECEIPT",
+      paymentNotice: "This document is not an invoice",
+      paymentEntry: "Entry",
+      paymentContactless: "Contactless",
+      paymentChip: "Chip",
+      paymentSwipe: "Swipe",
+      paymentAuthorization: "Authorization",
+      paymentAmount: "Amount",
+      refundReference: "Original invoice",
+      refundAmount: "Payment returned",
+      refundTip: "Tip returned",
+      refundTotal: "Money returned",
+      sampleIssuerName: "Waitron - Sample receipt",
+    });
+    expect(SPAIN.invoiceLocales).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES"]);
+    expect(receiptLanguageRules(SPAIN, "28").choices).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES"]);
+    expect(receiptLanguageRules(SPAIN, "08").fixed?.locale).toBe("ca-ES");
   });
 
-  it.each(SPAIN.invoiceLocales)("gives %s every label as non-empty text", (locale) => {
-    const labels = SPAIN.receiptLabels?.[locale];
-    expect(Object.keys(labels ?? {}).sort()).toEqual([...RECEIPT_LABEL_KEYS].sort());
-    for (const key of RECEIPT_LABEL_KEYS) {
-      expect(typeof labels?.[key], key).toBe("string");
-      expect(labels?.[key].trim(), key).not.toBe("");
-    }
+  it("labels the pack's receipt languages and English", () => {
+    expect(Object.keys(SPAIN.receiptLabels ?? {}).sort()).toEqual(
+      [...SPAIN.invoiceLocales, "en-GB"].sort(),
+    );
   });
 
-  it.each(SPAIN.invoiceLocales)(
+  it.each([...SPAIN.invoiceLocales, "en-GB"])(
+    "gives %s every label as non-empty text",
+    (locale) => {
+      const labels = SPAIN.receiptLabels?.[locale];
+      expect(Object.keys(labels ?? {}).sort()).toEqual([...RECEIPT_LABEL_KEYS].sort());
+      for (const key of RECEIPT_LABEL_KEYS) {
+        expect(typeof labels?.[key], key).toBe("string");
+        expect(labels?.[key].trim(), key).not.toBe("");
+      }
+    },
+  );
+
+  it.each([...SPAIN.invoiceLocales, "en-GB"])(
     "keeps the never-translated Veri*Factu legend and QR caption out of %s",
     (locale) => {
       const values = Object.values(SPAIN.receiptLabels?.[locale] ?? {});

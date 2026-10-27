@@ -241,6 +241,14 @@ describe("receipt labels", () => {
   // vocabulary, which this package's English-only guard refuses (`scripts/english-only.test.ts`).
   const spain = getCountryPack("ES")!.receiptLabels!;
 
+  it("A965 labels selects exact English resources and keeps bare or unknown locales Spanish", () => {
+    expect(receiptLabelsFor("en-GB").invoice).toBe("Invoice");
+    expect(receiptLabelsFor("en-GB")).toBe(spain["en-GB"]);
+    expect(receiptLabelsFor("es-ES")).toBe(spain["es-ES"]);
+    for (const locale of ["es", "en", "ca", "gl", "eu", "fr-FR", "en-US", "ca-ES-valencia"])
+      expect(receiptLabelsFor(locale), locale).toBe(spain["es-ES"]);
+  });
+
   it("finds a locale's labels in the pack that has them", () => {
     expect(receiptLabelsFor("ca-ES")).toBe(spain["ca-ES"]);
     expect(receiptLabelsFor("ca-ES").date).toBe("Data");
@@ -249,8 +257,7 @@ describe("receipt labels", () => {
   });
 
   it("prints Spain's Spanish labels for a locale no installed pack labels", () => {
-    for (const locale of ["en-GB", "es", "fr-FR"])
-      expect(receiptLabelsFor(locale)).toBe(spain["es-ES"]);
+    for (const locale of ["es", "fr-FR"]) expect(receiptLabelsFor(locale)).toBe(spain["es-ES"]);
   });
 });
 
