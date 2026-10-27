@@ -1583,45 +1583,43 @@ describe("A807 one notice per kitchen-note change", () => {
   it.each([0, 1])(
     "clears every dish of the notice at that station from row %i, keeping the first time",
     async (pick) => {
-      {
-        const v = await venue();
-        const order = await seedOrder(v.locationId, 4, null);
-        await inTx((tx) =>
-          recordKitchenNotices(
-            tx,
-            v.cfg,
-            order.orderId,
-            [
-              at(v.grill, order.burgerLineId),
-              at(v.grill, order.lemonadeLineId),
-              at(v.bar, order.burgerLineId),
-            ],
-            "changed",
-            change,
-          ),
-        );
-        const rows = await rawRows();
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 4, null);
+      await inTx((tx) =>
+        recordKitchenNotices(
+          tx,
+          v.cfg,
+          order.orderId,
+          [
+            at(v.grill, order.burgerLineId),
+            at(v.grill, order.lemonadeLineId),
+            at(v.bar, order.burgerLineId),
+          ],
+          "changed",
+          change,
+        ),
+      );
+      const rows = await rawRows();
 
-        await inTx((tx) =>
-          acknowledgeKitchenNotice(tx, v.cfg, rows[pick]!.id, { stationId: v.grill }),
-        );
+      await inTx((tx) =>
+        acknowledgeKitchenNotice(tx, v.cfg, rows[pick]!.id, { stationId: v.grill }),
+      );
 
-        const after = await rawRows();
-        expect(after.map((row) => row.acknowledgedAt !== null)).toEqual([true, true, false]);
-        expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
-        expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toHaveLength(1);
+      const after = await rawRows();
+      expect(after.map((row) => row.acknowledgedAt !== null)).toEqual([true, true, false]);
+      expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+      expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toHaveLength(1);
 
-        const first = "2026-01-01T00:00:00.000Z";
-        await db
-          .update(kitchenNotices)
-          .set({ acknowledgedAt: first })
-          .where(eq(kitchenNotices.stationId, v.grill));
-        await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, rows[1 - pick]!.id));
-        expect((await rawRows()).slice(0, 2).map((row) => row.acknowledgedAt)).toEqual([
-          first,
-          first,
-        ]);
-      }
+      const first = "2026-01-01T00:00:00.000Z";
+      await db
+        .update(kitchenNotices)
+        .set({ acknowledgedAt: first })
+        .where(eq(kitchenNotices.stationId, v.grill));
+      await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, rows[1 - pick]!.id));
+      expect((await rawRows()).slice(0, 2).map((row) => row.acknowledgedAt)).toEqual([
+        first,
+        first,
+      ]);
     },
   );
 

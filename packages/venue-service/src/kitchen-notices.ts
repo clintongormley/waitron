@@ -78,9 +78,9 @@ const NOTICE_LIMIT = 50;
 const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
 
 /**
- * The rows of one kitchen-note change for one order, written by one {@link recordKitchenNotices}
- * call, share this key and show as one notice; any other row's key is its own id. Values, not JSON
- * text, are compared, so key order cannot split a change.
+ * Kitchen-note change rows with the same order, time and note before and after share this key and
+ * show as one notice; any other row's key is its own id. Values, not JSON text, are compared, so
+ * key order cannot split a change.
  */
 const FOLD_KEY = sql<string>`case when ${kitchenNotices.orderNoteChange} is null then ${kitchenNotices.id} else json_array(${kitchenNotices.workingOrderId}, ${kitchenNotices.createdAt}, json_extract(${kitchenNotices.orderNoteChange}, '$.before'), json_extract(${kitchenNotices.orderNoteChange}, '$.after')) end`;
 
@@ -368,9 +368,8 @@ function sameNames(a: Record<string, string> | null, b: Record<string, string> |
 
 /**
  * Clears a notice from its station, every dish of a kitchen-note change included. Acknowledging
- * one twice keeps the first time. With `stationId`,
- * a notice at any other station is `kitchen_notice.not_found`, as a kitchen display bound to that
- * station must not clear another's.
+ * one twice keeps the first time. With `stationId`, a notice at any other station is
+ * `kitchen_notice.not_found`, as a kitchen display bound to that station must not clear another's.
  */
 export async function acknowledgeKitchenNotice(
   tx: Transaction,
@@ -379,7 +378,11 @@ export async function acknowledgeKitchenNotice(
   scope: { stationId?: string } = {},
 ): Promise<void> {
   const [notice] = await tx
-    .select({ stationId: kitchenNotices.stationId, foldKey: FOLD_KEY })
+    .select({
+      stationId: kitchenNotices.stationId,
+      createdAt: kitchenNotices.createdAt,
+      foldKey: FOLD_KEY,
+    })
     .from(kitchenNotices)
     .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenNotices.stationId))
     .where(
@@ -396,6 +399,7 @@ export async function acknowledgeKitchenNotice(
     .where(
       and(
         eq(kitchenNotices.stationId, notice.stationId),
+        eq(kitchenNotices.createdAt, notice.createdAt),
         eq(FOLD_KEY, notice.foldKey),
         isNull(kitchenNotices.acknowledgedAt),
       ),
