@@ -108,8 +108,11 @@ a test that checks the Spanish screen reads the expected text from that file rat
 it. Starter content a module writes into a new venue is English in its code and translated at setup
 from a translation file in the writing package, `src/starter-content.ts`, keyed by the English. So
 far that holds for the void and comp reasons (`packages/adjustments/src/starter-content.ts`, A918):
-each reason's language map gets the venue's starting content languages the file carries, plus
-English, and its plain name gets the staff language. The kitchen station, the device profiles, the
+each reason's language map gets the venue's starting content languages (the area's default
+content language, the languages the area requires every venue to keep, then English) that the file
+carries, plus English, and its plain name gets the staff language (the receipt language when the
+staff screens have it, `es-ES` or `en-GB`, otherwise the area's screen language, cut to `es` or
+`en`). The kitchen station, the device profiles, the
 service steps, the seasons, the counter zone, the menu period, the units, and the first menu with
 its root section and home layout are still written from code (A918's open slices).
 
@@ -154,8 +157,8 @@ comments without a parser, guessing from the code before a `/` whether it opens 
 expression, and a wrong guess can hide a Spanish word in code on a later line. It also never scans
 a package that `GENERIC_PACKAGES` leaves out (among them `bookings`,
 `venue-service`, `ui-core`, `server-kit` and `country-gb`), `provisioning`'s test files, any
-`dashboard/strings.ts`, a package's top-level `src/starter-content.ts`, whole: comments and
-identifiers included, with nothing checking that the file holds only data, a `«…»` quote anywhere
+`dashboard/strings.ts`, a package's top-level `src/starter-content.ts` (the whole file, comments
+and identifiers included; nothing checks that it holds only data), a `«…»` quote anywhere
 in the source (code included), or a backtick citation in a comment.
 
 **Module and package boundaries**

@@ -92,8 +92,8 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  * A module's dashboard panel keeps its own `{ en, es }` copy in `src/dashboard/strings.ts`, and
  * those `es` values are translation, not vocabulary.
  *
- * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so the guard still scans every
- * other file in these packages, a `dashboard/*.ts` widget that is NOT the catalogue included.
+ * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so a `dashboard/*.ts` widget
+ * that is NOT the catalogue is still scanned.
  */
 export const I18N_CATALOGUES = ["dashboard/strings.ts"] as const;
 
