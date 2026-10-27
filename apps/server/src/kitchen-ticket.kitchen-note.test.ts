@@ -179,7 +179,6 @@ describe.each([
         ),
       );
     const narrow = layout.paperWidth === "58mm";
-    // Captured from the single-dish correction slip this slip replaced, before it was removed.
     const singleDish = [
       {
         locale: "en-GB",

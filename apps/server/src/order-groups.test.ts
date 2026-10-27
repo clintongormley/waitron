@@ -630,6 +630,7 @@ describe("permanent group numbers on kitchen work", () => {
     expect(paper[0]).toContain("GROUP 5\n");
     expect(paper[0]).toContain("GROUP 5\n2.000 x K-FLAN");
     expect(paper[0]).toContain("GROUP 3\n4.000 x K-OCTO");
+    expect(paper[0]!.indexOf("GROUP 5\n")).toBeLessThan(paper[0]!.indexOf("GROUP 3\n"));
   });
 
   it("carries permanent numbers and origins through station and pass queues", async () => {

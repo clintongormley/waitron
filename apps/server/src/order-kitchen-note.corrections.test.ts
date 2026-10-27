@@ -571,7 +571,8 @@ it("A807 prints one slip per printer for stations that share one", async () => {
   });
   const p = await seat(v, await v.table("Table 1"));
   await inTx(v, (tx) => writeKitchenNote(tx, { partyId: p.partyId }, 0, "Old time"));
-  await order(v, p.tabId, "Burger", "Burger", "Flan", "Paella");
+  // Flan is ordered first, so the slip names Grill first only because stations print in name order.
+  await order(v, p.tabId, "Flan", "Burger", "Burger", "Paella");
   const jobsAt = async (printerId: string) =>
     (await v.db.select().from(printJobs).where(eq(printJobs.printerId, printerId))).map((job) =>
       printedLines(job.payload),
@@ -592,6 +593,8 @@ it("A807 prints one slip per printer for stations that share one", async () => {
       notice.dishes?.map((dish) => dish.lineName),
     );
   expect(await dishes(s.grill)).toEqual([["BURG"]]);
+  const [grill] = await inTx(v, (tx) => listStationNotices(tx, v.cfg, s.grill));
+  expect(grill!.dishes![0]!.quantity).toEqual(thousandthsToDecimal(2000));
   expect(await dishes(s.pastry)).toEqual([["FLAN"]]);
   expect(await dishes(s.bar)).toEqual([["PAELLA"]]);
 });

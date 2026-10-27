@@ -1112,7 +1112,10 @@ export async function enqueueAllergyCorrectionSlips(
   });
 }
 
-/** One slip per item, to its station's printers, headed with the current table. */
+/**
+ * One slip per item, to its station's printers, headed with the current table; a kitchen-note change
+ * prints one slip per printer instead.
+ */
 async function printCorrectionSlips(
   tx: Transaction,
   cfg: TillConfig,
