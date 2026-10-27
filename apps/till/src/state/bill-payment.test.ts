@@ -279,6 +279,17 @@ describe("the submission id of a confirmation", () => {
     });
   });
 
+  it("is kept after a refusal when only the receipt's guest count changed", () => {
+    const original = { ...tenEuros, guestCount: 4 };
+    const first = submissionFor("wo-1", original, null, ids("sub-1"));
+    const refused = unansweredAfter(first, { code: "bill.tip_not_allowed", status: 409 });
+
+    expect(
+      submissionFor("wo-1", { ...original, guestCount: 9 }, refused, ids("sub-2")).request
+        .submissionId,
+    ).toBe("sub-1");
+  });
+
   it("retains the original complete body when ownership changes after an authorization refusal", () => {
     const original = {
       ...tenEuros,
