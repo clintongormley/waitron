@@ -3021,7 +3021,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   own pages, such as the help guide, take no theme; a size drawn under 12 px is counted as hard
   to read, and every bold, heading and table header that sets no weight of its own draws the theme's Bold weight — headings on the
   dashboard, the tills and the setup screens now draw 600, not the browser's 700.
-  Next: 11b, 12 and 14 (14 with A1096's last part, below).
+  Slice 11b landed 2026-10-27 (#2140): Advanced on the Look card sets the typeface, the four sizes
+  and the three weights by hand, warns when text is too small and notes when it is larger than the
+  tills are checked at, each with a fix; the saved card lists the text set by hand.
+  Next: 12 and 14 (14 with A1096's last part, below).
 
 - **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
   A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
