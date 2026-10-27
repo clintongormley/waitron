@@ -226,6 +226,22 @@ describe("renderStartAgainSection", () => {
     }
   });
 
+  it("after a refused Move that cannot be moved aside, neither choice is checked", () => {
+    const html = render({ chosen: "move", message: { kind: "moveUnavailable" } });
+    const radios = [...html.matchAll(/<input type="radio"[^>]*>/g)].map((match) => match[0]);
+    expect(radios).toHaveLength(2);
+    for (const radio of radios) expect(radio).not.toContain("checked");
+  });
+
+  it("puts Continue in its own paragraph, so the Retry form below it does not touch it", () => {
+    for (const locale of LANGS) {
+      const html = render({ locale });
+      expect(html, locale).toContain(
+        `<p><button type="submit">${escapeHtml(START_AGAIN_PAGE_TEXT[locale].continue)}</button></p>\n</form>`,
+      );
+    }
+  });
+
   it("re-checks the chosen radio after a refusal", () => {
     const html = render({ chosen: "move", message: { kind: "wrongPassword" } });
     const radios = [...html.matchAll(/<input type="radio"[^>]*>/g)].map((match) => match[0]);

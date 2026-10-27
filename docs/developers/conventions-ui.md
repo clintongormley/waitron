@@ -1171,9 +1171,10 @@ TLS (`isSecure`, `apps/server/src/recovery-start-again.ts`); over anything else 
 list and "Open this page over the box's secure connection to choose." `POST
 /recovery-api/start-again` is mounted only on that page and refuses a request that is not TLS
 (403) or not from the page's own origin (403). The radios are a fieldset whose legend is
-`choiceLegend` ("What should the box do? *"). The password box is a plain HTML field, the one
-`ALLOWED` entry `scripts/native-form-fields.test.ts` holds for this file (A1098 Q1, owner,
-2026-10-27): the page loads no script or front-end bundle, so no field primitive can run on it.
+`choiceLegend` ("What should the box do? *"). A refusal redraws the form with the person's choice
+checked again, except `moveUnavailable`, which redraws it with neither checked. The password box is
+a plain HTML field, the one `ALLOWED` entry `scripts/native-form-fields.test.ts` holds for this file
+(A1098 Q1, owner, 2026-10-27): the page loads no script or front-end bundle, so no field primitive can run on it.
 
 The password is the setup record's administrator password (`ownerVerifier`). Every try is counted
 in `<state>/first-setup-start-again-guesses.json` before the password is checked, so a restart does
@@ -1223,8 +1224,9 @@ and it is later than the box's clock.
 
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
-recorded Keep from disk. After a Move, the answer names the set-aside folder and the process
-restarts once the answer is written, as Retry does. A Move refused
+recorded Keep from disk. After a Move, the answer names the set-aside folder, above the list of
+found files, in place of the files-found title, action and Retry button (`startAgainDraw`), and the
+process restarts once the answer is written, as Retry does. A Move refused
 `setup.start_again_move_unfinished` answers 409 with that code's recovery page and no list or form,
 does not restart, and the process keeps serving that page on `GET /`; every later `POST
 /recovery-api/start-again` in that process answers 409 with the same page without choosing again,

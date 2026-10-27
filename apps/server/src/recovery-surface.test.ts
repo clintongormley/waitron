@@ -1559,4 +1559,45 @@ describe("recoveryApp's Start again choice", () => {
     expect(page).not.toContain(FORM_ACTION);
     expect(page).not.toContain('type="password"');
   });
+
+  it("after Move, the answer in each language says only that Start again finished: no files-found title or action, and no Retry", async () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const found = OPERATOR_TEXT["setup.start_again_files_found"]![locale];
+      const words = START_AGAIN_PAGE_TEXT[locale];
+      const { app: surface } = app(MOVED);
+      const answer = await surface.request(
+        "/recovery-api/start-again",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Language": locale,
+          },
+          body: new URLSearchParams({
+            password: "pw",
+            choice: "move",
+            listed: SURVEY.digest,
+          }).toString(),
+        },
+        tls(),
+      );
+      expect(answer.status, locale).toBe(200);
+      const page = await answer.text();
+      const moved = page.indexOf(escapeHtml(words.moved("state/first-setup-set-aside/s1")));
+      expect(moved, locale).toBeGreaterThan(-1);
+      expect(page.indexOf("<li>venue/venue.db</li>"), locale).toBeGreaterThan(moved);
+      expect(page, locale).not.toContain(escapeHtml(found.title));
+      expect(page, locale).not.toContain(escapeHtml(found.action));
+      expect(page, locale).not.toContain(RETRY_ACTION);
+      expect(page, locale).not.toContain(FORM_ACTION);
+    }
+  });
+
+  it("gives the found-files list items overflow-wrap: anywhere, so a long file name wraps on a phone", async () => {
+    const { app: surface } = app();
+    const body = await (await surface.request("/", {}, tls())).text();
+    const head = body.slice(0, body.indexOf("</head>"));
+    expect(head).toContain("<style>li { overflow-wrap: anywhere; }</style>");
+    expect(body).toContain("<li>venue/venue.db</li>");
+  });
 });

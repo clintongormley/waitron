@@ -215,7 +215,7 @@ function bottomText(message: StartAgainMessage, text: StartAgainPageText): strin
 
 /**
  * The found files and, over a secure request, the choice form. Placed between the action
- * paragraph and the Retry form. The password box is the page's one native text field: the page
+ * paragraph and the Retry form; a `moved` answer is drawn in place of all three. The password box is the page's one native text field: the page
  * loads no script, so no field primitive can run on it (A1098 Q1).
  */
 export function renderStartAgainSection(input: {
@@ -233,7 +233,7 @@ export function renderStartAgainSection(input: {
     message === undefined
       ? ""
       : `<p id="start-again-message">${escapeHtml(bottomText(message, text))}</p>\n`;
-  if (message?.kind === "moved") return `${list}${bottom}`;
+  if (message?.kind === "moved") return `${bottom}${list}`;
   if (!secure) return `${list}<p>${escapeHtml(text.insecureForm)}</p>\n${bottom}`;
 
   const passwordError =
@@ -248,7 +248,9 @@ export function renderStartAgainSection(input: {
       ? ""
       : ' aria-invalid="true" aria-describedby="start-again-password-error"';
   const choiceInvalid = choiceError === null ? "" : ' aria-describedby="start-again-choice-error"';
-  const checked = (value: "keep" | "move") => (chosen === value ? " checked" : "");
+  // A Move this box cannot do is not offered back as the person's choice.
+  const preselected = message?.kind === "moveUnavailable" ? undefined : chosen;
+  const checked = (value: "keep" | "move") => (preselected === value ? " checked" : "");
   const floor =
     survey.noteFloorMs !== null && survey.noteFloorMs > now.getTime()
       ? `<p>${escapeHtml(text.moveFloor(utcMinute(survey.noteFloorMs)))}</p>\n`
@@ -268,7 +270,7 @@ ${fieldError("start-again-password-error", passwordError)}<fieldset${choiceInval
 <p>${escapeHtml(text.moveUnsent)}</p>
 ${floor}</fieldset>
 ${fieldError("start-again-choice-error", choiceError)}<input type="hidden" name="listed" value="${escapeHtml(survey.digest)}">
-${bottom}<button type="submit">${escapeHtml(text.continue)}</button>
+${bottom}<p><button type="submit">${escapeHtml(text.continue)}</button></p>
 </form>
 `;
 }
