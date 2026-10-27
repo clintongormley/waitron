@@ -9,7 +9,9 @@ introduce su precio. Su IVA empieza en la clase elegida en **Clase de IVA para p
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
-publicó la carta. Una línea que ya está en un pedido conserva la clase con la que se añadió.
+publicó la carta. Para corregir la clase en la carta publicada sin publicarla, consulta
+[Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Una línea que ya
+está en un pedido conserva la clase con la que se añadió.
 
 El editor deja a la vista los campos que cambias a menudo y pliega el resto bajo un encabezado que
 resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abre una haciendo clic en su
@@ -259,6 +261,58 @@ sitios que quieras y elige **Añadir a las cartas**, o elige **Omitir** y colóc
 entonces el producto ya está guardado, así que un sitio que lo rechaza no deshace el guardado. La
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
+
+## Corrige la carta publicada en una emergencia {#patch-live-menu}
+
+Usa una corrección cuando encuentres un error en la carta publicada, como un precio equivocado,
+mientras los productos ya tienen cambios para la próxima carta que todavía no quieres llevar a la
+caja. Publicar llevaría también esos cambios. Una corrección cambia solo los valores que corriges,
+en la versión publicada de una carta.
+
+Abre la carta en **Productos y cartas → Cartas** y elige **Corregir la carta publicada…** junto a
+su versión publicada, en el encabezado. El botón aparece solo mientras la carta tiene una versión
+publicada, y puede usarlo cualquiera que pueda publicar la carta. La ventana muestra los elementos
+de la carta publicada, con un buscador, y sus listas de extras y de opciones bajo **Extras y
+opciones**. Elige un elemento para ver lo que puedes cambiar:
+
+- Un plato: su nombre, nombre para el cliente, nombre de cocina, descripción, imagen, precio y
+  clase de IVA.
+- Una variante o un extra: lo mismo, sin descripción.
+- Una opción de una lista de opciones, y el nombre de una lista de extras o de opciones: sus tres
+  nombres.
+- Una sección: su nombre interno, su nombre para el cliente y su imagen.
+
+Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
+Elige o quita una imagen igual que en el editor de productos. Un plato con variantes se cobra al
+precio y con la clase de IVA de cada variante, así que corrígelos en sus variantes; corregir el
+plato nunca las cambia. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
+todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
+extra se corrige en cada sitio por separado.
+
+Una corrección no puede cambiar nada más. Los alérgenos y las etiquetas dietéticas se declaran en
+el propio producto; consulta
+[Declara los alérgenos y la aptitud dietética directamente](products.md#allergens). Tampoco puede
+cambiar la unidad, la disponibilidad, el curso ni la categoría, el orden de los elementos, los
+colores ni qué elementos y secciones tiene la carta.
+
+Cada elemento que cambias se marca **Con cambios**. **Revisar 1 corrección**, o **Revisar** seguido
+del número de correcciones, muestra cada una como el valor anterior → el nuevo. Elige **Seguir
+editando** para volver, o **Publicar ahora**. Esto es lo que hace publicar una corrección:
+
+- Se publica al momento como una versión nueva de esta carta, con el número siguiente. Las líneas
+  que se añaden a los pedidos desde entonces usan los valores corregidos. Las líneas que ya están
+  en pedidos abiertos mantienen su precio y su clase de IVA anteriores.
+- No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
+  otras cartas. Un producto que está en dos cartas se corrige en cada una.
+- Una versión programada para más tarde conserva su fecha y su contenido, y entra en vigor entonces
+  sin la corrección. Recibe un número nuevo, posterior al de la corrección, en **Versiones
+  programadas**.
+- La próxima publicación normal vuelve a crear la carta a partir de los productos, así que vuelve a
+  poner los valores anteriores, salvo que corrijas también los productos.
+
+Si lo que has introducido ya está publicado, no se guarda nada y la ventana lo dice. Si otra
+versión se ha publicado mientras corregías, **Publicar ahora** se rechaza: **Volver a cargar** abre
+la versión publicada ahora y conserva las correcciones que todavía encajan en ella.
 
 ## Reutiliza las elecciones {#reusable-choices}
 
