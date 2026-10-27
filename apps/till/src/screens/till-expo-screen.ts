@@ -136,7 +136,7 @@ export class TillExpoScreen extends LitElement {
         text-align: center;
       }
 
-      /* BOARD — a card per order, wrapping across rows (the station rail's flex-wrap shape). */
+      /* BOARD — a card per order, wrapping across rows. */
       .board {
         display: flex;
         flex-wrap: wrap;

@@ -1593,6 +1593,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
   [Detail](backlog/kitchen.md#a-selected-tab-that-grows-while-its-strip-keeps-its-width-is-not-scrolled-back-into-view)
 
+- **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
+  since A797 slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
+  plan's slice 8, D8). Retiring it is a change of its own, on the FULL review path because it is a
+  till route, and not part of A773-2, whose Task 2 keeps "real station-item/ticket preparation
+  routes for actual-released work" (its plan, Task 2's Interfaces).
+
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.

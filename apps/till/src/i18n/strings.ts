@@ -629,7 +629,8 @@ export const en = {
   // Placing and prep
   "action.place": "Send",
   "action.send_to_prep": "Send to prep",
-  // Station display. `station.min` is a suffix word, rendered as `${n} ${t(key)}`.
+  // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
+  // rendered as `${n} ${t(key)}`.
   "kitchen_screen.station": "Station screen",
   "kitchen_screen.pass": "Pass screen",
   "kitchen_screen.pass_monitor": "Pass monitor",

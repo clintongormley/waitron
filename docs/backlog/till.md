@@ -1050,12 +1050,7 @@ may predate that branch:
   group in Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no
   Tickets view) is in review, built from the plan's slice 8; next, slice 8b (short names on the
   cards, after slice 1, landed) and slice 9, taking turns with lane G's A773-2 on the station screen
-  (design §7). One point slice 8 leaves open: the whole-order advance route
-  `POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller
-  since slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
-  plan's slice 8, D8). Retiring it is a change of its own, on the FULL review path because it is a
-  till route, and not part of A773-2, whose Task 2 keeps "real station-item/ticket preparation
-  routes for actual-released work" (its plan, Task 2's Interfaces). Build slices (design §8), in the owner's
+  (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits

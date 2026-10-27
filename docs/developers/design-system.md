@@ -419,7 +419,7 @@ blocks give the same values.
 
 `--wt-color-table-calm-edge` is the soft left edge of a calm list card: `#8fb7f5` light, `#4d6aa6`
 dark. `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` are the colours a pulsing
-floor ring, the till bar's Waiting tab border and the Ready bar's warning edge reach half-way: `#e8bebc` and `#dccbb3` light,
+floor ring, a forgotten kitchen card's band and outline, the till bar's Waiting tab border and the Ready bar's warning edge reach half-way: `#e8bebc` and `#dccbb3` light,
 `#bd9ba0` and `#b9aa94` dark. The "floor ring and calm edge colours" cases in `colors.test.ts` hold,
 in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 or more on
 `--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is

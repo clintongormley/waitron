@@ -1667,9 +1667,7 @@ export interface StationQueueGroup {
   items: StationQueueItem[];
   /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
   elsewhere?: ElsewhereItem[];
-  /** This station's order-timing thresholds. Every group from one call shares them; they ride
-   *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
-   *  (`classifyBand`, `@waitron/shared`). */
+  /** This station's order-timing thresholds. Every group from one call shares them. */
   thresholds: StationThresholds;
   /** This order's own station's choice; a merged queue mixes stations. */
   bumpMode: BumpMode;
