@@ -6,6 +6,13 @@ delivery and the asesor's manual-remedy approval as prerequisites to that switch
 open separately. Counter payment still refuses F1. Earlier dated statements about the public
 F1 stop describe the implementation at that time.
 
+**2026-10-27 research update, A948:** The [operation-date proposal and B2B source check](research/2026-10-27-a948-operation-date-and-b2b.md)
+recommends a confirmed meal-completion date rather than bill opening or automatic use of the
+issue date. It awaits the owner's decision; S4 remains unanswered by the adviser. The BOE and
+AEAT now explicitly separate the B2B rules' entry into force from mandatory application on
+6 October 2027 or 2028, according to the issuer's threshold. This note sends no enquiry and
+changes neither S4 nor the earlier dated owner decision.
+
 **Owner, 2026-10-22 (what has been sent):** The [shortened list (2026-10-09)](#the-shortened-list-2026-10-09) went to the adviser about a week before this note, around 2026-10-15. That date is the owner's estimate, not a recorded one. Everything added after the shortened list, from [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31)(d) and [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) onward, is the next batch. The owner will send it later. No lane sends questions.
 
 **2026-10-17, A664:** You adopted the [revised proposal](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review) for specialist review. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) awaits the relevant fiscal/commercial, labour and privacy decisions. You will send it; no enquiry has been sent by this campaign. The historical Word copies have not been changed.

@@ -22,9 +22,21 @@ fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 se
 
 ## A444. A full invoice for a meal past midnight should carry the day the meal ends
 
-A231's provisional rule uses the day the bill was opened. The 2026-10-09 research found a binding
-ruling dating a service at its end (V1476-13, by analogy); asked as
-[S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). Fiscal: the owner lands it.
+A231's provisional rule uses the day the bill was opened. The
+[27 October proposal](../compliance/research/2026-10-27-a948-operation-date-and-b2b.md)
+recommends the meal-completion date, confirmed before first F1 issuance and retained through
+recovery. The owner must approve the rule before implementation; the restaurant-service
+analogy remains [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) for the adviser.
+A696/A739 integration and fiscal owner landing remain separate. Earlier issued dates stay saved.
+
+## Structured B2B invoices before the applicable 2027 or 2028 date
+
+The [27 October source check](../compliance/research/2026-10-27-a948-operation-date-and-b2b.md#b2b-delivery-the-rules-exist-their-mandatory-application-is-later)
+separates current paper/agreed-electronic delivery qualification from future structured B2B
+integration. The general mandate applies from 6 October 2027 above the issuer's EUR8 million
+threshold, or 6 October 2028 otherwise. Establish scope and design exchange, public-solution
+copies and required state/payment reporting before the applicable date. No connector is built
+or qualified by this research; current delivery and preservation checks remain open.
 
 ## A445. A free item on a bill with mixed VAT rates should take a share of the price paid
 
@@ -292,7 +304,8 @@ the same refusal. A saved F1 choice still permits the bill to grow above the sim
 the existing recipient checks and F1 series selection remain in place.
 
 **Next action:** complete A555, A444, the physical 58/80 mm paper and QR checks, the asesor's
-manual-remedy confirmation and applicable B2B delivery as separate work. F3 conversion, F1's
+manual-remedy confirmation and current business-invoice delivery qualification as separate work.
+Future structured B2B integration has its own entry above. F3 conversion, F1's
 R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
 
 <a id="a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21"></a>

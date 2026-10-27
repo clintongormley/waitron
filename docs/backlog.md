@@ -203,8 +203,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Implementation and runtime acceptance remain open; the separate FULL fiscal PR finishes green for the owner to land.
   [Detail](backlog/fiscal.md#a696-invoice-issue-dates-and-record-offsets-follow-the-process-zone).
 
-- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Fiscal: the owner lands it.
+- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** The sourced rule proposal awaits one owner decision before implementation. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
+- **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.
+  [Detail](backlog/fiscal.md#structured-b2b-invoices-before-the-applicable-2027-or-2028-date).
 
 - **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2.
   If it can, art. 7.1.c requires that date on the receipt. Check, then record the date on such a sale if needed.
@@ -281,7 +283,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#packagesfiscal-verifactu-restates-rules-the-validator-owns)
 
 - **A231/A948. Full invoices at the till** — table bill payments and unpaid departures can issue F1; counter sales and collection remain refused until A555 carries the delivery choice.
-  **Next action:** complete A555, A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and applicable B2B delivery as separate work. The owner removed these as switch prerequisites on 2026-10-27.
+  **Next action:** complete A555, A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
 - **A554. Should any screen show the address an invoice email went to?** An owner question, open.
