@@ -60,7 +60,7 @@ theme's four choices:
   followed by six digits or letters a to f, or Save tells you so under the field.
 - **Background**: **Neutral** or **Tinted**.
 - **Corners**: **Square**, **Standard** or **Round**.
-- **Text size**: a slider from 100% to 130% in steps of 5%, with the four sizes it gives under it,
+- **Text size**: a slider from 100% to 130% in steps of 5%, with the four sizes drawn under it,
   such as "Text on screens: small 12 px · normal 14 px · large 18 px · largest 22 px" at 100%.
 
 Under the brand colour, **Pick a different colour for dark screens** gives the dark version's main

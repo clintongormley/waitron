@@ -64,7 +64,7 @@ más abajo, y después las cuatro elecciones del tema:
 - **Fondo**: **Neutro** o **Teñido**.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**.
 - **Tamaño del texto**: un control deslizante del 100 % al 130 % en pasos del 5 %, con los cuatro
-  tamaños que da debajo, por ejemplo «Texto en pantalla: pequeño 12 px · normal 14 px · grande 18 px
+  tamaños dibujados debajo, por ejemplo «Texto en pantalla: pequeño 12 px · normal 14 px · grande 18 px
   · muy grande 22 px» al 100 %.
 
 Debajo del color de marca, **Elegir otro color para las pantallas oscuras** da a los botones
