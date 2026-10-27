@@ -91,7 +91,8 @@ series name at or before that note. Nothing deletes the note except `sudo bash w
 refuses with a page that says what to do. If that page lists files Start again did not create,
 such as a venue copied from a backup, it offers **Keep everything and stop** or **Move these files
 aside and finish Start again**, behind the administrator password you chose during setup. A Move
-raises the note to just after the newest time on the moved files. If the
+raises the note, if it is lower, to the first whole minute at least 150 seconds after the newest
+time on the moved files. If the
 attempt's recovery-key record is damaged, ticking the confirmation and pressing **Start again**
 asks for the administrator password you chose during setup, then shows the confirmation again with "This setup's recovery-key record is damaged and
 cannot be read." above it; you can still choose **Cancel**.
