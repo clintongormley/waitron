@@ -88,6 +88,7 @@ function refusalText(field: string, error: unknown): string {
 }
 
 interface Typed {
+  target: MenuPatchTarget;
   value: unknown;
   error: string;
   language: string | null;
@@ -415,7 +416,7 @@ export class MenuPatchDialog extends LitElement {
         this.reloadFailure = null;
       }
       this.dropped += this.#draft.rebase(answer.document, currentContentLanguages()).dropped;
-      this.#forgetSettled(answer.document);
+      this.dropped += this.#forgetSettled(answer.document);
       this.#scope!.changed();
     }
     this.live = answer;
@@ -427,13 +428,24 @@ export class MenuPatchDialog extends LitElement {
     if (this.#watching !== null) void this.#load(this.#watching);
   }
 
-  /** After a rebase, a field neither staged nor refused shows the newer live value again. */
-  #forgetSettled(document: MenuDocument): void {
+  /** After a rebase, a field neither staged nor refused shows the newer live value again. A field
+   * showing an error that the form can no longer draw is forgotten too, or nothing could clear it;
+   * returns how many of those there were. */
+  #forgetSettled(document: MenuDocument): number {
     const staged = new Set(this.#draft!.changes().map(changeKey));
     const items = itemNames(document);
-    for (const [key, typed] of this.#typed)
-      if (!items.has(targetOf(key)) || (typed.error === "" && !staged.has(key)))
-        this.#typed.delete(key);
+    const languages = currentContentLanguages();
+    let lost = 0;
+    for (const [key, typed] of this.#typed) {
+      const drawn =
+        items.has(targetOf(key)) &&
+        patchFieldValue(document, typed.target, key.slice(key.lastIndexOf("/") + 1), languages) !==
+          undefined &&
+        (typed.language === null || languages.languages.includes(typed.language));
+      if (typed.error !== "" && !drawn) lost += 1;
+      if (!staged.has(key) && (!drawn || typed.error === "")) this.#typed.delete(key);
+    }
+    return lost;
   }
 
   /** The names of the items holding a field with an error, in the order they were edited. */
@@ -514,6 +526,7 @@ export class MenuPatchDialog extends LitElement {
     this.#draft!.clear(change.target, change.field);
     this.#scope!.changed();
     this.#typed.set(key, {
+      target: change.target,
       // Every staged change was typed into its field.
       value: this.#typed.get(key)!.value,
       error: message,
@@ -576,10 +589,11 @@ export class MenuPatchDialog extends LitElement {
             ? toScale(decimal(checked!.value as string), MONEY_SCALE)
             : checked!.value,
       });
-      this.#typed.set(key, { value: raw, error: "", language: null });
+      this.#typed.set(key, { target, value: raw, error: "", language: null });
     } catch (error) {
       draft.clear(target, field);
       this.#typed.set(key, {
+        target,
         value: raw,
         error: refusalText(field, error),
         language: TRANSLATED.has(field)

@@ -1284,7 +1284,10 @@ it("shows a refusal for a change the venue's content languages drop while it is 
     expect(failures).toEqual([]);
     expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
     expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Drinks");
-    expect(bottomMessage(el)).toBe("Correct the fields marked on Drinks to continue.");
+    expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+      "1 change no longer fits the live version and was dropped.",
+    );
+    expect(bottomMessage(el)).toBe("");
   } finally {
     window.removeEventListener("unhandledrejection", record);
   }
@@ -1315,4 +1318,98 @@ it("moves onto a newer live version that arrives while a patch is being sent, on
   await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
   expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+});
+
+/** The lunch menu without Salad. */
+function withoutSalad(): MenuDocument {
+  const document = lunch();
+  const starters = document.root.members[0] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  starters.members = starters.members.filter(
+    (member) => member.kind !== "product" || member.menuItemId !== "mi-salad",
+  );
+  delete document.offers["mi-salad"];
+  return document;
+}
+
+it("counts a refused change as dropped when a newer version held during the send removes its item", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockResolvedValue(live(4, withoutSalad()));
+  let refuse!: (error: Error) => void;
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await press(el, "review");
+  await press(el, "put-live");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
+  await flush(el);
+  refuse(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  await flush(el);
+  expect(treeLabels(el)).not.toContain("Salad");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "review")!.disabled).toBe(false);
+});
+
+it("counts a field showing an error as dropped when a newer version removes its item", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockResolvedValue(live(4, withoutSalad()));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Salad");
+  await type(el, "wt-input", "name", "");
+  expect(bottomMessage(el)).toBe("Correct the fields marked on Salad to continue.");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("keeps a newer version held during the send when the content languages change after it", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4));
+  let refuse!: (error: Error) => void;
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
+  await flush(el);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  refuse(refusal("menu_patch.unchanged", { menuId: "menu-lunch" }));
+  await flush(el);
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
 });
