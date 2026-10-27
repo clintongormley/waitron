@@ -1138,7 +1138,12 @@ October.
 4. **Close the alert.** In the library, run `node scripts/source-watch.mjs --refresh`, commit the
    new baseline with the finding it represents, and close #148 with a comment that states the
    experiment above and its result.
-5. **Make the next alert diffable.** The watch stores only fingerprints, which is why the scope
-   page's old text could not be recovered. Have it also keep the normalised text of each HTML
-   source in the repository, so the next alert shows a diff. (Ignoring the date stamp is the wrong
-   fix: a new date is AEAT telling us it revised the pages.)
+5. **Keep an archive to compare against** (owner, 2026-10-27: "we should keep one for
+   comparison"). The watch has stored only fingerprints since it was added in the library's #10,
+   which is why the scope page's old text could not be recovered. From now on it keeps, in the
+   library repository, the normalised text of every HTML source and a copy of every PDF and
+   schema it watches, updated by `--refresh` alongside the fingerprints, so the next alert can
+   show exactly what changed. Seed the archive with today's copies of the FAQ pages, saved on
+   2026-10-27 in `~/waitron-campaign-shared/aeat-faq-2026-10-27/` (raw HTML, plus the Wayback
+   copy of the index from 2026-09-20). Ignoring the date stamp is the wrong fix: a new date is
+   AEAT telling us it revised the pages.
