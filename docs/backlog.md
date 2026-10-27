@@ -2960,6 +2960,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   80 mm but not at 58 mm, or the other way round, was not measured; the card says nothing about
   58 mm paper.
 
+- **The Look card's "How it prints" can stay on an undone framing (A841 slice 9b's review,
+  #2119).** If someone reframes the logo in the image library and undoes it while the picture is
+  still being drawn, the picture can keep the undone framing until the next change. Closing it
+  would loosen the check that stops the picture asking the server again and again; the theme
+  design's slice 9b rulings name the gap. Decide whether to close it or accept it.
+
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
   check returns, and that check asks about the counter zone plus the zone of a table whose order is
