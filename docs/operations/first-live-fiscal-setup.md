@@ -115,7 +115,10 @@ public fiscal record (`module-operation-public.json`), and its fiscal documents
 (`first-fiscal-documents/`). With the venue database missing, the warning covers any of the three
 that the box has to read, and appears after the setup password step. With the venue database present, only the record of chosen names
 does: ticking the confirmation and pressing **Start again** asks for the administrator password you
-chose during setup, then shows the confirmation again with the warning. A damaged public record or
+chose during setup, then shows the confirmation again with the warning. With the venue database
+present and a stopped backup recovery (below), the same warning appears beside the stopped
+recovery's details, and Start again sends the damaged records and the minute it showed with the
+recovery's discard. A damaged public record or
 fiscal documents beside a present database still refuses Start again, as an intact one does. The
 warning names each damaged record — "This box's record of the invoice series names it chose is
 damaged and cannot be read.", "This setup's public fiscal record is damaged and cannot be read." or
