@@ -1058,7 +1058,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
 
 - **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
-  A918 slice 4).** `packages/catalogue/src/units.ts:28-36` is never written into a venue, but the
+  A918 slice 4, #2141).** `packages/catalogue/src/units.ts:28-36` is never written into a venue, but the
   receipt reads its abbreviations to decide whether a line prints a unit
   (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
   own pull request waits for the owner.
