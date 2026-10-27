@@ -1,4 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
+import { createLeaveCoordinator } from "@waitron/ui-core/unsaved-changes";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
@@ -10,7 +11,12 @@ import type {
 } from "@waitron/catalogue/src/menu-document-types.js";
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
-import type { DashboardApi, LiveMenu } from "../api/client.js";
+import type {
+  DashboardApi,
+  LiveMenu,
+  MenuPatchResult,
+  MenuPublicationsAnswer,
+} from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
@@ -107,12 +113,37 @@ function live(number = 3, document = lunch()): LiveMenu {
   return { versionId: `v-${number}`, number, since: "2026-10-27T09:00:00.000Z", document };
 }
 
+function publications(
+  ...editions: { date: string; time: string; state?: "queued" | "activated" | "cancelled" }[]
+): MenuPublicationsAnswer {
+  return {
+    timeZone: "Europe/Madrid",
+    live: null,
+    editions: editions.map(({ state = "queued", ...local }, index) => ({
+      versionId: `v-q${index}`,
+      number: 10 + index,
+      state,
+      activatesAt: `${local.date}T07:00:00.000Z`,
+      queuedAt: "2026-10-20T09:00:00.000Z",
+      cancelledAt: null,
+      local: { ...local, offset: "+01:00", repeated: false },
+    })),
+  } as MenuPublicationsAnswer;
+}
+
+const patched: MenuPatchResult = { versionId: "v-5", number: 5, requeued: [] };
+
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
   return {
     getLiveMenu: vi.fn(async () => live()),
+    getMenuPublications: vi.fn(async () => publications()),
+    patchLiveMenu: vi.fn(async () => patched),
     imageLibraryRequest: vi.fn(),
     ...overrides,
-  } as unknown as DashboardApi & { getLiveMenu: ReturnType<typeof vi.fn> };
+  } as unknown as DashboardApi & {
+    getLiveMenu: ReturnType<typeof vi.fn>;
+    patchLiveMenu: ReturnType<typeof vi.fn>;
+  };
 }
 
 async function flush(el: MenuPatchDialog): Promise<void> {
@@ -596,4 +627,503 @@ it("reads the menu it is given when that changes while open", async () => {
   el.menuId = "menu-dinner";
   await flush(el);
   expect(api.getLiveMenu).toHaveBeenLastCalledWith("menu-dinner");
+});
+
+const footerButton = (el: MenuPatchDialog, name: string) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    `wt-button[data-test="${name}"]`,
+  );
+
+const bottomMessage = (el: MenuPatchDialog) =>
+  el.shadowRoot!.querySelector("wt-form-actions")!.error;
+
+const reviewLines = (el: MenuPatchDialog) =>
+  [...el.shadowRoot!.querySelectorAll('[data-test="review-line"]')].map((line) =>
+    line.textContent!.trim(),
+  );
+
+const reviewNotes = (el: MenuPatchDialog) =>
+  [...el.shadowRoot!.querySelectorAll('[data-test="review-note"]')].map((note) =>
+    note.textContent!.trim(),
+  );
+
+async function press(el: MenuPatchDialog, name: string): Promise<void> {
+  footerButton(el, name)!.click();
+  await flush(el);
+}
+
+function refusal(code: string, params: Record<string, unknown>): Error {
+  return Object.assign(new Error(code), { code, params });
+}
+
+it("keeps Review quiet and disabled until something is changed, and counts the changes", async () => {
+  const el = await mount();
+  const review = () => footerButton(el, "review")!;
+  expect(review().disabled).toBe(true);
+  expect(review().variant).toBe("secondary");
+  expect(review().textContent!.trim()).toBe("Review 0 changes");
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  expect(review().disabled).toBe(false);
+  expect(review().variant).toBe("primary");
+  expect(review().textContent!.trim()).toBe("Review 1 change");
+  await type(el, "wt-input", "name", "Broth");
+  expect(review().textContent!.trim()).toBe("Review 2 changes");
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("keeps Review disabled while any field shows an error, even beside a staged change", async () => {
+  const el = await mount();
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "name", "");
+  expect(el.changes).toHaveLength(1);
+  expect(footerButton(el, "review")!.disabled).toBe(true);
+  expect(bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+  footerButton(el, "review")!.click();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+  await type(el, "wt-input", "name", "Green salad");
+  expect(footerButton(el, "review")!.disabled).toBe(false);
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("reviews each change as old → new with the notes that always apply, then goes back", async () => {
+  const el = await mount();
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "3.5");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Soup: Price €3.00 → €3.50"]);
+  expect(reviewNotes(el)).toEqual([
+    "Lines already on open orders keep their old price and VAT class.",
+    "The next normal publish from the products puts the old values back unless you fix the products too.",
+  ]);
+  expect(form(el)).toBeNull();
+  expect(footerButton(el, "put-live")!.textContent!.trim()).toBe("Put live now");
+  expect(footerButton(el, "put-live")!.variant).toBe("primary");
+  await press(el, "keep-editing");
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+  expect(field(el, "wt-price-input", "price").value).toBe("3.5");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "3.50" }]);
+});
+
+it("says a queued version, named by its date, will not carry the changes", async () => {
+  const el = await mount(
+    stubApi({
+      getMenuPublications: vi.fn(async () =>
+        publications(
+          { date: "2026-10-01", time: "08:00", state: "activated" },
+          { date: "2026-10-20", time: "08:00", state: "cancelled" },
+          { date: "2026-11-03", time: "08:00" },
+        ),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  expect(reviewNotes(el)[1]).toBe(
+    "The version going live on 3 Nov 2026, 08:00 does not include these changes.",
+  );
+});
+
+it("puts the changes live against the version read, then says so and closes", async () => {
+  const api = stubApi();
+  const el = await mount(api);
+  const patchedEvents: MenuPatchResult[] = [];
+  el.addEventListener("wt-menu-patched", (event) => patchedEvents.push(event.detail));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [{ target: soup, field: "price", value: "4.00" }],
+  });
+  expect(patchedEvents).toEqual([patched]);
+  expect(el.open).toBe(false);
+  expect(modal(el).open).toBe(false);
+});
+
+it("goes quiet and puts nothing live when a newer version already holds the change", async () => {
+  const data = new LiveData();
+  const newer = lunch();
+  newer.offers["mi-soup"]!.unitPrice = "4.00";
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const api = stubApi({ liveData: data, getLiveMenu });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(reviewLines(el)).toEqual([]);
+  expect(footerButton(el, "put-live")!.disabled).toBe(true);
+  expect(footerButton(el, "put-live")!.variant).toBe("secondary");
+  footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
+  await flush(el);
+  expect(api.patchLiveMenu).not.toHaveBeenCalled();
+});
+
+it("puts a refused value back under its field, on its item, with the bottom message", async () => {
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", { change: 1, field: "kitchenName" });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await pick(el, "Soup");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+  expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Salad");
+  expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
+  expect(field(el, "wt-input", "kitchen-name").value).toBe("ENSALADA");
+  expect(bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(footerButton(el, "review")!.disabled).toBe(true);
+});
+
+it("shows the refusal's own reason under the first language of a translated field", async () => {
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", {
+          change: 0,
+          field: "customerName",
+          reason: "content.translation_required",
+        });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-input", "customer-name-en", "Daily soup");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(field(el, "wt-input", "customer-name-en").error).toBe(
+    codeMessage("content.translation_required"),
+  );
+  expect(field(el, "wt-input", "customer-name-es").error).toBe("");
+});
+
+it("explains a refusal that names no field shown, at the bottom, and keeps Put live working", async () => {
+  for (const [error, message] of [
+    [
+      refusal("menu_patch.unchanged", { menuId: "menu-lunch" }),
+      codeMessage("menu_patch.unchanged"),
+    ],
+    [
+      refusal("menu_patch.not_published", { menuId: "menu-lunch" }),
+      codeMessage("menu_patch.not_published"),
+    ],
+    [refusal("menu_patch.invalid", { change: 0, field: "target" }), "Check this value."],
+    [new Error("the box is unreachable"), codeMessage("server.internal")],
+  ] as const) {
+    const el = await mount(stubApi({ patchLiveMenu: vi.fn().mockRejectedValue(error) }));
+    await pick(el, "Soup");
+    await type(el, "wt-price-input", "price", "4");
+    await press(el, "review");
+    await press(el, "put-live");
+    expect(bottomMessage(el)).toBe(message);
+    expect(reviewLines(el)).toEqual(["Soup: Price €3.00 → €4.00"]);
+    expect(footerButton(el, "put-live")!.disabled).toBe(false);
+    expect(el.open).toBe(true);
+    cleanupWidgets();
+  }
+});
+
+it("offers to reload onto a newer live version, keeping what still fits and counting the rest", async () => {
+  const newer = lunch();
+  newer.offers["mi-soup"]!.offeredModifiers = [];
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const patchLiveMenu = vi
+    .fn()
+    .mockRejectedValueOnce(
+      refusal("menu_patch.base_changed", {
+        menuId: "menu-lunch",
+        baseVersionId: "v-3",
+        liveVersionId: "v-4",
+        liveNumber: 4,
+      }),
+    )
+    .mockResolvedValueOnce(patched);
+  const el = await mount(stubApi({ getLiveMenu, patchLiveMenu }));
+  await pick(el, "Toppings");
+  await type(el, "wt-input", "name", "Add-ons");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "name", "Green salad");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(bottomMessage(el)).toBe(
+    "Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  await press(el, "reload");
+  expect(getLiveMenu).toHaveBeenCalledTimes(2);
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "reload")).toBeNull();
+  expect(el.changes).toEqual([
+    { target: { kind: "offer", menuItemId: "mi-salad" }, field: "name", value: "Green salad" },
+  ]);
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(patchLiveMenu).toHaveBeenLastCalledWith("menu-lunch", {
+    baseVersionId: "v-4",
+    changes: [
+      { target: { kind: "offer", menuItemId: "mi-salad" }, field: "name", value: "Green salad" },
+    ],
+  });
+});
+
+it("keeps a refused field's own text through a reload", async () => {
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4));
+  const el = await mount(
+    stubApi({
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "keep-editing");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "name", "");
+  await press(el, "reload");
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(field(el, "wt-input", "name").value).toBe("");
+  expect(field(el, "wt-input", "name").error).toBe("Enter a name.");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+});
+
+it("explains a reload that fails and offers it again", async () => {
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockRejectedValueOnce(new Error("the box is unreachable"))
+    .mockResolvedValueOnce(live(4));
+  const el = await mount(
+    stubApi({
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  await press(el, "reload");
+  expect(bottomMessage(el)).toBe(
+    `Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept. ${codeMessage("server.internal")}`,
+  );
+  expect(footerButton(el, "reload")).not.toBeNull();
+  await press(el, "reload");
+  expect(getLiveMenu).toHaveBeenCalledTimes(3);
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("says when a newer live version arriving on its own drops changes", async () => {
+  const data = new LiveData();
+  const newer = lunch();
+  newer.offers["mi-soup"]!.offeredModifiers = [];
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Toppings");
+  await type(el, "wt-input", "name", "Add-ons");
+  await pick(el, "Bread");
+  await type(el, "wt-input", "name", "Toast");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "2 changes no longer fit the live version and were dropped.",
+  );
+});
+
+it("disables the dialog's actions while the patch is being put live", async () => {
+  let finish!: (value: MenuPatchResult) => void;
+  const el = await mount(
+    stubApi({ patchLiveMenu: vi.fn(() => new Promise((resolve) => (finish = resolve))) }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(footerButton(el, "put-live")!.loading).toBe(true);
+  expect(footerButton(el, "keep-editing")!.disabled).toBe(true);
+  expect(modal(el).dismissible).toBe(false);
+  finish(patched);
+  await flush(el);
+  expect(el.open).toBe(false);
+});
+
+it("ignores a patch's answer once the dialog has closed", async () => {
+  let finish!: (value: MenuPatchResult) => void;
+  const el = await mount(
+    stubApi({ patchLiveMenu: vi.fn(() => new Promise((resolve) => (finish = resolve))) }),
+  );
+  const events: unknown[] = [];
+  el.addEventListener("wt-menu-patched", (event) => events.push(event));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  el.open = false;
+  await flush(el);
+  el.open = true;
+  await flush(el);
+  finish(patched);
+  await flush(el);
+  expect(events).toEqual([]);
+  expect(el.open).toBe(true);
+});
+
+it("closes from its Close button", async () => {
+  const el = await mount();
+  await press(el, "close");
+  await vi.waitFor(() => expect(el.open).toBe(false));
+});
+
+it("explains a failed read of the menu's scheduled versions", async () => {
+  const el = await mount(
+    stubApi({ getMenuPublications: vi.fn().mockRejectedValue(new Error("unreachable")) }),
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="read-error"]')!.textContent).toContain(
+    codeMessage("server.internal"),
+  );
+});
+
+it("puts the live values back when its changes are discarded", async () => {
+  const coordinator = createLeaveCoordinator(async () => "discard", window);
+  const answer = (event: Event) =>
+    (event as CustomEvent<{ accept(value: typeof coordinator): void }>).detail.accept(coordinator);
+  document.body.addEventListener("wt-leave-coordinator", answer);
+  try {
+    const el = await mount();
+    await pick(el, "Soup");
+    await type(el, "wt-price-input", "price", "4");
+    await press(el, "review");
+    expect(coordinator.isDirty()).toBe(true);
+    await coordinator.request({ scopes: "all", reason: "cancel", proceed() {} });
+    await el.updateComplete;
+    expect(el.changes).toEqual([]);
+    expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+    expect(field(el, "wt-price-input", "price").value).toBe("3.00");
+    expect(footerButton(el, "review")!.disabled).toBe(true);
+  } finally {
+    document.body.removeEventListener("wt-leave-coordinator", answer);
+    coordinator.dispose();
+  }
+});
+
+it("sends a patch once however often Put live is pressed", async () => {
+  let finish!: (value: MenuPatchResult) => void;
+  const api = stubApi({
+    patchLiveMenu: vi.fn(() => new Promise((resolve) => (finish = resolve))),
+  });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
+  await flush(el);
+  expect(api.patchLiveMenu).toHaveBeenCalledTimes(1);
+  finish(patched);
+  await flush(el);
+});
+
+it("ignores a refusal or a reload once the dialog has closed", async () => {
+  let refuse!: (error: Error) => void;
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await press(el, "put-live");
+  el.open = false;
+  await flush(el);
+  refuse(refusal("menu_patch.unchanged", { menuId: "menu-lunch" }));
+  await flush(el);
+  el.open = true;
+  await flush(el);
+  expect(footerButton(el, "review")).not.toBeNull();
+  expect(bottomMessage(el)).toBe("");
+
+  let reread!: (value: LiveMenu) => void;
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockReturnValueOnce(new Promise((resolve) => (reread = resolve)));
+  const other = await mount(
+    stubApi({
+      getLiveMenu,
+      patchLiveMenu: vi.fn().mockRejectedValue(
+        refusal("menu_patch.base_changed", {
+          menuId: "menu-lunch",
+          baseVersionId: "v-3",
+          liveVersionId: "v-4",
+          liveNumber: 4,
+        }),
+      ),
+    }),
+  );
+  await pick(other, "Soup");
+  await type(other, "wt-price-input", "price", "4");
+  await press(other, "review");
+  await press(other, "put-live");
+  await press(other, "reload");
+  other.open = false;
+  await flush(other);
+  reread(live(4));
+  await flush(other);
+  expect(other.changes).toEqual([]);
+  expect(modal(other).heading).toBe("");
+});
+
+it("is no longer an unsaved draft by the time it says the patch is live", async () => {
+  const coordinator = createLeaveCoordinator(async () => "keep", window);
+  const answer = (event: Event) =>
+    (event as CustomEvent<{ accept(value: typeof coordinator): void }>).detail.accept(coordinator);
+  document.body.addEventListener("wt-leave-coordinator", answer);
+  try {
+    const el = await mount();
+    const dirtyWhenPatched: boolean[] = [];
+    el.addEventListener("wt-menu-patched", () => dirtyWhenPatched.push(coordinator.isDirty()));
+    await pick(el, "Soup");
+    await type(el, "wt-price-input", "price", "4");
+    await press(el, "review");
+    await press(el, "put-live");
+    expect(dirtyWhenPatched).toEqual([false]);
+  } finally {
+    document.body.removeEventListener("wt-leave-coordinator", answer);
+    coordinator.dispose();
+  }
 });

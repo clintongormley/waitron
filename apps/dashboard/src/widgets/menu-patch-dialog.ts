@@ -4,7 +4,11 @@ import {
   ContentLanguageController,
   baseStyles,
   currentContentLanguages,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
   visuallyHiddenStyles,
+  type DraftScope,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -20,11 +24,13 @@ import { PATCH_FIELDS } from "@waitron/catalogue/src/menu-patch-types.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   DashboardApi,
   LiveMenu,
+  LocalTime,
   MenuPatchChange,
   MenuPatchResult,
   MenuPatchTarget,
@@ -43,6 +49,8 @@ import {
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
 import { MenuPatchDraft, patchTree, targetKey, type PatchTreeNode } from "./menu-patch-draft.js";
+import { changeLines, reviewNotes } from "./menu-patch-review.js";
+import { localTimeWords } from "./menu-publications.js";
 
 const TRANSLATED = new Set(["customerName", "names", "description"]);
 
@@ -73,22 +81,37 @@ interface Typed {
   language: string | null;
 }
 
-/** The first language whose text alone the patch refuses. The patch checks each language's text on
- * its own, so a refused value has one. */
+/** The first language whose text alone the patch's parser refuses, else the first language: a
+ * refusal from merging with the stored text names no language. */
 function refusedLanguage(
   target: MenuPatchTarget,
   field: string,
   value: Record<string, string>,
 ): string {
-  return Object.keys(value).find((language) => {
-    try {
-      parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
-      return false;
-    } catch {
-      return true;
-    }
-  })!;
+  const languages = Object.keys(value);
+  return (
+    languages.find((language) => {
+      try {
+        parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
+        return false;
+      } catch {
+        return true;
+      }
+    }) ?? languages[0]!
+  );
 }
+
+interface Refusal {
+  code: string;
+  params: Record<string, unknown>;
+}
+
+/** `codeMessage` leaves a refusal's placeholders unfilled. */
+function refusalWords({ code, params }: Refusal): string {
+  return codeMessage(code).replace(/\{(\w+)\}/g, (_whole, name: string) => String(params[name]));
+}
+
+const changeKey = (change: MenuPatchChange) => `${targetKey(change.target)}/${change.field}`;
 
 function matching(nodes: readonly PatchTreeNode[], search: TextSearch): PatchTreeNode[] {
   return nodes.flatMap((node) => {
@@ -200,6 +223,16 @@ export class MenuPatchDialog extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+      .review {
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      .changes {
+        display: grid;
+        gap: var(--wt-space-2);
+        padding-inline-start: var(--wt-space-5);
+        list-style: disc;
+      }
       .error {
         display: grid;
         justify-items: start;
@@ -220,6 +253,15 @@ export class MenuPatchDialog extends LitElement {
   @state() private readError: string | null = null;
   @state() private search = "";
   @state() private picked: string | null = null;
+  @state() private step: "edit" | "review" = "edit";
+  @state() private busy = false;
+  /** A refusal that names no field the form shows; it stays until the next save. */
+  @state() private refusal: Refusal | null = null;
+  /** Why the last Reload failed, shown beside the refusal that offered it. */
+  @state() private reloadFailure: string | null = null;
+  /** How many staged changes newer live versions have dropped since the dialog opened. */
+  @state() private dropped = 0;
+  @state() private queued: LocalTime[] = [];
 
   #draft: MenuPatchDraft | null = null;
   /** What each field shows, keyed `<target key>/<field>`, once the person has edited it: their own
@@ -227,6 +269,9 @@ export class MenuPatchDialog extends LitElement {
    * the error belongs under. A value with an error is not staged. */
   #typed = new Map<string, Typed>();
   #watching: string | null = null;
+  #scope: DraftScope<MenuPatchChange[]> | undefined;
+  /** Replaced whenever the dialog opens or closes, so an answer to an earlier opening is ignored. */
+  #session = {};
   #taxCache: { key: string; options: { value: string; label: string }[] } | null = null;
   #imageApi: { api: DashboardApi; uploader: ImageUploader } | null = null;
 
@@ -260,37 +305,80 @@ export class MenuPatchDialog extends LitElement {
     const wanted = this.open && this.menuId !== "" ? this.menuId : null;
     if (wanted === this.#watching) return;
     this.#queries.release("getLiveMenu");
+    this.#queries.release("getMenuPublications");
     this.#watching = wanted;
+    this.#session = {};
     this.live = null;
     this.notPublished = false;
     this.readError = null;
     this.search = "";
     this.picked = null;
+    this.step = "edit";
+    this.busy = false;
+    this.refusal = null;
+    this.reloadFailure = null;
+    this.dropped = 0;
+    this.queued = [];
     this.#draft = null;
     this.#typed = new Map();
-    if (wanted !== null) void this.#load(wanted);
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    if (wanted === null) return;
+    this.#scope = draftScopeFor<MenuPatchChange[]>(this, {
+      id: this,
+      current: () => this.#current(),
+      snapshot: (value) => structuredClone(value),
+      equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+      restore: () => this.#discard(),
+    }).scope;
+    void this.#load(wanted);
+  }
+
+  /** The staged changes in a fixed order, so two drafts holding the same changes compare equal. */
+  #current(): MenuPatchChange[] {
+    return this.changes.sort((a, b) => changeKey(a).localeCompare(changeKey(b)));
+  }
+
+  /** The baseline is always no changes: the scope starts on an empty draft and the dialog closes
+   * once it commits. */
+  #discard(): void {
+    this.#draft = new MenuPatchDraft(this.live!.document, currentContentLanguages());
+    this.#typed = new Map();
+    this.step = "edit";
+    this.requestUpdate();
   }
 
   async #load(menuId: string): Promise<void> {
     this.readError = null;
-    try {
-      await this.#queries.watch("getLiveMenu", [menuId], (answer) => {
-        if (answer === null) {
-          this.notPublished = true;
-          return;
-        }
-        this.notPublished = false;
-        if (this.#draft === null)
-          this.#draft = new MenuPatchDraft(answer.document, currentContentLanguages());
-        else {
-          this.#draft.rebase(answer.document);
-          this.#forgetSettled();
-        }
-        this.live = answer;
-      });
-    } catch {
-      // The query's error callback has already recorded the failure.
+    // Each query's error callback records its own failure.
+    await Promise.all([
+      this.#queries
+        .watch("getLiveMenu", [menuId], (answer) => this.#applyLive(answer))
+        .catch(() => undefined),
+      this.#queries
+        .watch("getMenuPublications", [menuId], (answer) => {
+          this.queued = answer.editions
+            .filter((edition) => edition.state === "queued")
+            .map((edition) => edition.local);
+        })
+        .catch(() => undefined),
+    ]);
+  }
+
+  #applyLive(answer: LiveMenu | null): void {
+    if (answer === null) {
+      this.notPublished = true;
+      return;
     }
+    this.notPublished = false;
+    if (this.#draft === null)
+      this.#draft = new MenuPatchDraft(answer.document, currentContentLanguages());
+    else {
+      this.dropped += this.#draft.rebase(answer.document).dropped;
+      this.#forgetSettled();
+      this.#scope!.changed();
+    }
+    this.live = answer;
   }
 
   override connectedCallback(): void {
@@ -310,6 +398,86 @@ export class MenuPatchDialog extends LitElement {
 
   #close(): void {
     this.open = false;
+  }
+
+  #hasErrors(): boolean {
+    return [...this.#typed.values()].some((typed) => typed.error !== "");
+  }
+
+  #review(): void {
+    if (saveActionState(this.#scope).unchanged || this.#hasErrors()) return;
+    this.step = "review";
+  }
+
+  async #putLive(): Promise<void> {
+    if (this.busy || saveActionState(this.#scope).unchanged) return;
+    const session = this.#session;
+    const sent = this.changes;
+    const submitted = this.#current();
+    this.busy = true;
+    this.refusal = null;
+    this.reloadFailure = null;
+    const outcome = await this.api
+      .patchLiveMenu(this.menuId, { baseVersionId: this.live!.versionId, changes: sent })
+      .then(
+        (result) => ({ result }),
+        (error: unknown) => ({ error }),
+      );
+    if (session !== this.#session) return;
+    this.busy = false;
+    if ("error" in outcome) {
+      await this.#refused(outcome.error, sent);
+      return;
+    }
+    this.#scope!.commit(submitted);
+    this.dispatchEvent(
+      new CustomEvent("wt-menu-patched", { detail: outcome.result, bubbles: true, composed: true }),
+    );
+    this.renderRoot.querySelector("wt-modal")!.closeAfter("saved");
+    this.#close();
+  }
+
+  async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<void> {
+    const code = codeOf(error);
+    const params = (error as { params?: Record<string, unknown> }).params ?? {};
+    const change = code === "menu_patch.invalid" ? sent[params.change as number] : undefined;
+    if (change === undefined || change.field !== params.field) {
+      this.refusal = { code, params };
+      return;
+    }
+    const key = changeKey(change);
+    this.#draft!.clear(change.target, change.field);
+    this.#scope!.changed();
+    this.#typed.set(key, {
+      // Every staged change was typed into its field.
+      value: this.#typed.get(key)!.value,
+      error: codeMessage((params.reason as string | undefined) ?? "menu_patch.invalid"),
+      language: TRANSLATED.has(change.field)
+        ? refusedLanguage(change.target, change.field, change.value as Record<string, string>)
+        : null,
+    });
+    this.picked = targetKey(change.target);
+    this.step = "edit";
+    await this.updateComplete;
+    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="form"]')!);
+  }
+
+  /** Moves the draft onto the version now live, as a newer live version arriving on its own does. */
+  async #reload(): Promise<void> {
+    const session = this.#session;
+    const read = await this.api.getLiveMenu(this.menuId).then(
+      (answer) => ({ answer }),
+      (error: unknown) => ({ error }),
+    );
+    if (session !== this.#session) return;
+    if ("error" in read) {
+      this.reloadFailure = codeOf(read.error);
+      return;
+    }
+    this.refusal = null;
+    this.reloadFailure = null;
+    this.step = "edit";
+    this.#applyLive(read.answer);
   }
 
   #liveValue(target: MenuPatchTarget, field: string): unknown {
@@ -354,6 +522,7 @@ export class MenuPatchDialog extends LitElement {
           : null,
       });
     }
+    this.#scope!.changed();
     this.requestUpdate();
   }
 
@@ -394,12 +563,107 @@ export class MenuPatchDialog extends LitElement {
       .open=${this.open}
       heading=${heading}
       aria-label=${this.menuName}
+      .dismissible=${!this.busy}
       @wt-close=${(event: Event) => {
         if (event.target !== event.currentTarget) return;
         this.#close();
       }}
-      >${this.#renderBody()}</wt-modal
+      >${this.#renderBody()}${this.#renderFooter()}</wt-modal
     >`;
+  }
+
+  #showsDraft(): boolean {
+    return !this.notPublished && this.readError === null && this.live !== null;
+  }
+
+  #renderFooter(): TemplateResult | typeof nothing {
+    if (!this.#showsDraft()) return nothing;
+    const action = saveActionState(this.#scope);
+    const errors = this.#hasErrors();
+    const bottom = [
+      ...(this.refusal === null ? [] : [refusalWords(this.refusal)]),
+      ...(this.reloadFailure === null ? [] : [codeMessage(this.reloadFailure)]),
+      ...(errors ? [t("form.fix_fields")] : []),
+    ].join(" ");
+    const count = this.changes.length;
+    const reload =
+      this.refusal?.code === "menu_patch.base_changed"
+        ? html`<wt-button
+            slot="secondary"
+            variant="secondary"
+            data-test="reload"
+            ?disabled=${this.busy}
+            @click=${() => void this.#reload()}
+            >${t("menu_patch.reload")}</wt-button
+          >`
+        : nothing;
+    return html`<wt-form-actions slot="footer" .error=${bottom}>
+      ${
+        this.step === "edit"
+          ? html`<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="close"
+                @click=${() => void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel")}
+                >${t("action.close")}</wt-button
+              >${reload}<wt-button
+                variant=${action.variant}
+                data-test="review"
+                ?disabled=${action.unchanged || errors}
+                @click=${() => this.#review()}
+                >${
+                  count === 1
+                    ? t("menu_patch.review_one")
+                    : fill("menu_patch.review_many", { count: String(count) })
+                }</wt-button
+              >`
+          : html`<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="keep-editing"
+                ?disabled=${this.busy}
+                @click=${() => {
+                  this.step = "edit";
+                }}
+                >${t("menu_patch.keep_editing")}</wt-button
+              >${reload}<wt-button
+                variant=${action.variant}
+                data-test="put-live"
+                .loading=${this.busy}
+                ?disabled=${action.unchanged}
+                @click=${() => void this.#putLive()}
+                >${t("menu_patch.put_live")}</wt-button
+              >`
+      }
+    </wt-form-actions>`;
+  }
+
+  #renderDropped(): TemplateResult | typeof nothing {
+    return this.dropped === 0
+      ? nothing
+      : html`<p class="note" role="status" data-test="dropped">
+          ${
+            this.dropped === 1
+              ? t("menu_patch.dropped_one")
+              : fill("menu_patch.dropped_many", { count: String(this.dropped) })
+          }
+        </p>`;
+  }
+
+  #renderReview(): TemplateResult {
+    const languages = currentContentLanguages();
+    return html`<div class="review" data-test="review-step">
+      ${this.#renderDropped()}
+      <h3>${t("menu_patch.review_heading")}</h3>
+      <ul class="changes">
+        ${changeLines(this.live!.document, this.changes, languages).map(
+          (line) => html`<li data-test="review-line">${line}</li>`,
+        )}
+      </ul>
+      ${reviewNotes(this.queued.map(localTimeWords)).map(
+        (note) => html`<p class="note" data-test="review-note">${note}</p>`,
+      )}
+    </div>`;
   }
 
   #renderBody(): TemplateResult | typeof nothing {
@@ -413,37 +677,39 @@ export class MenuPatchDialog extends LitElement {
         <wt-button @click=${() => void this.#load(this.menuId)}>${t("menus.retry")}</wt-button>
       </div>`;
     if (this.live === null) return nothing;
+    if (this.step === "review") return this.#renderReview();
     const tree = patchTree(this.live.document, t("menu_patch.lists"));
     const search = textSearch(this.search);
     const shown = search === undefined ? tree : matching(tree, search);
     const picked = this.picked === null ? undefined : findNode(tree, this.picked);
-    return html`<div class="layout">
-      <div class="side">
-        ${textField(
-          { busy: false, locales: [], error: () => "" },
-          "search",
-          t("menu_patch.search"),
-          this.search,
-          (value) => {
-            this.search = value;
-          },
-          false,
-          t("menu_patch.search_placeholder"),
-        )}
+    return html`${this.#renderDropped()}
+      <div class="layout">
+        <div class="side">
+          ${textField(
+            { busy: false, locales: [], error: () => "" },
+            "search",
+            t("menu_patch.search"),
+            this.search,
+            (value) => {
+              this.search = value;
+            },
+            false,
+            t("menu_patch.search_placeholder"),
+          )}
+          ${
+            shown.length === 0
+              ? html`<p class="message" data-test="no-matches">${t("menu_patch.no_matches")}</p>`
+              : html`<nav aria-label=${t("menu_patch.tree")} data-test="tree">
+                  ${this.#renderNodes(shown)}
+                </nav>`
+          }
+        </div>
         ${
-          shown.length === 0
-            ? html`<p class="message" data-test="no-matches">${t("menu_patch.no_matches")}</p>`
-            : html`<nav aria-label=${t("menu_patch.tree")} data-test="tree">
-                ${this.#renderNodes(shown)}
-              </nav>`
+          picked === undefined
+            ? html`<p class="message" data-test="pick-prompt">${t("menu_patch.pick")}</p>`
+            : this.#renderForm(picked.target!, picked.label)
         }
-      </div>
-      ${
-        picked === undefined
-          ? html`<p class="message" data-test="pick-prompt">${t("menu_patch.pick")}</p>`
-          : this.#renderForm(picked.target!, picked.label)
-      }
-    </div>`;
+      </div>`;
   }
 
   #renderNodes(nodes: readonly PatchTreeNode[]): TemplateResult {
