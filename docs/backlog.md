@@ -3085,15 +3085,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   warning text's colour; the preview's colour-rebuild check (`theme-preview.test.ts`); Bar Lucía and
   lemon fixtures repeated across test files.
 
-- **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading "Advanced:
-  set colours by hand" and opening line "A colour you set here stays as you set it when you change
-  the brand colour, background or corners. Waitron still checks it can be read.", shortened from the
-  design's until slice 11b; the names given to colours outside the 22 (Error colour, Delete buttons
+- **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading and opening
+  line now carry text, as the design words them (slice 11b: "Advanced: set colours and text by
+  hand", and a sentence that a text size set there grows and shrinks with Text size); the names given to colours outside the 22 (Error colour, Delete buttons
   switched off, Warning colour, Google button outline, Search highlight, Floor map tables, Table
   card edge) and the folded "zone tab colours"; the two-sentence warning for a colour drawn both
   ways, and the one sentence when it has no fix; the row buttons' spoken names, "Use worked-out
   colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and the light form
   of the saved row's "set by hand".
+
+- **Advanced's Text rows sit after the colours in one flat list until A841 slice 12 folds Advanced
+  into sections** (A841 slice 11, D11 of
+  [the slice 11 plan](superpowers/plans/2026-10-27-a841-11-text-by-hand.md)).
 
 - **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
   design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
@@ -3179,7 +3182,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   or `document.fonts.add`) so the theme editor's preview can draw it — an `@font-face` inside a
   component's shadow stylesheet does nothing in Chromium 156 (A841 design, section 5a) — and re-running A841's 130% layout cases and hyphenation check in the
   uploaded face. It plugs into A841's seam: the typeface list, `typefaceStack()` and `@font-face`
-  ahead of `/api/theme`'s blocks (A841 design, section 5a). Needs A841's slice 11 first.
+  ahead of `/api/theme`'s blocks (A841 design, section 5a). Plugs into `TYPEFACES` and
+  `typefaceStack()` in `packages/ui-core/src/theme/text.ts` (slice 11).
 
 - **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
   `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file
