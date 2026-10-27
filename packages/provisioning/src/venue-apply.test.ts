@@ -11,6 +11,7 @@ import {
   locationBusinessDaySettings,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { STARTER_ZONE_NAMES } from "@waitron/venue-service";
 import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
@@ -352,10 +353,11 @@ describe("applyVenue", () => {
   });
 
   it("puts the seeded counter and handheld profiles in the venue's department, starting at its counter zone, and the kitchen in none", async () => {
-    await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
+    const venue = request("B10101010");
+    await applyVenue(
+      planVenue({ ...venue, location: { ...venue.location, name: "Harbour Bar" } }, ALL_MODULES),
+      { db: suite.db, modules: ALL_MODULES },
+    );
 
     const scopes = await suite.db.execute<{
       name: string;
@@ -378,14 +380,14 @@ describe("applyVenue", () => {
       },
       {
         name: STARTER_PROFILE_NAMES.Counter.es,
-        department: "Mostrador",
-        starting_zone: "Counter",
+        department: "Harbour Bar",
+        starting_zone: STARTER_ZONE_NAMES.Counter.es,
         every_zone: 1,
       },
       {
         name: STARTER_PROFILE_NAMES.Handheld.es,
-        department: "Mostrador",
-        starting_zone: "Counter",
+        department: "Harbour Bar",
+        starting_zone: STARTER_ZONE_NAMES.Counter.es,
         every_zone: 1,
       },
     ]);

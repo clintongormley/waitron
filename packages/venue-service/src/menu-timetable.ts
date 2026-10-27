@@ -10,6 +10,7 @@ import { catalogues, categories, floorZones, products, type Transaction } from "
 import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
+import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 
 import { occurrenceKey } from "./floor-layout-due.js";
 import {
@@ -53,13 +54,24 @@ import {
   inForceClock,
   type ServiceDayContext,
 } from "./service-day-context.js";
+import { STARTER_PERIOD_NAMES } from "./starter-content.js";
+import { readStarterStaffLanguage } from "./starter-language.js";
 import "./errors.js";
+
+export const OPEN_PERIOD_NAME = "Open";
+
+/** No column marks the starter period, so a lookup matches its name in every staff language. */
+export const STARTER_OPEN_PERIOD_NAMES: readonly string[] = [
+  OPEN_PERIOD_NAME,
+  ...Object.values(STARTER_PERIOD_NAMES[OPEN_PERIOD_NAME]),
+];
 
 export async function placeOpenPeriod(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
   menuId: string,
+  staffLanguage?: StarterStaffLanguage,
 ): Promise<void> {
   await assertDepartment(tx, cfg, departmentId);
   const [existing] = await tx
@@ -68,9 +80,10 @@ export async function placeOpenPeriod(
     .where(eq(menuPeriods.departmentId, departmentId))
     .limit(1);
   if (existing !== undefined) return;
+  const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
   const clockRevision = await readBusinessDayScheduleRevision(tx, cfg);
   const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
-    name: "Open",
+    name: starterName(STARTER_PERIOD_NAMES, OPEN_PERIOD_NAME, language),
     menuId,
     staffMenuIds: [],
   });

@@ -33,6 +33,7 @@ import { createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { readSeasons } from "./seasons.js";
+import { englishSeasonName, starterSeasonName } from "./testing/starter-seasons.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -96,7 +97,10 @@ async function routed() {
       return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: row!.id })).token}`;
     };
     const seasons = Object.fromEntries(
-      (await readSeasons(tx, cfg)).map((season) => [season.name, season.id]),
+      (await readSeasons(tx, cfg)).map((season) => [
+        englishSeasonName(season.name, "es"),
+        season.id,
+      ]),
     );
     return {
       restaurant,
@@ -152,10 +156,10 @@ describe("the year read route", () => {
       closed: false,
     });
     expect(year.seasons.map(({ name, lastDay }) => ({ name, lastDay }))).toEqual([
-      { name: "Spring", lastDay: "05-31" },
-      { name: "Summer", lastDay: "08-31" },
-      { name: "Autumn", lastDay: "11-30" },
-      { name: "Winter", lastDay: "02-28" },
+      { name: starterSeasonName("Spring", "es"), lastDay: "05-31" },
+      { name: starterSeasonName("Summer", "es"), lastDay: "08-31" },
+      { name: starterSeasonName("Autumn", "es"), lastDay: "11-30" },
+      { name: starterSeasonName("Winter", "es"), lastDay: "02-28" },
     ]);
     expect(year.clockRevision).toBe(0);
     expect(year.missingHolidays).toEqual([]);
@@ -215,8 +219,8 @@ describe("the month read route", () => {
       seasonId: r.seasons.Winter,
     });
     expect(month.seasons.map(({ name, lastDay }) => ({ name, lastDay }))).toEqual([
-      { name: "Autumn", lastDay: "11-30" },
-      { name: "Winter", lastDay: "02-28" },
+      { name: starterSeasonName("Autumn", "es"), lastDay: "11-30" },
+      { name: starterSeasonName("Winter", "es"), lastDay: "02-28" },
     ]);
   });
 
@@ -343,19 +347,19 @@ describe("the season routes", () => {
       r,
       r.manager,
       change({
-        save: [{ id: r.seasons.Summer, name: " Verano ", startsOn: "06-15", colour: "amber" }],
+        save: [{ id: r.seasons.Summer, name: " High summer ", startsOn: "06-15", colour: "amber" }],
       }),
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toContainEqual({
       id: r.seasons.Summer,
-      name: "Verano",
+      name: "High summer",
       startsOn: "06-15",
       colour: "amber",
     });
     expect(await stored(r)).toContainEqual({
       id: r.seasons.Summer,
-      name: "Verano",
+      name: "High summer",
       startsOn: "06-15",
       colour: "amber",
     });
@@ -374,11 +378,11 @@ describe("the season routes", () => {
     expect(feria).toEqual({ id: feria.id, name: "Feria", startsOn: "04-20", colour: "teal" });
     expect(await stored(r)).toEqual(answered);
     expect((await stored(r)).map(({ name }) => name)).toEqual([
-      "Spring",
+      starterSeasonName("Spring", "es"),
       "Feria",
-      "Summer",
-      "Autumn",
-      "Winter",
+      starterSeasonName("Summer", "es"),
+      starterSeasonName("Autumn", "es"),
+      starterSeasonName("Winter", "es"),
     ]);
   });
 
@@ -387,7 +391,9 @@ describe("the season routes", () => {
     const response = await put(r, r.manager, change({ delete: [r.seasons.Autumn] }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(await stored(r));
-    expect((await stored(r)).map(({ name }) => name)).toEqual(["Spring", "Summer", "Winter"]);
+    expect((await stored(r)).map(({ name }) => name)).toEqual(
+      (["Spring", "Summer", "Winter"] as const).map((name) => starterSeasonName(name, "es")),
+    );
   });
 
   it("GET delete-impact names the departments that painted the season, to a viewer", async () => {
@@ -424,7 +430,14 @@ describe("the season routes", () => {
         r,
         r.manager,
         change({
-          save: [{ id: r.seasons.Summer, name: "Winter", startsOn: "06-01", colour: "amber" }],
+          save: [
+            {
+              id: r.seasons.Summer,
+              name: starterSeasonName("Winter", "es"),
+              startsOn: "06-01",
+              colour: "amber",
+            },
+          ],
         }),
       ),
       400,
@@ -515,7 +528,7 @@ describe("the season routes", () => {
     const error = { error: { code: "hours.clock_changed", params: {} } };
     await answers(
       await put(r, r.manager, {
-        save: [{ id: r.seasons.Summer, name: "Verano", startsOn: "06-01", colour: "amber" }],
+        save: [{ id: r.seasons.Summer, name: "High summer", startsOn: "06-01", colour: "amber" }],
         delete: [],
       }),
       409,
@@ -545,7 +558,14 @@ describe("the season routes", () => {
         r,
         r.manager,
         change({
-          save: [{ id: r.seasons.Summer, name: "Summer", startsOn: "06-15", colour: "amber" }],
+          save: [
+            {
+              id: r.seasons.Summer,
+              name: starterSeasonName("Summer", "es"),
+              startsOn: "06-15",
+              colour: "amber",
+            },
+          ],
         }),
       ),
       409,

@@ -608,6 +608,9 @@ the map show it with Done; the order screen's status pin names it, and the pin's
 plain chip, without Done. The map
 draws a step as a seated table in blue with the bell and the step's name, cut to fit.
 
+**2026-10-27:** A918 slice 3 names the starter steps in the venue's staff language, from
+`packages/venue-service/src/starter-content.ts`; the 2026-10-19 note's language rule is retired.
+
 ## 9. Nothing needed: its own look
 
 Picture 11. The owner: "We need a separate status for no attention needed."

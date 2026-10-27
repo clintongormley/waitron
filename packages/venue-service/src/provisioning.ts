@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { starterName } from "@waitron/country-packs";
 import { deviceProfiles, floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { setProfileServiceScope } from "./profile-access.js";
@@ -12,12 +13,17 @@ import {
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
+import { STARTER_ZONE_NAMES } from "./starter-content.js";
+import { readStarterStaffLanguage } from "./starter-language.js";
+
+export const COUNTER_ZONE_NAME = "Counter";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
       "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
+      const staffLanguage = await readStarterStaffLanguage(tx, node);
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
         .from(locations)
@@ -60,7 +66,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             })
             .returning({ id: departments.id });
           departmentId = inserted!.id;
-          await addStarterServiceSteps(tx, node, departmentId);
+          await addStarterServiceSteps(tx, node, departmentId, staffLanguage);
         }
         await tx
           .update(departments)
@@ -102,7 +108,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         // update but the `returning`, which a plain `do nothing` would leave empty on a re-run.
         const zone = await tx
           .insert(floorZones)
-          .values({ locationId: node.locationId, name: "Counter", displayOrder: 0, active: true })
+          .values({
+            locationId: node.locationId,
+            name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
+            displayOrder: 0,
+            active: true,
+          })
           .onConflictDoUpdate({
             target: [floorZones.locationId, floorZones.name],
             targetWhere: sql`${floorZones.active} = 1`,
@@ -146,11 +157,11 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .insert(zoneSalePolicies)
         .values({ zoneId })
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
-      await ensureDefaultSeasons(tx, node);
+      await ensureDefaultSeasons(tx, node, staffLanguage);
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
-        await placeOpenPeriod(tx, node, counterDepartmentId, menuId);
+        await placeOpenPeriod(tx, node, counterDepartmentId, menuId, staffLanguage);
       }
       // A profile that takes orders and has no scope yet orders in the counter's department,
       // starting there. A kitchen display takes no orders, so it gets none. A scope already saved

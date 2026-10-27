@@ -27,13 +27,14 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
+  placeOpenPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
   resolveDefaultMenu,
@@ -68,6 +69,8 @@ import {
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
+import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";
+import { STARTER_PERIOD_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -1244,7 +1247,9 @@ describe("the opening-hours model's seasons", () => {
         AT,
         0,
       );
-      const winter = (await readSeasons(tx, v.cfg)).find((season) => season.name === "Winter")!;
+      const winter = (await readSeasons(tx, v.cfg)).find(
+        (season) => season.name === starterSeasonName("Winter", "es"),
+      )!;
       await replaceMenuWeek(
         tx,
         v.cfg,
@@ -1268,7 +1273,8 @@ describe("the opening-hours model's seasons", () => {
       );
       return { dinner, all: await readSeasons(tx, v.cfg) };
     });
-    const id = (name: string) => seasons.all.find((season) => season.name === name)!.id;
+    const id = (name: StarterSeason) =>
+      seasons.all.find((season) => season.name === starterSeasonName(name, "es"))!.id;
     const empty = <K extends string>(key: K) =>
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, [key]: [] }));
     const dinnerFriday = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
@@ -1284,10 +1290,30 @@ describe("the opening-hours model's seasons", () => {
       readOpeningHoursModel(tx, v.cfg, madrid("2026-12-04", "12:00")),
     );
     expect(december.seasons).toEqual([
-      { id: id("Spring"), name: "Spring", startsOn: "03-01", colour: "green" },
-      { id: id("Summer"), name: "Summer", startsOn: "06-01", colour: "amber" },
-      { id: id("Autumn"), name: "Autumn", startsOn: "09-01", colour: "orange" },
-      { id: id("Winter"), name: "Winter", startsOn: "12-01", colour: "blue" },
+      {
+        id: id("Spring"),
+        name: starterSeasonName("Spring", "es"),
+        startsOn: "03-01",
+        colour: "green",
+      },
+      {
+        id: id("Summer"),
+        name: starterSeasonName("Summer", "es"),
+        startsOn: "06-01",
+        colour: "amber",
+      },
+      {
+        id: id("Autumn"),
+        name: starterSeasonName("Autumn", "es"),
+        startsOn: "09-01",
+        colour: "orange",
+      },
+      {
+        id: id("Winter"),
+        name: starterSeasonName("Winter", "es"),
+        startsOn: "12-01",
+        colour: "blue",
+      },
     ]);
     expect(december.currentSeasonId).toBe(id("Winter"));
     const restaurant = december.departments.find((department) => department.id === v.restaurant)!;
@@ -1349,7 +1375,9 @@ describe("the opening-hours model's seasons", () => {
     const model = await scoped((tx) =>
       readOpeningHoursModel(tx, v.cfg, madrid("2026-12-01", "03:00")),
     );
-    expect(model.currentSeasonId).toBe(ids.find((season) => season.name === "Autumn")!.id);
+    expect(model.currentSeasonId).toBe(
+      ids.find((season) => season.name === starterSeasonName("Autumn", "es"))!.id,
+    );
   });
 
   it("when the clock cannot be read, has no current season and still lists the first season's week", async () => {
@@ -1386,7 +1414,7 @@ describe("the opening-hours model's seasons", () => {
       return { dinner, first };
     });
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    expect(spring.first.name).toBe("Spring");
+    expect(spring.first.name).toBe(starterSeasonName("Spring", "es"));
     expect(model.currentSeasonId).toBeNull();
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
     expect(restaurant.seasonWeeks[0]!.seasonId).toBe(spring.first.id);
@@ -3027,5 +3055,19 @@ describe("a service period occurrence", () => {
       orderable: true,
       endedPeriodName: null,
     });
+  });
+});
+
+describe("placeOpenPeriod", () => {
+  it("names the period in the venue's staff language when no language is passed", async () => {
+    await seedTenant(db);
+    const v = await venue({ timetable: false });
+    await scoped((tx) => placeOpenPeriod(tx, v.cfg, v.restaurant, v.menus.Almuerzo));
+    expect(
+      await db
+        .select({ name: menuPeriods.name })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, v.restaurant)),
+    ).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
   });
 });

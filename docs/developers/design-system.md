@@ -336,8 +336,10 @@ special-day painters, and the run the Staffing month draws over a special day's 
 the season's line, are `SPECIAL_DAY_LINE` (`season-tint.ts`), `--wt-color-palette-purple`, the
 colour the Calendar already marks special days with.
 Two seasons may share a colour. A new venue's four seasons are Spring green, Summer amber, Autumn
-orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`). The
-season's name and dates are always written on its chip.
+orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`): the
+colours are the same in every language, and the names are written in the venue's staff language
+(`STARTER_SEASON_NAMES`, `packages/venue-service/src/starter-content.ts`). The season's name and
+dates are always written on its chip.
 
 The "season paints" cases in `season-tint.test.ts` hold, in both themes and for every calendar
 colour, grey included, that the text is 4.5:1 or more on the tint and that the line is 3:1 or more

@@ -14,6 +14,7 @@ import {
   updateMenuPeriod,
   replaceMenuWeek,
   setRoutingCell,
+  STARTER_OPEN_PERIOD_NAMES,
   zoneSalePolicies,
 } from "@waitron/venue-service";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -171,7 +172,12 @@ export async function seedFloor(
     const [existing] = await tx
       .select({ id: menuPeriods.id })
       .from(menuPeriods)
-      .where(and(eq(menuPeriods.departmentId, restaurantId), eq(menuPeriods.name, "Open")));
+      .where(
+        and(
+          eq(menuPeriods.departmentId, restaurantId),
+          inArray(menuPeriods.name, [...STARTER_OPEN_PERIOD_NAMES]),
+        ),
+      );
     const restaurant =
       existing ??
       (await saveMenuPeriod(tx, cfg, restaurantId, {

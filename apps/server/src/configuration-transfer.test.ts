@@ -141,6 +141,7 @@ import {
   setRoutingCell,
   setStationToday,
   stationStates,
+  STARTER_SEASON_NAMES,
   zoneSalePolicies,
 } from "@waitron/venue-service";
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
@@ -7749,7 +7750,7 @@ describe("seasons in a configuration transfer", () => {
       from department_day_ranges r join department_days d on d.id=r.day_id
       join seasons s on s.id=d.season_id join menu_periods p on p.id=r.period_id
       join departments dep on dep.id=d.department_id
-      where dep.name='Season transfer' and d.weekday=6 and s.name in ('Harvest', 'Winter')
+      where dep.name='Season transfer' and d.weekday=6 and s.name in ('Harvest', ${STARTER_SEASON_NAMES.Winter.es})
       order by s.starts_on`);
     return rows.rows;
   }
@@ -7764,7 +7765,12 @@ describe("seasons in a configuration transfer", () => {
       await tx
         .update(seasons)
         .set({ name: "Harvest", startsOn: "09-15", colour: "teal" })
-        .where(and(eq(seasons.locationId, scope.locationId), eq(seasons.name, "Autumn")));
+        .where(
+          and(
+            eq(seasons.locationId, scope.locationId),
+            eq(seasons.name, STARTER_SEASON_NAMES.Autumn.es),
+          ),
+        );
       const ids = new Map(
         (
           await tx
@@ -7796,7 +7802,7 @@ describe("seasons in a configuration transfer", () => {
         seasonId: ids.get("Harvest")!,
       });
       await replaceMenuWeek(tx, scope, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
-        seasonId: ids.get("Winter")!,
+        seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)!,
       });
       const terrace = await createServiceZone(tx, scope, {
         name: "Season terrace",
@@ -7812,7 +7818,7 @@ describe("seasons in a configuration transfer", () => {
         })),
         0,
         HARVEST_SATURDAY,
-        { seasonId: ids.get("Winter")! },
+        { seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)! },
       );
     });
     const exported = await seasonsOf(suite.db, scope);
@@ -7836,15 +7842,20 @@ describe("seasons in a configuration transfer", () => {
     });
 
     expect(exported).toEqual([
-      { name: "Spring", startsOn: "03-01", colour: "green" },
-      { name: "Summer", startsOn: "06-01", colour: "amber" },
+      { name: STARTER_SEASON_NAMES.Spring.es, startsOn: "03-01", colour: "green" },
+      { name: STARTER_SEASON_NAMES.Summer.es, startsOn: "06-01", colour: "amber" },
       { name: "Harvest", startsOn: "09-15", colour: "teal" },
-      { name: "Winter", startsOn: "12-01", colour: "blue" },
+      { name: STARTER_SEASON_NAMES.Winter.es, startsOn: "12-01", colour: "blue" },
     ]);
     expect(await seasonsOf(targetSuite.db, target)).toEqual(exported);
     expect(await saturdays(targetSuite.db)).toEqual([
       { season: "Harvest", period: "Dinner", starts_at: "20:00:00", ends_at: "02:00:00" },
-      { season: "Winter", period: "Late bar", starts_at: "20:00:00", ends_at: "02:00:00" },
+      {
+        season: STARTER_SEASON_NAMES.Winter.es,
+        period: "Late bar",
+        starts_at: "20:00:00",
+        ends_at: "02:00:00",
+      },
     ]);
     expect(await saturdays(targetSuite.db)).toEqual(await saturdays(suite.db));
 

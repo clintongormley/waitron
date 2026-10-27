@@ -12,6 +12,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -19,7 +20,13 @@ import { createDepartment } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { serviceStepCompletions, serviceSteps } from "./schema/service-steps.js";
 import { clearServiceDeleteSettings } from "./service-delete-settings.js";
-import { listServiceSteps, listStepCourses, saveServiceSteps } from "./service-steps.js";
+import {
+  listServiceSteps,
+  listStepCourses,
+  saveServiceSteps,
+  STARTER_STEPS,
+} from "./service-steps.js";
+import { STARTER_STEP_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -37,10 +44,17 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function seedVenue(
   name: string,
   invoiceLocales: string[] = ["en-GB"],
+  options: { tenant?: boolean; province?: string } = {},
 ): Promise<{ locationId: LocationId }> {
+  if (options.tenant === true) await seedTenant(db);
   const [row] = await db
     .insert(locations)
-    .values({ name, invoiceLocales, operationDescription: "Hospitality" })
+    .values({
+      name,
+      invoiceLocales,
+      province: options.province ?? null,
+      operationDescription: "Hospitality",
+    })
     .returning({ id: locations.id });
   return { locationId: brandLocationId(row!.id) };
 }
@@ -66,7 +80,7 @@ async function departmentRows(departmentId: string) {
     .orderBy(asc(serviceSteps.position), asc(serviceSteps.id));
 }
 
-function starterSteps(departmentId: string, names: [string, string, string]) {
+function starterSteps(departmentId: string, names: readonly string[]) {
   return [
     { start: "seated", minutes: 0 },
     { start: "after_previous", minutes: 2 },
@@ -80,6 +94,8 @@ function starterSteps(departmentId: string, names: [string, string, string]) {
   }));
 }
 
+const spanishSteps = STARTER_STEPS.map((step) => STARTER_STEP_NAMES[step.name].es);
+
 describe("a new department's starter steps", () => {
   it.each([
     {
@@ -89,18 +105,38 @@ describe("a new department's starter steps", () => {
       names: ["Set up", "Take order", "Anything else?"],
     },
     {
-      title:
-        "a department created in a Spanish venue starts with Montar mesa, Tomar nota and ¿Algo más?",
+      title: "a department created in a Spanish venue starts with the file's Spanish names",
       locales: ["es-ES", "en-GB"],
-      names: ["Montar mesa", "Tomar nota", "¿Algo más?"],
+      names: spanishSteps,
     },
     {
-      title: "a venue whose first receipt language is neither starts with the Spanish names",
+      title:
+        "a venue with no country whose first receipt language the screens lack starts with the English names",
       locales: ["fr"],
-      names: ["Montar mesa", "Tomar nota", "¿Algo más?"],
+      names: ["Set up", "Take order", "Anything else?"],
     },
-  ] as const)("$title", async ({ locales, names }) => {
-    const cfg = await seedVenue(`Starter ${locales.join(" ")}`, [...locales]);
+    {
+      title:
+        "a Spanish venue whose first receipt language the screens lack starts with its staff language's names",
+      locales: ["fr"],
+      venue: { tenant: true },
+      names: spanishSteps,
+    },
+    {
+      title: "a Spanish venue with en-US receipts starts with its staff language's names",
+      locales: ["en-US"],
+      venue: { tenant: true },
+      names: spanishSteps,
+    },
+    {
+      title: "a Barcelona venue with ca-ES receipts starts with its staff language's names",
+      locales: ["ca-ES"],
+      venue: { tenant: true, province: "Barcelona" },
+      names: spanishSteps,
+    },
+  ] as const)("$title", async ({ locales, names, ...row }) => {
+    const venue = "venue" in row ? row.venue : {};
+    const cfg = await seedVenue(`Starter ${locales.join(" ")}`, [...locales], venue);
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );

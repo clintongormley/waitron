@@ -13,6 +13,7 @@ export {
   resolveDepartmentService,
   resolveDefaultMenu,
   saveMenuPeriod,
+  STARTER_OPEN_PERIOD_NAMES,
   updateMenuPeriod,
 } from "./menu-timetable.js";
 export type * from "./menu-timetable-types.js";
@@ -118,6 +119,11 @@ export {
   type DayPlan,
 } from "./day-resolver.js";
 export { readSeasons } from "./seasons.js";
+export {
+  STARTER_PERIOD_NAMES,
+  STARTER_SEASON_NAMES,
+  STARTER_ZONE_NAMES,
+} from "./starter-content.js";
 export type { Season } from "./season-rules.js";
 export { readDepartmentSeasonWeeks } from "./season-weeks.js";
 export { readCalendarMonthPlan } from "./opening-hours-calendar.js";

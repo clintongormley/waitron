@@ -3,7 +3,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   locations,
@@ -49,7 +49,9 @@ async function venue() {
     const [period] = await tx
       .select()
       .from(menuPeriods)
-      .where(eq(menuPeriods.departmentId, policy!.departmentId));
+      .where(
+        and(eq(menuPeriods.departmentId, policy!.departmentId), eq(menuPeriods.name, "Always")),
+      );
     await replaceMenuWeek(
       tx,
       v.cfg,

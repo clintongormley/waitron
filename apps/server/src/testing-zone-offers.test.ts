@@ -1,6 +1,6 @@
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   locations,
@@ -179,7 +179,7 @@ describe("offerProducts", () => {
         zoneServicePolicies,
         eq(zoneServicePolicies.departmentId, menuPeriods.departmentId),
       )
-      .where(eq(zoneServicePolicies.zoneId, first.zoneId));
+      .where(and(eq(zoneServicePolicies.zoneId, first.zoneId), eq(menuPeriods.name, "Always")));
     for (const hour of ["03", "15"]) {
       const served = await withTransaction(suite.db, (tx) =>
         listZoneOffers(tx, venue.cfg, first.zoneId, {

@@ -775,6 +775,12 @@ describe("seedDemoRestaurant", () => {
         dataSet: CASA_DELGADO_ES,
       });
 
+      const restaurantPeriods = await suite.db.execute<{ count: number }>(sql`
+        select count(*) as count from zone_service_policies p
+        join menu_periods d on d.department_id = p.department_id
+        where p.location_id = ${venue.locationId} and p.is_counter_default`);
+      expect(restaurantPeriods.rows).toEqual([{ count: 1 }]);
+
       const read = await withTransaction(suite.db, async (tx) => {
         const languages = await readContentLanguages(tx, "es");
         const gaps = await listTranslationGapReport(tx, languages);

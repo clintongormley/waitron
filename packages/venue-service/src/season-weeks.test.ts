@@ -40,6 +40,7 @@ import {
 import { readSeasons } from "./seasons.js";
 import type { ServiceRange } from "./service-day.js";
 import { readZoneClosedTimes, replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { englishSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -103,7 +104,9 @@ const closedWeek = (tuesday: { startsAt: string; endsAt: string }[]) =>
 
 async function seasonIds(v: Venue): Promise<Record<string, string>> {
   const rows = await scoped((tx) => readSeasons(tx, v.cfg));
-  return Object.fromEntries(rows.map((season) => [season.name, season.id]));
+  return Object.fromEntries(
+    rows.map((season) => [englishSeasonName(season.name, "es"), season.id]),
+  );
 }
 async function departmentTuesdays(v: Venue): Promise<Record<string, ServiceRange[]>> {
   const ids = await seasonIds(v);

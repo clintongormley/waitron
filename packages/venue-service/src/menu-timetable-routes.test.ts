@@ -40,6 +40,7 @@ import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { ensureDefaultSeasons } from "./seasons.js";
+import { starterSeasonName } from "./testing/starter-seasons.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -878,7 +879,7 @@ it("accepts a fitting week, refuses a clashing one and a stale one while a chang
           periodId: r.morningPeriod,
           periodName: "Mañanas",
           seasonId: r.season,
-          seasonName: "Autumn",
+          seasonName: starterSeasonName("Autumn", "es"),
           weekday: 1,
           startsAt: "06:00",
           endsAt: "08:00",

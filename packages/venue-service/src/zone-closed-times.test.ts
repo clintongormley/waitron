@@ -22,6 +22,7 @@ import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import type { ZonePaint } from "./day-paint.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay } from "./special-days.js";
+import { starterSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -310,7 +311,7 @@ describe("zones closed at an instant", () => {
   it("closes a zone by the season of the business day", async () => {
     const v = await venue();
     const seasons = await tx((db) => ensureDefaultSeasons(db, v.cfg));
-    const winter = seasons.find((season) => season.name === "Winter")!.id;
+    const winter = seasons.find((season) => season.name === starterSeasonName("Winter", "es"))!.id;
     const friday = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
       weekday,
       ranges: weekday === 5 ? [{ startsAt: "22:00", endsAt: "23:30" }] : [],

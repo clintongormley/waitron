@@ -46,6 +46,7 @@ import {
 } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { englishSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -102,7 +103,10 @@ async function venue(options: { oneSeason?: boolean } = {}) {
       return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     const ids = Object.fromEntries(
-      (await ensureDefaultSeasons(tx, cfg)).map((season) => [season.name, season.id]),
+      (await ensureDefaultSeasons(tx, cfg)).map((season) => [
+        englishSeasonName(season.name, "es"),
+        season.id,
+      ]),
     );
     return {
       cfg,
