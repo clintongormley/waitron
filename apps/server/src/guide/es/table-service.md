@@ -68,8 +68,8 @@ la comida al mostrador.
 Para un plato que ha pasado a cocina pero no está marcado como empezado, responde a **En
 preparación**. Para los demás, la ventana muestra la respuesta. Marca **Devolución** junto a cada
 plato cuyo dinero se devuelve; un plato empieza marcado cuando la preparación no ha empezado. Un
-solo **Motivo** sirve para todos los platos, y empieza en el motivo de plato no servido que trae Waitron, si tu local lo
-conserva.
+solo **Motivo** sirve para todos los platos, y empieza en **No servido** si tu local conserva
+ese motivo.
 
 Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
 marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,

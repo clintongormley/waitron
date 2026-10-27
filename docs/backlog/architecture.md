@@ -522,7 +522,7 @@ until A977).
   Waitron fixture's wording change does not update those files.
 - **A977 — point 8, after A918 and A963–A975 land.** Widen `scripts/english-only.test.ts` to every
   text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
-  `fiscal-verifactu`, translation files), add an accented-letter check, and keep a list of test
+  `fiscal-verifactu`, translation files, a package's `src/starter-content.ts`), add an accented-letter check, and keep a list of test
   folders still to clean that may only get shorter. Fix the wrong comment at
   `packages/reporting/src/dr303-layout.ts:14–16` and its generator
   (`reference/generate-dr303-layout.py:184–186, 274–275`), which say the guard scans `reporting`.
