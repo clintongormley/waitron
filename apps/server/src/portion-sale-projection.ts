@@ -28,7 +28,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-/** Everything a filed row carries except how many, and which dish it belongs to. */
+/** Every field of the stored line and its identity except its id, how many, and which dish it is under. */
 function rowKey(line: StoredOrderLine): string {
   const { quantity: _quantity, parentLineNo: _parent, ...rest } = line.locked;
   const { id: _id, ...identity } = line.identity;

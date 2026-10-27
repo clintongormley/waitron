@@ -292,3 +292,84 @@ describe("A803 monetary comparison: pricing portions grouped back by their order
     expect(parentName("Sauce")).toBe("Steak");
   });
 });
+
+describe("A803 monetary comparison: portions of one cohort that differ stay apart", () => {
+  const burgers = (extras: ExtraSpec[] = []) =>
+    portions([{ name: "Burger", price: "9.50", count: 2, extras }]);
+  const rowsOf = (projected: readonly ProjectedLine[]) =>
+    projected.map((line) => [line.locked.name, line.locked.quantity, line.locked.parentLineNo]);
+
+  it("A803 monetary comparison: a comped portion beside a full-price one", () => {
+    const bill = burgers();
+    const comped = bill.lines[1]!;
+    bill.lines[1] = {
+      identity: { ...comped.identity, listUnitGross: decimal("9.50") },
+      locked: { ...comped.locked, grossUnitPrice: "0.00" },
+    };
+    const projected = projectPortionSale(bill.lines, bill.bindings);
+    expect(rowsOf(projected)).toEqual([
+      ["Burger", "1.000", null],
+      ["Burger", "1.000", null],
+    ]);
+    expect(filed(projected).total).toBe("9.50");
+  });
+
+  it("A803 monetary comparison: portions recorded under different classifications", () => {
+    const bill = burgers();
+    const other = bill.lines[1]!;
+    bill.lines[1] = {
+      ...other,
+      identity: {
+        ...other.identity,
+        classification: { reporting: [{ id: "drinks", name: "Drinks" }] },
+      },
+    };
+    expect(projectPortionSale(bill.lines, bill.bindings)).toHaveLength(2);
+  });
+
+  it("A803 monetary comparison: the same number of extras, but different ones", () => {
+    const bill = burgers([{ name: "Cheese", price: "1.00" }]);
+    const second = bill.lines[3]!;
+    bill.lines[3] = {
+      identity: { ...second.identity, productId: "product-Bacon" },
+      locked: {
+        ...second.locked,
+        name: "Bacon",
+        descriptions: { en: "Bacon" },
+        grossUnitPrice: "3.00",
+      },
+    };
+    const projected = projectPortionSale(bill.lines, bill.bindings);
+    expect(rowsOf(projected)).toEqual([
+      ["Burger", "1.000", null],
+      ["Cheese", "1.000", 1],
+      ["Burger", "1.000", null],
+      ["Bacon", "1.000", 3],
+    ]);
+    expect(filed(projected).total).toBe("23.00");
+  });
+
+  it("A803 monetary comparison: an extra taken once on one portion and twice on the other", () => {
+    const bill = burgers([{ name: "Cheese", price: "1.00" }]);
+    const second = bill.lines[3]!;
+    bill.lines[3] = { ...second, locked: { ...second.locked, quantity: "2.000" } };
+    expect(rowsOf(projectPortionSale(bill.lines, bill.bindings))).toEqual([
+      ["Burger", "1.000", null],
+      ["Cheese", "1.000", 1],
+      ["Burger", "1.000", null],
+      ["Cheese", "2.000", 3],
+    ]);
+  });
+
+  it("A803 monetary comparison: an extra under another extra is refused as a bug", () => {
+    const bill = burgers([{ name: "Cheese", price: "1.00" }]);
+    const cheese = bill.lines[1]!;
+    bill.lines.splice(2, 0, {
+      identity: { ...cheese.identity, id: "line-under-extra" },
+      locked: { ...cheese.locked, parentLineNo: 2 },
+    });
+    expect(() => projectPortionSale(bill.lines, bill.bindings)).toThrow(
+      "extra line line-under-extra names no dish line",
+    );
+  });
+});
