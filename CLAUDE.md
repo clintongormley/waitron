@@ -336,7 +336,7 @@ called weaker than its name, the topic file lists what it does not see.
   Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code; its log tail is the file's last lines, whichever start or running server wrote them,
+  code (after a Start again Move, an answer naming the set-aside folder takes their place); its log tail is the file's last lines, whichever start or running server wrote them,
   written through `redactSecrets` and the personal-data mask (except the frozen-process watchdog's
   own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
   S10's defaults, open to the owner).
@@ -773,9 +773,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Re-registering starts a new chain under a new installation name; it is destructive for a
   working node.** Setup/restore/re-registration/promotion use five symbols for the box's UTC minute,
   after another machine's clock agrees within 30 seconds (no confirmation) and strictly later than
-  all readable historical names and the name the start-again note keeps (`first-setup-start-again.json` in the state
-  folder), which only `waitron.sh reset --all` removes (owner, 2026-10-24, A1042); guard
-  `scripts/start-again-note-writers.test.ts`, weaker than its name: reads which files name the note. Setup/restore wait 90–150 seconds. Only preproduction throwaway
+  all readable historical names and the start-again note's floor (`first-setup-start-again.json` in the state
+  folder; a Start again Move raises it to just after the moved files' newest time), which only `waitron.sh reset --all` removes (owner, 2026-10-24, A1042); guard
+  `scripts/start-again-note-writers.test.ts`, weaker than its name: reads which files name the note, its records or the set-aside folder. Setup/restore wait 90–150 seconds. Only preproduction throwaway
   skips second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
   unknown-name suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.

@@ -191,8 +191,8 @@ async function refusedAtStart(
 }
 
 /**
- * D1's `set-aside failed: <errno> <root>/<path>`, the path left out when the error names none or
- * one outside both roots.
+ * D1's `set-aside failed: <errno or Waitron code> <root>/<path>`, the path left out when the error
+ * names none or one outside both roots.
  */
 function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
   const code = error instanceof AppError ? error.code : (errnoOf(error) ?? "unknown");

@@ -1085,7 +1085,8 @@ in A129; the receipts are in the profile's header.
 ## The unauthenticated recovery page: curated title and action, the failed start's report and the log's last lines
 
 The title and action are fixed strings chosen by the error code, in English and Spanish, and never
-suggest wiping anything. Below them the page shows why the last start failed and the tail of
+suggest wiping anything — except on the Start again page, where a finished Move's answer takes
+their place and the Move choice holds the one approved removal sentence (below). Below them the page shows why the last start failed and the tail of
 `waitron.log`. Owner decision 2026-09-26: a box that failed during a migration showed `unknown` above
 a tail from the previous, successful run, and the reason was only in `docker logs`, which the
 operator cannot read. So every start counted as an attempt writes `server.boot_started` to
@@ -1132,8 +1133,8 @@ rechazó antes de empezar y no se ha contado.»), and it writes `server.boot_sta
 `server.boot_failed` with its code to `waitron.log`.
 
 Two of the recovery pages `runEntry` serves, the one served at once and the ordinary one, show the
-free space just below the status line; the page for a start refused before it began shows none and
-never mentions the disk (A1042 plan, Task 5b; `expectRefusedPage` in
+free space just below the status line; the page for a start refused before it began shows none,
+and only the Start again choice's full-disk refusal mentions the disk (A1042 plan, Task 5b; `expectRefusedPage` in
 `apps/server/src/first-setup-resolution.boot.test.ts`). The line reads: "Free space on the box's disk: 1.2 MB." («Espacio libre en el
 disco del equipo: 1,2 MB.»). It is read again on every `GET /`, from the lower of the state and
 venue folders, in decimal megabytes with at most one decimal, formatted for the page's language,

@@ -260,8 +260,9 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
 /**
  * Every string in this table is fixed and chosen by code. The strings on the page that are not —
- * the error code, `lastFailureAt`, the log tail, the last failed start's detail and the recorded
- * trigger names — are HTML-escaped, in either language, as is the line carrying `level` and
+ * the error code, `lastFailureAt`, the log tail, the last failed start's detail, the recorded
+ * trigger names and, on the Start again page, the found files' paths and the set-aside folder's
+ * name — are HTML-escaped, in either language, as is the line carrying `level` and
  * `failures`.
  *
  * The tail and the detail carry caught errors' own words, stacks and `AppError` params: the
@@ -715,8 +716,8 @@ export function startAgainDraw(
 
 /**
  * Served instead of trading once boot has failed past the retry threshold, or on the first start
- * after the running server stopped itself (`refused`). The one action is retry: there is no
- * degraded-but-trading mode.
+ * after the running server stopped itself (`refused`). The action is retry, or on a Start again
+ * cut off beside found files, Keep or Move: there is no degraded-but-trading mode.
  */
 export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();

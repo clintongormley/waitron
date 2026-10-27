@@ -4700,11 +4700,12 @@ unverifiable under the other environment.
 reimaged box, destructive for a working one. A setup, restore, re-registration or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after a check
 against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
-every name in the history it can read and than the name the start-again note keeps
+every name in the history it can read and than the start-again note's floor
 (`first-setup-start-again.json` in the state folder, which only `waitron.sh reset --all` removes;
-owner, 2026-10-24, A1042); a setup or restore waits 90 to 150 seconds first. Guard for the note:
+owner, 2026-10-24, A1042; a Start again Move raises the floor to just after the moved files' newest
+time, A1098); a setup or restore waits 90 to 150 seconds first. Guard for the note:
 `scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
-note as text, so a path built from pieces escapes it, and it never sees code that empties the whole
+note, its confirmation and choice records or the set-aside folder as text, so a path built from pieces escapes it, and it never sees code that empties the whole
 state folder without naming the file. The one
 exception is the preproduction throwaway, which names with no second clock and no history check
 and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,

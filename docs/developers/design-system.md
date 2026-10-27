@@ -2972,7 +2972,9 @@ The remaining-form audit (A331 batch 7, 2026-10-08) found no unreserved no-scope
 A selection that writes immediately, an inline Enter/blur commit, and a control that opens another
 editor have no staged primary Save to gate. The print agent's setup button labelled Save restarts
 connection and enrolment, including with its saved address after denial, so it remains available
-without an edit. Recovery Retry also performs an operation. The
+without an edit. Recovery Retry also performs an operation. The recovery page's Start again
+Continue is never disabled: the page loads no script, so the browser's `required` stops an empty
+send and the server's refusals redraw the form with errors under the fields (A1098). The
 [Batch 7 audit](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
 lists the call paths and the forms it left to their owning batches.
 The 2026-10-08 [Batch 7b follow-up](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
