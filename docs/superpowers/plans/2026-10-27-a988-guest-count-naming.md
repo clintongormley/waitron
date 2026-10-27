@@ -36,9 +36,11 @@ SQLite in `packages/db`, Vitest (the till runs in headless Chromium). No new dep
 4. Pre-live: no backwards-compatibility code and no data migration beyond the column rename itself
    (CLAUDE.md §3, last rule). An old till sending `guests` is simply ignored, not translated.
 
-**Open question for the lane before Task 5 (Q1, see Task 5):** the column rename breaks the frozen
-Madrid baseline fixture's comparison. Task 5 is gated on the answer; Tasks 1–4 and 6 do not depend
-on it.
+**Q1 ANSWERED by the lane driver, 2026-10-27: B for this PR.** The column rename breaks the frozen
+Madrid baseline fixture's comparison, and changing that comparison is an assertion change only the
+owner can allow. So Task 5 is SKIPPED here: the column stays `guests`, Task 6 records it as a
+deliberate limit, and a follow-up backlog entry plus an owner question offer option A as its own
+small PR. This PR therefore adds no migration.
 
 ## Global constraints
 
@@ -360,7 +362,7 @@ doc comment); `till-app.ts` `refusedSplitSide` (~716–719) matching `"guestCoun
   src/widgets/split-guests-dialog.test.ts`.
 - [ ] Commit: "Split a table sends each side's count as guestCounts (A988)".
 
-## Task 5: the column becomes `guest_count` — gated on Q1
+## Task 5: the column becomes `guest_count` — SKIPPED in this PR (Q1 = B); kept as the follow-up's recipe
 
 **Q1 for the lane (record the answer in the ledger before starting):** renaming the column changes
 `pragma table_info(sale_receipt_guests)`, which `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`
@@ -432,6 +434,11 @@ item 7). The fixture must not be edited or regenerated. Choose one:
 - [ ] `docs/developers/conventions-data.md` ~4165–4180: Split a table's fields become
   `guestCounts.staying` / `guestCounts.leaving`; "The payment routes' `guests`" becomes
   `guestCount`. Test titles cited there are unchanged by this plan.
+- [ ] Under B (this PR): add a short backlog entry in `docs/backlog/printers.md` (outside the
+  decisions section, as open work): "Rename `sale_receipt_guests.guests` to `guest_count` — needs
+  the owner's yes to map the renamed column in `seed.madrid-baseline.test.ts`'s comparison of the
+  frozen Madrid fixture; the recipe and measurements are Task 5 of
+  `docs/superpowers/plans/2026-10-27-a988-guest-count-naming.md`."
 - [ ] Under A only, same file ~3441: "Two generated migrations also carry hand-written SQL" becomes
   three, naming the new file and what is hand-written in it.
 - [ ] `docs/backlog/printers.md` ~709 and `docs/backlog/till.md` ~172 name the TABLE
@@ -457,9 +464,9 @@ item 7). The fixture must not be edited or regenerated. Choose one:
 
 ## Finishing
 
-- [ ] After Task 6 tell the driver the branch is ready for `finish-branch`. This diff touches a
-  migration of an append-only ledger table and a cross-package wire contract (till ↔ server), so it
-  takes the full path: the plan-vs-spec read and two Codex run-it reviews side by side.
+- [ ] After Task 6 tell the driver the branch is ready for `finish-branch`. This diff changes a
+  cross-package wire contract (till ↔ server), so it takes the full path: the plan-vs-spec read and two Codex run-it reviews side by side.
 - [ ] The pre-push hook runs once, never `--no-verify`; CI owns package suites and coverage — read
   the `changes` job's selection on the current head and confirm `@waitron/db`, `@waitron/server`,
-  `@waitron/till` and `@waitron/country-es` coverage ran. The owner lands the PR.
+  `@waitron/till` coverage ran. The lane lands the PR (not a fiscal PR: no invoice, chain, series
+  or filing change).
