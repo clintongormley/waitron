@@ -244,7 +244,7 @@ export interface TableRelocationOpenDetail {
 export interface SplitTableDetail {
   tableId: string;
   billId: string | null;
-  guests: SplitGuestsDetail;
+  guestCounts: SplitGuestsDetail;
   prompt?: object;
 }
 
@@ -4835,7 +4835,7 @@ export class TillTableOrderScreen extends LitElement {
         this.#dispatch("split-table", {
           tableId: splitting.tableId,
           billId: splitting.billId,
-          guests: (event as CustomEvent<SplitGuestsDetail>).detail,
+          guestCounts: (event as CustomEvent<SplitGuestsDetail>).detail,
           ...(splitting.prompt === undefined ? {} : { prompt: splitting.prompt }),
         } satisfies SplitTableDetail);
       }}

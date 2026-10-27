@@ -118,7 +118,7 @@ describe("split-table editing request", () => {
         billId,
         expectedPartyRevision: 4,
         expectedEdits,
-        guests,
+        guestCounts: guests,
       }),
     });
   });

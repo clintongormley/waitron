@@ -1846,9 +1846,9 @@ describe("till-app: the party on a handheld", () => {
     {
       window: "Split a table",
       method: "splitTable",
-      field: "guests.leaving",
+      field: "guestCounts.leaving",
       event: "split-table",
-      detail: { tableId: "t5", billId: null, guests: { staying: 3, leaving: 1000 } },
+      detail: { tableId: "t5", billId: null, guestCounts: { staying: 3, leaving: 1000 } },
       dialog: "till-split-guests-dialog",
       cancel: "split-guests-cancel",
     },
@@ -2228,7 +2228,7 @@ describe("till-app: table actions on the party", () => {
     const order = await openMesa(el, "t5");
 
     const guests = { staying: null, leaving: null };
-    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
+    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guestCounts: guests });
     await flush(el);
 
     expect(api.splitTable).toHaveBeenCalledWith(
@@ -2241,7 +2241,7 @@ describe("till-app: table actions on the party", () => {
     );
     expect(tableOrder(el)!.party).toEqual(afterSplit[0]!.party);
 
-    emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guests });
+    emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guestCounts: guests });
     await flush(el);
     expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, [], guests);
   });
@@ -2271,7 +2271,7 @@ describe("till-app: table actions on the party", () => {
     emit(order, "split-table", {
       tableId: "t5",
       billId: null,
-      guests: { staying: 3, leaving: 2 },
+      guestCounts: { staying: 3, leaving: 2 },
     });
     await flush(el);
 
@@ -2288,8 +2288,8 @@ describe("till-app: table actions on the party", () => {
     const floorOfTwo = () => vi.fn().mockResolvedValue([atTwo, table5, table7, table9]);
 
     it.each([
-      ["guests.staying", "staying", { staying: 1000, leaving: 2 }, "1000", "2"],
-      ["guests.leaving", "leaving", { staying: 3, leaving: null }, "3", ""],
+      ["guestCounts.staying", "staying", { staying: 1000, leaving: 2 }, "1000", "2"],
+      ["guestCounts.leaving", "leaving", { staying: 3, leaving: null }, "3", ""],
     ] as const)(
       "hands %s back to Split a table's guests window, beside the field, without a banner",
       async (field, side, guests, staying, leaving) => {
@@ -2299,7 +2299,7 @@ describe("till-app: table actions on the party", () => {
         });
         const order = await openMesa(el, "t4");
 
-        emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
+        emit(order, "split-table", { tableId: "t5", billId: "wo-check", guestCounts: guests });
         await flush(el);
 
         expect(api.splitTable).toHaveBeenCalledWith(
@@ -2334,7 +2334,7 @@ describe("till-app: table actions on the party", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         splitTable: vi
           .fn()
-          .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+          .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts.leaving" }),
       });
       await flush(el);
       emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -2348,7 +2348,7 @@ describe("till-app: table actions on the party", () => {
       emit(card(), "split-table", {
         tableId: "t5",
         billId: null,
-        guests: { staying: 3, leaving: 1000 },
+        guestCounts: { staying: 3, leaving: 1000 },
       });
       await flush(el);
 
@@ -2362,14 +2362,14 @@ describe("till-app: table actions on the party", () => {
         getTablesState: floorOfTwo(),
         splitTable: vi
           .fn()
-          .mockRejectedValue({ code: "management.request_invalid", field: "guests" }),
+          .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts" }),
       });
       const order = await openMesa(el, "t4");
 
       emit(order, "split-table", {
         tableId: "t5",
         billId: null,
-        guests: { staying: 3, leaving: 2 },
+        guestCounts: { staying: 3, leaving: 2 },
       });
       await flush(el);
 
@@ -2393,7 +2393,7 @@ describe("till-app: table actions on the party", () => {
       emit(order, "split-table", {
         tableId: "t5",
         billId: null,
-        guests: { staying: 3, leaving: 1000 },
+        guestCounts: { staying: 3, leaving: 1000 },
       });
       await flush(el);
       emit(tableOrder(el)!, "back-to-floor");
@@ -2401,7 +2401,7 @@ describe("till-app: table actions on the party", () => {
       emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
       await flush(el);
 
-      refuse({ code: "management.request_invalid", field: "guests.leaving" });
+      refuse({ code: "management.request_invalid", field: "guestCounts.leaving" });
       await flush(el);
 
       expect(tableOrder(el)!.party?.id).toBe("v7");
@@ -2415,13 +2415,13 @@ describe("till-app: table actions on the party", () => {
         getTablesState: floorOfTwo(),
         splitTable: vi
           .fn()
-          .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+          .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts.leaving" }),
       });
       const order = await openMesa(el, "t4");
       emit(order, "split-table", {
         tableId: "t5",
         billId: null,
-        guests: { staying: 3, leaving: 1000 },
+        guestCounts: { staying: 3, leaving: 1000 },
       });
       await flush(el);
 
@@ -9961,7 +9961,7 @@ describe("till-app: split-table editing observations", () => {
       getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
       listDrafts: observations(),
     });
-    emit(await openMesa(el), "split-table", { tableId: "t5", billId, guests });
+    emit(await openMesa(el), "split-table", { tableId: "t5", billId, guestCounts: guests });
     await flush(el);
     expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
       "v1",
@@ -9980,7 +9980,11 @@ describe("till-app: split-table editing observations", () => {
       getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
       listDrafts: observations(true),
     });
-    emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
+    emit(await openMesa(el), "split-table", {
+      tableId: "t5",
+      billId: "wo-check",
+      guestCounts: guests,
+    });
     await flush(el);
     expect(api.splitTable).not.toHaveBeenCalled();
     expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
@@ -9999,7 +10003,7 @@ describe("till-app: split-table editing observations", () => {
     });
     const order = await openMesa(el);
     const reads = listDrafts.mock.calls.length;
-    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
+    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guestCounts: guests });
     await flush(el, 5);
     expect(splitTable).toHaveBeenCalledOnce();
     expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
@@ -10017,7 +10021,11 @@ describe("till-app: split-table editing observations", () => {
           listDrafts: observations(),
           splitTable: pending.call,
         });
-        emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
+        emit(await openMesa(el), "split-table", {
+          tableId: "t5",
+          billId: "wo-check",
+          guestCounts: guests,
+        });
         await expect.poll(() => pending.call.mock.calls.length).toBe(1);
         let current = api;
         if (change === "API") {
@@ -10044,7 +10052,7 @@ describe("till-app: split-table editing observations", () => {
         else
           pending.answer.refuse(
             outcome === "guest refusal"
-              ? { code: "management.request_invalid", field: "guests.leaving" }
+              ? { code: "management.request_invalid", field: "guestCounts.leaving" }
               : { code: "draft.out_of_date" },
           );
         await flush(el, 5);
@@ -10241,7 +10249,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
       listDrafts,
       splitTable: vi
         .fn()
-        .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+        .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts.leaving" }),
     });
     await openMesa(el);
     await confirm(el, await prompt(el));

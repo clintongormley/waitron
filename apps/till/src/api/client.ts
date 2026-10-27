@@ -4596,7 +4596,7 @@ export class TillApi {
 
   /**
    * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
-   * when it is null → `POST /api/parties/:id/split-table`. `guests`, when given, is each side's
+   * when it is null → `POST /api/parties/:id/split-table`. `guestCounts`, when given, is each side's
    * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
    * `table.not_joined`, `party.main_bill_stays`, `group.held_leaves_party` and `party.out_of_date`.
    */
@@ -4606,7 +4606,7 @@ export class TillApi {
     billId: string | null,
     expectedPartyRevision: number,
     expectedEdits: BillEditExpected[],
-    guests?: { staying: number | null; leaving: number | null },
+    guestCounts?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
     mainBillId: string | null;
@@ -4617,7 +4617,7 @@ export class TillApi {
       billId,
       expectedPartyRevision,
       expectedEdits,
-      ...(guests === undefined ? {} : { guests }),
+      ...(guestCounts === undefined ? {} : { guestCounts }),
     });
   }
 

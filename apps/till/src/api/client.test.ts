@@ -3051,7 +3051,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("splitTable sends each side's guest count as the body's guests when given one", async () => {
+  it("splitTable sends each side's guest count as the body's guestCounts when given one", async () => {
     const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", mainBillId: null }));
     const api = new TillApi("", fetchStub);
 
@@ -3065,7 +3065,7 @@ describe("TillApi", () => {
           billId: null,
           expectedPartyRevision: 3,
           expectedEdits: [],
-          guests: { staying: 3, leaving: null },
+          guestCounts: { staying: 3, leaving: null },
         }),
       }),
     );

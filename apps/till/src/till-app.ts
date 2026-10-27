@@ -714,8 +714,8 @@ function refusedSplitSide(
   refused: { code?: string; field?: string } | undefined,
 ): "staying" | "leaving" | undefined {
   if (refused?.code !== "management.request_invalid") return undefined;
-  if (refused.field === "guests.staying") return "staying";
-  if (refused.field === "guests.leaving") return "leaving";
+  if (refused.field === "guestCounts.staying") return "staying";
+  if (refused.field === "guestCounts.leaving") return "leaving";
   return undefined;
 }
 
@@ -15225,7 +15225,8 @@ export class TillApp extends LitElement {
   }
 
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId, guests, prompt } = (event as CustomEvent<SplitTableDetail>).detail;
+    const { tableId, billId, guestCounts, prompt } = (event as CustomEvent<SplitTableDetail>)
+      .detail;
     const party = this.orderParty;
     if (party === null) return;
     const asked =
@@ -15249,7 +15250,7 @@ export class TillApp extends LitElement {
         billId,
         asked.revisions.expectedPartyRevision!,
         asked.expectedEdits,
-        guests,
+        guestCounts,
       );
     } catch (error) {
       if (!live()) return;
@@ -15260,8 +15261,8 @@ export class TillApp extends LitElement {
           this.splitRefusal = {
             tableId,
             billId,
-            staying: guestField(guests.staying),
-            leaving: guestField(guests.leaving),
+            staying: guestField(guestCounts.staying),
+            leaving: guestField(guestCounts.leaving),
             field: side,
             message: t("seat.guest_count_invalid"),
             ...(prompt === undefined ? {} : { prompt }),

@@ -5351,13 +5351,13 @@ describe("till-table-order-screen", () => {
         {
           tableId: "t5",
           billId: "wo-check",
-          guests: { staying: 3, leaving: null },
+          guestCounts: { staying: 3, leaving: null },
           prompt: expect.any(Object),
         },
         {
           tableId: "t5",
           billId: null,
-          guests: { staying: 3, leaving: null },
+          guestCounts: { staying: 3, leaving: null },
           prompt: expect.any(Object),
         },
       ]);
@@ -5596,7 +5596,7 @@ describe("till-table-order-screen", () => {
         {
           tableId: "t5",
           billId: null,
-          guests: { staying: 3, leaving: 2 },
+          guestCounts: { staying: 3, leaving: 2 },
           prompt: expect.any(Object),
         },
       ]);
@@ -5648,7 +5648,7 @@ describe("till-table-order-screen", () => {
         {
           tableId: "t5",
           billId: null,
-          guests: { staying: 4, leaving: 2 },
+          guestCounts: { staying: 4, leaving: 2 },
           prompt: expect.any(Object),
         },
       ]);
@@ -5671,7 +5671,7 @@ describe("till-table-order-screen", () => {
         {
           tableId: "t5",
           billId: null,
-          guests: { staying: 6, leaving: null },
+          guestCounts: { staying: 6, leaving: null },
           prompt: expect.any(Object),
         },
       ]);
@@ -5705,7 +5705,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(split).toEqual([
-        { tableId: "t5", billId: "wo-check", guests: { staying: 3, leaving: 2 } },
+        { tableId: "t5", billId: "wo-check", guestCounts: { staying: 3, leaving: 2 } },
       ]);
       expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
     });

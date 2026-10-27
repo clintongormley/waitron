@@ -151,7 +151,7 @@ import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
-import { joinTables, moveGuests, splitTable, type SplitGuests } from "./table-actions.js";
+import { joinTables, moveGuests, splitTable, type SplitGuestCounts } from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import type { TableActionOptions } from "./table-actions.js";
@@ -814,13 +814,14 @@ function requireGuestCountOrNull(value: unknown, field = "guestCount"): number |
   return requireGuestCount(value, field);
 }
 
-function requireSplitGuests(value: unknown): SplitGuests | undefined {
+function requireSplitGuestCounts(value: unknown): SplitGuestCounts | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("guests");
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw invalid("guestCounts");
   const { staying, leaving } = value as Record<string, unknown>;
   return {
-    staying: requireGuestCountOrNull(staying, "guests.staying"),
-    leaving: requireGuestCountOrNull(leaving, "guests.leaving"),
+    staying: requireGuestCountOrNull(staying, "guestCounts.staying"),
+    leaving: requireGuestCountOrNull(leaving, "guestCounts.leaving"),
   };
 }
 
@@ -3131,7 +3132,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         body.expectedPartyRevision,
         "expectedPartyRevision",
       );
-      const guests = requireSplitGuests(body.guests);
+      const guestCounts = requireSplitGuestCounts(body.guestCounts);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
@@ -3147,7 +3148,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             {
               expectedPartyRevision,
               operatorId: personId,
-              guests,
+              guestCounts,
               expectedEdits: parseBillEditExpecteds(body.expectedEdits),
             },
             deps.attendance === undefined

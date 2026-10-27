@@ -200,7 +200,7 @@ describe("the default guests (readReceiptGuests)", () => {
     await inTx(v, (tx) =>
       splitTable(tx, v.cfg, partyId, mesa5, second, {
         ...command,
-        guests: { staying: 3, leaving: 1 },
+        guestCounts: { staying: 3, leaving: 1 },
       }),
     );
 
