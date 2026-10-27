@@ -272,7 +272,7 @@ otro color.» o, si otro color fijado a mano lo impide, lo nombra: con Página e
 fijado a mano en #888888».
 
 Cuando dos o más avisos ofrecen cada uno una corrección, una línea debajo del editor cuenta los
-colores que se leen mal y ofrece **Corregir todos**, que aplica todas las correcciones a la vez,
+colores y tamaños de texto que se leen mal y ofrece **Corregir todos**, que aplica todas las correcciones a la vez,
 también las de los colores fijados a mano.
 
 Waitron nunca rechaza un color. Un aviso es un consejo: puedes guardar el color que elegiste y
@@ -316,7 +316,7 @@ Guardar un tema que no está en uso no cambia ninguna pantalla hasta que lo pone
 
 Si guardaste de todos modos, la fila de ese tema en la tarjeta Temas muestra una etiqueta como «2 se
 leen mal» y, mientras sea el tema en uso, la tarjeta Aspecto conserva además una línea de aviso por
-cada color que sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
+cada color o tamaño de texto que sigue leyéndose mal, para que también lo vea la próxima persona que abra la página.
 
 Mientras editas uno de los temas propios del local, el editor ofrece también **Guardar como tema
 nuevo…**. Abre el diálogo del nombre con el nombre del tema seguido de «(copia)», guarda tus
@@ -333,8 +333,8 @@ La tarjeta **Temas** muestra todos los temas del local, primero el de Waitron. C
 marca y después el color de la página de la versión clara y de la versión oscura. Cuando la tarjeta
 es estrecha, como en un teléfono o junto al menú lateral en una pantalla pequeña, no muestra los
 colores, y en un teléfono las etiquetas de estado van tras el nombre del tema en lugar de en una
-columna propia. Las etiquetas de estado dicen qué tema está **En uso** y cuántos de los colores de
-un tema se leen mal, por ejemplo «2 se leen mal». El tema de Waitron lleva la etiqueta
+columna propia. Las etiquetas de estado dicen qué tema está **En uso** y cuántos de los colores y tamaños
+de texto de un tema se leen mal, por ejemplo «2 se leen mal». El tema de Waitron lleva la etiqueta
 **integrado**.
 
 Un **Encargado** o un **Administrador** ve **Añadir tema** en la tarjeta, que abre el editor con las
@@ -370,7 +370,7 @@ aspecto de ninguna pantalla.
 ## Pon un tema en uso {#switch}
 
 **Usar en todas las pantallas** pregunta antes, con una pregunta como «¿Usar Terraza en todas las
-pantallas?». Si el tema tiene colores que se leen mal, la pregunta los muestra bajo «Se leen mal:».
+pantallas?». Si el tema tiene colores o tamaños de texto que se leen mal, la pregunta los muestra bajo «Se leen mal:».
 **Usarlo** pone el tema en uso, y **Volver** no cambia nada.
 
 Cuando un tema pasa a estar en uso, el panel que estás usando cambia a él al momento y los demás

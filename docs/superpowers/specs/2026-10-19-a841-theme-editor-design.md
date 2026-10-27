@@ -1033,7 +1033,7 @@ All my call; the plan pins the exact numbers.
   with white text and link text `#67a0fd`, where Waitron's own dark set has `#4c8dff`, `#06101f` and
   `#78a9ff` (`colors.css:136-139`).
 - It always writes **the same list of tokens** — the 22 colours Advanced offers (section 5), the
-  three corner radii and, from slice 10, the four text sizes — filling Waitron's own value where a knob sits at its default and nothing is
+  three corner radii and, from slice 10, the four text sizes, and from slice 11 the typeface and three weights — filling Waitron's own value where a knob sits at its default and nothing is
   set by hand, so every theme has the same shape and the list doubles as the allowlist (section 14).
   Every colour the knobs work out is among the 22, so the list covers both.
 - It works in OKLCH, a colour model where "lightness" matches what the eye sees, so it can move a
@@ -1993,7 +1993,7 @@ configuration import is the second way to write the theme table (`configuration-
 and `validateCoreConfiguration` checks no theme row today (`configuration-transfer.ts:5-24`): the
 build adds the same validity check there, and an imported look that is hard to read shows its
 warnings on the card like any other. The stylesheet is built only from the derived values —
-`#rrggbb` colours and pixel radii the function itself writes, and the owner's values only after they
+`#rrggbb` colours, pixel radii and sizes, weights in hundreds and a typeface list the function itself writes, each checked against its shape by `themeSheet`, and the owner's values only after they
 pass the same `#rrggbb` check — never from an unchecked stored string, so nothing stored can break
 out of a declaration.
 
@@ -2615,7 +2615,7 @@ prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after
     `apps/till/src/widgets/basket.ts:293`, the till's bill, and
     `apps/dashboard/src/screens/payments-screen.ts:215`), so a hand-set Bold weight reaches them;
     and a rule in the shared base styles, `strong, b, h1, h2, h3, h4, h5, h6, th { font-weight:
-    var(--wt-font-weight-bold) }`, with a browser case, because neither base style sets those today
+    var(--wt-font-weight-bold) }` (wrapped in `:where()`, section 16), with a browser case, because neither base style sets those today
     (the round-7 reviewer read `packages/ui-core/src/base-styles.ts` and `packages/ui/src/base-styles.ts`)
     and the browser's own bold does not read the token: rendered in Chromium 156.0.8078.4
     (`/tmp/a841t-r7/bold.mjs`) with the Bold weight set to 800, `<strong>`, `<h1>` and `<th>`

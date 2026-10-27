@@ -246,8 +246,8 @@ Some colours set by hand have no shade that reads well. Their warning ends "Pick
 another colour set by hand is in the way, names it: with Page set to `#777777` and Text to `#888888`
 on light screens, Page's warning ends "while Text is set by hand to #888888".
 
-When two or more of the warnings each offer a fix, a line under the editor counts the colours that
-are hard to read and offers **Fix all**, which takes every fix at once, colours set by hand
+When two or more of the warnings each offer a fix, a line under the editor counts the colours and text
+sizes that are hard to read and offers **Fix all**, which takes every fix at once, colours set by hand
 included.
 
 Waitron never refuses a colour. A warning is advice: you can save the colour you chose and live
@@ -287,8 +287,8 @@ a table's order is open on it, and otherwise follows when it next opens one, or 
 Saving a theme that is not in use changes no screen until you put it in use.
 
 If you saved anyway, the Themes card's row for that theme shows a tag such as "2 hard to read", and
-while it is the theme in use the Look card also keeps a warning line for each colour that is still
-hard to read, so the next person who opens the page sees it too.
+while it is the theme in use the Look card also keeps a warning line for each colour or text size that
+is still hard to read, so the next person who opens the page sees it too.
 
 While you edit one of the venue's own themes, the editor also offers **Save as new theme…**. It
 opens the name dialog with the theme's name followed by "(copy)", stores your choices under the name
@@ -305,7 +305,7 @@ The **Themes** card lists every theme the venue has, Waitron's first. Each row s
 the page colour of the light version and of the dark version. When the card is narrow, as on a
 phone or beside the side menu on a small screen, it leaves the colours out, and on a phone the
 status tags sit after the theme's name instead of in a column of their own. The status tags say
-which theme is **In use** and how many of a theme's colours are hard to read, such as "2 hard to
+which theme is **In use** and how many of a theme's colours and text sizes are hard to read, such as "2 hard to
 read". Waitron's theme carries the tag **built in**.
 
 A **Manager** or an **Admin** sees **Add theme** on the card, which opens the editor on Waitron's
@@ -339,7 +339,7 @@ renaming a theme changes no screen's look.
 ## Put a theme in use {#switch}
 
 **Use on every screen** asks first, with a question such as "Use Terrace on every screen?" When
-the theme has colours that are hard to read, the question lists them under "Hard to read:".
+the theme has colours or text sizes that are hard to read, the question lists them under "Hard to read:".
 **Use it** puts the theme in use, and **Back** changes nothing.
 
 Once a theme is in use, the dashboard you are using changes to it at once and other dashboards

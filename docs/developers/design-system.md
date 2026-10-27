@@ -90,7 +90,7 @@ Appearance page's preview makes each of its two panels one inside its shadow roo
 `data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the equipment
 label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:43-45`). The label and the
 recovery sheet take their type from Waitron's own token file (`WAITRON_DEFAULTS.structure`), never
-from the page, so a venue's text size does not reach paper.
+from the page, so a venue's text size, typeface and weights do not reach paper.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
@@ -112,7 +112,7 @@ even when data-theme is set` for the regression test.
 
 A venue changes its look on Settings → Appearance, which stores a theme and writes the 22 colours,
 three radii, four text sizes, the typeface and three weights of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the
-venue's choices, warning about hard-to-read colours rather than refusing them. The override
+venue's choices, warning about hard-to-read colours and text sizes drawn under 12 px rather than refusing them. The override
 described below is for a deployment's own stylesheet. A venue theme's sheet, built from worked-out
 values only, outranks the token layer the same way.
 
@@ -603,7 +603,7 @@ shells among them, and each of those apps'
 `index.html` sets it on `<body>` for anything drawn outside the app's own element. `baseStyles` also gives `strong`, `b`,
 `h1`–`h6` and `th` the Bold weight (`--wt-font-weight-bold`, 600) wherever a component sets none of
 its own, so a theme's Bold reaches them; components that include `baseStyles` no longer use the browser's own bold,
-700 (the custodian's offline page, which has no `baseStyles` and never takes a venue's theme, still does). A size in `rem`
+700 (pages built without `baseStyles` still do: the custodian's offline page, the printed recovery sheet and the server's own pages, such as the help guide). A size in `rem`
 does not follow the scale — it is relative to the browser's 16px root, which none of the three
 changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts`,
 `packages/ui-core/src/components/wt-card.test.ts` and

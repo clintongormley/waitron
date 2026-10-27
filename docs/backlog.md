@@ -2947,7 +2947,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
-  its own button colour. Until slice 11 its heading and opening line leave out text, and until slice
+  its own button colour. Until slice 11b its heading and opening line leave out text, and until slice
   12 it is one flat list. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
   library image and an optional one for dark screens — checked on save and on import; the image
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
@@ -2982,9 +2982,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 9b landed 2026-10-27 (#2119): the Look card shows how the logo prints, and says when it
   prints blank.
   Slice 11a landed 2026-10-27 (#PR): a theme stores a typeface, text sizes and weights set by hand,
-  checked on save and import; every screen draws them, a size drawn under 12 px is counted as hard
-  to read, and every bold, heading and table header draws the theme's Bold weight — Waitron's own
-  headings now draw 600, not the browser's 700.
+  checked on save and import; every screen draws them, while the equipment label, the recovery sheet and Google's
+  sign-in button keep Waitron's type; a size drawn under 12 px is counted as hard
+  to read, and every bold, heading and table header draws the theme's Bold weight — headings on the
+  dashboard, the tills and the setup screens now draw 600, not the browser's 700.
   Next: 11b, 12 and 14 (14 with A1096's last part, below).
 
 - **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
@@ -3052,7 +3053,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading "Advanced:
   set colours by hand" and opening line "A colour you set here stays as you set it when you change
   the brand colour, background or corners. Waitron still checks it can be read.", shortened from the
-  design's until slice 11; the names given to colours outside the 22 (Error colour, Delete buttons
+  design's until slice 11b; the names given to colours outside the 22 (Error colour, Delete buttons
   switched off, Warning colour, Google button outline, Search highlight, Floor map tables, Table
   card edge) and the folded "zone tab colours"; the two-sentence warning for a colour drawn both
   ways, and the one sentence when it has no fix; the row buttons' spoken names, "Use worked-out
