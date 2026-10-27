@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
@@ -3411,4 +3411,76 @@ describe("till-station-queue: a card's heading and whole-ticket taps", () => {
       { itemIds: ["ti-waiting"], stationId: "st-2", to: "preparing" },
     ]);
   });
+});
+
+describe("till-station-queue: a card's layout", () => {
+  afterEach(resetPage);
+
+  const fired = {
+    id: "g-2",
+    position: 2,
+    displayNumber: 2,
+    numberPartyId: "pa-1",
+    state: "fired" as const,
+  };
+  const token = (el: Element, name: string) =>
+    parseFloat(getComputedStyle(el).getPropertyValue(name));
+  const rect = (node: Element) => node.getBoundingClientRect();
+  /** The width a child that spans the box's content gets: inside its border and padding. */
+  const contentWidth = (box: HTMLElement) => {
+    const style = getComputedStyle(box);
+    return box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  };
+
+  it("a heading's words run from its leading edge, and only its minutes sit at the trailing edge", async () => {
+    await pageAt(1280, 800);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [ageBill(7, [ageDish("waiting", 15, { group: fired })], { label: null })],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const head = cardOf(el, 7).querySelector<HTMLElement>(".ticket-head")!;
+    const number = head.querySelector(".number")!;
+    const group = head.querySelector(".group-name")!;
+    const age = head.querySelector(".age")!;
+    expect(head.matches("button")).toBe(true);
+    const space3 = token(head, "--wt-space-3");
+    expect(space3).toBeGreaterThan(0);
+    expect(rect(group).left - rect(number).right).toBeGreaterThanOrEqual(0);
+    expect(rect(group).left - rect(number).right).toBeLessThanOrEqual(space3);
+    const style = getComputedStyle(head);
+    const contentRight =
+      rect(head).right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    expect(Math.abs(rect(age).right - contentRight)).toBeLessThanOrEqual(1);
+    expect(rect(age).left - rect(group).right).toBeGreaterThan(space3);
+  });
+
+  it.each([
+    [1280, 800],
+    [390, 844],
+  ])(
+    "a dish row spans its card's content in Waiting and Preparing at %i px",
+    async (width, height) => {
+      await pageAt(width, height);
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          ageBill(7, [ageDish("waiting", 15)]),
+          ageBill(8, [ageDish("preparing", 15, { state: "preparing" })]),
+        ],
+        stationId: "st-1",
+        canMove: true,
+        now: AGE_NOW,
+      });
+      expect(el.shadowRoot!.querySelector('[data-move-station="waiting"]')).not.toBeNull();
+      const spans = (order: number, item: string) => {
+        const card = cardOf(el, order);
+        const row = card.querySelector<HTMLElement>(`[data-item="${item}"]`)!;
+        return Math.abs(rect(row).width - contentWidth(card)) <= 1;
+      };
+      expect({ waiting: spans(7, "waiting"), preparing: spans(8, "preparing") }).toEqual({
+        waiting: true,
+        preparing: true,
+      });
+    },
+  );
 });

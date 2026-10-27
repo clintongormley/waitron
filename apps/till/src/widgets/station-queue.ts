@@ -156,7 +156,6 @@ export class TillStationQueue extends LitElement {
       .ticket-head {
         display: flex;
         align-items: baseline;
-        justify-content: space-between;
         gap: var(--wt-space-2);
       }
 
@@ -182,6 +181,7 @@ export class TillStationQueue extends LitElement {
       }
 
       .age {
+        margin-left: auto;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -242,6 +242,11 @@ export class TillStationQueue extends LitElement {
         text-align: left;
       }
 
+      /* A button sizes to its content, not its container. */
+      .lines .line {
+        width: 100%;
+      }
+
       button.line {
         cursor: pointer;
       }
@@ -251,8 +256,6 @@ export class TillStationQueue extends LitElement {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--wt-space-1);
-        width: fit-content;
-        max-width: 100%;
         margin-bottom: var(--wt-space-1);
       }
 
