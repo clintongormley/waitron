@@ -34,6 +34,7 @@ import {
   arrangeTicketItems,
   crossRefText,
   formatCorrectionSlip,
+  formatKitchenNoteChangeSlip,
   formatKitchenTicket,
   formatMovedSlip,
   joinKitchenTickets,
@@ -1162,6 +1163,63 @@ async function printCorrectionSlips(
 
   const printCfg: PrintConfig = { locationId: cfg.locationId };
   const at = new Date().toISOString();
+
+  if (change.kind === "ORDER NOTE CHANGED") {
+    // One slip per printer, routed and grouped as a kitchen ticket is.
+    const byStation = new Map<
+      string,
+      { lineNo: number; position: number | null; item: KitchenTicketItem }[]
+    >();
+    for (const target of items) {
+      const entry = itemsByLine.get(target.workingOrderLineId)!;
+      const item = atFiredQuantity(entry.item, target);
+      const bucket = byStation.get(target.stationId) ?? [];
+      bucket.push({
+        lineNo: entry.lineNo,
+        position: entry.position,
+        item:
+          target.group === undefined
+            ? item
+            : {
+                ...item,
+                group: target.group,
+                groupLabel:
+                  target.numberPartyLabel ??
+                  (target.group === entry.group ? item.groupLabel : undefined),
+              },
+      });
+      byStation.set(target.stationId, bucket);
+    }
+    const sorted = [...stationIds].sort((a, b) =>
+      compareStationNames(stationNames.get(a)!.name, stationNames.get(b)!.name),
+    );
+    for (const route of routeKitchenTickets(sorted, mappingsByStation(mappingRows))) {
+      const bytes = formatKitchenNoteChangeSlip(
+        {
+          locale: cfg.locale,
+          stations: route.stationIds.map((id) => ({
+            stationName: stationNames.get(id)!.name,
+            items: arrangeTicketItems(
+              byStation
+                .get(id)!
+                .sort(byGroupThenLine)
+                .map((entry) => entry.item),
+              stationNames.get(id)!.ticketGrouping,
+            ),
+          })),
+          tableLabel: header.tableLabel,
+          orderNumber: header.orderNumber,
+          at,
+          orderNoteChange: change.orderNoteChange,
+        },
+        route.printers[0]!,
+      );
+      for (const printer of route.printers) {
+        await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);
+      }
+    }
+    return;
+  }
 
   for (const target of items) {
     const targets = printersByStation.get(target.stationId);

@@ -423,7 +423,6 @@ export type CorrectionSlip = {
   | { kind: "HOLD CANCELLED" }
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
-  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
   | { kind: "ALLERGY CHANGED"; allergyBlock: KitchenAllergyBlock }
   | { kind: "ALLERGY REMOVED"; allergyBlock: null }
 );
@@ -497,8 +496,6 @@ function slipHeader(slip: CorrectionSlip): string {
     return KITCHEN_ALLERGY_WORDS[ticketLanguage(slip.locale)][
       slip.kind === "ALLERGY CHANGED" ? "changed" : "removed"
     ];
-  if (slip.kind === "ORDER NOTE CHANGED")
-    return kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale);
   if (slip.kind === "TO STATION")
     return `${kitchenWords(slip.locale).movedTo} ${slip.toStation.toLocaleUpperCase(slip.locale)}`;
   if (slip.kind !== "EXTRA CANCELLED") return slip.kind;
@@ -523,9 +520,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   if (slip.tableLabel !== null) text(slip.tableLabel);
   text(slip.orderNumber);
   b.line(hhmm(new Date(slip.at)));
-  if (slip.kind === "ORDER NOTE CHANGED")
-    emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
-  else emitKitchenNote(b, slip.kitchenNote, columns);
+  emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) emitGroup(b, slip.item, columns);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   const item =

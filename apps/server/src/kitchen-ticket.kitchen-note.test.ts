@@ -138,15 +138,13 @@ describe.each([
     ({ locale, changed, removedHeading, current, before, removed }) => {
       for (const after of ["New time", null]) {
         const lines = printedLines(
-          formatCorrectionSlip(
+          formatKitchenNoteChangeSlip(
             {
-              kind: "ORDER NOTE CHANGED",
-              stationName: "Grill",
+              locale,
+              stations: [{ stationName: "Grill", items: [item] }],
               tableLabel: "Table 2",
               orderNumber: "17",
               at: head.firedAt.toISOString(),
-              item,
-              locale,
               orderNoteChange: { before: "Old time", after },
             },
             layout,
@@ -181,7 +179,7 @@ describe.each([
         ),
       );
     const narrow = layout.paperWidth === "58mm";
-    // Captured from formatCorrectionSlip's ORDER NOTE CHANGED output before this slip existed.
+    // Captured from the single-dish correction slip this slip replaced, before it was removed.
     const singleDish = [
       {
         locale: "en-GB",
