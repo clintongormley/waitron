@@ -1333,51 +1333,51 @@ describe("mountCatalogueApi — location menus", () => {
 
   it("GET lists every tenant catalogue with sellable + default flags (200)", async () => {
     const app = mountApp();
-    const casa = await createCatalogueVia(app, "Casa");
-    const dia = await createCatalogueVia(app, "Día");
+    const house = await createCatalogueVia(app, "Casa");
+    const day = await createCatalogueVia(app, "Día");
     const shelf = await createCatalogueVia(app, "Shelf");
-    await send(app, "PUT", defaultPath(), { body: { catalogueId: casa } });
-    await send(app, "POST", cataloguesPath(), { body: { catalogueId: dia } });
+    await send(app, "PUT", defaultPath(), { body: { catalogueId: house } });
+    await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
     const res = await send(app, "GET", cataloguesPath());
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { id: string; sellable: boolean; isDefault: boolean }[];
     const byId = new Map(rows.map((r) => [r.id, r]));
-    expect(byId.get(casa)).toMatchObject({ sellable: true, isDefault: true });
-    expect(byId.get(dia)).toMatchObject({ sellable: true, isDefault: false });
+    expect(byId.get(house)).toMatchObject({ sellable: true, isDefault: true });
+    expect(byId.get(day)).toMatchObject({ sellable: true, isDefault: false });
     expect(byId.get(shelf)).toMatchObject({ sellable: false, isDefault: false });
   });
 
   it("POST adds a catalogue to the location's accessible set (204)", async () => {
     const app = mountApp();
-    const dia = await createCatalogueVia(app, "Día");
-    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: dia } });
+    const day = await createCatalogueVia(app, "Día");
+    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
     expect(res.status).toBe(204);
     const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
       id: string;
       sellable: boolean;
     }[];
-    expect(rows.find((r) => r.id === dia)).toMatchObject({ sellable: true });
+    expect(rows.find((r) => r.id === day)).toMatchObject({ sellable: true });
   });
 
   it("DELETE removes a catalogue from the location's accessible set (204)", async () => {
     const app = mountApp();
-    const dia = await createCatalogueVia(app, "Día");
-    await send(app, "POST", cataloguesPath(), { body: { catalogueId: dia } });
-    const res = await send(app, "DELETE", `${cataloguesPath()}/${dia}`);
+    const day = await createCatalogueVia(app, "Día");
+    await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
+    const res = await send(app, "DELETE", `${cataloguesPath()}/${day}`);
     expect(res.status).toBe(204);
     const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
       id: string;
       sellable: boolean;
     }[];
-    expect(rows.find((r) => r.id === dia)).toMatchObject({ sellable: false });
+    expect(rows.find((r) => r.id === day)).toMatchObject({ sellable: false });
   });
 
   it("PUT default-catalogue sets the default and keeps the old default sellable (204)", async () => {
     const app = mountApp();
-    const casa = await createCatalogueVia(app, "Casa");
-    const dia = await createCatalogueVia(app, "Día");
-    await send(app, "PUT", defaultPath(), { body: { catalogueId: casa } });
-    const res = await send(app, "PUT", defaultPath(), { body: { catalogueId: dia } });
+    const house = await createCatalogueVia(app, "Casa");
+    const day = await createCatalogueVia(app, "Día");
+    await send(app, "PUT", defaultPath(), { body: { catalogueId: house } });
+    const res = await send(app, "PUT", defaultPath(), { body: { catalogueId: day } });
     expect(res.status).toBe(204);
     const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
       id: string;
@@ -1385,8 +1385,8 @@ describe("mountCatalogueApi — location menus", () => {
       isDefault: boolean;
     }[];
     const byId = new Map(rows.map((r) => [r.id, r]));
-    expect(byId.get(dia)).toMatchObject({ sellable: true, isDefault: true });
-    expect(byId.get(casa)).toMatchObject({ sellable: true, isDefault: false });
+    expect(byId.get(day)).toMatchObject({ sellable: true, isDefault: true });
+    expect(byId.get(house)).toMatchObject({ sellable: true, isDefault: false });
   });
 
   it("POST unauthenticated → 401", async () => {
@@ -1464,10 +1464,10 @@ describe("mountCatalogueApi — location menus", () => {
 
     it("answers 404 location.not_found with a real catalogue", async () => {
       const app = mountApp();
-      const casa = await createCatalogueVia(app, `Casa ${crypto.randomUUID()}`);
+      const house = await createCatalogueVia(app, `Casa ${crypto.randomUUID()}`);
       const missing = crypto.randomUUID();
       const res = await send(app, method, unknownLocationPath(missing), {
-        body: { catalogueId: casa },
+        body: { catalogueId: house },
       });
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({
