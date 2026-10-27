@@ -1126,6 +1126,18 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     expect(held.tagName).toBe("SPAN");
   });
 
+  it("a held line is dashed, keeping the solid left edge every dish row's state colours", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      stationId: "st-1",
+    });
+    const style = getComputedStyle(el.shadowRoot!.querySelector('[data-item="it-main"]')!);
+    expect(style.borderLeftStyle).toBe("solid");
+    expect(style.borderTopStyle).toBe("dashed");
+    expect(style.borderRightStyle).toBe("dashed");
+    expect(style.borderBottomStyle).toBe("dashed");
+  });
+
   it("rail: a held line does not emit an advance when clicked (it is not a bump target)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],

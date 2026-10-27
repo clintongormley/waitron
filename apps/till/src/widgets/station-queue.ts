@@ -357,7 +357,7 @@ export class TillStationQueue extends LitElement {
          background and fail the color-contrast sweep). It renders as an inert span, so there is no bump. */
       .line.held {
         border-style: dashed;
-        border-top-style: solid;
+        border-left-style: solid;
         color: var(--wt-color-text-muted);
       }
 
