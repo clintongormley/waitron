@@ -317,6 +317,32 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
   return items;
 }
 
+/**
+ * The newest file time, rounded up to a whole millisecond, among the attempt's own items on the
+ * deletion list, or null when none is present. The databases and their side files are left out:
+ * they hold no series name and the engine touches them without the attempt writing anything.
+ */
+export async function attemptLastWriteMs(
+  roots: Roots,
+  options: Options = {},
+): Promise<number | null> {
+  const canonical = await canonicalFirstSetupRoots(roots);
+  try {
+    const databases = new Set(
+      ["venue.db", "node.db"].map((name) => join(canonical.venueDir, name)),
+    );
+    let latest: number | null = null;
+    for (const item of await itemsOnDisk(canonical, options)) {
+      if (item.kind === "side" || databases.has(item.path)) continue;
+      const { mtimeMs } = await lstat(item.path);
+      if (latest === null || mtimeMs > latest) latest = mtimeMs;
+    }
+    return latest === null ? null : Math.ceil(latest);
+  } catch (error) {
+    throw error instanceof AppError ? error : checkFailed(error);
+  }
+}
+
 async function sha256(path: string): Promise<StartAgainFingerprint> {
   const bytes = await readFile(path);
   return { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };

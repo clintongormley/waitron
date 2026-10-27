@@ -186,6 +186,7 @@ export {
   START_AGAIN_MARKER_LIMIT,
   assertNoStartAgainDeletion,
   assertStartAgainAllowedOnDisk,
+  attemptLastWriteMs,
   clearStartAgainMarker,
   deleteMarkedAttempt,
   finishStartAgainDeletion,
