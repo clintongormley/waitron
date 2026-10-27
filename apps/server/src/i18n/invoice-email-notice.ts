@@ -1,4 +1,4 @@
-/** The help guide's invoice-notice template (`guide/<language>/data-protection.md#invoice-notice`). */
+/** The invoice notice the help guide describes (`guide/<language>/data-protection.md#invoice-notice`). */
 export interface InvoiceEmailNoticeWords {
   readonly purpose: string;
   /** `purpose` for a sale with a filed tax record, which the box sends to the tax authority. */

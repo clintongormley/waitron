@@ -150,7 +150,9 @@ async function attachmentText(message: string) {
 function textPart(message: string) {
   const boundary = /boundary="?([^"\r\n;]+)"?/.exec(message)?.[1];
   expect(boundary).toBeDefined();
+  // The rig records the SMTP data stream, where a line starting with "." carries a second one.
   const part = message
+    .replace(/\r\n\.\./g, "\r\n.")
     .split(`--${boundary}`)
     .find((section) => /^Content-Type: text\/plain/im.test(section.split("\r\n\r\n")[0]!));
   expect(part).toBeDefined();
@@ -464,6 +466,22 @@ describe("invoice email privacy notice", () => {
 
   it("sends the caption alone when the message carries no privacy facts", async () => {
     expect(await sendText({ document: fixture })).toBe("Factura FF/1");
+  });
+
+  it("prints a venue name holding a replacement pattern as typed", async () => {
+    const typed = "Bar $& Co";
+    const words = INVOICE_EMAIL_NOTICE_WORDS.es;
+    expect(
+      await sendText({
+        document: {
+          ...fixture,
+          result: { ...fixture.result, issuer: { ...fixture.result.issuer!, venueName: typed } },
+        },
+        privacy: { privacyEmail: email, privacyNoticeUrl: null, taxRecord: false },
+      }),
+    ).toBe(
+      `Factura FF/1\n\n${words.purpose.split("{venue}").join(typed)}\n${words.contact.split("{contacts}").join(email)}`,
+    );
   });
 
   it("puts the notice after a duplicate's marked caption and a blank line", async () => {

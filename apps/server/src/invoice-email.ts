@@ -78,6 +78,8 @@ export function createInvoiceEmailSender(config: {
     const labels = receiptLabelsFor(document.invoiceLocale);
     const caption = `${labels.invoice} ${document.result.invoiceNumber}`;
     const notice = privacyNotice(document, privacy);
+    const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;
+    const text = notice === undefined ? marked : `${marked}\n\n${notice}`;
     // Own the socket so the deadline can cancel an in-flight SMTP exchange.
     const socket = new Socket();
     const transport = nodemailer.createTransport({ url: config.url, socket });
@@ -94,7 +96,7 @@ export function createInvoiceEmailSender(config: {
         from: config.from,
         to: recipient,
         subject: caption,
-        text: `${caption}${document.duplicate === true ? ` — ${labels.duplicate}` : ""}${notice === undefined ? "" : `\n\n${notice}`}`,
+        text,
         attachments: [{ filename: "invoice.pdf", contentType: "application/pdf", content: pdf }],
       })
       .then<InvoiceDeliveryOutcome, InvoiceDeliveryOutcome>(

@@ -2141,6 +2141,32 @@ describe("invoice email worker pass", () => {
     expect(JSON.stringify(await rows())).not.toContain("private data");
   });
 
+  it("sanitises a privacy read failure without a send or an automatic replay", async () => {
+    await queued();
+    let transported = false;
+    await runInvoiceEmailPass({
+      db: suite.db,
+      holder: "server-one",
+      now: () => start,
+      readDocument: documentFor,
+      readPrivacy: async () => {
+        throw new Error("Saved customer private data");
+      },
+      send: async () => {
+        transported = true;
+        return { status: "sent" };
+      },
+    });
+    expect(transported).toBe(false);
+    expect(await rows()).toHaveLength(1);
+    expect((await rows())[0]).toMatchObject({
+      status: "unknown",
+      failure_code: "transport_failed",
+      reported_outcome: "unknown",
+    });
+    expect(JSON.stringify(await rows())).not.toContain("private data");
+  });
+
   it("reads the privacy facts after the document, in its transaction, and sends them", async () => {
     const { sale } = await queued();
     const privacy = {
@@ -2178,7 +2204,7 @@ describe("invoice email worker pass", () => {
         return { status: "sent" };
       },
     });
-    expect((await outsideWrite) as unknown).toEqual({
+    expect(await outsideWrite).toEqual({
       privacyNoticeUrl: null,
       privacyEmail: "privacy@example.com",
     });

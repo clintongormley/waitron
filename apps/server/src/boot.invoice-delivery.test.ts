@@ -445,7 +445,9 @@ async function pdfText(message: string) {
 function textPart(message: string) {
   const boundary = /boundary="?([^"\r\n;]+)"?/.exec(message)?.[1];
   expect(boundary).toBeDefined();
+  // The rig records the SMTP data stream, where a line starting with "." carries a second one.
   const part = message
+    .replace(/\r\n\.\./g, "\r\n.")
     .split(`--${boundary}`)
     .find((section) => /^Content-Type: text\/plain/im.test(section.split("\r\n\r\n")[0]!));
   expect(part).toBeDefined();
@@ -462,36 +464,48 @@ function textPart(message: string) {
 }
 
 describe("invoice email worker at trading boot", () => {
-  it("sends the invoice customers' privacy notice in the text, read from the stored values", async () => {
+  it("sends the invoice customers' privacy notice as stored, changed and cleared in one running server", async () => {
     const ctx = await fixture();
-    await withTransaction(suite.db, async (tx) => {
-      await savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
+    const store = (privacyEmail: string | null, privacyNoticeUrl: string | null) =>
+      withTransaction(suite.db, async (tx) => {
+        await savePrivacyContact(tx, { privacyEmail, privacyNoticeUrl });
       });
-    });
+    await store("privacy@example.com", "https://example.com/privacy");
     const [taxpayer] = await suite.db.select({ legalName: tenants.legalName }).from(tenants);
+    const words = INVOICE_EMAIL_NOTICE_WORDS.es;
+    const notice = (contacts: string) => [
+      [
+        words.purpose.replace("{venue}", () => taxpayer!.legalName),
+        words.contact.replace("{contacts}", () => contacts),
+      ].join("\n"),
+    ];
     const smtp = await smtpFixture();
     let server: StartedServer | undefined;
+    const sent = async (id: string, count: number) => {
+      await vi.waitFor(
+        async () => expect(await delivery(id)).toMatchObject({ status: "sent", attempts: 1 }),
+        { timeout: 5_000 },
+      );
+      expect(smtp.messages).toHaveLength(count);
+      return smtp.messages[count - 1]!;
+    };
+    const another = () =>
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, ctx.paper.saleId, {
+          medium: "email",
+          requestKey: randomUUID(),
+          personId: "staff-one",
+          recipient: "saved-customer@example.test",
+        }),
+      );
     try {
       const email = await queuedEmail(ctx, smtp.smtp, true);
       server = await startServer(ctx.env);
-      await vi.waitFor(
-        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 }),
-        { timeout: 5_000 },
+      const first = await sent(email.id, 1);
+      expect(textPart(first).split("\n\n").slice(1)).toEqual(
+        notice("privacy@example.com, https://example.com/privacy"),
       );
-      expect(smtp.messages).toHaveLength(1);
-      const words = INVOICE_EMAIL_NOTICE_WORDS.es;
-      expect(textPart(smtp.messages[0]!).split("\n\n").slice(1)).toEqual([
-        [
-          words.purpose.replace("{venue}", () => taxpayer!.legalName),
-          words.contact.replace(
-            "{contacts}",
-            () => "privacy@example.com, https://example.com/privacy",
-          ),
-        ].join("\n"),
-      ]);
-      const text = await pdfText(smtp.messages[0]!);
+      const text = await pdfText(first);
       for (const saved of [
         "F/1",
         "Saved customer",
@@ -503,6 +517,17 @@ describe("invoice email worker at trading boot", () => {
       ]) {
         expect(text).toContain(saved);
       }
+
+      await store("rights@example.com", "https://example.com/rights");
+      const second = await sent((await another()).id, 2);
+      expect(textPart(second).split("\n\n").slice(1)).toEqual(
+        notice("rights@example.com, https://example.com/rights"),
+      );
+
+      await store(null, null);
+      const third = await sent((await another()).id, 3);
+      expect(textPart(third).split("\n\n")).toHaveLength(1);
+      expect(textPart(third)).not.toContain("example.com");
     } finally {
       await server?.close();
       await smtp.close();
