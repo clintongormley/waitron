@@ -3109,6 +3109,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   main, so whether the 1024 overflow predates slice 11 is unchecked. Readings:
   `~/waitron-campaign/a841-11b-shots/look-report-11b.md` (lane A's machine).
 
+- **An error under a field in Advanced moves what sits beside it (measured 2026-10-27, A841 slice
+  11b).** With a code-box error, a colour row's picker sits about 10 px off the box's centre and
+  its "Set by hand" tag drops to its own line, even at 1280 px (`colourValueField`,
+  `apps/dashboard/src/widgets/color-field.ts`); the Text rows' typeface and weight dropdowns widen
+  to their error's width (a weight box from 74 to 190 px), moving the tag right. Slice 11b fixed the
+  size rows only (the stepper held to its box's width, the row lined up by baseline,
+  `apps/dashboard/src/widgets/theme-text.ts`); the same approach may fit both.
+
 - **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
   design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
   reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on the dashboard, the
