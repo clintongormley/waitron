@@ -30,6 +30,7 @@ const readers: ReaderRow[] = [
     name: "Front counter",
     active: true,
     canEnable: true,
+    printsOwnSlipAutomatically: false,
     deviceCount: 1,
     deviceNames: ["Front till"],
   },
@@ -60,7 +61,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listReaders: vi.fn().mockResolvedValue(readers),
     listReaderHolders: vi.fn().mockResolvedValue([]),
     readerStatus: vi.fn().mockResolvedValue({ online: true } as ReaderStatusView),
-    renameReader: vi.fn().mockResolvedValue(undefined),
+    saveReader: vi.fn().mockResolvedValue(undefined),
     unpairReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue(available),
     adoptReader: vi.fn().mockResolvedValue({ id: "r-2", status: "paired" }),
@@ -186,13 +187,68 @@ const value = (el: PaymentsScreen, test: string) =>
   q<HTMLElement & { value: string }>(el, `[data-test=${test}]`)!.value;
 
 describe("the Rename reader dialog's Save", () => {
+  it("a later slip-setting change remains dirty after the captured save succeeds", async () => {
+    let finish!: () => void;
+    const saveReader = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { el } = await openRename(stubApi({ saveReader }));
+    const toggle = q<HTMLElementTagNameMap["wt-switch"]>(el, "[data-test=reader-own-slip]")!;
+    await toggle.updateComplete;
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    await press(el, "save-reader");
+    await vi.waitFor(() =>
+      expect(saveReader).toHaveBeenCalledExactlyOnceWith("r-1", {
+        name: "Front counter",
+        printsOwnSlipAutomatically: true,
+      }),
+    );
+    toggle.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: false } }));
+    finish();
+    await vi.waitFor(async () => expect(await state(el, "save-reader")).toEqual(ready));
+    expect(q(el, "[data-test=reader-editor]")).not.toBeNull();
+    await el.updateComplete;
+    await toggle.updateComplete;
+    expect(toggle.shadowRoot!.querySelector("input")!.checked).toBe(false);
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    expect(await state(el, "save-reader")).toEqual(quiet);
+  });
+
+  it("a keyboard change to the reader's own-slip setting wakes Save and persists both fields", async () => {
+    const saveReader = vi.fn().mockResolvedValue(undefined);
+    const { el } = await openRename(stubApi({ saveReader }));
+    const control = q<HTMLElementTagNameMap["wt-switch"]>(el, "[data-test=reader-own-slip]");
+    expect(control).not.toBeNull();
+    await control!.updateComplete;
+    const input = control!.shadowRoot!.querySelector("input")!;
+    expect(input.checked).toBe(false);
+    expect(await state(el, "save-reader")).toEqual(quiet);
+    input.focus();
+    await userEvent.keyboard(" ");
+    expect(input.checked).toBe(true);
+    expect(await state(el, "save-reader")).toEqual(ready);
+    await userEvent.keyboard(" ");
+    expect(input.checked).toBe(false);
+    expect(await state(el, "save-reader")).toEqual(quiet);
+    await userEvent.keyboard(" ");
+    await press(el, "save-reader");
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
+    expect(saveReader).toHaveBeenCalledExactlyOnceWith("r-1", {
+      name: "Front counter",
+      printsOwnSlipAutomatically: true,
+    });
+  });
+
   it("opens with the stored name and Save quiet, and a press sends nothing and marks nothing", async () => {
     const { el, api } = await openRename();
     expect(value(el, "edit-reader-name")).toBe("Front counter");
     expect(await state(el, "save-reader")).toEqual(quiet);
     await press(el, "save-reader");
     await settle(el);
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
     expect(q(el, "[data-test=reader-editor]")).not.toBeNull();
     await noComplaint(el, "reader-editor");
   });
@@ -202,7 +258,7 @@ describe("the Rename reader dialog's Save", () => {
     // A host `.click()` reaches the listener even while the inner button is disabled.
     action(el, "save-reader").click();
     await settle(el);
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
     await noComplaint(el, "reader-editor");
   });
 
@@ -221,7 +277,10 @@ describe("the Rename reader dialog's Save", () => {
     await type(el, "edit-reader-name", "Garden");
     await press(el, "save-reader");
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.renameReader).toHaveBeenCalledExactlyOnceWith("r-1", "Garden");
+    expect(api.saveReader).toHaveBeenCalledExactlyOnceWith("r-1", {
+      name: "Garden",
+      printsOwnSlipAutomatically: false,
+    });
   });
 
   it("a name emptied by an edit keeps Save drawn as a change but unpressable once tried", async () => {
@@ -230,13 +289,13 @@ describe("the Rename reader dialog's Save", () => {
     expect(await state(el, "save-reader")).toEqual(ready);
     await press(el, "save-reader");
     expect(await state(el, "save-reader")).toEqual(blocked);
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
   });
 
   it("an edit made while the save is in flight keeps the dialog open, measured from what was sent", async () => {
     let finish!: () => void;
     const api = stubApi({
-      renameReader: vi.fn(
+      saveReader: vi.fn(
         () =>
           new Promise<void>((resolve) => {
             finish = resolve;
@@ -257,11 +316,11 @@ describe("the Rename reader dialog's Save", () => {
 
   it("a refused rename keeps Save ready, and typing the stored name back quiets it", async () => {
     const { el, api } = await openRename(
-      stubApi({ renameReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+      stubApi({ saveReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );
     await type(el, "edit-reader-name", "Garden");
     await press(el, "save-reader");
-    await vi.waitFor(() => expect(api.renameReader).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(api.saveReader).toHaveBeenCalledTimes(1));
     await settle(el);
     expect(await state(el, "save-reader")).toEqual(ready);
     await type(el, "edit-reader-name", "Front counter");
@@ -273,7 +332,7 @@ describe("the Rename reader dialog's Save", () => {
     await type(el, "edit-reader-name", "Garden");
     await press(el, "close-reader-editor");
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
   });
 
   it("Escape after an edit closes the dialog with no leave coordinator", async () => {

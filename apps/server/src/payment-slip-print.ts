@@ -1,7 +1,7 @@
 import "./errors.js";
 import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
-import { payments, type CardDetails } from "@waitron/payments";
+import { cardReaders, payments, type CardDetails } from "@waitron/payments";
 import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import { formatPaymentSlip } from "./payment-slip.js";
@@ -9,10 +9,6 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
 import type { OriginConfig } from "./till-config.js";
 
-/**
- * Reconstruct the payment document of each card payment of the sale, one slip per payment in the
- * order the money moved, without reading or invoking the fiscal backend.
- */
 export async function printSalePaymentSlip(
   db: Database,
   cfg: OriginConfig,
@@ -47,8 +43,10 @@ export async function printSalePaymentSlip(
           ),
         ),
       )
+      .leftJoin(cardReaders, eq(cardReaders.id, payments.readerId))
       .where(
         and(
+          or(isNull(cardReaders.id), eq(cardReaders.printsOwnSlipAutomatically, false)),
           eq(payments.saleId, sale.id),
           eq(payments.workingOrderId, workingOrderId),
           ne(payments.provider, "manual"),

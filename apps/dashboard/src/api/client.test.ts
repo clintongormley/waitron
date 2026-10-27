@@ -3410,3 +3410,17 @@ it("never sends a free-space press as a passive read, even from the background c
   await api.freeBoxSpace();
   expect(active).toHaveBeenCalledWith("/api/box/free-space");
 });
+
+it("saves both reader fields through the authenticated reader PATCH", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+  const api = new DashboardApi("", fetchImpl);
+  await api.saveReader("reader-1", { name: "Counter", printsOwnSlipAutomatically: true });
+  expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
+    "/management-api/payments/readers/reader-1",
+    expect.objectContaining({
+      method: "PATCH",
+      credentials: "include",
+      body: JSON.stringify({ name: "Counter", printsOwnSlipAutomatically: true }),
+    }),
+  );
+});

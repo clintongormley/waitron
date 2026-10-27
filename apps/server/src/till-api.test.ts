@@ -1537,6 +1537,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       id: "00000000-0000-4000-8000-000000000247",
       name: "Demo card reader",
       provider: "simulator",
+      printsOwnSlipAutomatically: false,
     });
     expect(liveBody.activeReaders).not.toContainEqual(
       expect.objectContaining({ id: "00000000-0000-4000-8000-000000000247" }),

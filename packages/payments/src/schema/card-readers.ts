@@ -12,6 +12,7 @@ export const cardReaders = table(
     providerRef: label("provider_ref").notNull(),
     name: label("name").notNull(),
     active: flag("active").notNull().default(true),
+    printsOwnSlipAutomatically: flag("prints_own_slip_automatically").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     disabledAt: tsString("disabled_at"),
     // Local Enable cannot restore a registration we removed at the provider; verified adoption can.

@@ -509,7 +509,13 @@ const MOVE_STATION_MAX_LINES = 100;
 function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
   const reader = payReaderOf(equipment);
   return reader.kind === "ready"
-    ? { id: reader.id, name: reader.name, provider: reader.provider }
+    ? {
+        id: reader.id,
+        name: reader.name,
+        provider: reader.provider,
+        printsOwnSlipAutomatically: equipment.roles.find((role) => role.role === "card_terminal")!
+          .resolved!.printsOwnSlipAutomatically!,
+      }
     : null;
 }
 
@@ -2997,6 +3003,15 @@ export class TillApp extends LitElement {
    * open a bill payment on it that {@link TillApp.#onCounterBillPay} does not ignore outright, whether
    * or not the dialog then opens. */
   #counterSends = 0;
+  #counterBillEdit?: { id: string; visit: number; expectedEdit: BillEditExpected | null };
+
+  #counterExpectedEdit(id: string): BillEditExpected | null {
+    const observation = this.#counterBillEdit;
+    return observation?.id === id && observation.visit === this.#store.loadGeneration
+      ? (observation.expectedEdit ?? null)
+      : null;
+  }
+
   /** The service mode of the waiting order the collect stage was opened on: its own, not the till's
    * zone's. Unset when the basket holds anything else. */
   @state() private collectFlow?: OrderFlow;
@@ -6385,7 +6400,7 @@ export class TillApp extends LitElement {
         language,
         this.#store.kitchenNote ?? undefined,
         guests,
-        null,
+        this.#counterExpectedEdit(id),
         ...(lateSend === undefined ? [] : ([lateSend] as const)),
       );
       if (session !== this.#operatorSession) return;
@@ -6541,7 +6556,7 @@ export class TillApp extends LitElement {
         true,
         () =>
           this.api.pay({
-            expectedEdit: null,
+            expectedEdit: this.#counterExpectedEdit(id),
             id,
             lines,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
@@ -7307,7 +7322,7 @@ export class TillApp extends LitElement {
     const payload = this.#basketPayload();
     try {
       const saved = await this.api.updateWorkingOrder(id, {
-        expectedEdit: null,
+        expectedEdit: this.#counterExpectedEdit(id),
         lines,
         label,
         revision: this.#store.revision,
@@ -8752,6 +8767,11 @@ export class TillApp extends LitElement {
           ? `party:${order.kitchenNote.scope.partyId}`
           : `order:${order.kitchenNote.scope.workingOrderId}`,
     });
+    this.#counterBillEdit = {
+      id: order.id,
+      visit: this.#store.loadGeneration,
+      expectedEdit: structuredClone(order.expectedEdit),
+    };
     this.#rememberReceiptLanguage(
       order.id,
       offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),

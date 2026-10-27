@@ -18,6 +18,7 @@ const counter: ReaderRow = {
   name: "Counter",
   active: true,
   canEnable: true,
+  printsOwnSlipAutomatically: false,
   deviceCount: 0,
   deviceNames: [],
 };
@@ -79,14 +80,14 @@ function client(overrides: Partial<DashboardApi> = {}) {
       .mockResolvedValue([{ providerId: "acme", state: "connected", canUnpair: true }]),
     listReaders: vi.fn().mockResolvedValue(readers),
     listReaderHolders: vi.fn().mockResolvedValue([]),
-    readerStatus: vi.fn().mockResolvedValue({ online: false }),
+    readerStatus: vi.fn().mockResolvedValue({ printsOwnSlipAutomatically: false, online: false }),
     listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     listHeldPayments: vi.fn().mockResolvedValue([]),
     enableReader: vi.fn().mockResolvedValue(undefined),
-    renameReader: vi.fn().mockResolvedValue(undefined),
+    saveReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([]),
     getReaderDeleteImpact: vi.fn(async (id: string) =>
       id === "counter" ? counterImpact : impactOf(id, readers.find((r) => r.id === id)!.name),
@@ -613,7 +614,7 @@ describe("Deleting a card reader", () => {
   });
 
   it("a delete answered not-found while the first status reads are out leaves focus on the Status filter after they answer", async () => {
-    const statuses = deferred<{ online: boolean }>();
+    const statuses = deferred<{ online: boolean; printsOwnSlipAutomatically: boolean }>();
     const api = client({
       readerStatus: vi.fn(() => statuses.promise),
       deleteReader: vi.fn().mockRejectedValue(coded("reader.not_found")),
@@ -625,7 +626,7 @@ describe("Deleting a card reader", () => {
     await expect.poll(() => dialogOf(el)!.open).toBe(false);
     await flush(el);
     await expect.poll(() => statusFilterFocused(el)).toBe(true);
-    statuses.resolve({ online: true });
+    statuses.resolve({ printsOwnSlipAutomatically: false, online: true });
     await flush(el);
     expect(statusFilterFocused(el)).toBe(true);
   });
@@ -634,7 +635,7 @@ describe("Deleting a card reader", () => {
     const api = client();
     const el = await mount(api);
     const other: ReaderRow = { ...counter, id: "other", name: "Other" };
-    const statuses = deferred<{ online: boolean }>();
+    const statuses = deferred<{ online: boolean; printsOwnSlipAutomatically: boolean }>();
     vi.mocked(api.readerStatus).mockImplementation(() => statuses.promise);
     vi.mocked(api.listReaders).mockResolvedValue([other, terrace, unpaired]);
     await openDelete(el, "counter");
@@ -644,7 +645,7 @@ describe("Deleting a card reader", () => {
     const refresh = q(el, "[data-test=refresh-readers]")!;
     expect(refresh.hasAttribute("disabled")).toBe(true);
     await expect.poll(() => statusFilterFocused(el)).toBe(true);
-    statuses.resolve({ online: true });
+    statuses.resolve({ printsOwnSlipAutomatically: false, online: true });
     await expect.poll(() => refresh.hasAttribute("disabled")).toBe(false);
     expect(statusFilterFocused(el)).toBe(true);
   });
@@ -669,7 +670,7 @@ describe("Deleting a card reader", () => {
   });
 
   it("a not-found delete whose list re-read answers after the first status reads leaves focus on the Status filter", async () => {
-    const statuses = deferred<{ online: boolean }>();
+    const statuses = deferred<{ online: boolean; printsOwnSlipAutomatically: boolean }>();
     const reread = deferred<ReaderRow[]>();
     const other: ReaderRow = { ...counter, id: "other", name: "Other" };
     const api = client({
@@ -682,10 +683,13 @@ describe("Deleting a card reader", () => {
     confirmOf(el).click();
     await expect.poll(() => dialogOf(el)!.open).toBe(false);
     await flush(el);
-    statuses.resolve({ online: true });
+    statuses.resolve({ printsOwnSlipAutomatically: false, online: true });
     await flush(el);
     await flush(el);
-    vi.mocked(api.readerStatus).mockResolvedValue({ online: true });
+    vi.mocked(api.readerStatus).mockResolvedValue({
+      printsOwnSlipAutomatically: false,
+      online: true,
+    });
     reread.resolve([other, terrace, unpaired]);
     await vi.waitFor(() => expect(cell(el, "[data-test=details-other]")).not.toBeNull());
     await expect
@@ -722,7 +726,7 @@ describe("Deleting a card reader", () => {
     api.liveData!.invalidate([{ type: "card_readers", id: "counter" }]);
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
     expect(alertOf(el)).toBe(codeMessage("reader.not_found"));
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
 
     vi.mocked(api.listReaders).mockResolvedValue([terrace, unpaired]);
     cell(el, "[data-test=label-terrace]")!.click();

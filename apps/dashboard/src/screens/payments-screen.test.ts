@@ -74,6 +74,7 @@ const READERS: ReaderRow[] = [
     name: "Front counter",
     active: true,
     canEnable: true,
+    printsOwnSlipAutomatically: false,
     deviceCount: 2,
     deviceNames: ["Bar till", "Terrace till"],
   },
@@ -84,12 +85,14 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPaymentProviders: vi.fn().mockResolvedValue(PROVIDERS),
     listReaders: vi.fn().mockResolvedValue(READERS),
     listReaderHolders: vi.fn().mockResolvedValue([]),
-    readerStatus: vi.fn().mockResolvedValue({ online: true } as ReaderStatusView),
+    readerStatus: vi
+      .fn()
+      .mockResolvedValue({ printsOwnSlipAutomatically: false, online: true } as ReaderStatusView),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
     disableReader: vi.fn().mockResolvedValue(undefined),
     enableReader: vi.fn().mockResolvedValue(undefined),
     unpairReader: vi.fn().mockResolvedValue(undefined),
-    renameReader: vi.fn().mockResolvedValue(undefined),
+    saveReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([]),
     adoptReader: vi.fn().mockResolvedValue({ id: "r-2", status: "paired" }),
     listStuckPayments: vi.fn().mockResolvedValue([]),
@@ -422,7 +425,11 @@ describe("payments-screen", () => {
         readerStatus: vi.fn((id: string) =>
           id === "r-1" && reads++ === 0
             ? oldStatus
-            : Promise.resolve({ online: true, batteryPercent: 90 }),
+            : Promise.resolve({
+                printsOwnSlipAutomatically: false,
+                online: true,
+                batteryPercent: 90,
+              }),
         ),
       }),
     );
@@ -431,7 +438,8 @@ describe("payments-screen", () => {
     q(el, "[data-test=confirm-disable]")!.click();
     await flush(el);
     expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
-    if (outcome === "success") resolveOld({ online: false, batteryPercent: 10 });
+    if (outcome === "success")
+      resolveOld({ printsOwnSlipAutomatically: false, online: false, batteryPercent: 10 });
     else rejectOld();
     await flush(el);
     expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
@@ -790,9 +798,12 @@ describe("reader discovery and status", () => {
   it("renders unreachable as Unknown and shows zero battery", async () => {
     const { el } = await mount(
       stubApi({
-        readerStatus: vi
-          .fn()
-          .mockResolvedValue({ online: false, unreachable: true, batteryPercent: 0 }),
+        readerStatus: vi.fn().mockResolvedValue({
+          printsOwnSlipAutomatically: false,
+          online: false,
+          unreachable: true,
+          batteryPercent: 0,
+        }),
       }),
     );
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Unknown");
@@ -900,6 +911,7 @@ describe("reader discovery and status", () => {
     const { el, api } = await mount(
       stubApi({
         readerStatus: vi.fn().mockResolvedValue({
+          printsOwnSlipAutomatically: false,
           online: true,
           model: "solo",
           serial: "123",
@@ -931,7 +943,7 @@ describe("reader discovery and status", () => {
     changeName(el, "[data-test=edit-reader-name]", "");
     q(el, "[data-test=save-reader]")!.click();
     await flush(el);
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
     expect(q(el, "[data-test=edit-reader-name]")!.shadowRoot!.textContent).toContain(
       "Enter a reader name",
     );
@@ -939,7 +951,10 @@ describe("reader discovery and status", () => {
     vi.mocked(api.listReaders).mockRejectedValue({ code: "server.internal" });
     q(el, "[data-test=save-reader]")!.click();
     await flush(el);
-    expect(api.renameReader).toHaveBeenCalledWith("r-1", "Garden");
+    expect(api.saveReader).toHaveBeenCalledWith("r-1", {
+      name: "Garden",
+      printsOwnSlipAutomatically: false,
+    });
     expect(q(el, "[data-test=reader-editor]")).toBeNull();
   });
 
@@ -978,7 +993,7 @@ describe("reader discovery and status", () => {
 
   it("shows a refused rename above Save and leaves Save working", async () => {
     const { el, api } = await mount(
-      stubApi({ renameReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+      stubApi({ saveReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );
     await openRename(el);
     changeName(el, "[data-test=edit-reader-name]", "Garden");
@@ -989,7 +1004,7 @@ describe("reader discovery and status", () => {
     expect(isDisabled(el, "save-reader")).toBe(false);
     q(el, "[data-test=save-reader]")!.click();
     await flush(el);
-    expect(api.renameReader).toHaveBeenCalledTimes(2);
+    expect(api.saveReader).toHaveBeenCalledTimes(2);
   });
 
   it("starts the rename form again when it is reopened", async () => {
@@ -1142,7 +1157,7 @@ describe("reader dialog request lifetime", () => {
         readerStatus: vi
           .fn()
           .mockRejectedValueOnce(new Error("offline API"))
-          .mockResolvedValue({ online: false }),
+          .mockResolvedValue({ printsOwnSlipAutomatically: false, online: false }),
       }),
     );
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Unknown");
@@ -1190,7 +1205,11 @@ describe("payments-screen remaining edges", () => {
   it("shows a reader that is still pairing as Pairing", async () => {
     const { el } = await mount(
       stubApi({
-        readerStatus: vi.fn().mockResolvedValue({ online: false, pairingStatus: "processing" }),
+        readerStatus: vi.fn().mockResolvedValue({
+          printsOwnSlipAutomatically: false,
+          online: false,
+          pairingStatus: "processing",
+        }),
       }),
     );
 
@@ -1206,6 +1225,7 @@ describe("payments-screen remaining edges", () => {
         name: "Counter",
         active: true,
         canEnable: true,
+        printsOwnSlipAutomatically: false,
         deviceCount: 10,
         deviceNames: [
           "Till 1",
@@ -1226,6 +1246,7 @@ describe("payments-screen remaining edges", () => {
         name: "Bar",
         active: true,
         canEnable: true,
+        printsOwnSlipAutomatically: false,
         deviceCount: 9,
         deviceNames: [
           "Till 1",
@@ -1287,9 +1308,7 @@ describe("payments-screen remaining edges", () => {
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const { el, api } = await mount(
-      stubApi({ renameReader: vi.fn().mockReturnValueOnce(pending) }),
-    );
+    const { el, api } = await mount(stubApi({ saveReader: vi.fn().mockReturnValueOnce(pending) }));
     qCell(el, "[data-test=edit-r-1]")!.click();
     await el.updateComplete;
     changeName(el, "[data-test=edit-reader-name]", "Garden");
@@ -1301,7 +1320,7 @@ describe("payments-screen remaining edges", () => {
     release();
 
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.renameReader).toHaveBeenCalledTimes(1);
+    expect(api.saveReader).toHaveBeenCalledTimes(1);
   });
 
   it("saves a rename when Enter is pressed in the name field", async () => {
@@ -1315,7 +1334,12 @@ describe("payments-screen remaining edges", () => {
 
     pressEnter(field);
 
-    await vi.waitFor(() => expect(api.renameReader).toHaveBeenCalledWith("r-1", "Garden"));
+    await vi.waitFor(() =>
+      expect(api.saveReader).toHaveBeenCalledWith("r-1", {
+        name: "Garden",
+        printsOwnSlipAutomatically: false,
+      }),
+    );
   });
 
   it("adopts a listed reader when Enter is pressed in its name field", async () => {
@@ -1375,7 +1399,7 @@ describe("payments-screen remaining edges", () => {
     dialog.shadowRoot!.querySelector("dialog")!.close();
 
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.renameReader).not.toHaveBeenCalled();
+    expect(api.saveReader).not.toHaveBeenCalled();
   });
 
   it("shows the no-details copy when the reader's status could not be read", async () => {
@@ -1847,6 +1871,7 @@ describe("the readers table at phone width", () => {
       name: "Terminal-de-la-barra-de-la-terraza-junto-a-la-puerta",
       active: true,
       canEnable: true,
+      printsOwnSlipAutomatically: false,
       deviceCount: 0,
       deviceNames: [],
     },
@@ -1933,7 +1958,10 @@ describe("the providers and readers once the server answers again", () => {
         .mockResolvedValueOnce(READERS)
         .mockResolvedValue([...READERS, { ...READERS[0], id: "r-2", name: "Terrace" }]),
       readerStatus: vi.fn((id: string) =>
-        Promise.resolve({ online: id === "r-1" } as ReaderStatusView),
+        Promise.resolve({
+          printsOwnSlipAutomatically: false,
+          online: id === "r-1",
+        } as ReaderStatusView),
       ),
     });
     const { el } = await mount(api);
@@ -2084,7 +2112,11 @@ describe("the readers' status reads", () => {
     const readerStatus = vi.fn(
       (id: string) =>
         new Promise<ReaderStatusView>((resolve) => {
-          const entry = { id, resolve: () => resolve({ online: true } as ReaderStatusView) };
+          const entry = {
+            id,
+            resolve: () =>
+              resolve({ printsOwnSlipAutomatically: false, online: true } as ReaderStatusView),
+          };
           waiting.push(entry);
           unanswered.push(entry.resolve);
         }),
@@ -2133,7 +2165,7 @@ describe("the readers' status reads", () => {
             peak = Math.max(peak, inFlight);
             answers.push(() => {
               inFlight--;
-              resolve({ online: true } as ReaderStatusView);
+              resolve({ printsOwnSlipAutomatically: false, online: true } as ReaderStatusView);
             });
           }),
       ),
@@ -2249,7 +2281,9 @@ describe("the readers' status reads", () => {
         readerStatus: vi.fn(
           () =>
             new Promise<ReaderStatusView>((resolve) => {
-              answers.push(() => resolve({ online: true } as ReaderStatusView));
+              answers.push(() =>
+                resolve({ printsOwnSlipAutomatically: false, online: true } as ReaderStatusView),
+              );
             }),
         ),
       });

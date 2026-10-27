@@ -51,6 +51,7 @@ const printers = [
 
 const readers: ReaderRow[] = [
   {
+    printsOwnSlipAutomatically: false,
     id: "r1",
     provider: "acme",
     name: "Barra",
@@ -60,6 +61,7 @@ const readers: ReaderRow[] = [
     deviceNames: [],
   },
   {
+    printsOwnSlipAutomatically: false,
     id: "r2",
     provider: "acme",
     name: "Terraza",
@@ -69,6 +71,7 @@ const readers: ReaderRow[] = [
     deviceNames: [],
   },
   {
+    printsOwnSlipAutomatically: false,
     id: "r-off",
     provider: "acme",
     name: "Vieja",

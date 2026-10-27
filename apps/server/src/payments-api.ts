@@ -583,9 +583,21 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const body = await readJsonBody<Record<string, unknown>>(c);
       const name = requireString(body.name, "name").trim();
       if (!name) throw new AppError("management.request_invalid", { field: "name" });
+      const printsOwnSlipAutomatically = body.printsOwnSlipAutomatically;
+      if ("printsOwnSlipAutomatically" in body && typeof printsOwnSlipAutomatically !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "printsOwnSlipAutomatically" });
+      }
       await gated(sessionId, async (tx) => {
         await requireReader(tx, id);
-        await tx.update(cardReaders).set({ name }).where(readerWhere(id));
+        await tx
+          .update(cardReaders)
+          .set({
+            name,
+            ...(typeof printsOwnSlipAutomatically === "boolean"
+              ? { printsOwnSlipAutomatically }
+              : {}),
+          })
+          .where(readerWhere(id));
       });
       return c.body(null, 204);
     }),
@@ -745,6 +757,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             provider: cardReaders.provider,
             name: cardReaders.name,
             active: cardReaders.active,
+            printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
             unpairedAt: cardReaders.unpairedAt,
           })
           .from(cardReaders)
@@ -846,7 +859,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
       const reader = await gated(sessionId, async (tx) => {
         const [row] = await tx
-          .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
+          .select({
+            provider: cardReaders.provider,
+            providerRef: cardReaders.providerRef,
+            printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
+          })
           .from(cardReaders)
           .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
         if (row === undefined || readerId === DEMO_READER_ID)
@@ -855,7 +872,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       });
       const seat = cardProviderById(deps.providers, reader.provider);
       const status = await seat.readers.status(runtimeDeps(), reader.providerRef);
-      return c.json(status);
+      return c.json({ ...status, printsOwnSlipAutomatically: reader.printsOwnSlipAutomatically });
     }),
   );
 

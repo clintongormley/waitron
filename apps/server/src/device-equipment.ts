@@ -45,6 +45,7 @@ export type EquipmentItem = {
   heldBy: Holder | null;
   /** A reader's card provider; a printer has none. */
   provider?: string;
+  printsOwnSlipAutomatically?: boolean;
 };
 
 export type RoleEquipment = {
@@ -52,7 +53,13 @@ export type RoleEquipment = {
   selection: "default" | "item";
   chosenId: string | null;
   /** What the role prints, opens or pays on now. */
-  resolved: { id: string; name: string; available: boolean; provider?: string } | null;
+  resolved: {
+    id: string;
+    name: string;
+    available: boolean;
+    provider?: string;
+    printsOwnSlipAutomatically?: boolean;
+  } | null;
   chosen: EquipmentItem | null;
   default: EquipmentItem | null;
   /** What the device may newly choose for the role, in list order. */
@@ -116,6 +123,7 @@ type Info = {
   portable: boolean;
   available: boolean;
   provider?: string;
+  printsOwnSlipAutomatically?: boolean;
 };
 
 const FIELD: Record<EquipmentRole, EquipmentField> = {
@@ -175,6 +183,7 @@ function readerInfoOf(equipment: ReaderEquipment): Map<string, Info> {
         portable: true,
         available: row.active && row.unpairedAt === null,
         provider: row.provider,
+        printsOwnSlipAutomatically: row.printsOwnSlipAutomatically,
       },
     ]),
   );
@@ -197,7 +206,12 @@ function summaryOf(
             id: resolved.id,
             name: resolved.name,
             available: resolved.available,
-            ...(resolved.provider === undefined ? {} : { provider: resolved.provider }),
+            ...(resolved.provider === undefined
+              ? {}
+              : {
+                  provider: resolved.provider,
+                  printsOwnSlipAutomatically: resolved.printsOwnSlipAutomatically,
+                }),
           },
   };
 }

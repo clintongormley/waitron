@@ -250,6 +250,7 @@ const printers: Printer[] = [
 
 const readers: ReaderRow[] = [
   {
+    printsOwnSlipAutomatically: false,
     id: "r1",
     provider: "acme",
     name: "Front counter",
@@ -259,6 +260,7 @@ const readers: ReaderRow[] = [
     deviceNames: ["Front till"],
   },
   {
+    printsOwnSlipAutomatically: false,
     id: "r2",
     provider: "zeta",
     name: "Bar",
@@ -269,6 +271,7 @@ const readers: ReaderRow[] = [
   },
   // Retired: must be excluded from the picker's options.
   {
+    printsOwnSlipAutomatically: false,
     id: "r3",
     provider: "acme",
     name: "Old terminal",

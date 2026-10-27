@@ -386,7 +386,9 @@ it("reverted extras are exempt, and page Discard restores extras without chargin
 it("reader preference makes hidden simulator choices exempt and re-exposes their staged value", async () => {
   const { app, form } = await mount();
   form.cardProvider = "simulator";
-  form.activeReaders = [{ id: "demo", name: "Demo", provider: "simulator" }];
+  form.activeReaders = [
+    { printsOwnSlipAutomatically: false, id: "demo", name: "Demo", provider: "simulator" },
+  ];
   await form.updateComplete;
   await click(form, '[data-test="simulation-declined"]');
   expect(unload()).toBe(true);

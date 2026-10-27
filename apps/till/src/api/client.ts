@@ -233,6 +233,7 @@ export interface TillActiveReader {
   id: string;
   name: string;
   provider: "stripe_terminal" | "sumup_cloud" | "simulator";
+  printsOwnSlipAutomatically: boolean;
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status. */
@@ -1377,6 +1378,7 @@ export interface KitchenNoteSnapshot {
  */
 export interface HeldOrder {
   id: string;
+  expectedEdit: BillEditExpected | null;
   kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
   label: string | null;
@@ -1767,6 +1769,7 @@ export interface EquipmentItem {
   heldBy: EquipmentHolder | null;
   /** A reader's provider as the venue stores it (`sumup`, `stripe`); a printer has none. */
   provider?: string;
+  printsOwnSlipAutomatically?: boolean;
 }
 
 /** One role of the device: what it chose, its profile's default, and what it resolves to now. */
@@ -1776,7 +1779,13 @@ export interface RoleEquipment {
   selection: "default" | "item";
   chosenId: string | null;
   /** What the role prints, opens or pays on now; `null` for none. */
-  resolved: { id: string; name: string; available: boolean; provider?: string } | null;
+  resolved: {
+    id: string;
+    name: string;
+    available: boolean;
+    provider?: string;
+    printsOwnSlipAutomatically?: boolean;
+  } | null;
   chosen: EquipmentItem | null;
   default: EquipmentItem | null;
   /** What the device may newly choose for the role, in list order. */

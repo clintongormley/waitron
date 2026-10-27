@@ -276,8 +276,19 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
   });
 
   const readers = [
-    { id: "r1", name: "Front counter", provider: "stripe_terminal" as const },
-    { id: "r2", name: "Bar", provider: "stripe_terminal" as const, online: false },
+    {
+      printsOwnSlipAutomatically: false,
+      id: "r1",
+      name: "Front counter",
+      provider: "stripe_terminal" as const,
+    },
+    {
+      printsOwnSlipAutomatically: false,
+      id: "r2",
+      name: "Bar",
+      provider: "stripe_terminal" as const,
+      online: false,
+    },
   ];
 
   it("has no violations on the idle screen with the reader name + change-reader control shown", async () => {

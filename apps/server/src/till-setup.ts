@@ -55,18 +55,29 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     id: string;
     name: string;
     provider: TillReaderProvider;
+    printsOwnSlipAutomatically: boolean;
   }[] = [];
   const resolvedReaderId = device == null ? null : await resolveDeviceReaderId(tx, device.deviceId);
   if (resolvedReaderId !== null) {
     const [reader] = await tx
-      .select({ id: cardReaders.id, name: cardReaders.name, provider: cardReaders.provider })
+      .select({
+        id: cardReaders.id,
+        name: cardReaders.name,
+        provider: cardReaders.provider,
+        printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
+      })
       .from(cardReaders)
       .where(and(eq(cardReaders.id, resolvedReaderId), eq(cardReaders.active, true)));
     const provider = reader === undefined ? undefined : tillProviderForReader(reader.provider);
     if (reader !== undefined && provider !== undefined) {
       defaultReaderProvider = provider;
       defaultReaderId = reader.id;
-      activeReaders.push({ id: reader.id, name: reader.name, provider });
+      activeReaders.push({
+        id: reader.id,
+        name: reader.name,
+        provider,
+        printsOwnSlipAutomatically: reader.printsOwnSlipAutomatically,
+      });
     }
   }
   const receiptLanguages = await readOfferedReceiptLanguages(tx, {
@@ -96,7 +107,14 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     // A venue can have several active readers on one provider, so the till needs the row id.
     defaultReaderId: simulator ? undefined : defaultReaderId,
     activeReaders: simulator
-      ? [{ id: DEMO_READER_ID, name: "Demo card reader", provider: "simulator" as const }]
+      ? [
+          {
+            id: DEMO_READER_ID,
+            name: "Demo card reader",
+            provider: "simulator" as const,
+            printsOwnSlipAutomatically: false,
+          },
+        ]
       : activeReaders,
     tipsEnabled: deps.cfg.tipsEnabled,
     formFactor: device?.formFactor ?? "till",

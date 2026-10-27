@@ -817,6 +817,7 @@ describe("readers — lifecycle and screens", () => {
         id: readerId,
         provider: "stripe",
         name: "One reader",
+        printsOwnSlipAutomatically: false,
         active: true,
         canEnable: true,
         deviceCount: 1,
@@ -869,6 +870,7 @@ describe("readers — lifecycle and screens", () => {
       model: "bbpos_wisepos_e",
       // A Stripe reference reader is paired the instant it is added, so its status carries this.
       pairingStatus: "paired",
+      printsOwnSlipAutomatically: false,
     });
 
     // Point a device at the reader, then the list's deviceCount reflects it.
@@ -1311,6 +1313,128 @@ describe("reader adoption and local management", () => {
   };
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
+  it("defaults automatic slips off and retains the saved setting through rename, enable and adoption", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    const create = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(create.status).toBe(201);
+    const { id } = (await create.json()) as { id: string };
+    const saved = async () => {
+      const response = await send(app, "GET", `${base}/readers`, opts);
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        id: string;
+        name: string;
+        printsOwnSlipAutomatically: boolean;
+      }[];
+    };
+    expect(await saved()).toEqual([
+      expect.objectContaining({ id, printsOwnSlipAutomatically: false }),
+    ]);
+    expect(
+      (
+        await send(app, "PATCH", `${base}/readers/${id}`, {
+          ...opts,
+          body: { name: "Counter", printsOwnSlipAutomatically: true },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await saved()).toEqual([
+      expect.objectContaining({ id, printsOwnSlipAutomatically: true }),
+    ]);
+    expect(
+      await (await send(app, "GET", `${base}/readers/${id}/status`, opts)).json(),
+    ).toHaveProperty("printsOwnSlipAutomatically", true);
+    expect(
+      (
+        await send(app, "PATCH", `${base}/readers/${id}`, {
+          ...opts,
+          body: { name: "Terrace" },
+        })
+      ).status,
+    ).toBe(204);
+    for (const action of ["disable", "enable", "disable"]) {
+      expect((await send(app, "POST", `${base}/readers/${id}/${action}`, opts)).status).toBe(204);
+      expect(await saved()).toEqual([
+        expect.objectContaining({ id, name: "Terrace", printsOwnSlipAutomatically: true }),
+      ]);
+    }
+    const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(await adopted.json()).toEqual({ id, status: "paired" });
+    expect(await saved()).toEqual([
+      expect.objectContaining({ id, printsOwnSlipAutomatically: true }),
+    ]);
+    expect(
+      (
+        await send(app, "PATCH", `${base}/readers/${id}`, {
+          ...opts,
+          body: { name: "Counter", printsOwnSlipAutomatically: false },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await saved()).toEqual([
+      expect.objectContaining({ id, printsOwnSlipAutomatically: false }),
+    ]);
+  });
+
+  it("a new registration starts with automatic slips off after deleting an own-slip reader", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    const first = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    const { id } = (await first.json()) as { id: string };
+    expect(
+      (
+        await send(app, "PATCH", `${base}/readers/${id}`, {
+          ...opts,
+          body: { name: "Counter", printsOwnSlipAutomatically: true },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await send(app, "DELETE", `${base}/readers/${id}`, opts)).status).toBe(200);
+    const created = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(created.status).toBe(201);
+    const { id: newId } = (await created.json()) as { id: string };
+    expect(newId).not.toBe(id);
+    const rows = await suite.db.select().from(cardReaders);
+    expect(rows.find((row) => row.id === newId)).toMatchObject({
+      printsOwnSlipAutomatically: false,
+    });
+    expect(rows.find((row) => row.id === id)).toMatchObject({
+      printsOwnSlipAutomatically: true,
+      active: false,
+    });
+  });
+
+  it.each([null, [], "true", 1, {}].map((value) => ({ value })))(
+    "refuses invalid automatic-slip value $value without changing the reader",
+    async ({ value }) => {
+      const venue = await seedVenue();
+      const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+      await connectStripe(app, venue);
+      const opts = { cookie: venue.managerCookie };
+      const { id } = (await (
+        await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption })
+      ).json()) as { id: string };
+      const response = await send(app, "PATCH", `${base}/readers/${id}`, {
+        ...opts,
+        body: { name: "Changed", printsOwnSlipAutomatically: value },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "printsOwnSlipAutomatically" },
+        },
+      });
+      const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id));
+      expect(row).toMatchObject({ name: "Counter", printsOwnSlipAutomatically: false });
+    },
+  );
+
   it("labels available, added and disabled and reuses the disabled id and the device's chosen reader", async () => {
     const venue = await seedVenue();
     const removed: string[] = [];
@@ -1629,6 +1753,7 @@ describe("reader adoption and local management", () => {
         id,
         provider: "stripe",
         name: "Barra 1",
+        printsOwnSlipAutomatically: false,
         active: false,
         canEnable: false,
         deviceCount: 0,
@@ -1646,6 +1771,7 @@ describe("reader adoption and local management", () => {
         id,
         provider: "stripe",
         name: "Counter",
+        printsOwnSlipAutomatically: false,
         active: true,
         canEnable: true,
         deviceCount: 0,

@@ -642,6 +642,7 @@ describe("readDeviceEquipment", () => {
       name: "Lector",
       available: true,
       provider: "sumup",
+      printsOwnSlipAutomatically: false,
     });
     expect(terminal.default).toMatchObject({ id: sumup, provider: "sumup" });
     expect(terminal.choices.map((choice) => [choice.id, choice.provider])).toEqual([

@@ -10,6 +10,17 @@ issues the invoice; recording an unpaid departure also issues it, leaving the am
 Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
 use that bill's payments. Placing a counter order alone does not issue an invoice.
 
+## Avoid duplicate card slips {#reader-slips}
+
+If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that
+reader and turn on **Prints its own slip automatically**, then choose **Save**. Waitron then leaves
+that reader's payment slips to the reader. This setting describes the reader; it does not change
+its printer's settings. It starts off for a new reader.
+
+Disabling and enabling the same reader keeps your choice, as does adding that retained reader
+again. Deleting it and adding it as a new reader starts with the setting off. A configuration
+export carries payment policy, not card readers or this setting.
+
 ## Trust the box before opening the till {#certificate-trust}
 
 The till's **This device hasn't trusted the till yet** page follows your browser's preferred

@@ -1935,6 +1935,7 @@ describe("getHeldOrder", () => {
       })),
     }).toEqual({
       id,
+      expectedEdit: null,
       orderNumber: 1,
       label: "Mesa 7",
       revision: 0,
