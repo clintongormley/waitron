@@ -2484,6 +2484,7 @@ export class SetupApp extends LitElement {
     const ask = authenticatedMissing ? this.firstMissingSummary : undefined;
     const unreadable = (missing ? ask : (this.firstStoppedSummary ?? this.firstDamagedSummary))
       ?.unreadable;
+    const namesFrom = unreadable && namesFromText(currentLocale(), unreadable.floorMs);
     // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
     const recoveryStarted = this.firstBackupPhase !== "unstarted";
     const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
@@ -2597,13 +2598,7 @@ export class SetupApp extends LitElement {
               : nothing
           }
           <p>${t.startAgainHelp}</p>
-          ${
-            unreadable
-              ? html`<p data-test="names-from">
-                  ${namesFromText(currentLocale(), unreadable.floorMs)}
-                </p>`
-              : nothing
-          }
+          ${namesFrom ? html`<p data-test="names-from">${namesFrom}</p>` : nothing}
           <label
             ><input
               data-test="retire-confirmed"
