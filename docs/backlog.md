@@ -2074,6 +2074,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
   Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
+  What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
+  Columns store to reuse, and a key missing from a stored layout returns to its default place, not
+  the end (A797 plan, slice 9 D3 and D15). `apps/till/src/widgets/kitchen-columns-dialog.ts` is the
+  Columns window: it takes a layout and a map of column names and sends `column-move`,
+  `column-show` and `close`, so the pass can list its own columns in it; Other stations' dishes
+  would be a second section the pass adds. Every column may be hidden and Columns stays in each
+  board's header row. A key added to `STATION_COLUMNS` must also be drawn and named by
+  `stationColumnNames`, or "the station registers only columns the board draws" in
+  `apps/till/src/widgets/station-queue.test.ts` fails.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
