@@ -400,6 +400,9 @@ export class MenusScreen extends LitElement {
         flex-wrap: wrap;
         align-items: baseline;
         column-gap: var(--wt-space-2);
+        /* Room for the half of the patch help badge that hangs above the button when it wraps, help
+           on or off, so turning help on moves nothing. */
+        row-gap: calc(var(--wt-help-badge-target) / 2);
         min-width: 0;
       }
       /* The help badge hangs over this box's top trailing corner. */

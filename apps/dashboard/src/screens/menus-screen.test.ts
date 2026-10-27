@@ -10067,6 +10067,29 @@ describe("patching the live menu", () => {
     expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
   });
 
+  it("keeps the patch's help badge off the live words and the title when the heading wraps on a phone", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(width, height));
+    setHelpMode(true);
+    onTestFinished(() => setHelpMode(false));
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    const words = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
+    const title = q(el, ".title h1")!.getBoundingClientRect();
+    const button = patchButton(el)!.getBoundingClientRect();
+    const badge = patchHelp(el)!.getBoundingClientRect();
+    expect(button.top).toBeGreaterThanOrEqual(words.bottom);
+    expect(badge.width).toBeGreaterThan(0);
+    for (const box of [words, title])
+      expect(
+        badge.left < box.right &&
+          box.left < badge.right &&
+          badge.top < box.bottom &&
+          box.top < badge.bottom,
+      ).toBe(false);
+  });
+
   it("shows no patch tooltip where there is no patch button", async () => {
     const el = await mountLunch(
       api({ getMenuStatus: vi.fn().mockResolvedValue({ state: "unpublished", clashes: 0 }) }),
