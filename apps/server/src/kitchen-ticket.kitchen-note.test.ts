@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { EscSetting } from "@waitron/printing";
-import { formatCorrectionSlip, formatKitchenTicket, formatMovedSlip } from "./kitchen-ticket.js";
+import {
+  formatCorrectionSlip,
+  formatKitchenNoteChangeSlip,
+  formatKitchenTicket,
+  formatMovedSlip,
+} from "./kitchen-ticket.js";
+import type { KitchenTicketStation } from "./kitchen-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 
 describe.each([
@@ -153,4 +159,137 @@ describe.each([
       }
     },
   );
+
+  describe("A807 the slip for a kitchen-note change", () => {
+    const sentAt = new Date(2026, 9, 16, 10, 0).toISOString();
+    const slip = (
+      stations: KitchenTicketStation[],
+      locale = "en-GB",
+      after: string | null = "New time",
+    ) =>
+      printedLines(
+        formatKitchenNoteChangeSlip(
+          {
+            locale,
+            stations,
+            tableLabel: "Table 2",
+            orderNumber: "17",
+            at: sentAt,
+            orderNoteChange: { before: "Old time", after },
+          },
+          layout,
+        ),
+      );
+    const narrow = layout.paperWidth === "58mm";
+    // Captured from formatCorrectionSlip's ORDER NOTE CHANGED output before this slip existed.
+    const singleDish = [
+      {
+        locale: "en-GB",
+        after: "New time",
+        head: ["*** KITCHEN NOTE CHANGED ***"],
+        body: ["For the kitchen: New time", "Was: Old time"],
+      },
+      {
+        locale: "en-GB",
+        after: null,
+        head: ["*** KITCHEN NOTE REMOVED ***"],
+        body: ["Note for the kitchen removed", "Was: Old time"],
+      },
+      {
+        locale: "es-ES",
+        after: "New time",
+        head: narrow
+          ? ["*** NOTA PARA COCINA CAMBIADA", "***"]
+          : ["*** NOTA PARA COCINA CAMBIADA ***"],
+        body: ["Para cocina: New time", "Antes: Old time"],
+      },
+      {
+        locale: "es-ES",
+        after: null,
+        head: narrow
+          ? ["*** NOTA PARA COCINA ELIMINADA", "***"]
+          : ["*** NOTA PARA COCINA ELIMINADA ***"],
+        body: ["Nota para cocina eliminada", "Antes: Old time"],
+      },
+    ];
+
+    it.each(singleDish)(
+      "prints one station's single dish in the same lines as the single-dish slip ($locale, after $after)",
+      ({ locale, after, head, body }) => {
+        const top = [...head, "Grill", "Table 2", "17", "10:00", ...body];
+        expect(
+          slip(
+            [{ stationName: "Grill", items: [{ qty: 2, name: "Burger", note: "No onions" }] }],
+            locale,
+            after,
+          ),
+        ).toEqual([...top, "2 x Burger", "  * No onions", ""]);
+        expect(
+          slip(
+            [
+              {
+                stationName: "Grill",
+                items: [{ qty: 2, name: "Burger", note: "No onions", group: 3 }],
+              },
+            ],
+            locale,
+            after,
+          ),
+        ).toEqual([...top, "GROUP 3", "2 x Burger", "  * No onions", ""]);
+      },
+    );
+
+    it("lists two stations' dishes under each station's name", () => {
+      const lines = slip([
+        { stationName: "Grill", items: [{ qty: 2, name: "Burger", note: "No onions" }] },
+        { stationName: "Pastry", items: [{ qty: 1, name: "Flan" }] },
+      ]);
+      expect(lines[1]).toBe("Grill · Pastry");
+      expect(lines.slice(lines.indexOf("Was: Old time"))).toEqual([
+        "Was: Old time",
+        "Grill",
+        "2 x Burger",
+        "  * No onions",
+        "Pastry",
+        "1 x Flan",
+        "",
+      ]);
+    });
+
+    it("names a shared group once, and heads a second group", () => {
+      const shared = slip([
+        {
+          stationName: "Grill",
+          items: [
+            { qty: 1, name: "Burger", group: 1 },
+            { qty: 1, name: "Flan", group: 1 },
+          ],
+        },
+      ]);
+      expect(shared.slice(shared.indexOf("Was: Old time"))).toEqual([
+        "Was: Old time",
+        "GROUP 1",
+        "1 x Burger",
+        "1 x Flan",
+        "",
+      ]);
+      const two = slip([
+        {
+          stationName: "Grill",
+          items: [
+            { qty: 1, name: "Burger", group: 1 },
+            { qty: 1, name: "Flan", group: 2 },
+          ],
+        },
+      ]);
+      expect(two.slice(two.indexOf("Was: Old time"))).toEqual([
+        "Was: Old time",
+        "GROUP 1",
+        "1 x Burger",
+        "GROUP 2",
+        "1 x Flan",
+        "",
+      ]);
+    });
+  });
 });
