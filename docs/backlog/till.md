@@ -2799,3 +2799,15 @@ Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,
 the tab reads "Terrac". `apps/till/src/screens/till-floor-screen.ts`, which draws the chip, is
 unchanged between `git merge-base origin/main HEAD` and slice 3's tip, so I believe this
 predates the slice (not run on main).
+
+## The venue-service seed can take over a zone a manager made
+
+When a venue has no active counter-default zone in an active department and the venue-service
+seed runs again (`provisionNode`, `apps/server/src/provision-till.ts`), the seed inserts its counter
+zone with an upsert on the location's active zone names (`packages/venue-service/src/provisioning.ts`).
+An active zone that already has that name becomes the counter default and moves to the default
+department. Measured 2026-10-27 in A918 slice 3's review: a venue with `en-GB` receipts, an active
+zone named "Counter" in a "Bar" department and a switched-off counter-default zone had that zone
+moved to the default department by `provisionNode`. The upsert predates slice 3, which changed only
+the name: since slice 3 it is in the staff language, «Mostrador» when that is Spanish, "Counter"
+when English. Decide whether the seed should adopt a zone of that name or write under an unused one.

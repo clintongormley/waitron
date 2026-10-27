@@ -1997,7 +1997,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   translated when the box is set up (owner, 2026-10-19). The owner chose (2026-10-20): each module
   ships a translation file of its starter names, setup writes every language the venue uses from it, and the English-only check is to allow
   those files. It
-  covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
+  covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons, the counter zone, the starter period, units and the first menu, and
   is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
   items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
   Slice 1 landed in #2128: the mechanism and the reasons; slice 2 in #2130: the kitchen station and
@@ -2016,6 +2016,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
   in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
+
+- **Review follow-up: the venue-service seed can take over a zone a manager made.** Measured
+  2026-10-27: with no active counter-default zone in an active department, running the seed again
+  (`provisionNode`) makes an active zone with the starter counter name the counter default, in the
+  default department. [Detail](backlog/till.md#the-venue-service-seed-can-take-over-a-zone-a-manager-made)
 
 - **Review follow-up: nutrition for extras in Sent.** The Current orders wire's extra summaries
   carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill
