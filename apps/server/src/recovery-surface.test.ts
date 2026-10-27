@@ -11,6 +11,7 @@ import { createRotatingFileSink, tee } from "./log-file.js";
 import { createLogger } from "./logger.js";
 import { FRESH, afterFailure, refusedWhileRunning, type RecoveryState } from "./recovery-state.js";
 import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
+import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 
 const state = afterFailure(
   afterFailure(afterFailure(FRESH, "module.config_invalid", new Date()), "x", new Date()),
@@ -1141,6 +1142,32 @@ describe("a start refused before it began", () => {
           "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
       },
     },
+    {
+      code: "setup.start_again_files_found",
+      "en-GB": {
+        title: "Start again did not finish, and the box found files it did not expect.",
+        action:
+          "An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+        action:
+          "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado.",
+      },
+    },
+    {
+      code: "setup.start_again_kept",
+      "en-GB": {
+        title: "Start again did not finish, and everything on this box was kept.",
+        action:
+          "Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo.",
+        action:
+          "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
+      },
+    },
   ] as const;
 
   async function refusedPage(code: string, acceptLanguage: string): Promise<string> {
@@ -1188,6 +1215,40 @@ describe("a start refused before it began", () => {
         expect(action, `${row.code} ${lang}`).not.toMatch(/quien instaló/i);
       }
     }
+  });
+
+  it("never suggests deleting in the Start again choices, except the one owner-approved sentence", () => {
+    const NEVER_DELETE_EN = /\bwipe\b|\berase\b|\bdelet|\breset\b|\bremov/i;
+    const NEVER_DELETE_ES = new RegExp(`${NEVER_WIPE_ES.source}|\\bquit|\\bquít|\\bsuprim`, "i");
+    expect(NEVER_DELETE_EN.test("The files were deleted.")).toBe(true);
+    expect(NEVER_DELETE_ES.test("Quítalo.")).toBe(true);
+    expect(NEVER_DELETE_EN.test("Delete these files.")).toBe(true);
+    expect(NEVER_DELETE_ES.test("Borra estos archivos.")).toBe(true);
+    const strings = (text: (typeof START_AGAIN_PAGE_TEXT)[keyof typeof START_AGAIN_PAGE_TEXT]) =>
+      Object.entries({
+        ...text,
+        more: text.more(3),
+        moveFloor: text.moveFloor("2026-10-27 10:00 UTC"),
+        throttled: `${text.throttled(1)} ${text.throttled(5)}`,
+        moved: text.moved("state/first-setup-set-aside/2026-10-27T10-00-00Z"),
+      });
+    const checked = { "en-GB": NEVER_DELETE_EN, "es-ES": NEVER_DELETE_ES } as const;
+    for (const lang of ["en-GB", "es-ES"] as const) {
+      const entries = strings(START_AGAIN_PAGE_TEXT[lang]);
+      expect(entries.length, lang).toBe(27);
+      for (const [key, value] of entries) {
+        expect(typeof value, `${lang} ${key}`).toBe("string");
+        if (key === "moveDetail") continue;
+        expect(value, `${lang} ${key}`).not.toMatch(checked[lang]);
+      }
+      expect(START_AGAIN_PAGE_TEXT[lang].moveDetail, lang).toMatch(checked[lang]);
+    }
+    expect(START_AGAIN_PAGE_TEXT["en-GB"].moveDetail).toBe(
+      "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again. Its invoice series names are never used again.",
+    );
+    expect(START_AGAIN_PAGE_TEXT["es-ES"].moveDetail).toBe(
+      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo. Sus nombres de serie de facturas no se vuelven a usar.",
+    );
   });
 
   it("the unfinished Start again line never tells the person to reinstall, and says what reinstalling loses", () => {

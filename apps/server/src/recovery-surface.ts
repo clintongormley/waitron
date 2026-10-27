@@ -483,6 +483,30 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
     },
   },
+  "setup.start_again_files_found": {
+    "en-GB": {
+      title: "Start again did not finish, and the box found files it did not expect.",
+      action:
+        "An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+      action:
+        "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado.",
+    },
+  },
+  "setup.start_again_kept": {
+    "en-GB": {
+      title: "Start again did not finish, and everything on this box was kept.",
+      action:
+        "Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo.",
+      action:
+        "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
+    },
+  },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
   [HOLDER_STALLED]: holderStalledText(undefined),
 };
