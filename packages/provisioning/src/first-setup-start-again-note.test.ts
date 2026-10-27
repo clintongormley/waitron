@@ -91,12 +91,45 @@ it("raising never lowers the floor", async () => {
   expect(await readStartAgainNote(dir)).toEqual(raised);
 });
 
+it("a note whose name is unknown round-trips", async () => {
+  const dir = await stateDir();
+  await raiseStartAgainNote(dir, {
+    floorMs: 1792150980000,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  expect(await readStartAgainNote(dir)).toEqual({
+    version: 1,
+    floorMs: 1792150980000,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+});
+
+it("an unknown-name note never lowers a known one", async () => {
+  const dir = await stateDir();
+  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
+  await raiseStartAgainNote(dir, { floorMs: 100, lastName: null, module: "m" });
+  const first = { version: 1, floorMs: 200, lastName: "first", module: "m" };
+  expect(await readStartAgainNote(dir)).toEqual(first);
+  await raiseStartAgainNote(dir, { floorMs: 200, lastName: null, module: "m" });
+  expect(await readStartAgainNote(dir)).toEqual(first);
+  await raiseStartAgainNote(dir, { floorMs: 300, lastName: null, module: "m" });
+  expect(await readStartAgainNote(dir)).toEqual({
+    version: 1,
+    floorMs: 300,
+    lastName: null,
+    module: "m",
+  });
+});
+
 it.each([
   ["empty", ""],
   ["partial", '{"version":1,'],
   ["an array", "[]"],
   ["a wrong version", '{"version":2,"floorMs":1,"lastName":"a","module":"m"}'],
   ["a missing key", '{"version":1,"floorMs":1,"lastName":"a"}'],
+  ["a missing name key", '{"version":1,"floorMs":1,"module":"m"}'],
   ["an extra key", '{"version":1,"floorMs":1,"lastName":"a","module":"m","x":1}'],
   ["a text floor", '{"version":1,"floorMs":"1","lastName":"a","module":"m"}'],
   ["a numeric name", '{"version":1,"floorMs":1,"lastName":1,"module":"m"}'],

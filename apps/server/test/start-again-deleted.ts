@@ -36,7 +36,7 @@ export async function expectStartAgainDeleted(roots: Roots): Promise<void> {
   expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
 }
 
-export async function startAgainNoteName(roots: Roots): Promise<string | undefined> {
+export async function startAgainNoteName(roots: Roots): Promise<string | null | undefined> {
   return (await readStartAgainNote(roots.stateDir))?.lastName;
 }
 

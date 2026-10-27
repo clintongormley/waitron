@@ -479,7 +479,7 @@ it("Start again of an empty replacement keeps the inherited floor in the note", 
 });
 it("password recovery starts an unused named replacement again in the same folders, and the note holds the later of the two names", async () => {
   const f = await fixture(2, request.taxId, "production", false);
-  const earlier = (await readStartAgainNote(f.state.stateDir))!.lastName;
+  const earlier = (await readStartAgainNote(f.state.stateDir))!.lastName!;
   const named = (await choose(f.host, f.state, f.claim.capability)).state;
   const later = (firstSetupModuleContext(named, MODULE).request as { identity: string }).identity;
   expect(decodeMinuteIdentity(later)).toBeGreaterThan(decodeMinuteIdentity(earlier));

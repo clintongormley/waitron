@@ -16,7 +16,7 @@ const MODULE_ID = /^[a-z][a-z0-9-]*$/;
 export interface StartAgainNote {
   version: 1;
   floorMs: number;
-  lastName: string;
+  lastName: string | null;
   module: string;
 }
 
@@ -33,9 +33,10 @@ function parseNote(value: unknown): StartAgainNote {
   if (
     note.version !== 1 ||
     !Number.isSafeInteger(note.floorMs) ||
-    typeof note.lastName !== "string" ||
-    note.lastName.length < 1 ||
-    note.lastName.length > 64 ||
+    (note.lastName !== null &&
+      (typeof note.lastName !== "string" ||
+        note.lastName.length < 1 ||
+        note.lastName.length > 64)) ||
     typeof note.module !== "string" ||
     !MODULE_ID.test(note.module)
   )
@@ -43,7 +44,7 @@ function parseNote(value: unknown): StartAgainNote {
   return {
     version: 1,
     floorMs: note.floorMs as number,
-    lastName: note.lastName,
+    lastName: note.lastName as string | null,
     module: note.module,
   };
 }
