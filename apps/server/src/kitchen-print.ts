@@ -70,6 +70,8 @@ export interface FiredItem {
    * `0014_order_edit_columns.sql` carries none.
    */
   quantity?: number | null;
+  /** When the item was first sent to the kitchen; set by {@link readReprintParts} only. */
+  sentAt?: string;
 }
 
 /**
@@ -660,10 +662,21 @@ async function planKitchenTickets(
   };
   for (const route of routes) {
     const onTicket = route.stationIds.map((id) => stationById.get(id)!);
+    const onRoute = firedItems.filter((fired) => route.stationIds.includes(fired.stationId));
+    // A reprint keeps the time its dishes were first sent: the earliest, compared as times.
+    const firedAt = reprint
+      ? new Date(
+          onRoute.reduce(
+            (earliest, fired) => Math.min(earliest, Date.parse(fired.sentAt!)),
+            Infinity,
+          ),
+        )
+      : head.firedAt;
     const render = (leavesOut: readonly string[] | null) =>
       formatKitchenTicket(
         {
           ...head,
+          firedAt,
           mark:
             mark ??
             (fire !== undefined && route.stationIds.some((id) => fire.heldPaper.has(id))
@@ -701,13 +714,7 @@ async function planKitchenTickets(
         route.printers[0]!,
       );
     const bytesByRest = new Map<string, Uint8Array>();
-    const lineIds = [
-      ...new Set(
-        firedItems
-          .filter((fired) => route.stationIds.includes(fired.stationId))
-          .map((fired) => fired.workingOrderLineId),
-      ),
-    ];
+    const lineIds = [...new Set(onRoute.map((fired) => fired.workingOrderLineId))];
     for (const printer of route.printers) {
       const leavesOut = restLeavesOut.get(printer.printerId)!;
       const key = leavesOut === null ? "" : [...leavesOut].sort().join("|");
@@ -1286,6 +1293,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
+      holdPrintedAt: orderGroups.holdPrintedAt,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1690,6 +1698,7 @@ async function readReprintParts(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
+      sentAt: ticketItems.firedAt,
     })
     .from(ticketItems)
     .where(
@@ -1701,11 +1710,18 @@ async function readReprintParts(
     );
   const onHold = await readOnHoldTickets(tx, orderIds);
   const onPaper = await onHeldPaper(tx, onHold);
-  const held = onHold.filter(onPaper);
-  const byOrder = (rows: typeof fired) => {
+  const held = onHold
+    .filter(onPaper)
+    .map(({ holdPrintedAt, ...item }) => ({ ...item, sentAt: holdPrintedAt }));
+  const byOrder = (
+    rows: readonly (Omit<FiredItem, "sentAt"> & {
+      workingOrderId: string;
+      sentAt: string | null;
+    })[],
+  ) => {
     const items = new Map<string, FiredItem[]>(orderIds.map((id) => [id, []]));
-    for (const { workingOrderId, workingOrderLineId, stationId, quantity } of rows) {
-      items.get(workingOrderId)!.push({ workingOrderLineId, stationId, quantity });
+    for (const { workingOrderId, workingOrderLineId, stationId, quantity, sentAt } of rows) {
+      items.get(workingOrderId)!.push({ workingOrderLineId, stationId, quantity, sentAt: sentAt! });
     }
     return items;
   };
@@ -1758,8 +1774,9 @@ async function readReprintTargets(
 }
 
 /**
- * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
- * stamped with the reprint time, not the original fire time. Fired and HOLD sections for one
+ * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket's heading carries the
+ * reprint time, read once for the whole reprint, and its time line keeps the time its dishes were
+ * first sent ({@link FiredItem.sentAt}). Fired and HOLD sections for one
  * printer go as one job, cut once, linked to every station either carries, whatever stations each
  * covers; for a station printer, separate jobs could clear an earlier failure for dishes the later
  * section does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An

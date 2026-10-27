@@ -1,13 +1,15 @@
 import { recallLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenPrintJobLines,
   kitchenPrintJobs,
   locations,
+  orderGroups,
   printJobs,
   parties,
+  ticketItems,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -990,6 +992,69 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       "*** REPRINT 15:20 ***",
     ]);
     expect(reprint!.lines).toContain("*** HOLD ***");
+  });
+
+  // Fails if a reprint prints the reprint time under the order, or the first-fired dish's time
+  // rather than the earliest, or the HOLD part takes the fired part's time.
+  it("A808 prints the reprint time in the heading and each part's original send time below the order", async () => {
+    const v = await holdingVenue();
+    const table4 = await seated(v, "Mesa 4");
+    const { groups } = await submit(v, table4.partyId, [
+      { release: "fire", lines: [line(v, "burger")] },
+      { release: "hold", lines: [line(v, "fish")] },
+    ]);
+    await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "burger")] }]);
+    const fired = await db
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(and(eq(ticketItems.workingOrderId, table4.tabId), isNotNull(ticketItems.firedAt)))
+      .orderBy(sql`rowid`);
+    expect(fired).toHaveLength(2);
+    const at = (hours: number, minutes: number) =>
+      new Date(2026, 9, 27, hours, minutes).toISOString();
+    await db
+      .update(ticketItems)
+      .set({ firedAt: at(14, 30) })
+      .where(eq(ticketItems.id, fired[0]!.id));
+    await db
+      .update(ticketItems)
+      .set({ firedAt: at(14, 5) })
+      .where(eq(ticketItems.id, fired[1]!.id));
+    await db
+      .update(orderGroups)
+      .set({ holdPrintedAt: at(14, 10) })
+      .where(eq(orderGroups.id, groups[1]!.id));
+    const before = (await jobsAt(v.kitchenPrinterId)).length;
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    try {
+      await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const [reprint] = (await jobsAt(v.kitchenPrinterId)).slice(before);
+    const lines = reprint!.lines;
+    const heldAt = lines.lastIndexOf("*** REPRINT 15:20 ***");
+    expect(heldAt).toBeGreaterThan(0);
+    expect(lines.slice(0, 5)).toEqual([
+      "*** REPRINT 15:20 ***",
+      "Cocina",
+      "Mesa 4",
+      lines[3],
+      "14:05",
+    ]);
+    expect(lines.slice(heldAt)).toEqual([
+      "*** REPRINT 15:20 ***",
+      "*** HOLD ***",
+      "Cocina",
+      "Mesa 4",
+      lines[3],
+      "14:10",
+      "GROUP 2",
+      `1.000 x ${DISHES.fish.kitchen}`,
+    ]);
   });
 
   it("does not reprint a held group whose HOLD ticket was never queued", async () => {
