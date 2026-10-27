@@ -358,7 +358,7 @@ describe("MenuPatchDraft", () => {
     expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
   });
 
-  it("on rebase drops and counts wording a newer version's switched-off language refuses", () => {
+  it("on rebase lets go of wording in a switched-off language and keeps the rest of its change", () => {
     const document = lunch();
     document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
     const draft = new MenuPatchDraft(document, languages);
@@ -370,8 +370,24 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: salad, field: "price", value: "5.00" });
     const next = lunch();
     next.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Potage" };
-    expect(draft.rebase(next)).toEqual({ dropped: 1 });
-    expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
+    expect(draft.rebase(next)).toEqual({ dropped: 0 });
+    expect(draft.changes()).toEqual([
+      { target: soup, field: "customerName", value: { en: "Soup", es: "Caldo" } },
+      { target: salad, field: "price", value: "5.00" },
+    ]);
+  });
+
+  it("on rebase drops and counts a change that held new wording only in a switched-off language", () => {
+    const document = lunch();
+    document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
+    const draft = new MenuPatchDraft(document, languages);
+    draft.set({
+      target: soup,
+      field: "customerName",
+      value: { en: "Soup", es: "Sopa", fr: "Bouillon" },
+    });
+    expect(draft.rebase(document)).toEqual({ dropped: 1 });
+    expect(draft.changes()).toEqual([]);
   });
 
   it("on rebase lets a failure that is not a refusal through rather than counting it", () => {

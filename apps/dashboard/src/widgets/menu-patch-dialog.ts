@@ -514,26 +514,30 @@ export class MenuPatchDialog extends LitElement {
   #revalidate(): void {
     const { document } = this.live!;
     this.dropped += this.#draft!.rebase(document, currentContentLanguages()).dropped;
-    this.#typeFixedNames(document);
+    this.#typeSettled(document);
     this.dropped += this.#forgetSettled(document);
     this.#retireRefusal();
     this.#scope?.changed();
     this.requestUpdate();
   }
 
-  /** A staged name change holds the live text in each language every folder fixes; its field takes
-   * that text too, so the field shows what a send carries once a later version frees it. */
-  #typeFixedNames(document: MenuDocument): void {
+  /** A staged translated change holds no text in a switched-off language, and a staged name change
+   * holds the live text in each language every folder fixes; its field takes the same, so the
+   * field shows what a send carries once that language is switched back on or a later version
+   * frees it. */
+  #typeSettled(document: MenuDocument): void {
     const languages = currentContentLanguages();
     for (const change of this.#draft!.changes()) {
       const typed = this.#typed.get(changeKey(change));
-      if (change.field !== "names" || typed === undefined) continue;
+      if (!TRANSLATED.has(change.field) || typed === undefined) continue;
       const value = change.value as Record<string, string>;
-      const fixed = fixedLanguages(document, change.target, "names", languages);
-      typed.value = {
-        ...(typed.value as Record<string, string>),
-        ...Object.fromEntries(fixed.map((language) => [language, value[language] ?? ""])),
-      };
+      const fixed = fixedLanguages(document, change.target, change.field, languages);
+      typed.value = Object.fromEntries([
+        ...Object.entries(typed.value as Record<string, string>).filter(([language]) =>
+          languages.languages.includes(language),
+        ),
+        ...fixed.map((language) => [language, value[language] ?? ""]),
+      ]);
     }
   }
 

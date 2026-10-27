@@ -205,6 +205,19 @@ export class MenuPatchDraft {
     return { ...change, value: settled };
   }
 
+  /** A translated `change` holding text only in the content languages: the patch refuses text in
+   * a switched-off language that differs from the stored one, and keeps the stored text there. */
+  private inLanguages(change: MenuPatchChange): MenuPatchChange {
+    const value = change.value;
+    if (!TRANSLATED.has(change.field) || typeof value !== "object" || value === null) return change;
+    const kept = Object.entries(value as Record<string, string>).filter(([language]) =>
+      this.languages.languages.includes(language),
+    );
+    return kept.length === Object.keys(value).length
+      ? change
+      : { ...change, value: Object.fromEntries(kept) };
+  }
+
   private stage(change: MenuPatchChange): void {
     const target = targetKey(change.target);
     const key = `${target}/${change.field}`;
@@ -243,14 +256,15 @@ export class MenuPatchDraft {
 
   /** Moves the draft onto a newer live version, judged with `languages`. A change that version
    * already holds goes without being counted; one `applyMenuPatch` refuses on it is dropped and
-   * counted, and so is one left holding only the live text once a name language every folder now
-   * fixes takes the live text in place of what was typed. */
+   * counted, and so is one left holding only the live text once its text in a switched-off
+   * language is let go, or a name language every folder now fixes takes the live text in place of
+   * what was typed. */
   rebase(document: MenuDocument, languages = this.languages): { dropped: number } {
     this.document = document;
     this.languages = languages;
     const dropped = new Set<string>();
     for (const [key, staged] of this.staged) {
-      const change = this.settled(staged);
+      const change = this.settled(this.inLanguages(staged));
       if (this.isLive(change)) {
         if (change !== staged && lostText(staged, change)) dropped.add(key);
         this.unstage(key);

@@ -1174,7 +1174,7 @@ it("takes away a refusal under a language the venue switches off", async () => {
   expect(bottomMessage(el)).toBe("Correct the fields marked on Soup to continue.");
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   await el.updateComplete;
-  expect(el.changes).toEqual([]);
+  expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
   expect(node(el, "Soup").querySelector('[data-test="needs-correcting"]')).toBeNull();
   expect(bottomMessage(el)).toBe("");
 });
@@ -2430,4 +2430,27 @@ it("lets go of a refusal under a language the venue switches off, keeping its ch
   expect(node(el, "Soup").querySelector('[data-test="needs-correcting"]')).toBeNull();
   expect(bottomMessage(el)).toBe("");
   expect(footerButton(el, "review")!.disabled).toBe(false);
+});
+
+it("keeps a translated change in the languages the venue keeps, and counts one it cannot keep", async () => {
+  const el = await mount();
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-en", "Hot");
+  await type(el, "wt-input", "description-es", "Caliente");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "description-en", "Fresh");
+  expect(el.changes).toHaveLength(2);
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  await el.updateComplete;
+  await pick(el, "Soup");
+  // The field shows what a send carries: no English text, which the patch then clears.
+  expect(field(el, "wt-input", "description-en").value).toBe("");
+  expect(field(el, "wt-input", "description-es").value).toBe("Caliente");
+  expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
 });
