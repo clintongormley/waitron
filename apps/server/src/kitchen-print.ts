@@ -70,7 +70,10 @@ export interface FiredItem {
    * `0014_order_edit_columns.sql` carries none.
    */
   quantity?: number | null;
-  /** When the item was first sent to the kitchen; set by {@link readReprintParts} only. */
+  /**
+   * When its ticket was fired (fired work), or when its group's HOLD ticket was queued (held work);
+   * set by {@link readReprintParts} only.
+   */
   sentAt?: string;
 }
 
@@ -663,7 +666,7 @@ async function planKitchenTickets(
   for (const route of routes) {
     const onTicket = route.stationIds.map((id) => stationById.get(id)!);
     const onRoute = firedItems.filter((fired) => route.stationIds.includes(fired.stationId));
-    // A reprint keeps the time its dishes were first sent: the earliest, compared as times.
+    // A reprint prints the earliest of its dishes' send times, compared as times, not as text.
     const firedAt = reprint
       ? new Date(
           onRoute.reduce(
@@ -1776,7 +1779,7 @@ async function readReprintTargets(
 /**
  * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket's heading carries the
  * reprint time, read once for the whole reprint, and its time line keeps the time its dishes were
- * first sent ({@link FiredItem.sentAt}). Fired and HOLD sections for one
+ * sent ({@link FiredItem.sentAt}). Fired and HOLD sections for one
  * printer go as one job, cut once, linked to every station either carries, whatever stations each
  * covers; for a station printer, separate jobs could clear an earlier failure for dishes the later
  * section does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An
