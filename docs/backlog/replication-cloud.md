@@ -1,7 +1,6 @@
 # Replication, failover and the cloud — detail
 
-The open entries are listed in [the backlog](../backlog.md), under "Replication, failover and the cloud". This file holds
-their full text.
+The open entries are listed in [the backlog](../backlog.md), under "Replication, failover and the cloud".
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
@@ -92,8 +91,7 @@ for this docs task; no provider work is authorised.
 
 ## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
 
-- Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
-  or not fixable in a comments-only change. A completed provision or adopt operation replayed on
+- From #657: A completed provision or adopt operation replayed on
   a later request still answers 200 without restarting and keeps the setup lock set (the Cloud
   restore's replay does restart). After a refused resend of a half-finished adopt (A50, #685),
   what the first identity leaves behind on the primary and on this node is still not measured.
@@ -146,8 +144,7 @@ for this docs task; no provider work is authorised.
 
 ## `docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node version the deleted comment had
 
-- Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
-  change. Docs: `docs/developers/conventions-data.md`'s `busy_timeout` receipt, which
+- Docs: `docs/developers/conventions-data.md`'s `busy_timeout` receipt, which
   `recovery-lock.ts` now points at, should carry the date and Node version the deleted comment had
   (2026-09-24, Node v26.7.0). Tests and code, read not run unless stated: three `adopt.test.ts`
   titles say "before any mutation", but by then the primary has reserved an identity for the
@@ -167,14 +164,12 @@ for this docs task; no provider work is authorised.
 
 ## The boot-time fetch is given only the URL … and boot never reads the `superseded` that `reconcileMembershipOnBoot` returns
 
-- Found by #617 (`apps/server` part f1), not fixable in a comments-only change. **Still open**
+- **Still open**
   (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still open after A63**
   in the #657 item above), and boot never reads the `superseded` that
   `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
   `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
-  `device-api.ts`'s ticket-item advance route did not enforce the `act-as-kds` capability
-  (resolved by W97, 2026-10-06: it and the kitchen-notice acknowledge route now check the
-  profile's `prepare-orders` action through `assertProfileAction`); `enrol-rate-limit.ts` keeps
+  `enrol-rate-limit.ts` keeps
   one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
   tenant with `onConflictDoNothing`, so a second call's new NIF is silently kept out;
   `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
@@ -261,8 +256,6 @@ Cloud's production store still needs its own run.
 
 ## A restored box whose cloud peer does not answer during its first start signs the next term and removes the marker
 
-From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
-
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced (reproduced with a temporary two-boot case in
@@ -272,8 +265,6 @@ From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 ## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
 
-From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
-
 - The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
   restored copy holds: a copy whose `nodes.public_key` for this node was rewritten, with its
   document re-signed by the matching key, passes, and the next term is signed over the added node
@@ -281,8 +272,6 @@ From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
   pins that).
 
 ## Only the start that finishes a restore checks the row's signature
-
-From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 - Only the start that finishes a restore checks the row's signature. A mirror or fenced start
   checks only that it can be read and is shaped as a document (A53); a start still finishing an
@@ -298,8 +287,6 @@ From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
   primary's key"); a restored mirror's own start is not covered by it.
 
 ## On a start with NO restore marker, text that is not JSON or a machine list that is not a list fails with the generic text
-
-From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 - On a start with NO restore marker, text that is not JSON or a machine list that is not a list
   fails with the generic text; a stored JSON null reads as no document, and a document breaking only
@@ -567,8 +554,6 @@ the membership chart, so a till's router sees one server (§2).
 
 ## Loose ends left by the Cloud connection integration
 
-2026-09-24; #638, #808.
-
 - Customer remote setup UI and production deployment remain open.
 - Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
   shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly
@@ -577,9 +562,7 @@ the membership chart, so a till's router sees one server (§2).
 - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
   operator step. Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog.
-- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. Owner to choose:
-  refuse Stop access while the replacement file is unreadable, or record the stop somewhere that
-  survives the repair.
+- A stop made while `cloud-replacement.json` is unreadable is not recorded in it.
   [Detail](../backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
 - The Litestream stream's sealed-state restore and activation still need integration with Cloud
   storage and owner recovery. Connected does not mean those services are configured. Cloud service
@@ -601,9 +584,7 @@ the field into text before checking it, so `["ready"]` passes as `"ready"`:
 Left open by #425; receipts in
 [the results note](../research/2026-09-16-sqlite-failover-prototype.md).
 
-- **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
-  conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
-  Cloud's production store still needs its own run.
+- **Validate every supported object store.**
   [Detail](../backlog/replication-cloud.md#validate-every-supported-object-store)
 - The store pointer and a new generation are exercised for a rebuild, not for a promotion. A
   promoted node's generation, and Cloud's recovery orchestration (tracked in the
@@ -654,7 +635,6 @@ open by SQLite slice 1 (#490 and the preparation tasks).
 
 ## A promoting standby may list itself with an empty contactUrl
 
-**A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**
 Nothing the #600 review could find copies `node_membership` from the primary to a standby. A
 standby whose own held membership list omits it takes the fallback in `nextStandings`
 (`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
