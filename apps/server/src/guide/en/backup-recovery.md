@@ -42,8 +42,8 @@ If the page says that Start again has not finished, reload it to see what is lef
 is restarting, wait until it answers.
 
 If a Start again was cut off and the box then finds files that Start again did not create, such as
-a venue copied from a backup, the box does not start. Its page lists the files and, over the box's
-secure connection, asks for the administrator password you chose during setup. **Keep everything
+a venue copied from a backup, the box does not start. If its page lists the files, it also asks,
+over the box's secure connection, for the administrator password you chose during setup. **Keep everything
 and stop** leaves the files as they are, and the page then stays until Waitron is reinstalled.
 **Move these files aside and finish Start again** moves the files, unchanged, into a new folder on
 the box and finishes Start again; the box then starts a new first setup. If the files change after

@@ -44,9 +44,9 @@ Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver
 equipo se está reiniciando, espera a que responda.
 
 Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
-nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Su página
-muestra los archivos y, con la conexión segura del equipo, pide la contraseña de administrador que
-elegiste al configurar. **Conservarlo todo y parar** deja los archivos como están, y la página sigue
+nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su
+página muestra los archivos, también pide, con la conexión segura del equipo, la contraseña de
+administrador que elegiste al configurar. **Conservarlo todo y parar** deja los archivos como están, y la página sigue
 hasta que se reinstale Waitron. **Apartar estos archivos y terminar «Empezar de nuevo»** mueve los
 archivos, sin cambios, a una carpeta nueva del equipo y termina «Empezar de nuevo»; después el
 equipo empieza una configuración inicial nueva. Si los archivos cambian después de abrir la página,

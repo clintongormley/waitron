@@ -506,10 +506,12 @@ as this restored database, is not a found file, so it stays a manual loop.
 Left open by A1098 (owner question Q2, built with option A, the most cautious). When the found
 files include, at any depth, a symbolic link or special file, a lock file (`venue.lock`,
 `venue.lock-journal`, `venue.holder.json`, `migrations.lock`, `recovery.lock`), or more than
-20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses for any reason other than
-found files, the box shows A1042's `setup.start_again_incomplete` page: the explanation and what
-reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
-`packages/provisioning/src/first-setup-start-again-leftovers.ts`). Option B, offering Keep alone
+20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses `setup.start_again_incomplete`
+for a reason other than found files, the box shows A1042's `setup.start_again_incomplete` page:
+the explanation and what reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
+`packages/provisioning/src/first-setup-start-again-leftovers.ts`). A finisher refusal with any
+other code is not one of the start's refusals, so that start carries on past it instead
+(`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
 for these boxes, is still open to the owner.
 
 ## A1143: files a Move set aside have no way back in the app
@@ -536,17 +538,20 @@ floor to the newest moved file's time plus 150 seconds, rounded up to the minute
 it ever chose a series name), there is no `lastName` to keep and nothing is raised
 (`raiseNoteToRecord`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). A moved
 venue whose names were chosen by a clock running ahead could then share a name with a later setup
-on this box. A1099's "name unknown" note would let the Move raise a floor here too.
+on this box. On such a box the survey's `noteFloorMs` is null, so the Move option names no floor
+either. A1099's "name unknown" note would let the Move raise a floor here too.
 
 ## A1146: a found piece on another mount below a root fails after the choice is recorded
 
 Left open by A1098 (plan decision D4). Before recording a Move, the box tests a rename from each
 of the state and venue folders into the set-aside folder. A found piece below one of them that
 sits on yet another mount is found only when its own rename fails (`EXDEV`), after the record is
-written. The choice then answers "Start again could not finish. The files it found are unchanged.
-Press Retry…", although earlier pieces may already have moved; every later start tries the Move
-again, fails the same way, and shows the `setup.start_again_move_unfinished` page until the mount
-is changed (`refusedAtStart`, `apps/server/src/first-setup-entry.ts`). Read, not run.
+written. The choice then answers 409 with the `setup.start_again_move_unfinished` page, which says
+some files may already be in the set-aside folder (run with a failed second rename in
+`packages/provisioning/src/first-setup-start-again-choose.test.ts` and the 409 case in
+`apps/server/src/recovery-surface.test.ts`). Every later start tries the Move again, fails the same
+way, and shows that page until the mount is changed (`refusedAtStart`,
+`apps/server/src/first-setup-entry.ts`; read, not run with `EXDEV`).
 
 ## A1147: Start again's finisher removes an empty folder the box did not create
 

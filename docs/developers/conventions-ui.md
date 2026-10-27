@@ -1185,7 +1185,10 @@ The page binds the choice to the list it showed: the form carries the survey's d
 and `chooseStartAgainLeftovers` (`packages/provisioning/src/first-setup-start-again-choose.ts`)
 refuses `setup.start_again_files_changed` when the box's survey no longer has that digest, once
 before counting the guess and once more under the venue lock after the password. The digest
-changes when a listed file's bytes, a folder's contents or an inode changes.
+covers each listed file's inode, size and modification time, and each listed folder's inode and
+every entry under it by the same fields (`surveyStartAgainLeftovers`,
+`packages/provisioning/src/first-setup-start-again-leftovers.ts`), not any file's contents: a
+change that keeps a file's inode, size and time is not seen.
 
 Each choice writes one record, never replaced and never deleted by the box:
 `<state>/first-setup-start-again-choices/<ms>-<attemptId>.json`, holding the choice, the
@@ -1199,20 +1202,26 @@ the record it makes those folders and renames an empty probe folder from each so
 them; a probe that fails with `EXDEV` removes the empty folders it made and refuses
 `setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
 raises the note, renames the pieces (a database's main file last, never over anything) and runs
-A1042's finisher. A plain `waitron.sh reset` keeps the choices and the set-aside folder; `reset
+A1042's finisher. Any failure after the record is written refuses
+`setup.start_again_move_unfinished`, keeping the cause as the error's `reason`, which the route
+does not log; a failure before it (the probe, the list check, the guess counter, the password or
+the record write, for example) keeps its own code. A plain `waitron.sh reset` keeps the choices and the set-aside folder; `reset
 --all` removes them. A backup recovery's check of the box's files skips `first-setup-set-aside` in
 each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
 
 The note floor (owner question Q3, built with its option A): a Move raises the start-again note's
 floor to the newest found file's modification time plus 150 seconds, rounded up to the minute
-(`startAgainSetAsideFloorMs`), and only when the box has a note; with none, nothing is raised. The
-Move option shows that time when it is later than the box's clock.
+(`startAgainSetAsideFloorMs`), and only when the box has a note; with none, nothing is raised, and
+the survey's `noteFloorMs` is null. The Move option shows that time only when the survey has one
+and it is later than the box's clock.
 
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
 recorded Keep from disk. `/recovery-api/status` still reports `setup.start_again_files_found`
 until that next start. After a Move, the answer names the set-aside folder and the process
-restarts once the answer is written, as Retry does. The choice is logged
+restarts once the answer is written, as Retry does. A Move refused
+`setup.start_again_move_unfinished` answers 409 with that code's recovery page and no list or form,
+does not restart, and the process keeps serving that page on `GET /`. The choice is logged
 `recovery.start_again_choice` (the choice, the attempt id and the number of found units) only after
 it has taken effect.
 
@@ -1221,9 +1230,10 @@ The one sentence on this page that says something is removed is the Move choice'
 2026-10-25 15:24 to never suggesting a removal. The choice's words live in their own table,
 `START_AGAIN_PAGE_TEXT`, apart from `OPERATOR_TEXT`. Guard: the case "never suggests deleting in
 the Start again choices, except the one owner-approved sentence" in
-`apps/server/src/recovery-surface.test.ts`, weaker than its name: it reads the two text tables'
-strings, with wider patterns than `OPERATOR_TEXT`'s and `moveDetail` pinned word for word, not the
-rendered page.
+`apps/server/src/recovery-surface.test.ts`, weaker than its name: it reads `START_AGAIN_PAGE_TEXT`'s
+strings in both languages, with `moveDetail` pinned word for word, not the rendered page.
+`OPERATOR_TEXT`'s rows are read by the separate case "never suggests wiping anything, in either
+language", which reads each row's action only, with narrower patterns, never its title.
 
 Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL,
 the last failure's detail, the recorded trigger names, and on the Start again page the found

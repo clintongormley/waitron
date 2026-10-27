@@ -341,9 +341,10 @@ called weaker than its name, the topic file lists what it does not see.
   own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
   S10's defaults, open to the owner).
   `redactSecrets` masks only a password in a URL, which is why no code's params and no logged
-  message may carry a secret. Its one form, for `setup.start_again_files_found`, takes the
-  administrator password over HTTPS only; its Move choice is the owner's one exception to never
-  suggesting a removal (A1098). Guard: the never-delete cases in
+  message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
+  the administrator password over HTTPS only (cost if not: a password sent in plain text on the
+  venue's network); its Move choice is the owner's one exception to never suggesting a removal
+  (A1098). Guard: the never-delete cases in
   `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
   not the page.
 

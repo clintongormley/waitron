@@ -286,6 +286,8 @@ The finisher's refusal then shows the page again with whatever is left. So a cut
 
 **A full disk.** A try's first write is the guess counter (D6), before the password and before the lock. On a full disk that write fails, so the password is not checked and nothing is recorded or moved; the page says the disk is full (`diskFull`). Taking the venue lock writes too (`venue-lock.ts:59-60,88`), and so do the folders, the record and the note. A rename into a new folder may need a block for that folder's list (not measured). A failed write or rename after the record leaves every piece either at its source or at its destination, and the next start resumes.
 
+**Revision 2026-10-27 (Task 12 fix round 1):** every failure after the Move record is written (steps 3–5, the below-a-root `EXDEV` included) refuses `setup.start_again_move_unfinished` with the cause as its reason, and the route answers it 409 with that code's page, no form and no restart, instead of `notFinished` or `notSaved` (Task 8a's table).
+
 ### D5. The choice record: who, when, what, which files
 
 `<state>/first-setup-start-again-choices/<ms>-<attemptId>.json`, written once (an existing name refuses `setup.attempt_conflict`; the module exports no delete), by `writeDurableHostJson`, limit 8 MiB:
