@@ -8,7 +8,6 @@ import {
   validateStartingScreen,
   DEFAULT_PROFILE_CAPABILITIES,
   DEFAULT_DEVICE_PROFILES,
-  defaultProfileName,
 } from "./device-profile.js";
 import { FORM_FACTORS, CAPABILITY_FLAGS } from "./device-types.js";
 
@@ -297,20 +296,8 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
     }
   });
 
-  it("names every entry in both es and en", () => {
-    for (const profile of DEFAULT_DEVICE_PROFILES) {
-      expect(typeof profile.nameByLocale.es).toBe("string");
-      expect(typeof profile.nameByLocale.en).toBe("string");
-      expect(profile.nameByLocale.es!.length).toBeGreaterThan(0);
-      expect(profile.nameByLocale.en!.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("uses the owner-decided Spanish and English names", () => {
-    const byFormFactor = Object.fromEntries(DEFAULT_DEVICE_PROFILES.map((p) => [p.formFactor, p]));
-    expect(byFormFactor.till!.nameByLocale).toEqual({ es: "Mostrador", en: "Counter" });
-    expect(byFormFactor.kds!.nameByLocale).toEqual({ es: "Cocina", en: "Kitchen" });
-    expect(byFormFactor["phone-portrait"]!.nameByLocale).toEqual({ es: "Móvil", en: "Handheld" });
+  it("names each entry in English", () => {
+    expect(DEFAULT_DEVICE_PROFILES.map((p) => p.name)).toEqual(["Counter", "Kitchen", "Handheld"]);
   });
 
   it("seeds the till and handheld with a 300 s inactivity timeout; kds carries none", () => {
@@ -318,23 +305,5 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
     expect(byFormFactor["phone-portrait"]!.inactivityTimeoutSeconds).toBe(300);
     expect(byFormFactor.till!.inactivityTimeoutSeconds).toBe(300);
     expect(byFormFactor.kds!.inactivityTimeoutSeconds ?? null).toBeNull();
-  });
-});
-
-describe("defaultProfileName", () => {
-  const till = DEFAULT_DEVICE_PROFILES.find((p) => p.formFactor === "till")!;
-
-  it("resolves the language subtag of a full invoice-locale tag", () => {
-    expect(defaultProfileName(till, "es-ES")).toBe("Mostrador");
-    expect(defaultProfileName(till, "en-GB")).toBe("Counter");
-  });
-
-  it("is case-insensitive on the language subtag", () => {
-    expect(defaultProfileName(till, "ES-es")).toBe("Mostrador");
-  });
-
-  it("falls back to Spanish for a locale the map does not cover", () => {
-    expect(defaultProfileName(till, "fr-FR")).toBe("Mostrador");
-    expect(defaultProfileName(till, "")).toBe("Mostrador");
   });
 });

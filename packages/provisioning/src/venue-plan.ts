@@ -1,12 +1,9 @@
 import { AppError, assertSupportedLocale } from "@waitron/shared";
-import {
-  DEFAULT_DEVICE_PROFILES,
-  defaultProfileName,
-  type CapabilityFlag,
-  type FormFactor,
-} from "@waitron/layouts";
+import { resolveInstalledStarterLanguages, starterName } from "@waitron/country-packs";
+import { DEFAULT_DEVICE_PROFILES, type CapabilityFlag, type FormFactor } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { resolveFiscalModules } from "./fiscal-modules.js";
+import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
@@ -85,6 +82,7 @@ export type VenueAction =
       province: string;
       timeZone: string;
       dayCutover: string;
+      stationName: string;
     }
   | {
       // Needs seed-admin first: the profiles are authored under the admin's management session.
@@ -101,6 +99,9 @@ export type VenueAction =
   /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
    * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
   | { kind: "seed-module"; module: string; summary: string };
+
+/** The default kitchen station's English name; `src/starter-content.ts` holds its others. */
+export const DEFAULT_STATION_NAME = "Kitchen";
 
 /** Keep the two accepted spellings equal when an existing venue is provisioned again. */
 export function normalizeDayCutover(value: string): string {
@@ -152,6 +153,12 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   const adminLocale =
     request.admin.locale == null ? null : assertSupportedLocale(request.admin.locale);
 
+  const { staffLanguage } = resolveInstalledStarterLanguages({
+    country,
+    area: request.location.province,
+    receiptLocale: locales[0],
+  });
+
   return [
     {
       kind: "ensure-tenant",
@@ -173,7 +180,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     {
       kind: "seed-device-profiles",
       profiles: DEFAULT_DEVICE_PROFILES.map((profile) => ({
-        name: defaultProfileName(profile, locales[0]!),
+        name: starterName(STARTER_PROFILE_NAMES, profile.name, staffLanguage),
         formFactor: profile.formFactor,
         capabilities: profile.capabilities,
         inactivityTimeoutSeconds: profile.inactivityTimeoutSeconds ?? null,
@@ -192,6 +199,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       province: request.location.province,
       timeZone: request.location.timeZone,
       dayCutover,
+      stationName: starterName(STARTER_STATION_NAMES, DEFAULT_STATION_NAME, staffLanguage),
     },
     {
       kind: "create-node",

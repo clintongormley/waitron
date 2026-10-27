@@ -33,7 +33,6 @@ export {
   validateStartingScreen,
   DEFAULT_PROFILE_CAPABILITIES,
   DEFAULT_DEVICE_PROFILES,
-  defaultProfileName,
 } from "./device-profile.js";
 export type { DefaultDeviceProfile } from "./device-profile.js";
 export {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { isAppError } from "@waitron/shared";
+import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 
 const MODULES: readonly WaitronModule[] = [
@@ -76,13 +77,13 @@ describe("planVenue", () => {
     expect(actions[2]?.kind).toBe("seed-device-profiles");
   });
 
-  it("resolves the starter profiles' names from the venue's primary invoice locale (es → Spanish)", () => {
+  it("names the starter profiles in the staff language: the file's es words for an es-ES venue", () => {
     const action = planVenue(request(), MODULES).find((a) => a.kind === "seed-device-profiles");
     expect(action).toEqual({
       kind: "seed-device-profiles",
       profiles: [
         {
-          name: "Mostrador",
+          name: STARTER_PROFILE_NAMES.Counter.es,
           formFactor: "till",
           capabilities: [
             "integrated-card-payment",
@@ -102,13 +103,13 @@ describe("planVenue", () => {
           inactivityTimeoutSeconds: 300,
         },
         {
-          name: "Cocina",
+          name: STARTER_PROFILE_NAMES.Kitchen.es,
           formFactor: "kds",
           capabilities: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
           inactivityTimeoutSeconds: null,
         },
         {
-          name: "Móvil",
+          name: STARTER_PROFILE_NAMES.Handheld.es,
           formFactor: "phone-portrait",
           capabilities: [
             "take-orders",
@@ -124,6 +125,44 @@ describe("planVenue", () => {
         },
       ],
     });
+  });
+
+  it("names the default kitchen station in the staff language: the file's word for es-ES, English for en-GB", () => {
+    const stationName = (invoiceLocales: string[]) => {
+      const action = planVenue(
+        request({ location: { ...request().location, invoiceLocales } }),
+        MODULES,
+      ).find((a) => a.kind === "create-location");
+      return action?.kind === "create-location" && action.stationName;
+    };
+    expect(stationName(["es-ES"])).toBe(STARTER_STATION_NAMES.Kitchen.es);
+    expect(stationName(["en-GB"])).toBe("Kitchen");
+  });
+
+  it.each([
+    [
+      "a Barcelona venue printing receipts in Catalan, which no staff screen shows",
+      "Barcelona",
+      "ca-ES",
+    ],
+    ["a venue given en-US receipts, which only the command line accepts", "Madrid", "en-US"],
+  ])("names the station and profiles in Spanish for %s", (_title, province, receiptLocale) => {
+    const actions = planVenue(
+      request({ location: { ...request().location, province, invoiceLocales: [receiptLocale] } }),
+      MODULES,
+    );
+    const location = actions.find((a) => a.kind === "create-location");
+    const profiles = actions.find((a) => a.kind === "seed-device-profiles");
+    expect(location?.kind === "create-location" && location.stationName).toBe(
+      STARTER_STATION_NAMES.Kitchen.es,
+    );
+    expect(
+      profiles?.kind === "seed-device-profiles" && profiles.profiles.map((p) => p.name),
+    ).toEqual([
+      STARTER_PROFILE_NAMES.Counter.es,
+      STARTER_PROFILE_NAMES.Kitchen.es,
+      STARTER_PROFILE_NAMES.Handheld.es,
+    ]);
   });
 
   it("resolves the starter profiles' names in English for an en venue", () => {
@@ -411,7 +450,7 @@ describe("describeVenueAction", () => {
     expect(lines).toEqual([
       "ensure tenant ES/B12345678 (Deli SL)",
       "seed admin Owner",
-      "seed device profiles Mostrador, Cocina, Móvil",
+      `seed device profiles ${STARTER_PROFILE_NAMES.Counter.es}, ${STARTER_PROFILE_NAMES.Kitchen.es}, ${STARTER_PROFILE_NAMES.Handheld.es}`,
       "create location Mostrador in ES-common (es-ES)",
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",

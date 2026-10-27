@@ -105,16 +105,19 @@ seed and starter content, and tests, in every package and app outside the homes 
 module's screen keeps its translations in its `dashboard/strings.ts`, an app's in
 `apps/<app>/src/i18n/`, and the user guides' Spanish twins live under `apps/server/src/guide/es/`;
 a test that checks the Spanish screen reads the expected text from that file rather than spelling
-it. Starter content a module writes into a new venue is English in its code and translated at setup
-from a translation file in the writing package, `src/starter-content.ts`, keyed by the English. So
-far that holds for the void and comp reasons (`packages/adjustments/src/starter-content.ts`, A918):
-each reason's language map gets the venue's starting content languages (the area's default
-content language, the languages the area requires every venue to keep, then English) that the file
-carries, plus English, and its plain name gets the staff language (the receipt language when the
-staff screens have it, `es-ES` or `en-GB`, otherwise the area's screen language, cut to `es` or
-`en`). The kitchen station, the device profiles, the
-service steps, the seasons, the counter zone, the menu period, the units, and the first menu with
-its root section and home layout are still written from code (A918's open slices).
+it. Starter content Waitron writes into a new venue, from a module's seed or a core setup step, is
+English in its code and translated at setup from a translation file in the writing package,
+`src/starter-content.ts`, keyed by the English. So far that holds for the void and comp reasons
+(`packages/adjustments/src/starter-content.ts`) and for the default kitchen station and the device
+profiles (`packages/provisioning/src/starter-content.ts`), A918. A language map, such as a reason's
+names, gets the venue's starting content languages (the area's default content language, the
+languages the area requires every venue to keep, then English) that the file carries, plus
+English. A field holding one name, such as a reason's plain name, the station's or a profile's,
+gets the staff language: the receipt language when the staff screens have it, `es-ES` or `en-GB`,
+otherwise the area's screen language, cut to `es` or `en`. So a file of one-name rows carries only
+the staff languages other than English (`es`). The service steps, the seasons, the counter zone,
+the menu period, the units, and the first menu with its root section and home layout are still
+written from code (A918's open slices).
 
 **What it cost.** A758-1 (branch `feat/a758-1-reason-rules`) seeded the starter reasons «Cambio del
 cliente» and «Queja del cliente» from `packages/adjustments/src/provisioning.ts`. The push hook's
@@ -4473,10 +4476,10 @@ text official only in Spain, Spanish-specific terms, and Spain-only printed text
 official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and
 demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
 Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
-Module starter content is English in code and translated at setup; its words in other languages
-go in the writing package's `src/starter-content.ts`, which the guard skips by exact path (owner,
-2026-10-20, A918); a test of a non-English
-screen reads its expected text from the strings file. A Spanish domain term
+Starter content (module seeds, core setup) is English in code and translated at setup; its words
+in other languages go in the writing package's `src/starter-content.ts`, which the guard skips by
+exact path (owner, 2026-10-20, A918); a test of a non-English screen reads its expected text from
+the strings file. A Spanish domain term
 has one declaring home, its module's vocabulary; a fiscal term never goes in the base list. Guard:
 `scripts/english-only.test.ts`, weaker than its name — it refuses only listed words, scans only
 the packages `GENERIC_PACKAGES` names and never `apps/*`, so review greps the diff. Detail:

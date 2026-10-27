@@ -1378,7 +1378,7 @@ describe("reader adoption and local management", () => {
       const [row] = await suite.db
         .insert(deviceProfiles)
         .values({
-          name: nextName(profile.nameByLocale.es!),
+          name: nextName(profile.name),
           formFactor: profile.formFactor,
           capabilities: profile.capabilities,
         })
