@@ -78,6 +78,11 @@ describe("readStarterStaffLanguage", () => {
 
   it("answers en for a location that does not exist", async () => {
     await seedTenant(db);
+    await db.insert(locations).values({
+      name: "Another venue",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+    });
     const cfg = { locationId: brandLocationId(randomUUID()) };
     expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx, cfg))).toBe("en");
   });
