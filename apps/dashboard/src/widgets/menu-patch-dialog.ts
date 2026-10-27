@@ -276,6 +276,9 @@ export class MenuPatchDialog extends LitElement {
    * the error belongs under. A value with an error is not staged. */
   #typed = new Map<string, Typed>();
   #watching: string | null = null;
+  /** A live version or language change that arrived while a patch was being sent. Applying it then
+   * could drop a change the answer's refusal still has to place, so it waits for the answer. */
+  #held: { answer: LiveMenu | null } | null = null;
   #scope: DraftScope<MenuPatchChange[]> | undefined;
   /** Replaced whenever the dialog opens or closes, so an answer to an earlier opening is ignored. */
   #session = {};
@@ -302,7 +305,9 @@ export class MenuPatchDialog extends LitElement {
     this.addController({
       hostConnected: () => {
         unsubscribe = subscribeContentLanguages(() => {
-          if (this.live !== null) this.#applyLive(this.live);
+          if (this.live === null) return;
+          if (this.busy) this.#held ??= { answer: this.live };
+          else this.#applyLive(this.live);
         });
       },
       hostDisconnected: () => unsubscribe!(),
@@ -336,6 +341,7 @@ export class MenuPatchDialog extends LitElement {
     this.reloadFailure = null;
     this.dropped = 0;
     this.queued = [];
+    this.#held = null;
     this.#draft = null;
     this.#typed = new Map();
     this.#scope?.dispose();
@@ -383,6 +389,10 @@ export class MenuPatchDialog extends LitElement {
   }
 
   #applyLive(answer: LiveMenu | null): void {
+    if (this.busy) {
+      this.#held = { answer };
+      return;
+    }
     if (answer === null) {
       this.notPublished = true;
       return;
@@ -463,6 +473,10 @@ export class MenuPatchDialog extends LitElement {
     this.busy = false;
     if ("error" in outcome) {
       await this.#refused(outcome.error, sent);
+      if (this.#held === null) return;
+      const { answer } = this.#held;
+      this.#held = null;
+      this.#applyLive(answer);
       return;
     }
     this.#scope!.commit(submitted);

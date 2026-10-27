@@ -1249,3 +1249,70 @@ it("drops and counts a change the venue's new content languages refuse, as they 
     "1 change no longer fits the live version and was dropped.",
   );
 });
+
+it("shows a refusal for a change the venue's content languages drop while it is being sent", async () => {
+  const document = lunch();
+  const drinks = document.root.members[1] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  drinks.names = { en: "Bar", es: "Bebidas" };
+  drinks.fixed = { names: { en: "Bar" } };
+  let refuse!: (error: Error) => void;
+  const el = await mount(
+    stubApi({
+      getLiveMenu: vi.fn(async () => live(3, document)),
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    }),
+  );
+  const failures: unknown[] = [];
+  const record = (event: PromiseRejectionEvent) => {
+    event.preventDefault();
+    failures.push(event.reason);
+  };
+  window.addEventListener("unhandledrejection", record);
+  try {
+    await pick(el, "Drinks");
+    await type(el, "wt-input", "names-es", "Copas");
+    await press(el, "review");
+    await press(el, "put-live");
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await el.updateComplete;
+    refuse(refusal("menu_patch.invalid", { change: 0, field: "names" }));
+    await flush(el);
+    await flush(el);
+    expect(failures).toEqual([]);
+    expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+    expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Drinks");
+    expect(bottomMessage(el)).toBe("Correct the fields marked on Drinks to continue.");
+  } finally {
+    window.removeEventListener("unhandledrejection", record);
+  }
+});
+
+it("moves onto a newer live version that arrives while a patch is being sent, once it is refused", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4));
+  let refuse!: (error: Error) => void;
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await pick(el, "Salad");
+  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await press(el, "review");
+  await press(el, "put-live");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(modal(el).heading).toBe("Patch version 3 of Lunch Menu");
+  refuse(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+});
