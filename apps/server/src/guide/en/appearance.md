@@ -193,8 +193,8 @@ rather than one that may be the wrong one.
 Below the choices and the preview, the editor has a section headed **Advanced: set colours by
 hand**. It starts closed each time the editor opens, and its closed line says what is set by hand:
 "None set by hand. Waitron works out every colour and text size.", or a count and the colours'
-names, such as "2 set by hand: Page (light), Text (light)". While colours set by hand are hard to
-read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
+names, such as "2 set by hand: Page (light), Text (light)". While colours or text sizes set by hand
+are hard to read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
 heading to open it.
 
 Inside, a row for each of the theme's colours gives its value on light screens and on dark
@@ -268,7 +268,7 @@ and closes the editor. **Back** leaves you in the editor with nothing saved, ask
 changed anything in the dialog. The rules for a name are under "Name a theme" below.
 
 When something is still hard to read, Save first opens the **Hard to read** dialog, with one line
-for each colour that is. It offers three choices:
+for each colour or text size that is. It offers three choices:
 
 - **Back** returns you to the editor with nothing saved.
 - **Save anyway** saves the colours as you chose them.
@@ -276,8 +276,8 @@ for each colour that is. It offers three choices:
   would leave no warning at all.
 
 Where Save asks for a name, **Save anyway** and **Fix and save** open the name dialog rather than
-saving at once. While its switch is on, the name dialog lists the colours that are still hard to
-read, so you see them before the theme goes on every screen.
+saving at once. While its switch is on, the name dialog lists the colours and text sizes that are
+still hard to read, so you see them before the theme goes on every screen.
 
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
 once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
@@ -293,8 +293,8 @@ is still hard to read, so the next person who opens the page sees it too.
 While you edit one of the venue's own themes, the editor also offers **Save as new theme…**. It
 opens the name dialog with the theme's name followed by "(copy)", stores your choices under the name
 you give, leaves the theme you were editing as it was last saved, and closes the editor. Its **Use
-it on every screen now** switch starts on when the theme you are editing is in use. When a colour is
-still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
+it on every screen now** switch starts on when the theme you are editing is in use. When a colour or
+text size is still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
 tells you under the field when a colour code you typed is not valid, and saves nothing until you fix
 it.
 

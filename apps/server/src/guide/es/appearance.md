@@ -216,7 +216,7 @@ Debajo de las elecciones y de la vista previa, el editor tiene una sección titu
 fijar colores a mano**. Empieza cerrada cada vez que se abre el editor, y su línea cerrada dice qué
 está fijado a mano: «Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.»,
 o un recuento y los nombres de los colores, por ejemplo «2 fijados a mano: Página (versión clara),
-Texto (versión clara)». Mientras haya colores fijados a mano que se leen mal, la línea añade
+Texto (versión clara)». Mientras haya colores o tamaños de texto fijados a mano que se leen mal, la línea añade
 cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». Pulsa el título para
 abrirla.
 
@@ -294,7 +294,7 @@ sin guardar nada, y antes te lo pregunta si cambiaste algo en el diálogo. Las r
 «Pon nombre a un tema», más abajo.
 
 Si algo sigue leyéndose mal, Guardar abre primero el diálogo **Difícil de leer**, con una línea por
-cada color afectado. Ofrece tres opciones:
+cada color o tamaño de texto afectado. Ofrece tres opciones:
 
 - **Volver** te devuelve al editor sin guardar nada.
 - **Guardar de todos modos** guarda los colores tal como los elegiste.
@@ -303,7 +303,7 @@ cada color afectado. Ofrece tres opciones:
 
 Cuando Guardar pide un nombre, **Guardar de todos modos** y **Corregir y guardar** abren el diálogo
 del nombre en lugar de guardar al momento. Mientras su interruptor está activado, el diálogo del
-nombre muestra los colores que siguen leyéndose mal, para que los veas antes de que el tema llegue
+nombre muestra los colores y tamaños de texto que siguen leyéndose mal, para que los veas antes de que el tema llegue
 a todas las pantallas.
 
 Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
@@ -322,7 +322,7 @@ Mientras editas uno de los temas propios del local, el editor ofrece también **
 nuevo…**. Abre el diálogo del nombre con el nombre del tema seguido de «(copia)», guarda tus
 elecciones con el nombre que le des, deja el tema que estabas editando tal como se guardó por última
 vez y cierra el editor. Su interruptor **Usarlo ya en todas las pantallas** empieza activado cuando
-el tema que editas está en uso. Si algún color sigue leyéndose mal, primero aparece el diálogo
+el tema que editas está en uso. Si algún color o tamaño de texto sigue leyéndose mal, primero aparece el diálogo
 **Difícil de leer**, igual que con Guardar. Como Guardar, te indica debajo del campo si un código de
 color que escribiste no es válido, y no guarda nada hasta que lo corriges.
 

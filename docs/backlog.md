@@ -2982,8 +2982,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 9b landed 2026-10-27 (#2119): the Look card shows how the logo prints, and says when it
   prints blank.
   Slice 11a landed 2026-10-27 (#PR): a theme stores a typeface, text sizes and weights set by hand,
-  checked on save and import; every screen draws them, while the equipment label, the recovery sheet and Google's
-  sign-in button keep Waitron's type; a size drawn under 12 px is counted as hard
+  checked on save and import; the dashboard, the tills and the setup screens draw them, while the equipment label and
+  the recovery sheet keep Waitron's type, Google's sign-in button keeps Google's, and the server's
+  own pages, such as the help guide, take no theme; a size drawn under 12 px is counted as hard
   to read, and every bold, heading and table header draws the theme's Bold weight — headings on the
   dashboard, the tills and the setup screens now draw 600, not the browser's 700.
   Next: 11b, 12 and 14 (14 with A1096's last part, below).

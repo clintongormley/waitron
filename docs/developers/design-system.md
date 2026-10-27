@@ -88,9 +88,10 @@ light. Both are pinned in `packages/ui-core/src/tokens/colors.test.ts`. The dash
 inside its own (`applyTokens(document.documentElement)`, `apps/dashboard/src/main.ts:26`): the
 Appearance page's preview makes each of its two panels one inside its shadow root, with
 `data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the equipment
-label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:43-45`). The label and the
-recovery sheet take their type from Waitron's own token file (`WAITRON_DEFAULTS.structure`), never
-from the page, so a venue's text size, typeface and weights do not reach paper.
+label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:43-45`). The label takes
+its typeface, sizes and Bold weight, and the recovery sheet its typeface and sizes, from Waitron's
+own token file (`WAITRON_DEFAULTS.structure`), never from the page; the sheet sets no weight, so it
+draws the browser's own. A venue's text size, typeface and weights therefore do not reach paper.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
