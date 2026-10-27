@@ -53,9 +53,9 @@ describe("recipe composition and allergen derivation", () => {
     expect(await fx.db.select().from(products).where(eq(products.id, productId))).toEqual(before);
   });
 
-  it("derives a product's allergens from its ingredients (the alioli scenario)", async () => {
+  it("derives a product's allergens from its ingredients (the aioli scenario)", async () => {
     const published = await withTransaction(fx.db, async (tx) => {
-      const alioli = await createIngredient(tx, {
+      const aioli = await createIngredient(tx, {
         name: "alioli",
         allergens: { eggs: {} },
       });
@@ -63,7 +63,7 @@ describe("recipe composition and allergen derivation", () => {
         name: "bread",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
-      await setProductRecipe(tx, productId, [alioli.id, bread.id]);
+      await setProductRecipe(tx, productId, [aioli.id, bread.id]);
       const [row] = await tx
         .select({ a: products.allergens })
         .from(products)
@@ -83,14 +83,13 @@ describe("recipe composition and allergen derivation", () => {
 
   it("propagates an ingredient's allergen change to every product using it", async () => {
     const before = await withTransaction(fx.db, async (tx) => {
-      const alioli = await createIngredient(tx, { name: "alioli" }); // unreviewed
-      await setProductRecipe(tx, productId, [alioli.id]);
+      const aioli = await createIngredient(tx, { name: "alioli" }); // unreviewed
+      await setProductRecipe(tx, productId, [aioli.id]);
       const [r] = await tx
         .select({ a: products.allergens })
         .from(products)
         .where(eq(products.id, productId));
-      // tag alioli AFTER it is already in the recipe:
-      await updateIngredient(tx, alioli.id, { allergens: { eggs: {} } });
+      await updateIngredient(tx, aioli.id, { allergens: { eggs: {} } });
       return r!.a;
     });
     expect(before).toBeNull(); // was PENDING before the ingredient was tagged

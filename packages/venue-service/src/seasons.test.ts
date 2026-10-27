@@ -273,7 +273,7 @@ async function autumnVenue() {
       cfg,
       restaurant,
       bar,
-      terraza: zone!.id,
+      terrace: zone!.id,
       breakfast,
       dinner,
       ...ids,
@@ -307,9 +307,9 @@ const restaurantWeek = (v: AutumnVenue, seasonId: string) =>
   scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.restaurant])).then((weeks) =>
     weeks.get(v.restaurant)?.get(seasonId),
   );
-const terrazaWeek = (v: AutumnVenue, seasonId: string) =>
-  scoped((tx) => readZoneSeasonWeeks(tx, v.cfg, [v.terraza])).then((weeks) =>
-    weeks.get(v.terraza)?.get(seasonId),
+const terraceWeek = (v: AutumnVenue, seasonId: string) =>
+  scoped((tx) => readZoneSeasonWeeks(tx, v.cfg, [v.terrace])).then((weeks) =>
+    weeks.get(v.terrace)?.get(seasonId),
   );
 const THREE = [
   { name: "Autumn", startsOn: "09-01" },
@@ -521,7 +521,7 @@ describe("saveSeasons", () => {
     });
     expect(await seasonOnDay(v, "2030-12-20")).toBe(christmas.id);
     expect(await restaurantWeek(v, christmas.id)).toEqual(v.winterWeek);
-    expect(await terrazaWeek(v, christmas.id)).toEqual(v.zoneWeek);
+    expect(await terraceWeek(v, christmas.id)).toEqual(v.zoneWeek);
     // By value: emptying Winter leaves the copy alone.
     await scoped((tx) => writeDepartmentSeasonWeeks(tx, v.restaurant, [v.winter], EMPTY_WEEK()));
     expect(await restaurantWeek(v, christmas.id)).toEqual(v.winterWeek);
@@ -533,7 +533,7 @@ describe("saveSeasons", () => {
     const mid = saved.find((season) => season.startsOn === "10-01")!;
     expect(mid.name).toBe("Mid autumn");
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
-    expect(await terrazaWeek(v, mid.id)).toEqual(v.zoneWeek);
+    expect(await terraceWeek(v, mid.id)).toEqual(v.zoneWeek);
     expect(
       (await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.bar]))).get(v.bar)?.get(mid.id),
     ).toEqual(EMPTY_WEEK());
@@ -594,7 +594,7 @@ describe("saveSeasons", () => {
   it("gives the first season's days to the last one when the first is deleted, and removes its weeks", async () => {
     const v = await autumnVenue();
     expect(await seasonOnDay(v, "2030-09-15")).toBe(v.autumn);
-    expect(await terrazaWeek(v, v.autumn)).toEqual(v.zoneWeek);
+    expect(await terraceWeek(v, v.autumn)).toEqual(v.zoneWeek);
     await change(v, { delete: [v.autumn] });
     expect(await seasonOnDay(v, "2030-09-15")).toBe(v.winter);
     expect(await seasonsOf(v)).toEqual(THREE.slice(1));
@@ -699,11 +699,11 @@ describe("saveSeasons", () => {
       { id: advent.id, name: "Advent", startsOn: "11-20", colour: "purple" },
     ]);
     expect(await restaurantWeek(v, advent.id)).toEqual(EMPTY_WEEK());
-    expect(await terrazaWeek(v, advent.id)).toBeUndefined();
+    expect(await terraceWeek(v, advent.id)).toBeUndefined();
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(saved);
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await restaurantWeek(v, early.id)).toEqual(v.winterWeek);
-    expect(await terrazaWeek(v, early.id)).toEqual(v.zoneWeek);
+    expect(await terraceWeek(v, early.id)).toEqual(v.zoneWeek);
     const barWeeks = (await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.bar]))).get(
       v.bar,
     );
@@ -789,7 +789,7 @@ describe("saveSeasons", () => {
       { name: "Christmas", startsOn: "12-20" },
     ]);
     expect(await restaurantWeek(v, christmas.id)).toEqual(v.winterWeek);
-    expect(await terrazaWeek(v, christmas.id)).toEqual(v.zoneWeek);
+    expect(await terraceWeek(v, christmas.id)).toEqual(v.zoneWeek);
   });
 
   it("temporaryStart gives 365 distinct values no real start can equal and the table accepts", () => {
