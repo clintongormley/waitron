@@ -6,7 +6,15 @@ import {
   currentContentLanguages,
   visuallyHiddenStyles,
 } from "@waitron/ui";
-import { MONEY_SCALE, decimal, toScale, type AppError } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  decimal,
+  foldForSearch,
+  textSearch,
+  toScale,
+  type AppError,
+  type TextSearch,
+} from "@waitron/shared";
 import { parseMenuPatch, patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
 import { PATCH_FIELDS } from "@waitron/catalogue/src/menu-patch-types.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
@@ -23,7 +31,7 @@ import type {
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
   languageText,
@@ -59,10 +67,33 @@ function refusalText(field: string, error: unknown): string {
   );
 }
 
-function matching(nodes: readonly PatchTreeNode[], words: string): PatchTreeNode[] {
+interface Typed {
+  value: unknown;
+  error: string;
+  language: string | null;
+}
+
+/** The first language whose text alone the patch refuses. The patch checks each language's text on
+ * its own, so a refused value has one. */
+function refusedLanguage(
+  target: MenuPatchTarget,
+  field: string,
+  value: Record<string, string>,
+): string {
+  return Object.keys(value).find((language) => {
+    try {
+      parseMenuPatch([{ target, field, value: { [language]: value[language] } }]);
+      return false;
+    } catch {
+      return true;
+    }
+  })!;
+}
+
+function matching(nodes: readonly PatchTreeNode[], search: TextSearch): PatchTreeNode[] {
   return nodes.flatMap((node) => {
-    if (node.label.toLocaleLowerCase().includes(words)) return [node];
-    const children = matching(node.children, words);
+    if (search.rank(foldForSearch(node.label)) !== undefined) return [node];
+    const children = matching(node.children, search);
     return children.length === 0 ? [] : [{ ...node, children }];
   });
 }
@@ -192,9 +223,11 @@ export class MenuPatchDialog extends LitElement {
 
   #draft: MenuPatchDraft | null = null;
   /** What each field shows, keyed `<target key>/<field>`, once the person has edited it: their own
-   * text, so a refresh never replaces it, with its error. A value with an error is not staged. */
-  #typed = new Map<string, { value: unknown; error: string }>();
+   * text, so a refresh never replaces it, with its error and, for a translated field, the language
+   * the error belongs under. A value with an error is not staged. */
+  #typed = new Map<string, Typed>();
   #watching: string | null = null;
+  #taxCache: { key: string; options: { value: string; label: string }[] } | null = null;
   #imageApi: { api: DashboardApi; uploader: ImageUploader } | null = null;
 
   readonly #queries = new DashboardQueries(
@@ -249,12 +282,30 @@ export class MenuPatchDialog extends LitElement {
         this.notPublished = false;
         if (this.#draft === null)
           this.#draft = new MenuPatchDraft(answer.document, currentContentLanguages());
-        else this.#draft.rebase(answer.document);
+        else {
+          this.#draft.rebase(answer.document);
+          this.#forgetSettled();
+        }
         this.live = answer;
       });
     } catch {
       // The query's error callback has already recorded the failure.
     }
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // The query controller released the watch when the dialog left the page; the draft stays.
+    if (this.#watching !== null) void this.#load(this.#watching);
+  }
+
+  /** After a rebase, a field neither staged nor refused shows the newer live value again. */
+  #forgetSettled(): void {
+    const staged = new Set(
+      this.#draft!.changes().map((change) => `${targetKey(change.target)}/${change.field}`),
+    );
+    for (const [key, typed] of this.#typed)
+      if (typed.error === "" && !staged.has(key)) this.#typed.delete(key);
   }
 
   #close(): void {
@@ -292,10 +343,16 @@ export class MenuPatchDialog extends LitElement {
             ? toScale(decimal(checked!.value as string), MONEY_SCALE)
             : checked!.value,
       });
-      this.#typed.set(key, { value: raw, error: "" });
+      this.#typed.set(key, { value: raw, error: "", language: null });
     } catch (error) {
-      draft.set({ target, field, value: this.#liveValue(target, field) });
-      this.#typed.set(key, { value: raw, error: refusalText(field, error) });
+      draft.clear(target, field);
+      this.#typed.set(key, {
+        value: raw,
+        error: refusalText(field, error),
+        language: TRANSLATED.has(field)
+          ? refusedLanguage(target, field, value as Record<string, string>)
+          : null,
+      });
     }
     this.requestUpdate();
   }
@@ -305,10 +362,17 @@ export class MenuPatchDialog extends LitElement {
   }
 
   get #taxes() {
-    return VAT_CLASSES.map((id) => ({
-      value: id,
-      label: `${vatClassName(id)} (${vatRateOn(id, localToday()).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`,
-    }));
+    const today = localToday();
+    const key = `${currentLocale()}/${today}`;
+    if (this.#taxCache?.key !== key)
+      this.#taxCache = {
+        key,
+        options: VAT_CLASSES.map((id) => ({
+          value: id,
+          label: `${vatClassName(id)} (${vatRateOn(id, today).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`,
+        })),
+      };
+    return this.#taxCache.options;
   }
 
   get #uploader(): ImageUploader {
@@ -350,8 +414,8 @@ export class MenuPatchDialog extends LitElement {
       </div>`;
     if (this.live === null) return nothing;
     const tree = patchTree(this.live.document, t("menu_patch.lists"));
-    const words = this.search.trim().toLocaleLowerCase();
-    const shown = words === "" ? tree : matching(tree, words);
+    const search = textSearch(this.search);
+    const shown = search === undefined ? tree : matching(tree, search);
     const picked = this.picked === null ? undefined : findNode(tree, this.picked);
     return html`<div class="layout">
       <div class="side">
@@ -457,14 +521,16 @@ export class MenuPatchDialog extends LitElement {
 
   #renderField(target: MenuPatchTarget, field: string): TemplateResult {
     const value = this.#shown(target, field);
-    const error = this.#typed.get(`${targetKey(target)}/${field}`)?.error ?? "";
+    const typed = this.#typed.get(`${targetKey(target)}/${field}`);
+    const error = typed?.error ?? "";
     const languages = currentContentLanguages();
     const name = INPUT_NAMES[field];
+    const errorKey =
+      typed === undefined || typed.language === null ? name : `${name}-${typed.language}`;
     const context: FieldContext = {
       busy: false,
       locales: languages.languages,
-      // A translated value is refused as a whole, so its error shows under the first language.
-      error: (key) => (key === name || key === `${name}-${languages.languages[0]}` ? error : ""),
+      error: (key) => (key === errorKey ? error : ""),
     };
     const change = (next: unknown) => this.#change(target, field, next);
     switch (field) {

@@ -305,6 +305,19 @@ describe("MenuPatchDraft", () => {
     expect(draft.changes()).toEqual([change]);
   });
 
+  it("clears one field's change and leaves the others", () => {
+    const draft = new MenuPatchDraft(lunch(), languages);
+    draft.set({ target: soup, field: "price", value: "3.50" });
+    draft.set({ target: soup, field: "name", value: "Broth" });
+    draft.clear(soup, "price");
+    expect(draft.changes()).toEqual([{ target: soup, field: "name", value: "Broth" }]);
+    expect(draft.changed(soup)).toBe(true);
+    draft.clear(soup, "name");
+    draft.clear(soup, "name");
+    expect(draft.changes()).toEqual([]);
+    expect(draft.changed(soup)).toBe(false);
+  });
+
   it("keeps a value the patch would refuse, so the form can say what is wrong", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
     draft.set({ target: soup, field: "name", value: "  " });

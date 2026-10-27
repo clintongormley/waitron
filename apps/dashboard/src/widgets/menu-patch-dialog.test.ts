@@ -220,6 +220,14 @@ it("narrows the tree to the items whose name matches the search, keeping their p
   );
 });
 
+it("finds a name whatever its accents", async () => {
+  const el = await mount(
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, lunch("Sopa de calabacín"))) }),
+  );
+  await type(el, "wt-input", "search", "calabacin");
+  expect(treeLabels(el)).toEqual(["Starters", "Sopa de calabacín"]);
+});
+
 it("asks for an item to be picked before showing any form", async () => {
   const el = await mount();
   expect(form(el)).toBeNull();
@@ -366,13 +374,14 @@ it("shows a price the patch refuses under the field", async () => {
   expect(el.changes).toEqual([]);
 });
 
-it("shows a translated name the patch refuses under its first language", async () => {
+it("shows a translated name the patch refuses under the language that breaks it", async () => {
   const el = await mount();
   await pick(el, "Soup");
   await type(el, "wt-input", "customer-name-es", "x".repeat(4097));
-  expect(field(el, "wt-input", "customer-name-en").error).toBe(
+  expect(field(el, "wt-input", "customer-name-es").error).toBe(
     codeMessage("content.translation_invalid"),
   );
+  expect(field(el, "wt-input", "customer-name-en").error).toBe("");
   expect(el.changes).toEqual([]);
 });
 
@@ -465,6 +474,74 @@ it("keeps staged changes and what is being typed when a newer live version arriv
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
   expect(field(el, "wt-input", "name").value).toBe("");
   expect(field(el, "wt-input", "name").error).toBe("Enter a name.");
+});
+
+it("shows a newer live value in a field set back to the live one", async () => {
+  const data = new LiveData();
+  const newer = lunch();
+  newer.offers["mi-soup"]!.unitPrice = "3.50";
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4, newer));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await type(el, "wt-price-input", "price", "3");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(field(el, "wt-price-input", "price").value).toBe("3.50");
+  expect(el.changes).toEqual([]);
+});
+
+it("forgets the typing behind a change a newer version drops", async () => {
+  const data = new LiveData();
+  const newer = lunch();
+  newer.offers["mi-soup"]!.offeredModifiers = [];
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3))
+    .mockResolvedValueOnce(live(4, newer))
+    .mockResolvedValueOnce(live(5));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Toppings");
+  await type(el, "wt-input", "name", "Add-ons");
+  await pick(el, "Soup");
+  await type(el, "wt-input", "name", "Broth");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(el.changes).toEqual([{ target: soup, field: "name", value: "Broth" }]);
+  expect(field(el, "wt-input", "name").value).toBe("Broth");
+  expect(treeLabels(el)).not.toContain("Toppings");
+  data.invalidate([{ type: "menu_versions", id: "v-5" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu"));
+  await pick(el, "Toppings");
+  expect(field(el, "wt-input", "name").value).toBe("Toppings");
+});
+
+it("keeps following the live menu, and its staged changes, when moved on the page", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValueOnce(live(4));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  const parent = el.parentElement!;
+  el.remove();
+  parent.append(el);
+  await flush(el);
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+});
+
+it("gives the VAT field the same options on every redraw until the language changes", async () => {
+  const el = await mount();
+  await pick(el, "Soup");
+  const tax = () => form(el).querySelector("wt-combobox")!;
+  const first = tax().options;
+  await type(el, "wt-input", "name", "Broth");
+  expect(tax().options).toBe(first);
+  setLocale("es");
+  await el.updateComplete;
+  expect(tax().options).not.toBe(first);
+  expect(tax().options.map((option) => option.label)[1]).toContain("Reducido");
 });
 
 it("says so when the menu has never been published", async () => {

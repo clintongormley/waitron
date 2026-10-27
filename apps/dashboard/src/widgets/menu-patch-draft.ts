@@ -201,6 +201,11 @@ export class MenuPatchDraft {
     else this.stage(change);
   }
 
+  /** Takes back the field's change, if it has one. */
+  clear(target: MenuPatchTarget, field: string): void {
+    this.unstage(`${targetKey(target)}/${field}`);
+  }
+
   changes(): MenuPatchChange[] {
     return [...this.staged.values()];
   }
