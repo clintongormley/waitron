@@ -177,10 +177,10 @@ These are reading receipts at the checkpoint, not runtime qualifications:
   apps/till/dist`. The new checker examines JS chunks recursively and fails missing/empty output, missing `Waitron Demo S.L.` **in either app**, or presence of `Croquetes de pernil` in either app. Its
   unit controls cover all three failures and a valid two-app output. In a disposable candidate, expose a consumed dish through main and show the real build/check fails; remove the identity marker and
   show the opposite check fails; restore and rebuild/check both.
-- [ ] Run `pnpm --filter @waitron/server build` to check secondary exports in the Node bundle. If `docker info` succeeds, build with `docker build -f deploy/Dockerfile -t waitron:a972-cut1 .`, then
+- [x] Run `pnpm --filter @waitron/server build` to check secondary exports in the Node bundle. If `docker info` succeeds, build with `docker build -f deploy/Dockerfile -t waitron:a972-cut1 .`, then
   inspect the copied folder and run an installed-media seed smoke in a throwaway venue. If unavailable, record the exact command/error and explicitly leave image build/runtime unqualified; source-root
   tests and Dockerfile text assertions do not qualify an image. Required image CI must still finish on this head.
-- [ ] **8. Finish the cut:** Keep `apps/server/test-durations.json` aligned with moved/retained/new server test paths; regenerate measured values from actual server CI logs with `node
+- [x] **8. Prepare the cut for finishing:** Keep `apps/server/test-durations.json` aligned with moved/retained/new server test paths; regenerate measured values from actual server CI logs with `node
   scripts/test-durations.mjs apps/server/test-durations.json <saved-server-log>`, not invented measurements. Run focused `scripts/vitest-duration-sequencer.test.mjs` if the table changes. Update
   current path claims and backlog residuals. Review changed checks, stage explicit paths, `git commit -s -m "refactor: move Spanish demo data into its country pack"`, then the common finish protocol
   below.
@@ -458,3 +458,15 @@ The earlier byte comparison of regenerated and committed pictures applied to
 local Node 26.11.1. With Node 26.12.1, compression changes more file digests while
 the decoded-pixel difference still names only Negroni. The separate committed
 Negroni regeneration policy remains open.
+
+### Cut 1 measured shard weights — 2026-10-27
+
+Successful server jobs in CI run `40577336045`, for source head
+`9a6e2a59551e710bd335142a68173cb4ef34718a`, supplied the refreshed
+weights for this cut's fourteen new or changed server suites. The new media-path,
+Madrid baseline and semantic-reader suites measured 3.7, 13.5 and 3.5 seconds.
+`scripts/test-durations.mjs` extracted the hosted measurements; unrelated table
+entries retain their earlier estimates. The focused duration-sequencer guard
+passes all twenty cases. This metadata change retains the completed Claude
+review. Final current-head coverage, image and landing results are recorded in
+the cut's pull request and campaign ledger.
