@@ -574,7 +574,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   page does.
 
 - **Periods and staff roles pick from thirteen calendar colours, in rainbow order (owner,
-  2026-10-17, option (a) of the A753 swatch board, `docs/backlog/mockups/a753-calendar-colours/`).**
+  2026-10-17, option (a) of the A753 swatch board).**
   Red, orange, amber, lime, green, teal, cyan, blue, indigo, purple, pink, brown, grey
   (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts`). The order is the board's; it
   is the order the colour panel shows and the order a new period or staff role takes the first

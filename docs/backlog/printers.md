@@ -660,9 +660,6 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
     language, in words and in numbers.
   - When the right-hand value does not fit beside the end of the left-hand text, it drops to a
     right-aligned line of its own, as before (`labelAmountLines`, `packages/printing/src/layout.ts`).
-    Pictures, drawn from the code: [simplified receipt](mockups/a754-receipt-date-line/1-simplified-receipt.png),
-    [long numbers on 58 mm paper](mockups/a754-receipt-date-line/2-long-numbers-58mm.png) and
-    [captioned rows and the full invoice](mockups/a754-receipt-date-line/3-captioned-and-full-invoice.png).
     The printer's sample receipt (`apps/server/src/sample-receipt.ts`) keeps its Spanish «Mesa 6»
     and «Café y tostada» on a receipt in another language: they are internal sample values (owner).
 

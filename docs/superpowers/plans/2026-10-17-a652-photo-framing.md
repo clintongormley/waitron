@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Lit, existing `wt-modal`, `wt-slider`, file field and buttons, sharp, Drizzle SQLite migrations, Vitest Chromium and axe. No new dependency or lockfile change.
 
-**Spec:** [A652 backlog detail](../../backlog/catalogue.md#a652--frame-a-photo-for-its-thumbnails), [backlog entry](../../backlog.md), both [mockup boards](../../backlog/mockups/a652-photo-framing/), the owner's decisions recorded there. Text takes precedence over illustrative board styling.
+**Spec:** [A652 backlog detail](../../backlog/catalogue.md#a652--frame-a-photo-for-its-thumbnails), [backlog entry](../../backlog.md), the owner's decisions recorded there.
 
 ## Global Constraints
 

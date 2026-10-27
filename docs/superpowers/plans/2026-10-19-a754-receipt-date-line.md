@@ -150,8 +150,7 @@ tree): simplified everyday 80 mm and 58 mm in Spanish and Catalan, a short (`Mes
 (`Terraza 12`) table; the captioned shape on both papers; a 58 mm everyday receipt with a long number;
 full invoice 80 mm, 58 mm and A4. Add: a restored series' number (`T-S123456/123`) and an emergency
 one on 58 mm; long labels `Terraza interior 12` and `Ana · Mesa 4, 5`; the Catalan captioned shape on
-58 mm. Sheet into PNGs for the owner question (decision 9). Nothing committed but the PNGs under
-`docs/backlog/mockups/a754-receipt-date-line/`.
+58 mm. Sheet into PNGs for the owner question (decision 9). Nothing committed but the PNGs.
 
 ## Task 4 — docs
 

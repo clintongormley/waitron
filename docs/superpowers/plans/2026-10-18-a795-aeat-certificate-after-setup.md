@@ -27,8 +27,7 @@ own migration set record every install (append-only) and every reminder email.
 real Chromium), node-forge for test certificates.
 
 **Spec:** [2026-10-18-a795-aeat-certificate-after-setup-design.md](../specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)
-(read all of it; §3, §5, §7 and §8 are what the tasks implement). Mockups:
-[`docs/backlog/mockups/a795-aeat-certificate/`](../../backlog/mockups/a795-aeat-certificate/).
+(read all of it; §3, §5, §7 and §8 are what the tasks implement).
 Plan review folded in: `/Users/clintongormley/waitron-campaign/item-a795-plan-review.md` (3 HIGH,
 6 MEDIUM, 14 LOW), with the controller's rulings.
 

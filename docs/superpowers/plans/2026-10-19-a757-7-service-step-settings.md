@@ -44,8 +44,8 @@ Decided section's Q29, Q30 and Q31. Picture
   heads `Step`, `Starts`; start labels `When seated`, `After the step before`, `{course} served`
   (the picture's "Mains served"), `Everything served`; minutes shown with the unit `min`; button
   `Add step`. The "+" is drawn as text in the picture; the spec says its symbols stand in for icons
-  (spec lines 11-14), and the Courses page's own button reads "Add course" with no "+"
-  (`docs/backlog/mockups/a756-kitchen-settings/02-courses-page.png`), so the button reads
+  (spec lines 11-14), and the Courses page's own button reads "Add course" with no "+",
+  so the button reads
   `Add step`. The picture's paragraph under the list ("Starts: when seated · … (Q29); Dessert? is
   one this venue added.") and its caption are notes for the owner, naming a question number, not
   product text; they are not shown.
@@ -1106,7 +1106,7 @@ Where the build departs from picture 10, and why:
 
 1. **Delete is in each row's ⋮ menu, not a trash icon beside the row.** The design system puts
    Delete "in each row's menu" (`docs/developers/design-system.md:4636-4642`); A756's approved
-   Courses page does the same (`docs/backlog/mockups/a756-kitchen-settings/02-courses-page.png`);
+   Courses page does the same;
    and no trash icon is registered (`git grep -n '"trash"' -- packages/ui packages/ui-core` finds
    none).
 2. **The button reads "Add step", not "+ Add step".** The spec says the pictures' symbols stand in

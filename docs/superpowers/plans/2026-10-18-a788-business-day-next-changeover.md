@@ -39,8 +39,7 @@ Lit web components (`apps/dashboard`, `packages/venue-service/src/dashboard`), V
 real-Chromium browser projects).
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md` (owner's
-answers recorded there, 2026-10-18: all four questions A). Mockups:
-`docs/backlog/mockups/a788-business-day/`. Probes the design ran, and the planner's own
+answers recorded there, 2026-10-18: all four questions A). Probes the design ran, and the planner's own
 (`plan-check.ts`, `plan-dst.ts`, `plan-h1.ts`, `plan-fold.mts`):
 `/Users/clintongormley/waitron-campaign/a788-mockups-src/probe/`, run with the worktree's
 `node_modules/.pnpm/node_modules/.bin/tsx`. Plan review folded in:
@@ -931,8 +930,7 @@ screenshots outside the repo in `/Users/clintongormley/waitron-campaign/a788-sho
   test beside the editor, never committed (kept as `a788-shots/a788-shots.test.ts.keep`), mounting
   the card and dialog with Task 13–14's fixtures and saving `page.screenshot` files for: card
   nothing waiting, card waiting, dialog 05:00 → 03:00, dialog with mockup 04's clashes — en-GB and
-  es-ES, light and dark, 1280 and 390 px. Compare with
-  `docs/backlog/mockups/a788-business-day/01-…05-*.png`; note every difference.
+  es-ES, light and dark, 1280 and 390 px.
 - [ ] **Step 3: LOOK, real stack.** `wa-wt demo waitron-feat-a788-business-day-next-changeover`
   (`docs/developers/workflow-guide.md`; demo manager `manager@demo.waitron.local`;
   `docs/ui-review.md` → "Running the stack from a worktree"). Venue settings → Venue details.

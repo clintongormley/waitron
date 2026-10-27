@@ -3,8 +3,6 @@
 Status: **approved by the owner 2026-10-18 (Q39: "All recommended, configurable whether manager's
 pin required."); building — plan `docs/superpowers/plans/2026-10-21-a789-last-orders.md`.**
 Backlog entry: `docs/backlog.md` "A789".
-Pictures: `docs/backlog/mockups/a789-last-orders/` (drawn in HTML with the apps' colour tokens, not
-screenshots; 02 also in dark, `-dark.png`).
 
 File references are to `main` at `d9adb0e8f`. **(read)** marks a conclusion from reading code, not
 from running it. Nothing in this design was run: it changes no behaviour, and every statement about

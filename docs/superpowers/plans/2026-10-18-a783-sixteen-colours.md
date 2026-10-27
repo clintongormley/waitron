@@ -3,8 +3,7 @@
 **Owner decision (2026-10-17, lane B queue `~/waitron-campaign-b/queue.md:518-524`):** sixteen
 colours — today's thirteen plus yellow, sky and magenta — "The user can choose the colours that
 work for them. Also 16 breaks over 4 rows." One palette for service periods, staff roles, seasons
-AND prep stations. The chooser shows them four to a row. The values and pictures:
-`docs/backlog/mockups/a783-sixteen-colours/` (committed eb3e791e9; values in `shoot.mjs`).
+AND prep stations. The chooser shows them four to a row.
 
 Branch `feat/a783-sixteen-colours`, worktree
 `~/workspace/worktrees/waitron-feat-a783-sixteen-colours`. Review path: FULL (two migrations, and

@@ -332,11 +332,7 @@ you send it or move its bill. This replaces the earlier earliest-listed-course r
 
 ### A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
 
-**A756 (owner, 2026-10-16) — the owner approved the mock-ups.** Mock-ups:
-[where each setting goes](mockups/a756-kitchen-settings/01-where-each-setting-goes.png),
-[Courses page](mockups/a756-kitchen-settings/02-courses-page.png),
-[department Service tab](mockups/a756-kitchen-settings/03-department-service-tab.png),
-[Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
+**A756 (owner, 2026-10-16) — the owner approved the mock-ups.** The canvas they
 were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
 
 **Changed by A773 (owner, 2026-10-16, the same day).** These replace parts of the mock-ups:
@@ -456,8 +452,7 @@ the change (plan PR 8 Decision 1).
 - **The party's name prints on every kitchen ticket, as on MOVED slips (A683, owner 2026-10-14).**
   A named party's tickets read `Order 5 · Ana` / `Pedido 5 · Ana`, so the cook meets the name on
   the first ticket; a merged party's read the name of the party it ended up in, and an unnamed
-  party's or a counter order's print the bare number. Picture 5 in
-  [the A650 mockups](mockups/a650-moved-slips/).
+  party's or a counter order's print the bare number.
 
 - **A prep station's Times tab draws one track per department that sends it orders (A688, owner
   2026-10-14, mockup 2 of question A2 of A506-12).** A key above the grid names the rows in
@@ -478,7 +473,6 @@ the change (plan PR 8 Decision 1).
   station and period lines — is the row's own Every zone, and otherwise shows the inherited station
   in grey italics. The owner turned down blanking every inherited zone cell (option B): a category
   under one that sends Front Bar to Bar would then read as going to Kitchen from Front Bar.
-  Mockups: [mockups/a507-prep-stations/](mockups/a507-prep-stations/).
 
 - **A row's own Every zone beats a parent's setting for one zone (A507, owner 2026-10-11).**
   CLANDESTINA sets Every zone to Kitchen, so its Front Bar goes to Kitchen although Santet Deli Co
@@ -517,8 +511,7 @@ the change (plan PR 8 Decision 1).
   a cell that A507's rule leaves blank is named, in the "differs" style, when its station for the
   period differs from its row's Every zone's saved station for the period. "Always opens on All
   periods" is read as each time the page opens: the choice is the grid's own state, never written to
-  the address or to storage. Mockups:
-  [mockups/a584-station-colours/](mockups/a584-station-colours/). **2026-10-17, A753 point 1:**
+  the address or to storage. **2026-10-17, A753 point 1:**
   periods gained thirteen colours, retiring decision (1)'s "bigger set than the periods use".
   **2026-10-17, owner's A725/A783 decision:** stations use the same shared palette as periods,
   staff roles and seasons. A725 adopts the current shared list; A783 expands it to sixteen and

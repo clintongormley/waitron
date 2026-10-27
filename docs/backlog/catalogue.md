@@ -1036,10 +1036,7 @@ failing test first.
 Historical design observations and owner decisions, 2026-10-14. The field and tile contract is
 now in [the design system](../developers/design-system.md#primitives).
 
-Owner, 2026-10-14, from screenshots of the library, the picker and the upload window. Boards, in
-[mockups/a651-image-library/](mockups/a651-image-library/): 1 the library page, 2 photos dragged
-over it, 3 just after the drop, 4 the picker, 5 the picker's full-size photo, 6 the upload window.
-Where a board and this text differ, this text wins. The library is
+Owner, 2026-10-14, from screenshots of the library, the picker and the upload window. The library is
 `packages/media/src/dashboard/image-library.ts`; the picker
 (`packages/media/src/dashboard/image-picker.ts`) places that same component inside the window
 `apps/dashboard/src/widgets/image-upload.ts` opens, with its `picker` flag set.
@@ -1080,7 +1077,6 @@ one focal point and zoom for the square Lists preview and the 4:3 Till buttons p
 returns to the centre at 100%; Done returns to the unsaved photo draft. Only the outer Save
 persists names, accepted framing and a replacement file. Replacing resets framing while retaining
 names, photo identity and every use. The full-photo viewer shows the complete current source.
-The [boards](mockups/a652-photo-framing/) record these decisions.
 
 Implementation, 2026-10-17: original hash filenames remain stable references and still serve
 immutable original bytes. Replacement blobs and sparse framing/revision overrides travel in the

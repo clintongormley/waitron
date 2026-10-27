@@ -8,7 +8,7 @@
 
 **Tech stack:** TypeScript, Lit, existing UI tokens, Vitest browser mode with real Chromium, axe.
 
-**Spec:** [catalogue.md A651](../../backlog/catalogue.md#a651--drop-photos-to-upload-them-and-tidy-the-image-library-and-its-picker). Inspect all six [PNG boards](../../backlog/mockups/a651-image-library/): `1-library-page.png`, `2-dragging-photos.png`, `3-after-the-drop.png`, `4-picker.png`, `5-picker-full-photo.png`, `6-upload-window.png`. Text wins over boards.
+**Spec:** [catalogue.md A651](../../backlog/catalogue.md#a651--drop-photos-to-upload-them-and-tidy-the-image-library-and-its-picker).
 
 ## Constraints and settled choices
 

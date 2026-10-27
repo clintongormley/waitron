@@ -3,8 +3,7 @@
 Spec: backlog entry A662 (`docs/backlog.md`) and its detail in `docs/backlog/printers.md`
 ("## A662 — tidy the Edit receipt dialog, and a default tax-agency description"; both deleted
 when A662 landed, read them with `git show 4d498fe9c:docs/backlog.md` and
-`git show 4d498fe9c:docs/backlog/printers.md`), mockup
-`docs/backlog/mockups/a662-edit-receipt/1-logo.png`. Five points, quoted where they decide
+`git show 4d498fe9c:docs/backlog/printers.md`). Five points, quoted where they decide
 something below. Queue constraints: "Point 1 is a sale-path change: keep the refusal for any case
 the owner did not name, assert the domain code where it still applies, and run the fiscal gates
 UNEDITED. A department that gains the default must show it filled in and editable, and the

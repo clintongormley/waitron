@@ -854,28 +854,3 @@ above.
 - A852's wording no longer says the files are sealed in production; asesor Q10 gets a dated pointer;
   A664 is cited as a proposal; Q2's "quicker to get" is narrowed to the .11.1 route; the Save rule
   names all three disabled states; P8 is cited as run in `node:26-slim`.
-
-## Mockups
-
-PNG files in [`docs/backlog/mockups/a795-aeat-certificate/`](../../backlog/mockups/a795-aeat-certificate/),
-built from HTML that loads the real `--wt-*` token files
-(`/Users/clintongormley/waitron-campaign/a795-mockups-src/build.mjs`). They show layout and wording; the
-build draws them with the real `wt-*` components.
-
-| File | What it shows |
-| --- | --- |
-| `01-card-light.png`, `01-card-dark.png` | the card, healthy (350 days left), after the page's own cards, both themes |
-| `02-card-warning-phone-light.png` | the amber warning at phone width (390 px) |
-| `03-card-expiring-light.png`, `03-card-expiring-dark.png` | the red state, 14 days left (E1) |
-| `04-replace-dialog-light.png`, `04-replace-dialog-dark.png` | the Replace dialog, filled in |
-| `05-replace-dialog-phone-light.png` | the dialog at phone width |
-| `06-checking-light.png` | while the live check runs |
-| `07-refusal-wrong-passphrase-light.png` | E2 |
-| `08-refusal-other-taxpayer-dark.png` | E3 |
-| `09-refusal-expired-file-light.png` | E4 |
-| `10-check-failed-light.png` | E5, AEAT closed the connection |
-| `11-card-renewed-light.png` | after E1's install |
-| `12-alert-warning-light.png`, `13-alert-expiring-dark.png` | the expiry alert, amber and red (E8's dates) |
-| `14-alerts-expired-away-light.png` | E8 after expiry: the expired alert and the delay alert |
-| `15-card-spanish-light.png` | the card in Spanish |
-| `16-refusal-old-encryption-light.png` | E6 |

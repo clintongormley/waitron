@@ -2,8 +2,7 @@
 
 **Owner decision (2026-10-17, relayed by the watcher):** option (a) of the swatch question — today's
 six calendar colours plus orange, lime, teal, cyan, indigo, pink and brown (Spanish: Naranja, Lima,
-Turquesa, Cian, Índigo, Rosa, Marrón), "with the migration that widens the two CHECK rules". The
-question and pictures: `docs/backlog/mockups/a753-calendar-colours/` (values in `shoot.mjs`).
+Turquesa, Cian, Índigo, Rosa, Marrón), "with the migration that widens the two CHECK rules".
 Backlog: `docs/backlog.md` "A753" and `docs/backlog/service-periods.md#a753-calendar-colours-more-of-them`.
 
 Branch `feat/a753-calendar-palette`, worktree

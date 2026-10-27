@@ -16,8 +16,7 @@ saying why, so it can be planned when its blocker lands.
 `wt-form-actions`), Vitest browser mode (real Chromium), Hono routes, drizzle-kit (later PRs only).
 
 **Spec:** [`docs/backlog/kitchen.md` → A756](../../backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card)
-(the "Changed by A773" block at its top overrides the mock-ups), the mock-ups in
-`docs/backlog/mockups/a756-kitchen-settings/01..04`, and
+(the "Changed by A773" block at its top overrides the mock-ups), and
 [A773 spec §7](../specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756)
 with A773's pictures 9 and 10 (`docs/backlog/mockups/a773-courses-and-groups/`). A757's place in
 the Service tab: [A757 spec §3.1 and §11](../specs/2026-10-17-a757-table-states-design.md).
@@ -1189,8 +1188,7 @@ outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-4-shots/
   choosing Off (Save primary). Read `window.innerWidth` inside the test and record it. Then Venue
   settings → Kitchen tab at 1280, light: no reminder dropdown.
 - [ ] **Step 2:** Look at every picture against mock-up 03
-  (`docs/backlog/mockups/a756-kitchen-settings/03-department-service-tab.png`, without its "Who
-  sends a held course" buttons): the heading sits between "Orders and payment" and "Table states"
+  (without its "Who sends a held course" buttons): the heading sits between "Orders and payment" and "Table states"
   at the same level; the dropdown and its hint fit at 390 with no sideways scroll
   (`document.documentElement.scrollWidth` equals the viewport width); the open list stays inside
   the dialog; dark is readable. A defect found is fixed with a failing test first, in the

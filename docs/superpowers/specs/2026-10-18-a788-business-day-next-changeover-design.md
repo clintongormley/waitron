@@ -631,22 +631,3 @@ Opening hours. This is true today, with or without A788.
 new hours only against the start in force and a waiting one; past days in the Opening hours calendar
 draw a range that does not fit their own start cut at that day's ends; built as slice 5, after slice
 2.
-
-## Mockups
-
-In `docs/backlog/mockups/a788-business-day/`, drawn with the repository's tokens
-(`packages/ui-core/src/tokens/colors.css`, `structure.css`) from static pages kept outside the
-repository (`/Users/clintongormley/waitron-campaign/a788-mockups-src/`); the Business, Venue and
-Defaults cards copy A755's mockups. Department, period and season names are examples; the probes
-used a fixture's own names.
-
-- `01-card-light.png`, `01-card-dark.png` — nothing waiting.
-- `02-change-dialog-light.png` — the dialog, 05:00 → 03:00 at 22:00 on Tuesday.
-- `03-waiting-light.png`, `03-waiting-dark.png` — a new start waiting for the changeover.
-- `04-clash-light.png`, `04-clash-dark.png` — Save refused by Friday 21:00–04:00 and Saturday
-  21:00–04:30 dinners, the input of probe "mockup 04" (both `range`).
-- `05-waiting-phone-light.png` — the waiting card at 390 px.
-- `06-hours-refusal-light.png` — an opening-hours painter refusing a Saturday dinner 21:00–02:45
-  with last orders +30 while 03:00 waits, the input of probe "editor, 03:00 waiting, Sat
-  21:00–02:45 +30" (accepted by the editor, then `transition_strip`); only the refusal line is new,
-  the painter itself is not redrawn.

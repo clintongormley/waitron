@@ -310,8 +310,7 @@ master and file PLUS secret-paper retention are settled; do not ask those questi
 Public blocks and uploaded snapshots confer no current authority. C3 landed in #1725; use public
 import for subscribers until wizard fetching is separately designed, without expanding this scope.
 
-The four [static EN/ES drawings](../../backlog/mockups/a679-first-fiscal-setup/) keep 1280/390 widths
-and show the Live/Production outside-kit checkpoint. BOTH routes, the paper-original master and
+BOTH routes, the paper-original master and
 file PLUS secret-paper retention are approved; restoration checks and layouts remain proposed.
 Keep the shared form contract, semantic names, EN/ES inline and bottom errors,
 quiet unavailable actions, draft protection and 44px targets. No top error summary.

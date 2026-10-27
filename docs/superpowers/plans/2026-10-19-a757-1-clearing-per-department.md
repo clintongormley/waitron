@@ -42,8 +42,7 @@ item 1.
   ("Por recoger" and "recogida" are the till's own words, `apps/till/src/i18n/strings.ts:2442-2443`;
   “…” in English and «…» in Spanish as the till's strings quote, `apps/till/src/i18n/strings.ts:1181,2730`.)
   **Why picture 10 and not A756's mock-up 03.** Mock-up 03
-  (`docs/backlog/mockups/a756-kitchen-settings/03-department-service-tab.png`, committed 2026-10-16
-  with the owner's A756 queue) draws a `Tables` section with the switch "A table needs clearing after
+  (committed 2026-10-16 with the owner's A756 queue) draws a `Tables` section with the switch "A table needs clearing after
   a party leaves", and says under it "Other optional table states arrive here once the table
   lifecycle review settles them" — it hands the section to A757. Picture 10 was drawn for A757's
   revision on 2026-10-17 (commit 0ae96792a), and the owner agreed that revised design with Q29–Q34

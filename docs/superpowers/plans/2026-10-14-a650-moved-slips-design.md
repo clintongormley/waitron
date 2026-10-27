@@ -1,8 +1,7 @@
 # A650 — MOVED slips say which order moved, from where, to where (build plan)
 
 Status: build plan, written 2026-10-14 after the owner's rulings (§0). The build is four pull
-requests (§7); three small questions (§8) each carry the default the build proceeds on. Drawings: [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/)
-— pictures 1 to 4 are the design as it stood before the rulings, pictures 5 to 7 are this plan.
+requests (§7); three small questions (§8) each carry the default the build proceeds on.
 
 2026-10-14: Part 1 landed in #1706, and Part 2 in #1714, which adds
 `ticket_items.sent_order_number` (migration `0153_sent_order_number.sql`); §5's account of what is
@@ -780,21 +779,3 @@ Drawings: picture 6 for A, picture 5 for B, picture 7 for C.
   silence the screen too.
 
 The design's five questions (former §6) are answered by rulings 1 to 5 above.
-
-## 9. Drawings
-
-In [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/):
-
-1. `1-owner-cases.png` — paths 1 and 2, today and as designed. Still right.
-2. `2-whole-party-several-orders.png` — one slip per order per station. Still right, but drawn
-   without the party's name (ruling 3).
-3. `3-every-path.png` — every path as designed. **Superseded where the rulings differ**: path 7's
-   other bill and path 16 now print (picture 5), and the order lines carry the party's name.
-4. `4-question-variants.png` — the alternatives the questions offered; the rulings chose question
-   1's proposed slip, question 3's alternative, question 4's alternative and question 5's proposal.
-5. `5-slips-after-rulings.png` — the slips under this plan, English 80 mm and Spanish 58 mm.
-6. `6-till-was-number.png` — "(was 28)" on the Pass screen, a kitchen screen and the counter list.
-7. `7-moved-slip-setting.png` — the venue switch and the Edit station choice.
-
-Pictures 1 to 4 come from `moved-slips-mockups.html`, 5 to 7 from `plan-mockups.html`, each section
-rendered with the workspace's Playwright Chromium (a `locator('#s5').screenshot()` per section).
