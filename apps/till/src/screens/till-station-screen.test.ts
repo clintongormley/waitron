@@ -1419,7 +1419,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
   });
 
   it("a whole-ticket bump in a section advances that station's lines of an order both stations hold", async () => {
-    const sameOrderAtBarra: StationQueueGroup[] = [
+    const sameOrderAtBar: StationQueueGroup[] = [
       {
         ...barQueue[0]!,
         orderId: "wo-1",
@@ -1430,12 +1430,12 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     const { el, api } = await mountDevice({
       stations: [
         available("st-1", "Cocina", kitchenQueue),
-        available("st-2", "Barra", sameOrderAtBarra),
+        available("st-2", "Barra", sameOrderAtBar),
       ],
     });
-    const barra = sectionQueue(sections(el)[1]!)!;
-    await barra.updateComplete;
-    barra.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-2"]')!.click();
+    const barBoard = sectionQueue(sections(el)[1]!)!;
+    await barBoard.updateComplete;
+    barBoard.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-2"]')!.click();
     await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
     expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-2", "preparing");
@@ -1731,9 +1731,9 @@ describe("till-station-screen device mode with several stations (A366 decision 7
 
     it("the Columns window: Cocina's printer-down line follows its header row", async () => {
       const { el } = await mountFor("dev-1");
-      const cocina = sections(el)[0]!;
-      const line = cocina.querySelector("[data-printer-down]")!;
-      expect(line.parentElement).toBe(sectionQueue(cocina));
+      const kitchenBoard = sections(el)[0]!;
+      const line = kitchenBoard.querySelector("[data-printer-down]")!;
+      expect(line.parentElement).toBe(sectionQueue(kitchenBoard));
       expect(line.getAttribute("slot")).toBe("status");
     });
 
@@ -1764,21 +1764,21 @@ describe("till-station-screen device mode with several stations (A366 decision 7
 
     it("the Columns window: hiding a column hides it on that board only, and showing it brings it back", async () => {
       const { el } = await mountFor("dev-1");
-      const cocina = () => sectionQueue(sections(el)[0]!)!;
-      const barra = () => sectionQueue(sections(el)[2]!)!;
-      await openColumns(el, cocina());
+      const kitchenBoard = () => sectionQueue(sections(el)[0]!)!;
+      const barBoard = () => sectionQueue(sections(el)[2]!)!;
+      await openColumns(el, kitchenBoard());
       await pressInWindow(el, '[data-column-show="ready"]');
-      expect(cocina().columns.hidden).toEqual(["ready"]);
-      expect(barra().columns.hidden).toEqual([]);
+      expect(kitchenBoard().columns.hidden).toEqual(["ready"]);
+      expect(barBoard().columns.hidden).toEqual([]);
       await pressInWindow(el, "[data-columns-done]");
       await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
       await merge(el);
       expect(queueWidget(el)!.columns.hidden).toEqual([]);
       await merge(el);
-      expect(cocina().columns.hidden).toEqual(["ready"]);
-      await openColumns(el, cocina());
+      expect(kitchenBoard().columns.hidden).toEqual(["ready"]);
+      await openColumns(el, kitchenBoard());
       await pressInWindow(el, '[data-column-show="ready"]');
-      expect(cocina().columns.hidden).toEqual([]);
+      expect(kitchenBoard().columns.hidden).toEqual([]);
     });
 
     it("offers the switch with two stations, in the actions row, and opens stacked", async () => {
@@ -1863,7 +1863,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     });
 
     it("a whole-ticket bump in merged advances that order's lines at its own station", async () => {
-      const sameOrderAtBarra: StationQueueGroup[] = [
+      const sameOrderAtBar: StationQueueGroup[] = [
         {
           ...barQueue[0]!,
           orderId: "wo-1",
@@ -1874,7 +1874,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       const { el, api } = await mountFor("dev-1", {
         stations: [
           available("st-1", "Cocina", kitchenQueue),
-          available("st-2", "Barra", sameOrderAtBarra),
+          available("st-2", "Barra", sameOrderAtBar),
         ],
       });
       await merge(el);

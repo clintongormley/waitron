@@ -592,9 +592,9 @@ it("says the printers are loading, not that there is none, when reopened after a
 });
 
 describe("printing a full invoice", () => {
-  const BARRA = { id: "printer-1", name: "Barra", kind: "receipt" as const };
-  const OFICINA = { id: "page-1", name: "Oficina", kind: "a4" as const };
-  const COCINA = { id: "printer-2", name: "Cocina", kind: "receipt" as const };
+  const BAR_PRINTER = { id: "printer-1", name: "Barra", kind: "receipt" as const };
+  const OFFICE_PRINTER = { id: "page-1", name: "Oficina", kind: "a4" as const };
+  const KITCHEN_PRINTER = { id: "printer-2", name: "Cocina", kind: "receipt" as const };
   const fullRow: OrderRowDto = { ...row, invoiceType: "F1" };
   const invoiceDetail = (
     printers: OfferedPrinter[] | null,
@@ -696,7 +696,9 @@ describe("printing a full invoice", () => {
 
   it("preselects the printer the original went to, though it is neither first nor of the first's kind, and lists A4 printers marked", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER, KITCHEN_PRINTER], OFFICE_PRINTER.id),
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(3));
     expect(chooser(el)!.options).toEqual([
@@ -716,14 +718,16 @@ describe("printing a full invoice", () => {
     ["the original went by email", null],
     ["the original's printer is now switched off", "printer-9"],
   ])("preselects the first printer when %s", async (_name, original) => {
-    const api = invoiceApi(invoiceDetail([COCINA, OFICINA], original));
+    const api = invoiceApi(invoiceDetail([KITCHEN_PRINTER, OFFICE_PRINTER], original));
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(2));
     expect(chooser(el)!.value).toBe("printer-2");
   });
 
   it("keeps the person's choice when the list is read again, while it is still listed", async () => {
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER, KITCHEN_PRINTER], OFFICE_PRINTER.id),
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     chooser(el)!.dispatchEvent(
@@ -733,11 +737,13 @@ describe("printing a full invoice", () => {
         composed: true,
       }),
     );
-    api.getOrder.mockResolvedValue(invoiceDetail([OFICINA, COCINA, BARRA], OFICINA.id));
+    api.getOrder.mockResolvedValue(
+      invoiceDetail([OFFICE_PRINTER, KITCHEN_PRINTER, BAR_PRINTER], OFFICE_PRINTER.id),
+    );
     api.liveData.refresh();
     await vi.waitFor(() => expect(chooser(el)?.options[0]?.value).toBe("page-1"));
     expect(chooser(el)!.value).toBe("printer-2");
-    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA], OFICINA.id));
+    api.getOrder.mockResolvedValue(invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id));
     api.liveData.refresh();
     await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(2));
     expect(chooser(el)!.value).toBe("page-1");
@@ -745,7 +751,9 @@ describe("printing a full invoice", () => {
 
   it("prints the full invoice on the chosen printer under a request key, and says where it went", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"));
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id, "original"),
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     printButton(el).click();
@@ -759,10 +767,12 @@ describe("printing a full invoice", () => {
 
   it("once printed, keeps the heading and says only where it went while the server offers no print", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"));
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id, "original"),
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
-    api.getOrder.mockResolvedValue(withCurrent(invoiceDetail(null, OFICINA.id), "queued"));
+    api.getOrder.mockResolvedValue(withCurrent(invoiceDetail(null, OFFICE_PRINTER.id), "queued"));
     printButton(el).click();
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina"));
     await vi.waitFor(() => expect(chooser(el)).toBeNull());
@@ -777,7 +787,7 @@ describe("printing a full invoice", () => {
 
   it("never offers the receipt printers' list when the dialog turns to a full invoice", async () => {
     let answer!: (detail: OrderDetailDto) => void;
-    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id), {
+    const api = invoiceApi(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id), {
       getOrder: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
     });
     const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
@@ -792,13 +802,13 @@ describe("printing a full invoice", () => {
     await el.updateComplete;
     expect(chooser(el)).toBeNull();
     expect(loadingLine(el)).not.toBeNull();
-    answer(invoiceDetail([OFICINA], OFICINA.id));
+    answer(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id));
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
   });
 
   it("shows an unavailable printer's refusal under the chooser and keeps the dialog open", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id), {
+    const api = invoiceApi(invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id), {
       requestOrderPrintDelivery: vi
         .fn()
         .mockRejectedValue({ code: "invoice_delivery.printer_invalid" }),
@@ -815,7 +825,7 @@ describe("printing a full invoice", () => {
 
   it("shows any other refusal beside the buttons", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([BARRA], null), {
+    const api = invoiceApi(invoiceDetail([BAR_PRINTER], null), {
       requestOrderPrintDelivery: vi.fn().mockRejectedValue({ code: "invoice_delivery.active" }),
     });
     const el = await openInvoice(api);
@@ -866,7 +876,9 @@ describe("printing a full invoice", () => {
   );
 
   it("keeps the person's choice when Try again reads the bill again after a failed read", async () => {
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER, KITCHEN_PRINTER], OFFICE_PRINTER.id),
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     chooser(el)!.dispatchEvent(
@@ -879,7 +891,9 @@ describe("printing a full invoice", () => {
     api.getOrder.mockRejectedValue({ code: "connection.failed" });
     api.liveData.refresh();
     await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
-    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    api.getOrder.mockResolvedValue(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER, KITCHEN_PRINTER], OFFICE_PRINTER.id),
+    );
     const reads = api.getOrder.mock.calls.length;
     retryButton(el)!.click();
     await vi.waitFor(() => expect(retryButton(el)).toBeNull());
@@ -889,12 +903,12 @@ describe("printing a full invoice", () => {
   });
 
   it("chooses the original's printer again on Try again when the first read failed", async () => {
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id), {
+    const api = invoiceApi(invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id), {
       getOrder: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     });
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
-    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA], OFICINA.id));
+    api.getOrder.mockResolvedValue(invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id));
     retryButton(el)!.click();
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
   });
@@ -906,7 +920,9 @@ describe("printing a full invoice", () => {
     ["es-ES", "duplicate", "Imprimir una copia de la factura", "Imprimir una copia"],
   ] as const)("words the dialog in %s for an %s", async (locale, designation, title, action) => {
     setLocale(locale);
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, designation));
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id, designation),
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(title);
@@ -916,7 +932,7 @@ describe("printing a full invoice", () => {
 
   it("shows a failed read as a load failure with a retry that reads the bill again", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([BARRA], null), {
+    const api = invoiceApi(invoiceDetail([BAR_PRINTER], null), {
       getOrder: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     });
     const el = await openInvoice(api);
@@ -924,14 +940,14 @@ describe("printing a full invoice", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
       codeMessage("connection.failed"),
     );
-    api.getOrder.mockResolvedValue(invoiceDetail([BARRA], null));
+    api.getOrder.mockResolvedValue(invoiceDetail([BAR_PRINTER], null));
     retryButton(el)!.click();
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
     expect(api.getOrderPrinters).not.toHaveBeenCalled();
   });
 
   it("keeps receipt mode on the receipt printers when the same dialog later prints an invoice and back", async () => {
-    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id));
+    const api = invoiceApi(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id));
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     el.row = null;
@@ -945,9 +961,12 @@ describe("printing a full invoice", () => {
   it("says the printer the invoice was sent to, though another was chosen while the request was on its way", async () => {
     setLocale("en-GB");
     const held = heldPrint();
-    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"), {
-      requestOrderPrintDelivery: held.request,
-    });
+    const api = invoiceApi(
+      invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id, "original"),
+      {
+        requestOrderPrintDelivery: held.request,
+      },
+    );
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     printButton(el).click();
@@ -963,14 +982,14 @@ describe("printing a full invoice", () => {
   it("words the confirmation by the copy the server says it made, not by a later offer", async () => {
     setLocale("en-GB");
     const held = heldPrint();
-    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id, "original"), {
+    const api = invoiceApi(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id, "original"), {
       requestOrderPrintDelivery: held.request,
     });
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     printButton(el).click();
     await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
-    api.getOrder.mockResolvedValue(invoiceDetail([OFICINA], OFICINA.id, "duplicate"));
+    api.getOrder.mockResolvedValue(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id, "duplicate"));
     api.liveData.refresh();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(
@@ -984,7 +1003,7 @@ describe("printing a full invoice", () => {
 
   it("calls a print a copy when the server answers that it made a copy", async () => {
     setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id, "original"), {
+    const api = invoiceApi(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id, "original"), {
       requestOrderPrintDelivery: vi.fn().mockResolvedValue(deliveryAttempt("queued", "duplicate")),
     });
     const el = await openInvoice(api);
@@ -1006,7 +1025,7 @@ describe("printing a full invoice", () => {
     async (_name, settle) => {
       setLocale("en-GB");
       const held = heldPrint();
-      const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id, "original"), {
+      const api = invoiceApi(invoiceDetail([OFFICE_PRINTER], OFFICE_PRINTER.id, "original"), {
         requestOrderPrintDelivery: held.request,
       });
       const el = await openInvoice(api);
@@ -1016,7 +1035,10 @@ describe("printing a full invoice", () => {
       el.row = null;
       await el.updateComplete;
       const next = { ...fullRow, id: "bill-2", invoiceNumber: "A/13" };
-      api.getOrder.mockResolvedValue({ ...invoiceDetail([BARRA], null, "original"), row: next });
+      api.getOrder.mockResolvedValue({
+        ...invoiceDetail([BAR_PRINTER], null, "original"),
+        row: next,
+      });
       el.row = next;
       await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
       expect(printButton(el).loading).toBe(false);

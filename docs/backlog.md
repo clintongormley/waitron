@@ -5822,9 +5822,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   All five build cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
-  suites, server till-API and configuration-transfer fixtures, shared station fixtures,
-  and file names. Keep fixture text with A976, including recipe ingredient names and
-  seasonal venue and zone names.
+  suites, server till-API, configuration-transfer and station fixtures, and file names.
+  Keep fixture text with A976, including recipe ingredient names and seasonal venue and zone names.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its

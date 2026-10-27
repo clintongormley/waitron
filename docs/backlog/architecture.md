@@ -465,9 +465,8 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
-  naming sites remain in the till's boot and counter-payment suites,
-  the server's till-API and configuration-transfer fixtures,
-  and shared station fixtures.
+  naming sites remain in the till's boot and counter-payment suites
+  and the server's till-API, configuration-transfer and station fixtures.
   String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
   Recipe ingredient text and seasonal venue and zone names also stay with A976.
   Developer/demo script names remain A975's. Low priority.
