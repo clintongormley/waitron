@@ -435,6 +435,22 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("the board's header row with a hidden column has no violations", async () => {
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups,
+        stationId: "st-1",
+        columns: { order: ["waiting", "preparing", "ready"], hidden: ["preparing"], collapsed: [] },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-board-head] [data-columns-open]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("the board with orders whose dishes were sent under other numbers has no violations", async () => {
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
