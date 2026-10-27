@@ -49,6 +49,10 @@ Left open:
 - The pass's Ready records no `order_group_events` row, so who pressed them is
   recorded nowhere readable; a new kind changes that append-only table's check, which is a
   core migration.
+- The till's ordinary table refresh (`#loadTabLines` and the other groups reads in
+  `apps/till/src/till-app.ts`) can let an older read that answers last replace newer order groups
+  and current orders; A809 (#2153) fixed this for the printing-problems notice only, with a
+  per-read number. Believed to predate A809 (`git blame` 2026-09-27); not traced further.
 
 ## Task 6 (#761, HOLD tickets in advance)
 
