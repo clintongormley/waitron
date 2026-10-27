@@ -6,8 +6,9 @@
 > (branch `chore/a988-guest-count-naming`). Read the TDD skill before writing a test. One PR.
 
 **Goal:** Call the number of guests in a party or on a receipt `guestCount` everywhere code and the
-wire name it, and `guest_count` in a column, so the payment routes, the receipt-guests table and
-Split a table stop using `guests` for a count.
+wire name it, so the payment routes, the receipt-guests table's drizzle field and Split a table stop
+using `guests` for a count. The `sale_receipt_guests.guests` column keeps its name in this PR
+(Q1 = B, below); renaming it to `guest_count` is a follow-up.
 
 **Source:** the third bullet of _Loose ends left by A663 Part 3b (#1827)_ in
 [docs/backlog/printers.md](../../backlog/printers.md): "The number is `guests` on the wire and in
@@ -19,12 +20,12 @@ SQLite in `packages/db`, Vitest (the till runs in headless Chromium). No new dep
 
 ## Decisions already made (not reopened here)
 
-1. **A party's or a receipt's number of guests is `guestCount` in code and on the wire, and
-   `guest_count` in a column** — the party's existing name (`parties.guest_count`, the seat route's
-   `guestCount`). So the receipt-guests choice on the till's pay, collect and bill-payment routes
-   takes body field `guestCount` and refuses as field `guestCount`; the
-   `sale_receipt_guests.guests` column becomes `guest_count` (with its CHECK name and drizzle
-   field); code identifiers that hold the count follow. Function and file names that name the
+1. **A party's or a receipt's number of guests is `guestCount` in code and on the wire** — the
+   party's existing name (`parties.guest_count`, the seat route's `guestCount`). So the
+   receipt-guests choice on the till's pay, collect and bill-payment routes takes body field
+   `guestCount` and refuses as field `guestCount`; the `sale_receipt_guests` drizzle field becomes
+   `guestCount`; code identifiers that hold the count follow. The column itself stays `guests` in
+   this PR (Q1 = B); its rename to `guest_count`, with its CHECK name, is a follow-up. Function and file names that name the
    receipt's guests LINE stay unless they would mislead.
 2. **Split a table's `guests: { staying, leaving }` body becomes `guestCounts: { staying,
    leaving }`**, refusing as fields `guestCounts`, `guestCounts.staying` and
@@ -51,8 +52,11 @@ small PR. This PR therefore adds no migration.
   because of this rename is updated mechanically, with **every asserted value unchanged** (counts,
   codes, statuses, row contents, rendered text). Prefer changing only the reference: for example
   keep a select alias `.select({ guests: saleReceiptGuests.guestCount })` so the asserted object
-  `{ guests: 4 }` stays byte-identical. Do not rename test titles (`it("…")` strings):
-  `docs/developers/conventions-data.md` cites some by title. Any other assertion that must change
+  `{ guests: 4 }` stays byte-identical. Test titles (`it("…")` strings) stay, with one exception: a
+  title that names the wire field and would become false after the rename (for example
+  `apps/till/src/api/client.test.ts` ~3054, "…as the body's guests…") may be retitled if it is
+  UNCITED — check with `git grep -F "<title>" -- docs`, which must print nothing. A title cited in
+  `docs/developers/conventions-data.md` or anywhere else under `docs/` stays as it is. Any other assertion that must change
   to pass is a **STOP**: commit nothing for it, write it into the ledger, and return.
 - **List every test file changed mechanically** in the ledger
   `docs/handoffs/2026-10-27-a988-guest-count-naming.md` (gitignored; create it in Task 1 with
@@ -205,8 +209,9 @@ read `saleReceiptGuests.guestCount`.
 
 - [ ] Create the ledger (see Global constraints).
 - [ ] RED: in `packages/db/src/schema/sale-receipt-guests.test.ts` change the `insert` helper to
-  `.values({ saleId, guestCount: guests })` and every read of `saleReceiptGuests.guests` to
-  `.guestCount`, assertions unchanged. Run
+  `.values({ saleId, guestCount: guests })`, the update at ~115 `.set({ guests: 3 })` to
+  `.set({ guestCount: 3 })`, and every read of `saleReceiptGuests.guests` to `.guestCount`,
+  assertions unchanged. Run
   `pnpm --filter @waitron/db exec vitest run src/schema/sale-receipt-guests.test.ts` and record the
   failure (drizzle has no `guestCount` property yet).
 - [ ] Rename the property. Rerun the same command: green with a `Tests` count.
@@ -269,7 +274,7 @@ become `guestCount: undefined`, or the count enters the fingerprint. The existin
   `receipt-guests.test.ts` (the `a payment request's guests` refusal case ~367),
   `receipt-print.test.ts` and `unpaid-departure.test.ts` (~1679–1683, the collect refusal). Find
   the rest with `git grep -n -E "guests: (null|[0-9])|field: \"guests\"" -- 'apps/server/src/*.test.ts'`
-  and `git grep -n -E "\bpay\(v" -- apps/server/src`.
+  and `git grep -n -P "\bpay\(v" -- apps/server/src` (git grep's `-E` has no `\b`; `-P` does).
 - [ ] Focused, no name filter: `pnpm --filter @waitron/server exec vitest run
   src/receipt-guests.routes.test.ts src/receipt-guests.test.ts src/receipt-print.test.ts
   src/unpaid-departure.test.ts src/bill-payments.test.ts src/bill-payments-api.test.ts
@@ -279,6 +284,14 @@ become `guestCount: undefined`, or the count enters the fingerprint. The existin
 - [ ] Commit: "Payment routes take the receipt's guest count as guestCount (A988)".
 
 ## Task 3: the till sends `guestCount` on every payment request
+
+**Size.** This is the plan's largest task: about 15 till source files, about 100 test hits, and
+the till's tests run headless Chromium. It cannot be split: the request objects are built by
+spreading widget details and other objects, so TypeScript does not flag a leftover `guests` key,
+and a half-done rename would leave the till silently sending the old name. An implementer that
+passes about 150 tool calls with the task unfinished stops at a passing (or cleanly red) point,
+commits, and returns a handover — what is done, what is left, the files touched, and each check's
+state — and a fresh implementer continues from it.
 
 **Find:** `git grep -n -w "guests" -- apps/till/src ':!*.test.ts' | grep -v -i "allerg\|i18n/"`,
 classify. The count hits today: `api/client.ts` (`BillPaymentRequest.guests` ~1138, `recordSale`'s
@@ -294,30 +307,65 @@ coupled through object spreads (`Confirmation = Omit<BillPaymentRequest, "submis
 widgets' details spread into requests), so rename them together in this task; TypeScript does not
 flag an extra `guests` key in a spread.
 
+**Refusal placement — changes.** `widgets/presented-pay-dialog.ts:311` places a server refusal
+with `if (named === "guests" && this.asksGuests) return "guests";`. The COMPARED value becomes
+`"guestCount"` (the field the server now refuses as); the RETURNED form-field key stays `"guests"`:
+`if (named === "guestCount" && this.asksGuests) return "guests";`. Checked for the same pattern:
+`widgets/bill-pay-dialog.ts`'s `refusalField` (~155) has no `guests` case today (the next backlog
+bullet, Task 6, already records that gap), and `git grep -n -E '(=== |field: )"guests"' -- apps/till/src`
+finds no other till refusal placement comparing against `"guests"` for this count: besides line 311
+and its test (~529, ~551), the hits are the party-allergy dialog's page name, a floor reason and
+Split a table's test (Task 4).
+
 **Leave:** the shared stepper's input `name="guests"` (`widgets/guest-count.ts`, also used by the
 seat and party-guests dialogs, which already send `guestCount`); widget form-field keys `"guests"`
-(`Field` unions, `errors.get("guests")`); `receiptGuests` / `defaultReceiptGuests` (the default
+(`Field` unions, `errors.get("guests")`, and the value `#refusalField` RETURNS — not the value it
+compares, above); `receiptGuests` / `defaultReceiptGuests` (the default
 the receipt's guests line starts on); `guestsText`, `guestsAttempted`, `#guests()` renderers; the
 `ReceiptGuestsDetail` interface name; Split a table (Task 4); `floor-today.ts` `"guests"` reasons.
 
-- [ ] RED: in `apps/till/src/api/client.test.ts`, change the existing body assertions for
-  `recordSale`, `pay`, `collectOrder` and the bill payment to expect `guestCount` and NO `guests`
-  key (add `expect(body).not.toHaveProperty("guests")` beside each); run
-  `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts` and record the failure.
-- [ ] Rename across the files above; `pnpm --filter @waitron/till typecheck`.
+- [ ] RED, client methods that build the body themselves: in `apps/till/src/api/client.test.ts`,
+  change the existing body assertions for `recordSale` (it takes `guests` as a parameter and writes
+  the key, ~2839/2851) and `collectOrder` (~3229/3235) to expect `guestCount` and NO `guests` key
+  (add `expect(body).not.toHaveProperty("guests")` beside each). Do not count `pay` (~2881, sends
+  `{ ...req, zoneId }`) or `takeBillPayment` (~4342, sends `request` unchanged) as first-failing:
+  they pass on whatever key they are given, so a client test handing them `guestCount` passes
+  before the fix. Their assertions may still be renamed mechanically.
+- [ ] RED, one layer up, where the key is actually chosen: the widgets' event details emit
+  `guestCount` — assert it (and no `guests` key) in `widgets/tender-pay.test.ts`,
+  `widgets/bill-pay-dialog.test.ts` and `widgets/presented-pay-dialog.test.ts`; and
+  `till-app-bill-payments.test.ts` / `till-app-handheld-pay.test.ts` expect the mocked
+  `takeBillPayment` / `pay` to be called with `guestCount` (and no `guests`).
+- [ ] RED, refusal placement: in `widgets/presented-pay-dialog.test.ts` change the faked refusal at
+  ~529 and ~551 to `field: "guestCount"`, assertions unchanged (the error still shows under
+  `wt-number-stepper[name="guests"]`). It fails before the fix to line 311.
+- [ ] Run `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts
+  src/widgets/tender-pay.test.ts src/widgets/bill-pay-dialog.test.ts
+  src/widgets/presented-pay-dialog.test.ts src/till-app-bill-payments.test.ts
+  src/till-app-handheld-pay.test.ts` and record each failure.
+- [ ] Rename across the files above, including the compared value at `presented-pay-dialog.ts:311`;
+  `pnpm --filter @waitron/till typecheck`.
 - [ ] Mechanically update the widget and app tests that read event details or request bodies.
   Today: `till-app-bill-payments.test.ts`, `widgets/tender-pay.test.ts`,
   `widgets/bill-pay-dialog.test.ts`, `widgets/presented-pay-dialog.test.ts`, `till-app.test.ts`,
-  `till-app-handheld-pay.test.ts`, `state/bill-payment.test.ts`, `till-app-boot-and-counter.test.ts`
-  and possibly `screens/till-table-order-screen.test.ts`. Change only keys holding the count —
-  `[name="guests"]` selectors and form-field keys stay.
+  `till-app-handheld-pay.test.ts`, `state/bill-payment.test.ts`, `till-app-boot-and-counter.test.ts`,
+  `screens/till-table-order-screen.test.ts`, and these, which stay green with the stale key and
+  would silently stop testing the count if missed:
+  `screens/till-table-order-screen.panel-footer.test.ts` (~127, 136, 184),
+  `screens/till-table-order-screen.bill-payments.test.ts` (~282, 304),
+  `till-app-fingerprint-refusal.test.ts` (~161, 168), `widgets/presented-pay-dialog.a11y.test.ts`
+  (~150, 239, 479) and `widgets/tender-pay.a11y.test.ts` (~105). Change only keys holding the count
+  — `[name="guests"]` selectors and form-field keys stay.
 - [ ] Focused (check memory first): `pnpm --filter @waitron/till exec vitest run
   src/api/client.test.ts src/state/bill-payment.test.ts src/widgets/tender-pay.test.ts
   src/widgets/bill-pay-dialog.test.ts src/widgets/presented-pay-dialog.test.ts
   src/till-app-bill-payments.test.ts src/till-app-handheld-pay.test.ts src/till-app.test.ts
-  src/till-app-boot-and-counter.test.ts src/screens/till-table-order-screen.test.ts`, plus the
-  matching `*.unsaved.test.ts` and `*.a11y.test.ts` of the three widgets.
-- [ ] Check no count-shaped `guests` remains: `git grep -n -E "guests(\?)?: (number|null|[0-9])|\.guests\b|\{ guests \}" -- apps/till/src`
+  src/till-app-boot-and-counter.test.ts src/screens/till-table-order-screen.test.ts
+  src/screens/till-table-order-screen.panel-footer.test.ts
+  src/screens/till-table-order-screen.bill-payments.test.ts src/till-app-fingerprint-refusal.test.ts
+  src/widgets/presented-pay-dialog.a11y.test.ts src/widgets/tender-pay.a11y.test.ts`, plus the
+  matching `*.unsaved.test.ts` and the remaining `*.a11y.test.ts` of the three widgets.
+- [ ] Check no count-shaped `guests` remains: `git grep -n -P "guests(\?)?: (number|null|[0-9])|\.guests\b|\{ guests \}" -- apps/till/src`
   and classify every hit left.
 - [ ] Commit: "The till sends the receipt's guest count as guestCount (A988)".
 
@@ -334,17 +382,22 @@ doc comment); `till-app.ts` `refusedSplitSide` (~716–719) matching `"guestCoun
 `SplitTableDetail.guests` → `guestCounts` (~247, ~4838). Leave the split dialog's
 `SplitGuestsDetail` type, its `split-guests-confirm` event and the widget/file names.
 
-- [ ] RED server, in `apps/server/src/till-api.table-actions.test.ts` beside the existing split
-  cases: (a) `guestCounts: { staying: 3, leaving: 1 }` leaves the staying table at 3 and the new
-  party at 1 (fails today: ignored, 5 and none); (b) the old `guests: { staying: 0, leaving: 2 }`
-  is ignored — the split succeeds, staying keeps 5, the new party has none (fails today: refused
-  `guests.staying`). Then change the existing `refuses guests %j as a bad %s, changing nothing`
-  table's body key to `guestCounts` and its field strings to `guestCounts…` (title unchanged).
+- [ ] RED server, in `apps/server/src/till-api.table-actions.test.ts`: rename the body key
+  `guests:` → `guestCounts:` in the existing positive cases (~584 `gives each side the count the
+  waiter sent`, ~599, ~670), assertions unchanged — once renamed, ~584 fails today (the key is
+  ignored) and is the positive first-failing case, so no separate new positive case is added.
+  Add one new case beside them: the old `guests: { staying: 0, leaving: 2 }` is ignored — the split
+  succeeds, staying keeps 5, the new party has none (fails today: refused `guests.staying`). Then
+  change the existing `refuses guests %j as a bad %s, changing nothing` table's body key to
+  `guestCounts` and its field strings to `guestCounts…` (title unchanged).
   Run `pnpm --filter @waitron/server exec vitest run src/till-api.table-actions.test.ts`; record.
 - [ ] RED till: in `apps/till/src/api/client.test.ts` (~3058–3068) and
   `api/client.bill-editing.test.ts` (~110) expect body `guestCounts`; in `till-app-parties.test.ts`
   change the refusal table (~2291–2292) to `"guestCounts.staying"` / `"guestCounts.leaving"` with
-  the same sides and field texts, and the event details' `guests:` → `guestCounts:`. Run them;
+  the same sides and field texts, the other refusals naming `"guests.leaving"` (~1849, 2337, 2404,
+  2418, 10047, 10244) to `"guestCounts.leaving"`, the whole-object refusal `field: "guests"`
+  (~2365) to `field: "guestCounts"`, and the event details' `guests:` → `guestCounts:` (~1851,
+  2351, 2372, 2396, 2424). These stay green with stale keys, so every one must change. Run them;
   record.
 - [ ] Implement both sides; `pnpm --filter @waitron/server typecheck` and
   `pnpm --filter @waitron/till typecheck`.
@@ -424,7 +477,7 @@ item 7). The fixture must not be edited or regenerated. Choose one:
 
 ## Task 6: documentation and backlog
 
-**Find:** `git grep -n -E "readGuestsChoice|GuestsChoice|requireSplitGuests|SplitGuests\b|guests\.staying|guests\.leaving|field: \"guests\"|payment routes' \`guests\`" -- docs/developers docs/backlog docs/backlog.md CLAUDE.md apps/server/src/guide README.md`.
+**Find:** `git grep -n -P "readGuestsChoice|GuestsChoice|requireSplitGuests|SplitGuests\b|guests\.staying|guests\.leaving|field: \"guests\"|payment routes' \`guests\`" -- docs/developers docs/backlog docs/backlog.md CLAUDE.md apps/server/src/guide README.md`.
 
 - [ ] `docs/backlog/printers.md`, _Loose ends left by A663 Part 3b (#1827)_: delete the third bullet
   (this item). In the next bullet change "a server refusal naming `guests` … `refusalField` has no
@@ -438,7 +491,9 @@ item 7). The fixture must not be edited or regenerated. Choose one:
   decisions section, as open work): "Rename `sale_receipt_guests.guests` to `guest_count` — needs
   the owner's yes to map the renamed column in `seed.madrid-baseline.test.ts`'s comparison of the
   frozen Madrid fixture; the recipe and measurements are Task 5 of
-  `docs/superpowers/plans/2026-10-27-a988-guest-count-naming.md`."
+  `docs/superpowers/plans/2026-10-27-a988-guest-count-naming.md`." The implementer writes only
+  this backlog entry. The DRIVER, not the implementer, writes the owner question offering option A
+  in the lane's questions file.
 - [ ] Under A only, same file ~3441: "Two generated migrations also carry hand-written SQL" becomes
   three, naming the new file and what is hand-written in it.
 - [ ] `docs/backlog/printers.md` ~709 and `docs/backlog/till.md` ~172 name the TABLE
@@ -460,7 +515,7 @@ item 7). The fixture must not be edited or regenerated. Choose one:
   name a form field, not the wire.
 - An old till sending `guests` is ignored, not refused. Read, not run: the handlers read named
   fields and spread the rest of the body, so an unknown key is not refused; Task 2's case (b) and
-  Task 4's case (b) are the tests that pin it. This plan adds no special case.
+  Task 4's new old-name case are the tests that pin it. This plan adds no special case.
 
 ## Finishing
 
