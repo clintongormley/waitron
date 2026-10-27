@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, setHelpMode } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -10053,6 +10053,19 @@ describe("patching the live menu", () => {
       expect(tooltip.getAttribute("guide-label")).toBe(t("menus.patch_live_help_guide"));
     },
   );
+
+  it("hangs the patch's help badge over its button's top trailing corner while help is on", async () => {
+    setHelpMode(true);
+    onTestFinished(() => setHelpMode(false));
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    const button = patchButton(el)!.getBoundingClientRect();
+    const badge = patchHelp(el)!.getBoundingClientRect();
+    expect(badge.width).toBeGreaterThan(0);
+    const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
+    expect(Math.abs(x - button.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
+  });
 
   it("shows no patch tooltip where there is no patch button", async () => {
     const el = await mountLunch(

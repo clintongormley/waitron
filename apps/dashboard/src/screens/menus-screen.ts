@@ -402,6 +402,13 @@ export class MenusScreen extends LitElement {
         column-gap: var(--wt-space-2);
         min-width: 0;
       }
+      /* The help badge hangs over this box's top trailing corner. */
+      .patch-action {
+        position: relative;
+        display: flex;
+        gap: var(--wt-space-1);
+        align-items: center;
+      }
       .heading h1 {
         margin: 0;
         min-width: 0;
@@ -3301,7 +3308,8 @@ export class MenusScreen extends LitElement {
       !this.statusError && (this.status?.state === "current" || this.status?.state === "changed");
     return html`<span class="live" data-test="menu-status">(${words})</span>${
         live
-          ? html`<wt-button
+          ? html`<span class="patch-action"
+              ><wt-button
                 variant="secondary"
                 data-test="patch-live-menu"
                 @click=${() => {
@@ -3315,7 +3323,8 @@ export class MenusScreen extends LitElement {
                 guide-href=${guideHref("products.patch-live-menu")}
                 guide-label=${t("menus.patch_live_help_guide")}
                 >${t("menus.patch_live_help")}</wt-help-tooltip
-              >`
+              ></span
+            >`
           : nothing
       }`;
   }
