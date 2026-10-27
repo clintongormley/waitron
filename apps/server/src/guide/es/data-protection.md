@@ -78,7 +78,9 @@ Waitron muestra tu página de privacidad, la que indicas en la tarjeta **Privaci
 correos que envía al personal para crear una cuenta, restablecer una contraseña o confirmar un
 correo nuevo, en la página de inicio de sesión del panel y en las páginas que abre el enlace de un
 correo para configurar una cuenta o restablecer una contraseña, en **Configuración de la cuenta** y
-en el `README.txt` de una descarga de datos. Waitron guarda una sola página, así que usa la de tu
+en el `README.txt` de una descarga de datos. También la muestra, con el correo de privacidad, en
+el correo que envía una factura completa (consulta
+[Un aviso de privacidad para los clientes con factura](data-protection.md#invoice-notice)). Waitron guarda una sola página, así que usa la de tu
 aviso completo, que cubre por igual al personal y a los clientes.
 
 ## Un aviso de privacidad para los clientes con factura {#invoice-notice}
@@ -98,7 +100,7 @@ y más información: _correo de privacidad del local_, _dirección de la página
 Cuando Waitron envía por correo una factura completa, el correo lleva este aviso, con la razón
 social de tu local y el correo y la página de privacidad de la tarjeta **Privacidad**. El aviso va en
 español salvo que la factura esté en inglés, y lleva la parte sobre la Agencia Tributaria solo en una
-factura de la que el equipo envía un registro. Si no hay ninguno de los dos, el correo no lleva aviso. El
+factura de la que el equipo envía un registro. Si no hay ni correo ni página de privacidad, el correo no lleva aviso. El
 correo llega al cliente después de que el personal haya tomado los datos, así que muestra el aviso
 también donde los toma, por ejemplo en un cartel junto a la caja.
 

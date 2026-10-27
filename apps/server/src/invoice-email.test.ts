@@ -495,7 +495,7 @@ describe("invoice email privacy notice", () => {
 
   it("textPart decodes an accented line longer than a mail line", async () => {
     const rig = await smtpRig("accepted");
-    const known = `Protección de datos: ${"ñandú ".repeat(20)}fin`;
+    const known = `Data protection: ${"naïve café ".repeat(20)}end`;
     try {
       await nodemailer.createTransport({ url: rig.config.url }).sendMail({
         from: rig.config.from,

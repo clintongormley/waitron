@@ -221,7 +221,7 @@ _2026-10-27: the invoice notice moved to S1b2 ([the S1b plan](2026-10-27-a980-s1
    `apps/server/src/guide-catalogue.ts`, as S1a and S2a2 may; the later of any two rebases onto
    the earlier. S10 may mask the error parameters in `packages/identity/src/staff.ts` (`:53-66`), a
    file S4 also changes.
-4. **S1a**, then **S1a2**, then **S1b**; while lane B builds them, once its parked pull requests are closed, then **S1b2**, built 2026-10-27 and waiting for the owner's ruling on whether it lands without them.
+4. **S1a**, then **S1a2**, then **S1b**; while lane B builds them, once its parked pull requests are closed, then **S1b2**, built 2026-10-27.
 5. **S9** and **S11** when the specialists have agreed; S11, while lane B builds it, also after
    its parked pull requests.
 

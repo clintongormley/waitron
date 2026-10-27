@@ -319,7 +319,7 @@ by the answers):
   downloads read the privacy page saved on the Privacy card, built with the two Part 1 defaults of
   the [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open
   decisions for the owner", each open for the owner to reverse:
-  - **A. Only the Privacy card shows the privacy email for now.** Bar Ejemplo saves
+  - **A. Only the Privacy card shows the privacy email until S1b2.** Bar Ejemplo saves
     `privacidad@barejemplo.es`; Ana's invitation, the sign-in page, Account settings and Jordi's
     download show `https://barejemplo.es/privacidad` and not the email. S1b2 shows it to
     invoice customers. Alternative: the README's last line names it, "Contact Bar Ejemplo S.L. at
@@ -351,9 +351,6 @@ by the answers):
     export are offered "Send the email again" on the order in Orders while no original has reached
     the customer. So staff are told the invoice may not have reached Jordi even though nothing was
     sent. Alternative: send the invoice without the notice.
-
-  Landing: the pull request waits for the owner, who has not yet ruled whether a change to an
-  invoice email's body lands without them (questions.md, 2026-10-27).
 
   Deliberate limit: no test fails if the server read the privacy values once at start instead of
   for each email. The worker test in `apps/server/src/invoice-delivery.test.ts` pins that each pass
