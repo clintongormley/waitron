@@ -83,7 +83,7 @@ import {
   printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { readGuestsChoice } from "./receipt-guests.js";
+import { readGuestCountChoice } from "./receipt-guests.js";
 import {
   enqueueManualDrawerOpen,
   confirmReceiptHandover,
@@ -1760,7 +1760,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      const guests = readGuestsChoice(body.guests);
+      const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
@@ -1787,7 +1787,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             disk: deps.disk,
           },
           saleCfg,
-          { ...body, zoneId, guests, lateSend: late },
+          { ...body, zoneId, guestCount, lateSend: late },
           { personId, sessionId: session.sessionId },
         ),
       );
@@ -1823,7 +1823,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
-      const guests = readGuestsChoice(body.guests);
+      const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
@@ -1858,7 +1858,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             sayCardChargedNotRecorded: true,
           },
           saleCfg,
-          { ...body, zoneId, guests, lateSend: late },
+          { ...body, zoneId, guestCount, lateSend: late },
           { personId, sessionId: session.sessionId },
         ),
       );
@@ -2684,12 +2684,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         expectedEdit: BillEditExpected | null;
         tender: TillTender;
         receiptLanguage?: string;
-        guests?: unknown;
+        guestCount?: unknown;
       }>(c);
       if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
-      const guests = readGuestsChoice(body.guests);
+      const guestCount = readGuestCountChoice(body.guestCount);
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         {
@@ -2707,7 +2707,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           expectedEdit: body.expectedEdit,
           tender: body.tender,
           receiptLanguage: body.receiptLanguage,
-          guests,
+          guestCount,
         },
         { personId, sessionId: session.sessionId },
       );

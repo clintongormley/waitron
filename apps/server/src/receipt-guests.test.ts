@@ -22,7 +22,7 @@ import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { setPartyGuests } from "./parties.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
-  readGuestsChoice,
+  readGuestCountChoice,
   readPrintedGuests,
   readReceiptGuests,
   recordReceiptGuests,
@@ -352,19 +352,19 @@ async function printed(saleId: string): Promise<number | undefined> {
 
 describe("a payment request's guests", () => {
   it.each([undefined, null, 1, 4, 999])("accepts %s as itself", (value) => {
-    expect(readGuestsChoice(value)).toBe(value);
+    expect(readGuestCountChoice(value)).toBe(value);
   });
 
   it.each([[0], [1000], [2.5], [-1], ["4"], [true], [{}], [[]]])("refuses %j", (value) => {
     let thrown: unknown;
     try {
-      readGuestsChoice(value);
+      readGuestCountChoice(value);
     } catch (error) {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(AppError);
     expect((thrown as AppError).code).toBe("management.request_invalid");
-    expect((thrown as AppError).params).toEqual({ field: "guests" });
+    expect((thrown as AppError).params).toEqual({ field: "guestCount" });
   });
 });
 

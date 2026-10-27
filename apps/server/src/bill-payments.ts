@@ -65,7 +65,7 @@ import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-import { recordSaleReceiptFacts, type GuestsChoice } from "./receipt-guests.js";
+import { recordSaleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
@@ -152,7 +152,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   applied: string;
   tip: string;
   /** What the receipt prints if this payment completes the bill; absent stores the default then. */
-  guests?: number | null;
+  guestCount?: number | null;
 }
 
 /** Money given back from one bill payment before the invoice. */
@@ -662,7 +662,7 @@ async function issueWhenFullyPaid(
     moneyMoved?: boolean;
     total?: Decimal;
     printers?: PrinterLookup;
-    guests?: GuestsChoice;
+    guestCount?: GuestCountChoice;
   },
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   const notYet = { invoice: null, total: options.total };
@@ -740,7 +740,7 @@ async function issueWhenFullyPaid(
     tx,
     cfg,
     { saleId, workingOrderId, counterparty: selected.sale.counterparty },
-    options.guests,
+    options.guestCount,
   );
   await settleSale(tx, { saleId, tenders: tendersOfBill });
 
@@ -989,14 +989,14 @@ async function resultOf(
 
 /** A payment request as its retry fingerprint reads it: the lines in line order and every amount at
  * the money scale, an absent added tip as none, so a resend that spells the same request another
- * way is the same request. `guests` is left out: a resend is matched on the payment alone. */
+ * way is the same request. `guestCount` is left out: a resend is matched on the payment alone. */
 export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
   const scaled = (value: string | undefined) =>
     value === undefined ? undefined : money(decimal(value));
   return {
     ...req,
     expectedEdit: req.expectedEdit == null ? null : parseBillEditExpected(req.expectedEdit),
-    guests: undefined,
+    guestCount: undefined,
     lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),
     tendered: scaled(req.tendered),
@@ -1043,7 +1043,7 @@ export async function findSubmission(
  * payment answers the bill's total too, which the insert leaves as it was.
  *
  * Keyed by `submissionId` within the bill (design §5.1): the same payment again, whatever its
- * `guests`, answers the first row and writes nothing; the id with another payment, or naming one of
+ * `guestCount`, answers the first row and writes nothing; the id with another payment, or naming one of
  * the bill's refunds, is `submission.id_reused`.
  */
 async function beginBillPayment(
@@ -1219,7 +1219,7 @@ export async function takeBillPayment(
         {
           total: begun.total,
           printers,
-          guests: req.guests,
+          guestCount: req.guestCount,
         },
       );
       return resultOf(tx, deps, cfg, payment, invoice, total);
@@ -1336,7 +1336,7 @@ export async function completeBillPayment(
   billPaymentId: string,
   receivedAt: Date,
   attestation?: Attestation,
-  guests?: GuestsChoice,
+  guestCount?: GuestCountChoice,
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   const [payment] = await tx
     .update(billPayments)
@@ -1355,7 +1355,7 @@ export async function completeBillPayment(
     { ...cfg, origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
-    { moneyMoved: true, guests },
+    { moneyMoved: true, guestCount },
   );
   return { payment: payment!, ...issued };
 }
@@ -1497,7 +1497,7 @@ export async function takeReaderBillPayment(
               payment.id,
               settledAt,
               undefined,
-              req.guests,
+              req.guestCount,
             );
             return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
           },

@@ -8,13 +8,13 @@ import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily } from "./parties.js";
 
-/** The guests a payment request chose: a count, `null` for no line, `undefined` when it sent none. */
-export type GuestsChoice = number | null | undefined;
+/** The guest count a payment request chose: a count, `null` for no line, `undefined` when it sent none. */
+export type GuestCountChoice = number | null | undefined;
 
-/** A request's `guests`, refused as `management.request_invalid` `{ field: "guests" }` unless absent, null or 1 to 999. */
-export function readGuestsChoice(value: unknown): GuestsChoice {
+/** A request's `guestCount`, refused as `management.request_invalid` `{ field: "guestCount" }` unless absent, null or 1 to 999. */
+export function readGuestCountChoice(value: unknown): GuestCountChoice {
   if (value === undefined || value === null || isValidGuestCount(value)) return value;
-  throw invalid("guests");
+  throw invalid("guestCount");
 }
 
 /** A sale just recorded, named by what its caller handed `recordSale`. */
@@ -30,28 +30,28 @@ export async function recordSaleReceiptFacts(
   tx: Transaction,
   cfg: { locationId: LocationId },
   sale: RecordedSale,
-  guests: GuestsChoice,
+  guestCount: GuestCountChoice,
 ): Promise<void> {
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId);
   await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, sale.saleId, context?.zoneId ?? null);
-  await recordReceiptGuests(tx, sale, guests);
+  await recordReceiptGuests(tx, sale, guestCount);
 }
 
-/** Writes the row of a sale just recorded: the choice, or the default read now when there is none. Skips a full invoice. The choice must already have passed {@link readGuestsChoice}. */
+/** Writes the row of a sale just recorded: the choice, or the default read now when there is none. Skips a full invoice. The choice must already have passed {@link readGuestCountChoice}. */
 export async function recordReceiptGuests(
   tx: Transaction,
   sale: RecordedSale,
-  choice: GuestsChoice,
+  choice: GuestCountChoice,
 ): Promise<void> {
   if (sale.counterparty != null) return;
-  const guests = choice === undefined ? await storableDefault(tx, sale.workingOrderId) : choice;
-  await tx.insert(saleReceiptGuests).values({ saleId: sale.saleId, guestCount: guests });
+  const guestCount = choice === undefined ? await storableDefault(tx, sale.workingOrderId) : choice;
+  await tx.insert(saleReceiptGuests).values({ saleId: sale.saleId, guestCount });
 }
 
 /** The default as the row can hold it: a party's count above 999, which the parties table allows, stores no line. */
 async function storableDefault(tx: Transaction, workingOrderId: string): Promise<number | null> {
-  const guests = await readBillGuests(tx, workingOrderId);
-  return guests !== undefined && isValidGuestCount(guests) ? guests : null;
+  const guestCount = await readBillGuests(tx, workingOrderId);
+  return guestCount !== undefined && isValidGuestCount(guestCount) ? guestCount : null;
 }
 
 /** What a paper receipt of the sale prints: a simplified sale's stored row when it has one, else {@link readReceiptGuests}. */
@@ -63,20 +63,20 @@ export async function readPrintedGuests(
     .select({
       counterpartyTaxId: sales.counterpartyTaxId,
       stored: saleReceiptGuests.saleId,
-      guests: saleReceiptGuests.guestCount,
+      guestCount: saleReceiptGuests.guestCount,
     })
     .from(sales)
     .leftJoin(saleReceiptGuests, eq(saleReceiptGuests.saleId, sales.id))
     .where(eq(sales.id, saleId));
   if (row !== undefined && row.counterpartyTaxId === null && row.stored !== null) {
-    return row.guests ?? undefined;
+    return row.guestCount ?? undefined;
   }
   return readReceiptGuests(tx, saleId);
 }
 
 const BILL_PARTY = {
   partyId: parties.id,
-  guests: parties.guestCount,
+  guestCount: parties.guestCount,
   mergedInto: parties.mergedIntoPartyId,
 };
 
@@ -114,14 +114,14 @@ async function readBillGuests(
 
 async function guestsOfParty(
   tx: Transaction,
-  row: { partyId: string; guests: number | null; mergedInto: string | null } | undefined,
+  row: { partyId: string; guestCount: number | null; mergedInto: string | null } | undefined,
 ): Promise<number | undefined> {
-  if (row === undefined || row.guests === null || row.mergedInto !== null) return undefined;
+  if (row === undefined || row.guestCount === null || row.mergedInto !== null) return undefined;
   const family = await partyFamily(tx, row.partyId);
   const bills = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
     .where(and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned")))
     .limit(2);
-  return bills.length === 1 ? row.guests : undefined;
+  return bills.length === 1 ? row.guestCount : undefined;
 }
