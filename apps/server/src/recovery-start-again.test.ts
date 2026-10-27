@@ -827,6 +827,44 @@ describe("mountStartAgainChoice", () => {
     expect(onFinished).toHaveBeenCalledOnce();
   });
 
+  const MOVED = () =>
+    Promise.resolve({
+      choice: "move" as const,
+      setAside: {
+        state: "first-setup-set-aside/s1/state",
+        venue: "first-setup-set-aside/s1/venue",
+      },
+    });
+
+  it.each([
+    ["the browser disconnects before the answer is written", ["close"]],
+    ["the answer is written and the connection then closes", ["finish", "close"]],
+  ])("Move restarts once when %s", async (_, events) => {
+    const outgoing = new EventEmitter();
+    const { app, onFinished } = mounted({ choose: MOVED });
+    const response = await post(app, { ...FORM, choice: "move" }, { env: tls({ outgoing }) });
+    expect(response.status).toBe(200);
+    expect(onFinished).not.toHaveBeenCalled();
+    for (const event of events) outgoing.emit(event);
+    expect(onFinished).toHaveBeenCalledOnce();
+    outgoing.emit("close");
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it.each(["writableFinished", "destroyed", "closed"])(
+    "Move restarts once when the response is already %s before the choice is answered",
+    async (over) => {
+      const outgoing = Object.assign(new EventEmitter(), { [over]: true });
+      const { app, onFinished } = mounted({ choose: MOVED });
+      const response = await post(app, { ...FORM, choice: "move" }, { env: tls({ outgoing }) });
+      expect(response.status).toBe(200);
+      expect(onFinished).toHaveBeenCalledOnce();
+      outgoing.emit("finish");
+      outgoing.emit("close");
+      expect(onFinished).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([
     {
       name: "a Keep",

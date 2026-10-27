@@ -435,6 +435,31 @@ function outgoingOf(c: Context): ServerResponse | undefined {
 }
 
 /**
+ * Runs `then` once the answer is written or the connection is gone, whichever comes first: a
+ * browser that disconnects mid-answer closes the response without `'finish'`, and the finished
+ * Move must still restart.
+ */
+function afterResponse(outgoing: ServerResponse | undefined, then: () => void): void {
+  if (
+    outgoing === undefined ||
+    outgoing.writableFinished ||
+    outgoing.destroyed ||
+    outgoing.closed
+  ) {
+    then();
+    return;
+  }
+  let ran = false;
+  const once = () => {
+    if (ran) return;
+    ran = true;
+    then();
+  };
+  outgoing.once("finish", once);
+  outgoing.once("close", once);
+}
+
+/**
  * `POST /recovery-api/start-again`: the Keep or Move form `renderStartAgainSection` draws. Refuses
  * before choosing unless the request came over TLS from this page; the password goes to `choose`
  * alone and is never logged.
@@ -525,9 +550,7 @@ export function mountStartAgainChoice(
       return answer;
     }
     moved = { kind: "moved", folder: movedFolder(result.setAside) };
-    const outgoing = outgoingOf(c);
-    if (outgoing === undefined) void deps.onFinished();
-    else outgoing.once("finish", () => void deps.onFinished());
+    afterResponse(outgoingOf(c), () => void deps.onFinished());
     const answer = await page(200, { code, secure: true, message: moved });
     logChoice();
     return answer;
