@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
-import { orderPortions, workingLinePortions, type Transaction } from "@waitron/db";
+import {
+  orderPortions,
+  saleLinePortions,
+  saleLines,
+  workingLinePortions,
+  type Transaction,
+} from "@waitron/db";
 import type { PortionBinding } from "./portion-sale-projection.js";
-import type { PricedTabRound } from "./working-order.js";
+import type { OrderLineIdentity, PricedTabRound } from "./working-order.js";
 
 type Row = PricedTabRound["rows"][number];
 
@@ -150,4 +156,28 @@ export async function deletePortionBindings(
   await tx
     .delete(workingLinePortions)
     .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]));
+}
+
+/**
+ * Link each row `recordSale` just filed to the portions it stands for. `identities[i]` is the row
+ * filed as line `i + 1`, the number `grossRows` gives it and `saleLineRows` keeps.
+ */
+export async function linkSalePortions(
+  tx: Transaction,
+  saleId: string,
+  identities: readonly Pick<OrderLineIdentity, "portionIds">[],
+): Promise<void> {
+  if (!identities.some((identity) => (identity.portionIds?.length ?? 0) > 0)) return;
+  const filed = await tx
+    .select({ id: saleLines.id, lineNo: saleLines.lineNo })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId));
+  const rowOf = new Map(filed.map((row) => [row.lineNo, row.id]));
+  const links = identities.flatMap((identity, i) => {
+    const saleLineId = rowOf.get(i + 1);
+    if (saleLineId === undefined)
+      throw new Error(`linkSalePortions: sale ${saleId} filed no line ${i + 1}`);
+    return (identity.portionIds ?? []).map((portionId) => ({ saleLineId, portionId }));
+  });
+  await tx.insert(saleLinePortions).values(links);
 }

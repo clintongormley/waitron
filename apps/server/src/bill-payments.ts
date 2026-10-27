@@ -5,6 +5,7 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
+import { linkSalePortions } from "./order-portions.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   billPaymentLines,
@@ -736,6 +737,7 @@ async function issueWhenFullyPaid(
     operatorId,
     settlement: { kind: "deferred" },
   });
+  await linkSalePortions(tx, saleId, stored.identities);
   await recordSaleReceiptFacts(
     tx,
     cfg,

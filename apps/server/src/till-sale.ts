@@ -6,6 +6,7 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
+import { linkSalePortions } from "./order-portions.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -1026,6 +1027,7 @@ async function fileImmediateSale(
             ],
     },
   });
+  await linkSalePortions(tx, saleId, order.identities);
   await recordSaleReceiptFacts(
     tx,
     cfg,
@@ -1647,6 +1649,7 @@ async function finalizeCapture(
             ],
           },
         });
+        await linkSalePortions(tx, saleId, identities);
         await recordSaleReceiptFacts(
           tx,
           cfg,
@@ -1821,6 +1824,7 @@ async function finalizeRecovery(
           tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
         },
       });
+      await linkSalePortions(tx, saleId, order.identities);
       await recordSaleReceiptFacts(
         tx,
         cfg,

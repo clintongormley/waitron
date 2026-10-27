@@ -53,6 +53,8 @@ import {
 } from "./invoice-choice-delivery.js";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
+import { projectPortionSale, type PortionBinding } from "./portion-sale-projection.js";
+import { linkSalePortions } from "./order-portions.js";
 import {
   buildLineExtras,
   editLineExtras,
@@ -158,6 +160,7 @@ import {
   lineServiceCancellations,
   nowIso,
   orderGroups,
+  orderPortions,
   orderTableLabels,
   products,
   sales,
@@ -167,6 +170,7 @@ import {
   ticketItemMoves,
   partyTableLabels,
   withTransaction,
+  workingLinePortions,
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
@@ -1279,37 +1283,74 @@ export async function readLockedLines(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<StoredOrderLine[]> {
-  return toStoredLines(
-    await tx
-      .select(storedLineColumns)
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, workingOrderId))
-      .orderBy(workingOrderLines.lineNo),
-  );
+  const rows = await tx
+    .select({ ...storedLineColumns, ...portionColumns })
+    .from(workingOrderLines)
+    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .orderBy(workingOrderLines.lineNo);
+  return groupedByPortion(rows, toStoredLines(rows));
 }
 
-/** {@link readLockedLines}, with whether each line may be paid now, read in the same query. */
+/** {@link readLockedLines} before portions are grouped, with whether each line may be paid now. */
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
-): Promise<(StoredOrderLine & { payable: boolean })[]> {
+): Promise<{ lines: (StoredOrderLine & { payable: boolean })[]; grouped: StoredOrderLine[] }> {
   const rows = await tx
     .select({
       ...storedLineColumns,
+      ...portionColumns,
       sentAt: workingOrderLines.sentAt,
       sellable: productSellable,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
+    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
-  return toStoredLines(rows).map((line, i) => ({
-    ...line,
-    // A sent line is committed work, payable whatever its product's availability now.
-    payable:
-      line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.sellable),
-  }));
+  const stored = toStoredLines(rows);
+  return {
+    lines: stored.map((line, i) => ({
+      ...line,
+      // A sent line is committed work, payable whatever its product's availability now.
+      payable:
+        line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.sellable),
+    })),
+    grouped: groupedByPortion(rows, stored),
+  };
+}
+
+const portionColumns = {
+  portionId: orderPortions.id,
+  cohortId: orderPortions.cohortId,
+  ordinal: orderPortions.ordinal,
+};
+
+/** Bound portions grouped back into the rows they were priced as; an order with none is as stored. */
+function groupedByPortion(
+  rows: readonly {
+    id: string;
+    portionId: string | null;
+    cohortId: string | null;
+    ordinal: number | null;
+  }[],
+  stored: StoredOrderLine[],
+): StoredOrderLine[] {
+  const bindings = new Map<string, PortionBinding>();
+  for (const row of rows) {
+    if (row.portionId === null) continue;
+    bindings.set(row.id, {
+      lineId: row.id,
+      portionId: row.portionId,
+      cohortId: row.cohortId!,
+      ordinal: row.ordinal!,
+    });
+  }
+  return bindings.size === 0 ? stored : projectPortionSale(stored, bindings);
 }
 
 function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
@@ -1363,6 +1404,10 @@ export interface OrderLineIdentity {
   classification: SaleLineClassification | null;
   /** The unit price before a comp or a discount changed it, or null. */
   listUnitGross: Decimal | null;
+  /** On a row grouped from bound portions: every working line it stands for, `id` first. */
+  lineIds?: string[];
+  /** On a row grouped from bound portions, dish or extra: the portions it stands for. */
+  portionIds?: string[];
 }
 
 /** Gross lines together with, at the same index, the working-order line each was priced from. */
@@ -1448,14 +1493,14 @@ export async function priceStoredOrderForIssuance(
   workingOrderId: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<GrossOrder> {
-  const stored = await readLockedLinesForIssuance(tx, workingOrderId);
-  const unpayable = stored.find((line) => !line.payable);
+  const { lines, grouped } = await readLockedLinesForIssuance(tx, workingOrderId);
+  const unpayable = lines.find((line) => !line.payable);
   if (options.refuseUnsentUnavailable && unpayable !== undefined) {
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
   return {
-    gross: grossLockedLines(stored.map(({ locked }) => locked)),
-    identities: stored.map(({ identity }) => identity),
+    gross: grossLockedLines(grouped.map(({ locked }) => locked)),
+    identities: grouped.map(({ identity }) => identity),
   };
 }
 
@@ -6749,6 +6794,7 @@ export async function issueUnpaidInvoice(
     operatorId,
     settlement: { kind: "deferred" },
   });
+  await linkSalePortions(tx, saleId, invoice.identities);
   await recordSaleReceiptFacts(
     tx,
     cfg,
