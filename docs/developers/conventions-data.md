@@ -4474,8 +4474,8 @@ official languages (owner, 2026-10-20, A913). Every country pack must also provi
 demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
 Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
 Module starter content is English in code and translated at setup; its words in other languages
-live in the writing package's `src/starter-content.ts`, which the guard skips by exact path (owner,
-2026-10-20, A918: the reasons so far, the rest in A918's open slices); a test of a non-English
+go in the writing package's `src/starter-content.ts`, which the guard skips by exact path (owner,
+2026-10-20, A918); a test of a non-English
 screen reads its expected text from the strings file. A Spanish domain term
 has one declaring home, its module's vocabulary; a fiscal term never goes in the base list. Guard:
 `scripts/english-only.test.ts`, weaker than its name — it refuses only listed words, scans only

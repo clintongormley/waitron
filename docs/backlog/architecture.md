@@ -436,7 +436,7 @@ until A977).
   translation file each module ships. The kitchen station «Cocina»
   (`packages/provisioning/src/venue-apply.ts:308`), the service steps
   (`packages/venue-service/src/service-steps.ts:110–138`, A900), the device profiles
-  (`packages/layouts/src/device-profile.ts:131–152`) and A758-1's reasons. Trap: the demo seed finds
+  (`packages/layouts/src/device-profile.ts:131–152`). Trap: the demo seed finds
   the default station by its Spanish name (`apps/server/scripts/demo-seed/seed-catalogue.ts:46–56`);
   find it by `is_default`, as `dev-setup.ts` does.
 - **A963 — points 3(4) and 4.** Move the full-invoice address rule (`apps/server/src/invoice-selection.ts:20–46`:

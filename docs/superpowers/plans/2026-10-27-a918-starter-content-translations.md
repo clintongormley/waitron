@@ -641,11 +641,13 @@ export const STARTER_REASON_NAMES = {
      the Valencia row fails, `expected 'Error en marcar' to be 'Error al marcar'` (read from the
      file, not typed).
    - Delete the `"Discount"` row from the starter file: `typecheck` still passes (decision 6's
-     English fallback). The three Spanish rows of the four-venue `it.each` fail with a `TypeError`
-     reading a language of `expected["Discount"]` (`'ca-ES-valencia'` for Valencia, `'ca'` for
-     Barcelona, `'es'` for Madrid; London, whose map is `{ en }` only, passes); and the "names every starter" case fails because the seed still writes
-     "Discount" (the English fallback), so the **received** `names.en` list holds `Discount` and the
-     expected `Object.keys(STARTER_REASON_NAMES)` lacks it.
+     English fallback). The seed still writes "Discount" (the English fallback), so seven of the file's
+     nine cases fail: the four rows of the four-venue `it.each` (`provisioning.test.ts:150`) and
+     "names every starter in the file, and nothing else" (`:176`) at their English-name check, where
+     the **received** `names.en` list holds `Discount` and the expected
+     `Object.keys(STARTER_REASON_NAMES)` lacks it; and the two cases above them, which read
+     `expected["Discount"].es` (`:93`, `:122`). Measured by the finish-branch run on the slice-1 tip:
+     `Tests 7 failed | 2 passed (9)`.
 6. `pnpm --filter @waitron/adjustments test:coverage` (node and browser projects; check
    `memory_pressure | grep free` first, and run beside another session only well above 15% free).
 
@@ -703,10 +705,9 @@ Files: `apps/server/src/default-cancel-reason.test.ts`, `apps/server/scripts/dem
 5. The root `CLAUDE.md`, in the "General code is English only" line (`:368-376`), replace
    "Module starter content is English, translated at setup;" with:
    "Module starter content is English in code and translated at setup; its words in other languages
-   live in the writing package's `src/starter-content.ts`, which the guard skips by exact path
-   (owner, 2026-10-20, A918: the reasons so far, the rest in A918's open slices);". This states the
-   rule and where its translations live, and claims only the reasons as done (review I2). Whichever of
-   slices 2-4 lands last drops the words after the colon. No other line changes. (`src/starter-content.ts` is not rooted at a top-level folder, so
+   go in the writing package's `src/starter-content.ts`, which the guard skips by exact path
+   (owner, 2026-10-20, A918);". This states the rule and where its translations go. No other line
+   changes. (`src/starter-content.ts` is not rooted at a top-level folder, so
    `scripts/claude-md-pointers.test.ts` does not read it as a file pointer, `:31-42`.)
 6. `docs/developers/conventions-data.md`:
    - `:108-109` ("What it covers"): replace "Starter content a module writes into a new venue

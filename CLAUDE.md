@@ -371,8 +371,8 @@ called weaker than its name, the topic file lists what it does not see.
   reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913).
   Country packs also provide English and own demo data; Spain receipts use the venue's receipt language,
   never English. Module starter content is English in code and translated at setup; its words in other
-  languages live in the writing package's `src/starter-content.ts`, which the guard skips by exact
-  path (owner, 2026-10-20, A918: the reasons so far, the rest in A918's open slices); non-English
+  languages go in the writing package's `src/starter-content.ts`, which the guard skips by exact
+  path (owner, 2026-10-20, A918); non-English
   screen tests read expected strings. Domain terms have one declaring module vocabulary; fiscal terms
   never enter the base.
   Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;

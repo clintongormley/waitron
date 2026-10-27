@@ -1975,8 +1975,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A918. Starter content in the venue's languages at setup (left open by A758-1).**
   Starter content a module writes into a new venue is English, translated when the box is set up
-  (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
-  on every venue. The owner chose (2026-10-20): each module ships a translation file of its starter
+  (owner, 2026-10-19). The owner chose (2026-10-20): each module ships a translation file of its starter
   names, setup writes every language the venue uses from it, and the English-only check is to allow
   those files. It
   covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
