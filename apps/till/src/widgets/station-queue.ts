@@ -8,7 +8,7 @@ import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
@@ -31,6 +31,8 @@ import {
 } from "../state/kitchen-cards.js";
 import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
+import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
+import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -116,9 +118,27 @@ export class TillStationQueue extends LitElement {
     dietBadgeStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
+    segmentedOptionStyles,
     css`
       :host {
         display: block;
+      }
+
+      .width-probe {
+        height: 0;
+      }
+
+      .column-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3) var(--wt-space-2);
+        margin-block-end: var(--wt-space-3);
+      }
+
+      .tab-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
       }
 
       .visually-hidden {
@@ -731,6 +751,69 @@ export class TillStationQueue extends LitElement {
    *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
+  /** The host's width and sizes, read before each drawing so the first is already tabs or columns. */
+  #measured?: BoardMeasure;
+  #resizing?: ResizeObserver;
+  @state() private chosenTab?: ColumnKey;
+  /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
+  #opening?: ColumnKey;
+  #drewTabs = false;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeWidth();
+  }
+
+  override firstUpdated(): void {
+    this.#observeWidth();
+  }
+
+  /** Watches a line of no height across the board, not the host: the switch to tabs changes the
+   * host's height, which a watch on the host would report again in the same frame. */
+  #observeWidth(): void {
+    this.#resizing = new ResizeObserver((entries) => {
+      if (entries.at(-1)!.contentRect.width !== this.#measured?.width) this.requestUpdate();
+    });
+    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#resizing?.disconnect();
+    this.#resizing = undefined;
+  }
+
+  override willUpdate(): void {
+    const own = getComputedStyle(this);
+    const px = (token: string) => parseFloat(own.getPropertyValue(token));
+    this.#measured = {
+      width: this.getBoundingClientRect().width,
+      textPx: parseFloat(own.fontSize),
+      remPx: parseFloat(getComputedStyle(document.documentElement).fontSize),
+      tapMinPx: px("--wt-tap-min"),
+      gapPx: px("--wt-space-3"),
+    };
+    const tabs = this.groups.length > 0 && !this.#fits();
+    if (this.#opening !== undefined && tabs && !this.#drewTabs) this.chosenTab = this.#opening;
+    this.#opening = undefined;
+    this.#drewTabs = tabs;
+  }
+
+  /** The columns this board can draw that are not hidden, in the layout's order. */
+  #shown(): ColumnKey[] {
+    return this.columns.order.filter(
+      (key) =>
+        (key === "overview" || DRAWN[key] !== undefined) && !this.columns.hidden.includes(key),
+    );
+  }
+
+  #fits(): boolean {
+    return (
+      this.#measured === undefined ||
+      columnsFit(this.#measured, this.#shown(), this.columns.collapsed)
+    );
+  }
+
   #bump(
     card: KitchenCard,
     group: MergedQueueGroup,
@@ -839,7 +922,8 @@ export class TillStationQueue extends LitElement {
 
   override render() {
     const cards = kitchenCards(this.groups);
-    return html`<div class="board-head" data-board-head>
+    return html`<div class="width-probe"></div>
+      <div class="board-head" data-board-head>
         <slot name="lead"></slot>${this.#header(cards)}<wt-button
           data-columns-open
           variant="secondary"
@@ -850,7 +934,9 @@ export class TillStationQueue extends LitElement {
       <slot name="status"></slot>${this.#notices()}${
         this.groups.length === 0
           ? html`<p class="empty">${t("station.empty")}</p>`
-          : this.#board(cards)
+          : this.#fits()
+            ? this.#board(cards)
+            : this.#tabs(cards)
       }`;
   }
 
@@ -1024,16 +1110,53 @@ export class TillStationQueue extends LitElement {
   }
 
   #toggleColumn(key: ColumnKey): void {
+    if (this.columns.collapsed.includes(key)) this.#opening = key;
     this.dispatchEvent(
       new CustomEvent("toggle-column", { detail: { key }, bubbles: true, composed: true }),
     );
   }
 
+  /** One column at a time, under a tab per shown column; a collapsed column opens in its tab. */
+  #tabs(cards: readonly KitchenCard[]): TemplateResult {
+    const shown = this.#shown();
+    const chosen =
+      this.chosenTab !== undefined && shown.includes(this.chosenTab) ? this.chosenTab : shown[0]!;
+    const rows = overviewRows(overviewDishes(cards));
+    const inColumn = (state: TicketState) => cards.filter((card) => card.column === state);
+    const chosenState = DRAWN[chosen];
+    return html`<div
+        class="column-tabs"
+        data-column-tabs
+        role="group"
+        aria-label=${t("station.columns")}
+      >
+        ${shown.map((key) => {
+          const state = DRAWN[key];
+          const title =
+            state === undefined ? t("station.overview") : t(`station.state.${state}` as const);
+          const count = state === undefined ? rowsToMake(rows) : inColumn(state).length;
+          return html`<button
+            type="button"
+            class="option column-tab"
+            data-column-tab=${key}
+            aria-pressed=${key === chosen ? "true" : "false"}
+            @click=${() => (this.chosenTab = key)}
+          >
+            ${title}<span aria-hidden="true"> ·</span> ${count}
+          </button>`;
+        })}
+      </div>
+      <section class="tab-panel" data-tab-panel=${chosen} data-column=${chosenState ?? "overview"}>
+        ${
+          chosenState === undefined
+            ? this.#overview(rows)
+            : inColumn(chosenState).map((card) => this.#card(card))
+        }
+      </section>`;
+  }
+
   #board(cards: readonly KitchenCard[]): TemplateResult {
-    const shown = this.columns.order.filter(
-      (key) =>
-        (key === "overview" || DRAWN[key] !== undefined) && !this.columns.hidden.includes(key),
-    );
+    const shown = this.#shown();
     return html`<div class="kanban">
       ${shown.map((key) => {
         const collapsed = this.columns.collapsed.includes(key);

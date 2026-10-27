@@ -3615,12 +3615,17 @@ describe("till-station-queue: a card's layout", () => {
         now: AGE_NOW,
       });
       expect(el.shadowRoot!.querySelector('[data-move-station="waiting"]')).not.toBeNull();
-      const spans = (order: number, item: string) => {
+      // At 390 px the board draws tabs, so each card is checked under its own tab.
+      const spans = async (order: number, item: string, tab: ColumnKey) => {
+        el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-column-tab="${tab}"]`)?.click();
+        await el.updateComplete;
         const card = cardOf(el, order);
         const row = card.querySelector<HTMLElement>(`[data-item="${item}"]`)!;
         return Math.abs(rect(row).width - contentWidth(card)) <= 1;
       };
-      expect({ waiting: spans(7, "waiting"), preparing: spans(8, "preparing") }).toEqual({
+      const waiting = await spans(7, "waiting", "waiting");
+      const preparing = await spans(8, "preparing", "preparing");
+      expect({ waiting, preparing }).toEqual({
         waiting: true,
         preparing: true,
       });
@@ -4117,6 +4122,149 @@ describe("the Overview column", () => {
     } finally {
       setLocale(before);
     }
+  });
+});
+
+describe("the board's narrow tabs", () => {
+  const layout = (collapsed: ColumnKey[] = []) => ({
+    order: ["overview", "waiting", "preparing", "ready"] as ColumnKey[],
+    hidden: [] as ColumnKey[],
+    collapsed,
+  });
+  // Two cards Waiting, one Preparing, one Ready.
+  const board = () => [
+    ageBill(1, [ageDish("w1", 15, { name: "Sirloin" })]),
+    ageBill(2, [ageDish("w2", 16, { name: "Burger" })]),
+    ageBill(3, [ageDish("p1", 10, { name: "Rib steak", state: "preparing" })]),
+    ageBill(4, [ageDish("r1", 5, { name: "Croquettes", state: "ready" })]),
+  ];
+  const mountBoard = (columns = layout(), groups = board()) =>
+    mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns,
+    });
+  const shadow = (el: TillStationQueue) => el.shadowRoot!;
+  const tabs = (el: TillStationQueue) => [
+    ...shadow(el).querySelectorAll<HTMLButtonElement>("[data-column-tab]"),
+  ];
+  const tab = (el: TillStationQueue, key: string) =>
+    shadow(el).querySelector<HTMLButtonElement>(`[data-column-tab="${key}"]`)!;
+  const panels = (el: TillStationQueue) => [
+    ...shadow(el).querySelectorAll<HTMLElement>("[data-tab-panel]"),
+  ];
+
+  it("the board's narrow tabs: at 390 px the board draws a tab per shown column, in order, the first chosen", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    expect(tabs(el).map((button) => button.dataset.columnTab)).toEqual([
+      "overview",
+      "waiting",
+      "preparing",
+      "ready",
+    ]);
+    expect(tabs(el).map((button) => button.getAttribute("aria-pressed"))).toEqual([
+      "true",
+      "false",
+      "false",
+      "false",
+    ]);
+    const row = shadow(el).querySelector<HTMLElement>("[data-column-tabs]")!;
+    expect(row.getAttribute("role")).toBe("group");
+    expect(row.getAttribute("aria-label")).toBe(t("station.columns"));
+    expect(panels(el).map((panel) => panel.dataset.tabPanel)).toEqual(["overview"]);
+    expect(panels(el)[0]!.querySelectorAll("[data-overview-row]")).toHaveLength(3);
+    expect(shadow(el).querySelector(".kanban")).toBeNull();
+  });
+
+  it("the board's narrow tabs: a tab is named by its column and count", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    await expect
+      .element(page.getByRole("button", { name: "Waiting 2", exact: true }))
+      .toBeInTheDocument();
+    expect(tab(el, "waiting").textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `${t("station.state.queued")} · 2`,
+    );
+  });
+
+  it("the board's narrow tabs: tapping a tab shows that column's cards", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    tab(el, "preparing").click();
+    await el.updateComplete;
+    expect(tab(el, "preparing").getAttribute("aria-pressed")).toBe("true");
+    expect(tab(el, "overview").getAttribute("aria-pressed")).toBe("false");
+    expect(panels(el)).toHaveLength(1);
+    const panel = panels(el)[0]!;
+    expect(panel.dataset.column).toBe("preparing");
+    expect(
+      [...panel.querySelectorAll<HTMLElement>("[data-card]")].map((c) => c.dataset.order),
+    ).toEqual(["3"]);
+    expect(shadow(el).querySelector("[data-overview-row]")).toBeNull();
+  });
+
+  it.each([
+    ["1024 × 768 at 100%", "columns", [1024, 768, 100], []],
+    ["1024 × 768 at 130%", "tabs", [1024, 768, 130], []],
+    ["1280 × 800 at 130%", "columns", [1280, 800, 130], []],
+    [
+      "1024 × 768 at 130% with Preparing and Ready collapsed",
+      "columns",
+      [1024, 768, 130],
+      ["preparing", "ready"],
+    ],
+  ] as const)(
+    "the board's narrow tabs: at %s the board draws %s",
+    async (_, drawn, frame, collapsed) => {
+      await pageAt(frame[0], frame[1], frame[2]);
+      const { el } = await mountBoard(layout([...collapsed]));
+      expect(shadow(el).querySelector(".kanban") === null ? "tabs" : "columns").toBe(drawn);
+      expect(tabs(el).length > 0 ? "tabs" : "columns").toBe(drawn);
+    },
+  );
+
+  it("the board's narrow tabs: the board changes to tabs and back as its width crosses the need", async () => {
+    await page.viewport(1280, 900);
+    const { el } = await mountBoard();
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    await page.viewport(800, 900);
+    await vi.waitFor(() => expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull());
+    expect(shadow(el).querySelector(".kanban")).toBeNull();
+    await page.viewport(1280, 900);
+    await vi.waitFor(() => expect(shadow(el).querySelector(".kanban")).not.toBeNull());
+    expect(shadow(el).querySelector("[data-column-tabs]")).toBeNull();
+    expect(document.querySelector("till-station-queue")).toBe(el);
+  });
+
+  it("the board's narrow tabs: opening a collapsed column that no longer fits shows its tab", async () => {
+    await pageAt(1024, 768, 130);
+    const { el } = await mountBoard(layout(["preparing", "ready"]));
+    const keys: unknown[] = [];
+    el.addEventListener("toggle-column", (event) => keys.push((event as CustomEvent).detail));
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+
+    shadow(el).querySelector<HTMLButtonElement>('[data-column-toggle="ready"]')!.click();
+    expect(keys).toEqual([{ key: "ready" }]);
+    el.columns = layout(["preparing"]);
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+
+    shadow(el).querySelector<HTMLButtonElement>('[data-column-toggle="preparing"]')!.click();
+    el.columns = layout([]);
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).toBeNull();
+    expect(tab(el, "preparing").getAttribute("aria-pressed")).toBe("true");
+    expect(tab(el, "overview").getAttribute("aria-pressed")).toBe("false");
+    expect(panels(el)[0]!.dataset.column).toBe("preparing");
+  });
+
+  it("the board's narrow tabs: with no orders at 390 px there are no tabs, only Nothing in the kitchen", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(layout(), []);
+    expect(tabs(el)).toHaveLength(0);
+    expect(shadow(el).querySelector(".empty")!.textContent!.trim()).toBe(t("station.empty"));
   });
 });
 
