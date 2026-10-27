@@ -3098,6 +3098,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   into sections** (A841 slice 11, D11 of
   [the slice 11 plan](superpowers/plans/2026-10-27-a841-11-text-by-hand.md)).
 
+- **The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look
+  check).** The bar's middle strip scrolls sideways (`.till-strip`, `apps/till/src/widgets/till-shell.ts`)
+  and More repeats its actions, so nothing is lost, but buttons are scrolled out of view. Strip
+  content / visible width: 1280 × 800 in Spanish, Serif at 130%, 959 / 899 px ("Pase" out of
+  view); the device's own typeface at 130%, 921 / 917; Waitron's own look at 100%, 940 / 940. At
+  1024 × 768 the strip overflows in every setup measured, Waitron's own look at 100% included
+  (724 / 684 English, 789 / 684 Spanish). At 1024 × 768 and 130% the bill's scrolling area is
+  48–64 px tall, less than one bill line, against 110 px for Waitron's look at 100%. Not measured on
+  main, so whether the 1024 overflow predates slice 11 is unchecked. Readings:
+  `~/waitron-campaign/a841-11b-shots/look-report-11b.md` (lane A's machine).
+
 - **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
   design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
   reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on the dashboard, the
