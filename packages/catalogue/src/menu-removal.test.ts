@@ -58,8 +58,8 @@ async function removalFixture() {
           allergens: {},
         })
       ).id;
-    const tortilla = await make("Tortilla");
-    const croquetas = await make("Croquetas");
+    const omelette = await make("Tortilla");
+    const croquette = await make("Croquetas");
     const half = async (productId: string) =>
       (
         await setProductVariants(
@@ -78,32 +78,32 @@ async function removalFixture() {
           "en",
         )
       )[0]!.id;
-    const tortillaHalf = await half(tortilla);
-    const croquetasHalf = await half(croquetas);
+    const omeletteHalf = await half(omelette);
+    const croquetteHalf = await half(croquette);
 
     const tapasRoot = (await readMenuStructure(tx, tapas)).rootSectionId;
     const terraceRoot = (await readMenuStructure(tx, terrace)).rootSectionId;
-    await addMember(tx, tapasRoot, product(croquetas));
-    await addMember(tx, tapasRoot, product(tortilla));
+    await addMember(tx, tapasRoot, product(croquette));
+    await addMember(tx, tapasRoot, product(omelette));
     const fried = (await createSectionIn(tx, tapasRoot, { internalName: "Fried" })).id;
-    await addMember(tx, fried, product(tortilla));
-    await addMember(tx, fried, product(croquetas));
+    await addMember(tx, fried, product(omelette));
+    await addMember(tx, fried, product(croquette));
     const starters = (await createSectionIn(tx, terraceRoot, { internalName: "Starters" })).id;
     const cold = (await createSectionIn(tx, starters, { internalName: "Cold" })).id;
-    await addMember(tx, cold, product(tortilla));
-    await addMember(tx, cold, product(croquetas));
+    await addMember(tx, cold, product(omelette));
+    await addMember(tx, cold, product(croquette));
 
     for (const menuId of [tapas, terrace])
       for (const [productId, variantId] of [
-        [tortilla, tortillaHalf],
-        [croquetas, croquetasHalf],
+        [omelette, omeletteHalf],
+        [croquette, croquetteHalf],
       ] as const) {
         const offer = await offerOf(tx, menuId, productId);
         await updateMenuItem(tx, menuId, offer, { grossPrice: "5.00" });
         await setMenuVariantPrice(tx, offer, variantId, "3.00", menuId);
       }
-    await addShortcut(tx, tapas, product(croquetas));
-    await addShortcut(tx, tapas, product(tortilla));
+    await addShortcut(tx, tapas, product(croquette));
+    await addShortcut(tx, tapas, product(omelette));
     await addShortcut(tx, tapas, section(fried));
     return {
       tapasFolder,
@@ -112,10 +112,10 @@ async function removalFixture() {
       tapasRoot,
       fried,
       cold,
-      tortilla,
-      croquetas,
-      tortillaHalf,
-      croquetasHalf,
+      omelette,
+      croquette,
+      omeletteHalf,
+      croquetteHalf,
     };
   });
 }
@@ -179,13 +179,13 @@ describe("a product made Inactive comes off every menu", () => {
     expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
 
     await expect(
-      app((tx) => updateProduct(tx, r.tortilla, { active: false })),
+      app((tx) => updateProduct(tx, r.omelette, { active: false })),
     ).rejects.toMatchObject({
       code: "product.on_live_menu",
       params: {
         products: [
-          { id: r.tortilla, name: "Tortilla" },
-          { id: r.tortillaHalf, name: "Half" },
+          { id: r.omelette, name: "Tortilla" },
+          { id: r.omeletteHalf, name: "Half" },
         ],
         menus: expect.arrayContaining([
           { id: r.tapas, name: "Tapas" },
@@ -194,45 +194,45 @@ describe("a product made Inactive comes off every menu", () => {
       },
     });
     await app(async (tx) => {
-      await tx.update(products).set({ active: false }).where(eq(products.id, r.tortilla));
-      await takeOffMenus(tx, [r.tortilla]);
+      await tx.update(products).set({ active: false }).where(eq(products.id, r.omelette));
+      await takeOffMenus(tx, [r.omelette]);
     });
 
-    await expectOffEveryMenu(r, r.tortilla);
+    await expectOffEveryMenu(r, r.omelette);
     expect(await states([r.tapas, r.terrace])).toEqual(["changed", "changed"]);
-    await expectStillOnEveryMenu(r, r.croquetas);
+    await expectStillOnEveryMenu(r, r.croquette);
     expect(await listProducts(r.tapasRoot)).toEqual([
-      { position: 0, productId: r.croquetas },
+      { position: 0, productId: r.croquette },
       { position: 1, productId: null },
     ]);
-    expect(await listProducts(r.fried)).toEqual([{ position: 0, productId: r.croquetas }]);
-    expect(await listProducts(r.cold)).toEqual([{ position: 0, productId: r.croquetas }]);
+    expect(await listProducts(r.fried)).toEqual([{ position: 0, productId: r.croquette }]);
+    expect(await listProducts(r.cold)).toEqual([{ position: 0, productId: r.croquette }]);
   });
 
   it("refuses restoration and remains off every menu", async () => {
     const r = await removalFixture();
-    await app((tx) => updateProduct(tx, r.tortilla, { active: false }));
+    await app((tx) => updateProduct(tx, r.omelette, { active: false }));
     await expect(
-      app((tx) => updateProduct(tx, r.tortilla, { active: true })),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.tortilla } });
-    await expectOffEveryMenu(r, r.tortilla);
+      app((tx) => updateProduct(tx, r.omelette, { active: true })),
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.omelette } });
+    await expectOffEveryMenu(r, r.omelette);
   });
 
   it("through deactivateProduct", async () => {
     const r = await removalFixture();
-    await app((tx) => deactivateProduct(tx, r.tortilla));
-    await expectOffEveryMenu(r, r.tortilla);
-    await expectStillOnEveryMenu(r, r.croquetas);
+    await app((tx) => deactivateProduct(tx, r.omelette));
+    await expectOffEveryMenu(r, r.omelette);
+    await expectStillOnEveryMenu(r, r.croquette);
   });
 
   it("through the product editor's save with active false", async () => {
     const r = await removalFixture();
     await app(async (tx) => {
-      const value = await readProductEditor(tx, r.tortilla);
-      await saveProductEditor(tx, r.tortilla, r.tapas, { ...value, active: false }, "en");
+      const value = await readProductEditor(tx, r.omelette);
+      await saveProductEditor(tx, r.omelette, r.tapas, { ...value, active: false }, "en");
     });
-    await expectOffEveryMenu(r, r.tortilla);
-    await expectStillOnEveryMenu(r, r.croquetas);
+    await expectOffEveryMenu(r, r.omelette);
+    await expectStillOnEveryMenu(r, r.croquette);
   });
 
   it("for every product one Disable of a product selection names", async () => {
@@ -240,12 +240,12 @@ describe("a product made Inactive comes off every menu", () => {
     await app((tx) =>
       deleteCatalogueItems(
         tx,
-        { productIds: [r.tortilla, r.croquetas], categoryIds: [] },
+        { productIds: [r.omelette, r.croquette], categoryIds: [] },
         "delete",
       ),
     );
-    await expectOffEveryMenu(r, r.tortilla);
-    await expectOffEveryMenu(r, r.croquetas);
+    await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, r.croquette);
     expect(await listProducts(r.tapasRoot)).toEqual([{ position: 0, productId: null }]);
   });
 
@@ -254,12 +254,12 @@ describe("a product made Inactive comes off every menu", () => {
     await app((tx) =>
       deleteCatalogueItems(
         tx,
-        { productIds: [r.tortilla], categoryIds: [r.tapasFolder] },
+        { productIds: [r.omelette], categoryIds: [r.tapasFolder] },
         "move_up",
       ),
     );
-    await expectOffEveryMenu(r, r.tortilla);
-    await expectStillOnEveryMenu(r, r.croquetas);
+    await expectOffEveryMenu(r, r.omelette);
+    await expectStillOnEveryMenu(r, r.croquette);
   });
 
   it("for every product in a folder deleted with its contents", async () => {
@@ -267,8 +267,8 @@ describe("a product made Inactive comes off every menu", () => {
     await app((tx) =>
       deleteCatalogueItems(tx, { productIds: [], categoryIds: [r.tapasFolder] }, "delete"),
     );
-    await expectOffEveryMenu(r, r.tortilla);
-    await expectOffEveryMenu(r, r.croquetas);
+    await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, r.croquette);
   });
 
   it("refuses a published inclusion; historical removal clears its settings and changes both previews", async () => {
@@ -301,10 +301,10 @@ describe("a product made Inactive comes off every menu", () => {
 
   it("leaves a missing tile, named with the product's name, where its Device Home Page shortcut was", async () => {
     const r = await removalFixture();
-    await app((tx) => updateProduct(tx, r.tortilla, { active: false }));
+    await app((tx) => updateProduct(tx, r.omelette, { active: false }));
     const home = await app((tx) => readMenuHome(tx, r.tapas));
     expect(home.shortcuts.map(({ position, ref }) => ({ position, ref }))).toEqual([
-      { position: 0, ref: product(r.croquetas) },
+      { position: 0, ref: product(r.croquette) },
       { position: 1, ref: { kind: "missing", name: "Tortilla" } },
       { position: 2, ref: section(r.fried) },
     ]);
@@ -388,7 +388,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
     const [held] = await fx.db
       .select({ id: sectionMembers.id })
       .from(sectionMembers)
-      .where(and(eq(sectionMembers.sectionId, r.cold), eq(sectionMembers.productId, r.tortilla)));
+      .where(and(eq(sectionMembers.sectionId, r.cold), eq(sectionMembers.productId, r.omelette)));
     expect(
       await codeOf(() => app((tx) => replaceMember(tx, r.cold, held!.id, product(gazpacho)))),
     ).toBe("menu_section.membership_invalid");
@@ -406,9 +406,9 @@ describe("an Inactive product cannot be added to a menu list", () => {
       .values({ menuId: r.terrace, productId: gazpacho, grossPrice: 450 });
 
     const offered = await app((tx) => listMenuOffers(tx, [r.terrace]));
-    expect(offered.map((offer) => offer.productId)).toEqual([r.tortilla, r.croquetas]);
+    expect(offered.map((offer) => offer.productId)).toEqual([r.omelette, r.croquette]);
     const priced = await app((tx) => menuPrices(tx, r.terrace));
-    expect(priced.map((row) => row.productId)).toEqual([r.tortilla, r.croquetas]);
+    expect(priced.map((row) => row.productId)).toEqual([r.omelette, r.croquette]);
   });
 });
 
@@ -418,12 +418,12 @@ describe("an Inactive product cannot be added to a menu list", () => {
  */
 async function variantFixture() {
   const r = await removalFixture();
-  const tortillaWhole = await app(async (tx) => {
-    const [half] = await listProductVariants(tx, r.tortilla);
+  const omeletteWhole = await app(async (tx) => {
+    const [half] = await listProductVariants(tx, r.omelette);
     const whole = (
       await setProductVariants(
         tx,
-        r.tortilla,
+        r.omelette,
         [
           half!,
           {
@@ -439,10 +439,10 @@ async function variantFixture() {
       )
     )[1]!.id;
     for (const menuId of [r.tapas, r.terrace])
-      await setMenuVariantPrice(tx, await offerOf(tx, menuId, r.tortilla), whole, "6.00", menuId);
+      await setMenuVariantPrice(tx, await offerOf(tx, menuId, r.omelette), whole, "6.00", menuId);
     return whole;
   });
-  return { ...r, tortillaWhole };
+  return { ...r, omeletteWhole };
 }
 
 type VariantRemoval = Awaited<ReturnType<typeof variantFixture>>;
@@ -465,29 +465,29 @@ describe("a variant made Inactive loses its price on every menu", () => {
       "through its own editor save",
       (r) =>
         app(async (tx) => {
-          const value = await readProductEditor(tx, r.tortillaHalf);
-          await saveProductEditor(tx, r.tortillaHalf, r.tapas, { ...value, active: false }, "en");
+          const value = await readProductEditor(tx, r.omeletteHalf);
+          await saveProductEditor(tx, r.omeletteHalf, r.tapas, { ...value, active: false }, "en");
         }),
     ],
     [
       "through its product's editor save sending it Inactive",
       (r) =>
         app(async (tx) => {
-          const value = await readProductEditor(tx, r.tortilla);
+          const value = await readProductEditor(tx, r.omelette);
           const variants = value.variants.map((variant) =>
-            variant.id === r.tortillaHalf ? { ...variant, active: false } : variant,
+            variant.id === r.omeletteHalf ? { ...variant, active: false } : variant,
           );
-          await saveProductEditor(tx, r.tortilla, r.tapas, { ...value, variants }, "en");
+          await saveProductEditor(tx, r.omelette, r.tapas, { ...value, variants }, "en");
         }),
     ],
     [
       "through setProductVariants leaving it out",
       (r) =>
         app(async (tx) => {
-          const whole = (await listProductVariants(tx, r.tortilla)).find(
-            (variant) => variant.id === r.tortillaWhole,
+          const whole = (await listProductVariants(tx, r.omelette)).find(
+            (variant) => variant.id === r.omeletteWhole,
           );
-          await setProductVariants(tx, r.tortilla, [whole!], "en");
+          await setProductVariants(tx, r.omelette, [whole!], "en");
         }),
     ],
   ];
@@ -496,25 +496,25 @@ describe("a variant made Inactive loses its price on every menu", () => {
     "%s refuses a published variant; historical removal clears its prices and preserves every sibling",
     async (_, makeInactive) => {
       const r = await variantFixture();
-      expect(await menusPricing(r.tortillaHalf)).toEqual(bothMenus(r));
+      expect(await menusPricing(r.omeletteHalf)).toEqual(bothMenus(r));
       await publish(r.tapas);
       await publish(r.terrace);
       expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
 
       await expect(makeInactive(r)).rejects.toMatchObject({
         code: "product.on_live_menu",
-        params: { products: [{ id: r.tortillaHalf, name: "Half" }] },
+        params: { products: [{ id: r.omeletteHalf, name: "Half" }] },
       });
-      expect(await menusPricing(r.tortillaHalf)).toEqual(bothMenus(r));
+      expect(await menusPricing(r.omeletteHalf)).toEqual(bothMenus(r));
       await app(async (tx) => {
-        await tx.update(products).set({ active: false }).where(eq(products.id, r.tortillaHalf));
-        await menuRemoval.dropMenuPrices(tx, [r.tortillaHalf]);
+        await tx.update(products).set({ active: false }).where(eq(products.id, r.omeletteHalf));
+        await menuRemoval.dropMenuPrices(tx, [r.omeletteHalf]);
       });
 
-      expect(await menusPricing(r.tortillaHalf)).toEqual([]);
-      expect(await menusPricing(r.tortillaWhole)).toEqual(bothMenus(r));
-      expect(await menusPricing(r.croquetasHalf)).toEqual(bothMenus(r));
-      expect(await memberRowsNaming(r.tortilla)).toHaveLength(4);
+      expect(await menusPricing(r.omeletteHalf)).toEqual([]);
+      expect(await menusPricing(r.omeletteWhole)).toEqual(bothMenus(r));
+      expect(await menusPricing(r.croquetteHalf)).toEqual(bothMenus(r));
+      expect(await memberRowsNaming(r.omelette)).toHaveLength(4);
       expect(await states([r.tapas, r.terrace])).toEqual(["changed", "changed"]);
     },
   );
@@ -523,51 +523,51 @@ describe("a variant made Inactive loses its price on every menu", () => {
     const r = await variantFixture();
     const variantsPriced = async (menuId: string) =>
       (await app((tx) => menuPrices(tx, menuId)))
-        .find((row) => row.productId === r.tortilla)!
+        .find((row) => row.productId === r.omelette)!
         .variants.map(({ variantId, price }) => ({ variantId, price }));
     const variantsOffered = async (menuId: string) =>
       (await app((tx) => listMenuOffers(tx, [menuId])))
-        .find((offer) => offer.productId === r.tortilla)!
+        .find((offer) => offer.productId === r.omelette)!
         .variants.map(({ id, menuPrice }) => ({ id, menuPrice }));
     await app(async (tx) => {
-      const whole = (await listProductVariants(tx, r.tortilla)).find(
-        (variant) => variant.id === r.tortillaWhole,
+      const whole = (await listProductVariants(tx, r.omelette)).find(
+        (variant) => variant.id === r.omeletteWhole,
       );
-      await setProductVariants(tx, r.tortilla, [whole!], "en");
+      await setProductVariants(tx, r.omelette, [whole!], "en");
     });
     for (const menuId of [r.tapas, r.terrace]) {
-      expect(await variantsPriced(menuId)).toEqual([{ variantId: r.tortillaWhole, price: "6.00" }]);
-      expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
+      expect(await variantsPriced(menuId)).toEqual([{ variantId: r.omeletteWhole, price: "6.00" }]);
+      expect(await variantsOffered(menuId)).toEqual([{ id: r.omeletteWhole, menuPrice: "6.00" }]);
     }
 
     await expect(
       app(async (tx) => {
-        const variants = await listProductVariants(tx, r.tortilla);
+        const variants = await listProductVariants(tx, r.omelette);
         await setProductVariants(
           tx,
-          r.tortilla,
+          r.omelette,
           variants.map((variant) => ({ ...variant, active: true })),
           "en",
         );
       }),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.tortillaHalf } });
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.omeletteHalf } });
 
     for (const menuId of [r.tapas, r.terrace]) {
-      expect(await variantsPriced(menuId)).toEqual([{ variantId: r.tortillaWhole, price: "6.00" }]);
-      expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
+      expect(await variantsPriced(menuId)).toEqual([{ variantId: r.omeletteWhole, price: "6.00" }]);
+      expect(await variantsOffered(menuId)).toEqual([{ id: r.omeletteWhole, menuPrice: "6.00" }]);
     }
   });
 
   it("cannot be given a menu price by setMenuVariantPrice", async () => {
     const r = await variantFixture();
-    await app((tx) => updateProduct(tx, r.tortillaHalf, { active: false }));
-    const offer = await app((tx) => offerOf(tx, r.tapas, r.tortilla));
+    await app((tx) => updateProduct(tx, r.omeletteHalf, { active: false }));
+    const offer = await app((tx) => offerOf(tx, r.tapas, r.omelette));
     expect(
       await codeOf(() =>
-        app((tx) => setMenuVariantPrice(tx, offer, r.tortillaHalf, "3.20", r.tapas)),
+        app((tx) => setMenuVariantPrice(tx, offer, r.omeletteHalf, "3.20", r.tapas)),
       ),
     ).toBe("product.variant_not_found");
-    expect(await menusPricing(r.tortillaHalf)).toEqual([]);
+    expect(await menusPricing(r.omeletteHalf)).toEqual([]);
   });
 });
 
@@ -584,40 +584,40 @@ describe("saving a product or variant that was Inactive already", () => {
         });
       const keepOnlyWhole = () =>
         app(async (tx) => {
-          const whole = (await listProductVariants(tx, r.tortilla)).find(
-            (variant) => variant.id === r.tortillaWhole,
+          const whole = (await listProductVariants(tx, r.omelette)).find(
+            (variant) => variant.id === r.omeletteWhole,
           );
-          await setProductVariants(tx, r.tortilla, [whole!], "en");
+          await setProductVariants(tx, r.omelette, [whole!], "en");
         });
 
-      await editorSave(r.croquetas);
-      await expect(editorSave(r.croquetasHalf)).rejects.toMatchObject({
+      await editorSave(r.croquette);
+      await expect(editorSave(r.croquetteHalf)).rejects.toMatchObject({
         code: "product.archived",
-        params: { productId: r.croquetasHalf },
+        params: { productId: r.croquetteHalf },
       });
       await keepOnlyWhole();
-      expect(lists.mock.calls.map(([, ids]) => ids)).toEqual([[r.croquetas]]);
+      expect(lists.mock.calls.map(([, ids]) => ids)).toEqual([[r.croquette]]);
       expect(prices.mock.calls.map(([, ids]) => ids)).toEqual([
-        [r.croquetasHalf],
-        [r.tortillaHalf],
+        [r.croquetteHalf],
+        [r.omeletteHalf],
       ]);
 
       lists.mockClear();
       prices.mockClear();
-      await expect(editorSave(r.croquetas)).rejects.toMatchObject({
+      await expect(editorSave(r.croquette)).rejects.toMatchObject({
         code: "product.archived",
-        params: { productId: r.croquetas },
+        params: { productId: r.croquette },
       });
       await expect(
-        app((tx) => updateProduct(tx, r.croquetas, { active: false })),
-      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquetas } });
-      await expect(editorSave(r.croquetasHalf)).rejects.toMatchObject({
+        app((tx) => updateProduct(tx, r.croquette, { active: false })),
+      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquette } });
+      await expect(editorSave(r.croquetteHalf)).rejects.toMatchObject({
         code: "product.archived",
-        params: { productId: r.croquetasHalf },
+        params: { productId: r.croquetteHalf },
       });
       await expect(
-        app((tx) => updateProduct(tx, r.croquetasHalf, { active: false })),
-      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquetasHalf } });
+        app((tx) => updateProduct(tx, r.croquetteHalf, { active: false })),
+      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquetteHalf } });
       await keepOnlyWhole();
       expect(lists).not.toHaveBeenCalled();
       expect(prices).not.toHaveBeenCalled();
@@ -669,6 +669,6 @@ describe("menusHolding", () => {
       return id;
     });
     expect(await app((tx) => menusHolding(tx, [gazpacho]))).toBe(0);
-    expect(await app((tx) => menusHolding(tx, [r.tortilla, gazpacho]))).toBe(2);
+    expect(await app((tx) => menusHolding(tx, [r.omelette, gazpacho]))).toBe(2);
   });
 });

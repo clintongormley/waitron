@@ -490,12 +490,11 @@ until A977).
   pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
   Día» in an English slot (`menu.ts:840`) are fixed there. After A918.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
-  The separate core-comment [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
   naming sites remain in the till's boot/counter and parties suites;
   the payment widget's idle-choice and main suites,
-  the server's till API tests, catalogue and service-operation fixtures, and shared station fixtures.
+  the server's till API tests, other catalogue fixtures, and shared station fixtures.
   Shared equipment fixture exports and their other consumers still need English names.
   String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
   Developer/demo script names remain A975's. Low priority.

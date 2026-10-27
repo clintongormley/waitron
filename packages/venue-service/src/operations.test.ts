@@ -1276,7 +1276,7 @@ describe("routing outcomes and menu readiness", () => {
     const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Tapas" });
-      const croquetas = await createProduct(tx, {
+      const croquette = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
         name: "Croquetas",
@@ -1287,7 +1287,7 @@ describe("routing outcomes and menu readiness", () => {
       });
       const offer = await addProductToMenu(tx, {
         menuId: menu.id,
-        productId: croquetas.id,
+        productId: croquette.id,
         grossPrice: "6.00",
       });
       await offerMenuThroughZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
@@ -1300,7 +1300,7 @@ describe("routing outcomes and menu readiness", () => {
         (await listZoneOffers(tx, cfg, otherZoneId)).offers.map((row) => [row.id, row.available]),
       ).toEqual([[offer.id, false]]);
 
-      await tx.execute(sql`update products set available = true where id = ${croquetas.id}`);
+      await tx.execute(sql`update products set available = true where id = ${croquette.id}`);
       expect(
         (await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => [row.id, row.available]),
       ).toEqual([[offer.id, true]]);
