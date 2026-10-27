@@ -203,12 +203,14 @@ are hard to read, the line adds how many, as in "1 set by hand: Text (light) · 
 heading to open it.
 
 Inside, Advanced holds five sections, in this order: **Page and surfaces**, **Text colours and
-links**, **Buttons**, **Fields and focus** and **Text**. Each is closed when you open Advanced, and
-each has a closed line of its own that says what in it is set by hand, such as "1 set by hand: Page
-(light)" or "None set by hand", ending with "· 1 hard to read" while one of its values is hard to
-read. Press a section's heading to open it. A section stays open or closed as you leave it, closing
-and opening Advanced included, until the editor closes; the next time the editor opens, every
-section starts closed.
+links**, **Buttons**, **Fields and focus** and **Text**. Each starts closed when you open the
+editor, and each has a closed line of its own that says what in it is set by hand, such as "1 set by
+hand: Page (light)" or "None set by hand". While colours set by hand in that section, or, in the
+**Text** section, text sizes, are hard to read, the line adds how many, as in "1 set by hand: Page
+(light) · 1 hard to read". A brand colour that is hard to read counts in none of the sections. Press
+a section's heading to open it. A section stays open or closed as you leave it, closing and opening
+Advanced included, until the editor closes; the next time the editor opens, every section starts
+closed.
 
 In the four colour sections, a row for each of the section's colours gives its value on light
 screens and on dark screens, under the headings **Light screens** and **Dark screens** at the top of

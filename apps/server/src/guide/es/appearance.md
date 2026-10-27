@@ -226,12 +226,15 @@ cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». P
 abrirla.
 
 Dentro, Avanzado tiene cinco secciones, en este orden: **Página y superficies**, **Colores del texto
-y enlaces**, **Botones**, **Campos y foco** y **Texto**. Cada una está cerrada cuando abres
-Avanzado, y cada una tiene su propia línea cerrada que dice qué tiene fijado a mano, por ejemplo «1
-fijado a mano: Página (versión clara)» o «Ninguno fijado a mano», que termina en «· 1 se lee mal»
-mientras uno de sus valores se lee mal. Pulsa el título de una sección para abrirla. Una sección se
-queda abierta o cerrada como la dejes, aunque cierres y vuelvas a abrir Avanzado, hasta que se
-cierra el editor; la próxima vez que se abre el editor, todas las secciones empiezan cerradas.
+y enlaces**, **Botones**, **Campos y foco** y **Texto**. Cada una empieza cerrada cuando abres el
+editor, y cada una tiene su propia línea cerrada que dice qué tiene fijado a mano, por ejemplo «1
+fijado a mano: Página (versión clara)» o «Ninguno fijado a mano». Mientras haya colores fijados a
+mano en esa sección, o, en la sección **Texto**, tamaños de texto, que se leen mal, la línea añade
+cuántos, como en «1 fijado a mano: Página (versión clara) · 1 se lee mal». Un color de marca que se
+lee mal no cuenta en ninguna de las secciones. Pulsa el título de una sección para abrirla. Una
+sección se queda abierta o cerrada como la dejes, aunque cierres y vuelvas a abrir Avanzado, hasta
+que se cierra el editor; la próxima vez que se abre el editor, todas las secciones empiezan
+cerradas.
 
 En las cuatro secciones de colores, una fila por cada color de la sección da su valor en las
 pantallas claras y en las oscuras, bajo los títulos **Pantallas claras** y **Pantallas oscuras**
