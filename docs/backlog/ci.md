@@ -108,9 +108,7 @@ the fix at the cause.
 
 ## Nothing checks, on every CI run, that each server test file ran in exactly one shard.
 
-The
-guard checks the packing over a walk of the tree, and A938's pull request (#1930) recorded both
-attempts of one run: 878 `[file-progress] end` lines each, no path repeated. A standing check, for example in `test-server-merge` comparing the shards' `end`
+A standing check, for example in `test-server-merge` comparing the shards' `end`
 lines with the file list, is open. Left open by A938. [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## The first fiscal-hour end-to-end file exceeds the job budget
@@ -146,8 +144,7 @@ Vitest 4.1.11 reads it.
 
 ## The stream pause test's frozen-bucket control failed once in CI
 
-- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
-  attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
+- In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
   `s3.pause()` answered before the bound, so the assertion at line 540 read
   `expected 'answered' to be 'unanswered'`. W30 makes `pause()` await the stopped state before its
@@ -187,8 +184,7 @@ above concerns the release-to-bind interval, including single draws.
 
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 
-- **The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum — OPEN,
-  and the guard cannot close it.** A case that waits several times can still outlast a bound that
+- A case that waits several times can still outlast a bound that
   passes this check. Only reading catches that shape; if it recurs, the answer is probably a runtime
   check rather than a text reader. (Its `packages/` and `apps/` half went with the real-PostgreSQL
   harness; re-extending the scan is worth doing only if suites under those roots start declaring
@@ -230,7 +226,6 @@ again on the next sighting rather than re-running to green.
 
 ## `bench/pglite-throughput` starts a container `pnpm reap` cannot see
 
-- **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
   `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
   stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
   never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`
@@ -301,8 +296,7 @@ to wait for a real run.
 
 ## The PGlite throughput bench no longer matches the shape it says it matches
 
-**The PGlite throughput bench no longer matches the shape it says it matches — OPEN (found
-2026-09-21, task P6).** `bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
+`bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
 match" of the write path, and its `create table` statements are three landed storage decisions
 behind: `numeric` money and quantity columns where the real columns are now whole-number counts
 (#475 and task P6), and a `tenant_id` column the real schema no longer has. Either bring the three
@@ -322,7 +316,7 @@ re-baselines the bench.
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
-**`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** It is test-only plumbing
+It is test-only plumbing
 the Vitest config loads — the same class as `src/test-helpers.ts` and `src/a11y-helpers.ts`, which
 `packages/ui/stryker.config.json` excludes from `mutate`. Adding a third exclusion is the consistent
 move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
@@ -335,7 +329,6 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
 
 **Left behind by the vite 8 upgrade (#450, 2026-09-19).**
 
-- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
   `bundle-smoke` builds esbuild bundles only. The only thing that runs `vite build` is
   `deploy/Dockerfile`, which the `image` job runs — on a pull request only when an image input has
   changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on every main push; it never
@@ -343,8 +336,6 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
   `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
 
 ## P7's leftovers (#533)
-
-**What slice 1 left (#490 and the preparation tasks):**
 
 - **P7's leftovers (#533):** `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
   because it checks for an absence and the remaining files clear its floor of eight.
@@ -564,8 +555,7 @@ output.
 
 ## The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, #1788)
 
-- **The upgrade walk's historical runtime variation remains unexplained after reducing setup work
-  (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).** The captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
+- [#1788](https://github.com/clintongormley/waitron/pull/1788): the captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
   On recurrence, retain the phase report and host state before retrying; compare repeated samples
   before assigning the variation to CPU scheduling or storage. Since A751 the budget counts the
   walk's own processor time, so a recurrence fails the test when that time passes the budget or no
@@ -843,9 +833,6 @@ traced.
 
 
 ## Loose ends left by the comment-pruning pull requests (#559 to #624)
-
-Each was found while
-pruning comments.
 
 - Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
   (#624).
