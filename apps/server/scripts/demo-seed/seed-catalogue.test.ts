@@ -62,6 +62,22 @@ describe("seedCatalogues", () => {
     expect(new Set(rows.map((row) => row.color)).size).toBe(rows.length);
   });
 
+  it("finds the provisioned default station by its default flag, whatever setup named it", async () => {
+    const { locationId } = await provisionVenue();
+    const stations = await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`
+        update kitchen_stations set name = 'Galley'
+        where location_id = ${locationId} and is_default = 1`);
+      await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      return (
+        await tx.execute<{ name: string; colour: string }>(sql`
+        select name, colour from kitchen_stations
+        where location_id = ${locationId} and is_default = 1`)
+      ).rows;
+    });
+    expect(stations).toEqual([{ name: "Kitchen", colour: "orange" }]);
+  });
+
   it("includes Drinks as a folder in both restaurant menus", async () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {

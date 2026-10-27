@@ -43,13 +43,13 @@ type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
 };
 
 async function resolveStationIds(tx: Transaction, locationId: string): Promise<StationIds> {
-  const { rows: cocina } = await tx.execute<{ id: string }>(sql`
+  const { rows: defaults } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
-    where location_id = ${locationId} and name = 'Cocina'
+    where location_id = ${locationId} and is_default = 1 and active = 1
     limit 1`);
-  const kitchen = cocina[0]?.id;
+  const kitchen = defaults[0]?.id;
   if (kitchen === undefined) {
-    throw new Error(`seedCatalogues: no "Cocina" station found for location ${locationId}`);
+    throw new Error(`seedCatalogues: no default station found for location ${locationId}`);
   }
   await tx.execute(sql`
     update kitchen_stations set name = 'Kitchen', colour = 'orange'
