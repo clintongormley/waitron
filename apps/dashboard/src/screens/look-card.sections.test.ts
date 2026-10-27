@@ -48,9 +48,9 @@ const CHRISTMAS: ThemeChoices = {
   background: "neutral",
   corners: "standard",
   logo: null,
-  handSet: { light: {}, dark: {} },
+  handSet: { light: { bg: "#f8f1e1" }, dark: {} },
   textScale: 100,
-  text: {},
+  text: { size: { sm: 13 } },
 };
 const TWO_FIXES: ThemeChoices = {
   ...WAITRON_CHOICES,
@@ -379,6 +379,13 @@ describe("sections are closed again the next time the editor opens", () => {
     const warnings = deriveTheme(CHRISTMAS).warnings;
     for (const id of ADVANCED_SECTIONS)
       expect(section(el, id).summary, id).toBe(sectionSummary(id, CHRISTMAS, warnings));
+    expect(ADVANCED_SECTIONS.map((id) => section(el, id).summary)).toEqual([
+      "1 set by hand: Page (light)",
+      t("appearance.section_none"),
+      t("appearance.section_none"),
+      t("appearance.section_none"),
+      "1 set by hand: Small text",
+    ]);
   });
 });
 
@@ -395,6 +402,8 @@ describe("what is open is not stored", () => {
   }
 
   it("opening Advanced and opening and closing two sections writes nothing to storage", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
     const { el } = await mountEditing();
     const before = storage();
     await openDisclosure(disclosure(el));
