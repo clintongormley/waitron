@@ -391,6 +391,30 @@ it.each([
     expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
   },
 );
+it("damagedRecordSummary refuses a summary that also carries a stopped recovery, which the page did not draw", async () => {
+  const summary = {
+    ...unreadable,
+    recovery: {
+      startedAt: "2026-10-16T13:00:00.000Z",
+      lastActiveAt: "2026-10-16T13:10:00.000Z",
+      lastActiveSource: "memory",
+      lastName: null,
+      failed: false,
+      cloud: false,
+    },
+  } as const satisfies StartAgainSummary;
+  const { session, requests } = await fixture({ inspection: presentDatabase, summary });
+  const refused = await session.damagedRecordSummary().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(refused).toBeInstanceOf(Error);
+  expect(requests.map((r) => r.path)).toEqual([
+    "/setup-api/first-setup/resolution/recover",
+    "/setup-api/first-setup/resolution",
+    "/setup-api/first-setup/resolution/start-again/summary",
+  ]);
+});
 it("damagedRecordSummary sends nothing when the inspection changed", async () => {
   const { session, requests } = await fixture({
     inspection: { ...presentDatabase, revision: 3 },

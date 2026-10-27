@@ -722,7 +722,11 @@ export class FirstSetupSession {
       return summary;
     });
   }
-  /** With the database present, answered only while a damaged name record is there to name. */
+  /**
+   * With the database present, answered only while a damaged name record is there to name and no
+   * stopped recovery is: the page reads this only after its activity read found none, so it has
+   * drawn no recovery whose discard the send could confirm.
+   */
   damagedRecordSummary(): Promise<StartAgainSummary> {
     const unreadable = (): never => {
       throw new Error("The damaged records' summary could not be read.");
@@ -732,7 +736,7 @@ export class FirstSetupSession {
       const snapshot = await this.#presentDatabaseSnapshot(owner, current, unreadable);
       const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
       current();
-      if (summary.unreadable === undefined) unreadable();
+      if (summary.unreadable === undefined || summary.recovery !== undefined) unreadable();
       return summary;
     });
   }

@@ -331,6 +331,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               }
               await el.updateComplete;
               await expectNoA11yViolations(host);
+              expect(innerWidth).toBe(width);
               expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
               expect(
                 el

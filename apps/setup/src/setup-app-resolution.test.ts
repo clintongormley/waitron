@@ -613,6 +613,8 @@ async function damagedRecord(
     damagedSummary?: StartAgainSummary;
     /** The summary route refuses instead of answering `damagedSummary`. */
     summaryRefused?: boolean;
+    /** Answered by the summary route in place of `damagedSummary` once a send was refused. */
+    damagedSummaryAfterRefusal?: StartAgainSummary;
   } = {},
 ) {
   let generation = 1;
@@ -633,7 +635,9 @@ async function damagedRecord(
       if (path.endsWith("/start-again/summary") && options.damagedSummary)
         return options.summaryRefused
           ? Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 })
-          : Response.json(options.damagedSummary);
+          : Response.json(
+              (refused ? options.damagedSummaryAfterRefusal : undefined) ?? options.damagedSummary,
+            );
       if (path.endsWith("/resolution/start-again") && refusals > 0) {
         refusals -= 1;
         refused = true;
@@ -795,6 +799,59 @@ it("with the database present, a failed read of the damaged records' summary off
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
   expect(formErrors(app)).toContain(initialOwnerStrings.en.recoveryDetailsUnread);
   expect(startAgainRequests(requests)).toHaveLength(1);
+});
+
+it("with the database present, a damaged records' summary that also carries a stopped recovery the activity read did not show offers no Start again and sends nothing", async () => {
+  const { app, requests } = await damagedRecord({
+    damagedSummary: {
+      ...picksSummary(false),
+      recovery: { ...stoppedSummary(false).recovery, lastActiveSource: "memory" },
+    },
+  });
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => q(app, "check-again")).not.toBeNull();
+  expect(summaryRequests(requests)).toHaveLength(1);
+  expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+  expect(formErrors(app)).toContain(initialOwnerStrings.en.recoveryDetailsUnread);
+  expect(startAgainRequests(requests)).toHaveLength(1);
+});
+
+it("with the database present, a retry after a refused send draws and sends the damaged records' summary read again, not the one shown before", async () => {
+  const laterFloorMs = new Date(2026, 9, 26, 9, 41).getTime();
+  const later: StartAgainSummary = {
+    ...picksSummary(false),
+    unreadable: { records: ["series-picks"], floorMs: laterFloorMs },
+  };
+  const { app, requests } = await damagedRecord({
+    damagedSummary: picksSummary(false),
+    damagedSummaryAfterRefusal: later,
+    refuseFlagged: 1,
+  });
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=names-from]")).toBeNull();
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(summaryRequests(requests)).toHaveLength(2);
+  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", laterFloorMs));
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(3);
+  expect(startAgainRequests(requests)[2]!.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 3,
+    ownerGeneration: 3,
+    confirmUnreadable: { shown: later },
+  });
 });
 
 it("with the database present, a password refusal without the picks flag reads no summary and keeps today's warning", async () => {

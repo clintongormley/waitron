@@ -1501,8 +1501,8 @@ export class SetupApp extends LitElement {
     }
   }
   /**
-   * Signed in with the database present: the confirmation is drawn from the activity read now, and
-   * from the summary when a recovery has stopped, never from what the page read before.
+   * Signed in with the database present: the confirmation is drawn from what is read now, never
+   * from what the page read before.
    */
   async #openPresentConfirmation(
     session: FirstSetupSession,
