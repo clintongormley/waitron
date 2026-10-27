@@ -180,7 +180,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "menu_patch.base_changed": {
     en: "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
-    es: "La versión {liveNumber} se ha publicado mientras hacías los cambios. Vuelve a cargar para cambiar esa versión; se conservan los cambios que todavía encajan.",
+    es: "La versión {liveNumber} se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
   },
   "menu_patch.unchanged": {
     en: "These values are already live. Nothing was saved.",
@@ -188,7 +188,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "menu_patch.not_published": {
     en: "This menu has never been published, so there is nothing live to patch. Publish it first.",
-    es: "Esta carta no se ha publicado nunca, así que no hay nada publicado que cambiar. Publícala primero.",
+    es: "Esta carta no se ha publicado nunca, así que no hay nada publicado que corregir. Publícala primero.",
   },
   "menu_patch.invalid": {
     en: "Check this value.",

@@ -112,7 +112,7 @@ export function patchTree(document: MenuDocument, listsLabel: string): PatchTree
   ];
 }
 
-function targetKey(target: MenuPatchTarget): string {
+export function targetKey(target: MenuPatchTarget): string {
   switch (target.kind) {
     case "offer":
       return `offer:${target.menuItemId}`;

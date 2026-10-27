@@ -372,12 +372,18 @@ it("has English and Spanish copy for each refusal of a live menu patch", () => {
       "This menu has never been published, so there is nothing live to patch. Publish it first.",
     "menu_patch.invalid": "Check this value.",
   };
+  const spanish: Record<string, string> = {
+    "menu_patch.base_changed":
+      "La versión {liveNumber} se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
+    "menu_patch.unchanged": "Estos valores ya están publicados. No se ha guardado nada.",
+    "menu_patch.not_published":
+      "Esta carta no se ha publicado nunca, así que no hay nada publicado que corregir. Publícala primero.",
+    "menu_patch.invalid": "Revisa este valor.",
+  };
   for (const [code, text] of Object.entries(english)) {
     expect(codeMessage(code, "en"), code).toBe(text);
-    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
-    expect(codeMessage(code, "es"), code).not.toBe(text);
+    expect(codeMessage(code, "es"), code).toBe(spanish[code]);
   }
-  expect(codeMessage("menu_patch.base_changed", "es")).toContain("{liveNumber}");
 });
 
 it("has a sentence of its own for each refusal of a stuck card payment's check", () => {
