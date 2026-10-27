@@ -458,10 +458,19 @@ until A977).
   [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md):
   first move Spain's data and pictures into its pack with shared seeding code, then
   supply English and Spanish plain names, then add Catalonia with the Balearic
-  Islands, Valencia and Galicia in separate changes. All five build cuts remain
-  open. Regional restaurant defaults follow the province without overwriting a
-  typed name; regional staff and kitchen names are demo data, separate from the
+  Islands, Valencia and Galicia in separate changes. The first cut has an
+  independently captured Madrid database baseline for English and Spanish, with
+  row, relationship, credential and media checks. Its data and unchanged picture
+  bytes now live behind the country pack's secondary demo export; shared server
+  writers adapt its structural records to domain types.
+  The remaining cuts supply plain names, Catalonia/Balearic data, Valencia and Galicia. Regional restaurant defaults follow the
+  province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
+- **Demo media regeneration changes the committed Negroni picture.** The moved
+  generator produces different pixels for Negroni; a decoded-pixel comparison
+  preserves this finding across tested Node compression versions. Preserve the
+  committed picture when qualifying a future regeneration policy;
+  A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private

@@ -5819,7 +5819,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A972. Demo data per country pack and region.** Owner answers recorded;
   [plan](superpowers/plans/2026-10-27-a972-demo-country-region.md) covers the data move,
   English names, then Catalonia with the Balearic Islands, Valencia and Galicia.
-  All five build cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  Spain's records and pictures have moved behind the pack's secondary demo export,
+  with the frozen Madrid comparison and browser-boundary checks. Plain-name
+  translation and the three regional cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **Demo media regeneration.** Preserve the committed Negroni picture when
+  defining regeneration behavior; today's generator produces a different tile.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
   suites, server till-API, configuration-transfer and station fixtures, and file names.

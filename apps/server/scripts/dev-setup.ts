@@ -1,3 +1,4 @@
+import { DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
 // write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
 // against a production directory — it chains real fiscal records under `preproduction`, and it
@@ -29,8 +30,8 @@ import type { TillConfig } from "../src/till-config.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
 import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
-import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
+import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/credentials.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/locale.js";
 import { demoDataSetFor } from "./demo-seed/data-set.js";
 import { applyDeveloperDemoVenue } from "./demo-seed/allocation.js";
 
@@ -191,8 +192,7 @@ export async function inspectVenues(
   }
 }
 
-/** The wizard's Demo identity for Spain, so a dev venue is the same business a Demo box is. */
-const DEMO_IDENTITY = getCountryPack("ES")!.demo!;
+const DEMO_IDENTITY = getCountryPack(DEFAULT_DEMO_DEVELOPER_PRESET.country)!.demo!;
 
 async function provisionVenue(
   db: Database,
@@ -202,21 +202,21 @@ async function provisionVenue(
   const venue = await applyDeveloperDemoVenue(
     planVenue(
       {
-        country: "ES",
+        country: DEFAULT_DEMO_DEVELOPER_PRESET.country,
         taxId: DEMO_IDENTITY.taxId,
         legalName: DEMO_IDENTITY.legalName,
         location: {
-          name: DEMO_IDENTITY.locationName,
+          name: DEFAULT_DEMO_DEVELOPER_PRESET.locationName,
           fiscalTerritory: DEV_VENUE_TERRITORY,
           invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
           operationDescription: "In-store sales",
-          addressLine1: "1 Main Street",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
+          addressLine1: DEFAULT_DEMO_DEVELOPER_PRESET.addressLine1,
+          addressLine2: DEFAULT_DEMO_DEVELOPER_PRESET.addressLine2,
+          postalCode: DEFAULT_DEMO_DEVELOPER_PRESET.postalCode,
+          city: DEFAULT_DEMO_DEVELOPER_PRESET.city,
+          province: DEFAULT_DEMO_DEVELOPER_PRESET.province,
+          timeZone: DEFAULT_DEMO_DEVELOPER_PRESET.timeZone,
+          dayCutover: DEFAULT_DEMO_DEVELOPER_PRESET.dayCutover,
         },
         seriesCode: "A",
         rectificativeSeriesCode: "R",

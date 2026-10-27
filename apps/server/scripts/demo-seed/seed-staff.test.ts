@@ -7,8 +7,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifyPin, type PersonRoleValue } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
-import { DEMO_ADMIN_EMAIL, DEMO_PIN, DEMO_STAFF } from "./staff.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
+import { DEMO_ADMIN_EMAIL, DEMO_PIN } from "./credentials.js";
+import { DEMO_STAFF } from "./testing/data.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE = "en-GB";

@@ -113,19 +113,19 @@ These are reading receipts at the checkpoint, not runtime qualifications:
   CountryDemoDeveloperPreset>>` and `DEFAULT_DEMO_DEVELOPER_PRESET`. Move today's Madrid geography/address defaults there now; cut 3 adds regional choices. `SeedRawTable` is the strict server
   raw-table type, with existing table-shape and zone-key unions; only its server `onGrid` result carries strict `Placement`.
 
-- [ ] **1. Freeze the old database outcome before moving anything.** In a driver-created `mktemp -d` disposable detached checkout of the recorded original-main SHA, install dependencies. Write the
+- [x] **1. Freeze the old database outcome before moving anything.** In a driver-created `mktemp -d` disposable detached checkout of the recorded original-main SHA, install dependencies. Write the
   comparison harness there against **its own** existing seed imports. Pin `TZ=Europe/Madrid`, Date `2026-10-08T10:00:00.000Z`, Madrid `28013`, `Europe/Madrid`, cutover `05:00`, invoice locale `es-ES`,
   existing provisioner settings and `salesDays: 0`; capture EN and ES staff runs. Never swap old files into the feature worktree.
-- [ ] Capture all application tables before/after provisioning and seeding, with table/column manifests, row counts, added/changed/deleted rows and the complete seeded state of each affected table.
+- [x] Capture all application tables before/after provisioning and seeding, with table/column manifests, row counts, added/changed/deleted rows and the complete seeded state of each affected table.
   Inspect seed call chains and reconcile every write target with the manifest, including seed-added rows in already provisioned tables. This comparison deliberately covers nonsale seed data; the
   unedited fiscal golden separately covers its five sale products, not all menu rows.
-- [ ] Implement new test-only `readMadridSemantics(db: Database): Promise<MadridSemantics>` in `testing/madrid-semantics.ts`; `MadridSemantics` holds table/column inventory and rows keyed by semantic
+- [x] Implement new test-only `readMadridSemantics(db: Database): Promise<MadridSemantics>` in `testing/madrid-semantics.ts`; `MadridSemantics` holds table/column inventory and rows keyed by semantic
   identity. Replace generated ids with deterministic identities: product image/parent+variant, menu and section paths, ordered list/label positions, zone/table labels, person email, reason name and
   parent identities for link rows. Refuse collisions, unresolved references and unclassified changed tables/columns. Keep FK relationships, embedded JSON references, ordering, prices, defaults,
   translations, availability, routing, permissions, layout and media-byte digests; do not simply delete every `*_id` or timestamp column. Verify published-document hashes against original JSON before
   comparing canonicalized JSON/digests, so embedded ids do not create false mismatches. Normalize only named generated timestamps and salted hashes; verify PIN/password success and wrong-secret
   refusal, password presence and roles before replacing hash bytes with semantic results. Preserve authored times and all null/absent distinctions.
-- [ ] Freeze `madrid-before-move.{en,es}.json` and manifest with original SHA/settings/exporter digest before candidate data imports exist. Copy only these data artifacts and the independent harness
+- [x] Freeze `madrid-before-move.{en,es}.json` and manifest with original SHA/settings/exporter digest before candidate data imports exist. Copy only these data artifacts and the independent harness
   into the feature branch, placing the frozen data/manifest in `packages/country-es/test-fixtures/demo/` and the independent harness in server. Read fixtures through the test-only country-packs seam,
   never from candidate menu constants; new non-English expected values remain pack-owned. Run `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts`; initial baseline must pass against the unchanged seed. An optional old
   data archive/digest supplements this DB receipt, never replaces it.
@@ -143,44 +143,44 @@ These are reading receipts at the checkpoint, not runtime qualifications:
   harness there, run its `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts` with that option and an owned output directory. Retain raw/canonical capture
   receipts outside source; remove the capture-writing branch from the committed test so ordinary tests cannot refresh expectations. Remove the detached tree with `git worktree remove` when done.
 
-- [ ] **2. RED:** Add tests for secondary exports, full structural records, no secret-valued fields, source/installed media roots and transitive main-entry isolation. Run `pnpm --filter
+- [x] **2. RED:** Add tests for secondary exports, full structural records, no secret-valued fields, source/installed media roots and transitive main-entry isolation. Run `pnpm --filter
   @waitron/country-es exec vitest run src/demo/data.test.ts` and `pnpm --filter @waitron/country-packs exec vitest run src/demo.test.ts`; expect missing new exports. Run `pnpm exec vitest run
   scripts/demo-boundaries.test.ts scripts/check-demo-browser-bundles.test.mjs`; expect missing boundary/build checker behavior. Also add the type controls described in step 4 and run server typecheck
   before implementing its adapter. Record each intended failure separately.
-- [ ] **3. Move data and adapt writers.** Keep `menu.ts`'s locale type/map on server in `locale.ts`; move only menu records. Split adjustment records from decimal conversion and writes, and floor
+- [x] **3. Move data and adapt writers.** Keep `menu.ts`'s locale type/map on server in `locale.ts`; move only menu records. Split adjustment records from decimal conversion and writes, and floor
   records from placement functions. Move staff identities but retain server credentials. Bind station/category lookups to dataset values or returned ids so changing a name cannot break routing.
   Replace special beer/Negroni code with data-driven overrides. Keep every original written value, insertion order and price unchanged in this cut.
-- [ ] Update all relative/type imports by whole-tree search, including every `scripts/demo-seed/*.test.ts`, `testing/provision-venue.test.ts` if affected, `scripts/dev-setup.ts`,
+- [x] Update all relative/type imports by whole-tree search, including every `scripts/demo-seed/*.test.ts`, `testing/provision-venue.test.ts` if affected, `scripts/dev-setup.ts`,
   `src/demo-seed{,.test}.ts` and `src/demo-clock-profiles.test.ts`. Data-only assertions move to country-es; registry/fallback assertions split into country-packs and server. Tests needing DB/modules
   remain server-owned. No dependency from a pack test back into server or domain packages.
-- [ ] Change package export maps without deleting required existing deep-import compatibility accidentally; search actual consumers first. Keep direct country implementations named only in
+- [x] Change package export maps without deleting required existing deep-import compatibility accidentally; search actual consumers first. Keep direct country implementations named only in
   country-packs: refine `module-seams.test.ts` to allow **only `/demo` imports in its new secondary registry**, not a general second main-registry exemption. Keep main-registry checks intact.
-- [ ] Move media bytes unchanged; generator receives dataset id and reads the actual exported dataset: `pnpm --filter @waitron/server exec tsx ../../packages/country-es/scripts/gen-demo-media.mjs
+- [x] Move media bytes unchanged; generator receives dataset id and reads the actual exported dataset: `pnpm --filter @waitron/server exec tsx ../../packages/country-es/scripts/gen-demo-media.mjs
   casa-delgado-es`. For later cuts replace the last argument with that cut's id. Emit only that complete dataset folder, including inherited products; do not scrape one source file or prune another
   dataset. Keep its PNG algorithm. Point its ESLint Buffer override at the moved file. Docker copies `/src/packages/country-es/demo-media/` to `/app/demo-media/`; retain the env root
   `/app/demo-media`. Each regional cut adds its complete folder and matching `mediaDataSet` together.
-- [ ] **4. Strict type GREEN and negative controls:** The step-2 RED fixture is `data-set.typecheck.ts`, included by existing server tsconfig: valid registry assignment plus `@ts-expect-error`
+- [x] **4. Strict type GREEN and negative controls:** The step-2 RED fixture is `data-set.typecheck.ts`, included by existing server tsconfig: valid registry assignment plus `@ts-expect-error`
   controls for an invalid VAT class, staff role, pricing unit, dietary label, reason action/role, missing required text, and malformed floor-table/extra shape. Each invalid domain value must still
   satisfy the loose country contract and fail assignment to the strict server input. Its initial typecheck must fail for a
   missing strict contract or unused directive; after step 3 require no unused directives. In a disposable candidate remove each directive and require the specific diagnostic; weaken each strict field
   to string and require its now-unused directive to fail. Restore, then run `pnpm --filter @waitron/country typecheck`, `pnpm --filter @waitron/country-es typecheck`, `pnpm --filter
   @waitron/country-packs typecheck` and `pnpm --filter @waitron/server typecheck`. No `any`/double-cast escape.
-- [ ] **5. Focused GREEN:** Run `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/data-set.test.ts scripts/demo-seed/seed.madrid-baseline.test.ts
+- [x] **5. Focused GREEN:** Run `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/data-set.test.ts scripts/demo-seed/seed.madrid-baseline.test.ts
   scripts/demo-seed/seed-catalogue.test.ts scripts/demo-seed/seed-floor.test.ts scripts/demo-seed/seed-staff.test.ts scripts/demo-seed/seed-adjustments.test.ts scripts/demo-seed/seed-media.test.ts
   scripts/demo-seed/seed-option-lists.test.ts scripts/demo-seed/seed.integration.test.ts scripts/demo-seed/seed.test.ts src/demo-seed.test.ts src/demo-clock-profiles.test.ts
   scripts/dev-setup.test.ts`. Run the two new pack suites and focused root boundary/module-cycle/deploy guards. Every original semantic baseline row must match.
-- [ ] **6. Controls:** In a disposable candidate change the customer name of a dish outside the golden's five products; require a named row/field mismatch from `seed.madrid-baseline.test.ts`, restore
+- [x] **6. Controls:** In a disposable candidate change the customer name of a dish outside the golden's five products; require a named row/field mismatch from `seed.madrid-baseline.test.ts`, restore
   and require pass. Also delete one translation, relationship or row and require omission detection. Plant a main→helper→demo import/re-export and require the graph guard to fail; restore and
   demonstrate legitimate `/demo` import succeeds. Delete the guard's traversal/restriction in that copy and require its own planted-failure case to fail. Check static import, export-from and literal
   dynamic import paths; type-only imports are not runtime reachability.
-- [ ] **7. Build both real browser apps:** `pnpm --filter @waitron/setup build` and `pnpm --filter @waitron/till build`, then `node scripts/check-demo-browser-bundles.mjs apps/setup/dist
+- [x] **7. Build both real browser apps:** `pnpm --filter @waitron/setup build` and `pnpm --filter @waitron/till build`, then `node scripts/check-demo-browser-bundles.mjs apps/setup/dist
   apps/till/dist`. The new checker examines JS chunks recursively and fails missing/empty output, missing `Waitron Demo S.L.` **in either app**, or presence of `Croquetes de pernil` in either app. Its
   unit controls cover all three failures and a valid two-app output. In a disposable candidate, expose a consumed dish through main and show the real build/check fails; remove the identity marker and
   show the opposite check fails; restore and rebuild/check both.
-- [ ] Run `pnpm --filter @waitron/server build` to check secondary exports in the Node bundle. If `docker info` succeeds, build with `docker build -f deploy/Dockerfile -t waitron:a972-cut1 .`, then
+- [x] Run `pnpm --filter @waitron/server build` to check secondary exports in the Node bundle. If `docker info` succeeds, build with `docker build -f deploy/Dockerfile -t waitron:a972-cut1 .`, then
   inspect the copied folder and run an installed-media seed smoke in a throwaway venue. If unavailable, record the exact command/error and explicitly leave image build/runtime unqualified; source-root
   tests and Dockerfile text assertions do not qualify an image. Required image CI must still finish on this head.
-- [ ] **8. Finish the cut:** Keep `apps/server/test-durations.json` aligned with moved/retained/new server test paths; regenerate measured values from actual server CI logs with `node
+- [x] **8. Prepare the cut for finishing:** Keep `apps/server/test-durations.json` aligned with moved/retained/new server test paths; regenerate measured values from actual server CI logs with `node
   scripts/test-durations.mjs apps/server/test-durations.json <saved-server-log>`, not invented measurements. Run focused `scripts/vitest-duration-sequencer.test.mjs` if the table changes. Update
   current path claims and backlog residuals. Review changed checks, stage explicit paths, `git commit -s -m "refactor: move Spanish demo data into its country pack"`, then the common finish protocol
   below.
@@ -393,3 +393,80 @@ pnpm --filter @waitron/setup typecheck
   Read every required job, not just the summary. If image/dev runtime was unavailable locally, name exactly what remains unqualified and use the current-head CI evidence for what it actually ran.
 - [ ] Respect the parent driver's current landing/lock/owner-hold rules; do not land from the plan-author seat. After authorized landing, refresh dependencies and verify the merge's own main CI, then
   start the next cut only after fresh reservations. Preserve both sides when an overlapping held branch later lands.
+
+### Cut 1 local qualification — 2026-10-27
+
+The original Madrid row comparison and new pack, strict-type, media-path and graph
+checks pass. Deliberate dish/translation, graph traversal/restriction, secondary
+import and real browser-bundle faults are rejected; restored controls pass. The
+reporting-category lookup now uses the same dataset override as its writer, with
+an observed failing route case before the correction. All moved PNG bytes match
+the original files. The generator retains its original algorithm; its current
+runtime output differs from the older committed bytes in both old and moved
+versions, so this cut moves those committed bytes without regenerating them.
+
+Setup, till and Node bundles build. `docker info` refuses the absent local daemon
+socket, so local image build/runtime is unqualified. Image CI and measured server
+duration refresh, finish-branch, current-head CI and landing remain open. No
+fiscal writer, protected assertion or frozen expected data changes.
+
+### Cut 1 review corrections — 2026-10-27
+
+One Claude run-it review found that ordinary browser sources could import the
+secondary data export directly. The root guard now follows setup, till and
+dashboard sources as well as country main entries, including literal backtick
+imports. It resolves a forbidden demo export even if the app omitted that package
+from its dependencies. Six planted app imports and an actual Vite build expose
+those paths; removing the fallback fails three retained cases. Source scanning
+covers static imports, re-exports and literal dynamic imports; computed imports
+and bundler plugins remain outside that check.
+
+The exact original exporter is preserved as inert
+`packages/country-es/test-fixtures/demo/original-exporter.ts.txt`. Its digest
+matches the frozen manifest; the formatted current reader has different source
+bytes. The manifest and expected JSON remain unchanged. A changed-byte control
+fails the provenance check.
+
+Regeneration matches every committed tile except Negroni. Both the old and moved
+encoder emit the same Negroni bytes on this runtime. Its existing committed image
+stays unchanged; a future regeneration policy is recorded in the backlog.
+Matched provisioned adjustment reasons keep their existing policies, as the
+unchanged seed writer specifies. Changing the pack's Not served note rule leaves
+the original Madrid rows unchanged. This move preserves that priority; raw pack
+policy records do not promise to replace an existing reason's rules.
+
+The first normal push stopped at formatting the frozen JSON. The repository's
+existing `.prettierignore` already preserves byte-identified reference sources;
+this cut lists only the three frozen capture files and original exporter text
+there. Source and test code stay formatted. A digest test rejects a reformatted
+copy and passes after the original bytes are restored. The earlier scoped format
+check covered source files, not these capture files.
+
+### Cut 1 CI runtime correction — 2026-10-27
+
+The first PR root run rejected the generator's compressed-byte digest on Node
+26.12.1. The exact failure reproduces with that official runtime in an installed
+disposable checkout. The original encoder produces identical inflated scanlines
+and identical non-IDAT chunks under local Node 26.11.1 and 26.12.1; the compressed
+IDAT data differs. The test now decodes through the same installed image library
+as the server, asserts PNG format, dimensions and channels, and compares the
+original encoder's pixel digest. Both runtimes pass. A pixel mutation fails and
+a valid alternate compression level passes. No generator or committed image
+changed.
+
+The earlier byte comparison of regenerated and committed pictures applied to
+local Node 26.11.1. With Node 26.12.1, compression changes more file digests while
+the decoded-pixel difference still names only Negroni. The separate committed
+Negroni regeneration policy remains open.
+
+### Cut 1 measured shard weights — 2026-10-27
+
+Successful server jobs in CI run `40577336045`, for source head
+`9a6e2a59551e710bd335142a68173cb4ef34718a`, supplied the refreshed
+weights for this cut's fourteen new or changed server suites. The new media-path,
+Madrid baseline and semantic-reader suites measured 3.7, 13.5 and 3.5 seconds.
+`scripts/test-durations.mjs` extracted the hosted measurements; unrelated table
+entries retain their earlier estimates. The focused duration-sequencer guard
+passes all twenty cases. This metadata change retains the completed Claude
+review. Final current-head coverage, image and landing results are recorded in
+the cut's pull request and campaign ledger.

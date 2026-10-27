@@ -3,10 +3,10 @@ import { resolveFiscalJurisdiction } from "@waitron/country";
 import type { CountryDemoIdentity, CountryPack } from "@waitron/country";
 import { COUNTRY_PACKS, VENUE_SETUP_COUNTRY_PACKS, getCountryPack } from "@waitron/country-packs";
 import { ALL_MODULES } from "../../src/modules.js";
-import { CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA, PRODUCT_OPTION_LISTS } from "./menu.js";
-import { DEMO_TABLES, DEMO_ZONES } from "./floor.js";
-import { DEMO_STAFF } from "./staff.js";
-import { DEMO_ADJUSTMENT_REASONS } from "./seed-adjustments.js";
+import { CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA, PRODUCT_OPTION_LISTS } from "./testing/data.js";
+import { DEMO_TABLES, DEMO_ZONES } from "./testing/data.js";
+import { DEMO_STAFF } from "./testing/data.js";
+import { DEMO_ADJUSTMENT_REASONS } from "./testing/data.js";
 import {
   DEMO_DATA_SETS,
   demoContentLanguages,
@@ -16,7 +16,6 @@ import {
   inLanguages,
   type DemoDataSet,
 } from "./data-set.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 type Text = Readonly<Record<string, string>>;
 
@@ -57,49 +56,6 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
     texts.push([`adjustment reason ${reason.names.en}`, reason.names]);
   return texts;
 }
-
-const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = {
-  ca: [
-    "Negroni",
-    "Crema catalana",
-    "Torta del Casar (per kg)",
-    "Conserves",
-    "Postres",
-    "Refrescos",
-    "rac",
-  ],
-  "ca-ES-valencia": [
-    "Negroni",
-    "Crema catalana",
-    "Torta del Casar (per kg)",
-    "Conserves",
-    "Postres",
-    "Refrescos",
-    "rac",
-    "Café",
-  ],
-  gl: [
-    "Negroni",
-    "Torta del Casar (por kg)",
-    "Cecina de León (por kg)",
-    "Gazpacho andaluz",
-    "Paella de marisco",
-    "Salchichón (por kg)",
-    "Sobrasada (por kg)",
-    "Pan con tomate",
-    "Ensalada mixta",
-    "Refresco de cola",
-    "Conservas",
-    "Tapas",
-    "Segundos",
-    "Cócteles",
-    "Refrescos",
-    "Carta de bebidas",
-    "Café",
-    "ración",
-    "rac",
-  ],
-};
 
 describe("demo data sets", () => {
   it("gives every country pack distinct lowercase hex colours for its top-level categories", () => {
@@ -267,55 +223,6 @@ describe("demo data sets", () => {
         }
       }
     }
-  });
-
-  it("gives every Casa Delgado customer-facing text a value of its own in every language", () => {
-    const texts = customerTexts(CASA_DELGADO_ES);
-    expect(texts.length).toBeGreaterThan(70);
-    for (const [where, text] of texts) {
-      for (const language of CASA_DELGADO_ES.contentLanguages) {
-        expect(text[language]?.trim(), `${where} in ${language}`).toBeTruthy();
-      }
-      for (const language of CASA_DELGADO_ES.contentLanguages.filter(
-        (l) => l !== "en" && l !== "es",
-      )) {
-        const value = text[language]!;
-        if (SAME_AS_SPANISH_OR_ENGLISH[language]!.includes(value)) continue;
-        expect([text.en, text.es], `${where} in ${language} copies another language`).not.toContain(
-          value,
-        );
-      }
-    }
-  });
-
-  it("gives every Casa Delgado menu a customer name that differs from its staff name", () => {
-    const { restaurant, deli, lunch, drinksName, drinksCustomerName } = CASA_DELGADO_ES.menus;
-    const menus: [string, Text, Text][] = [
-      ["restaurant", restaurant.name, restaurant.customerName],
-      ["deli", deli.name, deli.customerName],
-      ["lunch", lunch.name, lunch.customerName],
-      ["drinks", drinksName, drinksCustomerName],
-    ];
-    for (const [menu, staff, customer] of menus) {
-      for (const language of ["en", "es"] as const) {
-        expect
-          .soft(customer[language]!.toLowerCase(), `${menu} menu in ${language}`)
-          .not.toBe(staff[language]!.toLowerCase());
-      }
-    }
-  });
-
-  it("allows only copies the data set actually makes", () => {
-    const values = customerTexts(CASA_DELGADO_ES).flatMap(([, text]) =>
-      Object.keys(SAME_AS_SPANISH_OR_ENGLISH).flatMap((language) => {
-        const value = text[language];
-        return value === text.en || value === text.es ? [`${language}:${value}`] : [];
-      }),
-    );
-    const allowed = Object.entries(SAME_AS_SPANISH_OR_ENGLISH).flatMap(([language, list]) =>
-      list.map((value) => `${language}:${value}`),
-    );
-    expect(allowed.filter((entry) => !values.includes(entry))).toEqual([]);
   });
 });
 

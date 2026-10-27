@@ -18,12 +18,12 @@ import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 import { createTable } from "../../src/testing/live-table.js";
 import type { TillConfig } from "../../src/till-config.js";
-import { DEMO_TABLES } from "./floor.js";
+import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedCatalogues } from "./seed-catalogue.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
@@ -40,6 +40,53 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 });
 
 describe("seedFloor", () => {
+  it("keeps dataset station names and reporting-category overrides together", async () => {
+    const { locationId } = await provisionVenue();
+    const dataSet = {
+      ...CASA_DELGADO_ES,
+      stations: {
+        kitchen: "Preparation",
+        downstairsBar: "Ground drinks",
+        upstairsBar: "Upper drinks",
+        deli: "Takeaway",
+      },
+      menus: {
+        ...CASA_DELGADO_ES.menus,
+        restaurant: {
+          ...CASA_DELGADO_ES.menus.restaurant,
+          categories: CASA_DELGADO_ES.menus.restaurant.categories.map((category) =>
+            category.station === "bar"
+              ? { ...category, categoryName: `Report ${category.name.en}` }
+              : category,
+          ),
+        },
+      },
+    };
+    const rows = await withTransaction(suite.db, async (tx) => {
+      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet });
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        dataSet,
+        menuIds,
+        departmentTradingNames: TRADING_NAMES,
+      });
+      return (
+        await tx.execute<{ category_name: string; station_name: string }>(sql`
+        select c.name as category_name, s.name as station_name from routing_cells r
+        join categories c on c.id = r.category_id join kitchen_stations s on s.id = r.station_id
+        join floor_zones z on z.id = r.zone_id
+        where r.location_id = ${locationId} and z.name = 'Upstairs bar' order by c.name`)
+      ).rows;
+    });
+    expect(rows).toEqual([
+      { category_name: "Report Cocktails", station_name: "Ground drinks" },
+      { category_name: "Report Coffee", station_name: "Ground drinks" },
+      { category_name: "Report Soft drinks", station_name: "Ground drinks" },
+      { category_name: "Report Wine and beer", station_name: "Ground drinks" },
+    ]);
+  });
+
   it("seeds no station hours and routes drinks downstairs without an evening period", async () => {
     const { locationId } = await provisionVenue();
     const result = await withTransaction(suite.db, async (tx) => {

@@ -344,3 +344,10 @@ file in full, not exhaustive); file and folder names other than those found whil
 ISO-8859-1 `.htm` sources in `country-es` (a UTF-8 grep shows none, but they are Spanish and
 official); `packages/adjustments` (A758-1); anything outside `packages/` and `apps/` (`scripts/`,
 `deploy/`, `bench/`). Statements marked "from reading" were traced through the code, not run.
+
+2026-10-27 A972 cut 1: the installed demo records and pictures in this historical
+inventory have moved to `packages/country-es/src/demo/` and
+`packages/country-es/demo-media/casa-delgado-es/`. Shared database writers remain
+in the server. Plain-name translation is the next cut; the historical rows above
+have not been rewritten. See the
+[A972 plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md).

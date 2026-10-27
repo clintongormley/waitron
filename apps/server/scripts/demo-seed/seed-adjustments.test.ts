@@ -12,7 +12,7 @@ import {
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

@@ -1,15 +1,16 @@
-// Regenerates the placeholder tiles under `media/`, one per distinct `image` basename in `menu.ts`:
-// `node gen-media.mjs`, then commit the PNGs, which are the source of truth. Node built-ins only;
-// each tile's colours and motif are derived deterministically from its basename.
-
+import * as demoExports from "../src/demo/index.ts";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const MEDIA_DIR = join(HERE, "media");
+const id = process.argv[2];
+const dataSet = Object.values(demoExports).find(
+  (value) => value !== null && typeof value === "object" && "id" in value && value.id === id,
+);
+if (dataSet === undefined) throw new Error(`gen-demo-media: unknown dataset ${id ?? "(missing)"}`);
+const MEDIA_DIR = fileURLToPath(demoExports.DEMO_MEDIA_ROOTS[dataSet.mediaDataSet]);
 const SIZE = 256;
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -138,10 +139,13 @@ function paintTile(name) {
 }
 
 function basenamesFromMenu() {
-  const src = readFileSync(join(HERE, "menu.ts"), "utf8");
-  const names = new Set();
-  for (const m of src.matchAll(/image:\s*"([^"]+)"/g)) names.add(m[1]);
-  return [...names].sort();
+  return [
+    ...new Set(
+      [dataSet.menus.restaurant, dataSet.menus.deli, dataSet.menus.lunch].flatMap((menu) =>
+        menu.categories.flatMap((category) => category.products.map((product) => product.image)),
+      ),
+    ),
+  ].sort();
 }
 
 function main() {

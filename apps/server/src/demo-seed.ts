@@ -2,7 +2,7 @@ import type { Database } from "@waitron/db";
 import { getCountryPack } from "@waitron/country-packs";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { seedDemoRestaurant } from "../scripts/demo-seed/seed.js";
-import type { SeedLocale } from "../scripts/demo-seed/menu.js";
+import type { SeedLocale } from "../scripts/demo-seed/locale.js";
 import { demoDataSetFor } from "../scripts/demo-seed/data-set.js";
 
 /** Public Demo starts with one month of deterministic practice sales and the full sample restaurant. */

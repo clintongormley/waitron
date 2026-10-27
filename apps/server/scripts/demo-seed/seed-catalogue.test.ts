@@ -20,9 +20,9 @@ import {
   readMenuStructure,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";

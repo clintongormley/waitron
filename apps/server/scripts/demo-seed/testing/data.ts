@@ -1,0 +1,11 @@
+import { demoDataSet } from "../data-set.js";
+export const CASA_DELGADO_ES = demoDataSet("casa-delgado-es");
+export const CASA_DELGADO = CASA_DELGADO_ES.menus.restaurant;
+export const DELI_TAKEAWAY = CASA_DELGADO_ES.menus.deli;
+export const MENU_DEL_DIA = CASA_DELGADO_ES.menus.lunch;
+export const PRODUCT_OPTION_LISTS = CASA_DELGADO_ES.productOptionLists;
+export const PRODUCT_EXTRA_LISTS = CASA_DELGADO_ES.productExtraLists;
+export const DEMO_ZONES = CASA_DELGADO_ES.floor.zones;
+export const DEMO_TABLES = CASA_DELGADO_ES.floor.tables;
+export const DEMO_STAFF = CASA_DELGADO_ES.staff;
+export const DEMO_ADJUSTMENT_REASONS = CASA_DELGADO_ES.adjustmentReasons;

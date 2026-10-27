@@ -22,7 +22,7 @@ import type { CountryDemoIdentity } from "@waitron/country";
 import { saveLayout } from "../../src/floor-plan.js";
 import { floorPlanSetsFor } from "../../src/floor-plan-sets.js";
 import type { TillConfig } from "../../src/till-config.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import type { DemoDataSet } from "./data-set.js";
 
 export interface SeedFloorInput {
@@ -131,13 +131,18 @@ export async function seedFloor(
       .where(
         and(
           eq(kitchenStations.locationId, locationId),
-          inArray(kitchenStations.name, ["Downstairs bar", "Upstairs bar"]),
+          inArray(kitchenStations.name, [
+            dataSet.stations.downstairsBar,
+            dataSet.stations.upstairsBar,
+          ]),
         ),
       );
     const downstairsStationId = barStations.find(
-      (station) => station.name === "Downstairs bar",
+      (station) => station.name === dataSet.stations.downstairsBar,
     )?.id;
-    const upstairsStationId = barStations.find((station) => station.name === "Upstairs bar")?.id;
+    const upstairsStationId = barStations.find(
+      (station) => station.name === dataSet.stations.upstairsBar,
+    )?.id;
     if (downstairsStationId === undefined || upstairsStationId === undefined) {
       throw new Error("seedFloor: bar preparation stations were not created");
     }
@@ -149,7 +154,7 @@ export async function seedFloor(
           categories.name,
           dataSet.menus.restaurant.categories
             .filter((category) => category.station === "bar")
-            .map((category) => category.name.en),
+            .map((category) => category.categoryName ?? category.name.en),
         ),
       );
     for (const category of barCategories) {
@@ -181,7 +186,7 @@ export async function seedFloor(
     const restaurant =
       existing ??
       (await saveMenuPeriod(tx, cfg, restaurantId, {
-        name: "Open",
+        name: dataSet.menuPeriodName,
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       }));
@@ -191,7 +196,7 @@ export async function seedFloor(
         staffMenuIds: [menuIds.lunch],
       });
     const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
-      name: "Open",
+      name: dataSet.menuPeriodName,
       menuId: menuIds.deli,
       staffMenuIds: [],
     });
@@ -237,7 +242,7 @@ export async function seedFloor(
       );
     }
   }
-  const setName = locale === "es" ? "Estándar" : "Standard";
+  const setName = dataSet.floor.setName[locale];
   const setOf = new Map<string, string>();
   for (const departmentId of [defaultPolicy.department_id, deliDepartmentId]) {
     setOf.set(

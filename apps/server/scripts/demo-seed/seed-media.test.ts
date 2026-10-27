@@ -3,25 +3,22 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedCatalogues } from "./seed-catalogue.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
-import { seedMedia } from "./seed-media.js";
+import { seedMedia, demoMediaPath } from "./seed-media.js";
 // The regex the public `GET /media/:filename` route accepts.
 import { MEDIA_FILENAME } from "@waitron/shared";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
-const SRC_DIR = fileURLToPath(new URL("media", import.meta.url));
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -43,7 +40,7 @@ describe("seedMedia", () => {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
-      await seedMedia(tx, { productsByImage });
+      await seedMedia(tx, { productsByImage, mediaDataSet: CASA_DELGADO_ES.mediaDataSet });
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
         sql`select id, image from products `,
       );
@@ -61,7 +58,9 @@ describe("seedMedia", () => {
       expect(MEDIA_FILENAME.test(stored!)).toBe(true);
       expect(stored).not.toBe(basename);
 
-      const srcBytes = await readFile(join(SRC_DIR, basename));
+      const srcBytes = await readFile(
+        demoMediaPath(CASA_DELGADO_ES.mediaDataSet, basename, undefined),
+      );
       const prepared = await prepareImage(srcBytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
       expect(stored).toBe(prepared.filename);
 
@@ -80,9 +79,12 @@ describe("seedMedia", () => {
         [...productsByImage.keys()].map(
           async (basename) =>
             (
-              await prepareImage(await readFile(join(SRC_DIR, basename)), {
-                maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
-              })
+              await prepareImage(
+                await readFile(demoMediaPath(CASA_DELGADO_ES.mediaDataSet, basename, undefined)),
+                {
+                  maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+                },
+              )
             ).filename,
         ),
       ),
@@ -98,11 +100,11 @@ describe("seedMedia", () => {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
-      await seedMedia(tx, { productsByImage });
+      await seedMedia(tx, { productsByImage, mediaDataSet: CASA_DELGADO_ES.mediaDataSet });
       const before = await tx.execute(
         sql`select id, filename, names from media_images order by id`,
       );
-      await seedMedia(tx, { productsByImage });
+      await seedMedia(tx, { productsByImage, mediaDataSet: CASA_DELGADO_ES.mediaDataSet });
       const after = await tx.execute(sql`select id, filename, names from media_images order by id`);
       expect(after.rows).toEqual(before.rows);
       expect(after.rows.length).toBeGreaterThan(0);

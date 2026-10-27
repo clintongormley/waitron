@@ -28,7 +28,7 @@ import { seedExtraLists } from "./seed-extra-lists.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
-import type { SeedLocale } from "./menu.js";
+import type { SeedLocale } from "./locale.js";
 import type { DemoDataSet } from "./data-set.js";
 import { DEMO_PRINTER_KEY, routeToDemoPrinter } from "../../src/demo-printer.js";
 
@@ -86,7 +86,7 @@ export async function seedDemoRestaurant(
       tx,
       { locationId },
       {
-        name: "Demo printer",
+        name: dataSet.printerName,
         transport: "usb",
         localKey: DEMO_PRINTER_KEY,
         hasCashDrawer: true,
@@ -99,7 +99,7 @@ export async function seedDemoRestaurant(
     await giveKitchenDisplaysThePass(tx);
     await seedStaff(tx, { dataSet });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
-    await seedMedia(tx, { productsByImage });
+    await seedMedia(tx, { productsByImage, mediaDataSet: dataSet.mediaDataSet });
     // Publish after modifiers and media so each version freezes their seeded values.
     for (const menuId of Object.values(menuIds)) {
       const { document } = await buildMenuDocument(tx, menuId);
@@ -157,7 +157,7 @@ export async function seedDemoRestaurant(
       cfg,
       null,
       {
-        name: "Christmas Day",
+        name: dataSet.specialDayName,
         repeatsYearly: true,
         dates: [{ date: `${year}-12-25`, closedAllDay: true }],
       },

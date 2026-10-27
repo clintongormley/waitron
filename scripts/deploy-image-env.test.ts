@@ -234,7 +234,7 @@ describe("the container image's environment", () => {
 
   it("ships the sample images at the directory the installed Demo seed reads", () => {
     expect(IMAGE_ENV.WAITRON_DEMO_MEDIA_SOURCE).toBe("/app/demo-media");
-    expect(DOCKERFILE).toContain("/src/apps/server/scripts/demo-seed/media/ /app/demo-media/");
+    expect(DOCKERFILE).toContain("/src/packages/country-es/demo-media/ /app/demo-media/");
   });
 });
 
