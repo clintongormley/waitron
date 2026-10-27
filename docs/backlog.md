@@ -1087,6 +1087,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
+- **A1151. Patch live menu: change wording, price, picture or VAT class in a menu's live version
+  without touching the products** (owner, 2026-10-27). Design approved and plan reviewed:
+  `docs/superpowers/specs/2026-10-27-patch-live-menu-design.md`,
+  `docs/superpowers/plans/2026-10-27-patch-live-menu.md`. Queued for a lane.
+
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
