@@ -612,6 +612,8 @@ export async function priceOrderLines(
   lateSend?: LateSendConfirmation,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
+  /** Aligned with `lineRows`: a dish sold in whole portions, which may be split one per dish. */
+  portionable: boolean[];
   gross: GrossLines;
   identities: OrderLineIdentity[];
   lineContexts: {
@@ -626,6 +628,7 @@ export async function priceOrderLines(
   if (requestedLines.length === 0) {
     return {
       lineRows: [],
+      portionable: [],
       gross: grossBasketWithOptions([]),
       identities: [],
       lineContexts: [],
@@ -811,6 +814,7 @@ export async function priceOrderLines(
         makeAt: string | null;
         unit: ExtraChild["unitContext"];
         recorded: boolean;
+        portionable: boolean;
         late?: { periodName: string; confirmedBy: string };
       }
     | {
@@ -937,6 +941,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       recorded: source !== undefined,
+      portionable: takesExtras(selection.unit),
       ...(mark === undefined ? {} : { late: mark }),
       unit: source?.unit ?? {
         id: selection.unit.id,
@@ -1054,7 +1059,8 @@ export async function priceOrderLines(
     ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
     ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
-  return { lineRows, gross, identities, lineContexts, offers };
+  const portionable = lineMeta.map((meta) => meta.kind === "parent" && meta.portionable);
+  return { lineRows, portionable, gross, identities, lineContexts, offers };
 }
 
 function recalledModifierPlan(
@@ -2909,6 +2915,8 @@ export interface PricedTabRound {
   tabId: string;
   /** One row per line and per extras child, in the order the lines were sent. */
   rows: WorkingOrderLineInsert[];
+  /** Aligned with `rows`, as {@link priceOrderLines} answers it. */
+  portionable: boolean[];
   lineContexts: {
     workingOrderLineId: string;
     menuItemId: string;
@@ -2942,7 +2950,7 @@ export async function priceTabRound(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
-  const { lineRows, lineContexts, offers } = await priceOrderLines(
+  const { lineRows, portionable, lineContexts, offers } = await priceOrderLines(
     tx,
     cfg,
     tabId,
@@ -2956,6 +2964,7 @@ export async function priceTabRound(
   return {
     tabId,
     rows: lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 })),
+    portionable,
     lineContexts,
     offers,
   };
