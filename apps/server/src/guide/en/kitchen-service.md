@@ -49,6 +49,10 @@ A correction covers only the quantity still to serve. Fully served or cancelled 
 new allergy notice. If a dish moves to another station, its original copy follows it, together
 with a correction when its current instructions differ.
 
+Changing or removing the order's kitchen note gives your station one notice listing every dish it
+affects, and **Got it** clears it. Each kitchen printer prints one slip listing the dishes of the
+stations it serves.
+
 ## Keep advance HOLD instructions with the work {#held-work}
 
 A held dish can reach a station on an advance HOLD ticket. That station keeps the allergy copy
@@ -72,6 +76,9 @@ from the instructions you confirm for that send.
 A reprint repeats the original allergy block. It does not issue another correction notice, so
 check the station's outstanding notices separately. Splitting dishes between bills keeps the
 copies with the resulting kitchen work; it does not replace the guest's instructions.
+
+A reprint's heading shows when it was reprinted (`*** REPRINT 15:20 ***`). The time under the
+order number stays the time the dishes were sent.
 
 ## Keep food visible until service ends {#service-lifetime}
 

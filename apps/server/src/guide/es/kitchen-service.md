@@ -53,6 +53,10 @@ Una corrección abarca solo la cantidad que queda por servir. El trabajo ya serv
 completo no recibe un aviso de alergia nuevo. Si un plato pasa a otra estación, conserva su copia
 original y lleva una corrección cuando las instrucciones actuales son distintas.
 
+Cambiar o quitar la nota para cocina del pedido da a tu estación un solo aviso con todos los platos
+afectados, y **Entendido** lo retira. Cada impresora de cocina imprime un solo ticket con los
+platos de las estaciones a las que sirve.
+
 ## Conserva las instrucciones anticipadas del trabajo en espera {#held-work}
 
 Un plato en espera puede llegar a una estación en un ticket anticipado de espera. Esa estación
@@ -80,6 +84,9 @@ Una reimpresión repite el bloque de alergias original. No genera otro aviso de 
 comprueba por separado los avisos pendientes de la estación. Dividir los platos entre cuentas
 conserva las copias con el trabajo de cocina resultante; no sustituye las instrucciones de la
 persona.
+
+La cabecera de una reimpresión indica cuándo se reimprimió (`*** REPRINT 15:20 ***`). La hora
+bajo el número de pedido sigue siendo la hora a la que se enviaron los platos.
 
 ## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
 
