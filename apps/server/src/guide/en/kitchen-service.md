@@ -132,6 +132,20 @@ waits, by the station's late flags, and a forgotten card's band pulses; it holds
 set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and waits under
 **Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
 
+The first column, **Overview**, lists each dish waiting or being made with how many, so you can see
+at a glance how many of each to start. After a **+** it shows how many more are held
+(**Pork shoulder 1 +2**). Dishes with something to make come first, and the heading shows how many
+of them there are. Overview is a column like the others: tap its heading to collapse it, and move or
+hide it in **Columns**.
+
+Where the screen is too narrow for its columns, it shows one column at a time, and the columns
+become tabs in the same order (**Waiting · 2**). The first tab is chosen until you tap another. A
+hidden column has no tab, and a collapsed column's tab still shows its cards. Opening a collapsed
+column can leave the others too little room: the screen then turns to tabs and shows the column you
+opened. To see the columns side by side again on that screen, hide columns in **Columns** until
+they fit. A tab whose column holds a late card has a red bar under it; a collapsed column holding a
+late card has one across its top.
+
 A row above the columns shows how many dishes are still to make and how many cards are late, and
 **Columns** at its end; above a single station's columns it also shows whether the station is open
 today, and on a kitchen screen that nobody signs in on, the station's name (unless the station is

@@ -1,6 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { StationThresholds } from "@waitron/shared";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  resetPage,
+} from "../widgets/test-helpers.js";
 import "./till-station-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
 import type { KitchenNotice, Station, StationQueueGroup, TillApi } from "../api/client.js";
@@ -180,6 +186,10 @@ const notices: KitchenNotice[] = [
   },
 ];
 
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)", (theme) => {

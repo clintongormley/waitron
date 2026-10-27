@@ -151,6 +151,21 @@ para reducir el movimiento se queda quieta. Una tarjeta cuyos platos están todo
 borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida la
 preparación](kitchen-service.md#request-cooking).
 
+La primera columna, **Resumen**, muestra cada plato que espera o se está haciendo con cuántos hay,
+para que veas de un vistazo cuántos de cada uno empezar. Tras un **+** muestra cuántos más están en
+espera (**Secreto ibérico 1 +2**). Primero van los platos que quedan por hacer, y la cabecera dice
+cuántos son. Resumen es una columna como las demás: toca su cabecera para plegarla, y muévela u
+ocúltala en **Columnas**.
+
+Donde la pantalla es demasiado estrecha para sus columnas, muestra una columna cada vez y las
+columnas pasan a ser pestañas en el mismo orden (**Esperando · 2**). La primera pestaña está elegida
+hasta que tocas otra. Una columna oculta no tiene pestaña, y la pestaña de una columna plegada sigue
+mostrando sus tarjetas. Abrir una columna plegada puede dejar sin sitio a las demás: la pantalla
+pasa entonces a pestañas y muestra la columna que abriste. Para volver a ver las columnas una al
+lado de otra en esa pantalla, oculta columnas en **Columnas** hasta que quepan. Una pestaña cuya
+columna tiene una tarjeta con retraso lleva una barra roja debajo; una columna plegada con una
+tarjeta con retraso la lleva en su parte superior.
+
 Una fila encima de las columnas muestra cuántos platos quedan por hacer y cuántas tarjetas van con
 retraso, y **Columnas** al final; encima de las columnas de una sola estación muestra también si la
 estación está abierta hoy y, en una pantalla de cocina en la que nadie inicia sesión, el nombre de

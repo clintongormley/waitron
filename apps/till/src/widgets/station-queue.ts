@@ -7,8 +7,8 @@ import { groupName } from "./group-name.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
@@ -26,9 +26,18 @@ import {
   isCounterOrder,
   kitchenCards,
   lateCards,
+  overviewDishes,
   thousandthsToMake,
 } from "../state/kitchen-cards.js";
+import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
+import {
+  type BoardMeasure,
+  CARD_COLUMN_TEXT_WIDTHS,
+  columnsFit,
+} from "../state/kitchen-board-fit.js";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
+import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -76,14 +85,18 @@ const DRAWN: Partial<Record<ColumnKey, TicketState>> = {
 
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 
-/** The columns this board can draw, each with its name, in the order the kitchen states go. */
+/** The columns this board can draw, each with its name: Overview, then the kitchen states in order. */
 export function stationColumnNames(): Map<ColumnKey, string> {
-  return new Map(
-    Object.entries(DRAWN).map(([key, state]) => [
-      key as ColumnKey,
-      t(`station.state.${state}` as const),
-    ]),
-  );
+  return new Map([
+    ["overview", t("station.overview")],
+    ...Object.entries(DRAWN).map(
+      ([key, state]) => [key as ColumnKey, t(`station.state.${state}` as const)] as const,
+    ),
+  ]);
+}
+
+function dishCount(thousandths: number): string {
+  return trimQuantity(thousandthsToDecimal(thousandths));
 }
 
 function afterPeriodWords(period: string): string {
@@ -110,9 +123,27 @@ export class TillStationQueue extends LitElement {
     dietBadgeStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
+    segmentedOptionStyles,
     css`
       :host {
         display: block;
+      }
+
+      .width-probe {
+        height: 0;
+      }
+
+      .column-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3) var(--wt-space-2);
+        margin-block-end: var(--wt-space-3);
+      }
+
+      .tab-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
       }
 
       .visually-hidden {
@@ -141,8 +172,56 @@ export class TillStationQueue extends LitElement {
         min-width: 0;
       }
 
+      .column-overview {
+        flex-grow: 0;
+      }
+
       .column.collapsed {
         flex: 0 0 var(--wt-tap-min);
+      }
+
+      .overview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        list-style: none;
+      }
+
+      /* A tab panel spans the board, so a name would sit across the screen from its count. */
+      .tab-panel .overview {
+        max-width: calc(${unsafeCSS(CARD_COLUMN_TEXT_WIDTHS)} * var(--wt-font-size-md));
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .tab-panel .overview {
+          max-width: none;
+        }
+      }
+
+      .overview-row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-2);
+      }
+
+      .overview-name {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .overview-making {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .overview-held {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .column-heading {
@@ -182,6 +261,14 @@ export class TillStationQueue extends LitElement {
         justify-content: flex-start;
         padding: var(--wt-space-2) 0;
         writing-mode: vertical-rl;
+      }
+
+      .collapsed .column-toggle[data-late] {
+        box-shadow: inset 0 var(--wt-space-1) 0 var(--wt-color-danger);
+      }
+
+      .column-tab[data-late] {
+        box-shadow: 0 var(--wt-space-1) 0 var(--wt-color-danger);
       }
 
       .column:not(.collapsed) .column-count {
@@ -688,6 +775,87 @@ export class TillStationQueue extends LitElement {
    *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
+  /** The host's width and sizes, read before each drawing so the first is already tabs or columns. */
+  #measured?: BoardMeasure;
+  #resizing?: ResizeObserver;
+  @state() private chosenTab?: ColumnKey;
+  /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
+  #opening?: ColumnKey;
+  /** The tab that takes the focus from the heading its column was opened with, which the tabs remove. */
+  #focusTab?: ColumnKey;
+  #drewTabs = false;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeWidth();
+  }
+
+  override firstUpdated(): void {
+    this.#observeWidth();
+  }
+
+  /** Watches a line of no height across the board, not the host: the switch to tabs changes the
+   * host's height, which a watch on the host would report again in the same frame. */
+  #observeWidth(): void {
+    this.#resizing = new ResizeObserver((entries) => {
+      if (entries.at(-1)!.contentRect.width !== this.#measured?.width) this.requestUpdate();
+    });
+    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#resizing?.disconnect();
+    this.#resizing = undefined;
+  }
+
+  override willUpdate(): void {
+    const own = getComputedStyle(this);
+    const px = (token: string) => parseFloat(own.getPropertyValue(token));
+    this.#measured = {
+      width: this.getBoundingClientRect().width,
+      textPx: parseFloat(own.fontSize),
+      remPx: parseFloat(getComputedStyle(document.documentElement).fontSize),
+      tapMinPx: px("--wt-tap-min"),
+      gapPx: px("--wt-space-3"),
+    };
+    const tabs = this.groups.length > 0 && !this.#fits();
+    if (this.#opening !== undefined && tabs && !this.#drewTabs) {
+      this.chosenTab = this.#opening;
+      const focused = (this.renderRoot as ShadowRoot).activeElement;
+      if (focused instanceof HTMLElement && focused.dataset.columnToggle === this.#opening) {
+        this.#focusTab = this.#opening;
+      }
+    }
+    this.#opening = undefined;
+    this.#drewTabs = tabs;
+    const shown = this.#shown();
+    if (tabs && this.chosenTab !== undefined && !shown.includes(this.chosenTab)) {
+      this.chosenTab = shown[0]!;
+    }
+  }
+
+  override updated(): void {
+    if (this.#focusTab === undefined) return;
+    this.renderRoot.querySelector<HTMLElement>(`[data-column-tab="${this.#focusTab}"]`)!.focus();
+    this.#focusTab = undefined;
+  }
+
+  /** The columns this board can draw that are not hidden, in the layout's order. */
+  #shown(): ColumnKey[] {
+    return this.columns.order.filter(
+      (key) =>
+        (key === "overview" || DRAWN[key] !== undefined) && !this.columns.hidden.includes(key),
+    );
+  }
+
+  #fits(): boolean {
+    return (
+      this.#measured === undefined ||
+      columnsFit(this.#measured, this.#shown(), this.columns.collapsed)
+    );
+  }
+
   #bump(
     card: KitchenCard,
     group: MergedQueueGroup,
@@ -796,7 +964,8 @@ export class TillStationQueue extends LitElement {
 
   override render() {
     const cards = kitchenCards(this.groups);
-    return html`<div class="board-head" data-board-head>
+    return html`<div class="width-probe"></div>
+      <div class="board-head" data-board-head>
         <slot name="lead"></slot>${this.#header(cards)}<wt-button
           data-columns-open
           variant="secondary"
@@ -807,7 +976,9 @@ export class TillStationQueue extends LitElement {
       <slot name="status"></slot>${this.#notices()}${
         this.groups.length === 0
           ? html`<p class="empty">${t("station.empty")}</p>`
-          : this.#board(cards)
+          : this.#fits()
+            ? this.#board(cards)
+            : this.#tabs(cards)
       }`;
   }
 
@@ -981,51 +1152,150 @@ export class TillStationQueue extends LitElement {
   }
 
   #toggleColumn(key: ColumnKey): void {
+    if (this.columns.collapsed.includes(key)) this.#opening = key;
     this.dispatchEvent(
       new CustomEvent("toggle-column", { detail: { key }, bubbles: true, composed: true }),
     );
   }
 
+  /** One column at a time, under a tab per shown column; a collapsed column opens in its tab. */
+  #tabs(cards: readonly KitchenCard[]): TemplateResult {
+    const shown = this.#shown();
+    const chosen =
+      this.chosenTab !== undefined && shown.includes(this.chosenTab) ? this.chosenTab : shown[0]!;
+    const rows = overviewRows(overviewDishes(cards));
+    const inColumn = (state: TicketState) => cards.filter((card) => card.column === state);
+    const now = this.#clockNow();
+    const chosenState = DRAWN[chosen];
+    return html`<div
+        class="column-tabs"
+        data-column-tabs
+        role="group"
+        aria-label=${t("station.columns")}
+      >
+        ${shown.map((key) => {
+          const state = DRAWN[key];
+          const title =
+            state === undefined ? t("station.overview") : t(`station.state.${state}` as const);
+          const count = state === undefined ? rowsToMake(rows) : inColumn(state).length;
+          const late = state === undefined ? 0 : lateCards(inColumn(state), now);
+          return html`<button
+            type="button"
+            class="option column-tab"
+            data-column-tab=${key}
+            ?data-late=${late > 0}
+            aria-pressed=${key === chosen ? "true" : "false"}
+            @click=${() => (this.chosenTab = key)}
+          >
+            ${title}<span aria-hidden="true"> ·</span>
+            <span aria-hidden=${late > 0 ? "true" : nothing}>${count}</span>${this.#lateWords(
+              count,
+              late,
+            )}
+          </button>`;
+        })}
+      </div>
+      <section class="tab-panel" data-tab-panel=${chosen} data-column=${chosenState ?? "overview"}>
+        ${
+          chosenState === undefined
+            ? this.#overview(rows)
+            : inColumn(chosenState).map((card) => this.#card(card))
+        }
+      </section>`;
+  }
+
   #board(cards: readonly KitchenCard[]): TemplateResult {
-    const drawn = this.columns.order.flatMap((key) => {
-      const state = DRAWN[key];
-      return state === undefined || this.columns.hidden.includes(key) ? [] : [{ key, state }];
-    });
+    const shown = this.#shown();
     return html`<div class="kanban">
-      ${drawn.map(({ key, state }) => {
-        const inColumn = cards.filter((card) => card.column === state);
+      ${shown.map((key) => {
         const collapsed = this.columns.collapsed.includes(key);
-        // One button template for both states, so a redraw keeps the focused element.
+        const state = DRAWN[key];
+        if (state === undefined) {
+          const rows = overviewRows(overviewDishes(cards));
+          return html`<section
+            class="column column-overview ${collapsed ? "collapsed" : ""}"
+            data-column="overview"
+          >
+            ${this.#heading(key, t("station.overview"), rowsToMake(rows), collapsed)}
+            ${collapsed ? nothing : this.#overview(rows)}
+          </section>`;
+        }
+        const inColumn = cards.filter((card) => card.column === state);
+        const late = collapsed ? lateCards(inColumn, this.#clockNow()) : 0;
         return html`<section
           class="column column-${state} ${collapsed ? "collapsed" : ""}"
           data-column=${state}
         >
-          <h2 class="column-heading">
-            <button
-              class="column-toggle"
-              data-column-toggle=${key}
-              aria-expanded=${collapsed ? "false" : "true"}
-              @click=${() => this.#toggleColumn(key)}
-            >
-              ${collapsed ? html`<wt-icon name="column-closed" aria-hidden="true"></wt-icon>` : nothing}<span
-                class="column-title"
-                >${t(`station.state.${state}` as const)}</span
-              >
-              ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
-                class="column-count"
-                data-column-count
-                >${inColumn.length}</span
-              >${
-                collapsed
-                  ? nothing
-                  : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`
-              }
-            </button>
-          </h2>
+          ${this.#heading(
+            key,
+            t(`station.state.${state}` as const),
+            inColumn.length,
+            collapsed,
+            late,
+          )}
           ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
         </section>`;
       })}
     </div>`;
+  }
+
+  /** One button template for both states, so a redraw keeps the focused element. */
+  #heading(
+    key: ColumnKey,
+    title: string,
+    count: number,
+    collapsed: boolean,
+    late = 0,
+  ): TemplateResult {
+    return html`<h2 class="column-heading">
+      <button
+        class="column-toggle"
+        data-column-toggle=${key}
+        ?data-late=${late > 0}
+        aria-expanded=${collapsed ? "false" : "true"}
+        @click=${() => this.#toggleColumn(key)}
+      >
+        ${collapsed ? html`<wt-icon name="column-closed" aria-hidden="true"></wt-icon>` : nothing}<span
+          class="column-title"
+          >${title}</span
+        >
+        ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
+          class="column-count"
+          data-column-count
+          aria-hidden=${late > 0 ? "true" : nothing}
+          >${count}</span
+        >${this.#lateWords(count, late)}${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
+      </button>
+    </h2>`;
+  }
+
+  /** The count's words while late: "1, 1 late" in one hidden span, as the drawn count is hidden
+   * then; a hidden span after the drawn count puts a space before its comma in Chromium's name. */
+  #lateWords(count: number, late: number): TemplateResult | typeof nothing {
+    if (late === 0) return nothing;
+    return html`<span class="visually-hidden"
+      >${count}, ${t("station.late").replace("{n}", String(late))}</span
+    >`;
+  }
+
+  #overview(rows: readonly OverviewRow[]): TemplateResult {
+    return html`<ul class="overview" data-overview>
+      ${rows.map(
+        (row) =>
+          html`<li class="overview-row" data-overview-row>
+            <span class="overview-name">${row.name}</span
+            ><span class="overview-making" data-overview-making>${dishCount(row.making)}</span>${
+              row.held > 0
+                ? html`<span class="overview-held" data-overview-held aria-hidden="true"
+                      >+${dishCount(row.held)}</span
+                    ><span class="visually-hidden"
+                      >, ${t("station.overview_held").replace("{n}", dishCount(row.held))}</span
+                    >`
+                : nothing
+            }
+          </li>`,
+      )}
+    </ul>`;
   }
 
   /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */

@@ -250,21 +250,30 @@ it.each(
       now: Date.parse("2026-08-17T10:02:00.000Z"),
     });
     await document.fonts.ready;
-    const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")];
-    expect(cells, "kitchen cards drawn").toHaveLength(DISHES.length);
-    const names = cells.map((cell) => cell.querySelector<HTMLElement>(".line-name")!);
-    expectDrawnAt(names[0]!, scale, DISH_SIZE);
-    const seen = Object.fromEntries(
-      cells.map((cell, index) => {
-        const name = names[index]!;
+    const shown = () => {
+      const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")];
+      return cells.map((cell) => {
+        const name = cell.querySelector<HTMLElement>(".line-name")!;
+        expectDrawnAt(name, scale, DISH_SIZE);
         // Its own box first: an ellipsis inside the card still cuts the dish off.
         const own = within(textRects(name), name.getBoundingClientRect());
         return [
           name.textContent!.trim(),
           own === "inside" ? within(textRects(name), cell.getBoundingClientRect()) : own,
-        ];
-      }),
-    );
+        ] as const;
+      });
+    };
+    // Where the columns do not fit, the board draws tabs: each column's cards under its own tab.
+    const cards: (readonly [string, string])[] = [];
+    if (el.shadowRoot!.querySelector("[data-column-tabs]")) {
+      for (const key of ["waiting", "preparing", "ready"]) {
+        el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-column-tab="${key}"]`)!.click();
+        await el.updateComplete;
+        cards.push(...shown());
+      }
+    } else cards.push(...shown());
+    expect(cards, "kitchen cards drawn").toHaveLength(DISHES.length);
+    const seen = Object.fromEntries(cards);
     expect(seen).toEqual(Object.fromEntries(DISHES.map((dish) => [`2× ${dish}`, "inside"])));
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   },

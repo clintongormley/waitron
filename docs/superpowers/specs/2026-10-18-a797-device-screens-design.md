@@ -310,6 +310,9 @@ needs a manager PIN), and "5 dishes to make · 1 late".
 - **Overview** (first; was "To make"): one row per dish waiting or being made, with its count
   ("Secreto ibérico 2"), and after a + how many are held ("+2"). It is what a grill cook reads to
   know how many steaks to put on. Shown by default on a kitchen screen.
+  _2026-10-27, slice 9c: one row per dish name, rows with something to make first; the count is the
+  rows with something to make; the key "After the +: held" is not drawn; see the build plan's
+  slice 9c, D2–D4, D6._
 - **Held** (was "Coming up"): held dishes, and dishes fired but waiting for the pass, the second
   marked **"Waiting for the pass"**. Both are held from the station's point of view: it must not
   start them. Drawn dimmed and dashed.
@@ -336,6 +339,7 @@ A757's fast speed.
   _2026-10-27, slice 9: the heading shows the column's count of cards open and collapsed; collapsed
   columns are kept per station on the device, the merged board apart; a collapsed column holding a
   late card has no mark of its own yet; see the build plan's slice 9, D5, D9, D14._
+  _2026-10-27, slice 9c: it now carries the red bar; see the build plan's slice 9c, D10._
 - **Column order is not changed on the live screen** (the owner withdrew long-press dragging, so
   nobody reorders by mistake mid-service): it is set in corner → Columns (§3.6, picture 07).
   _2026-10-27, slice 9b: each board has its own header row, with Columns at its end; the corner
@@ -348,6 +352,10 @@ Where the columns do not fit (below about 1000 px; the build measures), one colu
 and the columns become tabs with counts ("Waiting · 2"), **in the chosen order, so Overview is the
 first tab** by default; a hidden column has no tab. A tab holding a late card carries a red bar, as
 A757's zone tabs do. A kitchen screen on a phone is not a target; it gets the same tabs.
+_2026-10-27, slice 9c: the board draws tabs when its shown columns do not fit, by a measured rule
+(on a kitchen display, a viewport of about 985 px for the four default columns at standard text,
+1183 px at 130%); the first tab is chosen until a tap; a collapsed column keeps its tab; a collapsed
+column holding a late card carries the red bar too; see the build plan's slice 9c, D7–D10._
 
 ### 3.5 Pass, wide (picture 04)
 
@@ -721,6 +729,8 @@ edits the same files)
 ## 9. Not decided here
 
 - Exact widths where the kitchen screen and pass switch to tabs or a list; the build measures.
+  (2026-10-27: the kitchen screen's switch is settled in the build plan's slice 9c, D7; the pass's
+  is A773-2's.)
 - Short names on the floor map where a full name does not fit, and on printed kitchen tickets
   (§3.7): later choices for the owner, not built here.
 - What a tight place shows for a group joined today on the till (A504's today's joins), and for a

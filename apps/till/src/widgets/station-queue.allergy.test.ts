@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget, resetPage } from "./test-helpers.js";
 import { TillStationQueue } from "./station-queue.js";
 import {
   allergyBlock,
@@ -11,6 +11,10 @@ import {
 } from "../../test/kitchen-allergy-fixtures.js";
 
 const locale = currentLocale();
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(() => {
   cleanupWidgets();
   setLocale(locale);

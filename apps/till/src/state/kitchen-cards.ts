@@ -1,4 +1,4 @@
-import { BAND_RANK, classifyBand, stringToThousandths } from "@waitron/shared";
+import { BAND_RANK, classifyBand } from "@waitron/shared";
 import { mergeLabel } from "@waitron/ui";
 import type {
   QueueGroup,
@@ -7,6 +7,7 @@ import type {
   StationQueueItem,
   TicketState,
 } from "../api/client.js";
+import { type OverviewDish, dishThousandths } from "./kitchen-overview.js";
 
 /** One course's dishes on a card, in the read's order. */
 export interface CourseSection {
@@ -150,14 +151,29 @@ export function dishesAt(card: KitchenCard, stage: TicketState): string[] {
   return card.items.filter((item) => fired(item) && item.state === stage).map((item) => item.id);
 }
 
+/** Every dish for Overview, cards in turn: held ones `held`, fired ones not Ready `making`, Ready left out. */
+export function overviewDishes(cards: readonly KitchenCard[]): OverviewDish[] {
+  const dishes: OverviewDish[] = [];
+  for (const card of cards) {
+    for (const item of card.items) {
+      if (fired(item) && item.state === "ready") continue;
+      dishes.push({
+        name: item.name,
+        thousandths: dishThousandths(item.quantity, item.unitName, item.soldInEach),
+        stage: fired(item) ? "making" : "held",
+      });
+    }
+  }
+  return dishes;
+}
+
 /** Fired dishes Waiting or Preparing, in thousandths of a dish; a dish whose unit shows counts 1000 (D9). */
 export function thousandthsToMake(cards: readonly KitchenCard[]): number {
   let total = 0;
   for (const card of cards) {
     for (const item of card.items) {
       if (!fired(item) || item.state === "ready") continue;
-      const unitShows = item.unitName != null && item.soldInEach !== true;
-      total += unitShows ? 1000 : stringToThousandths(item.quantity);
+      total += dishThousandths(item.quantity, item.unitName, item.soldInEach);
     }
   }
   return total;

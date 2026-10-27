@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import type { StationThresholds } from "@waitron/shared";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget, resetPage } from "./test-helpers.js";
 import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
@@ -397,6 +398,10 @@ const partyGroups: StationQueueGroup[] = [
   },
 ];
 
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {
@@ -416,6 +421,86 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
       theme,
     );
     await expectNoA11yViolations(host);
+  });
+
+  it("a board with Overview has no violations", async () => {
+    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Mesa 7" };
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [
+          ...groups,
+          {
+            ...held,
+            items: held.items.map((item) => ({ ...item, id: `${item.id}-held`, firedAt: null })),
+          },
+        ],
+        stationId: "st-1",
+        columns: {
+          order: ["overview", "waiting", "preparing", "ready"],
+          hidden: [],
+          collapsed: [],
+        },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-overview-held]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("the board's narrow tabs: the narrow tabs have no violations", async () => {
+    await page.viewport(390, 844);
+    const props = {
+      groups,
+      stationId: "st-1",
+      columns: {
+        order: ["overview", "waiting", "preparing", "ready"],
+        hidden: [],
+        collapsed: [],
+      },
+      now: Date.parse("2026-08-17T10:20:00.000Z"),
+      reducedMotion: true,
+    } satisfies Partial<TillStationQueue>;
+    const first = await mountWidget<TillStationQueue>("till-station-queue", props, theme);
+    const second = await mountWidget<TillStationQueue>("till-station-queue", props, theme);
+    const page390 = document.createElement("div");
+    document.body.append(page390);
+    page390.append(first.host, second.host);
+    await Promise.all([first.el.updateComplete, second.el.updateComplete]);
+    for (const { el } of [first, second]) {
+      expect(el.shadowRoot!.querySelectorAll('[role="group"][data-column-tabs]')).toHaveLength(1);
+    }
+    try {
+      await expectNoA11yViolations(page390);
+    } finally {
+      page390.remove();
+    }
+  });
+
+  it("the late bar: a late tab and a late strip have no violations", async () => {
+    const props = (collapsed: ("waiting" | "preparing")[]) =>
+      ({
+        groups,
+        stationId: "st-1",
+        columns: { order: ["overview", "waiting", "preparing", "ready"], hidden: [], collapsed },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      }) satisfies Partial<TillStationQueue>;
+    await page.viewport(390, 844);
+    const narrow = await mountWidget<TillStationQueue>("till-station-queue", props([]), theme);
+    expect(narrow.el.shadowRoot!.querySelector("[data-column-tab][data-late]")).not.toBeNull();
+    await expectNoA11yViolations(narrow.host);
+    cleanupWidgets();
+    await page.viewport(1280, 900);
+    const wide = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      props(["waiting", "preparing"]),
+      theme,
+    );
+    expect(wide.el.shadowRoot!.querySelector("[data-column-toggle][data-late]")).not.toBeNull();
+    await expectNoA11yViolations(wide.host);
   });
 
   it("a board with a collapsed column has no violations", async () => {

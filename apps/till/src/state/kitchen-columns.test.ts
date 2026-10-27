@@ -47,7 +47,7 @@ describe("A773 columns state: the device's kitchen columns", () => {
     const storage = fakeStorage();
     const state = readColumnState(storage, scope, STATION_COLUMNS);
     expect(state).toEqual({
-      order: ["waiting", "preparing", "ready"],
+      order: ["overview", "waiting", "preparing", "ready"],
       hidden: [],
       collapsed: [],
     });
@@ -59,8 +59,12 @@ describe("A773 columns state: the device's kitchen columns", () => {
 
   it("keeps a saved layout for its venue, device, screen and station only", () => {
     const storage = fakeStorage();
-    saveColumnState(storage, scope, readyCollapsed);
-    expect(readColumnState(storage, scope, STATION_COLUMNS)).toEqual(readyCollapsed);
+    const saved: ColumnState = {
+      ...readyCollapsed,
+      order: ["overview", "waiting", "preparing", "ready"],
+    };
+    saveColumnState(storage, scope, saved);
+    expect(readColumnState(storage, scope, STATION_COLUMNS)).toEqual(saved);
     for (const other of [
       { ...scope, venueId: "https://other.local" },
       { ...scope, deviceId: "dev-2" },
@@ -73,11 +77,9 @@ describe("A773 columns state: the device's kitchen columns", () => {
     saveColumnState(
       storage,
       { venueId: scope.venueId, deviceId: scope.deviceId, screen: scope.screen },
-      readyCollapsed,
+      saved,
     );
-    expect(readColumnState(storage, { ...scope, stationId: "" }, STATION_COLUMNS)).toEqual(
-      readyCollapsed,
-    );
+    expect(readColumnState(storage, { ...scope, stationId: "" }, STATION_COLUMNS)).toEqual(saved);
   });
 
   it("stores under the versioned key, as JSON", () => {

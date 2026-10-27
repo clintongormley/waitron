@@ -15,7 +15,7 @@ export interface ColumnState {
 }
 
 export const STATION_COLUMNS: ColumnState = {
-  order: ["waiting", "preparing", "ready"],
+  order: ["overview", "waiting", "preparing", "ready"],
   hidden: [],
   collapsed: [],
 };

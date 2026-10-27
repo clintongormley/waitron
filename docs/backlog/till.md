@@ -1055,13 +1055,16 @@ may predate that branch:
   `apps/till/src/state/kitchen-columns.ts`) landed in #2129, from the plan's slice 9. Slice 9b (each
   kitchen board's header row with Columns, whose window moves columns up or down and hides or shows
   them, kept on the device; every column may be hidden and Columns stays) landed in #2135, from the
-  plan's slice 9b; next, slice 9c (Overview and the narrow tabs), taking turns with lane G's A773-2
-  on the station screen (design §7). Build slices (design §8), in the owner's
+  plan's slice 9b. Slice 9c (Overview, the first kitchen column, counting each dish to make with
+  the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
+  card's tab, and its collapsed column, carry a red bar) is delivered from the plan's slice 9c; it
+  builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
+  A773-2's pass reuses. What is left of A797: slices 10–11 once A803's slice 3 lands, and 12b after
+  A773-2 (slice 12 is A773-2's own). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
-  the work). Slices 10–11 wait for A803's slice 3; slices 12 and 12b follow A773-2; the rest build
-  now:
+  the work):
   [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](mockups/a797-device-screens/). Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
