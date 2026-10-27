@@ -2981,7 +2981,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   no logo; the till's ticket view and a department's Receipts preview follow the same rule.
   Slice 9b landed 2026-10-27 (#2119): the Look card shows how the logo prints, and says when it
   prints blank.
-  Next: 11, 12 and 14 (14 with A1096's last part, below).
+  Slice 11a landed 2026-10-27 (#PR): a theme stores a typeface, text sizes and weights set by hand,
+  checked on save and import; every screen draws them, a size drawn under 12 px is counted as hard
+  to read, and every bold, heading and table header draws the theme's Bold weight — Waitron's own
+  headings now draw 600, not the browser's 700.
+  Next: 11b, 12 and 14 (14 with A1096's last part, below).
 
 - **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
   A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
@@ -3054,6 +3058,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   ways, and the one sentence when it has no fix; the row buttons' spoken names, "Use worked-out
   colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and the light form
   of the saved row's "set by hand".
+
+- **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
+  design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
+  reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on the dashboard, the
+  tills and the setup screens; the design did not discuss it. Pictures:
+  `11a-{overview,till,setup}-{main,branch}.png` in
+  [mockups/a841-11-text-by-hand/](backlog/mockups/a841-11-text-by-hand/). The way not taken: a
+  heading weight held at 700, which no hand-set Bold would reach. The rule stands unless the owner
+  says otherwise.
 
 - **A colour picked in Advanced within one animation frame of leaving the editor is lost, and
   nothing asks (A841 slice 6's review, 2026-10-23).** A picker drag sends at most one change per
