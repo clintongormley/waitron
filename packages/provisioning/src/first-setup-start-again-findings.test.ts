@@ -102,6 +102,30 @@ it("collects every finding of a box, in the finisher's order", async () => {
   );
 });
 
+it("a file whose size differs from its marked size is reported changed without reading it; one of the same size is read and compared", async () => {
+  const { roots } = await fourFindings();
+  const read = () => vi.mocked(fs.readFile).mock.calls.map(([path]) => String(path));
+  vi.mocked(fs.readFile).mockClear();
+  const collected = await collectStartAgainFindings(roots);
+  expect(collected!.findings.map((finding) => finding.kind)).toEqual([
+    "refused-artifact",
+    "changed",
+    "unlisted",
+    "wal",
+  ]);
+  expect(read()).not.toContain(join(roots.venueDir, "venue.db"));
+  expect(read()).not.toContain(join(roots.venueDir, "venue.db-wal"));
+
+  await writeFile(join(roots.venueDir, "venue.db"), "attempt databasX");
+  vi.mocked(fs.readFile).mockClear();
+  expect((await collectStartAgainFindings(roots))!.findings).toContainEqual({
+    kind: "changed",
+    root: "venue",
+    name: "venue.db",
+  });
+  expect(read()).toContain(join(roots.venueDir, "venue.db"));
+});
+
 it("a link among the attempt's files is a blocker, after the findings before it", async () => {
   const { roots } = await startAgainAttempt(await scratch());
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");

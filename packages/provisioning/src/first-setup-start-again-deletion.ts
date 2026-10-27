@@ -322,6 +322,19 @@ async function sha256(path: string): Promise<StartAgainFingerprint> {
   return { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
+/**
+ * The file's fingerprint, or, for a regular file whose size is not `expected`'s, its size alone:
+ * a restored database there can be gigabytes, and both the start and the leftovers survey run this.
+ */
+async function fingerprintAgainst(
+  path: string,
+  expected: StartAgainFingerprint | null,
+): Promise<StartAgainFingerprint> {
+  const found = await lstat(path);
+  if (found.isFile() && found.size !== expected?.size) return { size: found.size, sha256: "" };
+  return sha256(path);
+}
+
 /** Names every present file of the deletion list with its size and SHA-256. */
 export async function startAgainMarkerFor(
   roots: Roots,
@@ -545,13 +558,13 @@ export async function collectStartAgainFindings(roots: Roots): Promise<{
       const expected = recorded.get(`${item.root}:${item.name}`);
       if (expected === undefined)
         findings.push({ kind: "unlisted", root: item.root, name: item.name });
-      else if (!same(expected, await sha256(item.path)))
+      else if (!same(expected, await fingerprintAgainst(item.path, expected)))
         findings.push({ kind: "changed", root: item.root, name: item.name });
     }
     for (const name of WAL_FILES) {
       const path = join(canonical.venueDir, name);
       if (!(await present(path))) continue;
-      const actual = await sha256(path);
+      const actual = await fingerprintAgainst(path, marker.wal[name]);
       if (actual.size !== 0 && !same(marker.wal[name], actual))
         findings.push({ kind: "wal", name });
     }
@@ -567,11 +580,8 @@ export async function finishStartAgainDeletion(roots: Roots): Promise<void> {
   if ((await readStartAgainMarker(canonical.venueDir)) === null) return;
   const hold = await lockVenueDatabase(canonical.venueDir);
   try {
-    const marker = await readStartAgainMarker(canonical.venueDir);
-    if (marker === null) return;
-    if (marker.venueDir !== canonical.venueDir || marker.stateDir !== canonical.stateDir)
-      throw incomplete("marker folders differ");
-    const collected = (await collectStartAgainFindings(canonical))!;
+    const collected = await collectStartAgainFindings(canonical);
+    if (collected === null) return;
     const first = collected.findings[0];
     if (first !== undefined) throw incomplete(startAgainFindingReason(first));
     if (collected.blocker !== null) throw collected.blocker;
