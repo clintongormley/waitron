@@ -2589,3 +2589,111 @@ it("says nothing was lost when a language the person never typed in is removed a
   expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
 });
+
+/** As `reloadedOntoOtherSpanish`, but the English typed before the Reload fails its own check, so
+ * nothing is staged until the English is put right after it. */
+async function fixedAfterReloadOntoOtherSpanish() {
+  const description = (es: string) => {
+    const document = lunch();
+    document.offers["mi-soup"]!.description = { en: "Old soup", es };
+    return document;
+  };
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, description("Sopa vieja")))
+    .mockResolvedValue(live(4, description("Sopa de otro")));
+  const api = stubApi({ liveData: data, getLiveMenu });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-en", "x".repeat(5000));
+  expect(el.changes).toEqual([]);
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "description-es").value).toBe("Sopa de otro");
+  await type(el, "wt-input", "description-en", "New soup");
+  return { api, el };
+}
+
+it("moves the untouched text of a field failing its own check onto the version a Reload reads", async () => {
+  const { api, el } = await fixedAfterReloadOntoOtherSpanish();
+  expect(field(el, "wt-input", "description-es").value).toBe("Sopa de otro");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Soup: Description (EN) Old soup → New soup"]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-4",
+    changes: [
+      { target: soup, field: "description", value: { en: "New soup", es: "Sopa de otro" } },
+    ],
+  });
+});
+
+it("says nothing was lost when a language left untouched in a field failing its own check is removed after a Reload", async () => {
+  const { el } = await fixedAfterReloadOntoOtherSpanish();
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "description", value: { en: "New soup" } }]);
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+});
+
+it("counts text typed in a language removed while its field fails its own check", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-es", "Sopa mia");
+  await type(el, "wt-input", "description-en", "x".repeat(5000));
+  expect(el.changes).toEqual([]);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
+  );
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  await el.updateComplete;
+  expect(field(el, "wt-input", "description-es").value).toBe("Sopa vieja");
+  await type(el, "wt-input", "description-en", "New soup");
+  expect(el.changes).toEqual([
+    { target: soup, field: "description", value: { en: "New soup", es: "Sopa vieja" } },
+  ]);
+});
+
+it("judges a field forgotten while failing its own check against the version shown when it is next edited", async () => {
+  const drinksNamed = (es: string) => {
+    const document = lunch();
+    const drinks = document.root.members[1] as Extract<
+      MenuDocument["root"]["members"][number],
+      { kind: "section" }
+    >;
+    drinks.names = { en: "Bar", es };
+    delete drinks.fixed;
+    return document;
+  };
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, drinksNamed("Bebidas")))
+    .mockResolvedValue(live(4, drinksNamed("Copas")));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Drinks");
+  await type(el, "wt-input", "names-es", "x".repeat(5000));
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  await el.updateComplete;
+  await type(el, "wt-input", "names-en", "Refreshments");
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-drinks" },
+      field: "names",
+      value: { en: "Refreshments", es: "Copas" },
+    },
+  ]);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
+});

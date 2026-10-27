@@ -132,6 +132,8 @@ export function targetKey(target: MenuPatchTarget): string {
 
 const TRANSLATED = new Set(["customerName", "names", "description"]);
 
+const changeKeyOf = (change: MenuPatchChange) => `${targetKey(change.target)}/${change.field}`;
+
 function sameTranslations(
   left: Record<string, string> | null,
   right: Record<string, string> | null,
@@ -149,11 +151,39 @@ function lostText(staged: MenuPatchChange, settled: MenuPatchChange): boolean {
   );
 }
 
+/** `text`, typed over `base`, in exactly the `enabled` languages once `stored` is the stored text.
+ * A language is typed while its text differs from its base: it keeps the text and the base. Any
+ * other enabled language takes the stored text, or a blank, as both text and base, so a send never
+ * clears or replaces stored text in a language the person left alone. A language not enabled goes
+ * from both; `lost` says whether one that went was typed. */
+function following(
+  text: Readonly<Record<string, string>>,
+  base: Readonly<Record<string, string>>,
+  stored: Readonly<Record<string, string>>,
+  enabled: readonly string[],
+): { text: Record<string, string>; base: Record<string, string>; lost: boolean } {
+  const typed = (language: string) =>
+    Object.hasOwn(text, language) && text[language] !== (base[language] ?? "");
+  const lost = Object.keys(text).some((language) => !enabled.includes(language) && typed(language));
+  const next = (from: Readonly<Record<string, string>>) =>
+    Object.fromEntries(
+      enabled.map((language) => [
+        language,
+        typed(language) ? (from[language] ?? "") : (stored[language] ?? ""),
+      ]),
+    );
+  return { text: next(text), base: next(base), lost };
+}
+
 /** The changes staged in the patch dialog, each against the live version it was read from. */
 export class MenuPatchDraft {
   private readonly staged = new Map<string, MenuPatchChange>();
   /** How many staged changes each target has, by `targetKey`. */
   private readonly perTarget = new Map<string, number>();
+  /** For each translated field the person has edited, staged or held, by change key: the stored
+   * text, per language, the person's text is judged against. A language whose text equals its
+   * base is one they left alone. */
+  private readonly bases = new Map<string, Record<string, string>>();
 
   constructor(
     private document: MenuDocument,
@@ -189,7 +219,8 @@ export class MenuPatchDraft {
   }
 
   /** `change` holding the live text in each name language every folder fixes, which no patch
-   * changes (`applyMenuPatch` lays the folders' names back on top). */
+   * changes (`applyMenuPatch` lays the folders' names back on top). That text was not typed, so
+   * the change's base takes it too. */
   private settled(change: MenuPatchChange): MenuPatchChange {
     const value = change.value;
     if (change.field !== "names" || typeof value !== "object" || value === null) return change;
@@ -199,49 +230,77 @@ export class MenuPatchDraft {
       Record<string, string> | undefined;
     if (live === undefined) return change;
     const settled = { ...(value as Record<string, string>) };
+    const base = this.bases.get(changeKeyOf(change))!;
     for (const language of fixed)
       if (live[language] === undefined) delete settled[language];
-      else settled[language] = live[language];
+      else {
+        settled[language] = live[language];
+        base[language] = live[language];
+      }
     return { ...change, value: settled };
   }
 
-  /** A translated `change`, typed over the text `left` stores, holding text in exactly the content
-   * languages. A language whose text still equals what `left` stores takes the stored text, or a
-   * blank, so a send clears nothing the person did not and never puts back text a newer version
-   * replaced; a switched-off language's text goes, since the patch keeps each copy's stored text
-   * there and copies may differ in it. `lost` says whether text that went was typed. */
+  private storedText(target: MenuPatchTarget, field: string): Record<string, string> {
+    return { ...(patchFieldValue(this.document, target, field, this.languages) ?? {}) };
+  }
+
+  /** The base of a translated field, recorded from the stored text the first time it is asked
+   * for after the field was last forgotten. */
+  private baseOf(key: string, target: MenuPatchTarget, field: string): Record<string, string> {
+    let base = this.bases.get(key);
+    if (base === undefined) {
+      base = this.storedText(target, field);
+      this.bases.set(key, base);
+    }
+    return base;
+  }
+
+  /** `text` of the translated field following the stored text of the version the draft is on, in
+   * the content languages (`following`); the field's base moves with it. */
+  private follows(
+    key: string,
+    target: MenuPatchTarget,
+    field: string,
+    text: Readonly<Record<string, string>>,
+  ): { value: Record<string, string>; lost: boolean } {
+    const next = following(
+      text,
+      this.baseOf(key, target, field),
+      this.storedText(target, field),
+      this.languages.languages,
+    );
+    this.bases.set(key, next.base);
+    return { value: next.text, lost: next.lost };
+  }
+
+  /** A translated staged `change` following the version the draft is on. A switched-off language's
+   * text goes rather than the stored text being sent: the patch keeps each copy's stored text
+   * there, and copies may differ in it. */
   private inLanguages(
+    key: string,
     change: MenuPatchChange,
-    left: { document: MenuDocument; languages: ContentLanguages },
   ): { change: MenuPatchChange; lost: boolean } {
     const value = change.value;
     if (!TRANSLATED.has(change.field) || typeof value !== "object" || value === null)
       return { change, lost: false };
     const text = value as Record<string, string>;
-    const base = (patchFieldValue(left.document, change.target, change.field, left.languages) ??
-      {}) as Record<string, string>;
-    const enabled = this.languages.languages;
-    const stored = (patchFieldValue(this.document, change.target, change.field, this.languages) ??
-      {}) as Record<string, string>;
-    const typed = (language: string) =>
-      Object.hasOwn(text, language) && text[language] !== (base[language] ?? "");
-    const lost = Object.keys(text).some(
-      (language) => !enabled.includes(language) && typed(language),
-    );
-    const kept = enabled.map((language) => [
-      language,
-      typed(language) ? text[language] : (stored[language] ?? ""),
-    ]);
-    return sameTranslations(Object.fromEntries(kept), text)
+    const { value: kept, lost } = this.follows(key, change.target, change.field, text);
+    return sameTranslations(kept, text)
       ? { change, lost }
-      : { change: { ...change, value: Object.fromEntries(kept) }, lost };
+      : { change: { ...change, value: kept }, lost };
   }
 
   private stage(change: MenuPatchChange): void {
     const target = targetKey(change.target);
-    const key = `${target}/${change.field}`;
+    const key = changeKeyOf(change);
     if (!this.staged.has(key)) this.perTarget.set(target, (this.perTarget.get(target) ?? 0) + 1);
     this.staged.set(key, change);
+  }
+
+  /** Unstages the field's change and forgets its base. */
+  private forget(key: string): void {
+    this.unstage(key);
+    this.bases.delete(key);
   }
 
   private unstage(key: string): void {
@@ -254,15 +313,36 @@ export class MenuPatchDraft {
     else this.perTarget.set(target, left);
   }
 
+  /** Stages `given`, or takes back the field's change when it leaves the field as live. */
   set(given: MenuPatchChange): void {
+    const key = changeKeyOf(given);
+    if (TRANSLATED.has(given.field)) this.baseOf(key, given.target, given.field);
     const change = this.settled(given);
-    if (this.isLive(change)) this.unstage(`${targetKey(change.target)}/${change.field}`);
+    if (this.isLive(change)) this.forget(key);
     else this.stage(change);
   }
 
-  /** Takes back the field's change, if it has one. */
+  /** Takes back the field's change while the person's text fails its own check; a translated
+   * field keeps its base, and `follow` moves its text onto newer versions. */
+  hold(target: MenuPatchTarget, field: string): void {
+    const key = `${targetKey(target)}/${field}`;
+    this.unstage(key);
+    if (TRANSLATED.has(field)) this.baseOf(key, target, field);
+  }
+
+  /** The held translated field's `text` following the version the draft is on, as a staged change
+   * follows it on `rebase`; `lost` says whether text typed in a removed language went. */
+  follow(
+    target: MenuPatchTarget,
+    field: string,
+    text: Readonly<Record<string, string>>,
+  ): { value: Record<string, string>; lost: boolean } {
+    return this.follows(`${targetKey(target)}/${field}`, target, field, text);
+  }
+
+  /** Takes back the field's change, if it has one, and forgets its base. */
   clear(target: MenuPatchTarget, field: string): void {
-    this.unstage(`${targetKey(target)}/${field}`);
+    this.forget(`${targetKey(target)}/${field}`);
   }
 
   changes(): MenuPatchChange[] {
@@ -273,30 +353,30 @@ export class MenuPatchDraft {
     return this.perTarget.has(targetKey(target));
   }
 
-  /** Moves the draft onto a newer live version, judged with `languages`. Every staged change was
-   * typed over the version the draft is leaving, so that version's stored text tells what the
-   * person typed. A change that version already holds goes without being counted; one
-   * `applyMenuPatch` refuses on it is dropped and counted, and so is one left holding only the
-   * live text once a name language every folder now fixes takes the live text in place of what was
-   * typed. `trimmed` holds the keys of the changes, kept or gone, whose typed text in a
-   * switched-off language was let go, less any refused afterwards. */
+  /** Moves the draft onto a newer live version, judged with `languages`. Each staged translated
+   * change follows it (`following`): a language the person left alone takes the newer stored text,
+   * and one they typed in keeps their text. A held field is not moved here; the caller moves it with
+   * `follow`. A change that version already holds goes without being counted; one `applyMenuPatch`
+   * refuses on it is dropped and counted, and so is one left holding only the live text once a
+   * name language every folder now fixes takes the live text in place of what was typed.
+   * `trimmed` holds the keys of the changes, kept or gone, whose typed text in a removed language
+   * was let go, less any refused afterwards. */
   rebase(
     document: MenuDocument,
     languages = this.languages,
   ): { dropped: number; trimmed: string[] } {
-    const left = { document: this.document, languages: this.languages };
     this.document = document;
     this.languages = languages;
     const dropped = new Set<string>();
     const trimmed = new Set<string>();
     for (const [key, staged] of this.staged) {
-      const { change: inLanguages, lost } = this.inLanguages(staged, left);
+      const { change: inLanguages, lost } = this.inLanguages(key, staged);
       const change = this.settled(inLanguages);
       const lostFixed = change !== inLanguages && lostText(inLanguages, change);
       if (lost) trimmed.add(key);
       if (this.isLive(change)) {
         if (lostFixed) dropped.add(key);
-        this.unstage(key);
+        this.forget(key);
       } else this.staged.set(key, change);
     }
     for (;;) {
@@ -313,7 +393,7 @@ export class MenuPatchDraft {
         // Each refusal names the first change it could not apply, so dropping it and retrying
         // finds every refused change.
         const [key] = entries[error.params.change]!;
-        this.unstage(key);
+        this.forget(key);
         trimmed.delete(key);
         dropped.add(key);
       }

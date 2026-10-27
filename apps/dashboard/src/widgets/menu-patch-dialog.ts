@@ -306,8 +306,8 @@ export class MenuPatchDialog extends LitElement {
   @state() private reloadFailure: string | null = null;
   /** How many staged changes newer live versions have dropped since the dialog opened. */
   @state() private dropped = 0;
-  /** The `changeKey`s of the changes that have let go of typed text in a language removed since the
-   * dialog opened. */
+  /** The `changeKey`s of the edited fields, staged or failing their own check, that have let go of
+   * text typed in a language removed since the dialog opened. */
   @state() private trimmed = new Set<string>();
   @state() private queued: LocalTime[] = [];
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
@@ -318,9 +318,11 @@ export class MenuPatchDialog extends LitElement {
   /** Whether Review has been pressed since the dialog opened: until then no field shows its own
    * check's error. */
   #pressed = false;
-  /** What each field shows, keyed `<target key>/<field>`, once the person has edited it: their own
-   * text, so a refresh never replaces it, with its error and, for a translated field, the language
-   * the error belongs under. A value failing its own check is not staged. */
+  /** What each field shows, keyed `<target key>/<field>`, once the person has edited it, with its
+   * error and, for a translated field, the language the error belongs under. A refresh never
+   * replaces text the person typed; in a translated field, a language they left alone shows the
+   * newest stored text, judged by the base the draft keeps for the field. A value failing its own
+   * check is not staged, and the draft keeps its base all the same (`MenuPatchDraft.hold`). */
   #typed = new Map<string, Typed>();
   #watching: string | null = null;
   /** A live version or language change that arrived while a patch was being sent. Applying it then
@@ -522,6 +524,7 @@ export class MenuPatchDialog extends LitElement {
     if (trimmed.length > 0) this.trimmed = new Set([...this.trimmed, ...trimmed]);
     this.#typeSettled();
     this.dropped += this.#forgetSettled(document);
+    this.#followHeld();
     this.#retireRefusal();
     this.#scope?.changed();
     this.requestUpdate();
@@ -539,6 +542,21 @@ export class MenuPatchDialog extends LitElement {
       typed.value = Object.fromEntries(
         languages.languages.map((language) => [language, value[language] ?? ""]),
       );
+    }
+  }
+
+  /** A translated field failing its own check follows the version shown as a staged change does. */
+  #followHeld(): void {
+    for (const [key, typed] of this.#failing()) {
+      const field = key.slice(key.lastIndexOf("/") + 1);
+      if (!TRANSLATED.has(field)) continue;
+      const { value, lost } = this.#draft!.follow(
+        typed.target,
+        field,
+        typed.value as Record<string, string>,
+      );
+      typed.value = value;
+      if (lost) this.trimmed = new Set([...this.trimmed, key]);
     }
   }
 
@@ -573,20 +591,24 @@ export class MenuPatchDialog extends LitElement {
     const items = itemNames(document);
     const languages = currentContentLanguages();
     let lost = 0;
+    const forget = (key: string, typed: Typed, field: string) => {
+      this.#typed.delete(key);
+      this.#draft!.clear(typed.target, field);
+    };
     for (const [key, typed] of this.#typed) {
+      const field = key.slice(key.lastIndexOf("/") + 1);
       const drawn =
         items.has(targetOf(key)) &&
-        patchFieldValue(document, typed.target, key.slice(key.lastIndexOf("/") + 1), languages) !==
-          undefined &&
+        patchFieldValue(document, typed.target, field, languages) !== undefined &&
         (typed.language === null || languages.languages.includes(typed.language));
       if (typed.refused) {
         // A refused change is staged, so the rebase does any counting.
-        if (!staged.has(key)) this.#typed.delete(key);
+        if (!staged.has(key)) forget(key, typed, field);
         else if (!drawn) Object.assign(typed, { error: "", language: null, refused: false });
         continue;
       }
       if (typed.error !== "" && !drawn) lost += 1;
-      if (!staged.has(key) && (!drawn || typed.error === "")) this.#typed.delete(key);
+      if (!staged.has(key) && (!drawn || typed.error === "")) forget(key, typed, field);
     }
     return lost;
   }
@@ -790,7 +812,7 @@ export class MenuPatchDialog extends LitElement {
       });
       this.#typed.set(key, { target, value: raw, error: "", language: null, refused: false });
     } catch (error) {
-      draft.clear(target, field);
+      draft.hold(target, field);
       this.#typed.set(key, {
         target,
         value: raw,
