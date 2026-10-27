@@ -138,4 +138,108 @@ describe("kitchen instructions on station work", () => {
       expect(acknowledged.mock.calls[0]![0].detail).toEqual({ noticeId: "removed" });
     },
   );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "A807 lists every dish of one note-change notice and acknowledges it once in %s",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 900);
+      const dish = { unitName: null, soldInEach: true, note: null, wasStarted: false };
+      // The server copies the first dish onto the notice's own fields.
+      const many = {
+        ...notice,
+        wasStarted: true,
+        orderNoteChange: { before: "Old train", after: "New train" },
+        dishes: [
+          { ...dish, lineName: "Burger", quantity: "1.000", note: "No onions", wasStarted: true },
+          { ...dish, lineName: "Croquetas", quantity: "2.000", wasStarted: true },
+          { ...dish, lineName: "Flan", quantity: "1.000" },
+        ],
+      } satisfies KitchenNotice;
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [group],
+        notices: [many],
+      });
+      el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')?.click();
+      await el.updateComplete;
+
+      const rows = el.shadowRoot!.querySelectorAll("[data-notice]");
+      expect(rows).toHaveLength(1);
+      const dishes = [...rows[0]!.querySelectorAll<HTMLElement>("[data-notice-dish]")];
+      expect(dishes.map((row) => row.querySelector(".notice-line")!.textContent!.trim())).toEqual([
+        "1× Burger",
+        "2× Croquetas",
+        "1× Flan",
+      ]);
+      expect(rows[0]!.querySelectorAll(".notice-line")).toHaveLength(3);
+      expect(dishes[0]!.textContent).toContain("No onions");
+      const notes = [...rows[0]!.querySelectorAll(".notice-note")].map((n) => n.textContent);
+      expect(notes.filter((text) => text === "No onions")).toHaveLength(1);
+      const started = locale === "en-GB" ? "Started" : es["station.notice.started"];
+      expect(dishes.map((row) => row.querySelector(".notice-started")?.textContent)).toEqual([
+        started,
+        started,
+        undefined,
+      ]);
+      expect(rows[0]!.querySelectorAll(".notice-started")).toHaveLength(2);
+      const button = rows[0]!.querySelector("wt-button")!;
+      for (const name of ["1× Burger", "2× Croquetas", "1× Flan"])
+        expect(button.getAttribute("aria-label")).toContain(name);
+
+      const body = rows[0]!.querySelector<HTMLElement>(".notice-body")!.getBoundingClientRect();
+      const boxes = dishes.map((row) => row.getBoundingClientRect());
+      for (let index = 1; index < boxes.length; index += 1)
+        expect(boxes[index]!.top).toBeGreaterThan(boxes[index - 1]!.top);
+      for (const [index, box] of boxes.entries()) {
+        expect(box.width).toBeCloseTo(body.width, 0);
+        expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(dishes[index]!.scrollWidth).toBeLessThanOrEqual(dishes[index]!.clientWidth);
+      }
+
+      const acknowledged = vi.fn();
+      el.addEventListener("acknowledge-notice", acknowledged);
+      await userEvent.click(button);
+      expect(acknowledged).toHaveBeenCalledTimes(1);
+      expect(acknowledged.mock.calls[0]![0].detail).toEqual({ noticeId: notice.id });
+    },
+  );
+
+  it("A807 lays a many-dish notice out in one row wherever the same notice with one dish fits one", async () => {
+    const dish = { unitName: null, soldInEach: true, note: null, wasStarted: false };
+    const widest = { ...dish, lineName: "Croquetas de jamón ibérico", quantity: "2.000" };
+    const change = {
+      before: "All together, train at nine",
+      after: "Bread first, then the rest",
+    };
+    const one = { ...notice, id: "one", orderNoteChange: change, dishes: [widest] };
+    const many = {
+      ...notice,
+      id: "many",
+      orderNoteChange: change,
+      dishes: [
+        widest,
+        { ...dish, lineName: "Patatas bravas picantes", quantity: "1.000" },
+        { ...dish, lineName: "Flan de huevo casero", quantity: "1.000" },
+      ],
+    } satisfies KitchenNotice;
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [group],
+      notices: [one, many],
+    });
+    // The heading, the text and Got it side by side, not wrapped onto rows of their own.
+    const oneRow = (id: string): boolean => {
+      const row = el.shadowRoot!.querySelector(`[data-notice="${id}"]`)!;
+      const kind = row.querySelector(".notice-kind")!.getBoundingClientRect();
+      const body = row.querySelector(".notice-body")!.getBoundingClientRect();
+      const button = row.querySelector("wt-button")!.getBoundingClientRect();
+      return (
+        kind.top < body.bottom &&
+        kind.right <= body.left &&
+        button.top < body.bottom &&
+        button.left >= body.right
+      );
+    };
+    expect(oneRow("one")).toBe(true);
+    expect(oneRow("many")).toBe(true);
+  });
 });

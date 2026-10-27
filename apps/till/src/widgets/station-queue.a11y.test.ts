@@ -328,6 +328,32 @@ const notices: KitchenNotice[] = [
     unitName: { "es-ES": "kg" },
   },
   { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
+  // A kitchen-note change listing several dishes, one started and one with its own note.
+  {
+    ...baseNotice,
+    id: "kn-note-change",
+    kind: "changed",
+    wasStarted: false,
+    orderNoteChange: { before: "Old train", after: "New train" },
+    dishes: [
+      {
+        lineName: "Burger",
+        unitName: null,
+        soldInEach: false,
+        quantity: "1.000",
+        note: "no onions",
+        wasStarted: false,
+      },
+      {
+        lineName: "Croquetas",
+        unitName: null,
+        soldInEach: false,
+        quantity: "2.000",
+        note: null,
+        wasStarted: true,
+      },
+    ],
+  },
   { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
   // Moved to the counter, onto an order with another number.
   {

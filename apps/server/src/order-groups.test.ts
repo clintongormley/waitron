@@ -628,7 +628,9 @@ describe("permanent group numbers on kitchen work", () => {
     const paper = (await printed(v)).slice(before).filter((p) => p.includes("K-FLAN"));
     expect(paper).toHaveLength(1);
     expect(paper[0]).toContain("GROUP 5\n");
-    expect(paper[0]).not.toContain("GROUP 3\n");
+    expect(paper[0]).toContain("GROUP 5\n2.000 x K-FLAN");
+    expect(paper[0]).toContain("GROUP 3\n4.000 x K-OCTO");
+    expect(paper[0]!.indexOf("GROUP 5\n")).toBeLessThan(paper[0]!.indexOf("GROUP 3\n"));
   });
 
   it("carries permanent numbers and origins through station and pass queues", async () => {
@@ -4104,7 +4106,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     const jobs = await printed(v);
     expect(jobs).toHaveLength(jobsBefore + 1);
     const reprint = ticketLines(jobs.at(-1)!);
-    expect(reprint[0]).toBe("*** REPRINT ***");
+    expect(reprint[0]).toMatch(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/);
     const at = (text: string) => reprint.findIndex((row) => row.includes(text));
     expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
       "GROUP 1",

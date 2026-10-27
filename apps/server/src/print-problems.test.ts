@@ -1,13 +1,15 @@
 import { recallLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenPrintJobLines,
   kitchenPrintJobs,
   locations,
+  orderGroups,
   printJobs,
   parties,
+  ticketItems,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -49,6 +51,7 @@ import {
   type GroupRelease,
 } from "./testing/group-composition-fixture.js";
 import { printingAlertSource } from "./alert-sources.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
@@ -859,6 +862,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
 describe("a failed HOLD ticket (service plan Task 6)", () => {
   const TIME = expect.stringMatching(/^\d\d:\d\d$/);
+  const REPRINTED = expect.stringMatching(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/);
 
   it("shows on Mesa 4 and on its station's card, as a failed fire ticket does", async () => {
     const v = await holdingVenue();
@@ -890,7 +894,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
     const [, reprint] = await jobsAt(v.kitchenPrinterId);
     expect(reprint!.lines).toEqual([
-      "*** REPRINT ***",
+      REPRINTED,
       ...hold!.lines.slice(0, 4),
       TIME,
       "GROUP 1",
@@ -926,11 +930,11 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const kitchenStationId = (await jobsAt(v.kitchenPrinterId)).slice(2);
     expect(kitchenStationId.map((job) => job.lines)).toEqual([
       [
-        "*** REPRINT ***",
+        REPRINTED,
         ...head("Cocina"),
         "GROUP 1",
         `1.000 x ${DISHES.burger.kitchen}`,
-        "*** REPRINT ***",
+        REPRINTED,
         "*** HOLD ***",
         ...head("Cocina"),
         "GROUP 2",
@@ -939,13 +943,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     ]);
     const barStationId = (await jobsAt(v.barPrinterId)).slice(1);
     expect(barStationId.map((job) => job.lines)).toEqual([
-      [
-        "*** REPRINT ***",
-        "*** HOLD ***",
-        ...head("Barra"),
-        "GROUP 2",
-        `1.000 x ${DISHES.beer.kitchen}`,
-      ],
+      [REPRINTED, "*** HOLD ***", ...head("Barra"), "GROUP 2", `1.000 x ${DISHES.beer.kitchen}`],
     ]);
     expect(
       (await links()).slice(before).map((row) => [row.printJobId, row.stationId, row.reprint]),
@@ -957,6 +955,106 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     await setJob(kitchenStationId[0]!.id, { status: "done" });
     await setJob(barStationId[0]!.id, { status: "done" });
     expect(await problemsOf(table4.partyId)).toEqual([]);
+  });
+
+  // Fails if each part reads the clock itself: the HOLD part's first dish read comes after the
+  // fired part's heading, and the spy moves the clock on there, so its heading would say 15:21.
+  it("A808 a reprint reads its time once, for every part", async () => {
+    const v = await holdingVenue();
+    const table4 = await seated(v, "Mesa 4");
+    await submit(v, table4.partyId, [
+      { release: "fire", lines: [line(v, "burger")] },
+      { release: "hold", lines: [line(v, "fish")] },
+    ]);
+    const before = (await jobsAt(v.kitchenPrinterId)).length;
+    const real = VENUE_SERVICE.readLinesSoldInEach.bind(VENUE_SERVICE);
+    let calls = 0;
+    const between = vi
+      .spyOn(VENUE_SERVICE, "readLinesSoldInEach")
+      .mockImplementation(async (...args) => {
+        calls += 1;
+        if (calls === 2) vi.setSystemTime(new Date(2026, 9, 27, 15, 21));
+        return real(...args);
+      });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    try {
+      await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
+    } finally {
+      vi.useRealTimers();
+      between.mockRestore();
+    }
+
+    expect(calls).toBeGreaterThanOrEqual(2);
+    const [reprint] = (await jobsAt(v.kitchenPrinterId)).slice(before);
+    expect(reprint!.lines.filter((text) => text.startsWith("*** REPRINT"))).toEqual([
+      "*** REPRINT 15:20 ***",
+      "*** REPRINT 15:20 ***",
+    ]);
+    expect(reprint!.lines).toContain("*** HOLD ***");
+  });
+
+  // Fails if a reprint prints the reprint time under the order, or the first-fired dish's time
+  // rather than the earliest, or the HOLD part takes the fired part's time.
+  it("A808 prints the reprint time in the heading and each part's original send time below the order", async () => {
+    const v = await holdingVenue();
+    const table4 = await seated(v, "Mesa 4");
+    const { groups } = await submit(v, table4.partyId, [
+      { release: "fire", lines: [line(v, "burger")] },
+      { release: "hold", lines: [line(v, "fish")] },
+    ]);
+    await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "burger")] }]);
+    const fired = await db
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(and(eq(ticketItems.workingOrderId, table4.tabId), isNotNull(ticketItems.firedAt)))
+      .orderBy(sql`rowid`);
+    expect(fired).toHaveLength(2);
+    const at = (hours: number, minutes: number) =>
+      new Date(2026, 9, 27, hours, minutes).toISOString();
+    await db
+      .update(ticketItems)
+      .set({ firedAt: at(14, 30) })
+      .where(eq(ticketItems.id, fired[0]!.id));
+    await db
+      .update(ticketItems)
+      .set({ firedAt: at(14, 5) })
+      .where(eq(ticketItems.id, fired[1]!.id));
+    await db
+      .update(orderGroups)
+      .set({ holdPrintedAt: at(14, 10) })
+      .where(eq(orderGroups.id, groups[1]!.id));
+    const before = (await jobsAt(v.kitchenPrinterId)).length;
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    try {
+      await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const [reprint] = (await jobsAt(v.kitchenPrinterId)).slice(before);
+    const lines = reprint!.lines;
+    const heldAt = lines.lastIndexOf("*** REPRINT 15:20 ***");
+    expect(heldAt).toBeGreaterThan(0);
+    expect(lines.slice(0, 5)).toEqual([
+      "*** REPRINT 15:20 ***",
+      "Cocina",
+      "Mesa 4",
+      lines[3],
+      "14:05",
+    ]);
+    expect(lines.slice(heldAt)).toEqual([
+      "*** REPRINT 15:20 ***",
+      "*** HOLD ***",
+      "Cocina",
+      "Mesa 4",
+      lines[3],
+      "14:10",
+      "GROUP 2",
+      `1.000 x ${DISHES.fish.kitchen}`,
+    ]);
   });
 
   it("does not reprint a held group whose HOLD ticket was never queued", async () => {
@@ -972,7 +1070,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
     const [fire, reprint] = await jobsAt(v.kitchenPrinterId);
     expect(reprint!.lines).toEqual([
-      "*** REPRINT ***",
+      REPRINTED,
       ...fire!.lines.slice(0, 3),
       TIME,
       ...fire!.lines.slice(4),
@@ -997,7 +1095,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
     const [, , reprint] = await jobsAt(v.kitchenPrinterId);
     expect(reprint!.lines).toEqual([
-      "*** REPRINT ***",
+      REPRINTED,
       ...hold!.lines.slice(1, 4),
       TIME,
       ...hold!.lines.slice(5),
@@ -1024,7 +1122,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const reprints = (await jobsAt(v.kitchenPrinterId)).slice(before).map((job) => job.lines);
     expect(reprints).toEqual([
       [
-        "*** REPRINT ***",
+        REPRINTED,
         "Cocina",
         "Mesa 4",
         expect.any(String),
@@ -1061,14 +1159,14 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     // their order is not this test's subject.
     const table = expect.stringMatching(/^Mesa (4, 5|5, 4)$/);
     expect(reprint.lines).toEqual([
-      "*** REPRINT ***",
+      REPRINTED,
       "Cocina",
       table,
       expect.any(String),
       TIME,
       expect.stringMatching(/^GROUP 1 · Mesa (4, 5|5, 4)$/),
       `1.000 x ${DISHES.fish.kitchen}`,
-      "*** REPRINT ***",
+      REPRINTED,
       "*** HOLD ***",
       "Cocina",
       table,

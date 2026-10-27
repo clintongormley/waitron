@@ -50,6 +50,7 @@ export type {
   KitchenNote,
   KitchenNoteSnapshot,
   KitchenNoteChange,
+  StationNoticeDish,
   KeepOpenSubject,
   ServiceMode,
   VenueServiceContribution,

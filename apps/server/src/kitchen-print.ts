@@ -34,6 +34,7 @@ import {
   arrangeTicketItems,
   crossRefText,
   formatCorrectionSlip,
+  formatKitchenNoteChangeSlip,
   formatKitchenTicket,
   formatMovedSlip,
   joinKitchenTickets,
@@ -70,6 +71,11 @@ export interface FiredItem {
    * `0014_order_edit_columns.sql` carries none.
    */
   quantity?: number | null;
+  /**
+   * When its ticket was fired (fired work), or when its group's HOLD ticket was queued (held work);
+   * set by {@link readReprintParts} only.
+   */
+  sentAt?: string;
 }
 
 /**
@@ -535,6 +541,7 @@ async function planKitchenTickets(
   firedItems: FiredItem[],
   {
     reprint,
+    reprintedAt,
     mark,
     fire,
     from,
@@ -542,6 +549,7 @@ async function planKitchenTickets(
     known,
   }: {
     reprint: boolean;
+    reprintedAt?: Date;
     mark?: "HOLD";
     fire?: { heldPaper: ReadonlySet<string> };
     from?: string;
@@ -649,7 +657,7 @@ async function planKitchenTickets(
   const head = {
     locale: cfg.locale,
     kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
-    reprint,
+    reprintedAt,
     from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
     party: partyName === null ? undefined : { name: partyName, locale: cfg.locale },
     tableLabel: order.tableLabel ?? "",
@@ -658,10 +666,21 @@ async function planKitchenTickets(
   };
   for (const route of routes) {
     const onTicket = route.stationIds.map((id) => stationById.get(id)!);
+    const onRoute = firedItems.filter((fired) => route.stationIds.includes(fired.stationId));
+    // A reprint prints the earliest of its dishes' send times, compared as times, not as text.
+    const firedAt = reprint
+      ? new Date(
+          onRoute.reduce(
+            (earliest, fired) => Math.min(earliest, Date.parse(fired.sentAt!)),
+            Infinity,
+          ),
+        )
+      : head.firedAt;
     const render = (leavesOut: readonly string[] | null) =>
       formatKitchenTicket(
         {
           ...head,
+          firedAt,
           mark:
             mark ??
             (fire !== undefined && route.stationIds.some((id) => fire.heldPaper.has(id))
@@ -699,13 +718,7 @@ async function planKitchenTickets(
         route.printers[0]!,
       );
     const bytesByRest = new Map<string, Uint8Array>();
-    const lineIds = [
-      ...new Set(
-        firedItems
-          .filter((fired) => route.stationIds.includes(fired.stationId))
-          .map((fired) => fired.workingOrderLineId),
-      ),
-    ];
+    const lineIds = [...new Set(onRoute.map((fired) => fired.workingOrderLineId))];
     for (const printer of route.printers) {
       const leavesOut = restLeavesOut.get(printer.printerId)!;
       const key = leavesOut === null ? "" : [...leavesOut].sort().join("|");
@@ -1099,7 +1112,10 @@ export async function enqueueAllergyCorrectionSlips(
   });
 }
 
-/** One slip per item, to its station's printers, headed with the current table. */
+/**
+ * One slip per item, to its station's printers, headed with the current table; a kitchen-note change
+ * prints one slip per printer instead.
+ */
 async function printCorrectionSlips(
   tx: Transaction,
   cfg: TillConfig,
@@ -1150,6 +1166,63 @@ async function printCorrectionSlips(
 
   const printCfg: PrintConfig = { locationId: cfg.locationId };
   const at = new Date().toISOString();
+
+  if (change.kind === "ORDER NOTE CHANGED") {
+    // One slip per printer, routed and grouped as a kitchen ticket is.
+    const byStation = new Map<
+      string,
+      { lineNo: number; position: number | null; item: KitchenTicketItem }[]
+    >();
+    for (const target of items) {
+      const entry = itemsByLine.get(target.workingOrderLineId)!;
+      const item = atFiredQuantity(entry.item, target);
+      const bucket = byStation.get(target.stationId) ?? [];
+      bucket.push({
+        lineNo: entry.lineNo,
+        position: entry.position,
+        item:
+          target.group === undefined
+            ? item
+            : {
+                ...item,
+                group: target.group,
+                groupLabel:
+                  target.numberPartyLabel ??
+                  (target.group === entry.group ? item.groupLabel : undefined),
+              },
+      });
+      byStation.set(target.stationId, bucket);
+    }
+    const sorted = [...stationIds].sort((a, b) =>
+      compareStationNames(stationNames.get(a)!.name, stationNames.get(b)!.name),
+    );
+    for (const route of routeKitchenTickets(sorted, mappingsByStation(mappingRows))) {
+      const bytes = formatKitchenNoteChangeSlip(
+        {
+          locale: cfg.locale,
+          stations: route.stationIds.map((id) => ({
+            stationName: stationNames.get(id)!.name,
+            items: arrangeTicketItems(
+              byStation
+                .get(id)!
+                .sort(byGroupThenLine)
+                .map((entry) => entry.item),
+              stationNames.get(id)!.ticketGrouping,
+            ),
+          })),
+          tableLabel: header.tableLabel,
+          orderNumber: header.orderNumber,
+          at,
+          orderNoteChange: change.orderNoteChange,
+        },
+        route.printers[0]!,
+      );
+      for (const printer of route.printers) {
+        await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);
+      }
+    }
+    return;
+  }
 
   for (const target of items) {
     const targets = printersByStation.get(target.stationId);
@@ -1284,6 +1357,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
+      holdPrintedAt: orderGroups.holdPrintedAt,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1688,6 +1762,7 @@ async function readReprintParts(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
+      sentAt: ticketItems.firedAt,
     })
     .from(ticketItems)
     .where(
@@ -1699,11 +1774,18 @@ async function readReprintParts(
     );
   const onHold = await readOnHoldTickets(tx, orderIds);
   const onPaper = await onHeldPaper(tx, onHold);
-  const held = onHold.filter(onPaper);
-  const byOrder = (rows: typeof fired) => {
+  const held = onHold
+    .filter(onPaper)
+    .map(({ holdPrintedAt, ...item }) => ({ ...item, sentAt: holdPrintedAt }));
+  const byOrder = (
+    rows: readonly (Omit<FiredItem, "sentAt"> & {
+      workingOrderId: string;
+      sentAt: string | null;
+    })[],
+  ) => {
     const items = new Map<string, FiredItem[]>(orderIds.map((id) => [id, []]));
-    for (const { workingOrderId, workingOrderLineId, stationId, quantity } of rows) {
-      items.get(workingOrderId)!.push({ workingOrderLineId, stationId, quantity });
+    for (const { workingOrderId, workingOrderLineId, stationId, quantity, sentAt } of rows) {
+      items.get(workingOrderId)!.push({ workingOrderLineId, stationId, quantity, sentAt: sentAt! });
     }
     return items;
   };
@@ -1756,8 +1838,9 @@ async function readReprintTargets(
 }
 
 /**
- * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
- * stamped with the reprint time, not the original fire time. Fired and HOLD sections for one
+ * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket's heading carries the
+ * reprint time, read once for the whole reprint, and its time line keeps the earliest time its
+ * dishes were sent ({@link FiredItem.sentAt}). Fired and HOLD sections for one
  * printer go as one job, cut once, linked to every station either carries, whatever stations each
  * covers; for a station printer, separate jobs could clear an earlier failure for dishes the later
  * section does not carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An
@@ -1778,13 +1861,16 @@ export async function reprintOrderTickets(
     stations: await readStations(tx, stationIds),
   };
   const papers = joinedPapers(firedStations, heldStations, known);
+  const reprintedAt = new Date();
   const jobs = await planKitchenTickets(tx, cfg, orderId, fired.items, {
     reprint: true,
+    reprintedAt,
     papers,
     known,
   });
   const holdJobs = await planKitchenTickets(tx, cfg, orderId, held.items, {
     reprint: true,
+    reprintedAt,
     mark: held.mark,
     known,
     papers: new Map(

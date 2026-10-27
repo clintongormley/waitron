@@ -629,9 +629,20 @@ export interface KitchenNoteChange {
   before: string | null;
   after: string | null;
 }
+export interface StationNoticeDish {
+  lineName: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  quantity: Decimal;
+  note: string | null;
+  wasStarted: boolean;
+}
 
 export interface StationNotice {
   orderNoteChange?: KitchenNoteChange;
+  /** On a kitchen-note change, the dishes it affects at this station; matching counted dishes (no
+   *  unit or sold in each, whole-number quantity) are merged. */
+  dishes?: StationNoticeDish[];
   allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;
@@ -1374,19 +1385,28 @@ export interface VenueServiceContribution {
       fromNumber?: number | null;
     },
   ): Promise<void>;
-  /** A station's unacknowledged notices, oldest first: the newest fifty of the business day. */
+  /**
+   * A station's unacknowledged notices, oldest first: the newest fifty of the business day, a
+   * kitchen-note change's notice kept whole.
+   */
   listStationNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },
     stationId: string,
   ): Promise<StationNotice[]>;
-  /** `listStationNotices` for several stations in one statement; every station asked for has an entry. */
+  /**
+   * `listStationNotices` for several stations in one statement, a kitchen-note change's notice kept
+   * whole; every station asked for has an entry.
+   */
   listStationsNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },
     stationIds: readonly string[],
   ): Promise<Map<string, StationNotice[]>>;
-  /** Clears one notice; with `stationId`, only one at that station. */
+  /**
+   * Clears one notice, every dish of a kitchen-note change included; with `stationId`, only one at
+   * that station.
+   */
   acknowledgeKitchenNotice(
     tx: Transaction,
     cfg: { locationId: LocationId },

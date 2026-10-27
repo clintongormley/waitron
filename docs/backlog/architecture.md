@@ -425,7 +425,7 @@ until A977).
   dates and money read it too. The [implementation plan](../superpowers/plans/2026-10-22-a964-kitchen-language.md)
   selects the saved default content language for frame words, with English fallback; recorded names,
   snapshot units and card-slip formatting keep their separate inputs. Implementation remains open,
-  subject to A807/A808 and A773-2's printing reservations. A966–A968 depend on the implementation,
+  subject to A773-2's printing reservations (A807/A808 landed 2026-10-27). A966–A968 depend on the implementation,
   not the plan's publication.
 - **A965 — points 3(1), 3(2), 3(5) and 5's English.** `country-es`'s receipt words
   (`packages/country-es/src/receipt-labels.ts`) gain English, shown on English screens, never printed

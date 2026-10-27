@@ -54,14 +54,15 @@ export interface OtherStationItem {
 }
 
 /**
- * `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`; a `mark` opens with
- * `*** HOLD ***` (held work printed in advance) or `*** FIRE ***` (that work released). With a
+ * `firedAt` prints as local HH:MM. A reprint opens with `*** REPRINT HH:MM ***`, `reprintedAt` in
+ * the same clock; a `mark` opens with `*** HOLD ***` (held work printed in advance) or
+ * `*** FIRE ***` (that work released). With a
  * `party`, the order number prints as a MOVED slip's order line does; without, it prints alone.
  */
 export type KitchenTicket = {
   locale: string;
   kitchenNote?: KitchenNoteHeading;
-  reprint?: boolean;
+  reprintedAt?: Date;
   mark?: "HOLD" | "FIRE";
   from?: { stationName: string; locale: string };
   party?: { name: string; locale: string };
@@ -344,7 +345,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     emitGrouped(b, items, columns, onlyGroup, ticket.locale, true);
 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
-  if (ticket.reprint === true) b.line("*** REPRINT ***");
+  if (ticket.reprintedAt !== undefined) b.line(`*** REPRINT ${hhmm(ticket.reprintedAt)} ***`);
   if (ticket.mark !== undefined) b.line(`*** ${ticket.mark} ***`);
   text(
     ticket.scope === "station"
@@ -422,7 +423,6 @@ export type CorrectionSlip = {
   | { kind: "HOLD CANCELLED" }
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
-  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
   | { kind: "ALLERGY CHANGED"; allergyBlock: KitchenAllergyBlock }
   | { kind: "ALLERGY REMOVED"; allergyBlock: null }
 );
@@ -463,21 +463,39 @@ function kitchenWords(locale: string) {
   return KITCHEN_WORDS[ticketLanguage(locale)];
 }
 
+function kitchenNoteChangeHeading(change: KitchenNoteChange, locale: string): string {
+  const removed = change.after === null;
+  return ticketLanguage(locale) === "es"
+    ? removed
+      ? "NOTA PARA COCINA ELIMINADA"
+      : "NOTA PARA COCINA CAMBIADA"
+    : removed
+      ? "KITCHEN NOTE REMOVED"
+      : "KITCHEN NOTE CHANGED";
+}
+
+/** The new note, or that it was removed, then the old one. */
+function emitKitchenNoteChange(
+  b: ReturnType<typeof esc>,
+  change: KitchenNoteChange,
+  locale: string,
+  columns: number,
+): void {
+  const text = (s: string): void => {
+    for (const line of wrapText(prepareText(s), columns)) b.line(line);
+  };
+  const spanish = ticketLanguage(locale) === "es";
+  const { before, after } = change;
+  if (after === null) text(spanish ? "Nota para cocina eliminada" : "Note for the kitchen removed");
+  else emitKitchenNote(b, { text: after, locale }, columns);
+  if (before !== null) text(`${spanish ? "Antes" : "Was"}: ${cleanOrderNote(before)}`);
+}
+
 function slipHeader(slip: CorrectionSlip): string {
   if (slip.kind === "ALLERGY CHANGED" || slip.kind === "ALLERGY REMOVED")
     return KITCHEN_ALLERGY_WORDS[ticketLanguage(slip.locale)][
       slip.kind === "ALLERGY CHANGED" ? "changed" : "removed"
     ];
-  if (slip.kind === "ORDER NOTE CHANGED") {
-    const removed = slip.orderNoteChange.after === null;
-    return ticketLanguage(slip.locale) === "es"
-      ? removed
-        ? "NOTA PARA COCINA ELIMINADA"
-        : "NOTA PARA COCINA CAMBIADA"
-      : removed
-        ? "KITCHEN NOTE REMOVED"
-        : "KITCHEN NOTE CHANGED";
-  }
   if (slip.kind === "TO STATION")
     return `${kitchenWords(slip.locale).movedTo} ${slip.toStation.toLocaleUpperCase(slip.locale)}`;
   if (slip.kind !== "EXTRA CANCELLED") return slip.kind;
@@ -502,14 +520,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   if (slip.tableLabel !== null) text(slip.tableLabel);
   text(slip.orderNumber);
   b.line(hhmm(new Date(slip.at)));
-  if (slip.kind === "ORDER NOTE CHANGED") {
-    const spanish = ticketLanguage(slip.locale) === "es";
-    const { before, after } = slip.orderNoteChange;
-    if (after === null)
-      text(spanish ? "Nota para cocina eliminada" : "Note for the kitchen removed");
-    else emitKitchenNote(b, { text: after, locale: slip.locale }, columns);
-    if (before !== null) text(`${spanish ? "Antes" : "Was"}: ${cleanOrderNote(before)}`);
-  } else emitKitchenNote(b, slip.kitchenNote, columns);
+  emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) emitGroup(b, slip.item, columns);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   const item =
@@ -526,6 +537,48 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
     )) {
       b.line(line);
     }
+  }
+
+  return b.feedAndCut().bytes();
+}
+
+export interface KitchenNoteChangeSlip {
+  locale: string;
+  stations: KitchenTicketStation[];
+  tableLabel: string | null;
+  orderNumber: string;
+  at: string;
+  orderNoteChange: KitchenNoteChange;
+}
+
+/**
+ * One order's kitchen-note change at one printer: the header as a correction slip prints it, then
+ * each station's dishes, under the station's name when there is more than one. Dishes that share
+ * one group name it once under the note lines; otherwise each group's run is headed, as a ticket
+ * heads them, with no late-send marks.
+ */
+export function formatKitchenNoteChangeSlip(
+  slip: KitchenNoteChangeSlip,
+  layout: EscSetting,
+): Uint8Array {
+  const b = esc(layout).init();
+  b.printArea(b.grid.widthDots);
+  const { columns } = b.grid;
+  const text = (s: string): void => {
+    for (const line of wrapText(prepareText(s), columns)) b.line(line);
+  };
+  const onlyGroup = onlyGroupOf(slip.stations.flatMap((station) => station.items));
+
+  text(`*** ${kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale)} ***`);
+  text(slip.stations.map((station) => station.stationName).join(" · "));
+  if (slip.tableLabel !== null) text(slip.tableLabel);
+  text(slip.orderNumber);
+  b.line(hhmm(new Date(slip.at)));
+  emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
+  if (onlyGroup !== undefined) emitGroup(b, onlyGroup, columns);
+  for (const station of slip.stations) {
+    if (slip.stations.length > 1) text(station.stationName);
+    emitGrouped(b, station.items, columns, onlyGroup, slip.locale, false);
   }
 
   return b.feedAndCut().bytes();

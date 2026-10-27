@@ -1575,9 +1575,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   gone to the kitchen and cannot be changed. You can cancel it" («Este plato ya ha ido a cocina y no
   se puede cambiar. Puedes cancelarlo»). Say if other words read better.
 
-- **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**
-  [Detail](backlog/kitchen.md#a807-one-slip-per-printer-and-one-notice-per-station-for-a-whole-order-kitchen-note-change-owner-2026-10-17)
-
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12).
   [Detail](backlog/kitchen.md#supervisors-have-no-dashboard-path-to-a-prep-stations-times)
 
@@ -1599,10 +1596,22 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17).
   Decide whether the report leaves held dishes out too. [Detail](backlog/kitchen.md#a930-the-managers-overdue-report-counts-a-held-dish-as-late)
 
-- **A808. A reprinted kitchen ticket shows when it was reprinted (owner, 2026-10-17).** The heading
-  reads `*** REPRINT HH:MM ***`, the local time of the reprint, where today it reads
-  `*** REPRINT ***` (`apps/server/src/kitchen-ticket.ts`); the original send time stays on the
-  ticket. Done when a ticket test pins both times on one reprint.
+- **Kitchen paper prints its times in the server process's time zone (left open by A808, 2026-10-27).**
+  The time line and the reprint heading go through `hhmm`, which reads `Date#getHours` and
+  `getMinutes` (`apps/server/src/kitchen-ticket.ts`). `deploy/Dockerfile` and `deploy/compose.yml`
+  set no `TZ` (`rg -n '\bTZ\b|localtime|zoneinfo' deploy` finds nothing), and a local probe of the
+  base image printed `UTC` (`docs/developers/testing-guide.md`); an operator's appliance was not
+  measured. The venue's own zone is `locations.time_zone`. A696 covers invoices and receipts only.
+  Decide with the owner whether kitchen paper moves to the venue's zone.
+
+- **A reprint covering several sends prints the earliest send time (left open by A808,
+  2026-10-27).** `planKitchenTickets` (`apps/server/src/kitchen-print.ts`) prints the earliest send
+  on each reprinted ticket. Ask the owner whether it should be the latest, or one time per send.
+
+- **A kitchen-note change gives a slip and a notice per bill, not per party (left open by A807,
+  2026-10-27).** A party with two bills gets two slips per printer and two notices per station
+  ([decision](backlog/kitchen.md#decisions-and-deliberate-limits)). Ask the owner whether a party
+  should get one.
 
 - **A1086. On a kitchen ticket nothing marks where a run of dishes sent after their period ends.**
   The late-send mark prints only above the run (`emitGrouped`, `apps/server/src/kitchen-ticket.ts`),
@@ -5783,8 +5792,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from
   `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),
-  using the saved default content language. Recheck A807/A808 and A773-2's printing reservations
-  before implementation. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  using the saved default content language. Recheck A773-2's printing reservations before
+  implementation; A807/A808 have landed (see the plan's BUILD gate). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A965. Spain's receipt words gain English; the card slip prints in the receipt language, and the
   refund receipt's heading moves into Spain's pack.** Build from the [implementation plan](superpowers/plans/2026-10-27-a965-receipt-language.md).

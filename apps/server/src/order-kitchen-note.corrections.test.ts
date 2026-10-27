@@ -15,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, listStationNotices, writeKitchenNote } from "@waitron/venue-service";
-import { locationId } from "@waitron/shared";
+import { locationId, thousandthsToDecimal } from "@waitron/shared";
 import {
   enqueueCorrectionSlips,
   enqueueOrderKitchenNoteChange,
@@ -507,21 +507,96 @@ describe("effective kitchen headings", () => {
   });
 });
 
-it("uses the existing per-dish acknowledgement and correction paper for a shared instruction", async () => {
+it("gives a shared instruction one slip at the printer and one notice at the station for three dishes", async () => {
   await printer();
   const p = await sent();
   await order(v, p.tabId, "Burger");
   await order(v, p.tabId, "Burger");
   const before = await v.db.select().from(printJobs);
-  await set({ partyId: p.partyId }, "New shared time");
+  const scope = { partyId: p.partyId };
+  const starting = await read(scope);
+  const submissionId = randomUUID();
+  const saved = await set(scope, "New shared time", submissionId, starting);
   const notices = await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId));
-  expect(notices).toHaveLength(3);
+  expect(notices).toHaveLength(1);
   expect(notices.map((notice) => notice.orderNoteChange)).toEqual([
     { before: "Old time", after: "New shared time" },
-    { before: "Old time", after: "New shared time" },
-    { before: "Old time", after: "New shared time" },
   ]);
-  expect(await v.db.select().from(printJobs)).toHaveLength(before.length + 3);
+  expect(await v.db.select().from(printJobs)).toHaveLength(before.length + 1);
+  expect(notices[0]!.dishes).toEqual([
+    expect.objectContaining({ lineName: "BURG", quantity: thousandthsToDecimal(3000) }),
+  ]);
+  const jobs = await v.db.select().from(printJobs);
+  expect(printedLines(jobs.at(-1)!.payload).filter((line) => line === "3.000 x BURG")).toHaveLength(
+    1,
+  );
+
+  const rows = await v.db.select().from(kitchenNotices);
+  expect(await set(scope, "New shared time", submissionId, starting)).toEqual(saved);
+  expect(await v.db.select().from(kitchenNotices)).toHaveLength(rows.length);
+  expect(await v.db.select().from(printJobs)).toEqual(jobs);
+
+  await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, v.cfg, notices[0]!.id));
+  expect(await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId))).toEqual([]);
+  const acknowledged = await v.db.select().from(kitchenNotices);
+  expect(acknowledged).toHaveLength(3);
+  expect(acknowledged.every((row) => row.acknowledgedAt !== null)).toBe(true);
+});
+
+it("A807 prints one slip per printer for stations that share one", async () => {
+  const s = await inTx(v, async (tx) => {
+    const newPrinter = async (name: string, paperWidth: "58mm" | "80mm") =>
+      (
+        await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          { name, transport: "cloud_poll", pollId: randomUUID(), paperWidth },
+        )
+      ).id;
+    const shared = await newPrinter("P", "80mm");
+    const own = await newPrinter("Q", "58mm");
+    const station = async (name: string, dish: string, printerId: string) => {
+      const { id } = await createStation(tx, v.cfg, { name });
+      await routeProductTo(tx, v.cfg, v.productId(dish), id);
+      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId: id, printerId });
+      return id;
+    };
+    return {
+      shared,
+      own,
+      grill: await station("Grill", "Burger", shared),
+      pastry: await station("Pastry", "Flan", shared),
+      bar: await station("Bar", "Paella", own),
+    };
+  });
+  const p = await seat(v, await v.table("Table 1"));
+  await inTx(v, (tx) => writeKitchenNote(tx, { partyId: p.partyId }, 0, "Old time"));
+  // Flan is ordered first, so the slip names Grill first only because stations print in name order.
+  await order(v, p.tabId, "Flan", "Burger", "Burger", "Paella");
+  const jobsAt = async (printerId: string) =>
+    (await v.db.select().from(printJobs).where(eq(printJobs.printerId, printerId))).map((job) =>
+      printedLines(job.payload),
+    );
+  const before = { shared: (await jobsAt(s.shared)).length, own: (await jobsAt(s.own)).length };
+
+  await set({ partyId: p.partyId }, "New time");
+
+  const shared = (await jobsAt(s.shared)).slice(before.shared);
+  expect(shared).toHaveLength(1);
+  expect(shared[0]!.slice(0, 2)).toEqual(["*** NOTA PARA COCINA CAMBIADA ***", "Grill · Pastry"]);
+  expect(shared[0]!.slice(-5)).toEqual(["Grill", "2.000 x BURG", "Pastry", "1.000 x FLAN", ""]);
+  const own = (await jobsAt(s.own)).slice(before.own);
+  expect(own).toHaveLength(1);
+  expect(own[0]).toContain("1.000 x PAELLA");
+  const dishes = async (id: string) =>
+    (await inTx(v, (tx) => listStationNotices(tx, v.cfg, id))).map((notice) =>
+      notice.dishes?.map((dish) => dish.lineName),
+    );
+  expect(await dishes(s.grill)).toEqual([["BURG"]]);
+  const [grill] = await inTx(v, (tx) => listStationNotices(tx, v.cfg, s.grill));
+  expect(grill!.dishes![0]!.quantity).toEqual(thousandthsToDecimal(2000));
+  expect(await dishes(s.pastry)).toEqual([["FLAN"]]);
+  expect(await dishes(s.bar)).toEqual([["PAELLA"]]);
 });
 
 it("does not correct retained work on an abandoned bill", async () => {

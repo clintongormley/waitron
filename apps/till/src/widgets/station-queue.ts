@@ -726,6 +726,22 @@ export class TillStationQueue extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      /* A grid, so the text asks for its widest dish's width, not every dish's added up. */
+      .notice-dishes {
+        display: grid;
+        flex-basis: 100%;
+        gap: var(--wt-space-1);
+        min-width: 0;
+      }
+
+      .notice-dish {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--wt-space-1) var(--wt-space-3);
+        min-width: 0;
+      }
+
       .notice-moved,
       .notice-rerouted,
       .notice-note {
@@ -1005,7 +1021,12 @@ export class TillStationQueue extends LitElement {
         ? t(`station.notice.${notice.kind}` as const)
         : t(change.after === null ? "kitchen_note.removed" : "kitchen_note.changed");
     const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
-    const line = `${sign}${dishLine(notice, notice.lineName)}`;
+    const dishes = notice.dishes;
+    const line =
+      dishes === undefined
+        ? `${sign}${dishLine(notice, notice.lineName)}`
+        : dishes.map((dish) => dishLine(dish, dish.lineName)).join(", ");
+    const started = html`<span class="notice-started">${t("station.notice.started")}</span>`;
     const acknowledge = t("station.notice.acknowledge");
     const { movedTo, reroutedTo, cancelledExtra } = notice;
     // Replacer functions, so a `$` in a name is never read as a pattern.
@@ -1027,14 +1048,23 @@ export class TillStationQueue extends LitElement {
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
       <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
       <span class="notice-body">
-        <span class="notice-line">${line}</span>
+        ${
+          dishes === undefined
+            ? html`<span class="notice-line">${line}</span>`
+            : html`<span class="notice-dishes">
+                ${dishes.map(
+                  (dish) =>
+                    html`<span class="notice-dish" data-notice-dish>
+                      <span class="notice-line">${dishLine(dish, dish.lineName)}</span>
+                      ${dish.wasStarted ? started : nothing}
+                      ${dish.note ? html`<span class="notice-note">${dish.note}</span>` : nothing}
+                    </span>`,
+                )}
+              </span>`
+        }
         ${extra === null ? nothing : html`<span class="notice-extra">${extra}</span>`}
         <span class="notice-order">${notice.orderLabel}</span>
-        ${
-          notice.wasStarted
-            ? html`<span class="notice-started">${t("station.notice.started")}</span>`
-            : nothing
-        }
+        ${dishes === undefined && notice.wasStarted ? started : nothing}
         ${
           change === undefined
             ? nothing
@@ -1044,7 +1074,7 @@ export class TillStationQueue extends LitElement {
               `
         }
         ${notice.kind === "allergy_changed" ? kitchenAllergyBlock(notice.allergyBlock!) : nothing}
-        ${notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
+        ${dishes === undefined && notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
         ${moved === null ? nothing : html`<span class="notice-moved">${moved}</span>`}
         ${rerouted === null ? nothing : html`<span class="notice-rerouted">${rerouted}</span>`}
         ${
