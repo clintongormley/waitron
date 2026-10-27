@@ -136,9 +136,10 @@ come after the list above:
   by the table's short name, and a counter order at no table "Counter #12") landed in
   #2126, from the build plan's slice 8b. Slice 9 (a kitchen screen's columns collapse by a tap
   on their heading, which shows the column's count, and are remembered on the device; the one
-  Columns store A773-2 reuses) landed in #2129, from the build plan's slice 9; next, slices 9b (the
-  corner's Columns) and 9c (Overview and the narrow tabs), taking turns with lane G's A773-2 on
-  the station screen. A773-2 builds the pass's part, and the phone's
+  Columns store A773-2 reuses) landed in #2129, from the build plan's slice 9. Slice 9b (each
+  kitchen board's header row with Columns, whose window moves columns up or down and hides or
+  shows them, kept on the device) is in review, from the build plan's slice 9b; next, slice 9c
+  (Overview and the narrow tabs), taking turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -2088,6 +2089,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
   Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
+  What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
+  Columns store to reuse, and a key missing from a stored layout returns to its default place, not
+  the end (A797 plan, slice 9 D3 and D15). `apps/till/src/widgets/kitchen-columns-dialog.ts` is the
+  Columns window: it takes a layout and a map of column names and sends `column-move`,
+  `column-show` and `close`, so the pass can list its own columns in it; Other stations' dishes
+  would be a second section the pass adds. Every column may be hidden and Columns stays in each
+  board's header row. A key added to `STATION_COLUMNS` must also be drawn and named by
+  `stationColumnNames`, or "the station registers only columns the board draws" in
+  `apps/till/src/widgets/station-queue.test.ts` fails.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

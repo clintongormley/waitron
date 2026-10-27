@@ -338,6 +338,9 @@ A757's fast speed.
   late card has no mark of its own yet; see the build plan's slice 9, D5, D9, D14._
 - **Column order is not changed on the live screen** (the owner withdrew long-press dragging, so
   nobody reorders by mistake mid-service): it is set in corner → Columns (§3.6, picture 07).
+  _2026-10-27, slice 9b: each board has its own header row, with Columns at its end; the corner
+  keeps theme and language above the boards; a move or a Show tap applies at once and Done only
+  closes; every column may be hidden and Columns stays; see the build plan's slice 9b, D1–D3._
 
 ### 3.4 Kitchen screen, narrow (picture 05, left)
 
@@ -392,6 +395,8 @@ Nothing about the layout is a setting except what the owner made one in Q42.
 2026-10-26, slice 6: the Ready warning time is set in the station editor and Add station as a fourth
 field after Waiting, Overdue and Forgotten, and is in no order with them; see the build plan's slice
 6, D3 and D6.
+2026-10-27, slice 9b: on a kitchen screen Columns is at the end of each board's header row, not in
+the corner; see the build plan's slice 9b, D1.
 
 **How the profile's and the device's "Other stations' dishes" combine** (recommended, Q51 (d)): the
 profile sets the default for its passes; a device may choose Show or Hide for itself, or "Profile
@@ -477,6 +482,8 @@ named.
    taps the dish, and the card moves to Ready only when the entrecot is ready too. The runners take
    food from the pass, so he has collapsed Ready to its heading, "Ready · 3"; it stays collapsed
    after a restart. The head chef set the column order once, in corner → Columns.
+   _2026-10-27, slice 9b: Columns is at the end of each board's header row; see the build plan's
+   slice 9b, D1._
 5. **Marta, the pass.** Held shows T7's desserts, held. T4's mains arrive under To fire, labelled
    Next course, "waiting 0 min". She checks the starters have gone out and taps Fire; the card moves
    to **In progress** with each dish's state; in the same group "Vino tinto · Ready · Bar" is dimmed,

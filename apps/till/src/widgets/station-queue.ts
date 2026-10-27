@@ -76,6 +76,16 @@ const DRAWN: Partial<Record<ColumnKey, TicketState>> = {
 
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 
+/** The columns this board can draw, each with its name, in the order the kitchen states go. */
+export function stationColumnNames(): Map<ColumnKey, string> {
+  return new Map(
+    Object.entries(DRAWN).map(([key, state]) => [
+      key as ColumnKey,
+      t(`station.state.${state}` as const),
+    ]),
+  );
+}
+
 function afterPeriodWords(period: string): string {
   return t("station.after_period").replace("{period}", () => period);
 }
@@ -485,8 +495,20 @@ export class TillStationQueue extends LitElement {
         }
       }
 
+      .board-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-2);
+      }
+
+      .board-head [data-columns-open] {
+        margin-inline-start: auto;
+      }
+
       .kitchen-counts {
-        margin: 0 0 var(--wt-space-2);
+        margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
@@ -773,15 +795,26 @@ export class TillStationQueue extends LitElement {
   }
 
   override render() {
-    return html`${this.#notices()}${this.#queue()}`;
+    const cards = kitchenCards(this.groups);
+    return html`<div class="board-head" data-board-head>
+        <slot name="lead"></slot>${this.#header(cards)}<wt-button
+          data-columns-open
+          variant="secondary"
+          @click=${(event: Event) => this.#openColumns(event.currentTarget as HTMLElement)}
+          >${t("station.columns")}</wt-button
+        >
+      </div>
+      <slot name="status"></slot>${this.#notices()}${
+        this.groups.length === 0
+          ? html`<p class="empty">${t("station.empty")}</p>`
+          : this.#board(cards)
+      }`;
   }
 
-  #queue(): TemplateResult {
-    if (this.groups.length === 0) {
-      return html`<p class="empty">${t("station.empty")}</p>`;
-    }
-    const cards = kitchenCards(this.groups);
-    return html`${this.#header(cards)}${this.#board(cards)}`;
+  #openColumns(opener: HTMLElement): void {
+    this.dispatchEvent(
+      new CustomEvent("open-columns", { detail: { opener }, bubbles: true, composed: true }),
+    );
   }
 
   #notices(): TemplateResult | typeof nothing {
@@ -956,7 +989,7 @@ export class TillStationQueue extends LitElement {
   #board(cards: readonly KitchenCard[]): TemplateResult {
     const drawn = this.columns.order.flatMap((key) => {
       const state = DRAWN[key];
-      return state === undefined ? [] : [{ key, state }];
+      return state === undefined || this.columns.hidden.includes(key) ? [] : [{ key, state }];
     });
     return html`<div class="kanban">
       ${drawn.map(({ key, state }) => {

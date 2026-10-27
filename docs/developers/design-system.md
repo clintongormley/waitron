@@ -5484,7 +5484,8 @@ capitals between `**` above each such run; correction and MOVED slips print none
 
 ### The kitchen screen's cards
 
-A kitchen screen draws three columns, Waiting, Preparing and Ready, and one card per station and
+A kitchen screen draws the columns Waiting, Preparing and Ready that its layout shows, in the
+layout's order, and one card per station and
 group across the group's bills; dishes with no group (a counter order, a bill with no party, or
 dishes moved in) make one card per station and bill (`kitchenCards`,
 `apps/till/src/state/kitchen-cards.ts`). A card sits in the column of its least advanced dish, a
@@ -5508,7 +5509,14 @@ time" moves that dish; in "Whole ticket at once" it moves the card's fired dishe
 dish's stage; the heading is a `<button>` only while the card has a fired dish not Ready, and its
 tap moves the card's fired dishes at the least advanced such stage, never a dish further on
 (`headingStage`, `dishesAt`, `kitchen-cards.ts`); the screen sends each dish's own advance in turn, in the order the card draws them
-(`#onAdvanceDishes`, `apps/till/src/screens/till-station-screen.ts`). The line above the columns,
+(`#onAdvanceDishes`, `apps/till/src/screens/till-station-screen.ts`). Each board opens with one
+header row, drawn by `till-station-queue` whether or not it has cards (`.board-head`, a wrapping
+flex row with a `--wt-space-3` gap): a `lead` slot the screen fills (on a kitchen display the
+station's name and today's control, or only today's control for a station drawn while unavailable,
+whose notice line above the board names it; on the till's Station screen today's control, the station's
+name being on its picker; nothing on the merged board), the counts line, and a secondary
+**Columns** `wt-button` pushed to the row's end. After the row, a `status` slot takes the screen's
+printer-down lines, then come the notices and the board. The counts line,
 "5 dishes to make · 1 late" in `--wt-font-size-sm`, bold, `--wt-color-text-muted`, counts the
 fired Waiting and Preparing dishes by quantity, a dish whose unit shows counting one, and the cards
 with such a dish whose band is overdue or forgotten; it shows while either count is above nothing
@@ -5528,7 +5536,17 @@ column's name, its count of cards (held cards included, 0 shown) and a decorativ
 collapsed column draws no cards and is a strip `--wt-tap-min` wide, its heading written top to
 bottom with the chevron first ("› Ready · 3"; `#board`, `station-queue.ts`). The drawn order does
 not decide a dish's state word: `#stateWord` compares the kitchen-state order (`COLUMNS`,
-`station-queue.ts`). A layout's `hidden` list is stored but not yet drawn.
+`station-queue.ts`). A column in the layout's `hidden` list is not drawn, and its cards still count
+in the header row's counts line; every column may be hidden, and the header row and Columns stay.
+Columns sends `open-columns` with its own button as `opener`, and the screen draws
+`till-kitchen-columns-dialog` (`apps/till/src/widgets/kitchen-columns-dialog.ts`) for that board:
+"Columns" with the board's name under it, one row per column the board draws
+(`stationColumnNames`, `station-queue.ts`) in the layout's order, with ↑ and ↓ icon buttons named
+"Move up Ready" and "Move down Ready" (disabled at the ends) and a Show switch. The window is a pure
+view: each tap sends `column-move` or `column-show`, and the screen applies `moveColumn` or
+`setColumnVisible` and saves at once (`#keepColumns`, `till-station-screen.ts`), so it holds no
+staged input, takes no draft scope and has no `*.unsaved.test.ts`; Done and Escape only close it.
+The screen closes it when its board is no longer drawn or the device changes.
 
 ### The till's late-send mark and window
 

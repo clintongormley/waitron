@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { userEvent } from "vitest/browser";
+import type { WtDialog } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
 import { TillStationScreen } from "./till-station-screen.js";
 import type {
   DeviceIdentity,
@@ -181,6 +184,28 @@ async function tapColumn(el: TillStationScreen, key: string, queue = queueWidget
   columnToggle(queue, key).click();
   await flush(el);
 }
+
+const columnsWindow = (el: TillStationScreen) =>
+  el.shadowRoot!.querySelector<TillKitchenColumnsDialog>("till-kitchen-columns-dialog");
+
+const windowPart = (el: TillStationScreen, selector: string) =>
+  columnsWindow(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+
+const windowBoardName = (el: TillStationScreen) =>
+  columnsWindow(el)!.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.description;
+
+async function openColumns(el: TillStationScreen, queue = queueWidget(el)!) {
+  await userEvent.click(queue.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!);
+  await flush(el);
+}
+
+async function pressInWindow(el: TillStationScreen, selector: string) {
+  await userEvent.click(windowPart(el, selector));
+  await flush(el);
+}
+
+const leadChildren = (queue: TillStationQueue) =>
+  [...queue.children].filter((child) => child.getAttribute("slot") === "lead");
 
 afterEach(cleanupWidgets);
 
@@ -1361,10 +1386,14 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     expect(second!.querySelectorAll("[data-printer-down]")).toHaveLength(0);
   });
 
-  it("one station renders as it does today: no section and no station heading", async () => {
+  it("one station renders without a section, its name in its board's header row", async () => {
     const { el } = await mountDevice({ stations: [available("st-1", "Cocina", kitchenQueue)] });
     expect(sections(el)).toHaveLength(0);
-    expect(el.shadowRoot!.querySelector("h2")).toBeNull();
+    const names = el.shadowRoot!.querySelectorAll("h2.station-name");
+    expect(names).toHaveLength(1);
+    expect(names[0]!.parentElement).toBe(queueWidget(el));
+    expect(names[0]!.getAttribute("slot")).toBe("lead");
+    expect(names[0]!.textContent!.trim()).toBe("Cocina");
     expect(queueWidget(el)!.groups).toEqual(kitchenQueue);
   });
 
@@ -1432,6 +1461,23 @@ describe("till-station-screen device mode with several stations (A366 decision 7
   });
 
   describe("a station switched off on its own page (owner 2026-10-09)", () => {
+    it("the Columns window: a station drawn while unavailable has only today's control in its header row", async () => {
+      const { el } = await mountDevice({
+        stations: [
+          available("st-1", "Cocina", kitchenQueue),
+          switchedOff("st-deli", "Deli", deliQueue, [deliNotice]),
+        ],
+      });
+      const deli = sections(el)[1]!;
+      const queue = sectionQueue(deli)!;
+      expect(leadChildren(queue).map((child) => child.tagName.toLowerCase())).toEqual([
+        "till-station-today",
+      ]);
+      expect(deli.querySelector("h2")).toBeNull();
+      const line = deli.querySelector("[data-station-unavailable]")!;
+      expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it("shows its line and then the dishes still waiting there, which bump", async () => {
       const { el, api } = await mountDevice({
         stations: [
@@ -1665,6 +1711,71 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       toggle(el)!.click();
       await el.updateComplete;
     }
+
+    it("the Columns window: each stacked board's header row holds its own station; the merged board's holds none", async () => {
+      const { el } = await mountFor("dev-1");
+      for (const section of [sections(el)[0]!, sections(el)[2]!]) {
+        const queue = sectionQueue(section)!;
+        const name = section.querySelector("h2.station-name")!;
+        const today = section.querySelector("till-station-today")!;
+        expect(leadChildren(queue)).toEqual([name, today]);
+      }
+      await merge(el);
+      expect(leadChildren(queueWidget(el)!)).toEqual([]);
+      expect(el.shadowRoot!.querySelectorAll("[data-station-controls]")).toHaveLength(2);
+    });
+
+    it("the Columns window: Cocina's printer-down line follows its header row", async () => {
+      const { el } = await mountFor("dev-1");
+      const cocina = sections(el)[0]!;
+      const line = cocina.querySelector("[data-printer-down]")!;
+      expect(line.parentElement).toBe(sectionQueue(cocina));
+      expect(line.getAttribute("slot")).toBe("status");
+    });
+
+    it.each([
+      ["one station", "Cocina"],
+      ["the second stacked board", "Barra"],
+      ["the merged board", "Cocina and Barra"],
+    ])(
+      "the Columns window: Columns opens the window named for its board (%s)",
+      async (board, name) => {
+        if (board === "one station") {
+          const { el } = await mountFor("dev-1", {
+            stations: [available("st-1", "Cocina", kitchenQueue)],
+          });
+          await openColumns(el);
+          expect(windowBoardName(el)).toBe(name);
+          return;
+        }
+        const { el } = await mountFor("dev-1");
+        if (board === "the merged board") await merge(el);
+        await openColumns(
+          el,
+          board === "the merged board" ? queueWidget(el)! : sectionQueue(sections(el)[2]!)!,
+        );
+        expect(windowBoardName(el)).toBe(name);
+      },
+    );
+
+    it("the Columns window: hiding a column hides it on that board only, and showing it brings it back", async () => {
+      const { el } = await mountFor("dev-1");
+      const cocina = () => sectionQueue(sections(el)[0]!)!;
+      const barra = () => sectionQueue(sections(el)[2]!)!;
+      await openColumns(el, cocina());
+      await pressInWindow(el, '[data-column-show="ready"]');
+      expect(cocina().columns.hidden).toEqual(["ready"]);
+      expect(barra().columns.hidden).toEqual([]);
+      await pressInWindow(el, "[data-columns-done]");
+      await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
+      await merge(el);
+      expect(queueWidget(el)!.columns.hidden).toEqual([]);
+      await merge(el);
+      expect(cocina().columns.hidden).toEqual(["ready"]);
+      await openColumns(el, cocina());
+      await pressInWindow(el, '[data-column-show="ready"]');
+      expect(cocina().columns.hidden).toEqual([]);
+    });
 
     it("offers the switch with two stations, in the actions row, and opens stacked", async () => {
       const { el } = await mountFor("dev-1");
@@ -2677,6 +2788,61 @@ describe("till-station-screen 15-second refresh", () => {
     afterEach(() => {
       clearStoredColumns();
       vi.restoreAllMocks();
+    });
+
+    it("the Columns window: a refresh keeps the window open and the moves made", async () => {
+      const api = stubApi({
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ printersDown: [], items: kitchenQueue, notices: [] })
+          .mockResolvedValue(later),
+      });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceId: "dev-1",
+        serverOrigin: BOX,
+      });
+      await flush(el);
+      await openColumns(el);
+      await pressInWindow(el, '[data-column-up="ready"]');
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+      expect(columnsWindow(el)).not.toBeNull();
+      expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+    });
+
+    it("the Columns window: a refresh that drops its station closes it", async () => {
+      const board = (id: string, name: string, queue: StationQueueGroup[]) => ({
+        id,
+        name,
+        available: true as const,
+        today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const },
+        queue,
+        notices: [],
+        printersDown: [],
+      });
+      const api = {
+        getDeviceStationScreen: vi
+          .fn()
+          .mockResolvedValueOnce({
+            stations: [board("st-1", "Cocina", kitchenQueue), board("st-2", "Barra", barQueue)],
+          })
+          .mockResolvedValue({ stations: [board("st-1", "Cocina", kitchenQueue)] }),
+        deviceAdvance: vi.fn().mockResolvedValue(undefined),
+      } as unknown as TillApi;
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+      });
+      await flush(el);
+      const queues = el.shadowRoot!.querySelectorAll<TillStationQueue>("till-station-queue");
+      await openColumns(el, queues[1]!);
+      expect(windowBoardName(el)).toBe("Barra");
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2);
+      expect(columnsWindow(el)).toBeNull();
     });
 
     it("the device's kitchen columns: a refresh keeps the collapse and does not read the store again", async () => {
@@ -4065,9 +4231,9 @@ describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) 
       "Printer Epson has printed nothing since something sent to it at 20:14 got stuck. Tickets are still shown here; tell a manager.",
     );
     expect(rows[0].getAttribute("role")).toBe("status");
-    expect(
-      rows[0].compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    // The widget draws its status slot above its board.
+    expect(rows[0].parentElement).toBe(queueWidget(el));
+    expect(rows[0].getAttribute("slot")).toBe("status");
     expect(queueWidget(el)!.groups).toEqual(kitchenQueue);
   });
 
@@ -4212,9 +4378,8 @@ describe("operator station-today controls", () => {
   it("shows the selected station status above its queue", async () => {
     const { el, control, line } = await mountToday();
     expect(line()).toBe("Always open: this is the default station.");
-    expect(
-      control()!.compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(control()!.parentElement).toBe(queueWidget(el));
+    expect(control()!.getAttribute("slot")).toBe("lead");
     expect(control()!.shadowRoot!.querySelector("[data-action]")).toBeNull();
   });
   it("switches the control along with the picked station", async () => {
@@ -4384,9 +4549,8 @@ describe("kitchen display station-today controls", () => {
       const { el, control, line, calls } = await kitchen(true, initial);
       expect(line()).toBe("Closed for today → Pass");
       expect(control()!.deviceMode).toBe(true);
-      expect(
-        control()!.compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(control()!.parentElement).toBe(queueWidget(el));
+      expect(control()!.getAttribute("slot")).toBe("lead");
       expect(calls.map((c) => c.path)).toEqual(initial ? [] : ["/api/device/station-screen"]);
     },
   );
@@ -5208,5 +5372,164 @@ describe("the device's kitchen columns", () => {
     await tapColumn(el, "ready");
     expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
     expect(escaped).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Columns window on the till", () => {
+  afterEach(() => {
+    clearStoredColumns();
+    vi.restoreAllMocks();
+    history.replaceState(null, "", "/");
+  });
+
+  async function mountOperator(props: Record<string, unknown> = {}) {
+    const api = stubApi();
+    const mounted = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceId: "dev-1",
+      serverOrigin: BOX,
+      ...props,
+    });
+    await flush(mounted.el);
+    return mounted;
+  }
+
+  it("the Columns window: on the till it is named for the picked station", async () => {
+    const { el } = await mountOperator();
+    await openColumns(el);
+    expect(windowBoardName(el)).toBe("Cocina");
+  });
+
+  it("the Columns window: a move reorders that board at once and is kept on the device", async () => {
+    const { el } = await mountOperator();
+    await openColumns(el);
+    await pressInWindow(el, '[data-column-up="ready"]');
+    expect(columnsWindow(el)).not.toBeNull();
+    expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+    expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!).order).toEqual([
+      "waiting",
+      "ready",
+      "preparing",
+    ]);
+    cleanupWidgets();
+    const again = await mountOperator();
+    expect(queueWidget(again.el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+  });
+
+  it("the Columns window: its events stop at the screen", async () => {
+    const { el, host } = await mountOperator();
+    const escaped = vi.fn();
+    for (const name of ["open-columns", "column-move", "column-show", "close"])
+      host.addEventListener(name, escaped);
+    await openColumns(el);
+    await pressInWindow(el, '[data-column-up="ready"]');
+    await pressInWindow(el, '[data-column-show="waiting"]');
+    await pressInWindow(el, "[data-columns-done]");
+    await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
+    expect(queueWidget(el)!.columns.hidden).toEqual(["waiting"]);
+    expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("the Columns window: with no origin or device it still reorders, for this screen only", async () => {
+    const { el } = await mountOperator({ serverOrigin: undefined });
+    await openColumns(el);
+    await pressInWindow(el, '[data-column-up="ready"]');
+    expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+    expect(storedColumnKeys()).toEqual([]);
+  });
+
+  it.each(["Done", "Escape"] as const)(
+    "the Columns window: %s puts the focus back on Columns",
+    async (how) => {
+      const { el } = await mountOperator();
+      await openColumns(el);
+      if (how === "Done") await pressInWindow(el, "[data-columns-done]");
+      else {
+        windowPart(el, '[data-column-down="waiting"]').focus();
+        await userEvent.keyboard("{Escape}");
+      }
+      await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
+      const queue = queueWidget(el)!;
+      await vi.waitFor(() =>
+        expect(queue.shadowRoot!.activeElement).toBe(
+          queue.shadowRoot!.querySelector("[data-columns-open]"),
+        ),
+      );
+    },
+  );
+
+  it("the Columns window: a device change closes it", async () => {
+    const { el } = await mountOperator();
+    await openColumns(el);
+    expect(columnsWindow(el)).not.toBeNull();
+    el.deviceId = "dev-2";
+    await flush(el);
+    expect(columnsWindow(el)).toBeNull();
+  });
+
+  it("the Columns window: a new API closes it", async () => {
+    const { el } = await mountOperator();
+    await openColumns(el);
+    expect(columnsWindow(el)).not.toBeNull();
+    el.api = stubApi();
+    await flush(el);
+    expect(columnsWindow(el)).toBeNull();
+  });
+
+  it("the Columns window: leaving kitchen-device mode closes it", async () => {
+    const { el, host } = await mountOperator({
+      api: stubApi({
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "open" },
+              printersDown: [],
+              queue: kitchenQueue,
+              notices: [],
+            },
+          ],
+        }),
+      }),
+    });
+    // Both modes' stations are loaded before the flip, so st-1's board is still drawn after it and
+    // only the mode change itself can close the window.
+    el.deviceMode = true;
+    el.remove();
+    host.appendChild(el);
+    await flush(el);
+    await vi.waitFor(() => expect(queueWidget(el)?.stationId).toBe("st-1"));
+    await openColumns(el);
+    expect(windowBoardName(el)).toBe("Cocina");
+    el.deviceMode = false;
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-1");
+    expect(columnsWindow(el)).toBeNull();
+  });
+
+  it("the Columns window: the device getting its first id closes it", async () => {
+    const { el } = await mountOperator({ deviceId: undefined });
+    await openColumns(el);
+    expect(columnsWindow(el)).not.toBeNull();
+    el.deviceId = "dev-1";
+    await flush(el);
+    expect(columnsWindow(el)).toBeNull();
+  });
+
+  it("the Columns window: Back to another station closes it", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
+    const { el } = await mountOperator();
+    expect(queueWidget(el)!.stationId).toBe("st-2");
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-1"]')!.click();
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-1");
+    await openColumns(el);
+    expect(windowBoardName(el)).toBe("Cocina");
+    history.back();
+    await vi.waitFor(() => expect(queueWidget(el)!.stationId).toBe("st-2"));
+    await flush(el);
+    expect(columnsWindow(el)).toBeNull();
   });
 });

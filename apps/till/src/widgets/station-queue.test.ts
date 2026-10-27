@@ -5,7 +5,8 @@ import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
-import { TillStationQueue } from "./station-queue.js";
+import { TillStationQueue, stationColumnNames } from "./station-queue.js";
+import { STATION_COLUMNS } from "../state/kitchen-columns.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
 
 // The shipped DB defaults.
@@ -3935,5 +3936,153 @@ describe("the board's columns", () => {
     const [card] = cardsIn(column(el, "queued"));
     const word = card!.querySelector('[data-item="cooking"] .line-state');
     expect(flat(word!)).toBe(t("station.state.preparing"));
+  });
+});
+
+describe("the board's header row and hidden columns", () => {
+  const shadow = (el: TillStationQueue) => el.shadowRoot!;
+  const columnsButton = (el: TillStationQueue) =>
+    shadow(el).querySelector<HTMLElement>("[data-columns-open]");
+  const lateWaiting = ageBill(3, [ageDish("late", 8)]);
+  const notice: KitchenNotice = {
+    id: "kn-1",
+    stationId: "st-1",
+    workingOrderId: "wo-3",
+    orderLabel: "#3",
+    kind: "void",
+    lineName: "Octopus",
+    unitName: null,
+    soldInEach: false,
+    quantity: "1.000",
+    note: null,
+    wasStarted: false,
+    movedTo: null,
+    reroutedTo: null,
+    direction: null,
+    cancelledExtra: null,
+    createdAt: ageAt(10),
+  };
+
+  it("the board's header row comes first: the lead slot, the counts line, then Columns", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [lateWaiting],
+      notices: [notice],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const head = shadow(el).querySelector<HTMLElement>("[data-board-head]")!;
+    const parts = [...head.children].map((child) =>
+      child.matches('slot[name="lead"]')
+        ? "lead"
+        : child.matches("[data-kitchen-counts]")
+          ? "counts"
+          : child.matches("[data-columns-open]")
+            ? "columns"
+            : child.tagName,
+    );
+    expect(parts).toEqual(["lead", "counts", "columns"]);
+    const order = [
+      ...shadow(el).querySelectorAll<HTMLElement>(
+        '[data-board-head], slot[name="status"], .notices, .kanban',
+      ),
+    ].map((node) =>
+      node.matches("[data-board-head]")
+        ? "head"
+        : node.matches("slot")
+          ? "status"
+          : node.matches(".notices")
+            ? "notices"
+            : "board",
+    );
+    expect(order).toEqual(["head", "status", "notices", "board"]);
+  });
+
+  it("the board's header row: an empty board still offers Columns and no counts", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [],
+      stationId: "st-1",
+    });
+    expect(columnsButton(el)).not.toBeNull();
+    expect(shadow(el).querySelector("[data-kitchen-counts]")).toBeNull();
+    expect(shadow(el).querySelector(".empty")!.textContent!.trim()).toBe(t("station.empty"));
+  });
+
+  it("the board's header row: Columns asks to open the window and changes nothing itself", async () => {
+    const columns = { order: [...STATION_COLUMNS.order], hidden: [], collapsed: [] };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [lateWaiting],
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns,
+    });
+    const asked: CustomEvent<{ opener: HTMLElement }>[] = [];
+    el.addEventListener("open-columns", (event) => {
+      asked.push(event as CustomEvent<{ opener: HTMLElement }>);
+    });
+    await userEvent.click(columnsButton(el)!);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.bubbles).toBe(true);
+    expect(asked[0]!.composed).toBe(true);
+    expect(asked[0]!.detail.opener).toBe(columnsButton(el));
+    expect(el.columns).toBe(columns);
+    expect(columns).toEqual({
+      order: ["waiting", "preparing", "ready"],
+      hidden: [],
+      collapsed: [],
+    });
+  });
+
+  it("the board's header row: a hidden column is not drawn, and the line still counts its late card", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [lateWaiting],
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns: { order: ["waiting", "preparing", "ready"], hidden: ["waiting"], collapsed: [] },
+    });
+    expect(shadow(el).querySelector('[data-column="queued"]')).toBeNull();
+    expect(shadow(el).querySelectorAll("[data-column]")).toHaveLength(2);
+    expect(shadow(el).querySelector("[data-card]")).toBeNull();
+    const line = shadow(el).querySelector("[data-kitchen-counts]")!.textContent!;
+    expect(line.replace(/\s+/g, " ").trim()).toMatch(/· 1 late$/);
+  });
+
+  it("the board's header row: every column hidden draws no column and keeps Columns", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [lateWaiting],
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns: {
+        order: ["waiting", "preparing", "ready"],
+        hidden: ["waiting", "preparing", "ready"],
+        collapsed: [],
+      },
+    });
+    expect(shadow(el).querySelector("[data-column]")).toBeNull();
+    expect(columnsButton(el)).not.toBeNull();
+  });
+
+  it("the board's header row: the station registers only columns the board draws", () => {
+    const names = stationColumnNames();
+    expect(STATION_COLUMNS.order.every((key) => names.has(key))).toBe(true);
+    expect([...names]).toEqual([
+      ["waiting", t("station.state.queued")],
+      ["preparing", t("station.state.preparing")],
+      ["ready", t("station.state.ready")],
+    ]);
+  });
+
+  it("the board's header row: Columns reads «Columnas» in Spanish", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [],
+        stationId: "st-1",
+      });
+      expect(t("station.columns")).not.toBe("Columns");
+      expect(columnsButton(el)!.textContent!.trim()).toBe(t("station.columns"));
+    } finally {
+      setLocale(before);
+    }
   });
 });

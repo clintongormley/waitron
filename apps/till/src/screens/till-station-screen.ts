@@ -12,7 +12,7 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
-import { clockTime, t } from "../i18n/t.js";
+import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   kitchenScreenNoticeText,
@@ -23,15 +23,18 @@ import "../widgets/stale-since.js";
 import "../widgets/station-queue.js";
 import "../widgets/station-today.js";
 import "../widgets/station-choice-dialog.js";
+import "../widgets/kitchen-columns-dialog.js";
 import { TABLE_REQUEST_LIMIT_MS, limited, resendUnanswered } from "../state/draft-sync.js";
-import type { MergedQueueGroup } from "../widgets/station-queue.js";
+import { type MergedQueueGroup, stationColumnNames } from "../widgets/station-queue.js";
 import {
   type ColumnKey,
   type ColumnScope,
   type ColumnState,
   STATION_COLUMNS,
+  moveColumn,
   readColumnState,
   saveColumnState,
+  setColumnVisible,
   toggleColumnCollapsed,
 } from "../state/kitchen-columns.js";
 import type {
@@ -60,6 +63,13 @@ const viewKey = (deviceId: string): string => `waitron.stationScreenView.${devic
 
 type DeviceStation = DeviceStationScreen["stations"][number];
 type WorkedStation = Extract<DeviceStation, { queue: StationQueueGroup[] }>;
+
+/** The board a Columns window edits: a station's, or the merged board's with no station. */
+interface ColumnsWindow {
+  stationId: string | undefined;
+  boardName: string;
+  opener: HTMLElement;
+}
 
 interface DishMove {
   workingOrderId: string;
@@ -252,6 +262,7 @@ export class TillStationScreen extends LitElement {
   @state() private bumpErrorCode?: string;
   @state() private stale = false;
   @state() private moving: DishMove | null = null;
+  @state() private columnsWindow: ColumnsWindow | null = null;
   /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
   @state() private moveErrorCode?: string;
   #moveOpening = false;
@@ -306,15 +317,25 @@ export class TillStationScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("deviceId")) this.merged = this.#rememberedMerged();
-    if (
-      (["api", "deviceMode", "deviceId"] as const).some(
-        (key) => changed.has(key) && changed.get(key) !== undefined,
-      )
-    ) {
+    const scopeKeys = ["api", "deviceMode", "deviceId"] as const;
+    if (scopeKeys.some((key) => changed.has(key) && changed.get(key) !== undefined)) {
       this.#moveGeneration++;
       this.#moveOpening = false;
       this.moving = null;
     }
+    if (scopeKeys.some((key) => changed.has(key))) this.columnsWindow = null;
+    if (this.columnsWindow !== null && !this.#drawnBoards().includes(this.columnsWindow.stationId))
+      this.columnsWindow = null;
+  }
+
+  /** The boards the render draws, each by its station, the merged board by none. */
+  #drawnBoards(): (string | undefined)[] {
+    if (!this.deviceMode) return this.stations.length > 0 ? [this.activeStationId] : [];
+    const [only] = this.deviceStations;
+    if (!this.deviceStations.some(drawsQueue)) return [];
+    if (this.deviceStations.length === 1 && only?.available === true) return [only.id];
+    if (this.deviceStations.length > 1 && this.merged) return [undefined];
+    return this.deviceStations.filter(drawsQueue).map((station) => station.id);
   }
 
   /** Each board's layout, read from storage once and never again on a refresh. */
@@ -349,15 +370,51 @@ export class TillStationScreen extends LitElement {
     return layout;
   }
 
-  #onToggleColumn(event: Event, stationId?: string): void {
-    event.stopPropagation();
-    const { key: column } = (event as CustomEvent<{ key: ColumnKey }>).detail;
+  #keepColumns(stationId: string | undefined, layout: ColumnState): void {
     const scope = this.#columnScope(stationId);
-    const layout = toggleColumnCollapsed(this.#columnsFor(stationId), column);
     this.#columns.set(layoutKey(scope, stationId), layout);
     const storage = scope === null ? null : this.#deviceStorage();
     if (scope !== null && storage !== null) saveColumnState(storage, scope, layout);
     this.requestUpdate();
+  }
+
+  #onToggleColumn(event: Event, stationId?: string): void {
+    event.stopPropagation();
+    const { key: column } = (event as CustomEvent<{ key: ColumnKey }>).detail;
+    this.#keepColumns(stationId, toggleColumnCollapsed(this.#columnsFor(stationId), column));
+  }
+
+  #onOpenColumns(event: Event, stationId: string | undefined, boardName: string): void {
+    event.stopPropagation();
+    const { opener } = (event as CustomEvent<{ opener: HTMLElement }>).detail;
+    this.columnsWindow = { stationId, boardName, opener };
+  }
+
+  #renderColumnsWindow(open: ColumnsWindow): TemplateResult {
+    const { stationId } = open;
+    return html`<till-kitchen-columns-dialog
+      .layout=${this.#columnsFor(stationId)}
+      .names=${stationColumnNames()}
+      .boardName=${open.boardName}
+      .opener=${open.opener}
+      @column-move=${(event: Event) => {
+        event.stopPropagation();
+        const { key, direction } = (
+          event as CustomEvent<{ key: ColumnKey; direction: "up" | "down" }>
+        ).detail;
+        this.#keepColumns(stationId, moveColumn(this.#columnsFor(stationId), key, direction));
+      }}
+      @column-show=${(event: Event) => {
+        event.stopPropagation();
+        const { key, visible } = (event as CustomEvent<{ key: ColumnKey; visible: boolean }>)
+          .detail;
+        this.#keepColumns(stationId, setColumnVisible(this.#columnsFor(stationId), key, visible));
+      }}
+      @close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.columnsWindow === open) this.columnsWindow = null;
+      }}
+    ></till-kitchen-columns-dialog>`;
   }
 
   /** The read is wrapped because localStorage can throw in a private window. */
@@ -871,7 +928,7 @@ export class TillStationScreen extends LitElement {
   override render() {
     return html`${this.deviceMode ? this.#renderDevice() : this.#renderOperator()}${
       this.moving === null ? nothing : this.#renderMoveDialog(this.moving)
-    }`;
+    }${this.columnsWindow === null ? nothing : this.#renderColumnsWindow(this.columnsWindow)}`;
   }
 
   #renderOperator(): TemplateResult {
@@ -906,7 +963,7 @@ export class TillStationScreen extends LitElement {
       });
     const body =
       this.deviceStations.length === 1 && only?.available === true
-        ? html`${this.#today(only)}${this.#queue(true, only)}`
+        ? this.#queue(true, only, this.#named(only), only.name)
         : several && this.merged
           ? this.#mergedBody()
           : html`${this.deviceStations.map((station) => this.#deviceSection(station))}`;
@@ -948,13 +1005,22 @@ export class TillStationScreen extends LitElement {
         .canMove=${this.#canMove()}
         .columns=${this.#columnsFor()}
         @toggle-column=${(event: Event) => this.#onToggleColumn(event)}
+        @open-columns=${(event: Event) =>
+          this.#onOpenColumns(
+            event,
+            undefined,
+            new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(
+              drawn.map((station) => station.name),
+            ),
+          )}
       ></till-station-queue>`;
   }
 
   /** The station's state today, and closing or reopening it for today. */
-  #today(station: WorkedStation): TemplateResult {
+  #today(station: WorkedStation, slot?: "lead"): TemplateResult {
     const { today } = station;
     return html`<till-station-today
+      slot=${slot ?? nothing}
       .api=${this.api}
       .deviceMode=${true}
       .station=${{
@@ -989,11 +1055,10 @@ export class TillStationScreen extends LitElement {
     >
       ${
         station.available
-          ? html`<h2 class="station-name">${station.name}</h2>
-              ${this.#today(station)} ${this.#queue(true, station)}`
+          ? this.#queue(true, station, this.#named(station), station.name)
           : drawsQueue(station)
-            ? html`${this.#unavailable(station.name)} ${this.#today(station)}
-              ${this.#queue(true, station)}`
+            ? html`${this.#unavailable(station.name)}
+              ${this.#queue(true, station, this.#today(station, "lead"), station.name)}`
             : this.#unavailable(station.name)
       }
     </section>`;
@@ -1087,25 +1152,31 @@ export class TillStationScreen extends LitElement {
   }
 
   #body(): TemplateResult {
+    const active = this.stations.find((station) => station.id === this.activeStationId);
     return html`
       <nav class="picker" aria-label=${t("station.pick")}>
         ${this.stations.map((station) => this.#pick(station))}
       </nav>
-      <till-station-today
-        .api=${this.api}
-        .station=${this.stations.find((station) => station.id === this.activeStationId)}
-        .stations=${this.allStations}
-        @station-today-changed=${(event: Event) => {
-          event.stopPropagation();
-          void this.#reload(undefined, true);
-        }}
-      ></till-station-today>
-      ${this.#queue(false, {
-        id: this.activeStationId,
-        queue: this.groups,
-        notices: this.notices,
-        printersDown: this.printersDown,
-      })}
+      ${this.#queue(
+        false,
+        {
+          id: this.activeStationId,
+          queue: this.groups,
+          notices: this.notices,
+          printersDown: this.printersDown,
+        },
+        html`<till-station-today
+          slot="lead"
+          .api=${this.api}
+          .station=${active}
+          .stations=${this.allStations}
+          @station-today-changed=${(event: Event) => {
+            event.stopPropagation();
+            void this.#reload(undefined, true);
+          }}
+        ></till-station-today>`,
+        active?.name ?? "",
+      )}
     `;
   }
 
@@ -1119,27 +1190,40 @@ export class TillStationScreen extends LitElement {
       notices: KitchenNotice[];
       printersDown: StationPrinterDown[];
     },
+    lead: TemplateResult,
+    boardName: string,
   ): TemplateResult {
-    return html` ${this.#printersDown(station.printersDown)}
-      <till-station-queue
-        .groups=${station.queue}
-        .notices=${station.notices}
-        .stationId=${station.id}
-        .advanceOnly=${advanceOnly}
-        .showReprint=${!advanceOnly}
-        .canMove=${this.#canMove()}
-        .columns=${this.#columnsFor(station.id)}
-        @toggle-column=${(event: Event) => this.#onToggleColumn(event, station.id)}
-      ></till-station-queue>`;
+    return html`<till-station-queue
+      .groups=${station.queue}
+      .notices=${station.notices}
+      .stationId=${station.id}
+      .advanceOnly=${advanceOnly}
+      .showReprint=${!advanceOnly}
+      .canMove=${this.#canMove()}
+      .columns=${this.#columnsFor(station.id)}
+      @toggle-column=${(event: Event) => this.#onToggleColumn(event, station.id)}
+      @open-columns=${(event: Event) => this.#onOpenColumns(event, station.id, boardName)}
+      >${lead}${this.#printersDown(station.printersDown, undefined, "status")}</till-station-queue
+    >`;
+  }
+
+  /** A station's name and today's control, for its board's header row. */
+  #named(station: WorkedStation): TemplateResult {
+    return html`<h2 class="station-name" slot="lead">${station.name}</h2>
+      ${this.#today(station, "lead")}`;
   }
 
   /** In the merged view each line names its station, since the queue below mixes them. */
-  #printersDown(printers: StationPrinterDown[], station?: string): TemplateResult[] {
+  #printersDown(
+    printers: StationPrinterDown[],
+    station?: string,
+    slot?: "status",
+  ): TemplateResult[] {
     return printers.map((printer) => {
       const line = t("station.printer_down")
         .replace("{name}", () => printer.printerName)
         .replace("{time}", () => clockTime(Date.parse(printer.since)));
-      return html`<p class="printer-down" role="status" data-printer-down>
+      return html`<p class="printer-down" role="status" data-printer-down slot=${slot ?? nothing}>
         ${station === undefined ? line : `${station}: ${line}`}
       </p>`;
     });
