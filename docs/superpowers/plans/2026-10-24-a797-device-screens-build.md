@@ -8552,8 +8552,8 @@ From `git grep -ln "kitchen-columns\|kitchen-cards" -- 'apps/*.ts'` outside test
   _2026-10-27, as built (finish-branch review): when the board draws tabs and the remembered tab's
   column is hidden, the first shown tab becomes the remembered choice, so showing the column again
   keeps the tab the cook sees (choose Ready, hide Ready, show it again: Overview stays chosen). When
-  a heading opened by Enter or Space still holds the focus as the board turns to tabs, the focus
-  moves to that column's tab; when the focus is elsewhere (a focused Columns button and a scripted
+  the heading that opened the column still holds the focus as the board turns to tabs, the focus
+  moves to that column's tab (tested with Enter and Space); when the focus is elsewhere (a focused Columns button and a scripted
   tap on the heading, in the test), it stays there._
 - **D10. The red bar** (design §3.4: "A tab holding a late card carries a red bar, as A757's zone
   tabs do"; owner, 2026-10-27, slice 9 D14: "A collapsed kitchen column that holds a late card
