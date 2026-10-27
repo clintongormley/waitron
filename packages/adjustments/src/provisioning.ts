@@ -92,7 +92,7 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
       const { languages, staffLanguage } = resolveInstalledStarterLanguages({
         country: venue?.country,
         area: venue?.area,
-        receiptLocale: venue?.invoiceLocales[0] ?? null,
+        receiptLocale: venue?.invoiceLocales[0],
       });
       for (const { english, ...starter } of STARTERS) {
         await createAdjustmentReason(tx, {

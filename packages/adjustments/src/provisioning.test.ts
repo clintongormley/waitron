@@ -147,6 +147,7 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
       const seeded = await reasons();
+      expect(seeded.map((reason) => reason.names.en)).toEqual(Object.keys(STARTER_REASON_NAMES));
       expect(seeded.map((reason) => reason.names)).toEqual(
         seeded.map((reason) => {
           const english = reason.names.en;
