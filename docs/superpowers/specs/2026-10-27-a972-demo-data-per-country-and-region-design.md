@@ -2,6 +2,14 @@
 
 Status: design, waiting for the owner's answers to Q1–Q4 (lane B, 2026-10-27).
 
+**2026-10-27 update:** the owner answered Q1(b), Q2 share, Q3(b) and Q4(b).
+Build Casa Delgado with a regional section, wine and staff, starting with Catalonia
+and the Balearic Islands together, then Valencia, then Galicia. Use regional
+restaurant names and regional staff and kitchen names whatever the setup language.
+Keep a name someone has typed when the region changes. The earlier recommendations
+below are superseded where those answers differ; the
+[implementation plan](../plans/2026-10-27-a972-demo-country-region.md) records the build order.
+
 ## What the owner asked for
 
 A913 point 6, in the owner's words:

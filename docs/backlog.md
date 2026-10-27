@@ -5823,10 +5823,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A971. Spain's pack provides English for every word it shows** (holiday names, area labels,
   notices) — check first; a holiday with two names may need a schema change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A972. Demo data per country pack and region — designed, waiting for the owner's answers to
-  Q1–Q4** ([design](superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)). Spain's
-  pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
-  moves into `country-es`, plus region demos ("catalán demo in Catalunya"). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A972. Demo data per country pack and region.** Owner answers recorded;
+  [plan](superpowers/plans/2026-10-27-a972-demo-country-region.md) covers the data move,
+  English names, then Catalonia with the Balearic Islands, Valencia and Galicia.
+  All five build cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
   suites, server till-API and configuration-transfer fixtures, catalogue and shared station fixtures,

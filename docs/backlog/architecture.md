@@ -454,15 +454,14 @@ until A977).
   one may need a schema change — ask before adding one.
 - **A972 — point 6: demo data per country pack and region.** Designed 2026-10-27 in
   [the A972 design](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md);
-  the build waits for the owner's answers to its Q1–Q4.
-  Spain's pack already names its demo (`demo.dataSet`, `packages/country-es/src/spain.ts`); the data
-  set itself (`apps/server/scripts/demo-seed/data-sets/casa-delgado-es.ts` and the menu, floor and
-  staff it draws from) moves into `country-es`, and the seeding code stays shared. Today's demo
-  already writes customer text in the area's languages (W109). Region demos ("catalán demo in
-  Catalunya"): say which regions get their own and which share Spain's default; setup picks the demo from the venue's country and region the way it already
-  derives other geography values (A833 landed: setup and the demo start only for a country with a
-  pack). English provided. The ~33 staff and kitchen names with no English (`menu.ts`) and «Menú del
-  Día» in an English slot (`menu.ts:840`) are fixed there.
+  the owner answered all four questions. Follow the
+  [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md):
+  first move Spain's data and pictures into its pack with shared seeding code, then
+  supply English and Spanish plain names, then add Catalonia with the Balearic
+  Islands, Valencia and Galicia in separate changes. All five build cuts remain
+  open. Regional restaurant defaults follow the province without overwriting a
+  typed name; regional staff and kitchen names are demo data, separate from the
+  staff apps' language. The durable owner decisions are below.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
@@ -618,6 +617,16 @@ Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adap
   size). Any query that binds one value per row can still meet it.
 
 ## Decisions and deliberate limits
+
+**A972 regional demos (owner, 2026-10-27).** Each regional demo extends Casa Delgado
+with one menu section, a regional wine and its own staff. Build Catalonia first,
+shared with the Balearic Islands, then Valencia, then Galicia. Give each region a
+restaurant name; update an untouched default when the postcode or province changes
+and preserve a name someone has typed. Staff and kitchen names use the region's
+language even when the staff screens are in English or Spanish. This applies to
+demo data only; the A918 starter-content policy below stays separate. The
+[design update](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)
+records the four answers.
 
 **A918 starter content in the venue's languages (owner, 2026-10-19, 2026-10-20 and 2026-10-27).**
 The owner: "These default starter names in the general module should be in English only, and
