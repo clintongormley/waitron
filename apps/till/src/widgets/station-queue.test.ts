@@ -884,7 +884,7 @@ describe("till-station-queue", () => {
       groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })), // no stationId
     });
     const spy = vi.fn();
-    el.addEventListener("advance-ticket", (e) => spy((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(spy).not.toHaveBeenCalled();
   });
@@ -3522,6 +3522,17 @@ describe("till-station-queue: a card's heading and whole-ticket taps", () => {
     const hidden = button.querySelector(".visually-hidden")!;
     expect(hidden.textContent).toBe(advance);
     expect(hidden.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+  });
+
+  it("a heading tap with no station sends nothing", async () => {
+    const bill = ageBill(7, [ageDish("ti-waiting", 15)]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    head(el, 7)!.click();
+    expect(taps.details()).toEqual([]);
   });
 
   it("a merged heading tap names its own station", async () => {
