@@ -1545,6 +1545,41 @@ it("with the database present, a damaged record and a stopped recovery: both lin
   });
 });
 
+it("with the database present, a stopped recovery and a damaged series picks file: the stopped lines, the name-record line and when new names can start; Confirm sends the summary as the recovery discard only", async () => {
+  const t = initialOwnerStrings.en;
+  const shown = {
+    ...stoppedSummary(false),
+    unreadable: { records: ["series-picks"], floorMs: picksFloorMs },
+  };
+  const { app, requests } = await stoppedPresent({ summary: () => Response.json(shown) });
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(stoppedLines(app)).toEqual([
+    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
+    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:47"),
+  ]);
+  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
+  expect(
+    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
+      p.textContent!.trim(),
+    ),
+  ).toEqual([t.seriesPicksDamaged]);
+  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
+  expect(startAgainRequests(requests)).toEqual([]);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+  const sent = startAgainRequests(requests)[0]!;
+  expect(sent.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    confirmRecoveryDiscard: { shown },
+  });
+  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
+});
+
 it("with the database present, while a recovery runs, no Start again, password or confirmation is offered and nothing is sent", async () => {
   const { app, requests } = await stoppedPresent({ running: true });
   for (const name of [

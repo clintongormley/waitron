@@ -2482,7 +2482,8 @@ export class SetupApp extends LitElement {
       !this.#firstSession?.recoveryRequired &&
       state.status !== "complete";
     const ask = authenticatedMissing ? this.firstMissingSummary : undefined;
-    const unreadable = (missing ? ask : this.firstDamagedSummary)?.unreadable;
+    const unreadable = (missing ? ask : (this.firstStoppedSummary ?? this.firstDamagedSummary))
+      ?.unreadable;
     // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
     const recoveryStarted = this.firstBackupPhase !== "unstarted";
     const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
