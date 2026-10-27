@@ -1,5 +1,4 @@
 import * as fs from "node:fs/promises";
-import { constants } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -12,6 +11,7 @@ import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { raiseStartAgainNote, readStartAgainNote } from "./first-setup-start-again-note.js";
+import { syncFolder } from "./folder-sync.js";
 import "./errors.js";
 
 export interface SetAsideIo {
@@ -219,15 +219,6 @@ export async function prepareSetAside(
     throw error;
   }
   return made.reverse();
-}
-
-async function syncFolder(path: string): Promise<void> {
-  const folder = await fs.open(path, constants.O_RDONLY | constants.O_DIRECTORY);
-  try {
-    await folder.sync();
-  } finally {
-    await folder.close();
-  }
 }
 
 /** `top`, then every folder below it down to `bottom`, which is inside it or is it. */
