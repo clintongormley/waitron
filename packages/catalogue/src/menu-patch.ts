@@ -1,6 +1,8 @@
 import { AppError, decimal, isAppError, toScale, type ContentLanguages } from "@waitron/shared";
 import "./errors.js";
+import { folderPresentation } from "./include-folder-presentation.js";
 import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
+import type { IncludeFolderOverrides } from "./section-types.js";
 import { PATCH_FIELDS, type MenuPatchChange, type MenuPatchTarget } from "./menu-patch-types.js";
 import { isProductPrice } from "./modifier-limits.js";
 import {
@@ -121,27 +123,39 @@ export function parseMenuPatch(body: unknown): MenuPatchChange[] {
   });
 }
 
+const fixedOf = (copy: Copy): IncludeFolderOverrides =>
+  (copy.fixed as IncludeFolderOverrides | undefined) ?? {};
+
 function sectionCopies(
   members: readonly DocumentMember[],
   sectionId: string,
-  field: string,
+  takes: (fixed: IncludeFolderOverrides) => boolean,
 ): Copy[] {
   return members.flatMap((member): Copy[] =>
     member.kind === "section"
       ? [
-          ...(member.sectionId === sectionId && !Object.hasOwn(member.fixed ?? {}, field)
-            ? [member as Copy]
-            : []),
-          ...sectionCopies(member.members, sectionId, field),
+          ...(member.sectionId === sectionId && takes(member.fixed ?? {}) ? [member as Copy] : []),
+          ...sectionCopies(member.members, sectionId, takes),
         ]
       : [],
   );
+}
+
+/** A fixed name is per language, so a copy refuses a names change only when it fixes every
+ * language the change can write; without `languages`, every copy fixing names may take it. */
+function takesChange(field: string, languages?: ContentLanguages) {
+  return (fixed: IncludeFolderOverrides): boolean =>
+    field === "names"
+      ? languages === undefined ||
+        !languages.languages.every((language) => Object.hasOwn(fixed.names ?? {}, language))
+      : !Object.hasOwn(fixed, field);
 }
 
 function locate(
   document: MenuDocument,
   target: MenuPatchTarget,
   field: string,
+  languages?: ContentLanguages,
 ): Located | undefined {
   const modifiers = () => Object.values(document.offers).flatMap((offer) => offer.offeredModifiers);
   let located: Located;
@@ -197,21 +211,29 @@ function locate(
       break;
     case "section":
       located = {
-        copies: sectionCopies(document.root.members, target.sectionId, field),
+        copies: sectionCopies(
+          document.root.members,
+          target.sectionId,
+          takesChange(field, languages),
+        ),
       };
   }
   return located.copies.length === 0 ? undefined : located;
 }
 
-/** The value a field holds now at the first copy a patch would change; `undefined` when the
- * document does not hold the target. */
+/** The value a field holds now at the first copy a patch would change, preferring a copy that fixes
+ * none of it; `undefined` when the document does not hold the target. */
 export function patchFieldValue(
   document: MenuDocument,
   target: MenuPatchTarget,
   field: string,
 ): unknown {
   const located = locate(document, target, field);
-  return located?.copies[0]![field === "price" ? located.priceKey! : field];
+  if (located === undefined) return undefined;
+  const copy =
+    located.copies.find((candidate) => !Object.hasOwn(fixedOf(candidate), field)) ??
+    located.copies[0]!;
+  return copy[field === "price" ? located.priceKey! : field];
 }
 
 /** A patched copy of `document`, which is never changed and may be deep-frozen. */
@@ -222,7 +244,7 @@ export function applyMenuPatch(
 ): MenuDocument {
   const patched = structuredClone(document);
   parseMenuPatch(changes).forEach(({ target, field, value }, index) => {
-    const located = locate(patched, target, field);
+    const located = locate(patched, target, field, languages);
     if (located === undefined) throw invalid(index, "target");
     for (const copy of located.copies as Copy[]) {
       if (TRANSLATED.has(field)) {
@@ -236,8 +258,17 @@ export function applyMenuPatch(
         } catch (error) {
           throw refusalFrom(error, index, field);
         }
+        const names = field === "names" ? fixedOf(copy).names : undefined;
         // A section's names are never null.
-        copy[field] = merged === null && field === "names" ? {} : merged;
+        copy[field] =
+          names !== undefined
+            ? folderPresentation(
+                { names: merged ?? {}, image: null, color: null },
+                { showAsFolder: true, overrides: { names } },
+              ).names
+            : merged === null && field === "names"
+              ? {}
+              : merged;
       } else if (field === "price") {
         const price = toScale(decimal(value as string), 2);
         copy[located.priceKey!] = price;

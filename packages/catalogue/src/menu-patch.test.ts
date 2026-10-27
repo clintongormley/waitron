@@ -12,6 +12,8 @@ import {
 import { setIncludeFolder } from "./include-folder.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { addMember, createSectionIn } from "./sections.js";
+import { updateMenuDetails } from "./operations.js";
+import { writeContentLanguages } from "./content-languages.js";
 import { liveVersions, previewMenu, publishMenu } from "./menu-publication.js";
 import { applyMenuPatch, parseMenuPatch, patchFieldValue } from "./menu-patch.js";
 import { PATCH_FIELDS, type MenuPatchChange } from "./menu-patch-types.js";
@@ -359,7 +361,9 @@ describe("applyMenuPatch on every copy", () => {
     for (const item of items) {
       expect(item).toMatchObject({ price: "0.60", vatClass: "general", image: "lemon.jpg" });
       expect(item).not.toHaveProperty("unitPrice");
-      expect(item.presentation).toEqual(before[0]!.items[0]!.presentation);
+      expect(item.presentation).toEqual(
+        before[0]!.items.find((candidate) => candidate.productId === f.extraLemon)!.presentation,
+      );
     }
     expect(patchFieldValue(patched, target, "price")).toBe("0.60");
   });
@@ -532,36 +536,114 @@ describe("applyMenuPatch on every copy", () => {
     }
     const everyCopyFixed = structuredClone(document);
     for (const copy of sectionCopies(everyCopyFixed.root.members, f.drinks))
-      copy.fixed = { names: { en: "Fixed" } };
+      copy.fixed = { names: { en: "Fixed", es: "Fijo" }, image: null };
     const names = { kind: "section", sectionId: f.drinks } as const;
+    expect(
+      refusal(() =>
+        applyMenuPatch(
+          everyCopyFixed,
+          [{ target: names, field: "image", value: "x.jpg" }],
+          languages,
+        ),
+      ),
+    ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "target" } });
     expect(
       refusal(() =>
         applyMenuPatch(everyCopyFixed, [{ target: names, field: "names", value: null }], languages),
       ),
     ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "target" } });
-    expect(patchFieldValue(everyCopyFixed, names, "names")).toBeUndefined();
+    expect(patchFieldValue(everyCopyFixed, names, "image")).toBeUndefined();
     expect(patchFieldValue(everyCopyFixed, names, "internalName")).toBe("Drinks");
   });
 
   it("rethrows a fault that is not a refusal", async () => {
     const { f, document } = await liveLunch();
+    const target = { kind: "section", sectionId: f.drinks } as const;
     const throwing = {
       get en(): string {
         throw new TypeError("boom");
       },
     };
-    expect(() =>
-      parseMenuPatch([
-        { target: { kind: "section", sectionId: f.drinks }, field: "names", value: throwing },
-      ]),
-    ).toThrow(TypeError);
-    expect(() =>
-      applyMenuPatch(
-        document,
-        [{ target: { kind: "section", sectionId: f.drinks }, field: "names", value: { en: "X" } }],
-        null as unknown as ContentLanguages,
-      ),
-    ).toThrow(TypeError);
+    expect(() => parseMenuPatch([{ target, field: "names", value: throwing }])).toThrow(TypeError);
+    let reads = 0;
+    const throwsOnSecondRead = {
+      get en(): string {
+        reads += 1;
+        if (reads > 1) throw new TypeError("boom");
+        return "Drinks";
+      },
+    };
+    const [change] = parseMenuPatch([{ target, field: "names", value: throwsOnSecondRead }]);
+    expect(() => applyMenuPatch(document, [change!], languages)).toThrow(TypeError);
+  });
+
+  it("patches the languages a folder does not fix, and skips a folder fixing them all", async () => {
+    const { f, document } = await liveLunch(async (tx, f) => {
+      await drinksTwice(tx, f);
+      await writeContentLanguages(tx, languages);
+      await updateMenuDetails(tx, f.drinksMenu, {
+        names: { en: "Something to drink", es: "Algo de beber" },
+      });
+    });
+    const target = { kind: "section", sectionId: f.drinks } as const;
+    expect(sectionCopies(document.root.members, f.drinks).map((copy) => copy.names)).toEqual([
+      { en: "Something to drink", es: "Algo de beber" },
+      { en: "Bar drinks", es: "Algo de beber" },
+    ]);
+    const patched = applyMenuPatch(
+      document,
+      parseMenuPatch([{ target, field: "names", value: { en: "To drink", es: "Bebidas" } }]),
+      languages,
+    );
+    const [direct, folder] = sectionCopies(patched.root.members, f.drinks);
+    expect(direct!.names).toEqual({ en: "To drink", es: "Bebidas" });
+    expect(folder!.names).toEqual({ en: "Bar drinks", es: "Bebidas" });
+    expect(folder!.fixed).toEqual({ names: { en: "Bar drinks" } });
+    const cleared = applyMenuPatch(
+      document,
+      parseMenuPatch([{ target, field: "names", value: null }]),
+      languages,
+    );
+    expect(sectionCopies(cleared.root.members, f.drinks).map((copy) => copy.names)).toEqual([
+      {},
+      { en: "Bar drinks" },
+    ]);
+
+    const blankFixed = structuredClone(document);
+    sectionCopies(blankFixed.root.members, f.drinks)[1]!.fixed = { names: { es: " " } };
+    sectionCopies(blankFixed.root.members, f.drinks)[0]!.fixed = { names: { en: "Ours" } };
+    expect(patchFieldValue(blankFixed, target, "names")).toEqual({
+      en: "Something to drink",
+      es: "Algo de beber",
+    });
+    const dropped = applyMenuPatch(
+      blankFixed,
+      parseMenuPatch([{ target, field: "names", value: { en: "To drink", es: "Bebidas" } }]),
+      languages,
+    );
+    expect(sectionCopies(dropped.root.members, f.drinks).map((copy) => copy.names)).toEqual([
+      { en: "Ours", es: "Bebidas" },
+      { en: "To drink" },
+    ]);
+
+    const fixedEverywhere = structuredClone(document);
+    sectionCopies(fixedEverywhere.root.members, f.drinks)[1]!.fixed = {
+      names: { en: "Bar drinks", es: "Barra" },
+    };
+    fixedEverywhere.root.members = [...fixedEverywhere.root.members].reverse();
+    expect(patchFieldValue(fixedEverywhere, target, "names")).toEqual({
+      en: "Something to drink",
+      es: "Algo de beber",
+    });
+    const skipped = applyMenuPatch(
+      fixedEverywhere,
+      parseMenuPatch([{ target, field: "names", value: { en: "To drink", es: "Bebidas" } }]),
+      languages,
+    );
+    expect(sectionCopies(skipped.root.members, f.drinks).map((copy) => copy.names)).toEqual([
+      { en: "Bar drinks", es: "Algo de beber" },
+      { en: "To drink", es: "Bebidas" },
+    ]);
   });
 });
 
