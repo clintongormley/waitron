@@ -20,13 +20,19 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
   START_AGAIN_MARKER_LIMIT,
+  attemptLastWriteMs,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
+  type StartAgainUnreadable,
   type BackupRepairRecord,
   type RegisterAnswer,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { initialSetupFor, type WaitronModule } from "@waitron/module";
+import {
+  initialSetupFor,
+  type InitialSetupContribution,
+  type WaitronModule,
+} from "@waitron/module";
 import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
 import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
@@ -37,6 +43,7 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
+import { readSeriesPicks } from "./start-again-name-records.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -54,6 +61,13 @@ export interface StartAgainSummaryRequest {
   ownerGeneration: number;
   owner?: FirstSetupOwnerAttempt;
 }
+type Seat = NonNullable<InitialSetupContribution["startAgainFloor"]>;
+type UnreadableRecord = StartAgainUnreadable["records"][number];
+const UNREADABLE_ORDER: readonly UnreadableRecord[] = [
+  "series-picks",
+  "public-record",
+  "fiscal-documents",
+];
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
 }
@@ -78,15 +92,19 @@ async function gatherStartAgainFloor(
   state: FirstSetupState,
   originals: readonly { name: string; bytes: Uint8Array | null }[],
   modules: readonly WaitronModule[] | undefined,
+  deletion: { discarding?: string },
+  recoveryFloor: Floor | null,
 ) {
   const attempts = [state, ...state.previous];
   const names = [
     ...new Set(attempts.flatMap((attempt) => attempt.frozen.modules.map(({ module }) => module))),
   ];
-  if (names.length === 0) return { floor: null, recoveryRecordDamaged: false };
+  if (names.length === 0)
+    return { floor: recoveryFloor, known: null, recoveryRecordDamaged: false };
   if (modules === undefined) unavailable();
-  let latest: { floorMs: number; lastName: string | null; module: string } | null = null;
   let recoveryRecordDamaged = false;
+  const unreadable = new Set<UnreadableRecord>();
+  const inputs: { module: string; seat: Seat; input: Parameters<Seat>[0] }[] = [];
   for (const module of names) {
     const seat = initialSetupFor(modules, module)?.startAgainFloor;
     if (seat === undefined) continue;
@@ -104,7 +122,6 @@ async function gatherStartAgainFloor(
         throw error;
       // The kept recovery record is the recovery sheet's public statement, which never sets Start
       // again's floor (`isNamelessEvidence`), so one that cannot be read is treated as missing.
-      // Every other reader here still refuses.
       recovery = null;
       recoveryRecordDamaged = true;
       seen = originals.map((entry) =>
@@ -114,31 +131,68 @@ async function gatherStartAgainFloor(
     const document =
       recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(module, state, seen));
     if (document !== undefined) publicEvidence.push(document);
-    const floor = seat({
-      attempts: attempts
-        .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === module))
-        .map((attempt) => ({
-          context: firstSetupModuleContext(attempt, module),
-          input: attempt.inputs[module],
-        })),
-      preparations: await readModulePreparationHistory(roots, module),
-      publicEvidence,
+    const picks = await readSeriesPicks(roots, module, seat);
+    if (picks.unreadable) unreadable.add("series-picks");
+    inputs.push({
+      module,
+      seat,
+      input: {
+        attempts: attempts
+          .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === module))
+          .map((attempt) => ({
+            context: firstSetupModuleContext(attempt, module),
+            input: attempt.inputs[module],
+          })),
+        preparations: picks.preparations,
+        publicEvidence,
+      },
     });
-    if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
-      latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
   }
-  return { floor: latest, recoveryRecordDamaged };
+  const latestOf = (lastWriteMs?: number) => {
+    let latest: Floor | null = null;
+    for (const { module, seat, input } of inputs) {
+      const floor = seat(lastWriteMs === undefined ? input : { ...input, lastWriteMs });
+      if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
+        latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
+    }
+    return latest;
+  };
+  const known = latestOf();
+  let floor = known;
+  if (unreadable.size > 0) {
+    const lastWriteMs = await attemptLastWriteMs(roots, deletion).catch((error: unknown) => {
+      throw error instanceof AppError
+        ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
+        : error;
+    });
+    if (lastWriteMs === null) unavailable();
+    floor = latestOf(lastWriteMs);
+  }
+  if (recoveryFloor !== null && (floor === null || recoveryFloor.floorMs > floor.floorMs))
+    floor = recoveryFloor;
+  if (unreadable.size === 0) return { floor, known, recoveryRecordDamaged };
+  if (floor === null) unavailable();
+  return {
+    floor,
+    known,
+    recoveryRecordDamaged,
+    unreadable: {
+      records: UNREADABLE_ORDER.filter((record) => unreadable.has(record)),
+      floorMs: floor.floorMs,
+    },
+  };
 }
 function summaryOf(
   state: FirstSetupState,
   gathered: Awaited<ReturnType<typeof gatherStartAgainFloor>>,
   recovery: StartAgainRecoveryShown | undefined,
 ): StartAgainSummary {
-  const summary = startAgainSummary(state, gathered.floor?.lastName ?? null);
+  const summary = startAgainSummary(state, gathered.known?.lastName ?? null);
   return {
     ...summary,
     ...(gathered.recoveryRecordDamaged && { recoveryRecordDamaged: true as const }),
     ...(recovery !== undefined && { recovery }),
+    ...(gathered.unreadable !== undefined && { unreadable: gathered.unreadable }),
   };
 }
 type BackupRecovery = Pick<
@@ -318,6 +372,8 @@ export function createFirstSetupResolutionActions(
             retained.state,
             snapshot.originals,
             host.modules,
+            found === undefined ? {} : { discarding: found.id },
+            found?.kind === "stopped" ? found.floor : null,
           );
           return summaryOf(retained.state, gathered, recovery);
         }),
@@ -416,14 +472,14 @@ export function createFirstSetupResolutionActions(
             state,
             snapshot.originals,
             host.modules,
+            discarding,
+            found?.kind === "stopped" ? found.floor : null,
           );
-          let floor = gathered.floor;
-          if (
-            found?.kind === "stopped" &&
-            found.floor !== null &&
-            (floor === null || found.floor.floorMs > floor.floorMs)
-          )
-            floor = found.floor;
+          // Only the database-missing and recovery-discard paths show the person a damaged name
+          // record before Start again, so any other path refuses one.
+          if (gathered.unreadable !== undefined && !missing && !discardsStopped)
+            throw new AppError("setup.attempt_invalid", {});
+          const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
           const finishing = found?.kind === "unemptied";

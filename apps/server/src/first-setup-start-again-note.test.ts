@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   access,
   lstat,
+  utimes,
   mkdtemp,
   mkdir,
   readFile,
@@ -304,6 +305,7 @@ const CONFIRMATIONS = "first-setup-start-again-confirmations";
 async function missingDatabase(
   changes: readonly FirstSetupChange[] = [],
   afterRemove?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
+  stamp?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
 ) {
   const base = await abandonedAttempt();
   const { f } = base;
@@ -320,6 +322,7 @@ async function missingDatabase(
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
+  await stamp?.(f);
   const current = await f.host.resolution.inspectFirstSetupResolution();
   const owner = {
     attemptId: recovered.state.attemptId,
@@ -831,6 +834,128 @@ it("the Start again route takes recoveryRecordDamagedShown only as true", async 
       error: { code: "setup.request_invalid", params: { field: "body" } },
     });
   }
+});
+
+function picksFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  return join(f.stateDir, "module-preparation-state.json");
+}
+
+async function damagePicks(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  await expect(lstat(picksFile(f))).resolves.toMatchObject({ size: expect.any(Number) });
+  await writeFile(picksFile(f), "{damaged");
+}
+
+async function stampTree(path: string, at: Date) {
+  const found = await lstat(path).catch(() => null);
+  if (found === null) return;
+  if (found.isDirectory())
+    for (const entry of await readdir(path)) await stampTree(join(path, entry), at);
+  await utimes(path, at, at);
+}
+
+const PICKS_AFTER_NAME_MS = 120 * MINUTE_MS;
+
+/** Every listed item a minute after the attempt's name, the picks file two hours after it. */
+async function stampAfterName(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  const state = (await f.store.read())!;
+  const name = (firstSetupModuleContext(state, f.module).request as { identity: string }).identity;
+  const nameMs = EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS;
+  const listed = new Date(nameMs + MINUTE_MS);
+  await stampTree(f.stateDir, listed);
+  await stampTree(join(f.venueDir, "first-setup-claim.json"), listed);
+  const picks = new Date(nameMs + PICKS_AFTER_NAME_MS);
+  await utimes(picksFile(f), picks, picks);
+}
+
+async function damagedPicksAttempt(options: { picks: boolean; recoveryRecord: boolean }) {
+  const base = await missingDatabase(
+    [],
+    async (f) => {
+      if (options.picks) await damagePicks(f);
+      if (options.recoveryRecord) await damageRecoveryRecord(f);
+    },
+    stampAfterName,
+  );
+  const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
+  const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
+  return { ...base, timeFloorMs };
+}
+
+async function summaryThenStartAgain(base: Awaited<ReturnType<typeof missingDatabase>>) {
+  const { f, actions, owner, ids, request } = base;
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  const shown = await answered.json();
+  await actions.startAgainFirstSetup({
+    ...request,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  return shown;
+}
+
+it("with the database missing, a damaged kept picks file reaches the confirmation, and the note keeps a time floor with no name", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+  expect(base.timeFloorMs).toBeGreaterThan(base.floorMs);
+  const shown = await summaryThenStartAgain(base);
+  expect(shown).toEqual({
+    reached: "named",
+    lastName: base.name,
+    unreadable: { records: ["series-picks"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  await expectStartAgainDeleted(base.f);
+});
+
+it("with the database missing, the same file times on an intact picks file leave the summary and the note as they were", async () => {
+  const base = await damagedPicksAttempt({ picks: false, recoveryRecord: false });
+  const shown = await summaryThenStartAgain(base);
+  expect(shown).toEqual({ reached: "named", lastName: base.name });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.floorMs,
+    lastName: base.name,
+    module: "fiscal-verifactu",
+  });
+});
+
+it("with the database missing, a damaged recovery record beside a damaged picks file shows both", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: true });
+  const shown = await summaryThenStartAgain(base);
+  expect(shown).toEqual({
+    reached: "named",
+    lastName: base.name,
+    recoveryRecordDamaged: true,
+    unreadable: { records: ["series-picks"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+});
+
+it("with the database present, a damaged kept picks file still refuses Start again, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...startRequest,
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision!,
+      ownerGeneration: inspected.ownerGeneration!,
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
 it("the password-required refusal answers 403 over HTTPS", async () => {

@@ -14,6 +14,12 @@ export type StartAgainSummary = {
   readonly lastName: string | null;
   readonly recoveryRecordDamaged?: true;
   readonly recovery?: StartAgainRecoveryShown;
+  readonly unreadable?: StartAgainUnreadable;
+};
+
+export type StartAgainUnreadable = {
+  readonly records: readonly ("series-picks" | "public-record" | "fiscal-documents")[];
+  readonly floorMs: number;
 };
 
 /** A stopped backup recovery that Start again would discard, as the summary showed it. */

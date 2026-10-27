@@ -180,6 +180,7 @@ export {
   type StartAgainConfirmation,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
+  type StartAgainUnreadable,
 } from "./first-setup-start-again-confirmation.js";
 export {
   START_AGAIN_MARKER_FILE,
