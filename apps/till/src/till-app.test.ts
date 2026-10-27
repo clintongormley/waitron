@@ -25089,4 +25089,58 @@ describe("retrieved table bills paid at Counter", () => {
     expect(pay.mock.calls[0]![0].expectedEdit).toEqual(expectedEdit);
     expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
   });
+  async function retrievedTable(overrides: Record<string, unknown> = {}) {
+    const mounted = await mountApp({
+      ...overrides,
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Table 4",
+        revision: 3,
+        expectedEdit,
+        kitchenNote: { scope: { partyId: "party-4" }, note: null, revision: 0, ownerRevision: 3 },
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      }),
+    });
+    const counter = await toCounter(mounted.el);
+    emit(counter, "retrieve-order", { id: "wo-1" });
+    await flush(mounted.el);
+    return { ...mounted, counter };
+  }
+
+  it("does not borrow a retrieved table observation when paying the next Counter basket", async () => {
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el, counter } = await retrievedTable({ recordSale });
+    counter.store.clear();
+    counter.store.addProduct(cafe, "1");
+    const next = counter.store.id;
+    expect(next).not.toBe("wo-1");
+    emit(counter, "confirm-payment", { method: "cash", amount: "1.50" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledTimes(1);
+    expect(recordSale.mock.calls[0]![2]).toBe(next);
+    expect(recordSale.mock.calls[0]![8]).toBeNull();
+  });
+
+  it("saves an edited retrieved table basket with its observation before paying it", async () => {
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el, counter } = await retrievedTable({ updateWorkingOrder, recordSale });
+    counter.store.setLineQuantity(0, "3");
+    emit(counter, "confirm-payment", { method: "cash", amount: "4.50" });
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledTimes(1);
+    expect(updateWorkingOrder.mock.calls[0]![0]).toBe("wo-1");
+    expect(updateWorkingOrder.mock.calls[0]![1]).toMatchObject({
+      expectedEdit,
+      revision: 3,
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "3" }],
+    });
+    expect(recordSale).toHaveBeenCalledTimes(1);
+    expect(recordSale.mock.calls[0]![8]).toEqual(expectedEdit);
+    expect(updateWorkingOrder.mock.invocationCallOrder[0]).toBeLessThan(
+      recordSale.mock.invocationCallOrder[0]!,
+    );
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+  });
 });
