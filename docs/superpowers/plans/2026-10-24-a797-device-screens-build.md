@@ -7,8 +7,8 @@ gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Read
 List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
 The handheld's bar**, **slice 6 — Ready warning time, data**, **slice 7 — The Ready bar's
 warning**, **slice 8 — Kitchen group cards**, **slice 8b — Short names on kitchen cards**,
-**slice 9 — The Columns controller and collapse** and **slice 9b — The corner Columns panel** in
-full tasks; each other slice is expanded into
+**slice 9 — The Columns controller and collapse**, **slice 9b — The corner Columns panel** and
+**slice 9c — Overview and the narrow tabs** in full tasks; each other slice is expanded into
 tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
@@ -248,7 +248,7 @@ window applies each tap at once, so it takes no draft scope (its D2)._
 **Goal:** the Overview column («Resumen») with "Secreto ibérico 2 +2", built on the one counting
 function A773-2's pass reuses; below about 1000 px the columns become tabs in the chosen order, a
 late card's tab carrying a red bar. **Dependencies:** slice 9. **Migration:** no. **Open
-decision:** the measured switch width (design §9).
+decision:** the measured switch width (design §9). _Expanded into tasks below (2026-10-27)._
 
 ### Slice 10 — Handheld order at phone width (LIGHT)
 
@@ -8288,6 +8288,791 @@ It writes its report to `/Users/clintongormley/waitron-campaign-c/a797-9b-look-r
   (D4's test).
 - After merge: delete the branch local and remote and check the remote one is gone; the backlog's
   "landed in #N" commit; update the ledger; then slice 9c, in turn with lane G.
+
+---
+
+## Slice 9c — Overview and the narrow tabs (one PR, branch `feat/a797-9c-overview-narrow-tabs`)
+
+**What it changes.** On a kitchen screen (a kitchen display, or the till's Station screen) a new
+first column, **Overview** («Resumen»), lists each dish waiting or being made with how many
+("Secreto ibérico 1"), and after a + how many more are held ("+2"): what a grill cook reads to know
+how many steaks to put on (design §3.3, picture 03). It is shown by default, collapses by its heading
+like any column, and is listed in the Columns window, where it can be moved or hidden (slice 9b).
+**Where the board is too narrow for its columns**, it shows one column at a time and the columns
+become **tabs with counts** ("Waiting · 2"), in the board's chosen order, so Overview is the first
+tab; a hidden column has no tab (design §3.4, picture 05). **A tab whose column holds a late card
+carries a red bar**, and so, by the owner's answer to slice 9's D14, does a **collapsed column**
+holding one. Underneath, slice 9c builds **the one counting function** A773-2's pass reuses for its
+own Overview (design §5, §7; A773-2 plan `:96`, `:311`). The pass, its Overview and its narrow list
+(slice 12, 12b) are not built here.
+
+**Review path: LIGHT.** No server read, route, schema or shared type changes; the Overview counts
+what the station read already sends, and the layout stays in the device's browser (design §5:
+"**Overview** counts what the screen holds"; "Columns … Nothing on the server"). The changed files
+are under `apps/till/src/`, the guides and the docs. `till-app.ts` and `till-station-screen.ts` are
+not changed by product code (only test files around them). None of the risk triggers applies.
+**Migration: none.** No venue reset.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-27 against `main` at
+`c5b0ae414` (this worktree's base); **(read)** means read in the code at that commit. The probe ran
+in a throwaway worktree (`git worktree add --detach /tmp/a797-9c-probe.bgOz/wt c5b0ae414`, `pnpm
+install --frozen-lockfile`), removed afterwards with `git worktree remove`; its diffs, logs and the
+contrast script are in `/Users/clintongormley/waitron-campaign-c/a797-9c-probe/` (`base1.txt`,
+`run1-overview.txt` … `run8-fixture-control.txt`, `measure.txt`, `measure2.txt`, `measure3.txt`,
+`probe-tabs.diff`, `probe-fits.diff`, `probe-final.diff`, `tab-bar-contrast.py`). None of the probe
+code is in this branch.
+
+### The turn with lane G's A773-2 (ran)
+
+`git fetch origin --prune`, then for each origin branch other than `main`
+(`feat/a1098-recovery-keep-or-move`, `feat/a918-3-venue-service-starters`,
+`feat/invoice-pdf-email-office-printing`, `fix/a973-operator-script-english`, `printers`):
+`git diff --name-only origin/main...origin/<branch> | grep -cE 'station-queue\.ts|till-station-screen\.ts|till-expo-screen\.ts|kitchen-columns\.ts'`
+→ `0` for every one. `git ls-remote origin | grep -i a773` → only `refs/pull/{459,831,1546,1721}/head`,
+no branch. `gh pr list --state open` → #2137 (A918 slice 3) and #2131 (A1098); `gh pr diff <n>
+--name-only` → neither touches code this slice changes, but #2137 touches `docs/backlog.md`,
+`docs/backlog/till.md` and `docs/developers/design-system.md`, and #2131 `docs/backlog.md` and
+`design-system.md`, all of which Task 9 edits, so whichever lands second may meet a small docs
+conflict. No lane queue holds A773-2's PRs B–D: `grep -n '^### .*A773' ~/waitron-campaign*/queue.md`
+→ nothing; the files that mention "A773-2" (lanes A, B, C, F) mention it inside other items'
+dependency text. The watcher's note in lane C's questions file (2026-10-27 ~07:52 CET): "Lane G
+moved to Waitron Cloud on 2026-10-22, and no lane holds A773-2 now: its remaining PRs (B–D) sit in
+`docs/backlog.md`'s A773-2 entry". So slice 9c takes the turn on `station-queue.ts`, edits no
+`till-expo-screen.ts`, and puts its hand-off for A773-2 in that backlog entry (Task 9), addressed to
+nobody. **Check again** (`gh pr list --state open`, the same `git diff` loop) before the first
+commit and before `/finish-branch`.
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `git grep -ln "kitchen-columns\|kitchen-cards" -- 'apps/*.ts'` outside tests (ran:
+`till-station-screen.ts`, `kitchen-columns-dialog.ts`, `station-queue.ts`), `git grep -n
+"thousandthsToMake\|lateCards\|STATION_COLUMNS\|stationColumnNames" -- 'apps/*.ts'` outside tests
+(ran) and the probe's runs, each line read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `apps/till/src/state/kitchen-columns.ts:17-21` `STATION_COLUMNS` | Waiting, Preparing, Ready; nothing hidden or collapsed | order gains `overview` first (D5; Task 7) |
+| same file `:48-78` `sanitise` | puts a registered key missing from a stored layout back at its default place, with its default hidden and collapsed state (slice 9 D3) | read, unchanged: a layout stored before Overview reads with Overview first, shown and open (D5) |
+| `apps/till/src/state/kitchen-cards.ts:153-164` `thousandthsToMake` | sums fired Waiting and Preparing dishes in thousandths, a dish whose unit shows counting 1000 | uses the new `dishThousandths` (D1); same answers (Task 2) |
+| same file `:166-176` `lateCards` | cards with a fired dish not Ready whose band is overdue or forgotten | read; also counted per column for the red bar (D10) |
+| same file `:81-126` `kitchenCards` | the cards, oldest first | read; the Overview's input order (D3) |
+| `apps/till/src/widgets/station-queue.ts:69` `COLUMNS`, `:71-75` `DRAWN`, `:80-87` `stationColumnNames` | the state order; the drawable keys; their names for the window | `stationColumnNames` also names `overview` (D5, D6; Task 4) |
+| same file `:129-146` `.kanban`, `.column`, `.column.collapsed` | a wrapping flex row; open columns `flex: 1 1 11rem`; collapsed a `--wt-tap-min` strip | Overview `flex-grow: 0` on the same basis (D5) |
+| same file `:162-185` `.column-toggle` | the heading button; collapsed, written top to bottom | collapsed with a late card, a red top bar (D10; Task 8) |
+| same file `:685` `columns` | the layout the screen hands down | read; drives tabs as well as columns (D9) |
+| same file `:785-795` `#header` | "5 dishes to make · 1 late" over every card | unchanged (D13) |
+| same file `:797-812` `render` | header row, status slot, notices, then the board or "Nothing in the kitchen" | the board or, when the columns do not fit, the tabs and one column (D7–D9; Task 6) |
+| same file `:989-1027` `#board` | one section per drawable, shown key | also draws Overview (Task 4) |
+| `apps/till/src/widgets/kitchen-columns-dialog.ts` | lists `layout.order` filtered to the names it is given | unchanged: lists Overview once `stationColumnNames` names it (slice 9b D4) |
+| `apps/till/src/screens/till-station-screen.ts:360-370` `#columnsFor`, `:397` `.names=${stationColumnNames()}` | reads each board's layout once against `STATION_COLUMNS`; hands the window the names | unchanged product code (D12) |
+| `apps/till/src/widgets/segmented-control-styles.ts:3-25` `segmentedOptionStyles`; `till-station-screen.ts:1232-1247` `#pick` | the till's pressed-picker look; the station picker, `<button aria-pressed>` with `.option` | the look and pattern the tabs reuse (D9) |
+| `apps/till/src/screens/till-floor-screen.ts:450-487` zone tabs | a zone tab with a late table: tint plus an inset bottom bar in `--wt-color-danger` | the precedent for the red bar, drawn outside the fill instead (D10) |
+| `apps/till/src/screens/till-table-order-screen.ts:161`, `:1467-1503` | `DRAFT_SIDE_BY_SIDE_MIN_WIDTH`; a `ResizeObserver` measuring a width | the precedent for switching layout on a measured width (D8) |
+| `apps/till/src/widgets/test-helpers.ts:108` `DEFAULT_FRAME`, `:117-135` `pageAt`, `resetPage` | every till browser test starts at 414 × 896 | why the station suites take a wide frame (D11; Task 5) |
+| `apps/till/src/i18n/strings.ts` en `:658-666`, `:685-687`; es `:2418-2426`, `:2445-2447` | `station.to_make`, `station.late`, `station.columns*`, `station.state.*` | read; new `station.overview`, `station.overview_held` (D6) |
+| `docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md:96`, `:101`, `:305`, `:311` | `OverviewFact = Pick<PassCardItem,"lineId"\|"stationId"\|"name"\|"qty"\|"phase"\|"informational">` "feed A797's Overview aggregator; do not build a second station totals algorithm"; "narrow tabs/list use the same order/visibility/collapse" | read: the interface D1 serves, and D9's one departure |
+
+### Plan decisions for slice 9c
+
+- **D1. One counting function, in one pure module the pass can call with its own facts.** New
+  `apps/till/src/state/kitchen-overview.ts`, importing nothing from the station read:
+  ```ts
+  /** One dish for the Overview, in whatever read it came from. */
+  export interface OverviewDish {
+    /** The kitchen name the card shows; rows are one per name. */
+    name: string;
+    /** How much it counts, in thousandths of a dish: {@link dishThousandths}. */
+    thousandths: number;
+    /** "making": fired and Waiting or Preparing; "held": held, or fired and waiting for the pass. */
+    stage: "making" | "held";
+  }
+  export interface OverviewRow { name: string; making: number; held: number } // thousandths
+  /** A dish whose unit shows ("0.35 kg × Pulpo") counts as one; otherwise its quantity (slice 8, D9). */
+  export function dishThousandths(quantity: string, unitName: Record<string, string> | null | undefined, soldInEach: boolean | undefined): number;
+  export function overviewRows(dishes: Iterable<OverviewDish>): OverviewRow[];
+  /** The rows with something to make: Overview's count (D4). */
+  export function rowsToMake(rows: readonly OverviewRow[]): number;
+  ```
+  The caller decides what counts and leaves Ready and served dishes out. The station's adapter is
+  `overviewDishes(cards: readonly KitchenCard[]): OverviewDish[]` in `kitchen-cards.ts` (fired and
+  not Ready → `making`; `firedAt` null → `held`; Ready → left out), and `thousandthsToMake` sums
+  through `dishThousandths` so the header line and Overview cannot disagree. **What A773-2 does with
+  it** (Task 9's hand-off, in the A773-2 backlog entry): map each `OverviewFact` to an
+  `OverviewDish` and call `overviewRows`; build no second aggregator (its plan `:96`, `:311`).
+  Its `OverviewFact` has no `unitName` or `soldInEach` (plan `:96`, read), so a dish sold by weight
+  would count by its weight; the hand-off says to add the two fields from `ExpoItem`
+  (`apps/till/src/api/client.ts:1887-1890`, read). And once A773-2 gives station dishes a requested
+  phase, `overviewDishes` counts them as `held`, because design §3.3 puts them in Held ("it must not
+  start them").
+- **D2. What Overview counts** (design §3.3, §3.8: "counts of dishes waiting or being made, held ones
+  after a +"). One row per **kitchen name** (`StationQueueItem.name`, "the variant's own on a
+  variant line", `client.ts:1546-1548`, read): a dish's options do not split its row, because the
+  cook counts steaks, not their sauces. **Making** is every fired dish Waiting or Preparing,
+  **held** every dish with `firedAt` null, Ready dishes not at all: picture 03's scene reads
+  "Secreto ibérico 1 +2" with one secreto Waiting (T9) and two in a held card (T4), "Chuletón 0 +1"
+  for T7's held chuletón, and nothing from the collapsed Ready column. A dish whose unit shows
+  counts as one and fractions stay exact, as the header line's "dishes to make" (slice 8, D9). On a
+  merged board the rows run across its stations by name, since a merged board is one board (slice 9,
+  D5): **owner FYI**.
+- **D3. Row order.** Rows with something to make first, then rows that are only held; within each,
+  in the order the dish first appears over the cards, oldest card first (`kitchenCards`' order),
+  each card's dishes in the order it draws them. So the row of the dish that has waited longest
+  leads, a row keeps its place across refreshes while its card does, and a held-only row comes
+  last, as picture 03 draws Chuletón. Picture 03's other rows (Secreto, Entrecot, Patatas,
+  Hamburguesa) follow no rule I could find (read); **owner FYI**. `overviewRows` keeps its input's
+  first-appearance order and only splits the two groups, so the pass passes its own order.
+- **D4. Overview's count is its rows with something to make.** Picture 05 tabs the same scene as
+  picture 03 (Held · 2, Waiting · 2, Preparing · 1, Ready · 2, "6 to make · 1 late") and labels it
+  "Overview · 4", where picture 03 draws five rows, one of them held only (Chuletón 0 +1). Slice 9's
+  heading carries a count for every column (its D9), so Overview's heading shows the same number,
+  though picture 03 draws none there: **owner FYI**.
+- **D5. Overview is a column like the others, first and shown.** Design §3.3: "Overview (first …)
+  Shown by default on a kitchen screen". `STATION_COLUMNS.order` becomes `["overview", "waiting",
+  "preparing", "ready"]`, nothing hidden or collapsed. Its heading is slice 9's heading button
+  (`data-column-toggle="overview"`), so it collapses like any column ("Overview · 4" on the strip),
+  and `stationColumnNames()` names it, so the Columns window lists it with no change to the window
+  (slice 9b, D4). **A layout stored before Overview existed** reads with Overview first, shown and
+  open: `sanitise` puts a missing registered key at its default place with its default state
+  (`kitchen-columns.ts:67-76`, slice 9 D3, read), so no compatibility code is written; Task 7 pins
+  it at the screen. **Its width:** picture 03 draws Overview narrower than the card columns, so it
+  keeps `.column`'s `11rem` basis (today's one value; no new `rem`, CLAUDE.md §3) and does not grow,
+  `flex-grow: 0`; its names wrap (`overflow-wrap: anywhere`) rather than cut, since a card's dish
+  names are cut with an ellipsis (`.line-name`, `station-queue.ts:438-443`, read). **The probe
+  (ran)** drew Overview growing like the others and at 1024 px a long dish name no longer fitted its
+  card ("keeps a long dish name whole inside its card at 1024 px": "expected 201 to be less than or
+  equal to 192", `run1-overview.txt`); with `flex-grow: 0` that check passed (`run7-fits.txt`). Its
+  body is one bordered box (`--wt-color-surface`, 1 px `--wt-color-border`, `--wt-radius-md`), one
+  row per dish: the name, then the making count bold at the end ("1", "1.5"), then, while held,
+  "+2" in `--wt-font-size-sm` `--wt-color-text-muted` (muted on surface is 6.13 : 1 light, 7.07 : 1
+  dark, slice 9 D9). With no rows the body is empty and the count reads 0.
+- **D6. Words: one settled, one built from a settled word.** `station.overview` "Overview" /
+  «Resumen» (design §10 (g)). `station.overview_held` "{n} held" / «{n} en espera», visually hidden
+  after the drawn "+2" (which is `aria-hidden`), so a screen reader hears "Secreto ibérico 1, 2
+  held": "Held" «En espera» is §10's settled word. **Not built:** picture 03's key under the list,
+  "After the +: held", and picture 07's second line under Overview in the window, "Counts each dish
+  to make" (slice 9b D10 left it to 9c). Design §10 gives neither a wording, and this slice adds
+  only §10's words; **owner FYI**, with the plan's proposal if wanted: «Tras el +: en espera» and
+  «Cuenta cada plato por hacer», one small follow-up. The tabs and the red bar add no words: a tab
+  is the column's name and count, and its late words reuse `station.late` ("{n} late" «{n} con
+  retraso»). Keys en and es in `apps/till/src/i18n/strings.ts` only.
+- **D7. The switch to tabs: measured, as a rule rather than one width** (design §9's open
+  decision). Design §3.4: "Where the columns do not fit (below about 1000 px; the build measures)".
+  **The build draws tabs exactly when the board is narrower than its shown columns need**, a pure
+  function, `columnsFit`, in a new `apps/till/src/state/kitchen-board-fit.ts`:
+  - an open card column needs **16.5 times the board's text size**; an open Overview its `11rem`
+    basis; a collapsed column `--wt-tap-min`; plus `--wt-space-3` between each two columns (the
+    `.kanban` gap);
+  - a column that is hidden, or that the board cannot draw yet (`held`, `toFire`, `inProgress`),
+    needs nothing; with nothing shown the board fits (it draws no column and no tab).
+  **The measurement (ran, `measure3.txt`):** the narrowest card column holding a dish line whole,
+  stepping one card's column width by 1 px: "2× Strawberries and cream" (the text-size suite's
+  longest dish) needs 229 px at 14 px text and 272 px at 18 px (the 130% text size); "2× Grilled
+  octopus with paprika" 256 and 305. 16.5 text widths is 231 px and 297 px, so a 22-character dish
+  line stays whole at both sizes. The rule then gives, for today's four default columns, a board of
+  **905 px** at standard text (176 + 3 × 231 + 3 × 12) and **1103 px** at 130% (`measure2.txt`'s
+  frame: `pageAt(1024, …)` leaves a 976 px board, `pageAt(1280, …)` 1232 px). So a kitchen screen
+  shows columns from a screen about 950–1000 px wide, the design's "about 1000 px", and tabs on a
+  1024 px screen at 130% text, where four columns cut the dish names (`run1-overview.txt`: the
+  text-size check at 1024 × 768 and 130% failed with Overview drawn; `measure2.txt`: at a 976 px
+  board and 130%, three of the probe's four dish lines cut with Overview not growing). **Why a rule and not one width:** the probe's fixed 1000 px switch
+  (`run5-wide-fixture.txt`) put a 1024 × 768 screen at 100% text into tabs although its columns fit
+  (the text-size check passed there under the rule, `run7-fits.txt`); a rule also lets a cook who
+  hides or collapses columns keep columns on a narrower screen, and moves the switch by itself when
+  A773-2 adds Held: five columns need 1148 px at standard text, so **a 1024 px kitchen screen draws
+  tabs once Held is shown** unless a column is hidden or collapsed (**owner FYI**, and in the
+  hand-off).
+- **D8. Measuring, so the first drawing is already the right one.** The widget measures its own
+  host (`display: block`, as wide as its container: every container above it is a column flex box,
+  `till-station-screen.ts:121-125`, `:181-185`, read): its width (`getBoundingClientRect`), its
+  text size (`getComputedStyle(this).fontSize`, which a dish row inherits, `.line { font: inherit }`,
+  `station-queue.ts:305`, read; a dish name measured 14 px, and 18 px at 130%, `measure3.txt`;
+  Task 6's case 7 checks that the host's size gives D7's switch), the root's font size for `rem`, and the
+  `--wt-tap-min` and `--wt-space-3` tokens (declared in px, `packages/ui-core/src/tokens/structure.css:4`,
+  `:29`, read) read with `getPropertyValue`. It measures **in `willUpdate` before the first
+  render**, so `await el.updateComplete` after a mount already sees tabs or columns. Measured only
+  by the observer, the first drawing is columns and the switch comes a moment later: the probe's
+  observer-only version failed 17 station tests where its measure-before-drawing version failed 65
+  (`run2-tabs.txt`, `run3-tabs-sync.txt`), because which tests saw tabs depended on whether the
+  observer had answered yet. After the first drawing, a `ResizeObserver` on the host follows later
+  changes, acting only when the **width** changes, so
+  the switch's own change of height never feeds back. Disconnected, it stops observing. The
+  precedent is the order screen's measured width (`DRAFT_SIDE_BY_SIDE_MIN_WIDTH`,
+  `till-table-order-screen.ts:161`, `:1467-1503`, read).
+- **D9. The tabs.** A `<nav class="column-tabs" data-column-tabs aria-label="Columns">` row of
+  `<button type="button" class="option column-tab" data-column-tab=${key} aria-pressed>`, with the
+  till's pressed-picker look (`segmentedOptionStyles`, the station picker's, picture 05's bordered
+  tabs with the chosen one filled), wrapping onto a second line on a phone; each reads "Waiting · 2"
+  drawn, its accessible name "Waiting 2" (a real space, the " · " `aria-hidden`, as slice 9's
+  heading). **Which tabs:** every column the board can draw that is not hidden, in the layout's
+  order (design §3.4), so Overview is first by default; with every column hidden, no tabs, and the
+  header row with Columns stays (slice 9b D3). **Which is chosen:** the first tab until a tab is
+  tapped; the choice is kept by the widget while it is mounted, so a 15-second refresh keeps it,
+  and falls back to the first tab when its column is hidden. It is not stored on the device
+  (design §3.6 lists order, shown and collapsed only): **owner FYI**. **Under the tabs**, one
+  `<section class="tab-panel" data-tab-panel=${key} data-column=${state}>` (`data-column` as the
+  column's section has it, `"overview"` for Overview, so the existing helpers find a card in it)
+  holds that column's cards, or Overview's list; no column heading is drawn. **Collapse:** a
+  collapsed column keeps its tab and shows its cards when chosen, and the stored layout is not
+  changed, because a tab already folds every other column away and a tab that opens onto nothing
+  would be a dead control; back on a wide screen it is collapsed again. A773-2's contract says
+  "narrow tabs/list use the same order/visibility/collapse" (plan `:101`): order and visibility are
+  kept; collapse is kept for the pass's narrow **list**, where each section folds (design §3.5),
+  not for tabs (**owner FYI**, and in the hand-off).
+- **D10. The red bar** (design §3.4: "A tab holding a late card carries a red bar, as A757's zone
+  tabs do"; owner, 2026-10-27, slice 9 D14: "A collapsed kitchen column that holds a late card
+  carries the same red bar as slice 9c's narrow tabs"). **Late** is `lateCards` over that column's
+  cards, the header line's rule (a card with a fired dish not Ready whose band is overdue or
+  forgotten), so only Waiting and Preparing can carry it and Overview never. **On a tab:** a
+  `--wt-space-1` bar in `--wt-color-danger` drawn **under** the tab, outside its fill
+  (`box-shadow: 0 var(--wt-space-1) 0 var(--wt-color-danger)`, the row gap `--wt-space-3` so a
+  wrapped line clears it), on the chosen tab too. The floor's zone tab draws it inside, over a
+  tint (`till-floor-screen.ts:484-487`, read), but the floor never marks the zone on screen, and a
+  kitchen tab may be chosen: inside a chosen tab's blue the red is 1.41 : 1 light and 1.30 : 1 dark,
+  against the page 6.11 : 1 and 7.62 : 1 (ran: `python3 -I
+  /Users/clintongormley/waitron-campaign-c/a797-9c-scripts/tab-bar-contrast.py`, WCAG's formula over
+  `colors.css:6`, `:7`, `:14`, `:18`, dark `:142-143`, `:150`, `:154`). **On a collapsed column's
+  strip:** the same bar across the strip's top, inside its border (`box-shadow: inset 0
+  var(--wt-space-1) 0 var(--wt-color-danger)`), against `--wt-color-surface` 6.54 : 1 and 6.94 : 1
+  (ran, the same script), at the top because the strip can run below the screen's edge. An open
+  column draws none (its cards show their own band). Both carry `data-late` and a visually hidden
+  ", 1 late" in their accessible name ("Preparing 1, 1 late"), so the bar is not colour alone, and
+  neither moves (no pulse, so reduced motion needs nothing). A hidden column's late card marks
+  nothing beyond the header line (slice 9b D3).
+- **D11. Tests start at a phone's width, so the station suites take a wide frame.** Every till
+  browser test starts at 414 × 896 (`DEFAULT_FRAME`, `test-helpers.ts:108`, read); under D7 a board
+  there draws tabs, which opens on Overview and draws no card. The probe with tabs at 414 failed
+  231 of 668 station tests (`run4-overview-first.txt`). Seven station suites get
+  `beforeEach(async () => { await page.viewport(1280, 900); })` and `afterEach(resetPage)` (the
+  helper restoring 414 × 896), and the till-app describe whose kitchen display taps a dish the
+  same: **fixture-only**, because each case's subject is not the board's width. **Control (ran):**
+  that fixture alone, with no product change, → `Tests 668 passed (668)` (`run8-fixture-control.txt`).
+  With it and the probe, the failures fell to the 17 changed checks below (`run7-fits.txt`). The
+  cases that set 390 px themselves keep their width and select their card's tab first.
+- **D12. What is not touched.** `till-station-screen.ts`, `till-app.ts`, `till-expo-screen.ts` and
+  `kitchen-columns-dialog.ts` keep their product code: the screen already reads `STATION_COLUMNS`
+  and hands the window `stationColumnNames()` (`till-station-screen.ts:366-367`, `:397`, read).
+  `kitchen-columns.ts` changes only `STATION_COLUMNS`.
+- **D13. The header line is unchanged.** "5 dishes to make · 1 late" still counts every card,
+  hidden and collapsed columns included, and in tabs it sits above the tabs in the header row
+  (picture 05 draws it there). Overview's making counts add up to it (Task 2 pins that).
+- **D14. Task order keeps every task green.** Overview drawn when a layout lists it (Task 4) before
+  it is registered (Task 7); the wide frame (Task 5) before the tabs (Task 6). The text-size check
+  at 1024 × 768 and 130% fails if Overview is registered before tabs exist (four columns cut the
+  names: `run1-overview.txt`), so registration waits for the tabs.
+
+### Changed test checks (from the probe; the implementer confirms each)
+
+**Probe (ran):** in `apps/till`, `pnpm exec vitest run src/widgets/station-queue
+src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout
+src/state/kitchen-columns src/widgets/kitchen-columns-dialog`: base `Test Files 13 passed (13)`,
+`Tests 668 passed (668)` (`base1.txt`); Overview registered and drawn, no tabs → `Tests 12 failed |
+656 passed` (`run1-overview.txt`); Overview with `flex-grow: 0`, D7's rule, tabs opening on
+Overview, and D11's wide frame → `Tests 17 failed | 651 passed (668)` (`run7-fits.txt`). The other
+suites that mount the screen or the app, with tabs at 414 and no wide frame (`src/screens/till-expo-screen
+src/screens/device-screens.phone-margin src/widgets/pressed-pickers.a11y src/screens/till-counter-screen
+src/till-app`) → `Test Files 1 failed | 55 passed (56)`, `Tests 3 failed | 4797 passed (4800)`
+(`run6-others.txt`). Free memory 80 % (ran `memory_pressure`). The probe's tabs were crude (no
+chosen tab, no red bar); the build's own new cases are listed per task.
+
+**The checks that change** (each in the task named; "whichever of Tasks 6 and 7 first sees it
+fail" edits it, the same way):
+
+1. `apps/till/src/state/kitchen-columns.test.ts:46` "reads the defaults when nothing is stored" and
+2. `:60` "keeps a saved layout for its venue, device, screen and station only": compare with a
+   literal default order; it gains `"overview"` first (D5). Task 7.
+3. `apps/till/src/widgets/kitchen-columns-dialog.test.ts:42` "lists the columns it has names for, in
+   the layout's order, numbered": its unnamed key is `overview`, which `stationColumnNames()` now
+   names; the unnamed key becomes `held` (layout `["ready", "held", "waiting", "preparing"]`), so
+   it still checks that a key without a name is left out. Task 4.
+4. `apps/till/src/widgets/station-queue.test.ts:3818` "leaves out the columns it cannot draw yet":
+   Overview is now drawn; expected `["overview", "queued", "preparing", "ready"]` (Held still left
+   out). Task 4.
+5. same file `:4010` "the board's header row: Columns asks to open the window and changes nothing
+   itself": its literal default `columns` gains `"overview"`. Task 7.
+6. same file `:4064` "the board's header row: the station registers only columns the board draws":
+   the names map gains `["overview", t("station.overview")]` first. Task 4.
+7. `apps/till/src/screens/till-station-screen.test.ts:5287` "the device's kitchen columns: a
+   collapsed column stays collapsed when the screen opens again": the stored value's order gains
+   `"overview"`. Task 7.
+8. same file `:5403` "the Columns window: a move reorders that board at once and is kept on the
+   device", 9. `:5433` "the Columns window: with no origin or device it still reorders, for this
+   screen only" and 10. `:2793` "the Columns window: a refresh keeps the window open and the moves
+   made": moving Ready up from the new default gives `["overview", "waiting", "ready",
+   "preparing"]`. Task 7.
+11. and 12. `apps/till/src/widgets/station-queue.test.ts:359` (an `it.each`) "leave a card's dish
+    name uncut at %s px wide (former numbers %j)", its two 390 px variants; 13. and 14. `:3551`
+    "a long heading wraps inside its card at 390 px, its minutes on one line (en-GB|es)"; 15. `:3600`
+    "a dish row spans its card's content in Waiting and Preparing at 390 px" (its 1280 variant is
+    unchanged); 16. `apps/till/src/widgets/station-queue.kitchen-note.test.ts:83` "wraps an
+    unbroken instruction at phone width": at 390 px the board draws tabs (D7, D9), so each case
+    first taps its card's tab (`[data-column-tab="waiting"]`, then `"preparing"` where it checks
+    Preparing) and then checks exactly what it checked. Task 6 or 7.
+17. `apps/till/src/screens/text-size.layout.test.ts:244` (an `it.each`) "on a kitchen station's queue
+    at 1024x768 and 130%, every dish lies inside its card": at that size the four columns do not
+    fit and the board draws tabs (D7). The case taps the Waiting, Preparing and Ready tabs in turn
+    and checks each tab's dishes inside their card; "kitchen cards drawn" becomes the three cards
+    seen over the three tabs, and the font-size and page-width checks stay. Its 1280 variants and
+    the 1024 × 768 100% variant are unchanged (they still draw columns, `run7-fits.txt`). Task 7.
+
+**Fixture-only** (Task 5; no check changes, control `run8-fixture-control.txt`): the wide frame of
+D11 in `src/widgets/station-queue.test.ts`, `station-queue.a11y.test.ts`,
+`station-queue.allergy.test.ts`, `station-queue.kitchen-note.test.ts`,
+`src/screens/till-station-screen.test.ts`, `till-station-screen.a11y.test.ts`,
+`till-station-screen.allergy.test.ts`, and in `src/till-app.test.ts`'s describe "till-app: a box
+update while a kitchen display's dish move still waits for the server" (`:22683`; its three cases
+failed at 414 once tabs existed, `run6-others.txt`: "expected null not to be null").
+
+Any other failure, in any suite a task names, is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **Picture 03's scene through `overviewDishes` and `overviewRows`:** "Secreto ibérico 1 +2",
+   "Chuletón 0 +1" last, Ready left out, the count 4 (D2–D4; Tasks 1, 2, 4).
+2. **Quantities:** a dish sold by weight counts one; "1.5" stays exact; the making counts sum to
+   the header line (D2; Tasks 1, 2).
+3. **The switch at the rule's edge:** 905 and 904 px of board at standard text, 1103 at 130%, a
+   hidden or collapsed column moving it, nothing shown (D7; Tasks 3, 6).
+4. **The first drawing:** a board mounted at 390 px draws tabs with no extra frame; a resize in
+   either direction switches once and does not flicker back (D8; Task 6).
+5. **The chosen tab:** kept on a 15-second refresh and on a new `groups`; falls back when its column
+   is hidden in the Columns window while chosen (D9; Task 6).
+6. **A collapsed column in tabs:** its tab opens it; on a wide screen again it is still collapsed;
+   no `toggle-column` sent (D9; Task 6).
+7. **A layout stored before Overview:** Overview first, shown and open; a stored collapsed Ready
+   stays collapsed (D5; Task 7).
+8. **The red bar:** on a late tab, chosen or not; on a collapsed late strip; not on an open column,
+   Overview, a held card's column or a hidden column; the words ", 1 late"; nothing moves (D10;
+   Task 8).
+9. **Keyboard:** Tab reaches each tab; Enter and Space choose it; the focus ring shows;
+   `aria-pressed` follows (D9; Tasks 6, 10).
+10. **Dark theme, Spanish («Resumen · 4», «Esperando · 2»), 390 px, just under and just over the
+    switch, 1024 and 1280 px** (Task 10).
+
+---
+
+**Task order and why.** The counting function first (Task 1), then the station's adapter (Task 2)
+and the fit rule (Task 3), all pure; the Overview column drawn when a layout lists it (Task 4); the
+wide test frame (Task 5) before the tabs (Task 6); then Overview registered first (Task 7), which
+needs the tabs (D14); the red bar (Task 8); the docs (Task 9); the LOOK (Task 10). Each is one
+implementer's, test first, well under 100 tool calls, and ends green and committed.
+
+### Task 1: The one counting function, in one pure module
+
+**Files:**
+- Create: `apps/till/src/state/kitchen-overview.ts` (D1: `OverviewDish`, `OverviewRow`,
+  `dishThousandths`, `overviewRows`, `rowsToMake`; imports `stringToThousandths` from
+  `@waitron/shared`, as `kitchen-cards.ts:1` does, and nothing from `api/client.ts`)
+- Test: `apps/till/src/state/kitchen-overview.test.ts`
+
+- [ ] **Step 1: Failing tests**, in one `describe("the kitchen Overview's counts")`:
+  1. "one row per name, making and held apart" — `[{ name: "Secreto ibérico", thousandths: 1000,
+     stage: "making" }, { name: "Secreto ibérico", thousandths: 2000, stage: "held" }, { name:
+     "Entrecot", thousandths: 1000, stage: "making" }]` → `[{ name: "Secreto ibérico", making:
+     1000, held: 2000 }, { name: "Entrecot", making: 1000, held: 0 }]`.
+  2. "rows with something to make come first, each group in first-appearance order" — input order
+     Chuletón (held), Patatas (making), Secreto (held), Secreto (making), Entrecot (making) → names
+     `["Patatas", "Secreto", "Entrecot", "Chuletón"]` (Secreto first appears before Entrecot).
+  3. "the same name with different quantities adds up exactly" — 1500 + 1000 → 2500.
+  4. "no dishes, no rows" → `[]`; and a dish of 0 thousandths makes no row.
+  5. "rowsToMake counts the rows with something to make" — picture 03's five rows (Chuletón 0 +1)
+     → 4.
+  6. `it.each` "dishThousandths: %s" — `("2.000", undefined, undefined)` → 2000; `("1.500", null,
+     undefined)` → 1500; `("0.350", { en: "kg" }, undefined)` → 1000 (the unit shows: counts one);
+     `("3.000", { en: "each" }, true)` → 3000 (sold in Each: the unit is left out, so it counts by
+     quantity), as `thousandthsToMake` decides today (`kitchen-cards.ts:159-160`, read).
+  7. "does not change its input" — a frozen array of frozen dishes.
+- [ ] **Step 2: Run; expect FAIL** (the module does not exist) `pnpm --filter @waitron/till exec vitest run src/state/kitchen-overview.test.ts`
+  (memory first: `memory_pressure | grep free`).
+- [ ] **Step 3: Implement** D1–D3. One `Map` keyed by name for the sums and a list for first
+  appearance; then the two groups.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count: 6 cases plus the `it.each`'s four, 10).
+- [ ] **Step 5:** `pnpm --filter @waitron/till typecheck`; `pnpm exec eslint apps/till/src/state/kitchen-overview.ts apps/till/src/state/kitchen-overview.test.ts`;
+  `pnpm format:check`; ledger; `git commit -s -m "A797-9c: one function counts the kitchen's dishes for Overview"`
+
+### Task 2: The station's dishes for Overview
+
+**Files:**
+- Modify: `apps/till/src/state/kitchen-cards.ts` (`overviewDishes(cards)`, D1: over the cards in
+  their order and each card's `items` in turn, `firedAt` null → `held`, fired and not `ready` →
+  `making`, `ready` left out, `thousandths` from `dishThousandths(item.quantity, item.unitName,
+  item.soldInEach)`; `thousandthsToMake` (`:153-164`) sums the `making` dishes' thousandths through
+  the same helper)
+- Test: `apps/till/src/state/kitchen-cards.test.ts`
+
+- [ ] **Step 1: Failing tests:**
+  1. "the station's dishes for Overview: held, making, and no Ready" — picture 03's scene as cards
+     (T9 Waiting: 1 Secreto, 1 Patatas; T5 Waiting: 2 Patatas; T2 Preparing: 1 Entrecot, 1
+     Hamburguesa; T4 held: 2 Secreto, 1 Patatas; T7 held: 1 Chuletón; one Ready card), through
+     `overviewRows(overviewDishes(kitchenCards(orders)))` → Secreto 1000/2000, Patatas 3000/1000,
+     Entrecot 1000/0, Hamburguesa 1000/0, Chuletón 0/1000, Chuletón last, no Ready dish.
+  2. "Overview's making counts add up to the dishes to make" — the same scene plus a "0.35 kg ×
+     Pulpo" dish: the sum of `making` equals `thousandthsToMake`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/kitchen-cards.test.ts`
+  (the export is missing; first add an empty stub returning `[]` so the file loads and the cases
+  fail on their assertions).
+- [ ] **Step 3: Implement.** `thousandthsToMake`'s own tests must pass unchanged.
+- [ ] **Step 4: Run; expect PASS**, then `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts -t "dishes-to-make"`
+  (the header line's describe, `station-queue.test.ts:3243`) → passes unchanged.
+- [ ] **Step 5:** typecheck till; eslint the changed files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9c: the kitchen cards hand Overview their dishes"`
+
+### Task 3: When a kitchen board's columns fit
+
+**Files:**
+- Create: `apps/till/src/state/kitchen-board-fit.ts` (D7):
+  ```ts
+  export interface BoardMeasure { width: number; textPx: number; remPx: number; tapMinPx: number; gapPx: number }
+  /** An open card column holds a 22-character dish line whole at any text size (measured, plan slice 9c D7). */
+  export const CARD_COLUMN_TEXT_WIDTHS = 16.5;
+  /** `.column`'s flex basis in `station-queue.ts`, which Overview keeps and does not grow past. */
+  export const OVERVIEW_COLUMN_REMS = 11;
+  /** Whether the shown columns, in order, fit side by side; `collapsed` among them take a strip. */
+  export function columnsFit(board: BoardMeasure, shown: readonly ColumnKey[], collapsed: readonly ColumnKey[]): boolean;
+  ```
+- Test: `apps/till/src/state/kitchen-board-fit.test.ts`
+
+- [ ] **Step 1: Failing tests** (`remPx: 16, tapMinPx: 44, gapPx: 12` unless a case says otherwise):
+  1. `it.each` "four columns at %i px text need %i px" — `textPx` 14 → 905 fits and 904 does not;
+     `textPx` 18 → 1103 fits and 1102 does not (`shown` `["overview", "waiting", "preparing",
+     "ready"]`).
+  2. "three card columns need less" — no Overview, 14 px → 717 fits, 716 does not.
+  3. "a collapsed column takes a strip" — `collapsed: ["waiting", "preparing"]` → 531 fits, 530
+     does not.
+  4. "Held as a fifth column" — `["overview", "held", "waiting", "preparing", "ready"]`, 14 px →
+     1148 fits, 1147 does not (the hand-off's figure, D7).
+  5. "nothing shown always fits" — `shown: []`, width 0 → true.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/kitchen-board-fit.test.ts`.
+- [ ] **Step 3: Implement** D7: each shown key adds `collapsed` → `tapMinPx`, `overview` →
+  `OVERVIEW_COLUMN_REMS * remPx`, any other → `CARD_COLUMN_TEXT_WIDTHS * textPx`; plus `gapPx *
+  (shown.length - 1)`; fits when `width >= need`. The caller passes only keys it can draw.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count).
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9c: a rule for when a kitchen board's columns fit"`
+
+### Task 4: The Overview column, drawn when a layout lists it
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (`#board` draws a `section.column.column-overview
+  data-column="overview"` for the key `overview` when it is in `columns.order` and not hidden: slice
+  9's heading button with `t("station.overview")` and the count `rowsToMake(rows)`, collapsible as
+  any column; open, a `<ul class="overview" data-overview>` of `<li data-overview-row>` rows, each
+  `<span class="overview-name">`, `<span data-overview-making>` (`trimQuantity(thousandthsToDecimal(row.making))`),
+  and while `held > 0` `<span data-overview-held aria-hidden="true">+N</span>` then a
+  `.visually-hidden` ", N held"; the rows from `overviewRows(overviewDishes(cards))`;
+  `stationColumnNames()` names `overview` first; styles per D5 with `--wt-*` tokens only:
+  `.column-overview { flex-grow: 0; }`, the list box, names `overflow-wrap: anywhere`),
+  `apps/till/src/i18n/strings.ts` (`station.overview` "Overview" / «Resumen», `station.overview_held`
+  "{n} held" / «{n} en espera»)
+- Test: `apps/till/src/widgets/station-queue.test.ts` (a new `describe("the Overview column")`, with
+  "the board's columns" describe's builders, `:3750-3800`), `station-queue.a11y.test.ts` (inside the
+  both-theme describe), and changed checks 3, 4 and 6
+
+- [ ] **Step 1: Failing tests** (each mounted with `columns: { order: ["overview", "waiting",
+  "preparing", "ready"], hidden: [], collapsed: [] }`, at 1280 × 900 with `page.viewport` restored
+  after, until Task 5 gives the file its wide frame):
+  1. "Overview lists each dish to make with how many, and the held after a +" — picture 03's scene
+     (Task 2's case 1 as queue orders): the rows read, flattened, "Secreto ibérico 1 +2",
+     "Patatas bravas 3 +1", "Entrecot 1", "Hamburguesa 1", "Chuletón 0 +1", in that order; no row
+     for the Ready card's dish.
+  2. "Overview's heading counts the dishes with something to make" — `[data-column="overview"]
+     [data-column-count]` reads "4"; its `.column-title` reads `t("station.overview")`.
+  3. "a row tells assistive technology how many are held" — the Secreto row's text content
+     includes ", 2 held" in a `.visually-hidden` span and its "+2" is `aria-hidden`.
+  4. "Overview collapses by its heading like any column" — click `[data-column-toggle="overview"]`
+     → one `toggle-column` `{ key: "overview" }`; with `collapsed: ["overview"]` no
+     `[data-overview-row]`, its button named "Overview 4".
+  5. "Overview is narrower than a card column, and a long name wraps inside it" — at 1280 px:
+     Overview's section is narrower than Waiting's; a row named "Grilled octopus with paprika and
+     potatoes" lies inside the list box (`textRects` within its row).
+  6. "with nothing to make or held, Overview shows 0 and no rows" — only a Ready card.
+  7. "Overview reads «Resumen» in Spanish, and a held row «2 en espera»" — `setLocale("es-ES")`,
+     restored in `finally`.
+  8. a11y: "a board with Overview has no violations" (`reducedMotion: true`, a fixed `now`), once
+     per theme.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts -t "Overview"`.
+- [ ] **Step 3: Implement**; then edit changed checks 3, 4 and 6 as listed, and nothing else.
+- [ ] **Step 4: Run; expect PASS**, then `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout src/state/kitchen-columns src/widgets/kitchen-columns-dialog src/state/kitchen-cards src/state/kitchen-overview src/i18n`
+  → every test passes (the default layout has no Overview yet, so the screen's checks do not
+  change here); a failure other than 3, 4 and 6 is a STOP. Then, from the root,
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint the changed files; `pnpm format:check`; ledger, with
+  checks 3, 4 and 6 and their reasons; `git commit -s -m "A797-9c: the kitchen board draws an Overview column of dishes to make"`
+
+### Task 5: The station suites take a wide test frame (fixture-only)
+
+**Files:**
+- Modify (tests only): `apps/till/src/widgets/station-queue.test.ts`,
+  `station-queue.a11y.test.ts`, `station-queue.allergy.test.ts`,
+  `station-queue.kitchen-note.test.ts`, `apps/till/src/screens/till-station-screen.test.ts`,
+  `till-station-screen.a11y.test.ts`, `till-station-screen.allergy.test.ts` (top level of each:
+  `beforeEach(async () => { await page.viewport(1280, 900); })` and `afterEach(resetPage)`, with
+  `page` from `vitest/browser` and `resetPage` from `../widgets/test-helpers.js` or
+  `./test-helpers.js`), `apps/till/src/till-app.test.ts` (the same two hooks inside the describe at
+  `:22683` only). Task 4's own cases drop their per-case `page.viewport` once their file has the
+  frame. Nothing else changes (D11).
+
+- [ ] **Step 1: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout src/state/kitchen-columns src/widgets/kitchen-columns-dialog`
+  before the change and record its `Tests` count.
+- [ ] **Step 2: Add the frame**; run the same command → the same count, all passing (control:
+  `run8-fixture-control.txt`); then `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t "a box update while a kitchen display"`
+  → its three cases pass.
+- [ ] **Step 3:** typecheck till; eslint the changed files; `pnpm format:check`; ledger (the files
+  under "Fixture-only"); `git commit -s -m "A797-9c: the kitchen board's tests run at a kitchen screen's width"`
+
+### Task 6: Below the width its columns need, the board shows one column at a time
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (D7–D9: `@state() private board?: BoardMeasure`;
+  `#measure()` reading the host per D8; `willUpdate` measures when `board` is unset and the host is
+  connected; a `ResizeObserver` on the host from `connectedCallback`, disconnected in
+  `disconnectedCallback`, re-measuring only when the width changed; `#shown()` = `columns.order`
+  keys the board can draw (`overview` and `DRAWN`'s), not hidden; render draws, in place of
+  `#board`, `#tabs(cards)` when `board` is set and `!columnsFit(board, shown, columns.collapsed)`:
+  the nav and one panel per D9; `@state() private chosenTab?: ColumnKey`; `segmentedOptionStyles`
+  added to `styles`; tokens only)
+- Test: `apps/till/src/widgets/station-queue.test.ts` (a new `describe("the board's narrow tabs")`),
+  `station-queue.a11y.test.ts`, and whichever of changed checks 11–16 fail here
+
+- [ ] **Step 1: Failing tests** (each name starts "the board's narrow tabs:"; the layout is passed
+  explicitly with Overview first, as Task 4's cases; a resize is followed by `vi.waitFor` on the
+  expected element, never a fixed sleep):
+  1. "at 390 px the board draws a tab per shown column, in order, the first chosen" — `pageAt(390,
+     844)`, then right after `mountWidget`'s `updateComplete`, with no extra frame (D8):
+     `[data-column-tab]` keys `["overview", "waiting", "preparing", "ready"]`, the first
+     `aria-pressed="true"`, the rest `"false"`; one `[data-tab-panel="overview"]` holding the
+     `[data-overview-row]`s; no `.kanban`.
+  2. "a tab is named by its column and count" — `getByRole("button", { name: "Waiting 2" })`; the
+     drawn text "Waiting · 2".
+  3. "tapping a tab shows that column's cards, and the choice survives new orders" — click Preparing:
+     its panel `data-column="preparing"` holds its cards; set `groups` to a copy with one more card
+     and await: Preparing still chosen.
+  4. "a hidden column has no tab, and a chosen column that is hidden gives way to the first" —
+     `hidden: ["waiting"]` → three tabs; choose Ready, then set `hidden: ["waiting", "ready"]` →
+     Overview chosen.
+  5. "with every column hidden there are no tabs, and Columns stays" — no `[data-column-tab]`,
+     `[data-columns-open]` present.
+  6. "a collapsed column keeps its tab and shows its cards there, and nothing is asked of the
+     layout" — `collapsed: ["ready"]`: choose Ready → its cards drawn; no `toggle-column` event.
+  7. `it.each` "at %s the board draws %s" (D7's figures, through the real widget):
+     `pageAt(1024, 768, 100)` → columns; `pageAt(1024, 768, 130)` → tabs; `pageAt(1280, 800, 130)`
+     → columns; `pageAt(1024, 768, 130)` with `collapsed: ["preparing", "ready"]` → columns.
+  8. "the board changes to tabs and back as its width crosses the need" — mount at 1280: `.kanban`;
+     `page.viewport(800, 900)` → `vi.waitFor` `[data-column-tabs]`; back to 1280 → `.kanban`, the
+     same element instance of the widget.
+  9. "Enter and Space choose a tab" — focus the Ready tab, `userEvent.keyboard("{Enter}")` → Ready
+     chosen; focus Waiting, `" "` → Waiting chosen.
+  10. "the tabs read «Resumen · 4» and «Esperando · 2» in Spanish" — `setLocale("es-ES")`, restored
+      in `finally`.
+  11. a11y: "the narrow tabs have no violations", once per theme, at 390 px.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts -t "narrow tabs"`.
+- [ ] **Step 3: Implement** D7–D9. Then run the probe's command (Task 5's Step 1); of changed
+  checks 11–16, edit **only** those that fail, as listed (tap the card's tab first), and nothing
+  else.
+- [ ] **Step 4: Run; expect PASS**, the same command → every test passes; then the other suites
+  that mount the queue or the screen,
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-expo-screen src/screens/device-screens.phone-margin src/widgets/pressed-pickers.a11y src/screens/till-counter-screen src/till-app`
+  (memory first; `run6-others.txt` had 4800 tests; any failure is a STOP), then from the root
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts scripts/native-form-fields.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger, with each changed check
+  edited here; `git commit -s -m "A797-9c: a narrow kitchen board shows its columns as tabs"`
+
+### Task 7: Overview is the first column by default
+
+**Files:**
+- Modify: `apps/till/src/state/kitchen-columns.ts` (`STATION_COLUMNS.order` `["overview", "waiting",
+  "preparing", "ready"]`, D5)
+- Test: `apps/till/src/screens/till-station-screen.test.ts` (inside the top-level "the device's kitchen
+  columns" describe, `:5269`, with its `mountOperator`, `clearStoredColumns` and `BOX`), and changed
+  checks 1, 2, 5, 7–10, 17 and the rest of 11–16
+
+- [ ] **Step 1: Failing tests:**
+  1. "the device's kitchen columns: Overview comes first by default" — a fresh screen: the widget's
+     `columns.order` is `["overview", "waiting", "preparing", "ready"]` and the first
+     `[data-column]` is `overview`.
+  2. "the device's kitchen columns: a layout saved before Overview shows Overview first, shown and
+     open" — store `{ version: 1, order: ["ready", "waiting", "preparing"], hidden: [], collapsed:
+     ["ready"] }` under D2's key for `st-1`, then mount: order `["overview", "ready", "waiting",
+     "preparing"]`, Overview not hidden or collapsed, Ready still collapsed (slice 9 D3).
+  3. "the device's kitchen columns: the Columns window lists Overview" — open Columns: the first row
+     reads `t("station.overview")`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen.test.ts -t "the device's kitchen columns"`.
+- [ ] **Step 3: Implement** D5 (one line); then edit changed checks 1, 2, 5, 7–10 and 17, and those
+  of 11–16 that Task 6 did not, as listed, and nothing else.
+- [ ] **Step 4: Run; expect PASS**, Task 5's Step 1 command and Task 6's Step 4 commands → every
+  test passes; a failure not listed is a STOP.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger, with every changed check
+  and its reason; `git commit -s -m "A797-9c: a kitchen screen opens with Overview first"`
+
+### Task 8: A late card puts a red bar on its tab, and on its column when collapsed
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (D10: per column, `lateCards(inColumn, now)`;
+  a tab with late cards gets `data-late` and a `.visually-hidden` `, ${t("station.late")}` with the
+  number; a collapsed column's `[data-column-toggle]` the same; styles: `.column-tab[data-late] {
+  box-shadow: 0 var(--wt-space-1) 0 var(--wt-color-danger); }`, `.collapsed
+  .column-toggle[data-late] { box-shadow: inset 0 var(--wt-space-1) 0 var(--wt-color-danger); }`,
+  the tab row's `row-gap: var(--wt-space-3)`)
+- Test: `apps/till/src/widgets/station-queue.test.ts` (a new `describe("the late bar")`, with the
+  file's `ageBill`/`ageDish` builders and `AGE_NOW`, `:3110-3140`),
+  `station-queue.a11y.test.ts`
+
+- [ ] **Step 1: Failing tests** (each name starts "the late bar:"):
+  1. "a tab whose column holds a late card carries it and says so" — at 390 px, an overdue card in
+     Preparing and a fresh one in Waiting: `[data-column-tab="preparing"]` has `data-late` and the
+     accessible name "Preparing 1, 1 late"; Waiting's tab has neither; Preparing's computed
+     `box-shadow` names the danger colour (read `--wt-color-danger` from the host for the
+     comparison).
+  2. "the chosen tab keeps its bar" — choose Preparing: still `data-late`.
+  3. "Overview's tab and a held card's column never carry it" — a held card only in Waiting: no
+     `data-late` anywhere.
+  4. "a collapsed column holding a late card carries the bar on its strip" — at 1280 px,
+     `collapsed: ["preparing"]`: its `[data-column-toggle]` has `data-late`, the name "Preparing 1,
+     1 late", an inset `box-shadow`; open again (`collapsed: []`) → no `data-late`.
+  5. "a hidden column's late card marks nothing but the header line" — `hidden: ["preparing"]`:
+     no `data-late`; `[data-kitchen-counts]` still ends "· 1 late".
+  6. "the bar holds still" — the late tab's and strip's `getAnimations()` are empty, with and
+     without `reducedMotion`.
+  7. "a late tab reads «Preparando 1, 1 con retraso» in Spanish" — `setLocale("es-ES")`, restored.
+  8. a11y: "a late tab and a late strip have no violations", once per theme.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts -t "late bar"`.
+- [ ] **Step 3: Implement** D10.
+- [ ] **Step 4: Run; expect PASS**, then Task 5's Step 1 command → every test passes; from the root
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9c: a late card marks its tab, and its column while collapsed, with a red bar"`
+
+### Task 9: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/kitchen-service.md` (`## Work the kitchen screen
+  {#kitchen-screen}`, `:120-146`), `apps/server/src/guide/es/kitchen-service.md` (the same section,
+  `:137-169`), `docs/developers/design-system.md` (`### The kitchen screen's cards`, `:5485-5550`),
+  `docs/backlog.md` (the A797 entry in the priority list, `:120-145`; the area entry, `:2704-2718`;
+  the A773-2 entry, `:2087-2101`), `docs/backlog/till.md` (A797's entry, `:1034-1070`),
+  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.3's Overview bullet, `:310-312`;
+  §3.4, `:345-350`; §9's first bullet, `:723`: dated pointers)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+- [ ] **Step 1: Guides.** English, in the section: the first column, **Overview**, lists each dish
+  waiting or being made with how many, and after a **+** how many more are held ("Secreto ibérico
+  1 +2"); its heading counts the dishes with something to make; it can be collapsed, moved or hidden
+  like any column. Then: where the screen is too narrow for its columns, it shows one at a time,
+  and the columns become tabs in the same order ("**Waiting · 2**"); tap a tab to see that column; a
+  hidden column has no tab; a tab whose column holds a late card has a red bar under it, and a
+  collapsed column holding a late card has a red bar across its top. Spanish the same, with
+  «Resumen», «Esperando · 2» (read the `es` block's `station.*` words before writing); Spanish only
+  in the Spanish file.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md**, in "The kitchen screen's cards": the first sentence names
+  Overview among the columns; a paragraph: Overview's rows come from `overviewRows`
+  (`apps/till/src/state/kitchen-overview.ts`) over `overviewDishes` (`kitchen-cards.ts`), one per
+  kitchen name, making then "+held", rows with something to make first, its count the rows with
+  something to make, the column not growing past `.column`'s basis; the board draws tabs when
+  `columnsFit` (`apps/till/src/state/kitchen-board-fit.ts`) says its shown columns do not fit,
+  measured on the host before the first render and on a width change; the tabs are the till's
+  pressed pickers (`segmentedOptionStyles`) with `aria-pressed`, in layout order, the first chosen
+  until a tap, a collapsed column's tab still opening it; a late column's tab carries a
+  `--wt-space-1` `--wt-color-danger` bar outside its fill and a collapsed late column an inset bar
+  across its top, each with ", N late" in its name.
+- [ ] **Step 4: Backlog** (in this PR, before `/finish-branch`; no docs-only push to `main` after
+  the merge, per the watcher's note of 2026-10-27 ~06:53). Both A797 entries in `docs/backlog.md`
+  and the one in `docs/backlog/till.md`: slice 9c (Overview, the first kitchen column, counting
+  each dish to make with the held after a +; below the width its columns need, a kitchen board
+  shows them as tabs; a late card's tab, and its collapsed column, carry a red bar) is delivered
+  from the build plan's slice 9c, with no PR number (the queue file keeps it); what is left of
+  A797: slices 10–11 once A803's slice 3 lands, 12b after A773-2. The **A773-2 entry** gains the
+  hand-off, addressed to nobody: Overview on the pass calls `overviewRows` from
+  `apps/till/src/state/kitchen-overview.ts` with its own `OverviewDish`es (D1), and builds no
+  second aggregator; its `OverviewFact` needs `unitName` and `soldInEach` for a dish sold by weight
+  to count one; once station dishes carry a requested phase, `overviewDishes` counts them as held;
+  with Held as a fifth column a kitchen board needs 1148 px at standard text (`columnsFit`), so a
+  1024 px screen draws tabs unless a column is hidden or collapsed; the kitchen's tabs keep order
+  and visibility but not collapse, which the pass's narrow list keeps (D9). Open no new entry
+  unless the LOOK finds something this slice does not fix (its number from
+  `~/waitron-campaign-shared/next-item-number`: read it, use it, write the next back).
+- [ ] **Step 5: Design file.** After §3.3's Overview bullet: "_2026-10-27, slice 9c: one row per
+  dish name, rows with something to make first; the count is the rows with something to make; the
+  key "After the +: held" is not drawn; see the build plan's slice 9c, D2–D4, D6._" After §3.4: "_2026-10-27,
+  slice 9c: the board draws tabs when its shown columns do not fit, by a measured rule (a board of
+  905 px at standard text for the four default columns, 1103 px at 130%); the first tab is chosen
+  until a tap; a collapsed column keeps its tab; a collapsed column holding a late card carries the
+  red bar too; see the build plan's slice 9c, D7–D10._" After §9's first bullet: "(2026-10-27: the
+  kitchen screen's switch is settled in the build plan's slice 9c, D7; the pass's is A773-2's.)"
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-9c — guides, design system and backlog for Overview and the narrow tabs"`
+
+### Task 10 (visual): LOOK at Overview, the tabs and the red bar
+
+Dispatched as one foreground subagent (`run_in_background: false`), not an implementer (it changes
+no code), as slice 9b's LOOK was run (its scripts:
+`/Users/clintongormley/waitron-campaign-c/a797-9b-scripts/`). It writes its report to
+`/Users/clintongormley/waitron-campaign-c/a797-9c-look-report.md`.
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-9c-overview-narrow-tabs`; `wa-wt ls`
+  for the URLs. Enrol one browser context as a kitchen display showing the demo's kitchen station
+  screen, and one till context signed in, as slice 9b's LOOK did. Make food so Waiting, Preparing
+  and Ready each hold a card, one dish appears on two cards, one group is held, and one card is
+  late (slice 8's LOOK Step 2: lower the station's Waiting, Overdue and Forgotten after to 1, 2 and
+  3 minutes, noting the values first and putting them back after).
+- [ ] **Step 2: Find the switch.** On the kitchen display with the default columns, step the
+  viewport width down from 1100 px by 10 px and record the first width that draws
+  `[data-column-tabs]`; report it beside D7's expectation (a board of 905 px).
+- [ ] **Step 3: Look** with the workspace's Playwright Chromium (the script in
+  `/Users/clintongormley/waitron-campaign-c/a797-9c-scripts/`, never in the worktree, its process id
+  recorded), on the kitchen display at **1280 px**, **1024 px**, **10 px over** and **10 px under**
+  the switch, and on the till's Station screen at **390 px** (phone width), **light and dark**,
+  **English and Spanish**:
+  - Overview: its rows, counts and "+N"; held-only rows last; its heading count; collapsed
+    («Resumen · N»);
+  - the tabs: their order, the chosen one, «Esperando · 2»; tap each; a refresh (wait 15 s) keeps
+    the chosen tab; the wrap at 390 px;
+  - Columns: Overview listed first; hide Overview → its tab goes; move Ready first → the tabs
+    follow; collapse Preparing on a wide screen, then narrow the window: its tab still opens it;
+  - the late card: the red bar under its tab (chosen and not) and across its collapsed column's
+    top; none on an open column;
+  - keyboard: Tab to the tabs, the focus ring, Enter and Space choose;
+  - reduced motion: nothing moves;
+  - set the 1280 px light English picture beside picture 03
+    (`docs/backlog/mockups/a797-device-screens/03-kitchen-screen.png`) and the 390 px picture
+    beside picture 05's left (`05-narrow.png`), and describe each difference in the report: no
+    "After the +: held" key (D6), a count in Overview's heading (D4), the row order (D3), no Held
+    column (A773-2), the corner on its own row and the other slice 8–9b departures are expected;
+    anything else is a finding.
+- [ ] **Step 4: Save** each picture as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-9c-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, and describe what was seen in the report, the
+  ledger and the PR body. Put back every demo setting changed, and leave the device's columns as
+  the demo had them.
+- [ ] **Step 5: Stop** what you started: the script's process by its recorded id, then
+  `wa-wt down waitron-feat-a797-9c-overview-narrow-tabs`.
+
+### Closing slice 9c
+
+- Focused runs per task as above; CI runs the till's package suites and coverage (and the server's
+  for the guides). Read the `changes` job's outputs and the till's coverage or merge job on the
+  current head before calling the PR green. Code this slice leaves unreached is deleted, never
+  excluded (Global constraints).
+- `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read, one
+  Codex run-it review and the convention seat.
+- PR body. First line: no venue reset. Then: **What a cook sees** (Overview first; tabs where the
+  columns do not fit; the red bar on a late tab and a late collapsed column); **What A773-2
+  reuses** (`kitchen-overview.ts`, D1); **Decisions** D1–D14 in one line each; **Changed test
+  checks** (the 17 above, each with its reason, and the fixture-only files, with the probe's
+  receipts); **New words** (`station.overview`, `station.overview_held`); **LOOK**.
+- **Owner FYIs** (one line each in the PR and lane C's questions file): D2 (rows by name; a merged
+  board's rows run across its stations); D3 (row order); D4 (Overview's count, and a number in its
+  heading); D6 (picture 03's "After the +: held" and picture 07's "Counts each dish to make" are not
+  drawn, with the proposed Spanish if wanted); D7 (the switch is a measured rule: about 950–1000 px
+  for today's columns at standard text, tabs on a 1024 px screen at 130% text, and on a 1024 px
+  screen once A773-2's Held is shown unless a column is hidden or collapsed); D9 (the first tab is
+  chosen until a tap, not kept on the device; a collapsed column keeps its tab); D10 (the bar under
+  a tab rather than inside it, and across the top of a collapsed strip).
+- **Owner questions:** none.
+- The hand-off for A773-2 is in its `docs/backlog.md` entry (Task 9), not addressed to a lane.
+- After merge: delete the branch local and remote and check the remote one is gone; update the
+  ledger and the queue file with the PR number (no docs-only push to `main`); A797's next slices
+  wait for A803's slice 3 (10–11) and A773-2 (12b).
 
 ---
 
