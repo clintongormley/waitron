@@ -53,7 +53,7 @@ Stripe account, the BalanceTransaction's `amount` is `1234`, its `currency` is `
 (https://docs.stripe.com/api/balance_transactions/object), and "If the charge currency differs
 from your settlement currency … Stripe converts the charge to your settlement currency"
 (https://docs.stripe.com/currencies/conversions). Waitron charges in euros, so an account whose
-settlement currency is not the euro would make every payment differ. Left open by A846.
+settlement currency is not the euro would make every payment differ.
 
 ## A846's points for the owner at land: held card payments
 
@@ -179,7 +179,7 @@ payment already running; neither should change the assignment. Sign out, tap a r
 and sign in normally: the selection must wait for sign-in. Open a row's QR camera, return to the
 list and close the dialog; NFC must resume without a second selection from the same tap. Lock the
 phone or leave the app and return, then tap again. Browser tests use simulated readers; these
-box-address checks remain unverified. Left open by W102.
+box-address checks remain unverified.
 
 ## Check NFC sticker writing and locking on the box's address
 
@@ -187,7 +187,7 @@ On the OnePlus 13 at `https://waitron.local`, open a reader or portable printer'
 in the dashboard. Write a spare unlocked sticker and check its text with the till. Write again
 after moving the sticker away to check the retry message. Lock only a disposable sticker after
 reading the permanent warning, then try rewriting it. Browser tests use simulated writers; these
-box-address write/read/lock checks remain unverified. Left open by W102.
+box-address write/read/lock checks remain unverified.
 
 ## Check equipment labels on a physical venue printer
 
@@ -195,7 +195,7 @@ On the OnePlus 13 at `https://waitron.local`, open a portable printer's Equipmen
 Print on a printer, choose that printer and print. Check its job preview, read the paper's QR in
 the till dialog, and check the name and code are legible. Repeat for a reader label on a second
 active printer. Confirm neither print opens the drawer. Application payload checks do not
-establish a physical print; these checks remain unverified. Left open by W102.
+establish a physical print; these checks remain unverified.
 
 ## A guest paying from their own phone
 
@@ -248,7 +248,7 @@ because if the reader owns the whole step there may be nothing for us to build.
 
 ## `finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled
 
-Left open by A526. When a card payment's last step tries to file the sale and finds a sale already
+When a card payment's last step tries to file the sale and finds a sale already
 on the order, it answers that sale's receipt instead of failing (`finalizeCapture`'s catch,
 `apps/server/src/till-sale.ts`). The receipt comes from `readSettledTicket`, which reads the sale
 and never the order's status (read). So if another writer filed a sale on an order that is still
@@ -261,7 +261,7 @@ than show a receipt).
 
 ## Check how real Stripe answers a malformed reader id, and one from another Stripe account
 
-Left open by A519 (#1566). The add-reader route answers `reader.reference_unknown` when Stripe's
+The add-reader route answers `reader.reference_unknown` when Stripe's
 library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts`
 `readers.add`), and its tests used a local server pretending to be Stripe answering 404
 `resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
@@ -273,7 +273,7 @@ A reader's status and the provider's available readers wait up to 250 seconds. S
 gives up on an attempt after 80 seconds of silence once connected and tries three times (stated
 in `defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps
 sending data slowly, or a connection that is slow to open, can take longer, since Stripe's limit
-is on silence, not on the whole answer. Left open by A255 (#1145, lane A's W18c).
+is on silence, not on the whole answer.
 
 ## The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit
 
@@ -286,7 +286,6 @@ connections to the box; W18c #1145 and W48 #1162).
 ## Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is the SumUp provider's `resolvePending`) do not both succeed
 
 The second pass throws partway instead of skipping the rows the first resolved.
-Left open by #558.
 
 ## Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991)
 
@@ -377,7 +376,7 @@ own tip screen was switched on outside Waitron; other causes were not checked. N
 Once no card payment of the order runs in this process, a collect is accepted
 (`ordersWithUnfiledPayment`, `apps/server/src/till-sale.ts`, counts no `settled` row). A526's
 review measured it with `FakePaymentProvider.forward`; of the adapters, only
-`StripeOnDeviceProvider`, which no app builds, settles forwarded rows. Left open by A526.
+`StripeOnDeviceProvider`, which no app builds, settles forwarded rows.
 
 ## Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive
 
@@ -385,7 +384,7 @@ SumUp's
 older `refund` call still parses a 2xx or 4xx body as JSON
 (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with
 an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
-reversal primitive. Left open by A632.
+reversal primitive.
 
 ## A placed order with no invoice is not checked against stored card payments when it is cancelled
 
@@ -422,7 +421,7 @@ and shows a clear message.
 Not yet checked: the payment API's
 `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
 `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
-the same column. Left open by the table actions plan.
+the same column.
 [Detail](till.md#tables-parties-and-bills--the-tills-table-actions)
 
 ## Loose ends left by A633
