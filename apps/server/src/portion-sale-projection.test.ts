@@ -1,12 +1,39 @@
-import { grossLockedLines, rateLines, type LockedLine, type VatClass } from "@waitron/catalogue";
-import { decimal, sumDecimals } from "@waitron/shared";
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import {
+  createExtraList,
+  createProduct,
+  grossLockedLines,
+  rateLines,
+  readContentLanguages,
+  writeProductModifiers,
+  type LockedLine,
+  type VatClass,
+} from "@waitron/catalogue";
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { persons } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { applyAdjustment } from "./adjustments-apply.js";
+import { readBillEditState } from "./bill-editing.js";
+import { withReceiptListPrices } from "./receipt-lines.js";
+import { partyRevisionOfOrder } from "./parties.js";
 import {
   projectPortionSale,
   type PortionBinding,
   type ProjectedLine,
 } from "./portion-sale-projection.js";
-import type { StoredOrderLine } from "./working-order.js";
+import { transferItems } from "./testing/bill-action-fixture.js";
+import { cancelLine } from "./testing/cancel-line.js";
+import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
+import { splitPartyBill } from "./testing/serve-line.js";
+import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-extras-venue.js";
+import type { DeviceRequestConfig } from "./till-config.js";
+import { readLockedLines, splitLinesWithinOrder, type StoredOrderLine } from "./working-order.js";
 
 const DAY = "2026-10-27";
 
@@ -371,5 +398,405 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     expect(() => projectPortionSale(bill.lines, bill.bindings)).toThrow(
       "extra line line-under-extra names no dish line",
     );
+  });
+});
+
+const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
+
+/**
+ * The same operations through the real writers (plan Task 3). Today's bills are written grouped by
+ * `priceTabRound` + `insertTabRound`; the portion bills are the same round cut into one line per
+ * dish with the existing unit split, their bindings kept in memory (cohort: the round's line;
+ * ordinal: the order the lines were cut in).
+ */
+describe("A803 monetary comparison: operations on portions through the real paths", () => {
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+  let db: Database;
+  let cfg: DeviceRequestConfig;
+  let ids: { croqueta: string; burger: string; cheese: string; toppings: string; reasonId: string };
+
+  beforeAll(() => {
+    db = suite.db;
+    useSplitExtrasDb(db);
+  });
+
+  beforeEach(async () => {
+    const venue = await setupVenue();
+    cfg = venue.cfg;
+    ids = await withTransaction(db, async (tx) => {
+      const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+      const product = async (name: string, price: string) =>
+        (
+          await createProduct(tx, {
+            catalogueId: venue.catalogueId,
+            categoryId: null,
+            name,
+            customerName: { [defaultLanguage]: `${name} (customer)` },
+            kitchenName: name.toUpperCase(),
+            pricingUnit: "each",
+            unitPrice: price,
+            vatClass: "reduced",
+          })
+        ).id;
+      const croqueta = await product("Croqueta", "3.33");
+      const burger = await product("Burger", "3.33");
+      const cheese = await product("Cheese", "0.35");
+      const toppings = (
+        await createExtraList(
+          tx,
+          {
+            name: "Toppings",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [{ productId: cheese, maxQuantity: 2, preselected: false, price: null }],
+          },
+          cfg.locale,
+        )
+      ).id;
+      await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
+      await tx.insert(persons).values({ id: OPERATOR, displayName: "Ana", role: "supervisor" });
+      const reasonId = (
+        await createAdjustmentReason(tx, {
+          name: "House",
+          names: {},
+          kind: "comp",
+          actions: ["comp", "discount_percent", "discount_amount"],
+          maxPercentBp: null,
+          maxAmount: null,
+          applyRoles: ["staff", "supervisor", "manager", "admin"],
+          approverRoles: ["staff", "supervisor", "manager", "admin"],
+          noteRequired: false,
+        })
+      ).id;
+      return { croqueta, burger, cheese, toppings, reasonId };
+    });
+  });
+
+  const croquetas = (count: number): ProductLine => ({
+    productId: ids.croqueta,
+    quantity: String(count),
+  });
+  const burgersWithCheese = (count: number): ProductLine => ({
+    productId: ids.burger,
+    quantity: String(count),
+    extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] }],
+  });
+  const plainBurger = (): ProductLine => ({ productId: ids.burger, quantity: "1" });
+
+  /** Today's shape: each round line one row, its extras at the line's quantity. */
+  function groupedBill(tx: Transaction, lines: ProductLine[]): Promise<string> {
+    return createTableKitchenOrder(tx, cfg, lines);
+  }
+
+  /** The same round, cut into one line per dish, each with its own extras. */
+  async function portionBill(
+    tx: Transaction,
+    lines: ProductLine[],
+  ): Promise<{ billId: string; bindings: Map<string, PortionBinding> }> {
+    const billId = await createTableKitchenOrder(tx, cfg, lines);
+    const bindings = new Map<string, PortionBinding>();
+    const dishes = await tx
+      .select({
+        id: workingOrderLines.id,
+        lineNo: workingOrderLines.lineNo,
+        quantity: workingOrderLines.quantity,
+      })
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+      )
+      .orderBy(asc(workingOrderLines.lineNo));
+    for (const dish of dishes) {
+      const members = [dish.id];
+      for (let unit = 1; unit < dish.quantity / 1000; unit += 1) {
+        const split = await splitLinesWithinOrder(
+          tx,
+          cfg,
+          billId,
+          [{ lineNo: dish.lineNo, quantity: "1" }],
+          { splitExtras: true },
+        );
+        members.push(split.get(dish.id)!.id);
+      }
+      members.forEach((lineId, i) =>
+        bindings.set(lineId, {
+          lineId,
+          portionId: randomUUID(),
+          cohortId: dish.id,
+          ordinal: i + 1,
+        }),
+      );
+    }
+    return { billId, bindings };
+  }
+
+  /** What the bill would file: grouped back when bindings are given, one row per line otherwise. */
+  async function fileBill(
+    tx: Transaction,
+    billId: string,
+    bindings?: ReadonlyMap<string, PortionBinding>,
+  ) {
+    const stored = await readLockedLines(tx, billId);
+    return filed(bindings === undefined ? stored : projectPortionSale(stored, bindings));
+  }
+
+  /** The rows as every filing path hands them to `recordSale`, through `withReceiptListPrices`. */
+  async function saleRowsOf(
+    tx: Transaction,
+    billId: string,
+    bindings?: ReadonlyMap<string, PortionBinding>,
+  ): Promise<string[]> {
+    const stored = await readLockedLines(tx, billId);
+    const lines = bindings === undefined ? stored : projectPortionSale(stored, bindings);
+    const priced = rateLines(grossLockedLines(lines.map((line) => line.locked)), DAY);
+    return withReceiptListPrices(
+      priced.lines,
+      lines.map((line) => line.identity),
+    )
+      .map(
+        (row) =>
+          `${row.name} ${row.quantity} gross ${row.lineGross} base ${row.lineTotal} @${row.vatRate} list ${row.listGross ?? "-"} each ${row.listUnitPriceGross ?? "-"}`,
+      )
+      .sort();
+  }
+
+  async function dishLineNos(tx: Transaction, billId: string): Promise<number[]> {
+    const rows = await tx
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+      )
+      .orderBy(asc(workingOrderLines.lineNo));
+    return rows.map((row) => row.lineNo);
+  }
+
+  async function moveBack(tx: Transaction, from: string, into: string): Promise<void> {
+    const party = await partyRevisionOfOrder(tx, from);
+    await transferItems(
+      tx,
+      cfg,
+      from,
+      into,
+      (await dishLineNos(tx, from)).map((lineNo) => ({ lineNo })),
+      { expectedPartyRevision: party!.revision, operatorId: OPERATOR },
+    );
+  }
+
+  async function discountLine(
+    tx: Transaction,
+    billId: string,
+    lineNo: number,
+    amount: string,
+    quantity?: string,
+  ): Promise<void> {
+    const [line] = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, lineNo)),
+      );
+    const [order] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    await applyAdjustment(
+      tx,
+      cfg,
+      {
+        orderId: billId,
+        expectedEdit: await readBillEditState(tx, billId),
+        submissionId: randomUUID(),
+        expectedRevision: order!.revision,
+        lineId: line!.id,
+        reasonId: ids.reasonId,
+        action: "discount_amount",
+        amount: decimal(amount),
+        ...(quantity === undefined ? {} : { quantity }),
+        note: null,
+        operatorId: OPERATOR,
+      },
+      cfg.locale,
+    );
+  }
+
+  /**
+   * A projection that groups a cohort's dishes and ignores their extras: the control for a case in
+   * which the ungrouped lines already equal today's.
+   */
+  function groupByDishAlone(
+    stored: readonly StoredOrderLine[],
+    bindings: ReadonlyMap<string, PortionBinding>,
+  ): StoredOrderLine[] {
+    const out: StoredOrderLine[] = [];
+    const rowOfPosition = new Map<number, number>();
+    const rowOfCohort = new Map<string, number>();
+    stored.forEach((line, i) => {
+      if (line.locked.parentLineNo != null) {
+        out.push({
+          ...line,
+          locked: { ...line.locked, parentLineNo: rowOfPosition.get(line.locked.parentLineNo)! },
+        });
+        return;
+      }
+      const cohort = bindings.get(line.identity.id)?.cohortId;
+      const row = cohort === undefined ? undefined : rowOfCohort.get(cohort);
+      if (row === undefined) {
+        out.push(line);
+        rowOfPosition.set(i + 1, out.length);
+        if (cohort !== undefined) rowOfCohort.set(cohort, out.length);
+      } else {
+        const merged = out[row - 1]!;
+        out[row - 1] = {
+          ...merged,
+          locked: {
+            ...merged.locked,
+            quantity: addDecimal(decimal(merged.locked.quantity), decimal(line.locked.quantity)),
+          },
+        };
+        rowOfPosition.set(i + 1, row);
+      }
+    });
+    return out;
+  }
+
+  it("A803 monetary comparison: one of three €3.33 dishes moved to another bill", async () => {
+    await withTransaction(db, async (tx) => {
+      const todayBill = await groupedBill(tx, [croquetas(3)]);
+      const todayMoved = await splitPartyBill(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]);
+      const bill = await portionBill(tx, [croquetas(3)]);
+      const moved = await splitPartyBill(tx, cfg, bill.billId, [{ lineNo: 3 }]);
+
+      const staying = await fileBill(tx, bill.billId, bill.bindings);
+      const leaving = await fileBill(tx, moved.billId, bill.bindings);
+      expect(baseOf(await fileBill(tx, todayBill), "10.00")).toBe("6.05");
+      expect(baseOf(await fileBill(tx, bill.billId), "10.00")).toBe("6.06");
+      expect(staying).toEqual(await fileBill(tx, todayBill));
+      expect(leaving).toEqual(await fileBill(tx, todayMoved.billId));
+      expect(sumDecimals([decimal(staying.total), decimal(leaving.total)])).toBe("9.99");
+    });
+  });
+
+  it("A803 monetary comparison: one of three €3.33 burgers with €0.35 cheese moved", async () => {
+    await withTransaction(db, async (tx) => {
+      // Today refuses to move part of a dish with extras, so the baselines are the two bills as
+      // they would be written whole.
+      const todayStaying = await groupedBill(tx, [burgersWithCheese(2)]);
+      const todayLeaving = await groupedBill(tx, [burgersWithCheese(1)]);
+      const bill = await portionBill(tx, [burgersWithCheese(3)]);
+      const [, , third] = await dishLineNos(tx, bill.billId);
+      const moved = await splitPartyBill(tx, cfg, bill.billId, [{ lineNo: third! }]);
+
+      const staying = await fileBill(tx, bill.billId, bill.bindings);
+      const leaving = await fileBill(tx, moved.billId, bill.bindings);
+      expect(baseOf(await fileBill(tx, todayStaying), "10.00")).toBe("6.69");
+      expect(baseOf(await fileBill(tx, bill.billId), "10.00")).toBe("6.70");
+      expect(staying).toEqual(await fileBill(tx, todayStaying));
+      expect(leaving).toEqual(await fileBill(tx, todayLeaving));
+      expect(sumDecimals([decimal(staying.total), decimal(leaving.total)])).toBe("11.04");
+    });
+  });
+
+  it("A803 monetary comparison: one of three €3.33 dishes cancelled", async () => {
+    await withTransaction(db, async (tx) => {
+      const todayBill = await groupedBill(tx, [croquetas(3)]);
+      await cancelLine(tx, cfg, todayBill, 1, "1", OPERATOR);
+      const bill = await portionBill(tx, [croquetas(3)]);
+      await cancelLine(tx, cfg, bill.billId, 2, undefined, OPERATOR);
+
+      const today = await fileBill(tx, todayBill);
+      expect(baseOf(today, "10.00")).toBe("6.05");
+      expect(baseOf(await fileBill(tx, bill.billId), "10.00")).toBe("6.06");
+      expect(await fileBill(tx, bill.billId, bill.bindings)).toEqual(today);
+    });
+  });
+
+  it("A803 monetary comparison: cheese cancelled on one of two €3.33 burgers", async () => {
+    await withTransaction(db, async (tx) => {
+      const todayBill = await groupedBill(tx, [burgersWithCheese(1), plainBurger()]);
+      const bill = await portionBill(tx, [burgersWithCheese(2)]);
+      // Line 2 is the first burger's cheese.
+      await cancelLine(tx, cfg, bill.billId, 2, undefined, OPERATOR);
+
+      const today = await fileBill(tx, todayBill);
+      expect(await fileBill(tx, bill.billId, bill.bindings)).toEqual(today);
+      const stored = await readLockedLines(tx, bill.billId);
+      const control = filed(groupByDishAlone(stored, bill.bindings));
+      expect(control.rows).toEqual([
+        expect.stringMatching(/^Burger 2\.000 /),
+        expect.stringMatching(/^Cheese 1\.000 .* under Burger 2\.000 /),
+      ]);
+      expect(control).not.toEqual(today);
+    });
+  });
+
+  it("A803 monetary comparison: a discount on one of three €3.33 dishes", async () => {
+    await withTransaction(db, async (tx) => {
+      const todayBill = await groupedBill(tx, [croquetas(3)]);
+      await discountLine(tx, todayBill, 1, "1.00", "1");
+      const bill = await portionBill(tx, [croquetas(3)]);
+      await discountLine(tx, bill.billId, 1, "1.00");
+
+      const today = await fileBill(tx, todayBill);
+      const candidate = await fileBill(tx, bill.billId, bill.bindings);
+      expect(baseOf(await fileBill(tx, bill.billId), "10.00")).toBe("8.18");
+      expect({ total: candidate.total, vat: candidate.vat }).toEqual({
+        total: today.total,
+        vat: today.vat,
+      });
+      // Today's carve stamps the list price on the whole line before it splits it
+      // (`reprice`, adjustments-apply.ts), so the two undiscounted dishes keep a list price equal to
+      // their price; portions the discount never touched keep none.
+      expect(today.rows).toEqual([
+        "Croqueta 1.000 gross 2.33 base 2.12 @10.00 list 3.33",
+        "Croqueta 2.000 gross 6.66 base 6.05 @10.00 list 3.33",
+      ]);
+      expect(candidate.rows).toEqual([
+        "Croqueta 1.000 gross 2.33 base 2.12 @10.00 list 3.33",
+        "Croqueta 2.000 gross 6.66 base 6.05 @10.00 list null",
+      ]);
+      // What a sale row records: a list price only where it differs from what was charged.
+      expect(await saleRowsOf(tx, todayBill)).toEqual([
+        "Croqueta 1.000 gross 2.33 base 2.12 @10.00 list 3.33 each 3.33",
+        "Croqueta 2.000 gross 6.66 base 6.05 @10.00 list - each -",
+      ]);
+      expect(await saleRowsOf(tx, bill.billId, bill.bindings)).toEqual(
+        await saleRowsOf(tx, todayBill),
+      );
+    });
+  });
+
+  it("A803 monetary comparison: two €3.33 dishes, one moved out and back, file as the original row", async () => {
+    await withTransaction(db, async (tx) => {
+      const original = await fileBill(tx, await groupedBill(tx, [croquetas(2)]));
+      const bill = await portionBill(tx, [croquetas(2)]);
+      const moved = await splitPartyBill(tx, cfg, bill.billId, [{ lineNo: 2 }]);
+      await moveBack(tx, moved.billId, bill.billId);
+
+      expect(baseOf(original, "10.00")).toBe("6.05");
+      expect(baseOf(await fileBill(tx, bill.billId), "10.00")).toBe("6.06");
+      expect(await fileBill(tx, bill.billId, bill.bindings)).toEqual(original);
+    });
+  });
+
+  it("A803 monetary comparison: today, a dish moved out and back stays a row of its own", async () => {
+    await withTransaction(db, async (tx) => {
+      const todayBill = await groupedBill(tx, [croquetas(2)]);
+      const moved = await splitPartyBill(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]);
+      await moveBack(tx, moved.billId, todayBill);
+
+      const today = await fileBill(tx, todayBill);
+      expect(today.rows).toEqual([
+        expect.stringMatching(/^Croqueta 1\.000 gross 3\.33 base 3\.03 /),
+        expect.stringMatching(/^Croqueta 1\.000 gross 3\.33 base 3\.03 /),
+      ]);
+      expect(baseOf(today, "10.00")).toBe("6.06");
+    });
   });
 });
