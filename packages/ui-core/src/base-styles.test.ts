@@ -65,3 +65,33 @@ test("every bold reads the Bold weight, and a component's own weight wins", asyn
     root.remove();
   }
 });
+
+class OrderProbe extends LitElement {
+  static override styles = [
+    css`
+      h3 {
+        font-weight: var(--wt-font-weight-medium);
+      }
+    `,
+    baseStyles,
+  ];
+  override render() {
+    return html`<h3>3</h3>`;
+  }
+}
+customElements.define("base-styles-order-probe", OrderProbe);
+
+test("a component's own weight wins even when its styles come before baseStyles", async () => {
+  const root = document.createElement("div");
+  root.style.setProperty("--wt-font-weight-bold", "800");
+  root.style.setProperty("--wt-font-weight-medium", "500");
+  const probe = document.createElement("base-styles-order-probe") as OrderProbe;
+  root.append(probe);
+  document.body.append(root);
+  try {
+    await probe.updateComplete;
+    expect(getComputedStyle(probe.shadowRoot!.querySelector("h3")!).fontWeight).toBe("500");
+  } finally {
+    root.remove();
+  }
+});

@@ -602,7 +602,8 @@ Google sign-in button alone (A228; see the login section). Body text is `--wt-fo
 shells among them, and each of those apps'
 `index.html` sets it on `<body>` for anything drawn outside the app's own element. `baseStyles` also gives `strong`, `b`,
 `h1`–`h6` and `th` the Bold weight (`--wt-font-weight-bold`, 600) wherever a component sets none of
-its own, so a theme's Bold reaches them; the browser's own bold, 700, is not used. A size in `rem`
+its own, so a theme's Bold reaches them; components that include `baseStyles` no longer use the browser's own bold,
+700 (the custodian's offline page, which has no `baseStyles` and never takes a venue's theme, still does). A size in `rem`
 does not follow the scale — it is relative to the browser's 16px root, which none of the three
 changes. Pinned in real Chromium by `packages/ui-core/src/tokens/structure.test.ts`,
 `packages/ui-core/src/components/wt-card.test.ts` and
