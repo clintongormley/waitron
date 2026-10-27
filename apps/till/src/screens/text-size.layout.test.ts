@@ -225,6 +225,7 @@ const queue: StationQueueGroup[] = DISHES.map((name, index) => ({
       quantity: "2.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 }));
@@ -249,7 +250,7 @@ it.each(
       now: Date.parse("2026-08-17T10:02:00.000Z"),
     });
     await document.fonts.ready;
-    const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".cell")];
+    const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")];
     expect(cells, "kitchen cards drawn").toHaveLength(DISHES.length);
     const names = cells.map((cell) => cell.querySelector<HTMLElement>(".line-name")!);
     expectDrawnAt(names[0]!, scale, DISH_SIZE);

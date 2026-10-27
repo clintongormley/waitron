@@ -38,16 +38,6 @@ import type {
   TillApi,
 } from "../api/client.js";
 
-/**
- * The one item state a per-line advance to `to` legitimately STARTS from. A DEVICE has only a per-line
- * advance verb, so a whole-ticket bump expands to one advance per FIRED item at this state — never an
- * invalid skip such as a queued item jumped straight to `ready`.
- */
-const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
-  preparing: "queued",
-  ready: "preparing",
-};
-
 /** How often the screen re-reads its queue and notices (plan decision D11). */
 const REFRESH_MS = 15_000;
 
@@ -131,8 +121,8 @@ export class TillStationScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* A sibling of the header, never inside it, so the view toggle and the out-of-date banner survive
-         when an embedded card host drops the header. */
+      /* A sibling of the header, never inside it, so the out-of-date banner survives when an embedded
+         card host drops the header. */
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -214,7 +204,7 @@ export class TillStationScreen extends LitElement {
   @property({ attribute: false }) initialDeviceStation?: DeviceStationScreen;
   /** Keys the remembered stacked-or-merged choice, so each kitchen display keeps its own. */
   @property({ attribute: false }) deviceId?: string;
-  /** Mounted inside a card host, which supplies the header; the view toggle and the out-of-date banner stay. */
+  /** Mounted inside a card host, which supplies the header; the out-of-date banner stays. */
   @property({ type: Boolean }) embedded = false;
   @property({ type: Boolean }) canMoveStation = false;
 
@@ -236,7 +226,6 @@ export class TillStationScreen extends LitElement {
   @state() private printersDown: StationPrinterDown[] = [];
   @state() private notices: KitchenNotice[] = [];
   @state() private deviceStations: DeviceStationScreen["stations"] = [];
-  @state() private view: "kanban" | "rail" = "kanban";
   @state() private merged = false;
   /**
    * UNLIKE the advance/collect levers, a failed reprint is not swallowed: it changes no order state,
@@ -553,10 +542,6 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
-  #toggleView(): void {
-    this.view = this.view === "kanban" ? "rail" : "kanban";
-  }
-
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
@@ -605,36 +590,24 @@ export class TillStationScreen extends LitElement {
     );
   }
 
-  async #onAdvanceTicket(event: Event): Promise<void> {
+  async #onAdvanceDishes(event: Event): Promise<void> {
     event.stopPropagation();
-    const { orderId, stationId, to } = (
+    const { itemIds, stationId, to } = (
       event as CustomEvent<{
-        orderId: string;
+        itemIds: readonly string[];
         stationId: string;
         to: Exclude<TicketState, "queued">;
       }>
     ).detail;
-    await this.#advance(() =>
-      this.deviceMode
-        ? this.#deviceAdvanceTicket(orderId, stationId, to)
-        : this.api.advanceTicket(orderId, stationId, to),
-    );
-  }
-
-  async #deviceAdvanceTicket(
-    orderId: string,
-    stationId: string,
-    to: Exclude<TicketState, "queued">,
-  ): Promise<void> {
-    const station = this.deviceStations.find((candidate) => candidate.id === stationId);
-    if (station === undefined || !worked(station)) return;
-    const group = station.queue.find((candidate) => candidate.orderId === orderId);
-    if (group === undefined) return;
-    for (const item of group.items) {
-      if (item.firedAt !== null && item.state === ADVANCE_FROM[to]) {
-        await this.api.deviceAdvance(item.id, to);
+    // In turn, never Promise.all: the dishes move in the order the cook sees, and the first refusal
+    // stops the rest.
+    await this.#advance(async () => {
+      for (const itemId of itemIds) {
+        await (this.deviceMode
+          ? this.api.deviceAdvance(itemId, to)
+          : this.api.advanceTicketItem(itemId, stationId, to));
       }
-    }
+    });
   }
 
   async #onMarkCollected(event: Event): Promise<void> {
@@ -870,7 +843,6 @@ export class TillStationScreen extends LitElement {
     if (this.deviceStations.length > 0 && !this.deviceStations.some(drawsQueue))
       return this.#renderQueueSurface({
         showBack: false,
-        showViews: false,
         body: html`${this.deviceStations.map((station) => this.#unavailable(station.name))}
           <p class="choose-again" data-choose-again>${t("kitchen_screen.choose_again")}</p>`,
       });
@@ -914,7 +886,6 @@ export class TillStationScreen extends LitElement {
         .groups=${queue}
         .notices=${drawn.flatMap((station) => station.notices)}
         .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
-        .view=${this.view}
         .advanceOnly=${true}
         .canMove=${this.#canMove()}
       ></till-station-queue>`;
@@ -970,7 +941,6 @@ export class TillStationScreen extends LitElement {
 
   #renderQueueSurface(opts: {
     showBack: boolean;
-    showViews?: boolean;
     showMerge?: boolean;
     body: TemplateResult;
   }): TemplateResult {
@@ -979,7 +949,7 @@ export class TillStationScreen extends LitElement {
         class="screen"
         aria-label=${t("station.title")}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
-        @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
+        @advance-dishes=${(event: Event) => void this.#onAdvanceDishes(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
         @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}
@@ -1005,18 +975,6 @@ export class TillStationScreen extends LitElement {
               </header>`
         }
         <div class="actions">
-          ${
-            opts.showViews === false
-              ? nothing
-              : html`<wt-button
-                  class="view-toggle"
-                  data-view-toggle
-                  variant="secondary"
-                  @click=${() => this.#toggleView()}
-                >
-                  ${this.view === "kanban" ? t("station.view_rail") : t("station.view_kanban")}
-                </wt-button>`
-          }
           ${
             opts.showMerge === true
               ? html`<wt-button
@@ -1106,7 +1064,6 @@ export class TillStationScreen extends LitElement {
       <till-station-queue
         .groups=${station.queue}
         .notices=${station.notices}
-        .view=${this.view}
         .stationId=${station.id}
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}

@@ -419,7 +419,7 @@ blocks give the same values.
 
 `--wt-color-table-calm-edge` is the soft left edge of a calm list card: `#8fb7f5` light, `#4d6aa6`
 dark. `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` are the colours a pulsing
-floor ring, the till bar's Waiting tab border and the Ready bar's warning edge reach half-way: `#e8bebc` and `#dccbb3` light,
+floor ring, a forgotten kitchen card's band and outline, the till bar's Waiting tab border and the Ready bar's warning edge reach half-way: `#e8bebc` and `#dccbb3` light,
 `#bd9ba0` and `#b9aa94` dark. The "floor ring and calm edge colours" cases in `colors.test.ts` hold,
 in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 or more on
 `--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is
@@ -611,8 +611,10 @@ dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one cycle of a floor
 ring's pulse, which dims it to `--wt-color-danger-pulse-dim` or `--wt-color-warning-pulse-dim`
 half-way, at full opacity — in dark, toward grey, not to the card;
-`packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. The kitchen screen's and the pass's
-forgotten flash keep their own keyframes and read the fast duration; the till bar's Waiting tab
+`packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. A forgotten card on the kitchen
+screen keeps its own keyframe, reads the fast duration and dims its band and outline to
+`--wt-color-danger-pulse-dim` half-way (`station-queue.ts`); the pass's forgotten flash keeps its own
+keyframe and reads the fast duration; the till bar's Waiting tab
 keeps its own keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`,
 and so does the Ready bar's warning edge (`till-floor-screen.ts`).
 
@@ -5462,10 +5464,40 @@ the status line's words, and the narrowing applies once the person leaves the ta
 A dish sent after its period ended, once the kitchen agreed, carries "After {period} — agreed"
 (`station.after_period`) in a warning chip: `--wt-color-warning` with `--wt-color-on-warning` text,
 bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
-In the Tickets view it is a row of its own above each run of consecutive dishes with the same
-mark, within one course or group heading; in the Board view each marked dish's cell carries it
-above the dish. The pass and expo show no mark. The kitchen ticket prints the same words in
+On a card it is a row of its own above each run of consecutive dishes with the same mark, within
+one course. The pass and expo show no mark. The kitchen ticket prints the same words in
 capitals between `**` above each such run; correction and MOVED slips print none.
+
+### The kitchen screen's cards
+
+A kitchen screen draws three columns, Waiting, Preparing and Ready, and one card per station and
+group across the group's bills; dishes with no group (a counter order, a bill with no party, or
+dishes moved in) make one card per station and bill (`kitchenCards`,
+`apps/till/src/state/kitchen-cards.ts`). A card sits in the column of its least advanced dish, a
+held dish counting as Waiting; within a column the card whose oldest fired dish was queued first
+comes first, a card with no fired dish after every timed one, then the read's order of each card's
+first bill, then the group's position with the no-group card first (`kitchen-cards.ts`). Its
+heading holds each bill's number with any former numbers, the allergy marker, its bills' labels once
+each, the group's name, the course when every dish shares one, "Held, not released" when the group
+is held or no dish on the card is fired, and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
+the heading can move something), each bill's kitchen note and printing problem, the dishes (course
+sub-heads only when the card has more than one course), and each bill's "Also on this order",
+Collect and Reprint where they apply, each naming its bill's number when the card merges bills (`#card`, `apps/till/src/widgets/station-queue.ts`). Its age band
+is a top border one `--wt-space-1` thick: `--wt-color-success` fresh, `--wt-color-warning` warm,
+and for overdue and forgotten the whole border in `--wt-color-danger`; a forgotten card pulses
+unless reduced motion is asked for (the `flash` class and the `@media` rule), and a card with no
+fired dish is dashed, with no band and no minutes (`station-queue.ts`). A dish tap in "One item at a
+time" moves that dish; in "Whole ticket at once" it moves the card's fired dishes at the tapped
+dish's stage; the heading is a `<button>` only while the card has a fired dish not Ready, and its
+tap moves the card's fired dishes at the least advanced such stage, never a dish further on
+(`headingStage`, `dishesAt`, `kitchen-cards.ts`); the screen sends each dish's own advance in turn, in the order the card draws them
+(`#onAdvanceDishes`, `apps/till/src/screens/till-station-screen.ts`). The line above the columns,
+"5 dishes to make · 1 late" in `--wt-font-size-sm`, bold, `--wt-color-text-muted`, counts the
+fired Waiting and Preparing dishes by quantity, a dish whose unit shows counting one, and the cards
+with such a dish whose band is overdue or forgotten; it shows while either count is above nothing
+(`thousandthsToMake`, `lateCards`, `kitchen-cards.ts`; `#header`, `station-queue.ts`). A dish at its
+card's column shows no state word, a dish further on shows "Preparing" or "Ready", and a held dish on
+a card with a fired dish shows "Held, not released" (`#stateWord`, `station-queue.ts`).
 
 ### The till's late-send mark and window
 

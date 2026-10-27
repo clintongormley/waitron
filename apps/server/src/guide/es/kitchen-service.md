@@ -117,8 +117,9 @@ estaciones y zonas de servicio que tiene asignadas.
 Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
 local. Cada estación de preparación fija si su pantalla de cocina avanza la preparación un plato cada vez
 o toda la comanda a la vez, en **Marcado en la pantalla** al editarla en **Estaciones de preparación**. En la
-pantalla de cocina, una comanda de una estación que avanza toda la comanda muestra **Toda la comanda**
-mientras un toque aún pueda avanzarla.
+pantalla de cocina, una tarjeta de una estación que avanza toda la comanda muestra **Toda la
+comanda** mientras un toque aún pueda avanzarla, y un toque en uno de sus platos avanza los platos de
+la tarjeta que están en la misma fase.
 Cada
 estación de preparación fija sus propios avisos de demora, y un tiempo de **Listo sin recoger** de 3
 minutos si no lo cambias, al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
@@ -132,6 +133,25 @@ adelantado los grupos en espera y si un plato ya enviado a ella se puede retirar
 espera** o **En espera o sin empezar**. Un plato que la cocina ha empezado nunca se retira. Un plato
 que no fue a ninguna estación, sin ningún extra que fuera a una estación propia, se puede retirar
 sea cual sea el ajuste de las estaciones.
+
+## Trabaja con la pantalla de cocina {#kitchen-screen}
+
+La pantalla de cocina muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
+cada pedido de mostrador. Una tarjeta está en la columna de su plato menos avanzado, **Esperando**,
+**Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Toca un plato para
+avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan los platos
+que la retienen, así que un plato que ya va más adelante se queda donde está. La franja de la parte
+superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos de demora
+de la estación, y la franja de una tarjeta olvidada late; en un dispositivo configurado para reducir
+el movimiento se queda quieta. La línea encima de las columnas dice cuántos platos quedan por hacer
+y cuántas tarjetas van con retraso. Una tarjeta cuyos platos están todos en espera tiene el borde
+discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero
+[pida la preparación](kitchen-service.md#request-cooking).
+
+Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impresión. En un
+terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
+pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
+dos.
 
 ## Un plato enviado tras acabar su periodo {#after-period}
 
@@ -149,9 +169,8 @@ puedes cobrar cuando lo has quitado.
 
 Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
 cocina lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de cocina, una
-línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina, **Comandas** muestra
-**Tras Almuerzo — aceptado** en una fila encima, y **Tablero** muestra las mismas palabras en su
-tarjeta.
+línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina, la tarjeta muestra
+**Tras Almuerzo — aceptado** encima del plato.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
 con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña

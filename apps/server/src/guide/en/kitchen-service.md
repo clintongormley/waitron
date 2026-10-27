@@ -102,7 +102,8 @@ zones assigned to it.
 You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
 station sets whether its kitchen screen moves preparation on one item at a time or a whole
 ticket at once, under **Done on the screen** when you edit it in **Prep stations**. On the kitchen
-screen, an order at a whole-ticket station shows **Whole ticket** while a tap can still move it on.
+screen, a card from a whole-ticket station shows **Whole ticket** while a tap can still move it
+on, and a tap on one of its dishes moves the card's dishes at the same stage.
 Each prep station sets
 its own late flags, and a **Ready warning** time of 3 minutes unless you change it, when you add it
 with **Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. On a
@@ -115,6 +116,22 @@ changed, under **Identical dishes on a kitchen ticket**, **Print held groups in 
 **While held or waiting**. A dish the kitchen has started is never recalled. A dish that went to no
 station, with no extra that went to a station of its own, can be recalled whatever the stations
 allow.
+
+## Work the kitchen screen {#kitchen-screen}
+
+The kitchen screen shows a card for each group of dishes a table sent, and one for each counter
+order. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
+**Ready**, with the card that has waited longest first. Tap a dish to move it on one step, or tap
+the card's heading to move the card on: only the dishes holding it back move, so a dish already
+further on stays where it is. The band along a card's top turns from green to amber to red as it
+waits, by the station's late flags, and a forgotten card's band pulses; it holds still on a device
+set to reduce motion. The line above the columns says how many dishes are still to make and how
+many cards are late. A card whose dishes are all held is dashed, shows no minutes and waits under
+**Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
+
+Each card carries its order's kitchen note and any printing problem. On a till, a card also offers
+**Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
+that nobody signs in on shows neither.
 
 ## A dish sent after its period ended {#after-period}
 
@@ -132,8 +149,7 @@ only once it is removed.
 
 A dish sent after its period ended earlier the same business day, once the kitchen agreed, carries a mark
 with its period's name. On its kitchen ticket a line above it reads `** AFTER LUNCH — AGREED **`.
-On the kitchen screen, **Tickets** shows **After Lunch — agreed** on a row above it, and
-**Board** shows the same words on its card.
+On the kitchen screen, the card shows **After Lunch — agreed** above it.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with
 **Manager's PIN to send after a period ends** under **Courses and the kitchen** on its **Service**

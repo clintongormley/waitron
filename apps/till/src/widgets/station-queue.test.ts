@@ -1,9 +1,9 @@
-import { page } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
@@ -15,8 +15,8 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
   forgottenAfterMinutes: 15,
 };
 
-// One item in each of the three kitchen states, so the kanban columns and the rail cards can be
-// asserted from a single mount.
+// One item in each of the three kitchen states, so the three columns can be asserted from a single
+// mount.
 const groupA: StationQueueGroup = {
   kitchenNote: null,
   orderId: "wo-1",
@@ -36,6 +36,7 @@ const groupA: StationQueueGroup = {
       quantity: "2.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -46,6 +47,7 @@ const groupA: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
@@ -69,6 +71,7 @@ const groupB: StationQueueGroup = {
       quantity: "3.000",
       course: null,
       firedAt: "2026-08-17T10:05:00.000Z",
+      queuedAt: "2026-08-17T10:05:00.000Z",
     },
   ],
 };
@@ -120,7 +123,6 @@ describe("till-station-queue", () => {
   it("rail shows other stations' dishes and their progress without bump controls", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [withElsewhere],
-      view: "rail",
       stationId: "st-1",
     });
     const section = el.shadowRoot!.querySelector('[data-elsewhere="wo-1"]')!;
@@ -140,20 +142,20 @@ describe("till-station-queue", () => {
   it("rail omits the other-stations section when its list is empty or absent", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [{ ...withElsewhere, elsewhere: [] }, groupB],
-      view: "rail",
       stationId: "st-1",
     });
     expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
   });
 
-  it("kanban omits the other-stations section", async () => {
+  it("board: the bill's card shows its other stations' dishes", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [withElsewhere],
-      view: "kanban",
       stationId: "st-1",
     });
-    expect(el.shadowRoot!.querySelector(".elsewhere")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Burger");
+    const section = el.shadowRoot!.querySelector('[data-card] [data-elsewhere="wo-1"]')!;
+    expect(section.querySelector('[data-elsewhere-item="other-burger"]')!.textContent).toContain(
+      "2× Burger",
+    );
   });
 
   it("rail translates the other-stations heading and held state into Spanish", async () => {
@@ -162,7 +164,6 @@ describe("till-station-queue", () => {
     try {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withElsewhere],
-        view: "rail",
         stationId: "st-1",
       });
       const section = el.shadowRoot!.querySelector(".elsewhere")!;
@@ -214,26 +215,9 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(0);
   });
 
-  it("kanban is the default view: three state columns, each holding its state's lines", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      stationId: "st-1",
-    });
-    expect(
-      el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]'),
-    ).not.toBeNull();
-    expect(
-      el.shadowRoot!.querySelector('[data-column="preparing"] [data-item="ti-2"]'),
-    ).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-column="ready"] [data-item="ti-3"]')).not.toBeNull();
-    const queuedCol = el.shadowRoot!.querySelector('[data-column="queued"]')!;
-    expect(queuedCol.textContent).toContain(t("station.state.queued"));
-  });
-
   it("rail view renders one ticket card per order with its number and label", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     const tickets = el.shadowRoot!.querySelectorAll(".ticket");
@@ -247,7 +231,6 @@ describe("till-station-queue", () => {
   it("rail: each line shows its quantity × dish name (the cook's line), not a bare line number", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain("2× Paella");
@@ -268,7 +251,6 @@ describe("till-station-queue", () => {
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [fractional],
-      view: "rail",
       stationId: "st-1",
     });
     expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain(
@@ -311,7 +293,6 @@ describe("till-station-queue", () => {
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [counted],
-      view: "rail",
       stationId: "st-1",
     });
     const text = (id: string) =>
@@ -322,14 +303,15 @@ describe("till-station-queue", () => {
     expect(text("ti-g")).toContain("200 g× Almendras");
   });
 
-  it("kanban: each cell shows its quantity × dish name alongside the order number", async () => {
+  it("board: each dish shows its quantity × dish name, and its card's heading the order number", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       stationId: "st-1",
     });
     const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]')!;
     expect(cell.textContent).toContain("2× Paella");
-    expect(cell.textContent).toContain("5");
+    const number = cell.closest("[data-card]")!.querySelector(".ticket-head .number")!;
+    expect(number.textContent!.trim()).toBe("#5");
   });
 
   describe("the numbers an order's dishes were sent to the kitchen under", () => {
@@ -345,74 +327,47 @@ describe("till-station-queue", () => {
       ["en-GB", [28], "#27 (was 28)"],
       ["es-ES", [28], "#27 (antes 28)"],
       ["en-GB", [28, 30], "#27 (was 28, 30)"],
-    ])(
-      "follow the number on the ticket head and on each kanban cell (%s, %j)",
-      async (locale, formerNumbers, text) => {
-        const previousLocale = currentLocale();
-        setLocale(locale);
-        try {
-          const rail = await mountWidget<TillStationQueue>("till-station-queue", {
-            groups: [moved(formerNumbers)],
-            view: "rail",
-            stationId: "st-1",
-          });
-          expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe(text);
-          const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
-            groups: [moved(formerNumbers)],
-            view: "kanban",
-            stationId: "st-1",
-          });
-          for (const id of ["ti-1", "ti-2"])
-            expect(flat(kanban.el.shadowRoot!.querySelector(`[data-item="${id}"] .number`)!)).toBe(
-              text,
-            );
-        } finally {
-          setLocale(previousLocale);
-        }
-      },
-    );
+    ])("follow the number on the card's head (%s, %j)", async (locale, formerNumbers, text) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [moved(formerNumbers)],
+          stationId: "st-1",
+        });
+        const heads = el.shadowRoot!.querySelectorAll("[data-card] .ticket-head .number");
+        expect([...heads].map(flat)).toEqual([text]);
+        expect(el.shadowRoot!.querySelector("[data-item] .number")).toBeNull();
+      } finally {
+        setLocale(previousLocale);
+      }
+    });
 
     it("leave a plain number on an order that never moved", async () => {
-      const rail = await mountWidget<TillStationQueue>("till-station-queue", {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [moved()],
-        view: "rail",
         stationId: "st-1",
       });
-      expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe("#27");
-      const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [moved()],
-        view: "kanban",
-        stationId: "st-1",
-      });
-      expect(flat(kanban.el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!)).toBe("#27");
+      expect(flat(el.shadowRoot!.querySelector("[data-card] .ticket-head .number")!)).toBe("#27");
     });
 
     it.each([
       [390, undefined],
       [390, [28, 30]],
-      [1024, undefined],
-      [1024, [28, 30]],
     ])(
-      "leave a kanban cell's dish name uncut at %s px wide (former numbers %j)",
+      "leave a card's dish name uncut at %s px wide (former numbers %j)",
       async (width, formerNumbers) => {
         const previous = { width: innerWidth, height: innerHeight };
         await page.viewport(width, 844);
         try {
           const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
             groups: [{ ...moved(formerNumbers), label: "Mesa 91" }],
-            view: "kanban",
             stationId: "st-1",
           });
           const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
           expect(flat(name)).toBe("2× Paella");
           expect(name.clientWidth).toBeGreaterThan(0);
           expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
-          if (width === 1024) {
-            const tag = el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!;
-            expect(tag.getBoundingClientRect().top).toBeLessThan(
-              name.getBoundingClientRect().bottom,
-            );
-          }
         } finally {
           await page.viewport(previous.width, previous.height);
         }
@@ -442,6 +397,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
         },
       ],
     };
@@ -472,6 +428,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           modifiers: [
             { descriptions: { "es-ES": "Grande" } },
             { descriptions: { "es-ES": "Leche avena" } },
@@ -480,13 +437,12 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("rail: renders the dish then its two options as indented '+ name' sub-text", async () => {
+    it("renders the dish then its two options as indented '+ name' sub-text", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withModifiers],
-        view: "rail",
         stationId: "st-9",
       });
-      const item = el.shadowRoot!.querySelector('[data-item="ti-9"]')!;
+      const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-9"]')!;
       expect(item.textContent).toContain("1× Cortado");
       expect(item.textContent).toContain("+ Grande");
       expect(item.textContent).toContain("+ Leche avena");
@@ -495,21 +451,9 @@ describe("till-station-queue", () => {
       expect(html.indexOf("Grande")).toBeLessThan(html.indexOf("Leche avena"));
     });
 
-    it("kanban: renders the same indented options beneath the cell's dish", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [withModifiers],
-        stationId: "st-9",
-      });
-      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-9"]')!;
-      expect(cell.textContent).toContain("1× Cortado");
-      expect(cell.textContent).toContain("+ Grande");
-      expect(cell.textContent).toContain("+ Leche avena");
-    });
-
     it("a modifier-free item renders flat, with no modifiers sub-text at all (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // the top-level fixture — no item here carries `modifiers`
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-modifiers")).toHaveLength(0);
@@ -535,7 +479,6 @@ describe("till-station-queue", () => {
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withExtraNutrition],
-        view: "rail",
         stationId: "st-9",
       });
       const milkName = allergenName("milk", currentLocale());
@@ -574,29 +517,20 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           note: "sin sal",
         },
       ],
     };
 
-    it("rail: renders the note as sub-text beneath the dish", async () => {
+    it("renders the note as sub-text beneath the dish", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withCustomisation],
-        view: "rail",
         stationId: "st-c",
       });
-      const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
+      const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-c"]')!;
       expect(item.textContent).toContain("1× Chuletón");
       expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
-    });
-
-    it("kanban: renders the same note beneath the cell's dish", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [withCustomisation],
-        stationId: "st-c",
-      });
-      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-c"]')!;
-      expect(cell.querySelector("[data-note]")!.textContent).toContain("sin sal");
     });
 
     it("an EMPTY note renders no customisation row (an empty string is not a note)", async () => {
@@ -606,7 +540,6 @@ describe("till-station-queue", () => {
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [emptyNote],
-        view: "rail",
         stationId: "st-c",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
@@ -621,7 +554,6 @@ describe("till-station-queue", () => {
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [noNote],
-        view: "rail",
         stationId: "st-c",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
@@ -631,7 +563,6 @@ describe("till-station-queue", () => {
     it("a plain item (no note) renders no customisation row at all (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // the top-level fixture — no item carries a note
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-customisation")).toHaveLength(0);
@@ -658,6 +589,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: { milk: {} }, pending: false },
         },
       ],
@@ -682,34 +614,24 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: {}, pending: true },
         },
       ],
     };
 
-    it("rail: shows the dish's own localised 'Milk' contains chip", async () => {
+    it("shows the dish's own localised 'Milk' contains chip", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
-        view: "rail",
         stationId: "st-a",
       });
-      const item = el.shadowRoot!.querySelector('[data-item="ti-a"]')!;
+      const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
       expect(item.textContent).toMatch(/milk/i);
-    });
-
-    it("kanban: shows the dish's own contains chip beneath the cell's dish", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [withAllergens],
-        stationId: "st-a",
-      });
-      const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
-      expect(cell.textContent).toMatch(/milk/i);
     });
 
     it("omits the retired not-reviewed warning when the dish's own allergens are pending", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [pendingItem],
-        view: "rail",
         stationId: "st-p",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-p"]')!;
@@ -720,7 +642,6 @@ describe("till-station-queue", () => {
     it("a plain item with no as-served profile renders no allergen row (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // the top-level fixture — no item carries asServed
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-allergens")).toHaveLength(0);
@@ -733,11 +654,10 @@ describe("till-station-queue", () => {
       items: [{ ...groupA.items[0]!, asServed: { allergens: { gluten: {} }, pending: false } }],
     };
 
-    for (const view of ["kanban", "rail"] as const) {
-      it(`${view}: starts with the dish, carries its allergens and ends with the bump label`, async () => {
+    {
+      it("starts with the dish, carries its allergens and ends with the bump label", async () => {
         const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
           groups: [paella],
-          view,
           stationId: "st-1",
         });
         const line = el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-item="ti-1"]')!;
@@ -775,6 +695,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          queuedAt: "2026-08-17T10:00:00.000Z",
           asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] },
         },
       ],
@@ -805,7 +726,6 @@ describe("till-station-queue", () => {
     it("shows vegan + vegetarian badges for a plant-only plate", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [veganItem],
-        view: "rail",
         stationId: "st-v",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-v"]')!;
@@ -817,7 +737,6 @@ describe("till-station-queue", () => {
     it("shows a contains-meat chip and no positive badge for a meat plate", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [meatItem],
-        view: "rail",
         stationId: "st-m",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-m"]')!;
@@ -828,7 +747,6 @@ describe("till-station-queue", () => {
     it("shows the NEUTRAL 'not reviewed' state for a pending diet, never a positive claim", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [pendingDiet],
-        view: "rail",
         stationId: "st-pd",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-pd"]')!;
@@ -839,7 +757,6 @@ describe("till-station-queue", () => {
     it("renders no diet row for an item carrying no asServedDiet (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups, // no item carries asServedDiet
-        view: "rail",
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-diet")).toHaveLength(0);
@@ -877,18 +794,18 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('button[data-item="ti-3"]')).toBeNull();
   });
 
-  it("ticket mode: tapping a line emits advance-ticket { orderId, stationId, to } (whole-ticket)", async () => {
+  it("ticket mode: tapping a line emits advance-dishes { itemIds, stationId, to } for its card's dishes at its stage", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
       stationId: "st-1",
     });
     const item = vi.fn();
-    const ticket = vi.fn();
+    const dishes = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
-    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(item).not.toHaveBeenCalled();
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(dishes).toHaveBeenCalledWith({ itemIds: ["ti-1"], stationId: "st-1", to: "preparing" });
   });
 
   it("ticket mode without a stationId cannot fire a whole-ticket bump (the route is station-keyed)", async () => {
@@ -896,7 +813,7 @@ describe("till-station-queue", () => {
       groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })), // no stationId
     });
     const spy = vi.fn();
-    el.addEventListener("advance-ticket", (e) => spy((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(spy).not.toHaveBeenCalled();
   });
@@ -946,7 +863,6 @@ describe("till-station-queue", () => {
   it("rail: a SETTLED (collectable) order shows a per-order collect button; a placed one does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     // groupB (wo-2) is settled → the Mode-P handover is offered; groupA (wo-1) is placed → not.
@@ -959,7 +875,6 @@ describe("till-station-queue", () => {
   it("rail: tapping the collect button emits mark-collected { orderId }, composed and bubbling", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     let captured: CustomEvent | undefined;
@@ -970,18 +885,18 @@ describe("till-station-queue", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("kanban: no per-order collect button (the handover is a rail-card, counter-side action)", async () => {
+  it("board: a settled bill's card shows its collect button; a placed bill's card does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups, // groupB is settled, but kanban cells cut across orders — no per-order card to host it
+      groups,
       stationId: "st-1",
     });
-    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="6"] [data-collect="wo-2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="5"] [data-collect]')).toBeNull();
   });
 
   it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route, §3d)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups, // groupB (wo-2) is settled → normally collectable
-      view: "rail",
       stationId: "st-1",
       advanceOnly: true,
     });
@@ -991,7 +906,6 @@ describe("till-station-queue", () => {
   it("rail: showReprint renders a per-order reprint button on every card; off by default", async () => {
     const off = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
     });
     expect(off.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
@@ -999,7 +913,6 @@ describe("till-station-queue", () => {
     // Both a placed and a settled order get it: reprint is status-independent, unlike collect.
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
       showReprint: true,
     });
@@ -1009,19 +922,19 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('[data-reprint="wo-2"]')).not.toBeNull();
   });
 
-  it("kanban: no per-order reprint button even with showReprint (it is a rail-card action)", async () => {
+  it("board: showReprint puts a reprint button on each bill's card", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups, // kanban cells cut across orders — no per-order card to host a reprint
+      groups,
       stationId: "st-1",
       showReprint: true,
     });
-    expect(el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="5"] [data-reprint="wo-1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-order="6"] [data-reprint="wo-2"]')).not.toBeNull();
   });
 
   it("rail: tapping the reprint button emits reprint-order { orderId }, composed and bubbling", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       stationId: "st-1",
       showReprint: true,
     });
@@ -1038,7 +951,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue, B: 7 min → warm
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
-      view: "rail",
       now,
     });
     const tickets = el.shadowRoot!.querySelectorAll(".ticket");
@@ -1050,7 +962,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:01:00.000Z"); // A: 1 min → fresh
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
     });
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-fresh")).toBe(true);
@@ -1060,60 +971,25 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
     });
     expect(el.shadowRoot!.querySelector(".ticket")!.classList.contains("age-forgotten")).toBe(true);
   });
 
-  it("kanban: the age accent is also applied to each cell (today only the rail ticket carried it)", async () => {
+  it("board: the age accent is on the dish's card", async () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      now, // default view: kanban
-    });
-    const cell = el.shadowRoot!.querySelector('[data-item="ti-1"]')!.closest(".cell")!;
-    expect(cell.classList.contains("age-overdue")).toBe(true);
-  });
-
-  it("the header shows a legible overdue+forgotten count badge — a non-colour tell, not just borders", async () => {
-    // groupA is 12 min old (overdue), groupB is 7 min old (warm) — one group has escalated.
-    const now = Date.parse("2026-08-17T10:12:00.000Z");
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      view: "rail",
       now,
     });
-    const badge = el.shadowRoot!.querySelector(".overdue-count")!;
-    expect(badge.textContent).toContain("1");
-    expect(badge.textContent).toContain(t("station.overdue_count"));
-  });
-
-  it("the header shows no badge at all when nothing has escalated to overdue", async () => {
-    const now = Date.parse("2026-08-17T10:01:00.000Z"); // both groups fresh/near-fresh
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [groupA],
-      view: "rail",
-      now,
-    });
-    expect(el.shadowRoot!.querySelector(".overdue-count")).toBeNull();
-  });
-
-  it("the header counts BOTH overdue and forgotten groups (band rank ≥ overdue)", async () => {
-    const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten, B: 11 min → overdue
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      view: "rail",
-      now,
-    });
-    expect(el.shadowRoot!.querySelector(".overdue-count")!.textContent).toContain("2");
+    const card = el.shadowRoot!.querySelector('[data-item="ti-1"]')!.closest("[data-card]")!;
+    expect(card.classList.contains("age-overdue")).toBe(true);
   });
 
   it("forgotten flashes by default (motion allowed) — the flash class rides alongside the steady accent", async () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
       reducedMotion: false,
     });
@@ -1122,31 +998,10 @@ describe("till-station-queue", () => {
     expect(ticket.classList.contains("flash")).toBe(true);
   });
 
-  it.each(["rail", "kanban"] as const)(
-    "flashes a forgotten ticket at the fast pulse token, 1 s by default (%s)",
-    async (view) => {
-      const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [groupA],
-        view,
-        now,
-        reducedMotion: false,
-      });
-      const flashing = el.shadowRoot!.querySelector(
-        view === "rail" ? ".ticket.age-forgotten" : ".cell.age-forgotten",
-      )!;
-      expect(getComputedStyle(flashing).animationName).toBe("age-forgotten-flash");
-      expect(getComputedStyle(flashing).animationDuration).toBe("1s");
-      el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
-      expect(getComputedStyle(flashing).animationDuration).toBe("3s");
-    },
-  );
-
   it("reduced motion: a forgotten ticket renders the steady-red class with NO flash/animation class", async () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
       reducedMotion: true,
     });
@@ -1160,7 +1015,6 @@ describe("till-station-queue", () => {
     const now = Date.parse("2026-08-17T10:12:00.000Z"); // A: 12 min → overdue, not forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [groupA],
-      view: "rail",
       now,
       reducedMotion: false,
     });
@@ -1193,6 +1047,7 @@ const coursedOrder: StationQueueGroup = {
       // Principales — HELD (fired_at null), display_order 2: must render LAST despite being listed first.
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1204,6 +1059,7 @@ const coursedOrder: StationQueueGroup = {
       // Entrantes — FIRED, display_order 1: renders after the null course, before Principales.
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1215,24 +1071,17 @@ const coursedOrder: StationQueueGroup = {
       // The null course must render FIRST, and carries no header.
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
 
 describe("till-station-queue — KDS-2 courses & fire", () => {
-  it.each([
-    ["waiter", "rail"],
-    ["kitchen", "rail"],
-    ["expo", "rail"],
-    ["waiter", "kanban"],
-    ["kitchen", "kanban"],
-    ["expo", "kanban"],
-  ] as const)(
-    "A773 waiter authority: legacy %s mode cannot start held food in %s",
-    async (fireControl, view) => {
+  it.each(["waiter", "kitchen", "expo"] as const)(
+    "A773 waiter authority: legacy %s mode cannot start held food",
+    async (fireControl) => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [coursedOrder, partyOrder],
-        view,
         ...{ fireControl },
         stationId: "st-1",
       });
@@ -1256,7 +1105,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: groups a card's lines by course, header per named course, ordered null-course-first then by displayOrder", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const sections = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-course]")];
@@ -1270,7 +1118,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: a HELD course's line renders greyed (held) and non-advanceable — a span, never a bump button", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const held = el.shadowRoot!.querySelector('[data-item="it-main"]')!;
@@ -1279,10 +1126,21 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     expect(held.tagName).toBe("SPAN");
   });
 
+  it("a held line is dashed, keeping the solid left edge every dish row's state colours", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder],
+      stationId: "st-1",
+    });
+    const style = getComputedStyle(el.shadowRoot!.querySelector('[data-item="it-main"]')!);
+    expect(style.borderLeftStyle).toBe("solid");
+    expect(style.borderTopStyle).toBe("dashed");
+    expect(style.borderRightStyle).toBe("dashed");
+    expect(style.borderBottomStyle).toBe("dashed");
+  });
+
   it("rail: a held line does not emit an advance when clicked (it is not a bump target)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const spy = vi.fn();
@@ -1294,7 +1152,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("rail: a FIRED course's line stays advanceable (KDS-1 behaviour is unchanged for fired items)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
     });
     const spy = vi.fn();
@@ -1306,7 +1163,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("A773 waiter authority: a held course cannot request cooking from the station", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1326,7 +1182,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("A773 waiter authority: released and unassigned courses have no Fire button", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1338,7 +1193,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("waiter fire: the display shows no fire button even for a held course (the tab screen fires — Task 7)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "waiter" },
     });
@@ -1351,7 +1205,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("kanban: a held line renders greyed and non-advanceable in its state column too", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      stationId: "st-1", // default kanban view
+      stationId: "st-1",
     });
     const held = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="it-main"]')!;
     expect(held.classList.contains("held")).toBe(true);
@@ -1370,7 +1224,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   it("advanceOnly: held food has no Fire button and stays non-advanceable", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
       advanceOnly: true,
@@ -1413,7 +1266,7 @@ it("shows saved nonprice modifier answers in the kitchen without HTML interpreta
 });
 
 it("shows a dish's frozen options answers in the KITCHEN's wording", async () => {
-  // Three different texts per name, so the assertion fails if the rail reads the staff or the
+  // Three different texts per name, so the assertion fails if the card reads the staff or the
   // customer side by mistake (CLAUDE.md §3).
   const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
     groups: [
@@ -1850,6 +1703,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1861,6 +1715,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1871,6 +1726,7 @@ const partyOrder: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1882,6 +1738,7 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-dessert", name: "Postres", displayOrder: 3 },
       group: { id: "g-4", position: 4, displayNumber: 4, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
       allergy: null,
@@ -1893,13 +1750,14 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
 };
 
 describe("till-station-queue — a seated party's groups", () => {
-  const sections = (el: TillStationQueue) => [
-    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-section]"),
+  const cards = (el: TillStationQueue) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]"),
   ];
 
   it("keeps permanent heading numbers when firing positions change", async () => {
@@ -1923,43 +1781,43 @@ describe("till-station-queue — a seated party's groups", () => {
           })),
         },
       ],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
-    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-4", "g-2", "g-3"]);
-    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+    expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-4", "g-3", "g-2"]);
+    expect(cards(el)[1]!.querySelector(".ticket-head")!.textContent).toContain(
       `${t("table.group_n").replace("{n}", "4")} · Terrace 7`,
     );
     expect(el.shadowRoot!.querySelector('[data-fire-group="g-4"]')).toBeNull();
   });
 
-  it("rail: sections a party's card by group position, the lines with no group first, and no course headers", async () => {
+  it("draws a party's bill as one card per sent group, the dishes with no group first, each card's one course in its heading", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
     });
-    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-2", "g-3", "g-4"]);
-    expect(sections(el)[0]!.querySelector(".course-head")).toBeNull();
-    expect(sections(el)[0]!.querySelector('[data-item="it-moved"]')).not.toBeNull();
-    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+    expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-3", "g-4", "g-2"]);
+    const [moved, held, , fired] = cards(el);
+    expect(moved!.querySelector(".group-name")).toBeNull();
+    expect(moved!.querySelector('[data-item="it-moved"]')).not.toBeNull();
+    expect(fired!.querySelector(".ticket-head")!.textContent).toContain(
       t("table.group_n").replace("{n}", "2"),
     );
     expect(
-      [...sections(el)[2]!.querySelectorAll<HTMLElement>("[data-item]")].map((i) => i.dataset.item),
+      [...held!.querySelectorAll<HTMLElement>("[data-item]")].map((i) => i.dataset.item),
     ).toEqual(["it-steak", "it-fish"]);
-    expect(el.shadowRoot!.querySelector("[data-course]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Principales");
+    expect(el.shadowRoot!.querySelector(".course-head")).toBeNull();
+    expect(held!.querySelector(".ticket-head")!.textContent).toContain(
+      partyOrder.items[0]!.course!.name,
+    );
   });
 
-  it("rail: a held group says it is held, not released, and its lines are greyed and not bump targets", async () => {
+  it("a held group's card says it is held, not released, and its lines are greyed and not bump targets", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
     });
-    const [, fired, held] = sections(el);
+    const [, held, , fired] = cards(el);
     expect(held!.querySelector("[data-group-held]")!.textContent).toContain(
       t("station.group_held"),
     );
@@ -1971,7 +1829,6 @@ describe("till-station-queue — a seated party's groups", () => {
   it("A773 waiter authority: held groups cannot request cooking from the station", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -1995,7 +1852,6 @@ describe("till-station-queue — a seated party's groups", () => {
     async (fireControl) => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [partyOrder],
-        view: "rail",
         stationId: "st-1",
         ...{ fireControl },
       });
@@ -2006,7 +1862,6 @@ describe("till-station-queue — a seated party's groups", () => {
   it("advanceOnly: a device display never offers Fire on a held group", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
       advanceOnly: true,
@@ -2026,7 +1881,6 @@ describe("till-station-queue — a seated party's groups", () => {
   it("a card with no party keeps its course sections beside a party's card", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder, partyOrder],
-      view: "rail",
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
@@ -2045,7 +1899,6 @@ describe("till-station-queue — printing problems", () => {
   it("rail: a card whose ticket has not printed says so; another card does not", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled, groupB],
-      view: "rail",
       stationId: "st-1",
     });
     const card = el.shadowRoot!.querySelector('[data-order="5"]')!;
@@ -2058,7 +1911,6 @@ describe("till-station-queue — printing problems", () => {
   it("rail: Reprint is on the troubled card only where the widget shows Reprint", async () => {
     const operator = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled],
-      view: "rail",
       stationId: "st-1",
       showReprint: true,
     });
@@ -2067,42 +1919,11 @@ describe("till-station-queue — printing problems", () => {
     ).not.toBeNull();
     const device = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [troubled],
-      view: "rail",
       stationId: "st-1",
       advanceOnly: true,
     });
     expect(device.el.shadowRoot!.querySelector("[data-print-problem]")).not.toBeNull();
     expect(device.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
-  });
-
-  it("kanban: names each order whose ticket has not printed above the columns", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [troubled, groupB],
-      stationId: "st-1",
-    });
-    const strip = el.shadowRoot!.querySelector("[data-print-problems]")!;
-    expect(strip.textContent).toContain(t("station.print_problem"));
-    expect(strip.textContent).toContain("#5 · Mesa 4");
-    expect(strip.textContent).not.toContain("#6");
-  });
-
-  it("kanban: an order with no label is named by its number alone", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: [{ ...groupB, printProblem: true }],
-      stationId: "st-1",
-    });
-    const strip = el.shadowRoot!.querySelector("[data-print-problems]")!;
-    expect(strip.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      `${t("station.print_problem")}: #6`,
-    );
-  });
-
-  it("kanban: no strip while every ticket printed", async () => {
-    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      stationId: "st-1",
-    });
-    expect(el.shadowRoot!.querySelector("[data-print-problems]")).toBeNull();
   });
 });
 
@@ -2210,19 +2031,15 @@ describe("till-station-queue — a merged queue's station labels", () => {
       .shadowRoot!.querySelector(`[data-item="${itemId}"] [data-line-station]`)
       ?.textContent?.trim();
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: each dish names its own group's station",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: merged,
-        stationNames,
-        view,
-      });
-      expect(label(el, "ti-1")).toBe("Cocina");
-      expect(label(el, "ti-2")).toBe("Cocina");
-      expect(label(el, "ti-3")).toBe("Barra");
-    },
-  );
+  it("each dish names its own group's station", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: merged,
+      stationNames,
+    });
+    expect(label(el, "ti-1")).toBe("Cocina");
+    expect(label(el, "ti-2")).toBe("Cocina");
+    expect(label(el, "ti-3")).toBe("Barra");
+  });
 
   it("shows no station label without station names", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -2238,10 +2055,10 @@ describe("till-station-queue — a merged queue's station labels", () => {
       stationNames,
       stationId: "st-2",
     });
-    const ticket = vi.fn();
-    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    const dishes = vi.fn();
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(dishes).toHaveBeenCalledWith({ itemIds: ["ti-1"], stationId: "st-1", to: "preparing" });
   });
 
   it("a merged queue bumps each order by its own station's mode", async () => {
@@ -2255,15 +2072,14 @@ describe("till-station-queue — a merged queue's station labels", () => {
         { ...queuedAtBar, stationId: "st-2", bumpMode: "line" as const },
       ],
       stationNames,
-      view: "rail",
     });
     const item = vi.fn();
     const ticket = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
-    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => ticket((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(ticket).toHaveBeenCalledOnce();
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(ticket).toHaveBeenCalledWith({ itemIds: ["ti-1"], stationId: "st-1", to: "preparing" });
     expect(item).not.toHaveBeenCalled();
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-4"]')!.click();
     expect(item).toHaveBeenCalledOnce();
@@ -2304,10 +2120,10 @@ describe("till-station-queue — a merged queue's station labels", () => {
       const item = vi.fn();
       const ticket = vi.fn();
       el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
-      el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+      el.addEventListener("advance-dishes", (e) => ticket((e as CustomEvent).detail));
       el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-1"]')!.click();
       expect(ticket).toHaveBeenCalledExactlyOnceWith({
-        orderId: "wo-1",
+        itemIds: ["ti-1"],
         stationId: "st-1",
         to: "preparing",
       });
@@ -2321,90 +2137,64 @@ describe("till-station-queue — a merged queue's station labels", () => {
       expect(ticket).toHaveBeenCalledOnce();
     };
 
-    it("rail: the ticket-mode card shows the mark once and the line-mode card none", async () => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: mixed,
-        stationNames,
-        view: "rail",
-      });
-      const kitchen = el.shadowRoot!.querySelector('article[data-order="5"]')!;
-      const bar = el.shadowRoot!.querySelector('article[data-order="6"]')!;
-      const marks = kitchen.querySelectorAll(mark);
-      expect(marks).toHaveLength(1);
-      expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
-      expect(readable(marks[0]!)).toBe(true);
-      // The control: the hidden label the mark stands beside is still there, and is not readable.
-      const hidden = kitchen.querySelector('button[data-item="ti-1"] .visually-hidden')!;
-      expect(hidden.textContent).toBe("Advance ticket #5");
-      expect(readable(hidden)).toBe(false);
-      expect(bar.querySelector(mark)).toBeNull();
-      expect(bar.querySelector('button[data-item="ti-4"] .visually-hidden')!.textContent).toBe(
-        "Advance #6",
-      );
-      tap(el);
-    });
-
     it("rail: a ticket-mode card with no dish left to bump shows no mark", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [{ ...groupB, stationId: "st-1", bumpMode: "ticket" as const }],
         stationNames,
-        view: "rail",
       });
       expect(el.shadowRoot!.querySelector('article[data-order="6"]')).not.toBeNull();
       expect(el.shadowRoot!.querySelector(mark)).toBeNull();
     });
 
-    it.each(["rail", "kanban"] as const)(
-      "%s: a ticket-mode order whose only unfinished dish is held shows no mark",
-      async (view) => {
-        const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
-        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-          groups: [
-            {
-              ...groupB,
-              stationId: "st-1",
-              bumpMode: "ticket" as const,
-              items: [...groupB.items, held],
-            },
-          ],
-          stationNames,
-          view,
-        });
-        expect(el.shadowRoot!.querySelector('[data-item="ti-held"]')).not.toBeNull();
-        expect(el.shadowRoot!.querySelector(mark)).toBeNull();
-      },
-    );
+    it("a ticket-mode order whose only unfinished dish is held shows no mark", async () => {
+      const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          {
+            ...groupB,
+            stationId: "st-1",
+            bumpMode: "ticket" as const,
+            items: [...groupB.items, held],
+          },
+        ],
+        stationNames,
+      });
+      expect(el.shadowRoot!.querySelector('[data-item="ti-held"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(mark)).toBeNull();
+    });
 
-    it("kanban: each bumpable cell of the ticket-mode order shows the mark, no other cell", async () => {
+    it("the ticket-mode card shows the mark once and the line-mode card none", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: mixed,
         stationNames,
-        view: "kanban",
       });
-      const cell = (itemId: string) =>
-        el.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest(".cell")!;
-      for (const itemId of ["ti-1", "ti-2"]) {
-        const marks = cell(itemId).querySelectorAll(mark);
-        expect(marks).toHaveLength(1);
-        expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
-        expect(readable(marks[0]!)).toBe(true);
-      }
-      expect(readable(cell("ti-1").querySelector(".visually-hidden")!)).toBe(false);
-      // A ready dish has no bump, so nothing to warn about.
-      expect(cell("ti-5").querySelector(mark)).toBeNull();
-      expect(cell("ti-4").querySelector(mark)).toBeNull();
-      expect(el.shadowRoot!.querySelectorAll(mark)).toHaveLength(2);
+      const card = (itemId: string) =>
+        el.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest("[data-card]")!;
+      const marks = card("ti-1").querySelectorAll(mark);
+      expect(marks).toHaveLength(1);
+      expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
+      expect(readable(marks[0]!)).toBe(true);
+      expect(readable(card("ti-1").querySelector(".visually-hidden")!)).toBe(false);
+      // The control: the hidden label the mark stands beside is still there, and is not readable.
+      const hidden = card("ti-1").querySelector('button[data-item="ti-1"] .visually-hidden')!;
+      expect(hidden.textContent).toBe("Advance ticket #5");
+      expect(readable(hidden)).toBe(false);
+      expect(card("ti-5")).toBe(card("ti-1"));
+      expect(card("ti-4").querySelector(mark)).toBeNull();
+      expect(
+        card("ti-4").querySelector('button[data-item="ti-4"] .visually-hidden')!.textContent,
+      ).toBe("Advance #6");
+      expect(el.shadowRoot!.querySelectorAll(mark)).toHaveLength(1);
       tap(el);
     });
 
-    it.each(["rail", "kanban"] as const)("%s: the mark reads in Spanish", async (view) => {
+    it("the mark reads in Spanish", async () => {
       const previousLocale = currentLocale();
       setLocale("es-ES");
       try {
         const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
           groups: mixed,
           stationNames,
-          view,
         });
         const marks = [...el.shadowRoot!.querySelectorAll(mark)];
         expect(marks.length).toBeGreaterThan(0);
@@ -2472,6 +2262,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -2482,6 +2273,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: { id: "co-main", name: "Principales", displayOrder: 2 },
         firedAt: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -2492,6 +2284,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -2502,6 +2295,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       // An extra prepared at its own station is its own queue item, named "for" its dish
       // (apps/server/src/split-off-extras.queue.test.ts); the till moves dishes only.
@@ -2514,6 +2308,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
       },
     ],
@@ -2523,81 +2318,68 @@ describe("till-station-queue — moving a dish to another station", () => {
       (button) => button.dataset.moveStation,
     );
 
-  it.each(["kanban", "rail"] as const)("%s: draws no Move without canMove", async (view) => {
+  it("draws no Move without canMove", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view,
     });
     expect(moveButtons(el)).toEqual([]);
   });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: draws Move on held and fired queued dishes only, never on a started dish or an extra",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [order],
-        stationId: "st-1",
-        view,
-        canMove: true,
-      });
-      expect(moveButtons(el).sort()).toEqual(["ti-fired", "ti-held"]);
-      const button = el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!;
-      expect(button.tagName).toBe("WT-BUTTON");
-      expect(button.getAttribute("size")).toBe("sm");
-      expect(button.getAttribute("variant")).toBe("secondary");
-      expect(button.getAttribute("aria-label")).toBe(`${t("table.move_station")} · Paella`);
-      expect(button.textContent!.trim()).toBe(t("table.move_station"));
-      expect(button.closest("[data-item]")).toBeNull();
-    },
-  );
+  it("draws Move on held and fired queued dishes only, never on a started dish or an extra", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      canMove: true,
+    });
+    expect(moveButtons(el).sort()).toEqual(["ti-fired", "ti-held"]);
+    const button = el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!;
+    expect(button.tagName).toBe("WT-BUTTON");
+    expect(button.getAttribute("size")).toBe("sm");
+    expect(button.getAttribute("variant")).toBe("secondary");
+    expect(button.getAttribute("aria-label")).toBe(`${t("table.move_station")} · Paella`);
+    expect(button.textContent!.trim()).toBe(t("table.move_station"));
+    expect(button.closest("[data-item]")).toBeNull();
+  });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: pressing Move asks to move that dish from this station, and bumps nothing",
-    async (view) => {
-      const { el, host } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [order],
-        stationId: "st-1",
-        view,
-        canMove: true,
-      });
-      const moves: CustomEvent[] = [];
-      host.addEventListener("move-station", (e) => moves.push(e as CustomEvent));
-      const bumps = vi.fn();
-      el.addEventListener("advance-ticket-item", bumps);
-      el.addEventListener("advance-ticket", bumps);
-      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
-      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-held"]')!.click();
-      expect(moves.map((e) => e.detail)).toEqual([
-        { workingOrderId: "wo-m", lineId: "wol-fired", name: "Paella", stationId: "st-1" },
-        { workingOrderId: "wo-m", lineId: "wol-held", name: "Solomillo", stationId: "st-1" },
-      ]);
-      expect(moves.every((e) => e.bubbles && e.composed)).toBe(true);
-      expect(bumps).not.toHaveBeenCalled();
-    },
-  );
+  it("pressing Move asks to move that dish from this station, and bumps nothing", async () => {
+    const { el, host } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order],
+      stationId: "st-1",
+      canMove: true,
+    });
+    const moves: CustomEvent[] = [];
+    host.addEventListener("move-station", (e) => moves.push(e as CustomEvent));
+    const bumps = vi.fn();
+    el.addEventListener("advance-ticket-item", bumps);
+    el.addEventListener("advance-ticket", bumps);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-held"]')!.click();
+    expect(moves.map((e) => e.detail)).toEqual([
+      { workingOrderId: "wo-m", lineId: "wol-fired", name: "Paella", stationId: "st-1" },
+      { workingOrderId: "wo-m", lineId: "wol-held", name: "Solomillo", stationId: "st-1" },
+    ]);
+    expect(moves.every((e) => e.bubbles && e.composed)).toBe(true);
+    expect(bumps).not.toHaveBeenCalled();
+  });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: a merged queue's Move names the dish's own station, not the widget's",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [{ ...order, stationId: "st-2" }],
-        stationNames: new Map([["st-2", "Barra"]]),
-        stationId: "st-1",
-        view,
-        canMove: true,
-      });
-      const moved = vi.fn();
-      el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
-      el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
-      expect(moved).toHaveBeenCalledWith({
-        workingOrderId: "wo-m",
-        lineId: "wol-fired",
-        name: "Paella",
-        stationId: "st-2",
-      });
-    },
-  );
+  it("a merged queue's Move names the dish's own station, not the widget's", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...order, stationId: "st-2" }],
+      stationNames: new Map([["st-2", "Barra"]]),
+      stationId: "st-1",
+      canMove: true,
+    });
+    const moved = vi.fn();
+    el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-fired"]')!.click();
+    expect(moved).toHaveBeenCalledWith({
+      workingOrderId: "wo-m",
+      lineId: "wol-fired",
+      name: "Paella",
+      stationId: "st-2",
+    });
+  });
 });
 
 describe("till-station-queue — where Move sits", () => {
@@ -2610,6 +2392,7 @@ describe("till-station-queue — where Move sits", () => {
     quantity: "1.000",
     course: null,
     firedAt: "2026-08-17T10:00:00.000Z",
+    queuedAt: "2026-08-17T10:00:00.000Z",
   });
   const order: StationQueueGroup = {
     kitchenNote: null,
@@ -2629,12 +2412,10 @@ describe("till-station-queue — where Move sits", () => {
     const plain = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view: "kanban",
     });
     const movable = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view: "kanban",
       canMove: true,
     });
     expect(box(movable.el, '[data-item="ti-a"]').width).toBe(
@@ -2646,7 +2427,6 @@ describe("till-station-queue — where Move sits", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order],
       stationId: "st-1",
-      view: "rail",
       canMove: true,
     });
     const own = box(el, '[data-item="ti-a"]');
@@ -2657,70 +2437,64 @@ describe("till-station-queue — where Move sits", () => {
 });
 
 describe("station move attribution", () => {
-  it.each(["en-GB", "es-ES"] as const)(
-    "shows the mover on rail and kanban cards in %s",
-    async (locale) => {
-      const previous = currentLocale();
-      setLocale(locale);
-      try {
-        for (const view of ["rail", "kanban"] as const) {
-          const movedAt = new Date(2026, 9, 10, 20, 12).toISOString();
-          const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-            view,
-            stationId: "st-1",
-            canMove: true,
-            groups: [
-              {
-                ...groupA,
-                items: [
-                  {
-                    ...groupA.items[0]!,
-                    lastMove: {
-                      fromStationName: "Grill $&",
-                      personName: "Luis",
-                      deviceName: "Till 2",
-                      movedAt,
-                    },
+  it.each(["en-GB", "es-ES"] as const)("shows the mover on the card in %s", async (locale) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      {
+        const movedAt = new Date(2026, 9, 10, 20, 12).toISOString();
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          stationId: "st-1",
+          canMove: true,
+          groups: [
+            {
+              ...groupA,
+              items: [
+                {
+                  ...groupA.items[0]!,
+                  lastMove: {
+                    fromStationName: "Grill $&",
+                    personName: "Luis",
+                    deviceName: "Till 2",
+                    movedAt,
                   },
-                  {
-                    ...groupA.items[1]!,
-                    lastMove: {
-                      fromStationName: "Bar",
-                      personName: "Ana",
-                      deviceName: null,
-                      movedAt,
-                    },
+                },
+                {
+                  ...groupA.items[1]!,
+                  lastMove: {
+                    fromStationName: "Bar",
+                    personName: "Ana",
+                    deviceName: null,
+                    movedAt,
                   },
-                  {
-                    ...groupB.items[0]!,
-                    lastMove: {
-                      fromStationName: "Grill",
-                      personName: null,
-                      deviceName: "Kitchen display",
-                      movedAt,
-                    },
+                },
+                {
+                  ...groupB.items[0]!,
+                  lastMove: {
+                    fromStationName: "Grill",
+                    personName: null,
+                    deviceName: "Kitchen display",
+                    movedAt,
                   },
-                  { ...groupB.items[0]!, id: "unmoved" },
-                ],
-              },
-            ],
-          });
-          const prefix = locale === "es-ES" ? "Pasado de" : "Moved from";
-          const text = (id: string) =>
-            el
-              .shadowRoot!.querySelector(`[data-item="${id}"] [data-last-move]`)
-              ?.textContent?.trim();
-          const time = "20:12";
-          expect(text("ti-1")).toBe(`${prefix} Grill $& · Luis · Till 2 · ${time}`);
-          expect(text("ti-2")).toBe(`${prefix} Bar · Ana · ${time}`);
-          expect(text("ti-3")).toBe(`${prefix} Grill · Kitchen display · ${time}`);
-          expect(text("unmoved")).toBeUndefined();
-        }
-      } finally {
-        setLocale(previous);
+                },
+                { ...groupB.items[0]!, id: "unmoved" },
+              ],
+            },
+          ],
+        });
+        const prefix = locale === "es-ES" ? "Pasado de" : "Moved from";
+        const text = (id: string) =>
+          el.shadowRoot!.querySelector(`[data-item="${id}"] [data-last-move]`)?.textContent?.trim();
+        const time = "20:12";
+        expect(text("ti-1")).toBe(`${prefix} Grill $& · Luis · Till 2 · ${time}`);
+        expect(text("ti-2")).toBe(`${prefix} Bar · Ana · ${time}`);
+        expect(text("ti-3")).toBe(`${prefix} Grill · Kitchen display · ${time}`);
+        expect(text("unmoved")).toBeUndefined();
       }
-    },
-  );
+    } finally {
+      setLocale(previous);
+    }
+  });
 });
 
 describe("till-station-queue — a dish sent after its period", () => {
@@ -2750,7 +2524,6 @@ describe("till-station-queue — a dish sent after its period", () => {
     (
       await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [lateOrder(items)],
-        view: "rail",
         stationId: "st-1",
         ...extra,
       })
@@ -2802,11 +2575,15 @@ describe("till-station-queue — a dish sent after its period", () => {
             party: { id: "v-4", revision: 1 },
           },
         ],
-        view: "rail",
         stationId: "st-1",
       })
     ).el;
-    expect(rows(el)).toEqual([
+    const cardRows = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")].map((card) =>
+      [...card.querySelectorAll<HTMLElement>("[data-after-period], [data-item]")].map(
+        (row) => row.dataset.item ?? row.textContent!.trim(),
+      ),
+    );
+    expect(cardRows).toEqual([
       ["After Lunch — agreed", "tortilla"],
       ["After Lunch — agreed", "entrecot"],
     ]);
@@ -2824,30 +2601,22 @@ describe("till-station-queue — a dish sent after its period", () => {
     expect(el.shadowRoot!.querySelector("[data-after-period]")).toBeNull();
   });
 
-  it("board: labels a marked dish's cell, and not an unmarked one's", async () => {
-    const el = await mount([line("tortilla", starters, "Lunch"), line("bread", starters)], {
-      view: "kanban",
-    });
-    const mark = (id: string) =>
-      el
-        .shadowRoot!.querySelector(`[data-item="${id}"]`)!
-        .closest(".cell")!
-        .querySelector("[data-after-period]")
-        ?.textContent?.trim();
-    expect(mark("tortilla")).toBe("After Lunch — agreed");
-    expect(mark("bread")).toBeUndefined();
+  it("board: marks a marked dish within its card, and not an unmarked one", async () => {
+    const el = await mount([line("tortilla", starters, "Lunch"), line("bread", starters)]);
+    expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(1);
+    expect(rows(el)).toEqual([["After Lunch — agreed", "tortilla", "bread"]]);
   });
 
   it("board: words the mark in Spanish", async () => {
     const previous = currentLocale();
     setLocale("es-ES");
     try {
-      const el = await mount([line("tortilla", starters, "Lunch $&")], { view: "kanban" });
+      const el = await mount([line("tortilla", starters, "Lunch $&")]);
       const expected = t("station.after_period").replace("{period}", () => "Lunch $&");
       expect(expected).not.toContain("After");
-      expect(el.shadowRoot!.querySelector(".cell [data-after-period]")!.textContent!.trim()).toBe(
-        expected,
-      );
+      expect(
+        el.shadowRoot!.querySelector("[data-card] [data-after-period]")!.textContent!.trim(),
+      ).toBe(expected);
     } finally {
       setLocale(previous);
     }
@@ -2863,6 +2632,1035 @@ describe("till-station-queue — a dish sent after its period", () => {
       expect(rows(el)).toEqual([[expected, "tortilla"]]);
     } finally {
       setLocale(previous);
+    }
+  });
+});
+
+describe("the board's cards", () => {
+  const sent = (id: string, position: number, state: "held" | "fired" = "fired") => ({
+    id,
+    position,
+    displayNumber: position,
+    numberPartyId: "pa-1",
+    state,
+  });
+  const dish = (
+    id: string,
+    firedAt: string | null,
+    extra: Partial<StationQueueItem> = {},
+  ): StationQueueItem => ({
+    ...groupA.items[0]!,
+    id,
+    workingOrderLineId: `wol-${id}`,
+    name: `Dish ${id}`,
+    firedAt,
+    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+    ...extra,
+  });
+  const bill = (
+    orderId: string,
+    orderNumber: number,
+    items: StationQueueItem[],
+  ): StationQueueGroup => ({
+    ...groupA,
+    orderId,
+    orderNumber,
+    label: "Table 7",
+    party: { id: "pa-1", revision: 1 },
+    items,
+  });
+  const cardsIn = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>("[data-card]")];
+  const dishesOn = (card: Element) =>
+    [...card.querySelectorAll<HTMLElement>("[data-item]")].map((node) => node.dataset.item);
+  const flat = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+  const column = (el: TillStationQueue, state: string) =>
+    el.shadowRoot!.querySelector(`[data-column="${state}"]`)!;
+
+  it("draws three columns of cards, each in its least advanced dish's column", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    expect(column(el, "queued").querySelector(".column-title")!.textContent).toBe(
+      t("station.state.queued"),
+    );
+    const waiting = cardsIn(column(el, "queued"));
+    expect(waiting.map((card) => card.dataset.order)).toEqual(["5"]);
+    expect(dishesOn(waiting[0]!)).toEqual(["ti-1", "ti-2"]);
+    expect(waiting[0]!.dataset.cardGroup).toBe("none");
+    expect(cardsIn(column(el, "preparing"))).toHaveLength(0);
+    const ready = cardsIn(column(el, "ready"));
+    expect(ready.map((card) => card.dataset.order)).toEqual(["6"]);
+    expect(dishesOn(ready[0]!)).toEqual(["ti-3"]);
+  });
+
+  it("names the first column Waiting, in Spanish Esperando", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    expect(flat(column(el, "queued").querySelector(".column-title")!)).toBe("Waiting");
+    const previousLocale = currentLocale();
+    setLocale("es");
+    try {
+      const spanish = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups,
+        stationId: "st-1",
+      });
+      const title = flat(column(spanish.el, "queued").querySelector(".column-title")!);
+      expect(title).toBe(t("station.state.queued"));
+      expect(title).not.toBe("Waiting");
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it("gives a party one card per sent group and the dishes with no group their own, oldest first", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("late", "2026-08-17T10:42:00.000Z", { group: sent("g-2", 2) }),
+          dish("first", "2026-08-17T10:00:00.000Z", { group: sent("g-1", 1) }),
+          dish("moved", "2026-08-17T10:20:00.000Z"),
+        ]),
+      ],
+      stationId: "st-1",
+      now: Date.parse("2026-08-17T10:45:00.000Z"),
+      reducedMotion: true,
+    });
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-1", "none", "g-2"]);
+    expect(cards.map(dishesOn)).toEqual([["first"], ["moved"], ["late"]]);
+    expect(cards.map((card) => flat(card.querySelector(".ticket-head .age")!))).toEqual([
+      `45 ${t("station.min")}`,
+      `25 ${t("station.min")}`,
+      `3 ${t("station.min")}`,
+    ]);
+    expect(cards[0]!.classList.contains("age-forgotten")).toBe(true);
+    expect(cards[2]!.classList.contains("age-fresh")).toBe(true);
+    expect(flat(cards[0]!.querySelector(".ticket-head")!)).toContain(
+      t("table.group_n").replace("{n}", "1"),
+    );
+    expect(flat(cards[2]!.querySelector(".ticket-head")!)).toContain(
+      t("table.group_n").replace("{n}", "2"),
+    );
+  });
+
+  it("draws one card for a group sent across two bills, with both bills' numbers", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 12, [
+          dish("bill-1-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+        bill("wo-2", 13, [
+          dish("bill-2-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+      ],
+      stationId: "st-1",
+      canMove: true,
+    });
+    const cards = cardsIn(el.shadowRoot!);
+    expect(cards).toHaveLength(1);
+    const [card] = cards;
+    expect(card!.dataset.order).toBe("12");
+    expect(card!.dataset.cardGroup).toBe("g-2");
+    expect([...card!.querySelectorAll(".ticket-head .number")].map(flat)).toEqual(["#12", "#13"]);
+    expect([...card!.querySelectorAll(".ticket-head .label")].map(flat)).toEqual(["Table 7"]);
+    expect(flat(card!.querySelector(".ticket-head")!)).toContain("#12 · #13");
+    expect(dishesOn(card!)).toEqual(["bill-1-dish", "bill-2-dish"]);
+    const label = (id: string) =>
+      card!.querySelector(`button[data-item="${id}"] .visually-hidden`)!.textContent;
+    expect(label("bill-1-dish")).toBe(`${t("station.advance")} #12`);
+    expect(label("bill-2-dish")).toBe(`${t("station.advance")} #13`);
+    const moved = vi.fn();
+    el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
+    card!.querySelector<HTMLElement>('[data-move-station="bill-2-dish"]')!.click();
+    expect(moved).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ workingOrderId: "wo-2", lineId: "wol-bill-2-dish" }),
+    );
+  });
+
+  it("draws a held group's card dashed in Waiting, with no minutes", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("held-1", null, { group: sent("g-3", 3, "held") }),
+          dish("held-2", null, { group: sent("g-3", 3, "held") }),
+          dish("fired", "2026-08-17T10:00:00.000Z", { group: sent("g-4", 4) }),
+          dish("kept-back", null, { group: sent("g-4", 4) }),
+        ]),
+      ],
+      stationId: "st-1",
+      now: Date.parse("2026-08-17T10:07:00.000Z"),
+    });
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-4", "g-3"]);
+    const [mixed, held] = cards;
+    expect(held!.classList.contains("held")).toBe(true);
+    expect(getComputedStyle(held!).borderTopStyle).toBe("dashed");
+    expect(held!.querySelector(".age")).toBeNull();
+    expect([...held!.classList].some((name) => name.startsWith("age-"))).toBe(false);
+    expect(flat(held!.querySelector(".ticket-head")!)).toContain(t("station.group_held"));
+    // The control: a card with one dish fired is timed by it and drawn solid.
+    expect(mixed!.classList.contains("held")).toBe(false);
+    expect(getComputedStyle(mixed!).borderTopStyle).toBe("solid");
+    expect(flat(mixed!.querySelector(".ticket-head .age")!)).toBe(`7 ${t("station.min")}`);
+  });
+
+  // A recall un-fires a fired group's dishes; a bill taken to the counter then leaves its group.
+  it("says a card is held whenever every dish on it is, in a fired group or in none", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("recalled", null, { group: sent("g-2", 2) }),
+          dish("fired", "2026-08-17T10:00:00.000Z", { group: sent("g-3", 3) }),
+          dish("kept-back", null, { group: sent("g-3", 3) }),
+        ]),
+        { ...groupA, orderId: "wo-2", orderNumber: 6, items: [dish("at-the-counter", null)] },
+      ],
+      stationId: "st-1",
+      now: Date.parse("2026-08-17T10:07:00.000Z"),
+    });
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-3", "g-2", "none"]);
+    const [mixed, ...held] = cards;
+    for (const card of held) {
+      expect(card.classList.contains("held")).toBe(true);
+      expect(card.querySelector("[data-card-head]")).toBeNull();
+      expect(flat(card.querySelector(".ticket-head")!)).toContain(t("station.group_held"));
+    }
+    // The control: a fired group's card with one dish fired says it only beside its held dish.
+    expect(flat(mixed!.querySelector(".ticket-head")!)).not.toContain(t("station.group_held"));
+    expect(flat(mixed!.querySelector('[data-item="kept-back"]')!)).toContain(
+      t("station.group_held"),
+    );
+  });
+
+  const elsewhereDish = {
+    id: "other-burger",
+    name: "Burger",
+    quantity: "1.000",
+    unitName: null,
+    unitPrecision: null,
+    soldInEach: true,
+    stationName: "Grill",
+    state: "preparing" as const,
+    held: false,
+  };
+  const troubledBill = (
+    orderId: string,
+    orderNumber: number,
+    items: StationQueueItem[],
+  ): StationQueueGroup => ({
+    ...bill(orderId, orderNumber, items),
+    status: "settled",
+    kitchenNote: `No salt on ${orderNumber}`,
+    printProblem: true,
+    elsewhere: [{ ...elsewhereDish, id: `other-${orderNumber}` }],
+  });
+
+  it("shows the bill's note, printing problem, other stations' dishes, Collect and Reprint on each of its cards", async () => {
+    const twoGroups = [
+      troubledBill("wo-1", 12, [
+        dish("first", "2026-08-17T10:00:00.000Z", { group: sent("g-1", 1) }),
+        dish("second", "2026-08-17T10:20:00.000Z", { group: sent("g-2", 2) }),
+      ]),
+    ];
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: twoGroups,
+      stationId: "st-1",
+      showReprint: true,
+    });
+    const cards = cardsIn(el.shadowRoot!);
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-1", "g-2"]);
+    const collected = vi.fn();
+    const reprinted = vi.fn();
+    el.addEventListener("mark-collected", (e) => collected((e as CustomEvent).detail));
+    el.addEventListener("reprint-order", (e) => reprinted((e as CustomEvent).detail));
+    for (const card of cards) {
+      expect(flat(card.querySelector("[data-kitchen-note]")!)).toBe(
+        `${t("kitchen_note.heading")}: No salt on 12`,
+      );
+      expect(flat(card.querySelector("[data-print-problem]")!)).toBe(t("station.print_problem"));
+      const elsewhere = card.querySelector('[data-elsewhere="wo-1"]')!;
+      expect(flat(elsewhere.querySelector("h3")!)).toBe(t("station.elsewhere"));
+      expect(flat(elsewhere.querySelector('[data-elsewhere-item="other-12"]')!)).toContain(
+        "1× Burger",
+      );
+      expect(flat(card.querySelector('[data-collect="wo-1"]')!)).toBe(t("station.collect"));
+      const reprint = card.querySelector<HTMLElement>('[data-reprint="wo-1"]')!;
+      expect(flat(reprint)).toBe(t("station.reprint"));
+      card.querySelector<HTMLElement>('[data-collect="wo-1"]')!.click();
+      reprint.click();
+    }
+    expect(collected.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-1" }]]);
+    expect(reprinted.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-1" }]]);
+    expect(el.shadowRoot!.querySelector("[data-print-problems]")).toBeNull();
+
+    const device = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: twoGroups,
+      stationId: "st-1",
+      advanceOnly: true,
+    });
+    expect(cardsIn(device.el.shadowRoot!)).toHaveLength(2);
+    expect(device.el.shadowRoot!.querySelectorAll("[data-print-problem]")).toHaveLength(2);
+    expect(device.el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+    expect(device.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
+  });
+
+  it("on a group's card spanning two bills, names each bill's note, printing problem and Reprint", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        troubledBill("wo-1", 12, [
+          dish("bill-1-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+        troubledBill("wo-2", 13, [
+          dish("bill-2-dish", "2026-08-17T10:00:00.000Z", { group: sent("g-2", 2) }),
+        ]),
+      ],
+      stationId: "st-1",
+      showReprint: true,
+    });
+    const [card, ...others] = cardsIn(el.shadowRoot!);
+    expect(others).toHaveLength(0);
+    expect([...card!.querySelectorAll("[data-kitchen-note]")].map(flat)).toEqual([
+      `${t("kitchen_note.heading")} #12: No salt on 12`,
+      `${t("kitchen_note.heading")} #13: No salt on 13`,
+    ]);
+    expect([...card!.querySelectorAll("[data-print-problem]")].map(flat)).toEqual([
+      `${t("station.print_problem")} #12`,
+      `${t("station.print_problem")} #13`,
+    ]);
+    expect([...card!.querySelectorAll("[data-elsewhere] h3")].map(flat)).toEqual([
+      `${t("station.elsewhere")} #12`,
+      `${t("station.elsewhere")} #13`,
+    ]);
+    expect([...card!.querySelectorAll("[data-collect]")].map(flat)).toEqual([
+      `${t("station.collect")} #12`,
+      `${t("station.collect")} #13`,
+    ]);
+    const reprints = [...card!.querySelectorAll<HTMLElement>("[data-reprint]")];
+    expect(reprints.map(flat)).toEqual([
+      `${t("station.reprint")} #12`,
+      `${t("station.reprint")} #13`,
+    ]);
+    const reprinted = vi.fn();
+    el.addEventListener("reprint-order", (e) => reprinted((e as CustomEvent).detail));
+    for (const reprint of reprints) reprint.click();
+    expect(reprinted.mock.calls).toEqual([[{ orderId: "wo-1" }], [{ orderId: "wo-2" }]]);
+  });
+
+  const starters = { id: "co-start", name: "Starters", displayOrder: 1 };
+  const mains = { id: "co-main", name: "Mains", displayOrder: 2 };
+  const fired = "2026-08-17T10:00:00.000Z";
+  const stateWord = (card: Element, id: string) =>
+    card.querySelector(`[data-item="${id}"] .line-state`);
+
+  it("names the group's course in its heading when its dishes share one", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("steak", fired, { group: sent("g-2", 2), course: mains }),
+          dish("fish", fired, { group: sent("g-2", 2), course: mains }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [card] = cardsIn(el.shadowRoot!);
+    const head = flat(card!.querySelector(".ticket-head")!);
+    expect(head).toContain(t("table.group_n").replace("{n}", "2"));
+    expect(head).toContain("Mains");
+    expect(card!.querySelector(".course-head")).toBeNull();
+    expect(dishesOn(card!)).toEqual(["steak", "fish"]);
+  });
+
+  it("puts course heads inside a card whose dishes span two courses, null course first", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("steak", fired, { group: sent("g-1", 1), course: mains }),
+          dish("soup", fired, { group: sent("g-1", 1), course: starters }),
+          dish("bread", fired, { group: sent("g-1", 1), course: null }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [card] = cardsIn(el.shadowRoot!);
+    const sections = [...card!.querySelectorAll<HTMLElement>("[data-course]")];
+    expect(sections.map((section) => section.dataset.course)).toEqual([
+      "none",
+      "co-start",
+      "co-main",
+    ]);
+    expect(sections.map((section) => section.querySelector(".course-head")?.textContent)).toEqual([
+      undefined,
+      "Starters",
+      "Mains",
+    ]);
+    expect(sections.map(dishesOn)).toEqual([["bread"], ["soup"], ["steak"]]);
+    const head = flat(card!.querySelector(".ticket-head")!);
+    expect(head).not.toContain("Starters");
+    expect(head).not.toContain("Mains");
+  });
+
+  it("a dish ahead of its card's column says its state; one at the column says none", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("waiting", fired, { group: sent("g-1", 1) }),
+          dish("cooking", fired, { group: sent("g-1", 1), state: "preparing" }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [card] = cardsIn(column(el, "queued"));
+    expect(flat(stateWord(card!, "cooking")!)).toBe(t("station.state.preparing"));
+    expect(stateWord(card!, "waiting")).toBeNull();
+  });
+
+  it("a held dish on a fired card says it is held, and is not a button", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("fired-by-hand", fired, { group: sent("g-1", 1, "held") }),
+          dish("kept-back", null, { group: sent("g-1", 1, "held") }),
+          dish("all-held", null, { group: sent("g-2", 2, "held") }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    const [mixed, held] = cardsIn(column(el, "queued"));
+    expect(mixed!.dataset.cardGroup).toBe("g-1");
+    expect(flat(stateWord(mixed!, "kept-back")!)).toBe(t("station.group_held"));
+    expect(mixed!.querySelector('button[data-item="kept-back"]')).toBeNull();
+    expect(mixed!.querySelector('button[data-item="fired-by-hand"]')).not.toBeNull();
+    expect(stateWord(mixed!, "fired-by-hand")).toBeNull();
+    // The control: on a card that is itself held, the heading says it and the dish says nothing.
+    expect(held!.dataset.cardGroup).toBe("g-2");
+    expect(stateWord(held!, "all-held")).toBeNull();
+  });
+
+  it("a Ready dish on a Preparing card reads Ready, in English and in Spanish", async () => {
+    const mountMixed = async () =>
+      (
+        await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [
+            bill("wo-1", 5, [
+              dish("cooking", fired, { group: sent("g-1", 1), state: "preparing" }),
+              dish("plated", fired, { group: sent("g-1", 1), state: "ready" }),
+            ]),
+          ],
+          stationId: "st-1",
+        })
+      ).el;
+    const english = cardsIn(column(await mountMixed(), "preparing"))[0]!;
+    expect(flat(stateWord(english, "plated")!)).toBe("Ready");
+    expect(stateWord(english, "cooking")).toBeNull();
+    cleanupWidgets();
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanish = cardsIn(column(await mountMixed(), "preparing"))[0]!;
+      const expected = t("station.state.ready");
+      expect(expected).not.toBe("Ready");
+      expect(flat(stateWord(spanish, "plated")!)).toBe(expected);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("keeps a long dish name whole inside its card at 1024 px", async () => {
+    const previous = { width: innerWidth, height: innerHeight };
+    await page.viewport(1024, 844);
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          {
+            ...groupA,
+            orderNumber: 27,
+            formerNumbers: [28, 30],
+            label: "Table 91",
+            items: [{ ...groupA.items[0]!, name: "Grilled octopus with paprika" }],
+          },
+        ],
+        stationId: "st-1",
+      });
+      const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
+      expect(flat(name)).toBe("2× Grilled octopus with paprika");
+      expect(name.clientWidth).toBeGreaterThan(0);
+      expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+      const box = name.getBoundingClientRect();
+      const card = name.closest("[data-card]")!.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(card.left);
+      expect(box.right).toBeLessThanOrEqual(card.right);
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  });
+});
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateReducedMotion: (reduced: boolean) => Promise<void>;
+  }
+}
+
+const ageAt = (minute: number) => `2026-08-17T10:${String(minute).padStart(2, "0")}:00.000Z`;
+const AGE_NOW = Date.parse(ageAt(20));
+
+function ageDish(
+  id: string,
+  minute: number,
+  overrides: Partial<StationQueueItem> = {},
+): StationQueueItem {
+  return {
+    allergy: null,
+    id,
+    workingOrderLineId: `line-${id}`,
+    state: "queued",
+    name: "Octopus",
+    quantity: "1.000",
+    course: null,
+    firedAt: ageAt(minute),
+    queuedAt: ageAt(minute),
+    ...overrides,
+  };
+}
+
+function ageBill(
+  orderNumber: number,
+  items: StationQueueItem[],
+  overrides: Partial<StationQueueGroup & { stationId: string }> = {},
+): StationQueueGroup & { stationId?: string } {
+  return {
+    kitchenNote: null,
+    orderId: `wo-${orderNumber}`,
+    orderNumber,
+    label: `Table ${orderNumber}`,
+    queuedAt: items[0]!.queuedAt,
+    status: "placed",
+    thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
+    items,
+    ...overrides,
+  };
+}
+
+// At 10:20: 2, 7, 12 and 20 minutes old, and one never fired.
+const fresh = ageBill(1, [ageDish("fresh", 18)]);
+const warm = ageBill(2, [ageDish("warm", 13)]);
+const overdue = ageBill(3, [ageDish("overdue", 8)]);
+const forgotten = ageBill(4, [ageDish("forgotten", 0)]);
+const heldBill = ageBill(5, [ageDish("held", 0, { firedAt: null })]);
+
+const cardOf = (el: TillStationQueue, orderNumber: number) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-card][data-order="${orderNumber}"]`)!;
+
+const paint = (el: TillStationQueue) => {
+  el.style.setProperty("--wt-color-success", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+  el.style.setProperty("--wt-color-danger", "rgb(7, 8, 9)");
+  el.style.setProperty("--wt-color-danger-pulse-dim", "rgb(10, 11, 12)");
+  el.style.setProperty("--wt-color-border", "rgb(13, 14, 15)");
+};
+
+describe("till-station-queue: a card's age band", () => {
+  afterEach(() => commands.emulateReducedMotion(false));
+
+  it("a card's band is green, then amber, then red as it ages", async () => {
+    await commands.emulateReducedMotion(false);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [fresh, warm, overdue, heldBill],
+      stationId: "st-1",
+      now: AGE_NOW,
+      reducedMotion: false,
+    });
+    paint(el);
+    expect(getComputedStyle(cardOf(el, 1)).borderTopColor).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(cardOf(el, 1)).borderLeftColor).toBe("rgb(13, 14, 15)");
+    expect(getComputedStyle(cardOf(el, 2)).borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(cardOf(el, 2)).borderLeftColor).toBe("rgb(13, 14, 15)");
+    expect(getComputedStyle(cardOf(el, 3)).borderTopColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(cardOf(el, 3)).borderLeftColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(cardOf(el, 5)).borderTopColor).toBe("rgb(13, 14, 15)");
+  });
+
+  it("a forgotten card's band pulses to the dim red at the fast pulse token", async () => {
+    await commands.emulateReducedMotion(false);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [forgotten],
+      stationId: "st-1",
+      now: AGE_NOW,
+      reducedMotion: false,
+    });
+    paint(el);
+    const card = cardOf(el, 4);
+    expect(getComputedStyle(card).animationName).toBe("age-forgotten-flash");
+    expect(getComputedStyle(card).animationDuration).toBe("1s");
+    const [animation] = card.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 500;
+    expect(getComputedStyle(card).borderTopColor).toBe("rgb(10, 11, 12)");
+    expect(getComputedStyle(card).borderLeftColor).toBe("rgb(10, 11, 12)");
+    animation!.currentTime = 0;
+    expect(getComputedStyle(card).borderTopColor).toBe("rgb(7, 8, 9)");
+    el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
+    expect(getComputedStyle(card).animationDuration).toBe("3s");
+  });
+
+  it("under reduced motion a forgotten card holds still and stays red", async () => {
+    const still = (el: TillStationQueue) => {
+      paint(el);
+      const card = cardOf(el, 4);
+      expect(getComputedStyle(card).animationName).toBe("none");
+      expect(getComputedStyle(card).borderTopColor).toBe("rgb(7, 8, 9)");
+    };
+    const mount = async (reducedMotion: boolean | undefined) =>
+      (
+        await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [forgotten],
+          stationId: "st-1",
+          now: AGE_NOW,
+          reducedMotion,
+        })
+      ).el;
+    await commands.emulateReducedMotion(false);
+    still(await mount(true));
+    cleanupWidgets();
+    await commands.emulateReducedMotion(true);
+    still(await mount(undefined));
+    cleanupWidgets();
+    // Turned on after the card was drawn, with no redraw: the stylesheet's own gate stops it.
+    await commands.emulateReducedMotion(false);
+    const drawn = await mount(undefined);
+    expect(getComputedStyle(cardOf(drawn, 4)).animationName).toBe("age-forgotten-flash");
+    await commands.emulateReducedMotion(true);
+    still(drawn);
+  });
+});
+
+describe("till-station-queue: the dishes-to-make line", () => {
+  const counts = (el: TillStationQueue) =>
+    el.shadowRoot!.querySelectorAll<HTMLElement>("[data-kitchen-counts]");
+  const line = (el: TillStationQueue) => {
+    const [only, ...rest] = counts(el);
+    expect(rest).toHaveLength(0);
+    return only?.textContent!.replace(/\s+/g, " ").trim();
+  };
+
+  // 2 + 1.5 (counted in Each) + 1 (a weighed dish) on a fresh card; nothing held or Ready counts.
+  const mixed = ageBill(6, [
+    ageDish("plain", 18, { quantity: "2.000" }),
+    ageDish("each", 18, {
+      quantity: "1.500",
+      unitName: { "en-GB": "each" },
+      soldInEach: true,
+      state: "preparing",
+    }),
+    ageDish("weighed", 18, { quantity: "0.350", unitName: { "en-GB": "kg" } }),
+    ageDish("held-dish", 18, { quantity: "3.000", firedAt: null }),
+    ageDish("ready", 18, { state: "ready" }),
+  ]);
+
+  it("the header says how many dishes are to make and how many cards are late", async () => {
+    const board = { groups: [mixed, overdue], stationId: "st-1", now: AGE_NOW };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", board);
+    expect(counts(el)[0]!.classList.contains("kitchen-counts")).toBe(true);
+    expect(line(el)).toBe("5.5 dishes to make · 1 late");
+    cleanupWidgets();
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanishBoard = await mountWidget<TillStationQueue>("till-station-queue", board);
+      const spanish = `${t("station.to_make").replace("{n}", "5.5")} · ${t("station.late").replace("{n}", "1")}`;
+      expect(spanish).not.toBe("5.5 dishes to make · 1 late");
+      expect(line(spanishBoard.el)).toBe(spanish);
+    } finally {
+      setLocale(before);
+    }
+    cleanupWidgets();
+
+    const one = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [fresh],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(line(one.el)).toBe("1 dish to make");
+    cleanupWidgets();
+
+    // Late only counts a card with something to make: an old card all Ready is not late.
+    const nothing = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [ageBill(7, [ageDish("done", 0, { state: "ready" })]), heldBill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(counts(nothing.el)).toHaveLength(0);
+  });
+
+  it("a merged queue has one header line for every station", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        ageBill(8, [ageDish("grill", 18, { quantity: "2.000" })], { stationId: "st-grill" }),
+        ageBill(8, [ageDish("fryer", 8)], { stationId: "st-fryer" }),
+      ],
+      now: AGE_NOW,
+    });
+    expect(line(el)).toBe("3 dishes to make · 1 late");
+  });
+});
+
+describe("till-station-queue: a card's heading and whole-ticket taps", () => {
+  const head = (el: TillStationQueue, orderNumber: number) =>
+    cardOf(el, orderNumber).querySelector<HTMLButtonElement>("button[data-card-head]");
+  const listen = (el: TillStationQueue) => {
+    const dishes: CustomEvent[] = [];
+    const item = vi.fn();
+    el.addEventListener("advance-dishes", (e) => dishes.push(e as CustomEvent));
+    el.addEventListener("advance-ticket-item", item);
+    return { dishes, details: () => dishes.map((e) => e.detail as unknown), item };
+  };
+  const sentIn = (id: string, position: number) => ({
+    id,
+    position,
+    displayNumber: position,
+    numberPartyId: "pa-1",
+    state: "fired" as const,
+  });
+
+  it("a heading tap sends the card's least advanced dishes on, never one further on", async () => {
+    const bill = ageBill(7, [
+      ageDish("ti-waiting", 15),
+      ageDish("ti-preparing", 15, { state: "preparing" }),
+      ageDish("ti-ready", 15, { state: "ready" }),
+      ageDish("ti-held", 15, { firedAt: null }),
+    ]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    head(el, 7)!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-waiting"], stationId: "st-1", to: "preparing" },
+    ]);
+    expect(taps.dishes.every((e) => e.bubbles && e.composed)).toBe(true);
+    expect(taps.item).not.toHaveBeenCalled();
+  });
+
+  it("a whole-ticket dish tap sends that card's dishes at the tapped dish's stage", async () => {
+    const bill = ageBill(
+      7,
+      [
+        ageDish("ti-waiting", 15),
+        ageDish("ti-preparing-1", 15, { state: "preparing" }),
+        ageDish("ti-preparing-2", 15, { state: "preparing" }),
+      ],
+      { bumpMode: "ticket" },
+    );
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-preparing-1"]')!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-preparing-1", "ti-preparing-2"], stationId: "st-1", to: "ready" },
+    ]);
+    expect(taps.item).not.toHaveBeenCalled();
+  });
+
+  it("a whole-ticket tap on a party's card leaves its other group's card alone", async () => {
+    const bill = ageBill(
+      7,
+      [
+        ageDish("ti-first-a", 5, { group: sentIn("gr-1", 1) }),
+        ageDish("ti-first-b", 5, { group: sentIn("gr-1", 1) }),
+        ageDish("ti-second", 15, { group: sentIn("gr-2", 2) }),
+      ],
+      { bumpMode: "ticket", party: { id: "pa-1", revision: 1 } },
+    );
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(2);
+    const taps = listen(el);
+    el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-first-a"]')!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-first-a", "ti-first-b"], stationId: "st-1", to: "preparing" },
+    ]);
+  });
+
+  it("a heading is a button only while a tap can move something", async () => {
+    const allReady = ageBill(7, [ageDish("ti-ready", 15, { state: "ready" })]);
+    const allHeld = ageBill(8, [ageDish("ti-held", 15, { firedAt: null })]);
+    const moving = ageBill(9, [ageDish("ti-moving", 15)]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [allReady, allHeld, moving],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(head(el, 7)).toBeNull();
+    expect(head(el, 8)).toBeNull();
+    expect(cardOf(el, 7).querySelector(".ticket-head")).not.toBeNull();
+    expect(cardOf(el, 8).querySelector(".ticket-head")).not.toBeNull();
+    expect(head(el, 9)).not.toBeNull();
+  });
+
+  it("a heading's name starts with its words and ends with Advance ticket", async () => {
+    const bill = ageBill(7, [ageDish("ti-waiting", 15)]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const button = head(el, 7)!;
+    const advance = `${t("station.bump_ticket")} #7`;
+    await expect
+      .element(page.elementLocator(button))
+      .toHaveAccessibleName(new RegExp(`^#7 Table 7 .*${advance.replace("#", "\\#")}$`));
+    const hidden = button.querySelector(".visually-hidden")!;
+    expect(hidden.textContent).toBe(advance);
+    expect(hidden.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+  });
+
+  it("a heading tap with no station sends nothing", async () => {
+    const bill = ageBill(7, [ageDish("ti-waiting", 15)]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    head(el, 7)!.click();
+    expect(taps.details()).toEqual([]);
+  });
+
+  it("a merged heading tap names its own station", async () => {
+    const bill = ageBill(7, [ageDish("ti-waiting", 15)], { stationId: "st-2" });
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-9",
+      stationNames: new Map([["st-2", "Bar"]]),
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    head(el, 7)!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-waiting"], stationId: "st-2", to: "preparing" },
+    ]);
+  });
+
+  describe("a tap sends its dishes in the order the card draws them", () => {
+    const starters = { id: "co-start", name: "Starters", displayOrder: 1 };
+    const mains = { id: "co-main", name: "Mains", displayOrder: 2 };
+    // Read mains first, so the read's order and the card's differ.
+    const coursed = (bumpMode: StationQueueGroup["bumpMode"]) =>
+      ageBill(
+        7,
+        [
+          ageDish("ti-steak", 15, { course: mains }),
+          ageDish("ti-soup", 15, { course: starters }),
+          ageDish("ti-bread", 15, { course: null }),
+          ageDish("ti-salad", 15, { course: starters }),
+        ],
+        { bumpMode },
+      );
+    const drawn = (el: TillStationQueue) =>
+      [...cardOf(el, 7).querySelectorAll<HTMLElement>("[data-item]")].map(
+        (node) => node.dataset.item,
+      );
+    const inCardOrder = ["ti-bread", "ti-soup", "ti-salad", "ti-steak"];
+
+    it("a heading tap", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [coursed("line")],
+        stationId: "st-1",
+        now: AGE_NOW,
+      });
+      expect(drawn(el)).toEqual(inCardOrder);
+      const taps = listen(el);
+      head(el, 7)!.click();
+      expect(taps.details()).toEqual([
+        { itemIds: inCardOrder, stationId: "st-1", to: "preparing" },
+      ]);
+    });
+
+    it("a whole-ticket dish tap", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [coursed("ticket")],
+        stationId: "st-1",
+        now: AGE_NOW,
+      });
+      expect(drawn(el)).toEqual(inCardOrder);
+      const taps = listen(el);
+      el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-steak"]')!.click();
+      expect(taps.details()).toEqual([
+        { itemIds: inCardOrder, stationId: "st-1", to: "preparing" },
+      ]);
+    });
+  });
+});
+
+describe("till-station-queue: a card's layout", () => {
+  afterEach(resetPage);
+
+  const fired = {
+    id: "g-2",
+    position: 2,
+    displayNumber: 2,
+    numberPartyId: "pa-1",
+    state: "fired" as const,
+  };
+  const token = (el: Element, name: string) =>
+    parseFloat(getComputedStyle(el).getPropertyValue(name));
+  const rect = (node: Element) => node.getBoundingClientRect();
+  /** The width a child that spans the box's content gets: inside its border and padding. */
+  const contentWidth = (box: HTMLElement) => {
+    const style = getComputedStyle(box);
+    return box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  };
+
+  it("a heading's words run from its leading edge, and only its minutes sit at the trailing edge", async () => {
+    await pageAt(1280, 800);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [ageBill(7, [ageDish("waiting", 15, { group: fired })], { label: null })],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const head = cardOf(el, 7).querySelector<HTMLElement>(".ticket-head")!;
+    const number = head.querySelector(".number")!;
+    const group = head.querySelector(".group-name")!;
+    const age = head.querySelector(".age")!;
+    expect(head.matches("button")).toBe(true);
+    const space3 = token(head, "--wt-space-3");
+    expect(space3).toBeGreaterThan(0);
+    expect(rect(group).left - rect(number).right).toBeGreaterThanOrEqual(0);
+    expect(rect(group).left - rect(number).right).toBeLessThanOrEqual(space3);
+    const style = getComputedStyle(head);
+    const contentRight =
+      rect(head).right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    expect(Math.abs(rect(age).right - contentRight)).toBeLessThanOrEqual(1);
+    expect(rect(age).left - rect(group).right).toBeGreaterThan(space3);
+  });
+
+  it.each(["en-GB", "es"])(
+    "a long heading wraps inside its card at 390 px, its minutes on one line (%s)",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        await pageAt(390, 844);
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [
+            ageBill(9, [ageDish("first-bill", 0, { group: fired })], { label: "T1" }),
+            ageBill(11, [ageDish("second-bill", 0, { group: fired })], {
+              label: null,
+              formerNumbers: [9],
+            }),
+          ],
+          stationId: "st-1",
+          now: AGE_NOW,
+        });
+        const card = cardOf(el, 9);
+        const head = card.querySelector<HTMLElement>(".ticket-head")!;
+        expect(head.querySelectorAll(".number")).toHaveLength(2);
+        expect(head.querySelector(".label")).not.toBeNull();
+        expect(head.querySelector(".group-name")).not.toBeNull();
+        const age = head.querySelector<HTMLElement>(".age")!;
+        expect(age.textContent!.replace(/\s+/g, " ").trim()).toBe(`20 ${t("station.min")}`);
+        const style = getComputedStyle(head);
+        const contentRight =
+          rect(head).right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+        const cardStyle = getComputedStyle(card);
+        const cardContentRight =
+          rect(card).right -
+          parseFloat(cardStyle.borderRightWidth) -
+          parseFloat(cardStyle.paddingRight);
+        expect(rect(age).right).toBeLessThanOrEqual(contentRight + 0.5);
+        expect(rect(age).right).toBeLessThanOrEqual(cardContentRight + 0.5);
+        // Its line-height computes to "normal", so count the lines its words are drawn on.
+        const words = document.createRange();
+        words.selectNodeContents(age);
+        const lineTops = new Set([...words.getClientRects()].map((line) => Math.round(line.top)));
+        expect(lineTops.size).toBe(1);
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it.each([
+    [1280, 800],
+    [390, 844],
+  ])(
+    "a dish row spans its card's content in Waiting and Preparing at %i px",
+    async (width, height) => {
+      await pageAt(width, height);
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          ageBill(7, [ageDish("waiting", 15)]),
+          ageBill(8, [ageDish("preparing", 15, { state: "preparing" })]),
+        ],
+        stationId: "st-1",
+        canMove: true,
+        now: AGE_NOW,
+      });
+      expect(el.shadowRoot!.querySelector('[data-move-station="waiting"]')).not.toBeNull();
+      const spans = (order: number, item: string) => {
+        const card = cardOf(el, order);
+        const row = card.querySelector<HTMLElement>(`[data-item="${item}"]`)!;
+        return Math.abs(rect(row).width - contentWidth(card)) <= 1;
+      };
+      expect({ waiting: spans(7, "waiting"), preparing: spans(8, "preparing") }).toEqual({
+        waiting: true,
+        preparing: true,
+      });
+    },
+  );
+  const twoCards = async () => {
+    await pageAt(1280, 800);
+    const mounted = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        ageBill(7, [ageDish("waiting", 15)]),
+        ageBill(8, [ageDish("ready", 15, { state: "ready" })]),
+      ],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const head = (order: number) =>
+      cardOf(mounted.el, order).querySelector<HTMLElement>(".ticket-head")!;
+    expect(head(7).matches("button")).toBe(true);
+    expect(head(8).matches("button")).toBe(false);
+    return { el: mounted.el, head };
+  };
+
+  it("a heading button's words sit at its vertical centre", async () => {
+    const { head } = await twoCards();
+    const words = [...head(7).querySelectorAll(":scope > :not(.visually-hidden)")].map(rect);
+    const middle =
+      (Math.min(...words.map((w) => w.top)) + Math.max(...words.map((w) => w.bottom))) / 2;
+    const box = rect(head(7));
+    expect(box.height).toBeGreaterThan(Math.max(...words.map((w) => w.height)) + 2);
+    expect(Math.abs(middle - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1);
+  });
+
+  it("a Ready card's heading is as tall as a Waiting card's", async () => {
+    const { head } = await twoCards();
+    expect(Math.abs(rect(head(8)).height - rect(head(7)).height)).toBeLessThanOrEqual(1);
+  });
+
+  it("a heading is ruled off from its dishes in the card's border colour and width", async () => {
+    const { el, head } = await twoCards();
+    el.style.setProperty("--wt-color-border", "rgb(13, 14, 15)");
+    for (const order of [7, 8]) {
+      const style = getComputedStyle(head(order));
+      const card = getComputedStyle(cardOf(el, order));
+      expect(style.borderBottomStyle).toBe("solid");
+      expect(style.borderBottomColor).toBe("rgb(13, 14, 15)");
+      expect(style.borderBottomWidth).toBe(card.borderLeftWidth);
     }
   });
 });

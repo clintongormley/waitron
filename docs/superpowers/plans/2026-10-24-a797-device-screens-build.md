@@ -5,8 +5,9 @@
 **Goal:** Build design §8's slices one pull request at a time. This plan outlines every slice and
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
 List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
-The handheld's bar**, **slice 6 — Ready warning time, data** and **slice 7 — The Ready bar's
-warning** in full tasks; each other slice is expanded into tasks when it starts.
+The handheld's bar**, **slice 6 — Ready warning time, data**, **slice 7 — The Ready bar's
+warning** and **slice 8 — Kitchen group cards** in full tasks; each other slice is expanded into
+tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
 argues from it). Pictures: `docs/backlog/mockups/a797-device-screens/`.
@@ -213,12 +214,13 @@ Tickets view and its switch go. **File set:** `apps/till/src/widgets/station-que
 edits the same files (take turns, design §7); #2037 changes `station-queue.ts` and the station
 screen's bump mode (ran: `gh pr diff 2037 --name-only`), so the heading tap meets the per-station
 bump mode it adds (design §9 asks the plan to trace it). **Dependencies:** #2037 landed, turn agreed
-with lane G. **Migration:** no.
+with lane G. **Migration:** no. _Expanded into tasks below (2026-10-26)._
 
 ### Slice 8b — Short names on kitchen cards (FULL; a station read changes)
 
-**Goal:** the station read carries each table's short name; the card shows it. **Dependencies:**
-slices 1 and 8. **Migration:** no.
+**Goal:** the station read carries each table's short name; the card shows it. The read also says
+whether a bill is a counter order, so a counter card reads "Counter #12" (slice 8, D5).
+**Dependencies:** slices 1 and 8. **Migration:** no.
 
 ### Slice 9 — The Columns controller and collapse (LIGHT)
 
@@ -232,7 +234,9 @@ collapse ("Ready · 3"). **Risks:** whichever lane builds it first, the other us
 
 **Goal:** corner → Columns («Columnas»): Move up / Move down («Subir», «Bajar») and a Show switch
 («Mostrar») per column. A new dialog with staged input takes a draft scope and a
-`*.unsaved.test.ts` (CLAUDE.md §3). **Dependencies:** slice 9. **Migration:** no.
+`*.unsaved.test.ts` (CLAUDE.md §3). The one-row header of picture 03 (the station's name, its
+Open/Closed chip and the header line) comes with the corner's Columns (slice 8, D9).
+**Dependencies:** slice 9. **Migration:** no.
 
 ### Slice 9c — Overview and the narrow tabs (LIGHT)
 
@@ -5865,6 +5869,956 @@ it means the app hands the floor something the plan did not read.
   outer ring).
 - After merge: delete the branch local and remote and check the remote one is gone; the backlog's
   "landed in #N" commit; update the ledger; then slice 8 when lane G's turn allows.
+
+---
+
+## Slice 8 — Kitchen group cards (one PR, branch `feat/a797-8-kitchen-group-cards`)
+
+**What it changes.** On a kitchen screen (a kitchen display, or the till's Station screen), the
+three columns stay, but each now holds **cards, one per group** a table sent (Q42 (d)), or one per
+counter order, in place of today's one cell per dish. A card sits in the column of its least
+advanced dish. **Tap a dish** to move it on one step, as today; **tap the card's heading** to move
+the card on one column. The band along the card's top is its age: green, then amber, then red; a
+forgotten card's band pulses at A757's fast speed. Above the columns, "5 dishes to make · 1 late"
+replaces today's "1 overdue" badge. The first column is called **Waiting** («Esperando»), no longer
+New. **The Tickets view goes, with its Board/Tickets switch**: the card is the ticket, so
+everything a ticket showed (the kitchen note, a printing problem, the order's dishes at other
+stations, Collect and Reprint) is on the card. Merged/Stacked stays (design §3.3). Overview, the
+Held column, collapse, the Columns panel, narrow tabs and short names on cards are later slices
+(8b, 9, 9b, 9c) or A773-2's (design §7, §8).
+
+**Review path: LIGHT.** No server read, route, schema or shared type changes. The till starts
+reading one field the station read already sends, each dish's `queuedAt`
+(`apps/server/src/working-order.ts:7367`, set at `:7809`; the device route reads the same
+`listStationQueues`, `apps/server/src/device-api.ts:1038`, `:1047`, all read), so what the server
+sends is unchanged. The changed files are under `apps/till/src/`, two token comments in
+`packages/ui-core/src/tokens/`, the guides and the docs. The heading tap sends today's per-dish
+route once per dish, in turn (D8); each call is the same single-row, state-guarded update the
+per-dish tap already makes (`advanceTicketItem`, `working-order.ts:7221-7264`, `eq(state, from)`,
+read), so it adds no new concurrency path. None of the risk triggers applies. **Migration: none.**
+No venue reset.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-26 against `main` at
+`52eb61a11` (this worktree's base; the brief named `8e8ef605a`, and `main` gained #2111, the
+"Powered by Waitron" mark, in between: ran `git diff --stat 8e8ef605a 52eb61a11`, which touches
+`till-shell.ts` and its tests and no station file); **(read)** means read in the code at that commit. The probe ran in a throwaway worktree
+(`git worktree add --detach /tmp/a797-8-probe.3AdW/wt 52eb61a11`), removed afterwards; its diff and
+logs were copied to `/Users/clintongormley/waitron-campaign-c/a797-8-probe/` (`probe.diff`,
+`base1.txt`, `run1.txt`–`run3.txt`, `tsc1.txt`–`tsc3.txt`). None of the probe code is in this branch.
+
+### The turn with lane G's A773-2 (ran)
+
+Design §7 has the two lanes take turns on `station-queue.ts`, `till-station-screen.ts` and
+`till-expo-screen.ts`. On 2026-10-26: no open pull request names A773 (`gh pr list --search "A773"
+--state open` → `[]`); no branch on `origin` names it (`git ls-remote origin | grep -i a773` →
+only old `refs/pull/*` heads); lane G's queue has no A773-2 entry
+(`grep -n "A773-2" ~/waitron-campaign-g/queue.md` → nothing; its latest progress lines are about
+D316); and `main` holds A773-2's plan and none of its code (`git log --oneline | grep -i a773` →
+`9d6157fa3`, the plan; the only code commit is `c9ad7a634`, A773-1, #1897; the rest are
+specs and plans). So nobody is editing these files, and slice 8 takes the turn. It
+leaves `till-expo-screen.ts` alone. The closing step posts a one-line note in lane C's questions
+file that slice 8 holds the two station files until it lands.
+
+What slice 8 leaves for A773-2 to build on, from its plan: the station's Held contents ("held and
+requested, distinguishing Waiting for the pass", A773-2 Task 7, plan line 305) go into a column
+slice 8 does not draw; the card grouping is one pure function (`kitchenCards`, Task 2) that
+A773-2 can extend with its phases; A756's per-station bump mode is kept (A773-2 plan line 311,
+"preserving A756 bump mode"). A773-2's Task 2 removes station Fire and Away/Done levers that are
+already gone from this widget (`station-queue.ts` has no `data-fire`: ran
+`grep -n "data-fire" apps/till/src/widgets/station-queue.ts` → nothing).
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `grep -rn "till-station-queue\|view_rail\|view_kanban\|data-view-toggle\|advance-ticket\b\|advanceTicket\b" apps/till/src --include='*.ts' | grep -v "\.test\.ts"`
+(ran), `grep -rn "station\.state\.\|station.overdue_count\|station.min\b" apps/till/src --include='*.ts'`
+(ran) and `grep -rn "pulse-fast\|danger-pulse-dim" apps packages --include='*.ts' --include='*.css'`
+(ran), each line read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `apps/till/src/widgets/station-queue.ts:640` `view`, `:787-794` `#queue` | draws the Board (`#kanban`, `:1018-1031`) or, with `view="rail"`, the Tickets view (`#rail`, `:882-912`) | the board of cards only; `view` deleted (D3, D13) |
+| same file `:1018-1031` `#kanban`, `:1041-1052` `#kanbanCell`, `:1070-1076` `#cell` | one cell per dish in its state's column, each with the order's number and label, the kitchen note and the whole-ticket mark | one card per group (D1–D6) |
+| same file `:882-912` `#rail`, `:718-749` `#courseSections`, `#groupSections`, `:933-975` `#courseSection`, `#groupSection` | one card per order: head (number, allergy marker, label, minutes), whole-ticket mark, kitchen note, printing problem, course or group sections, other stations' dishes, Collect, Reprint | its parts move onto each group card (D5, D11); a party's group sections become cards |
+| same file `:978-987` `#printProblems` | on the Board only, "Printing problem: #12 · T4" above the columns | deleted: each card says it (D11) |
+| same file `:756-758` `#band`, `:760-762` `#elapsedMinutes`, `:768-771` `#accentClasses` | ages an order by `group.queuedAt`, the order's oldest line at the station | ages a card by its own oldest fired dish (D4) |
+| same file `:401-457` styles | the age accent is a left border: fresh none, warm `--wt-color-primary`, overdue and forgotten `--wt-color-danger`; forgotten flashes it to `transparent` over `--wt-duration-pulse-fast`, off under reduced motion (class and `@media`) | a top band: green, amber, red; forgotten pulses to `--wt-color-danger-pulse-dim` (D7) |
+| same file `:773-781` `#overdueCount`, `#header` | "N overdue" badge, counting orders at overdue or worse, ready ones included | "N dishes to make · M late" (D9) |
+| same file `:658-678` `#bump` | line mode: `advance-ticket-item` for the dish; ticket mode: `advance-ticket` for the whole order at the station | ticket mode: `advance-dishes` for the card's dishes at the tapped dish's stage (D8) |
+| same file `:1054-1057` `#wholeTicket` | "Whole ticket" once on a rail card, and on each bumpable Board cell | once on the card (D8) |
+| same file `:1063-1068` `#line`, `:1078-1141` `#renderLine` | a dish's state word beside it on a rail card | the state word only for a dish ahead of its card's column (D12) |
+| `apps/till/src/screens/till-station-screen.ts:239` `view`, `:556-558` `#toggleView`, `:1007-1019` the toggle, `:917`, `:1109` `.view=` | Board/Tickets switch | deleted (D13) |
+| same file `:41-49` `ADVANCE_FROM`, `:608-638` `#onAdvanceTicket`, `#deviceAdvanceTicket`, `:982` `@advance-ticket` | operator: one `advanceTicket` call; device: one `deviceAdvance` per fired dish of the order at the step's starting state | one handler, `advance-dishes`, one per-dish call per dish, in turn (D8) |
+| same file `:592-606` `#onAdvanceTicketItem` | one dish: `advanceTicketItem` or `deviceAdvance` | unchanged |
+| same file `:886-921` `#mergedBody` | sorts the merged orders by `queuedAt`, labels each order with its station | unchanged; the widget orders cards itself (D2) |
+| `apps/till/src/api/client.ts:1530-1572` `StationQueueItem` | no `queuedAt`, though the read sends one (above) | gains `queuedAt: string` (D4) |
+| same file `:1644-1653` `StationQueueGroup.queuedAt`'s comment | "the group's ordering key and the age-colouring anchor" | no longer the anchor: comment narrowed |
+| same file `:3338-3354` `advanceTicket` | `POST /api/orders/:id/stations/:sid/advance` | deleted: no caller left (D8) |
+| `apps/server/src/till-api.ts:2250-2276` that route | whole order at one station | unchanged; left for a later change (D8) |
+| `apps/server/src/attendance-capture.ts:21-45` `captureKitchenActivity` | called by both till advance routes (`till-api.ts:2239-2241`, `:2270-2272`; the device route passes none, `device-api.ts:656`): one staff-activity fact per distinct order per call, each call with a new command key | unchanged; a till heading tap now writes one fact per dish where the whole-order call wrote one per order (D8) |
+| `packages/db/src/schema/order-groups.ts:22` `partyId`, `packages/db/src/schema/orders.ts:124` `working_orders_party_idx` | a group belongs to the party, and a party may hold several bills (the index is not unique) | one card per group across its bills (D1) |
+| `apps/till/src/till-app.ts:18895` `@advance-ticket-item` | the counter's own handler (the station screen stops its own events, `till-station-screen.ts:593`) | unchanged |
+| `apps/till/src/i18n/strings.ts` en `:652-653`, es `:2405-2406` | `station.view_kanban` "Board" «Tablero», `station.view_rail` "Tickets" «Comandas» | deleted (D13) |
+| same file en `:677`, es `:2429` `station.state.queued` | "New" «Nuevo»: the column, a rail dish's state, the pass's dish state (`till-expo-screen.ts:922`), "Also on this order" (`station-queue.ts:925`), a department transfer's work (`widgets/department-transfers.ts:524`) | "Waiting" «Esperando» in all five (D10) |
+| same file en `:659`, es `:2411` `station.overdue_count` | the station's badge and the pass's (`till-expo-screen.ts:1046`) | kept for the pass; the station stops reading it |
+| `packages/ui-core/src/tokens/colors.css:120-121`, `structure.css:50` | comments naming who dims to the pulse colours and reads each pulse speed | gain the forgotten card's band (D7) |
+| `apps/till/src/screens/till-expo-screen.ts:188-237` | comments citing the station queue's rail card and `.cell` | comments only: they name a card that changes; reworded to "the kitchen screen's cards" (Task 4), nothing else in the file |
+
+### Plan decisions for slice 8
+
+- **D1. One card per group per station, across the group's bills.** A group belongs to the party,
+  not to a bill (`order_groups.party_id`, `packages/db/src/schema/order-groups.ts:22`), a party may
+  hold several bills (`working_orders_party_idx` is a plain index, `packages/db/src/schema/orders.ts:124`),
+  and the pass's Ready for a group reaches "every fired kitchen item of its lines, on every bill of
+  the party" (`apps/server/src/order-groups.ts:602-605`; all read). The station read, though, is one
+  entry per bill (`groups.get(row.orderId)`, `working-order.ts:7728`), so a group sent across Bill 1
+  and Bill 2 arrives as two entries. So a card is keyed by station and group, **merging the group's
+  bills**: one card per group (design §3.3), as A773-2's pass keeps "one group card across bills"
+  (its plan lines 97, 238, 307). A dish's group is `item.group` (`QueueGroup`, `client.ts:1520-1527`);
+  it is absent "on a bill with no party, and on a line moved in from another bill" (`:1563-1564`,
+  read), so dishes with no group are keyed by station and bill: a counter order, or any bill with no
+  party, is one card (design §3.3, "or per counter order"), and a party bill's dishes with no group
+  (moved in) make one card of their own, as today's rail put them in a "no group" section first
+  (`#groupSections`, `:734-749`). In a merged screen each station's part is its own card, as each
+  bill is today (`MergedQueueGroup`, `:71`). A card keeps its bills in the read's order. The
+  grouping is one pure function, `kitchenCards` in a new `apps/till/src/state/kitchen-cards.ts`,
+  beside the floor's pure state files, so slice 9c's Overview and A773-2's Held work read the same
+  cards.
+- **D2. A card sits in the column of its least advanced dish** (design §3.3), held dishes counting
+  as Waiting (a held dish's state is `queued`, `firedAt` null; `client.ts:1567-1569`). **Within a
+  column, the oldest card first**: by its age (D4); a card with no fired dish after every timed
+  one; ties in the read's order of each card's first bill (oldest first, `working-order.ts:7669`),
+  then by group position with the no-group card first, as `#groupSections` sorts today. Today's per-order
+  sort by `queuedAt` would put a table's second group, fired forty minutes after its first, above
+  a newer table's first group.
+- **D3. A held card stays in Waiting until A773-2 adds Held.** A card all of whose dishes are held
+  is drawn in Waiting with a dashed outline and today's "Held, not released" («En espera, sin
+  marchar», `station.group_held`) in its heading, with no band, no minutes and no heading tap.
+  Design §3.3 lists a separate Held column, but its contents are A773-2's: §7 "A773-2 builds: …
+  the kitchen screen's Held contents (held and requested, 'Waiting for the pass')" and §8 slice 12
+  "Built by A773-2 … the kitchen's Held column" (design `:609-610`, `:696-697`, read); A773-2's plan
+  Task 7 has the station "register Overview/Held/Waiting/Preparing/Ready" (its line 101) and puts
+  held and requested in Held (line 305). Today held dishes already sit in the first column, dashed
+  (`.line.held`, `station-queue.ts:369-373`), so this keeps where a cook finds them. **Owner FYI:**
+  design §3.8 gives Waiting one meaning, "released to the station, not started", and a held card
+  under that heading stretches it until A773-2 lands. The alternative is an interim Held column in
+  slice 8 holding held cards only, which A773-2 would then extend with requested work; the plan
+  does not build it, so as not to build part of A773-2's column ahead of it.
+- **D4. A card ages from its own oldest fired dish.** Each dish's `queuedAt` is already on the wire
+  (above); the till's `StationQueueItem` gains `queuedAt: string`, required, as the server always
+  sends it. Firing sets it and a release re-routing a held dish sets it again (design §5, read), so
+  a group fired at 21:15 counts from 21:15, not from the table's first group at 20:40, which is
+  the order's `queuedAt` the widget ages by today (`#band`, `:756-758`; the read sets the order's
+  `queuedAt` from its first row, `working-order.ts:7728-7735`, read). Held dishes do not count.
+  Thresholds stay the order's station's (`group.thresholds`). **Receipt (ran, the probe):** the
+  type change compiles in the source and fails only test fixtures, 63 item literals in 9 files
+  (`tsc2.txt`); each gains `queuedAt` equal to its order's, so every band they check is unchanged
+  (Task 1, fixture-only).
+- **D5. What a card shows.** Its heading: each of its bills' numbers with any former numbers (as
+  today; one number on almost every card, "#12 · #13" when a group spans two bills), the allergy
+  marker when a dish on it has an allergy, its bills' labels, each once (today's table or order
+  label; the short name is slice 8b), the group's name with its party label (`groupName`,
+  `widgets/group-name.ts:14-18`, "Group 2 · Terrace 7"), the course when every dish on the card
+  shares one, "Held, not released" when the group is held, and the minutes (D6). Under it, in
+  order: the whole-ticket mark (D8), the kitchen note, the printing problem, the dishes, the
+  order's dishes at other stations, Collect, Reprint. **Courses:** when the card's dishes are in
+  more than one course, today's course sub-heads go inside the card, null course first, then by
+  display order (`#courseSections`, `:718-731`), and the heading names none. This changes one
+  thing a test pins today: a party's rail card names no course ("no course headers", "not
+  contain Principales", `station-queue.test.ts:1937-1954`); design §3.3 puts "the group and its
+  course" on the card. The bill's name (A803) is not on `main`, so there is nothing to show yet. **"Counter #12"**
+  (design §3.3) is not built here: the read does not say whether a bill is a counter order (a bill
+  with no `party` may also be a table's, `client.ts:1658`), so slice 8b, which changes the station
+  read for short names, carries it with them; Task 8 adds that to slice 8b's outline. Until then a
+  counter card reads as today, "#12" and its label.
+- **D6. The timer stays whole minutes, "7 min"**, as today (`station.min`). Picture 03 draws
+  "2:10"; a seconds count would redraw every kitchen screen every second against today's 20-second
+  clock (`TickingClock`, `packages/ui/src/ticking-clock.ts:10`, read). **Owner FYI**, with the
+  alternative: minutes and seconds.
+- **D7. The age band: a top border one `--wt-space-1` thick.** Fresh `--wt-color-success`, warm
+  `--wt-color-warning`, overdue and forgotten `--wt-color-danger` (design §3.3: "green, then
+  amber, then red"); overdue and forgotten also draw the card's 1-px outline in
+  `--wt-color-danger`, as picture 03 rings T2. A forgotten card's band and outline pulse to
+  `--wt-color-danger-pulse-dim` half-way over `--wt-duration-pulse-fast`, as A757's fast ring
+  does (`packages/ui/src/floor-ring.ts:27`, `:75-76`), keeping today's two reduced-motion gates
+  (the `flash` class only while `!#prefersReducedMotion()`, and the `@media` rule,
+  `station-queue.ts:441-457`). This changes two of today's colours: warm was
+  `--wt-color-primary` (blue) and fresh had none. **Not colour alone:** the minutes are on every
+  timed card and "N late" in the header line (D9). A held card draws no band (D3). **Contrast (ran):**
+  `python3 -I /Users/clintongormley/waitron-campaign-c/a797-8-scripts/band-contrast.py` (the WCAG
+  ratio over the token values, `packages/ui-core/src/tokens/colors.css:7`, `:18`, `:25-26`, dark
+  `:143`, `:154`, `:161-162`) gives, against the card's `--wt-color-surface` and the page's
+  `--wt-color-bg`: light success 4.97 / 4.64, warning 6.33 / 5.91, danger 6.54 / 6.11; dark success
+  7.49 / 8.23, warning 9.14 / 10.04, danger 6.94 / 7.62, each above WCAG's 3:1 for a graphic. The
+  pulse's dim moment, `--wt-color-danger-pulse-dim`, is 1.68 / 1.57 in light (6.79 / 7.46 dark): the
+  band fades for half a beat, as A757's rings do, and is steady red under reduced motion. Task 4's
+  axe sweep checks the text on the card, not the band (axe's colour-contrast rule reads text).
+- **D8. Taps, and the station's bump mode** (design §9 asked the plan to trace it). The mode is
+  each station's, carried on every queue order (`bumpMode`, `client.ts:1673`; #2037, read).
+  - **A dish tap, "One item at a time":** that dish one step, through today's `advance-ticket-item`
+    (unchanged).
+  - **A heading tap, either mode:** every fired dish on the card at the card's least advanced stage
+    that is not Ready moves one step, so the card moves one column (picture 03's caption: "tap a
+    card's heading to move the whole card on"). A dish already further on does not move: a card
+    with the entrecôte Waiting and the secreto Preparing goes to Preparing with both Preparing; the
+    secreto is not marked Ready. **Departure, for the owner:** design §3.3 says "move every dish on
+    it one step", which would also mark the secreto Ready. Marking a dish Ready that is not tells
+    the pass and the handheld's Ready bar it can go out (slice 7), so the plan moves only the dishes
+    holding the card back; the two readings agree whenever a card's dishes are at one stage, which
+    is every card a heading tap is drawn on in design §4's example 4.
+  - **A dish tap, "Whole ticket at once":** every fired dish on the same card at the tapped dish's
+    stage moves one step. Today it moves those dishes across the whole order at the station
+    (`advanceTicket`, `working-order.ts:7267-7292`; the device's loop, `till-station-screen.ts:624-638`,
+    read). Narrowed to the card because "the card is the ticket" (design §3.3) and another group's
+    card may sit in another column. The "Whole ticket" mark («Toda la comanda») shows once on such
+    a card while something on it can move, as the rail card showed it (#2037).
+  - **Route:** both send one new event, `advance-dishes` `{ itemIds, stationId, to }`; the screen
+    sends today's per-dish route for each id in turn (`advanceTicketItem` on a till,
+    `deviceAdvance` on a kitchen display; `client.ts:3330`, `:3491`), never
+    `Promise.all`, then reloads, exactly as the device's whole-ticket loop does today. The first
+    refusal stops the loop and the reload shows the truth; a full disk shows its line
+    (`#advance`, `:564-575`). On a till this replaces one whole-order call with several per-dish
+    calls: a refusal half-way leaves the earlier dishes moved, as on a kitchen display today.
+    `advance-ticket`, `#onAdvanceTicket`, `#deviceAdvanceTicket`, `ADVANCE_FROM` and the till's
+    `TillApi.advanceTicket` (no other caller: the grep above) are deleted. **Side effect, on a till
+    only:** each per-dish call records the person's kitchen activity for its bill with a new
+    command key (`captureKitchenActivity`, `attendance-capture.ts:21-45`, through
+    `till-api.ts:2239-2241`), so a heading tap over three dishes writes three activity facts where
+    the whole-order call wrote one per bill; a kitchen display records none (`device-api.ts:656`
+    passes no attendance). Permissions are unchanged: both till routes ask `prepare-orders`
+    (`till-api.ts:2216`, `:2252`), the device route the same profile action (`device-api.ts:634`). **The server route
+    `POST /api/orders/:id/stations/:sid/advance` stays**: retiring a till route is a FULL change of
+    its own; Task 8 records it in A797's backlog detail as an open point.
+  - The heading is a `<button>` only while a heading tap would move something (not all Ready, not
+    all held); its accessible name is its words plus today's hidden "Advance ticket #12"
+    (`station.bump_ticket`, with each of its bills' numbers), as a ticket-mode dish's is. A ticket-mode dish keeps its hidden
+    "Advance ticket #12"; a line-mode dish "Advance #12" (`#bumpLabel`, `:1205-1208`).
+- **D9. The header line: "5 dishes to make · 1 late"** at the top of each queue, where the "1
+  overdue" badge is today (`#header`, `:777-781`), so a stacked screen has one per station and a
+  merged one covers every station. **Dishes to make** sums the quantity of every fired dish that is
+  Waiting or Preparing; a dish whose unit shows ("0.35 kg × Pulpo") counts as one, the rule
+  `dishLine` uses to decide whether a quantity is a count (`widgets/dish-format.ts:15-28`). It is
+  summed in thousandths (the wire's three places, `client.ts:1548`) so a fraction stays exact,
+  and written as the dish rows write a quantity (`trimQuantity`, `dish-format.ts:11-13`): "1.5",
+  in Spanish too, as «1.5× Croqueta» is today.
+  **Late** counts cards with something to make whose band is overdue or forgotten; today's badge
+  also counts orders whose food is all Ready (`#overdueCount`, `:773-775`). Picture 03 reads "6
+  dishes to make · 1 late" with T2's red card holding two dishes, so late counts cards. The line
+  shows while either count is above nothing; "· 1 late" only while some card is late. Plain text,
+  `--wt-font-size-sm`, bold, in `--wt-color-text-muted`, as the column titles (`:133-139`); the
+  danger-filled badge goes. **Where it sits departs from picture 03**, which puts it in one header
+  row with the station's name, an "Open today" chip and the corner's Columns: today's station name
+  and Open/Closed control (`station-today.ts:222-247`) stay as they are, and that header row is
+  left to slice 9b, which adds the corner's Columns (Task 8 notes it on the slice 9b outline).
+- **D10. Words.** New, en / es: `station.to_make` "{n} dishes to make" / «{n} platos por hacer»,
+  `station.to_make_one` "1 dish to make" / «1 plato por hacer» (through `countText`,
+  `i18n/t.ts:33-35`), `station.late` "{n} late" / «{n} con retraso». The English is design §3.3's;
+  the Spanish is the plan's, with «con retraso», slice 6's Spanish for Overdue (design §3.8 note),
+  and is an **Owner FYI**. `station.state.queued` becomes "Waiting" «Esperando» (§10 (g): "The
+  kitchen column Waiting (A773's rename of New, «Nuevo» today) «Esperando»"; §6 retires "New" as
+  a column name). Every other reader of that key means the same state, released and not started
+  (the table above), so they change with it rather than keep a second word ("same language
+  everywhere", design §1). Deleted: `station.view_kanban`, `station.view_rail` (D13).
+- **D11. A bill's own facts and actions show on each of its cards**: the kitchen note, the
+  printing problem, "Also on this order", Collect (a settled bill, not on a kitchen display) and
+  Reprint (not on a kitchen display). These are **whole-bill facts on a group's card**: Reprint
+  sends `reprintOrder(orderId)` and reprints the bill's ticket (`till-station-screen.ts:673-683`,
+  `client.ts`'s `reprintOrder`), "Also on this order" lists the bill's dishes at other stations
+  (`ElsewhereItem` has no group, `client.ts:1582-1592`), and the note is the bill's
+  (`kitchenNote`, per bill, `working-order.ts:7732`), all read. They show on every card of the bill
+  because a cook may see only one of them, in any column. On a card merging two bills (D1), each
+  bill's note, printing problem, "Also on this order", Collect and Reprint are drawn once per bill,
+  each naming its bill's number ("#12"), and Reprint's name says which ("Reprint #12"). The Board's
+  printing-problem strip above the columns goes. Collect and Reprint now show on the till's
+  Station screen without switching to Tickets, which is where they were (`#collectAction`,
+  `#reprintAction`, `:991-1016`; tests "kanban: no per-order collect button", "kanban: no per-order
+  reprint button" pin their absence from the Board).
+- **D12. A dish's own words on a card.** A dish at its card's column shows no state word (the
+  column says it); a dish further on shows "Preparing" or "Ready" and keeps today's coloured left
+  edge (`.line.state-*`, `:353-363`); a held dish on a card that is not itself held shows "Held,
+  not released", so a fired-and-held card does not rest on the dashed look alone. Everything else
+  on a dish row is today's (`#renderLine`): Move, the move attribution, the note, extras, cross
+  references, allergens, diet, the allergy block, the after-period mark. In a merged screen each
+  dish keeps its station's name as today (`data-line-station`); moving it to the heading is left to
+  slice 9's look.
+- **D13. The Tickets view and its switch go** (design §3.3, §6): the widget's `view`, the screen's
+  `view`, `#toggleView`, the toggle and its two strings. The screen's `showViews` option goes with
+  it (it only hid the toggle, `:873`, `:1009`). Merged/Stacked stays. Every test that mounted the
+  widget with `view: "rail"` and still checks something a card shows keeps its check without
+  `view`; each `it.each` over the two views keeps one case (Changed test checks).
+- **D14. Room for slices 8b, 9, 9b and 9c.** The board is drawn from one ordered list of columns
+  (`COLUMNS`, `:53`) and from `kitchenCards`; slice 9's controller replaces the list with the
+  device's order and collapsed set, mapping its column keys (A773-2 plan line 101: `"waiting"`,
+  `"preparing"`, `"ready"`) onto these. `data-column` keeps today's state names (`queued`,
+  `preparing`, `ready`). Slice 8b changes only the label in the heading. Nothing here stores
+  anything on the device.
+
+### Changed test checks (from the probe; the implementer confirms each)
+
+**Probe (ran):** D1–D5, D7, D8, D9, D10 and D13 crudely in the widget and the screen, the item
+type's `queuedAt`, and `TillApi.advanceTicket` deleted. Before the change, with free memory at 81 %
+(ran `memory_pressure`), in `apps/till`:
+`pnpm exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout src/screens/till-expo-screen`
+→ `Test Files 15 passed (15)`, `Tests 789 passed (789)` (`base1.txt`). With the probe:
+
+- `pnpm typecheck` in `apps/till`: the source compiled; 178 errors, every one in a test file
+  (`tsc3.txt`): 112 for the widget's `view` (`kitchen-allergy.look.test.ts` 1,
+  `till-station-screen.test.ts` 3, `station-queue.a11y.test.ts` 18, `station-queue.allergy.test.ts`
+  6, `station-queue.kitchen-note.test.ts` 2, `station-queue.test.ts` 82), 63 for an item without
+  `queuedAt` (9 files: `client.test.ts` 1, `kitchen-allergy-send.test.ts` 1,
+  `text-size.layout.test.ts` 1, `till-station-screen.a11y.test.ts` 4, `till-station-screen.test.ts`
+  8, `station-queue.a11y.test.ts` 17, `station-queue.kitchen-note.test.ts` 6,
+  `station-queue.test.ts` 23, `test/kitchen-allergy-fixtures.ts` 2), and 5 for
+  `advanceTicket` (`client.test.ts:1459`; `till-station-screen.test.ts:304`, `:1243`, `:1391`, `:1398`).
+- The same command → `Test Files 5 failed | 10 passed (15)`, `Tests 62 failed | 727 passed (789)`
+  (`run1.txt`).
+- `pnpm exec vitest run src/till-app` → `Test Files 40 passed (40)`, `Tests 4393 passed (4393)`
+  (`run2.txt`). This run began before the probe deleted `TillApi.advanceTicket`; that deletion was
+  checked by `tsc3.txt` and by
+  `pnpm exec vitest run src/api/client.test.ts src/widgets/department-transfers src/i18n` →
+  `Tests 1 failed | 613 passed (614)`, the one `client.test.ts:1455` below (`run3.txt`).
+  `department-transfers` and `till-expo-screen` passed with `station.state.queued` reading
+  "Waiting": no test pins "New" or «Nuevo» (also ran
+  `grep -rn 'Nuevo' apps/till/src --include='*.test.ts'` → only a product renamed "Nuevo nombre"
+  in `till-table-order-screen.test.ts:6515`, `:6540`, and `grep -rn '"New"' apps/till/src
+  --include='*.test.ts'` → nothing).
+
+**The 62, each a check this spec changes** (file, test name, reason, and the task that changes it):
+
+`apps/till/src/widgets/station-queue.test.ts` (28):
+- "kanban is the default view: three state columns, each holding its state's lines" — the columns
+  now hold cards, not lines; rewritten as "draws three columns of cards, each in its least advanced
+  dish's column" (D1, D2). [3a-i]
+- "kanban omits the other-stations section" — the card shows the bill's other dishes (D11). [3a-ii]
+- "kanban: no per-order collect button (…)" and "kanban: no per-order reprint button even with
+  showReprint (…)" — the board's cards carry them (D11); each becomes its opposite. [3a-ii]
+- "kanban: the age accent is also applied to each cell (…)" — no cells; the age accent is the card's (D7). [3a-i]
+- "the header shows a legible overdue+forgotten count badge — a non-colour tell, not just borders",
+  "the header shows no badge at all when nothing has escalated to overdue", "the header counts BOTH
+  overdue and forgotten groups (band rank ≥ overdue)" — the header line replaces the badge (D9). [4]
+- "flashes a forgotten ticket at the fast pulse token, 1 s by default (kanban)" — one board, the
+  pulse on the card's band (D7); the `(rail)` case of the same `it.each` passed and is the one kept. [3a-i reads the card; 4 the band]
+- "ticket mode: tapping a line emits advance-ticket { orderId, stationId, to } (whole-ticket)" —
+  `advance-dishes` for the card's dishes at that stage (D8). [5b]
+- "a whole-ticket bump carries the group's own station, not the widget's" and "a merged queue bumps
+  each order by its own station's mode" — the same, through `advance-dishes` (D8). [5b]
+- "rail: the ticket-mode card shows the mark once and the line-mode card none" and "kanban: each
+  bumpable cell of the ticket-mode order shows the mark, no other cell" — one mark per card (D8). [the "kanban: …" case 3a-i; the "rail: …" case 3a-ii]
+- "the numbers an order's dishes were sent to the kitchen under": "follow the number on the ticket
+  head and on each kanban cell" (three cases: en-GB [28], es-ES [28], en-GB [28,30]), "leave a plain
+  number on an order that never moved", "leave a kanban cell's dish name uncut at 1024 px wide"
+  (two cases) — the number is in the card's heading only, not beside each dish (D5). [3a-i]
+- "keeps permanent heading numbers when firing positions change", "rail: sections a party's card by
+  group position, the lines with no group first, and no course headers", "rail: a held group says
+  it is held, not released, and its lines are greyed and not bump targets" — a party's group
+  sections are now its cards (D1), ordered as D2 says, named with their course (D5), a held one
+  drawn per D3. [3a-ii; the course in 3b]
+- "kanban: names each order whose ticket has not printed above the columns", "kanban: an order
+  with no label is named by its number alone" — the strip goes; each card says it (D11). [3a-ii]
+- "marks under each of a seated party's sent groups", "board: labels a marked dish's cell, and not
+  an unmarked one's", "board: words the mark in Spanish" — the after-period mark now sits within a
+  group's card, above the dish, as the rail drew it (D12). [the party case 3a-ii; the two "board:" cases 3a-i]
+
+`apps/till/src/widgets/station-queue.allergy.test.ts` (3): "shows frozen instructions only on the
+assigned kanban dish in en", "… in es", "marks only the assigned card in a merged kanban queue" —
+they look for the order tag beside each Board dish (D5); the allergy block under its dish is
+unchanged and stays checked. [3a-i]
+
+`apps/till/src/screens/till-station-screen.test.ts` (21):
+- "kanban is the default view; the toggle flips the widget to rail and back", "suppresses its own
+  header + Back when embedded, keeping the view toggle", "with one station still available, offers
+  its view toggle and no guidance", "offers the switch with two stations, beside the view toggle,
+  and opens stacked", "as the only station, keeps its toggles and its dish until the queue is
+  empty, then guides" — no toggle (D13); the merge switch and the rest of each check stay. [6]
+- "operator mode shows the per-order Reprint button in the rail (…)", "clicking Reprint calls
+  reprintOrder(orderId) and does not escape the screen", "a rejected Reprint surfaces the localised
+  banner, never the raw code", "a codeless Reprint rejection (a fetch network throw) falls back to
+  the generic banner", "device mode hides the Reprint button (…)", "device mode hides the Collect
+  button on a settled order (…)", "device mode hides the kitchen-fire button on a held course (…)"
+  — each clicked the toggle first; Reprint and Collect are on the board's cards (D11, D13); every
+  other check in them stays. [6]
+- "an advance-ticket from the widget calls advanceTicket then reloads the active queue", "a failed
+  whole-ticket advance still reloads the queue (reconciling)", "a whole-ticket bump expands to a
+  deviceAdvance for each advanceable item at the station", "a whole-ticket bump refused
+  device.unauthorized asks at once to switch, naming the station screen", "a whole-ticket bump in a
+  section advances that station's lines of an order both stations hold", "a merged device screen
+  bumps a whole order at one station and a single dish at another", "a station's changed bump mode
+  reaches an open device screen at its next refresh", and the describe "till-station-screen
+  device-mode whole-ticket bump selection" ("advances only the fired lines whose next step is the
+  target, skipping held and later lines", "advances nothing for an order no longer on the loaded
+  queue, and still reloads") — `advance-dishes` names the dishes, so the screen no longer chooses
+  them from the order (D8); what each pins about the calls it makes, the reload and the refusals
+  moves to the `advance-dishes` handler's cases (Task 5a), and the selection rule to the widget's
+  (Tasks 2, 5b). [5b]
+
+`apps/till/src/screens/till-station-screen.a11y.test.ts` (6): "has no violations on the TICKET RAIL
+(toggle switches the widget, age-coloured cards)" and "has no violations on the rail with held food
+and no station Fire button", each in both themes, and "has no violations on the merged rail with
+its station labels and the lines above it" in both themes — each clicked the toggle (D13); the
+held-food and merged sweeps are kept on the board. [6]
+
+`apps/till/src/screens/text-size.layout.test.ts` (4): "on a kitchen station's queue at
+{1280x800, 1024x768} and {100, 130}%, every dish lies inside its card" — it counted one `.cell` per
+dish; now each dish's name must lie inside its card (D1). [3a-i]
+
+**Also changed, though they pass under the probe** (each needs its `view` removed, and keeping
+both cases of a pair would test one drawing twice; D13). One case of each pair is deleted, the
+other kept without `view`, all in Task 6 except where marked:
+- `station-queue.test.ts`: the `it.each` / `for` over the two views at `:736` ("an advanceable
+  line's accessible name"), `:1125` (the forgotten flash: keep one), `:2213` (merged station
+  labels), `:2357`, `:2400` (the whole-ticket mark), `:2526`, `:2535`, `:2555`, `:2580` (Move),
+  `:2666` (move attribution); and the pairs of single cases named "rail: …" and "kanban: …" for
+  modifiers (`:483`, `:498`), the note (`:582`, `:593`) and as-served allergens (`:690`, `:700`).
+- `station-queue.a11y.test.ts`: "the kanban board (…)" and "the ticket rail (…)" (`:396`, `:405`)
+  become one board sweep; the `it.each` at `:414`, `:462`, `:583`, `:612`; "the kanban
+  printing-problem strip has no violations" (`:557`) is deleted with the strip (D11) [3a-ii].
+- `station-queue.allergy.test.ts` `:20`, `:96`; `station-queue.kitchen-note.test.ts` `:57`, `:85`;
+  `till-station-screen.a11y.test.ts` `:568`; `kitchen-allergy.look.test.ts` `:23` (its `rail` and
+  `kanban` surfaces become one `board`).
+- `api/client.test.ts:1455` "advanceTicket POSTs { to } to the whole-ticket advance route (…)" —
+  deleted with the method (D8). [5b]
+
+**Fixture-only (no check changes):** `queuedAt` on every station-queue item literal (the 63 sites
+above), equal to its order's `queuedAt` [1]; the probe's typecheck flagged no `till-app*.test.ts`
+fixture, so those stay as they are, and Task 1's typecheck is the judge; `view: "rail"` / `view` removed from mounts whose checks hold on
+the board (the rest of the 112) [6].
+
+Any other failure, in any suite a task names, is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **A party with two groups at one station**, the second fired 40 minutes after the first: two
+   cards, each with its own minutes and band; the second is fresh (D1, D4; Tasks 2, 3a-i, 4).
+2. **A card with dishes at different stages** (one Waiting, one Preparing): it sits in Waiting; the
+   Preparing dish says so; a heading tap moves only the Waiting dish; a whole-ticket dish tap on the
+   Preparing dish moves only Preparing dishes on that card (D2, D8, D12; Tasks 2, 3b, 5b).
+3. **A held group, and a group with one dish fired by hand** (`fireHeldLine`, A773): the held card
+   is dashed, untimed, with no heading tap; the mixed card ages by its fired dish and its held dish
+   says "Held, not released" (D3, D12; Tasks 3a-i, 3b).
+4. **Ticket mode on a party bill**: a dish tap moves that card only, never the order's other
+   group's card (D8; Task 5b).
+5. **A refusal half-way through a heading tap** (another screen moved a dish): the loop stops, the
+   reload shows the truth, no message unless the disk is full (D8; Task 5a).
+6. **A kitchen display**: no Collect, no Reprint, heading taps through `deviceAdvance` (D8, D11;
+   Tasks 5a, 6).
+7. **Merged screen**: one header line for all stations; each station's part of an order its own
+   card, oldest first (D1, D2, D9; Tasks 4, 6).
+8. **A weighed dish** ("0.35 kg × Pulpo") counts as one dish to make; "1.5× Croqueta" as 1.5; a
+   held or Ready dish none (D9; Task 2).
+9. **Reduced motion, dark theme, Spanish, 1280 and 1024 px, and a narrow till (Station screen at
+   390 px)**: nothing pulses, the band stays, contrast holds, «Esperando», «platos por hacer»
+   (Tasks 4, 9).
+10. **The pass and department transfers say Waiting** where they said New (D10; Task 7).
+11. **One group sent across two bills of a party** (Bill 1 and Bill 2, A803's several bills): one
+    card, both bills' numbers, each bill's note, printing problem and Reprint; a heading tap moves
+    both bills' dishes (D1, D11; Tasks 2, 3a-i, 3a-ii, 5b).
+
+---
+
+**Task order and why.** The type and fixtures first (Task 1), so later tasks read each dish's own
+time; the pure card model (Task 2); the Board's cells become cards (3a-i), the card takes over the
+ticket's parts and the Tickets drawing goes (3a-ii), then the course and each dish's words (3b); the band
+and the header line (4); the screen learns `advance-dishes` (5a) before the widget sends it (5b);
+the Tickets view goes (6); the word Waiting (7); the docs (8); the LOOK (9). Each leaves the tree
+green and is sized well under 100 tool calls.
+
+### Task 1: Each queue dish carries its own queued time (fixtures only)
+
+**Files:**
+- Modify: `apps/till/src/api/client.ts` (`StationQueueItem`, after `firedAt` `:1567-1569`:
+  `/** When this dish joined the queue: set at fire, and again when a release re-routes it. */
+  queuedAt: string;`; and `StationQueueGroup.queuedAt`'s comment `:1644-1646`: "the order's
+  oldest line at this station; the merged screen's ordering key" — no longer "the age-colouring
+  anchor")
+- Modify (fixture-only): the 63 item literals the probe's typecheck named (D4) — each gains
+  `queuedAt` equal to its order's `queuedAt` (where a builder spreads a shared item, set it once
+  in the builder)
+
+- [ ] **Step 1:** Make the type change, then `pnpm --filter @waitron/till typecheck` and fix each
+  error by adding `queuedAt` (never a cast). Expect the 63 sites in 9 files the changed-checks list
+  names; a different count is fine if every new site is an item literal, and anything else is a STOP.
+- [ ] **Step 2: Run; expect PASS, unchanged counts** (memory first: `memory_pressure | grep free`):
+  `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout src/screens/till-expo-screen`
+  → `Tests 789 passed (789)`, the probe's base for these five paths (`base1.txt`; the expo suite is
+  in it because its allergy case reads the edited `test/kitchen-allergy-fixtures.ts`), then
+  `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts` (read its `Tests` count before
+  and after: unchanged).
+- [ ] **Step 3:** eslint the changed files; `pnpm format:check`; ledger (fixture-only list, no
+  changed check); `git commit -s -m "A797-8: each kitchen-queue dish carries its own queued time"`
+
+### Task 2: The card model, in one pure module
+
+**Files:**
+- Create: `apps/till/src/state/kitchen-cards.ts`
+- Test: `apps/till/src/state/kitchen-cards.test.ts`
+
+**Interfaces:**
+- Produces:
+  ```ts
+  export interface KitchenCard {
+    /** `${stationId ?? ""}|g:${groupId}`, or `${stationId ?? ""}|o:${orderId}` for dishes with no group: unique on one screen. */
+    key: string;
+    /** Its bills, in the read's order: one, or more when a group spans a party's bills (D1). */
+    orders: MergedQueueGroup[];
+    /** The group the dishes were sent in; null for a counter order, a bill with no party, or dishes moved in. */
+    group: QueueGroup | null;
+    /** In the read's order. */
+    items: StationQueueItem[];
+    /** Its least advanced dish's state, held dishes counting as `queued` (D2). */
+    column: TicketState;
+    /** The earliest `queuedAt` of its fired dishes, epoch ms; null when none is fired (D4). */
+    since: number | null;
+  }
+  /** One card per station and group across its bills, or per station and bill for dishes with no group; oldest first (D1, D2). */
+  export function kitchenCards(orders: readonly MergedQueueGroup[]): KitchenCard[];
+  /** The state a heading tap moves: its least advanced fired dish not Ready; undefined when none (D8). */
+  export function headingStage(card: KitchenCard): TicketState | undefined;
+  /** The ids a tap at `stage` moves: the card's fired dishes in that state (D8). */
+  export function dishesAt(card: KitchenCard, stage: TicketState): string[];
+  /** Fired dishes Waiting or Preparing, in thousandths of a dish; a dish whose unit shows counts 1000 (D9). */
+  export function thousandthsToMake(cards: readonly KitchenCard[]): number;
+  /** Cards with a fired dish not Ready whose band at `now` is overdue or forgotten (D9). */
+  export function lateCards(cards: readonly KitchenCard[], now: number): number;
+  ```
+  `MergedQueueGroup` moves from `widgets/station-queue.ts:71` into this file and is re-exported
+  there, so `till-station-screen.ts:27` keeps its import. Consumed by Tasks 3a-i–5b.
+
+- [ ] **Step 1: Failing tests** (builders as in `station-queue.test.ts`, each item with its own
+  `queuedAt`):
+  1. "makes one card per sent group, and one for an order with no party" — a party order with
+     groups g-2, g-3 and a moved dish with none, and a counter order → keys for `none`, g-2, g-3
+     and the counter order; each card's items in the read's order.
+  2. "keeps each station's part of an order on its own card" — one order at two stations in a
+     merged list → two cards.
+  2b. "merges one group's dishes from two bills into one card" — Bill 1 and Bill 2 of one party,
+     each with a dish in g-2 → one card, `orders` [Bill 1, Bill 2], both dishes; a no-group dish on
+     each bill → one card per bill (Review focus 11).
+  3. "puts a card in its least advanced dish's column, held dishes counting as Waiting" — queued +
+     preparing → `queued`; preparing + ready → `preparing`; all ready → `ready`; held + ready →
+     `queued`.
+  4. "ages a card from its own oldest fired dish, never a held one" — fired at 20:40 and 21:15 on
+     two groups of one order → `since` 20:40 and 21:15; a held-only card → `null`.
+  5. "orders cards oldest first, untimed last, ties by the read then group position" — Review
+     focus 1's two groups behind a newer counter order: counter order between them.
+  6. "names the stage a heading tap moves, and the dishes it moves" — queued + preparing →
+     `queued`, `dishesAt` the queued fired ids only; all ready → `undefined`; held + preparing →
+     `preparing`.
+  7. "counts dishes to make: quantities, a shown unit as one, nothing held or Ready" — `"2.000"`
+     no unit, `"1.500"` sold in each, `"0.350"` kg, a held `"3.000"`, a ready `"1.000"` → 4500.
+  8. "counts late cards with something to make" — an overdue card with a queued dish, a forgotten
+     card all Ready, a held card → 1.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/kitchen-cards.test.ts`.
+- [ ] **Step 3: Implement.** Use `classifyBand` and `BAND_RANK` from `@waitron/shared` as the widget
+  does (`station-queue.ts:13`); a stable sort; `Date.parse` of each fired dish's `queuedAt`.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count).
+- [ ] **Step 5:** typecheck till; eslint both files and `station-queue.ts`; `pnpm format:check`;
+  ledger; `git commit -s -m "A797-8: one kitchen card per group, in a pure module"`
+
+### Task 3a-i: The Board's dish cells become group cards
+
+The Board (the widget's default view) draws cards; the Tickets view (`view="rail"`) is left drawing
+as today until Task 3a-ii, so every rail check stays green here.
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (`#kanban` becomes `#board`: it maps `COLUMNS` to
+  sections holding `kitchenCards(this.groups)` by `column`; `#card` draws what the Board drew
+  per dish, now once per card: the heading (D5's identity: numbers, allergy marker, labels, group
+  name, held note, minutes), the whole-ticket mark once (D8), the kitchen note, then the dishes
+  with their after-period marks; the article is keyed `data-card`, with `data-order` (its first
+  bill's number) and `data-card-group` (`group?.id ?? "none"`); a held card per D3 (class `held`,
+  dashed); the age accent moves from `.cell` to the card; delete `#kanbanCell`, `#cell` and `.cell`
+  styles. `#rail`, `#printProblems` and `view` are untouched)
+- Test: `apps/till/src/widgets/station-queue.test.ts`, `station-queue.allergy.test.ts`,
+  `apps/till/src/screens/text-size.layout.test.ts`
+
+- [ ] **Step 1: Change the checks** tagged `[3a-i]` in the changed-checks list (D1, D2, D3, D5,
+  D7's accent move, D8's mark), with these new cases in `station-queue.test.ts`, a `describe` "the
+  board's cards":
+  1. "draws three columns of cards, each in its least advanced dish's column" (replacing "kanban
+     is the default view…").
+  2. "gives a party one card per sent group and the dishes with no group their own, oldest first"
+     (Review focus 1).
+  3. "draws one card for a group sent across two bills, with both bills' numbers" (Review focus 11,
+     D1).
+  4. "draws a held group's card dashed in Waiting, with no minutes and no heading tap" (D3).
+  5. "keeps a long dish name whole inside its card at 1024 px" (replacing the two "uncut" cases).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/text-size.layout`.
+- [ ] **Step 3: Implement.** A card draws its dishes as the rail did for its kind (course sections
+  for a card with no group; a plain list for a group card); course in the heading and the dish's
+  state word wait for Task 3b.
+- [ ] **Step 4: Run; expect PASS**, then
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen src/screens/kitchen-allergy src/screens/till-expo-screen src/widgets/station-queue.a11y.test.ts`:
+  expect PASS (the screen still offers the toggle, and the widget still sends `advance-ticket`
+  until Task 5b). A failure is a STOP unless it reads a Board cell (then it is D1 or D5: change it
+  here and list it).
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger (each changed check, with its
+  D-number); `git commit -s -m "A797-8: the kitchen Board draws one card per group"`
+
+### Task 3a-ii: The card is the ticket: the bill's facts and actions move onto it
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (`#card` gains, per bill, the printing problem,
+  "Also on this order", Collect and Reprint (D11; on a merged-bills card each names its bill's
+  number); `#queue` draws `#board()` whatever `view` says; delete `#rail`, `#groupSections`,
+  `#groupSection`, `#printProblems` and their styles (`.rail`, `.print-problems`); `view` stays,
+  unread, until Task 6)
+- Test: `apps/till/src/widgets/station-queue.test.ts`, `station-queue.a11y.test.ts`
+
+- [ ] **Step 1: Change the checks** tagged `[3a-ii]` in the changed-checks list (D1, D11: other
+  stations' dishes, Collect, Reprint, the strip, a party's sections, the rail's whole-ticket mark,
+  the party after-period marks; the a11y strip case deleted), with these new cases in "the board's
+  cards":
+  1. "shows the bill's note, printing problem, other stations' dishes, Collect and Reprint on each
+     of its cards" (D11); with `advanceOnly`, no Collect; without `showReprint`, no Reprint.
+  2. "on a group's card spanning two bills, names each bill's note, printing problem and Reprint"
+     (D1, D11): two Reprint buttons, named "Reprint #12" and "Reprint #13", each emitting its own
+     `orderId`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue`.
+- [ ] **Step 3: Implement** D11 and the deletions.
+- [ ] **Step 4: Run; expect PASS**, then the Task 3a-i Step 4 command. The screen cases that click
+  the toggle and then look for Reprint or Collect now find them on the board (the widget ignores
+  `view`): they pass unchanged here and change only in Task 6. A failure is a STOP unless it reads
+  the Tickets view's group sections (then it is D1: change it here and list it).
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-8: a kitchen card carries its bill's note, problems and actions"`
+
+### Task 3b: A card's courses and each dish's words
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (`#card`'s heading names the course when every
+  dish shares one, else `#courseSections` inside, D5; `#line` draws the state word only for a dish
+  ahead of its card's column, and "Held, not released" for a held dish on a card not itself held,
+  D12; after-period marks within the card, `#sectionLines`)
+- Test: `apps/till/src/widgets/station-queue.test.ts`
+
+- [ ] **Step 1: Failing tests** (and the changed "marks under each of a seated party's sent
+  groups", "board: labels a marked dish's cell…", "board: words the mark in Spanish", D12):
+  1. "names the group's course in its heading when its dishes share one" — the heading holds
+     "Group 2" and the case's own English course name, "Mains" (course names are the venue's
+     content, never a translated string). General code is English only (CLAUDE.md §3): the
+     existing fixture's "Principales" (`station-queue.test.ts:1850`) is an old leak this slice
+     does not spread — a new case builds its own course name in English, and the old leak is
+     noted for A913 in lane C's questions file, not fixed here.
+  2. "puts course heads inside a card whose dishes span two courses, null course first".
+  3. "a dish ahead of its card's column says its state; one at the column says none" — Review
+     focus 2: the Preparing dish reads "Preparing", the Waiting one has no `.line-state`.
+  4. "a held dish on a fired card says it is held, and is not a button" — Review focus 3.
+  5. "a Ready dish on a Preparing card reads Ready, in Spanish Listo" (restore the language after).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts`.
+- [ ] **Step 3: Implement** D5's course rule and D12.
+- [ ] **Step 4: Run; expect PASS**, then the Task 3a-i Step 4 command.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-8: a kitchen card names its course, and each dish its own state"`
+
+### Task 4: The age band, the forgotten pulse and the header line
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (styles `:401-457` → D7's top band and outline,
+  keyframe to `--wt-color-danger-pulse-dim`; `#header` → D9 through `thousandthsToMake` and
+  `lateCards`, class `kitchen-counts`, `data-kitchen-counts`; `.overdue-count` style deleted from
+  this widget), `apps/till/src/i18n/strings.ts` (D10's three new keys, en after `:659`, es after
+  `:2411`), `packages/ui-core/src/tokens/colors.css` (`:120-121`: "…the till bar's Waiting tab,
+  the Ready bar's warning and a forgotten kitchen card's band dim to half-way"),
+  `packages/ui-core/src/tokens/structure.css` (`:50`: "fast for Forgotten, on the floor and a
+  kitchen card"), `apps/till/src/screens/till-expo-screen.ts` (comments `:188`, `:205`, `:224`
+  only: "the kitchen screen's cards" for "till-station-queue's rail card" and its `.cell`)
+- Test: `apps/till/src/widgets/station-queue.test.ts`, `station-queue.a11y.test.ts`
+
+- [ ] **Step 1: Failing tests** (and the changed header and age checks, D7, D9). Cases 1–3 first
+  call `await commands.emulateReducedMotion(false)` as `till-floor-screen.ready-bar.test.ts` does
+  (typed as there; reset in `finally`):
+  1. "a card's band is green, then amber, then red as it ages" — fresh, warm, overdue cards: the
+     band's `border-top-color` equals `--wt-color-success`, `--wt-color-warning`,
+     `--wt-color-danger` (set each to a distinct `rgb(…)` on the widget); overdue's left border
+     also danger; a held card's band is the plain border colour.
+  2. "a forgotten card's band pulses to the dim red at the fast pulse token" — `animationName`
+     `age-forgotten-flash`, `1s`; paused at `currentTime` 500 the band reads
+     `--wt-color-danger-pulse-dim`; with `--wt-duration-pulse-fast: 3000ms`, `3s` (the kept case of
+     `:1125`).
+  3. "under reduced motion a forgotten card holds still and stays red" — `reducedMotion: true`, and
+     separately `emulateReducedMotion(true)` with nothing injected: `animationName` `none`, band
+     `--wt-color-danger`.
+  4. "the header says how many dishes are to make and how many cards are late" — Review focus 8's
+     dishes plus one overdue card → "5.5 dishes to make · 1 late" and, under `setLocale("es")`,
+     «5.5 platos por hacer · 1 con retraso» (restore the language after); one dish → "1 dish to
+     make"; no late card → no "late"; nothing to make and nothing late → no line.
+  5. "a merged queue has one header line for every station" — two stations' orders → one
+     `[data-kitchen-counts]`, the sum.
+  6. a11y, in `station-queue.a11y.test.ts`'s both-theme `describe`: "a board with a fresh, warm,
+     overdue, forgotten and held card and the header line has no violations" (`reducedMotion:
+     true`, a fixed `now`).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts`.
+- [ ] **Step 3: Implement** with `--wt-*` tokens only (CLAUDE.md §3; no hex, `rem` or `em`) and
+  D10's strings in both blocks.
+- [ ] **Step 4: Run; expect PASS**, then the Task 3a-i Step 4 command,
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts scripts/english-only.test.ts`,
+  `pnpm --filter @waitron/ui-core exec vitest run src/tokens` and
+  `pnpm --filter @waitron/till exec vitest run src/i18n` (the catalogues' own suites).
+- [ ] **Step 5:** typecheck till; eslint the changed `.ts` files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-8: a kitchen card's age band, and the dishes-to-make line"`
+
+### Task 5a: The station screen moves the dishes a card names
+
+**Files:**
+- Modify: `apps/till/src/screens/till-station-screen.ts` (a new `#onAdvanceDishes` for
+  `advance-dishes` `{ itemIds, stationId, to }`, bound beside `:981`: `event.stopPropagation()`,
+  then `#advance` with a loop that awaits `deviceMode ? api.deviceAdvance(id, to) :
+  api.advanceTicketItem(id, stationId, to)` for each id in turn)
+- Test: `apps/till/src/screens/till-station-screen.test.ts` (a `describe` "moving the dishes a card
+  names", dispatching `advance-dishes` from the widget element as `:265` dispatches
+  `advance-ticket-item`)
+
+The old `advance-ticket` path stays in this task, so the widget, which still sends it, keeps
+working; Task 5b removes it.
+
+- [ ] **Step 1: Failing tests:**
+  1. "on a till, advances each named dish in turn, then reloads the queue" — three ids: three
+     `advanceTicketItem(id, "st-1", "preparing")` calls in order, the second only after the first
+     resolves (hold the first's promise), then one `getStationQueue`.
+  2. "on a kitchen display, through deviceAdvance, then reloads the display" — never
+     `advanceTicketItem`; one `getDeviceStationScreen` after.
+  3. "stops at the first refusal and still reloads, with no line" — the second refused
+     `ticket.invalid_transition`: no third call, a reload, no `[role=alert]` (Review focus 5).
+  4. "a refusal on a full disk says so" — `storage.disk_full`: the full-disk line.
+  5. "a kitchen display whose screen was taken asks to switch" — `device.unauthorized`:
+     `kitchen-screen-changed` with `{ from: "station" }`, no reload (as the existing
+     "a whole-ticket bump refused device.unauthorized…" checks).
+  6. "the event stops at the screen" — the app's listener above it never sees `advance-dishes`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen.test.ts -t "moving the dishes a card names"`.
+- [ ] **Step 3: Implement.** Never `Promise.all` (CLAUDE.md §3 forbids it for one transaction's
+  queries; here it keeps the order the cook sees and the first refusal's stop).
+- [ ] **Step 4: Run; expect PASS**, then the whole file and `src/screens/till-station-screen.a11y.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-8: the station screen moves the dishes a card names"`
+
+### Task 5b: The heading moves the card; a whole-ticket tap moves the card's dishes
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (the heading a `<button data-card-head>` while
+  `headingStage(card)` is defined, its hidden "Advance ticket #N"; `#bump` in ticket mode sends
+  `advance-dishes` with `dishesAt(card, item.state)`; the heading sends `dishesAt(card,
+  headingStage(card))`; `#wholeTicket` once per card while something can move; styles for the
+  heading button: `min-height: var(--wt-tap-min)`, no fill, the text colour, a focus ring as
+  `.line`'s), `apps/till/src/screens/till-station-screen.ts` (delete `ADVANCE_FROM` `:41-49`,
+  `#onAdvanceTicket`, `#deviceAdvanceTicket` `:608-638`, `@advance-ticket` `:982`),
+  `apps/till/src/api/client.ts` (delete `advanceTicket` `:3338-3354`); the nine
+  `advanceTicket: vi.fn()…` stubs in test fakes go with it (`till-app.test.ts:503`,
+  `till-station-screen.a11y.test.ts:135`, `till-station-screen.test.ts:135`, `:723`, `:812`, `:1366`,
+  `:1475`, `:1794`, `:2836`; ran `grep -rn "advanceTicket:" apps/till/src apps/till/test`), fixture-only
+  except `:723`, whose test changes with D8
+- Test: `apps/till/src/widgets/station-queue.test.ts`, `station-queue.a11y.test.ts`,
+  `apps/till/src/screens/till-station-screen.test.ts`, `till-station-screen.a11y.test.ts`,
+  `apps/till/src/api/client.test.ts`
+
+- [ ] **Step 1: Failing tests** (and every changed check the list gives for D8):
+  1. "a heading tap sends the card's least advanced dishes on, never one further on" — Review
+     focus 2: `advance-dishes` `{ itemIds: ["ti-waiting"], stationId, to: "preparing" }`.
+  2. "a whole-ticket dish tap sends that card's dishes at the tapped dish's stage" — tapping the
+     Preparing dish → only the Preparing ids, `to: "ready"`.
+  3. "a whole-ticket tap on a party's card leaves its other group's card alone" — Review focus 4.
+  4. "a heading is a button only while a tap can move something" — all Ready, all held: no
+     `button[data-card-head]`.
+  5. "a heading's name starts with its words and ends with Advance ticket" — as the existing
+     "an advanceable line's accessible name" case reads names.
+  6. "a merged heading tap names its own station" — the order's `stationId`, not the widget's.
+  7. Screen, "a heading tap on a kitchen display advances each of its dishes through
+     deviceAdvance" — the widget's real click → `deviceAdvance` per id, then the reload (replaces
+     "a whole-ticket bump expands to a deviceAdvance…").
+  8. Screen, "a station's changed bump mode reaches an open device screen at its next refresh"
+     (changed): after the refresh a dish tap sends `advance-dishes`, observed as two
+     `deviceAdvance` calls.
+  9. a11y: the "whole-ticket bump mode has no violations" sweep now includes a heading button.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/screens/till-station-screen.test.ts`.
+- [ ] **Step 3: Implement** D8; delete the old path; `pnpm --filter @waitron/till typecheck` must
+  flag only the deleted method's uses in tests, each changed or deleted per the list.
+- [ ] **Step 4: Run; expect PASS**: `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/api/client.test.ts`,
+  then `pnpm --filter @waitron/till exec vitest run src/till-app` (memory first; the probe's
+  result is under "Changed test checks"; a new failure is a STOP).
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger (the deleted
+  `client.test.ts` case and every changed screen case, D8);
+  `git commit -s -m "A797-8: a card's heading moves the card on; whole-ticket taps move its dishes"`
+- [ ] **Stop and hand over** if the task passes about 150 tool calls unfinished (global rule): stop
+  at a green point (the widget's new taps and their tests, with the old screen path still in place,
+  is one), or a cleanly red one, commit it with `git commit -s`, and return a handover — done, left,
+  files, each check's state — for a fresh implementer.
+
+### Task 6: The Tickets view and its switch go
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (delete `view` `:640` and any comment naming
+  the rail or the kanban; the class comment `:82-90` says "one card per group in three state
+  columns"), `apps/till/src/screens/till-station-screen.ts` (delete `view` `:239`, `#toggleView`
+  `:556-558`, the toggle `:1008-1019`, the `showViews` option `:973` and its use `:873`, the two
+  `.view=` bindings; the comments at `:134-135` and `:217` lose "the view toggle"),
+  `apps/till/src/i18n/strings.ts` (delete `station.view_kanban`, `station.view_rail`, en
+  `:652-653`, es `:2405-2406`, and the comment at `:632` naming "the view toggles")
+- Test: every file the changed-checks list names for D13, and the fixture-only `view` removals
+
+- [ ] **Step 1: Change the checks** the list gives for D13 (toggle cases; Reprint and Collect
+  cases that clicked the toggle now find the buttons on the board; the view pairs collapse to one
+  case each) and remove `view` from every other mount. New case in `till-station-screen.test.ts`:
+  "offers no Board or Tickets switch, on a till or a kitchen display" — no `[data-view-toggle]`,
+  and the merge switch still there with two stations.
+- [ ] **Step 2: Run; expect FAIL** on the new case only:
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen.test.ts -t "no Board or Tickets switch"`.
+- [ ] **Step 3: Implement** D13. Then `grep -rn "view_rail\|view_kanban\|\"rail\"\|data-view-toggle" apps/till/src --include='*.ts'`:
+  only the floor's own List/Map toggle (`till-floor-screen*`, `test-helpers.ts:709`,
+  `till-shell.device-zones.look.test.ts:117`) may remain.
+- [ ] **Step 4: Run; expect PASS**: `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout`,
+  and `pnpm --filter @waitron/till typecheck` (exit 0).
+- [ ] **Step 5:** eslint; `pnpm format:check`; ledger (each collapsed pair and deleted case by
+  name, D13); `git commit -s -m "A797-8: the kitchen screen's Tickets view and its switch go"`
+- [ ] **Stop and hand over** if the task passes about 150 tool calls unfinished: a natural point is
+  the source change with `station-queue.test.ts`'s pairs collapsed and the other files still to do
+  (their `view` mounts fail typecheck, so either commit once `pnpm --filter @waitron/till
+  typecheck` passes, or commit cleanly red and say which files are left); commit with
+  `git commit -s` and return a handover — done, left, files, each check's state.
+
+### Task 7: The first column is Waiting
+
+**Files:**
+- Modify: `apps/till/src/i18n/strings.ts` (`station.state.queued` "Waiting" `:677`, «Esperando»
+  `:2429`, D10)
+- Test: `apps/till/src/widgets/station-queue.test.ts` (one case), and the readers' suites
+
+- [ ] **Step 1: Failing test:** "names the first column Waiting, in Spanish Esperando" — the
+  `[data-column="queued"]` title reads "Waiting", and «Esperando» under `setLocale("es")`
+  (restore the language after, CLAUDE.md §4).
+- [ ] **Step 2: Run; expect FAIL**, then change the two values.
+- [ ] **Step 3: Run; expect PASS**, then the other readers' suites:
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-expo-screen src/widgets/department-transfers src/widgets/station-queue`.
+  The probe changed this value and no expo or station test failed on the word (`run1.txt`); a
+  failure that pins "New" or «Nuevo» is a check this spec changes (D10): change it and list it.
+- [ ] **Step 4:** eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-8: the kitchen's first column is Waiting"`
+
+### Task 8: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/kitchen-service.md` (a new section before
+  `## A dish sent after its period ended {#after-period}`: `## Work the kitchen screen
+  {#kitchen-screen}`; the whole-ticket sentence `:104-105`; the after-period sentence `:135-136`),
+  `apps/server/src/guide/es/kitchen-service.md` (the same section, `{#kitchen-screen}`; `:119-121`;
+  `:152-154`), `docs/developers/design-system.md` (`:614-617`; `### The kitchen screen's late-send
+  mark` `:5454-5463`; a new `### The kitchen screen's cards` after it), `docs/backlog.md` (the
+  A797 entry `:120-140`), `docs/backlog/till.md` (A797's entry from `:1036`),
+  this plan's slice 9b outline (one sentence: the one-row header of picture 03 — the station's name,
+  its Open/Closed chip and the header line — comes with the corner's Columns, D9), and its slice 8b
+  outline (one sentence: the read also says whether a bill is a counter order, so a counter card
+  reads "Counter #12", D5),
+  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.3 a dated pointer; §9's
+  bump-mode point a dated answer)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+- [ ] **Step 1: Guides.** English, the new section in about six sentences: each card is a group
+  of a table's dishes, or a counter order; it sits in the column of its least advanced dish
+  (**Waiting**, **Preparing**, **Ready**); tap a dish to move it on, or the card's heading to move
+  the card on (only the dishes holding it back move); the band along its top turns from green to
+  amber to red as it waits, and a forgotten card's band pulses (it holds still on a device set to
+  reduce motion); the line above the columns says how many dishes are to make and how many cards
+  are late; held cards are dashed and wait for the waiter. Replace "an order at a whole-ticket
+  station shows **Whole ticket** while a tap can still move it on" with: a card from a
+  whole-ticket station shows **Whole ticket**, and a tap on one of its dishes moves the card's
+  dishes at the same stage. Replace the after-period sentence's "**Tickets** … **Board** …" with
+  "the card shows **After Lunch — agreed** above it". Spanish the same, with «Esperando»,
+  «Preparando», «Listo», «Toda la comanda», «platos por hacer», «con retraso» (read each from
+  `strings.ts`'s `es` block before writing); Spanish only in the Spanish file.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md.** `:614-617`: the kitchen screen's forgotten band dims to
+  `--wt-color-danger-pulse-dim` over the fast duration (its own keyframe); the pass's flash is
+  unchanged. The late-send mark: "On a card it is a row of its own above each run of consecutive
+  dishes with the same mark, within one course head" (no Tickets, no Board). New section, "The
+  kitchen screen's cards": D1, D2, D5, D7, D8, D9 and D12 in one paragraph each sentence pointing
+  at `apps/till/src/state/kitchen-cards.ts` or `apps/till/src/widgets/station-queue.ts`.
+- [ ] **Step 4: Backlog.** Both A797 entries: slice 8 (the kitchen screen's group cards) in review,
+  built from the build plan's slice 8; next, slice 8b (short names on cards, after slice 1, landed)
+  and slice 9. In A797's detail (`docs/backlog/till.md`), one open point: the whole-order advance
+  route `POST /api/orders/:id/stations/:sid/advance` has no till caller after slice 8 (D8).
+  Retiring it is a separate change of its own, FULL (a till route), not part of A773-2: A773-2's
+  Task 2 retains "real station-item/ticket preparation routes for actual-released work" (its plan,
+  Task 2's Interfaces). After the merge, a docs-only commit on `main`
+  says "landed in #N". Open no new entry unless the LOOK finds something this slice does not fix
+  (its number from `~/waitron-campaign-shared/next-item-number`: read it, use it, write the next
+  back).
+- [ ] **Step 5: Design file** (dated pointers): after §3.3's "Tap a dish" bullet, "_2026-10-26,
+  slice 8: a heading tap moves the dishes holding the card back, not a dish already further on; a
+  whole-ticket station's dish tap moves that card's dishes at its stage; the card ages from its own
+  fired dishes and keeps whole minutes; the header line sits above the columns until slice 9b's
+  header row; see the build plan's slice 8, D4, D6, D8, D9._" In §9, after "the venue's bump mode
+  once a dish tap and a heading tap both exist": "(2026-10-26, slice 8: traced and settled in the
+  build plan's slice 8, D8.)"
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-8 — guides, design system and backlog for the kitchen's group cards"`
+
+### Task 9 (visual): LOOK at the kitchen screen's cards
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-8-kitchen-group-cards`; `wa-wt ls`
+  for the URLs. Enrol one browser context as a kitchen display showing the Grill (or the demo's
+  kitchen) station screen, as slice 7's LOOK did for its kitchen pictures, and one till context
+  signed in (dev mode approves joins at once; a tab still picks a device). In **Prep stations**
+  set one station to **Whole ticket at once** for Step 3's last bullet, and back afterwards.
+- [ ] **Step 2: Make the food.** From the till: a table with two groups (fire the first, hold the
+  second, then fire it a minute later), a second table with one group whose two dishes you then
+  move to different stages, a counter order with a note, and a party with two bills sending one
+  group (Review focus 11). In **Prep stations**, set the station's Waiting, Overdue and Forgotten
+  after to **1**, **2** and **3** minutes for the run, so cards reach amber, red and the forgotten
+  pulse within minutes; note the values first and put them back afterwards.
+- [ ] **Step 3: Look** with the workspace's Playwright Chromium (the script in
+  `/Users/clintongormley/waitron-campaign-c/a797-8-scripts/`, never in the worktree, its process id
+  recorded), at **1280 px** and **1024 px** on the kitchen display and **390 px** on the till's
+  Station screen, **light and dark**, **English and Spanish**:
+  - the three columns, **Waiting · Preparing · Ready** «Esperando · Preparando · Listo», one card
+    per group, the second group's card on its own with its own minutes;
+  - the header line «… platos por hacer · 1 con retraso» and its English;
+  - the bands: green, amber, red; a forgotten card's pulse (two pictures about half a second
+    apart; the computed `animation-name` in the ledger); with `reducedMotion: "reduce"`, still and
+    red;
+  - the held card dashed in Waiting with "Held, not released";
+  - a card with two stages: the further dish says its state; tap the heading: only the waiting dish
+    moves; tap a dish: only it moves; on the whole-ticket station, tap a dish: the card's dishes at
+    its stage move, the other group's card does not;
+  - on the till, Reprint and Collect on the cards, no Board/Tickets switch; on the display, neither;
+  - a merged display with two stations: one header line, each station's cards labelled;
+  - the group sent across two bills: one card with both bills' numbers, two Reprint buttons on the
+    till;
+  - the word Waiting where New was (D10): a dish on the pass (the till's ☰ → Pass) and a department
+    transfer's outstanding work, in English and Spanish;
+  - set the 1280 px light English picture beside picture 03
+    (`docs/backlog/mockups/a797-device-screens/03-kitchen-screen.png`) and describe each difference
+    in the ledger and the PR body: Overview, Held, the corner's Columns, the collapsed Ready, short
+    names, m:ss timers and the one-row header are expected (later slices, D6, D9); anything else
+    (card grouping, order, band colours, the heading, the words) that differs is a finding.
+- [ ] **Step 4: Save** each picture as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-8-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, and describe what was seen in the ledger and
+  the PR body. Put back every demo setting changed in Steps 1–2.
+- [ ] **Step 5: Stop** what you started: the script's process by its recorded id, then
+  `wa-wt down waitron-feat-a797-8-kitchen-group-cards`.
+
+### Closing slice 8
+
+- Focused runs per task as above; CI runs the till's package suites and coverage (and ui-core's
+  for the comments, and the server's for the guides). Read the `changes` job's outputs and the
+  till's coverage or merge job on the current head before calling the PR green. Code this slice
+  leaves unreached is deleted, never excluded (Global constraints).
+- `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read and one
+  Codex run-it review.
+- PR body. First line: no venue reset. Then: **What a cook sees** (cards per group, the heading
+  tap, the band, the header line, Waiting, no Tickets switch, Reprint and Collect on the cards);
+  **Decisions** D1–D14 in one line each; **Changed test checks** (from the ledger, each with its
+  D-number); **LOOK**.
+- **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D8 (a
+  heading tap moves the dishes holding the card back, not "every dish one step"; a whole-ticket
+  station's tap moves that card's dishes, no longer the whole order's), D6 (whole minutes, not
+  picture 03's m:ss), D9 (the header line above the columns, not yet in one row with the station's
+  name; "late" counts cards), D10 (the Spanish «platos por hacer», «con retraso»; "Waiting" also
+  on the pass and department transfers), D11 (Reprint and Collect on every card of a bill), D3
+  (held cards sit under Waiting, dashed, until A773-2's Held column; the alternative is an interim
+  Held column).
+- In lane C's questions file, also one line for lane G: slice 8 holds `station-queue.ts` and
+  `till-station-screen.ts` until it lands (design §7's turn).
+- After merge: delete the branch local and remote and check the remote one is gone; the backlog's
+  "landed in #N" commit; update the ledger; then slice 8b or 9, in turn with lane G.
 
 ---
 

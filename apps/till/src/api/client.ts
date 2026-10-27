@@ -1564,9 +1564,11 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
-  /** `null` while the item's course is HELD — not advanceable (`ticket.item_held`); a timestamp once
+  /** `null` while the item is HELD — not advanceable (`ticket.item_held`); a timestamp once
    *  fired. */
   firedAt: string | null;
+  /** When this dish joined the queue: set at fire, and again when a release re-routes it. */
+  queuedAt: string;
   /** The NON-FISCAL kitchen note as frozen at fire, so a later edit never changes what the cook sees. */
   note?: string | null;
 }
@@ -1642,8 +1644,8 @@ export interface StationQueue {
 }
 
 /**
- * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
- * group's ordering key and the age-colouring anchor.
+ * One order's lines at a station. `queuedAt` is that of the order's oldest line at this station; the
+ * merged screen's ordering key.
  */
 export interface StationQueueGroup {
   kitchenNote: string | null;
@@ -1665,9 +1667,7 @@ export interface StationQueueGroup {
   items: StationQueueItem[];
   /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
   elsewhere?: ElsewhereItem[];
-  /** This station's order-timing thresholds. Every group from one call shares them; they ride
-   *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
-   *  (`classifyBand`, `@waitron/shared`). */
+  /** This station's order-timing thresholds. Every group from one call shares them. */
   thresholds: StationThresholds;
   /** This order's own station's choice; a merged queue mixes stations. */
   bumpMode: BumpMode;
@@ -3333,21 +3333,6 @@ export class TillApi {
     to: Exclude<TicketState, "queued">,
   ): Promise<void> {
     await this.#request<void>(`/api/ticket-items/${itemId}/advance`, "POST", { to, stationId });
-  }
-
-  /**
-   * Advance a WHOLE ticket → `POST /api/orders/:id/stations/:sid/advance`: every not-yet-`to` line of
-   * the order at the station. An empty match is a no-op, so unlike {@link advanceTicketItem} it never
-   * rejects on a transition.
-   */
-  async advanceTicket(
-    orderId: string,
-    stationId: string,
-    to: Exclude<TicketState, "queued">,
-  ): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/stations/${stationId}/advance`, "POST", {
-      to,
-    });
   }
 
   // --- Device mode: these verbs need NO operator session; the httpOnly device cookie rides

@@ -5,9 +5,8 @@ import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
-// The shipped DB defaults. No fixture injects `now`, so every ticket ages off the REAL wall clock
-// against its fixed `queuedAt` and renders `forgotten`, and the header's overdue-count badge appears
-// too; the sweep below covers exactly that state.
+// The shipped DB defaults. Unless a case injects `now`, every card ages off the REAL wall clock
+// against its fixed `queuedAt` and renders `forgotten`.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
@@ -45,6 +44,7 @@ const groups: StationQueueGroup[] = [
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -56,6 +56,7 @@ const groups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -67,6 +68,7 @@ const groups: StationQueueGroup[] = [
         quantity: "3.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -76,7 +78,7 @@ const groups: StationQueueGroup[] = [
     orderNumber: 6,
     label: null,
     queuedAt: "2026-08-17T10:05:00.000Z",
-    status: "settled", // a Mode-P pickup — its rail card carries the collect button (a11y-checked here)
+    status: "settled", // a Mode-P pickup — its card carries the collect button (a11y-checked here)
     thresholds: DEFAULT_THRESHOLDS,
     bumpMode: "line",
     items: [
@@ -89,6 +91,7 @@ const groups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:05:00.000Z",
+        queuedAt: "2026-08-17T10:05:00.000Z",
       },
     ],
   },
@@ -116,6 +119,7 @@ const coursedGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -126,6 +130,7 @@ const coursedGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -137,6 +142,7 @@ const coursedGroups: StationQueueGroup[] = [
         // HELD — greyed and non-advanceable.
         course: { id: "co-main", name: "Principales", displayOrder: 2 },
         firedAt: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -162,6 +168,7 @@ const modifierGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         modifiers: [
           { descriptions: { "es-ES": "Grande" } },
           { descriptions: { "es-ES": "Leche avena" } },
@@ -191,6 +198,7 @@ const customisationGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         note: "sin sal",
       },
     ],
@@ -217,6 +225,7 @@ const allergenGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServed: { allergens: { milk: {} }, pending: false },
       },
       {
@@ -228,6 +237,7 @@ const allergenGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServed: { allergens: {}, pending: true },
       },
     ],
@@ -254,6 +264,7 @@ const dietGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [], halal: "yes" },
       },
       {
@@ -265,6 +276,7 @@ const dietGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
       },
       {
@@ -276,6 +288,7 @@ const dietGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
         asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
       },
     ],
@@ -354,6 +367,7 @@ const partyGroups: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -365,6 +379,7 @@ const partyGroups: StationQueueGroup[] = [
         course: null,
         group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
         firedAt: "2026-08-17T10:00:00.000Z",
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
         allergy: null,
@@ -376,6 +391,7 @@ const partyGroups: StationQueueGroup[] = [
         course: null,
         group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
         firedAt: null,
+        queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
   },
@@ -393,42 +409,29 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("the kanban board (bump controls across three columns) has no violations", async () => {
+  it("the board (cards across three columns) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups, stationId: "st-1", view: "kanban" },
+      { groups, stationId: "st-1" },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
-  it("the ticket rail (age-coloured cards, per-line bump) has no violations", async () => {
-    const { host } = await mountWidget<TillStationQueue>(
+  it("the board with orders whose dishes were sent under other numbers has no violations", async () => {
+    const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups, stationId: "st-1", view: "rail" },
+      {
+        groups: groups.map((group) => ({ ...group, formerNumbers: [28, 30] })),
+        stationId: "st-1",
+      },
       theme,
     );
+    expect(el.shadowRoot!.querySelector(".number .was")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it.each(["kanban", "rail"] as const)(
-    "the %s view with orders whose dishes were sent under other numbers has no violations",
-    async (view) => {
-      const { el, host } = await mountWidget<TillStationQueue>(
-        "till-station-queue",
-        {
-          groups: groups.map((group) => ({ ...group, formerNumbers: [28, 30] })),
-          stationId: "st-1",
-          view,
-        },
-        theme,
-      );
-      expect(el.shadowRoot!.querySelector(".number .was")).not.toBeNull();
-      await expectNoA11yViolations(host);
-    },
-  );
-
-  it("a rail card listing another station's dishes has no violations", async () => {
+  it("a card listing another station's dishes has no violations", async () => {
     const { host, el } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
@@ -451,7 +454,6 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
           },
         ],
         stationId: "st-1",
-        view: "rail",
       },
       theme,
     );
@@ -459,37 +461,35 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it.each(["kanban", "rail"] as const)(
-    "%s: Move buttons on queued held and fired dishes have no violations",
-    async (view) => {
-      const { host, el } = await mountWidget<TillStationQueue>(
-        "till-station-queue",
-        { groups: [...groups, ...coursedGroups], stationId: "st-1", view, canMove: true },
-        theme,
-      );
-      if (el.shadowRoot!.querySelectorAll("[data-move-station]").length < 3)
-        throw new Error("Move buttons missing");
-      await expectNoA11yViolations(host);
-    },
-  );
+  it("Move buttons on queued held and fired dishes have no violations", async () => {
+    const { host, el } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      { groups: [...groups, ...coursedGroups], stationId: "st-1", canMove: true },
+      theme,
+    );
+    if (el.shadowRoot!.querySelectorAll("[data-move-station]").length < 3)
+      throw new Error("Move buttons missing");
+    await expectNoA11yViolations(host);
+  });
 
-  it("whole-ticket bump mode has no violations", async () => {
-    const { host } = await mountWidget<TillStationQueue>(
+  it("whole-ticket bump mode, with a card's heading button, has no violations", async () => {
+    const { host, el } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
         groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
         stationId: "st-1",
-        view: "rail",
       },
       theme,
     );
+    if (el.shadowRoot!.querySelector("button[data-card-head]") === null)
+      throw new Error("heading button missing");
     await expectNoA11yViolations(host);
   });
 
-  it("the course-grouped rail (headers and greyed held lines) has no violations", async () => {
+  it("the course-grouped board (headers and greyed held lines) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: coursedGroups, stationId: "st-1", view: "rail", ...{ fireControl: "kitchen" } },
+      { groups: coursedGroups, stationId: "st-1", ...{ fireControl: "kitchen" } },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -498,7 +498,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   it("a dish with selected options (ordering modifiers, indented sub-text) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: modifierGroups, stationId: "st-1", view: "rail" },
+      { groups: modifierGroups, stationId: "st-1" },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -507,34 +507,34 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   it("a dish with a per-line note (indented sub-text) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: customisationGroups, stationId: "st-1", view: "rail" },
+      { groups: customisationGroups, stationId: "st-1" },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
-  it("the as-served allergen rail (contains chips, pending note) has no violations", async () => {
+  it("the as-served allergen board (contains chips, pending note) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: allergenGroups, stationId: "st-1", view: "rail" },
+      { groups: allergenGroups, stationId: "st-1" },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
-  it("the as-served diet rail (vegan/vegetarian/halal badges, contains-meat chip, not-reviewed note) has no violations", async () => {
+  it("the as-served diet board (vegan/vegetarian/halal badges, contains-meat chip, not-reviewed note) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: dietGroups, stationId: "st-1", view: "rail" },
+      { groups: dietGroups, stationId: "st-1" },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
-  it("the reprint rail (per-order Reprint wt-button on each card, KDS-4) has no violations", async () => {
+  it("the reprint board (per-order Reprint wt-button on each card, KDS-4) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups, stationId: "st-1", view: "rail", showReprint: true },
+      { groups, stationId: "st-1", showReprint: true },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -545,7 +545,6 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
       {
         groups: partyGroups,
         stationId: "st-1",
-        view: "rail",
         ...{ fireControl: "kitchen" },
         showReprint: true,
       },
@@ -554,19 +553,10 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("the kanban printing-problem strip has no violations", async () => {
+  it("the notices strip, one of each kind, above the board has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: partyGroups, stationId: "st-1", view: "kanban" },
-      theme,
-    );
-    await expectNoA11yViolations(host);
-  });
-
-  it("the notices strip, one of each kind, above the kanban board has no violations", async () => {
-    const { host } = await mountWidget<TillStationQueue>(
-      "till-station-queue",
-      { groups, notices, stationId: "st-1", view: "kanban" },
+      { groups, notices, stationId: "st-1" },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -575,12 +565,12 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   it("the notices strip above an empty queue has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: [], notices, view: "rail" },
+      { groups: [], notices },
       theme,
     );
     await expectNoA11yViolations(host);
   });
-  it.each(["rail", "kanban"] as const)("a moved dish in %s has no violations", async (view) => {
+  it("a moved dish has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
@@ -601,7 +591,6 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
           },
         ],
         stationId: "st-1",
-        view,
         canMove: true,
       },
       theme,
@@ -609,25 +598,58 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it.each(["rail", "kanban"] as const)(
-    "dishes sent after their period in %s have no violations",
-    async (view) => {
-      const { el, host } = await mountWidget<TillStationQueue>(
-        "till-station-queue",
+  it("dishes sent after their period have no violations", async () => {
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [
+          {
+            ...groups[0]!,
+            items: groups[0]!.items.map((item) => ({ ...item, afterPeriod: "Lunch" })),
+          },
+        ],
+        stationId: "st-1",
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-after-period]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("a board with a fresh, warm, overdue, forgotten and held card and the header line has no violations", async () => {
+    const at = (minute: number) => `2026-08-17T10:${String(minute).padStart(2, "0")}:00.000Z`;
+    const card = (orderNumber: number, minute: number, fired = true): StationQueueGroup => ({
+      ...groups[0]!,
+      orderId: `wo-age-${orderNumber}`,
+      orderNumber,
+      label: `Table ${orderNumber}`,
+      queuedAt: at(minute),
+      items: [
         {
-          groups: [
-            {
-              ...groups[0]!,
-              items: groups[0]!.items.map((item) => ({ ...item, afterPeriod: "Lunch" })),
-            },
-          ],
-          stationId: "st-1",
-          view,
+          ...groups[0]!.items[0]!,
+          id: `ti-age-${orderNumber}`,
+          name: "Octopus",
+          firedAt: fired ? at(minute) : null,
+          queuedAt: at(minute),
         },
-        theme,
-      );
-      expect(el.shadowRoot!.querySelector("[data-after-period]")).not.toBeNull();
-      await expectNoA11yViolations(host);
-    },
-  );
+      ],
+    });
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [card(1, 18), card(2, 13), card(3, 8), card(4, 0), card(5, 0, false)],
+        stationId: "st-1",
+        now: Date.parse(at(20)),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    for (const band of ["fresh", "warm", "overdue", "forgotten", "held"]) {
+      expect(
+        el.shadowRoot!.querySelector(`[data-card].${band === "held" ? "held" : `age-${band}`}`),
+      ).not.toBeNull();
+    }
+    expect(el.shadowRoot!.querySelector("[data-kitchen-counts]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

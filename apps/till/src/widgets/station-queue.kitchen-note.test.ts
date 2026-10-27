@@ -6,12 +6,13 @@ import { es } from "../i18n/strings.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
+const queuedAt = new Date().toISOString();
 const group = {
   orderId: "order-a",
   orderNumber: 7,
   label: "Table 4",
   status: "placed",
-  queuedAt: new Date().toISOString(),
+  queuedAt,
   kitchenNote: "Train at 14:30 <keep together>",
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   bumpMode: "line",
@@ -25,6 +26,7 @@ const group = {
       quantity: "1.000",
       course: null,
       firedAt: new Date().toISOString(),
+      queuedAt,
       note: "No onions",
     },
   ],
@@ -54,50 +56,42 @@ afterEach(() => {
 });
 
 describe("kitchen instructions on station work", () => {
-  it.each(["rail", "kanban"] as const)(
-    "places the whole note above dishes in %s and replaces it independently",
-    async (view) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [group],
-        view,
-      });
-      const heading = el.shadowRoot!.querySelector("[data-kitchen-note]");
-      expect(heading?.textContent).toContain("For the kitchen: Train at 14:30 <keep together>");
-      expect(
-        heading!.compareDocumentPosition(el.shadowRoot!.querySelector(".line-name")!) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-      expect(el.shadowRoot!.textContent).toContain("No onions");
-      expect(heading!.querySelector("keep")).toBeNull();
-      el.groups = [{ ...group, kitchenNote: "Later departure" }];
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-kitchen-note]")?.textContent).toContain(
-        "Later departure",
-      );
-      expect(el.shadowRoot!.textContent).not.toContain("Train at 14:30");
-      el.groups = [{ ...group, kitchenNote: null }];
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-kitchen-note]")).toBeNull();
-      expect(el.shadowRoot!.textContent).toContain("No onions");
-    },
-  );
+  it("places the whole note above dishes and replaces it independently", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [group],
+    });
+    const heading = el.shadowRoot!.querySelector("[data-kitchen-note]");
+    expect(heading?.textContent).toContain("For the kitchen: Train at 14:30 <keep together>");
+    expect(
+      heading!.compareDocumentPosition(el.shadowRoot!.querySelector(".line-name")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(el.shadowRoot!.textContent).toContain("No onions");
+    expect(heading!.querySelector("keep")).toBeNull();
+    el.groups = [{ ...group, kitchenNote: "Later departure" }];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-kitchen-note]")?.textContent).toContain(
+      "Later departure",
+    );
+    expect(el.shadowRoot!.textContent).not.toContain("Train at 14:30");
+    el.groups = [{ ...group, kitchenNote: null }];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-kitchen-note]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("No onions");
+  });
 
-  it.each(["rail", "kanban"] as const)(
-    "wraps an unbroken instruction in %s at phone width",
-    async (view) => {
-      await page.viewport(390, 900);
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [{ ...group, kitchenNote: "instruction".repeat(180) }],
-        view,
-      });
-      const heading = el.shadowRoot!.querySelector<HTMLElement>("[data-kitchen-note]")!;
-      const bounds = heading.getBoundingClientRect();
-      expect(window.innerWidth).toBe(390);
-      expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
-      expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
-      expect(bounds.height).toBeGreaterThan(40);
-    },
-  );
+  it("wraps an unbroken instruction at phone width", async () => {
+    await page.viewport(390, 900);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...group, kitchenNote: "instruction".repeat(180) }],
+    });
+    const heading = el.shadowRoot!.querySelector<HTMLElement>("[data-kitchen-note]")!;
+    const bounds = heading.getBoundingClientRect();
+    expect(window.innerWidth).toBe(390);
+    expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+    expect(bounds.height).toBeGreaterThan(40);
+  });
 
   it.each(["en-GB", "es-ES"] as const)(
     "distinguishes edits and removals and acknowledges the copied notice in %s",

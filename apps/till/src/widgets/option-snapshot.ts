@@ -8,7 +8,7 @@ import {
 import type { OptionSnapshot } from "@waitron/shared";
 
 /**
- * Which of the three names a surface reads: the kitchen rail and the pass read the kitchen name, a
+ * Which of the three names a surface reads: the kitchen screen and the pass read the kitchen name, a
  * settled receipt the customer-facing text in the invoice locale, the basket and table screen the
  * staff name.
  */
