@@ -85,7 +85,7 @@ async function gatherStartAgainFloor(
   ];
   if (names.length === 0) return { floor: null, recoveryRecordDamaged: false };
   if (modules === undefined) unavailable();
-  let latest: { floorMs: number; lastName: string; module: string } | null = null;
+  let latest: { floorMs: number; lastName: string | null; module: string } | null = null;
   let recoveryRecordDamaged = false;
   for (const module of names) {
     const seat = initialSetupFor(modules, module)?.startAgainFloor;
@@ -152,7 +152,7 @@ const PRESENT_START_AGAIN_STATUSES: readonly string[] = [
   "consumption-intent",
   "abandoned",
 ];
-type Floor = { floorMs: number; lastName: string; module: string };
+type Floor = { floorMs: number; lastName: string | null; module: string };
 type FoundRecovery =
   | { kind: "stopped"; id: string; floor: Floor | null; shown: StartAgainRecoveryShown }
   | { kind: "unemptied"; id: string };

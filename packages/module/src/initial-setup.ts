@@ -83,7 +83,9 @@ export interface InitialSetupContribution {
     readonly publicEvidence: readonly unknown[];
     /** A backup recovery journal's recorded inputs, passed untouched; one the module cannot read names nothing. */
     readonly recoveryInputs?: readonly unknown[];
-  }): { readonly floorMs: number; readonly lastName: string } | null;
+    /** The newest file time among the attempt's own files, when a name record could not be read. */
+    readonly lastWriteMs?: number;
+  }): { readonly floorMs: number; readonly lastName: string | null } | null;
 
   assignmentPositions?(
     context: InitialSetupContext,

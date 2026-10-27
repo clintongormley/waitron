@@ -136,10 +136,13 @@ function isNamelessEvidence(evidence: unknown): boolean {
     evidence.currentEntryState === "consumed-for-event"
   );
 }
+/** The chooser's wait bound, `WAIT_BOUND_MS` (`hour-selection.ts:65`): a name it picks is at most
+ * this far ahead of its last write. */
+const START_AGAIN_WRITE_MARGIN_MS = 150_000;
 export function hourStartAgainFloor(
   retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
 ): NonNullable<InitialSetupContribution["startAgainFloor"]> {
-  return ({ attempts, preparations, publicEvidence, recoveryInputs = [] }) => {
+  return ({ attempts, preparations, publicEvidence, recoveryInputs = [], lastWriteMs }) => {
     let minutes: number[];
     try {
       minutes = [
@@ -169,12 +172,22 @@ export function hourStartAgainFloor(
     } catch {
       return refuse("history_invalid");
     }
-    if (minutes.length === 0) return null;
-    const minute = Math.max(...minutes);
-    return {
-      floorMs: EPOCH_MS + (minute + 1) * MINUTE_MS,
-      lastName: encodeMinuteIdentity(EPOCH_MS + minute * MINUTE_MS),
-    };
+    const minute = minutes.length === 0 ? null : Math.max(...minutes);
+    const known =
+      minute === null
+        ? null
+        : {
+            floorMs: EPOCH_MS + (minute + 1) * MINUTE_MS,
+            lastName: encodeMinuteIdentity(EPOCH_MS + minute * MINUTE_MS),
+          };
+    if (lastWriteMs === undefined) return known;
+    if (!Number.isSafeInteger(lastWriteMs)) return refuse("history_invalid");
+    const timeFloorMs = Math.max(
+      EPOCH_MS,
+      (Math.floor((lastWriteMs + START_AGAIN_WRITE_MARGIN_MS) / MINUTE_MS) + 1) * MINUTE_MS,
+    );
+    if (known !== null && known.floorMs >= timeFloorMs) return known;
+    return { floorMs: timeFloorMs, lastName: null };
   };
 }
 
