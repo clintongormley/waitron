@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import {
   THEME_COLOURS,
   WAITRON_CHOICES,
@@ -577,7 +577,9 @@ describe("the fixed line", () => {
 describe("one pick per frame", () => {
   let frames: FrameRequestCallback[];
   let cancel: ReturnType<typeof vi.spyOn>;
-  beforeEach(() => {
+  // A fold opens over animation frames, which this suite holds back; without motion it opens at once.
+  beforeEach(async () => {
+    await commands.emulateReducedMotion("reduce");
     frames = [];
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       frames.push(callback);
@@ -585,8 +587,9 @@ describe("one pick per frame", () => {
     });
     cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
   });
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await commands.emulateReducedMotion(null);
   });
 
   function pick(el: ThemeAdvanced, colour: string) {
