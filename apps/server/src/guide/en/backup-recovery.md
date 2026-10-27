@@ -40,8 +40,8 @@ venue.
 
 If one of the setup's records of its invoice series names is damaged, **Start again** still works,
 after a warning. If the page says the setup database is missing, the warning appears after you
-enter the administrator password you chose during setup. Otherwise only the box's record of the
-names it chose gets this warning, and Start again asks for that password first. The page names
+enter the administrator password you chose during setup. Otherwise this applies only to the box's
+record of the names it chose, and Start again asks for that password first. The page names
 each damaged record, for example "This box's record of the invoice series names it chose is damaged
 and cannot be read.", and says from when new series names can start: usually a few minutes after
 you entered the password. If you set up again before then, the setup waits until that time or, if

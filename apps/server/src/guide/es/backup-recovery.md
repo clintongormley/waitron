@@ -43,7 +43,7 @@ el local de este equipo.
 Si uno de los registros de los nombres de serie de facturas de la configuración está dañado,
 **Empezar de nuevo** sigue funcionando, tras un aviso. Si la página dice que falta la base de datos
 de configuración, el aviso aparece después de que introduzcas la contraseña de administrador que
-elegiste al configurar. Si no, el aviso solo se da para el registro de los nombres que eligió el
+elegiste al configurar. Si no, esto solo vale para el registro de los nombres que eligió el
 equipo, y Empezar de nuevo pide antes esa contraseña. La página nombra cada registro dañado, por
 ejemplo «El registro de los nombres de serie de facturas que eligió este equipo está dañado y no se
 puede leer.», y dice desde cuándo pueden empezar los nuevos nombres de serie: normalmente unos

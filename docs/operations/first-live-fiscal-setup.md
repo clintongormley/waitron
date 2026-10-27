@@ -44,7 +44,7 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **A later minute is already in use**: the page names the time from which the series can be made,
+- **A later minute is already in use**: the page names the time (and the date, when it is on a later day) from which the series can be made,
   with no countdown (`first-hour.browser.test.ts`, "a later minute in use names its time and does
   not count down").
 

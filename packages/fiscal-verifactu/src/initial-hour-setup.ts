@@ -136,7 +136,7 @@ function isNamelessEvidence(evidence: unknown): boolean {
     evidence.currentEntryState === "consumed-for-event"
   );
 }
-/** The chooser's wait bound, `WAIT_BOUND_MS` (`hour-selection.ts:65`). */
+/** The chooser's wait bound, `WAIT_BOUND_MS` in `hour-selection.ts`. */
 const START_AGAIN_WRITE_MARGIN_MS = 150_000;
 export function hourStartAgainFloor(
   retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,

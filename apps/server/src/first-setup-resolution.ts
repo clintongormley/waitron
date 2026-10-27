@@ -46,7 +46,7 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
-import { readSeriesPicks, seriesPicksUnreadable } from "./start-again-name-records.js";
+import { readSeriesPicks, seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -119,7 +119,7 @@ async function gatherStartAgainFloor(
   let recoveryRecordDamaged = false;
   const unreadable = new Set<UnreadableRecord>();
   // Only the database-missing path reads past a damaged public record or documents file; with the
-  // database present they keep today's refusals.
+  // database present a damaged one is refused.
   const unreadableRecord = (error: unknown, damaged: boolean, record: UnreadableRecord) => {
     if (!databaseMissing || !damaged || !(error instanceof AppError)) throw error;
     unreadable.add(record);

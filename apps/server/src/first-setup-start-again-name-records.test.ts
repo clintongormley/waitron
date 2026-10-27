@@ -6,7 +6,7 @@ import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "@waitron/composition";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
-import { readSeriesPicks, seriesPicksUnreadable } from "./start-again-name-records.js";
+import { readSeriesPicks, seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
 
 const reader = vi.hoisted(() => ({ fail: null as Error | null }));
 vi.mock("@waitron/provisioning", async (importOriginal) => {

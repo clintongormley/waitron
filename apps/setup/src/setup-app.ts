@@ -1120,7 +1120,7 @@ export class SetupApp extends LitElement {
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
-  /** The password step was asked for by a refusal while no recovery was known: the record is damaged. */
+  /** The password step was asked for by a refusal while no recovery was known: a record is damaged. */
   #damagedInferred = false;
   /** The password refusal said the series picks file is damaged. */
   #seriesPicksUnreadable = false;
@@ -1443,7 +1443,7 @@ export class SetupApp extends LitElement {
         ) {
           this.firstRestartConfirm = false;
           this.firstRetireConfirmed = false;
-          // The refusal comes from a damaged record or a stopped recovery; only the activity says which.
+          // The refusal comes from a damaged record or a stopped recovery; only the activity says whether a recovery has stopped.
           const activity = await this.#readActivityAnswer().catch(() => undefined);
           if (!current()) return;
           if (activity !== undefined) {
