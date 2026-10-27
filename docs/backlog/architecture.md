@@ -477,7 +477,8 @@ until A977).
   naming sites remain in the till's boot and counter-payment suites
   and the server's till-API, configuration-transfer and station fixtures.
   String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
-  Catalogue display names, recipe ingredient text and seasonal venue and zone names also stay with A976.
+  Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
+  also stay with A976.
   Developer/demo script names remain A975's. Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
   treats an inherited property such as `constructor` as a language entry. Qualify the selection path with country-pack
