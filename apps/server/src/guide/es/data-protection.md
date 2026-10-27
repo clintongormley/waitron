@@ -95,8 +95,12 @@ factura y cumplir sus obligaciones fiscales, incluida la remisión a la Agencia 
 registro de la factura con su nombre y su NIF. Derechos
 y más información: _correo de privacidad del local_, _dirección de la página de privacidad_.
 
-Waitron todavía no muestra este aviso en ningún sitio. Muéstralo donde el personal toma los datos
-del cliente, por ejemplo en un cartel junto a la caja.
+Cuando Waitron envía por correo una factura completa, el correo lleva este aviso, con la razón
+social de tu local y el correo y la página de privacidad de la tarjeta **Privacidad**; la parte
+sobre la Agencia Tributaria, solo en una factura de la que el equipo envía un registro, y en español
+salvo que la factura esté en inglés. Si no hay ninguno de los dos, el correo no lleva aviso. El
+correo llega al cliente después de que el personal haya tomado los datos, así que muestra el aviso
+también donde los toma, por ejemplo en un cartel junto a la caja.
 
 Si también lo quieres en papel, puedes escribir una versión breve en el **Mensaje de pie** del
 recibo. En **Departamentos y zonas**, abre el departamento y elige su pestaña **Recibos**. Lo que
@@ -187,8 +191,8 @@ una contraseña o confirmar un correo nuevo, en la página de inicio de sesión 
 páginas que abre el enlace de un correo para configurar una cuenta o restablecer una contraseña, en
 **Configuración de la cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en
 el siguiente correo o la siguiente descarga; una página ya abierta lo muestra al volver a cargarla,
-salvo **Configuración de la cuenta**, que lo sigue al momento. Por ahora, solo la tarjeta
-**Privacidad** muestra el correo de privacidad.
+salvo **Configuración de la cuenta**, que lo sigue al momento. Waitron también
+muestra los dos en el correo que envía una factura completa.
 
 ## Tu registro de actividades de tratamiento {#record}
 

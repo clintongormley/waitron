@@ -202,11 +202,6 @@ by the answers):
     holds Maria's name and address.
   - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
     they are switched on.
-- **S1b2** — the invoice email carries the invoice customers' privacy notice, with the privacy email
-  and page from the Privacy card. Planned as Part 2 of the
-  [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md); waits for the
-  owner's ruling on whether a change to an invoice email's body lands without them. Until it lands,
-  nothing but the Privacy card shows the privacy email.
 - **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
   confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
   `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
@@ -326,12 +321,41 @@ by the answers):
   decisions for the owner", each open for the owner to reverse:
   - **A. Only the Privacy card shows the privacy email for now.** Bar Ejemplo saves
     `privacidad@barejemplo.es`; Ana's invitation, the sign-in page, Account settings and Jordi's
-    download show `https://barejemplo.es/privacidad` and not the email. S1b2 is to show it to
+    download show `https://barejemplo.es/privacidad` and not the email. S1b2 shows it to
     invoice customers. Alternative: the README's last line names it, "Contact Bar Ejemplo S.L. at
     privacidad@barejemplo.es to ask."
   - **B. A server that still has the retired `WAITRON_PRIVACY_NOTICE_URL` set ignores it
     silently.** Nothing warns, and the readers show the card's value, or nothing while the card is
     empty. Alternative: a start-up warning naming the retired variable.
+- **A980 S1b2, 2026-10-27:** the email that sends a full invoice carries the invoice customers'
+  privacy notice, with the venue's legal name and the privacy email and page saved on the Privacy
+  card, built with the four Part 2 defaults of the
+  [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open decisions
+  for the owner", each open for the owner to reverse:
+  - **C. The Tax Agency clause appears only for an invoice with a tax record.** Bar Ejemplo runs
+    Veri\*Factu, so its invoice emails say "incluida la remisión a la Agencia Tributaria de un
+    registro de la factura con su nombre y su NIF"; a box without Veri\*Factu, whose sales file
+    nothing, says only "para emitir esta factura y cumplir sus obligaciones fiscales."
+    Alternative: the clause always, as the guide's template has it.
+  - **D. The notice is in Spanish for a Catalan, Galician or Basque invoice**, and in English only
+    for an invoice in English. A Girona venue's invoice email has the subject `Factura F1/23` and
+    the Spanish notice. Alternative: the notice in each of Spain's receipt languages, whose
+    Catalan, Galician and Basque words would need a native speaker's check before they ship.
+  - **E. The notice shows on duplicates too.** Staff resend Jordi's invoice; the email's text
+    starts "Factura F1/23 — DUPLICADO" and carries the same notice. Alternative: the original only.
+  - **F. If the notice's facts cannot be read, the invoice email is not sent.** The read of the
+    Privacy card's values fails for Jordi's invoice; the attempt is recorded with an unknown
+    outcome, as when the invoice itself cannot be read. Alternative: send the invoice without the
+    notice.
+
+  Landing: the pull request waits for the owner, who has not yet ruled whether a change to an
+  invoice email's body lands without them (questions.md, 2026-10-27).
+
+  Deliberate limit: no test fails if the server read the privacy values once at start instead of
+  for each email. The worker test in `apps/server/src/invoice-delivery.test.ts` pins that each pass
+  reads them afresh, with the values stored, changed and cleared between passes; the boot test in
+  `apps/server/src/boot.invoice-delivery.test.ts` pins only that the server gives the worker the
+  reader, with the values stored before it starts.
 - **A980 S10, 2026-10-26:** what the log masks and what it leaves, each built with the default
   and open for the owner to reverse (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
   owner note 5). Masked in every line the server's logger writes, on `docker logs` as
