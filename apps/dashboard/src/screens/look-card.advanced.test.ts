@@ -11,6 +11,7 @@ import {
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
+import { ADVANCED_SECTIONS } from "../widgets/advanced-sections.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -772,7 +773,7 @@ describe("the dark version's own button colour", () => {
     return opened;
   }
 
-  it("Pick a different colour for dark screens opens Advanced at the dark Main buttons code, changing nothing", async () => {
+  it("Pick a different colour for dark screens opens Advanced's Buttons section at the dark Main buttons code, changing nothing", async () => {
     const { el } = await mountEditing();
     const fixedLine = q(el, "[data-test=brand-fixed-dark]")!;
     expect(words(fixedLine)).toBe("Buttons on dark screens: #437e5b");
@@ -785,6 +786,16 @@ describe("the dark version's own button colour", () => {
     await userEvent.click(link);
     await settle(el);
     expect(disclosure(el).open).toBe(true);
+    expect(
+      ADVANCED_SECTIONS.filter(
+        (id) =>
+          (
+            advanced(el).shadowRoot!.querySelector(
+              `[data-test=section-${id}]`,
+            ) as HTMLElementTagNameMap["wt-disclosure"]
+          ).open,
+      ),
+    ).toEqual(["buttons"]);
     const inner = handCode(el, "dark", "primary").shadowRoot!.querySelector("input");
     await expect.poll(() => focused(el)).toBe(inner);
     expect(button(el, "save").variant).toBe("secondary");
