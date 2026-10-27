@@ -2738,7 +2738,7 @@ permission-gated write (CLAUDE.md's risk triggers).
   plan D10): it asks again when the main image's `display` address changes. Not taken: following
   the image's name only, which would keep showing the old framing. Since 2026-10-27 (the slice's
   review) the route's answer names the `display` address it drew from, and the picture asks again
-  whenever the address the library gives differs from it, so a reframe heard before the first
+  when the library's address changes to one it was not drawn from, so a reframe heard before the first
   lookup is followed too; and while the library no longer holds the image the picture is not drawn.
 - **No text-size line in the switch or delete dialog** (owner, 2026-10-25): switching or deleting
   a theme says nothing about the tills' text size. Not taken: "Text on the tills changes size too."
@@ -2812,9 +2812,9 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **A switch can change text size under a waiter's finger.** Switching between themes with
   different text sizes reflows every signed-in till's buttons within one poll, at a moment nobody
   chose. My call: apply it like every other theme change, not at the till's next idle moment or
-  sign-in. A switch is a rare, deliberate manager action; its dialog says "Text on the tills
-  changes size too." when the sizes differ (section 8b; the line was dropped by the owner
-  2026-10-25, section 16); and holding one change back per till
+  sign-in. A switch is a rare, deliberate manager action; its dialog said "Text on the tills
+  changes size too." when the sizes differ (section 8b) until the owner dropped the line on
+  2026-10-25 (section 16); and holding one change back per till
   would need a second "pending look" state on every till for one case. The trade-off: a waiter
   mid-order sees the grid move once.
 - **"Theme" names two things** (the owner's choice, Q8 revised): the account menu's Light / Dark /

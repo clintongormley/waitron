@@ -140,7 +140,7 @@ negros de una impresora de recibos de 80 mm. Consulta [En los tickets y las
 facturas](appearance.md#logo-receipts). Cuando el logotipo no imprimiría ningún punto, como ocurre
 con un logotipo blanco sobre fondo transparente, debajo de la imagen aparece «Este logotipo se
 imprime en blanco en los recibos.»: elige una imagen más oscura o da a los departamentos un logotipo
-de recibo propio. Si la imagen no se puede mostrar, aparece en su lugar «No se ha podido mostrar cómo
+de recibo propio. Si falla la consulta de la imagen, aparece en su lugar «No se ha podido mostrar cómo
 se imprime este logotipo.», con **Reintentar**.
 
 La vista previa muestra el logotipo en la franja superior de cada versión, seguido de la razón

@@ -296,6 +296,11 @@ caption beside it on a wide card and under it on a phone, and, at zero dots, the
 **Try again**. An answer for an image the field no longer holds is dropped (a request generation,
 CLAUDE.md §4's in-flight rule).
 
+(2026-10-27, from the slice's review: the widget no longer takes the first address it hears as a
+baseline. It asks again when the library's address changes to one the shown answer was not drawn
+from, the first arrival included, and draws nothing while the library no longer holds the image,
+asking afresh if it returns.)
+
 **D11. Nothing more for slice 7's paths.** Printing reads the dots slice 7 keeps current: a save
 stores them (`theme-store.ts:83-89`), a library reframe or replaced source redraws them for every
 theme naming the image as light (`packages/media/src/image-edits.ts:71-97`), a configuration copy
