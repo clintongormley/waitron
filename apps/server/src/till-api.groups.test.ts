@@ -117,8 +117,8 @@ async function withGroups() {
     { lines: [dish("Croquetas")], release: "hold" },
   ]);
   expect(submitted.status).toBe(200);
-  const [fired, tarta, croquetas] = (submitted.json as unknown as SubmitAnswer).groups;
-  return { ...party, fired: fired!, tarta: tarta!, croquetas: croquetas! };
+  const [fired, cake, croquettes] = (submitted.json as unknown as SubmitAnswer).groups;
+  return { ...party, fired: fired!, cake: cake!, croquettes: croquettes! };
 }
 
 async function dishLines(tabId: string) {
@@ -339,7 +339,7 @@ describe("POST /api/parties/:id/groups", () => {
     const party = await withGroups();
 
     const joined = await submit(party.partyId, [{ lines: [dish("Pulpo")], release: "hold" }], {
-      joinGroupId: party.tarta.id,
+      joinGroupId: party.cake.id,
     });
     const before = await snapshot(party);
     const toFired = await submit(party.partyId, [{ lines: [dish("Pulpo")], release: "hold" }], {
@@ -352,7 +352,7 @@ describe("POST /api/parties/:id/groups", () => {
 
     expect(joined.status).toBe(200);
     expect((joined.json as unknown as SubmitAnswer).groups.map((group) => group.id)).toEqual([
-      party.tarta.id,
+      party.cake.id,
     ]);
     expect(toFired.status).toBe(409);
     expect(toFired.json).toEqual(refusal("group.not_held", { groupId: party.fired.id }));
@@ -421,15 +421,11 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
     const party = await withGroups();
     const revision = await revisionOf(party.partyId);
 
-    const fired = await call(
-      "POST",
-      `/api/parties/${party.partyId}/groups/${party.tarta.id}/fire`,
-      {
-        submissionId: randomUUID(),
-        expectedPartyRevision: revision,
-        operatorId: venue.adminId,
-      },
-    );
+    const fired = await call("POST", `/api/parties/${party.partyId}/groups/${party.cake.id}/fire`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revision,
+      operatorId: venue.adminId,
+    });
 
     expect(fired.status).toBe(200);
     expect(fired.json).toEqual({ revision: revision + 1 });
@@ -438,7 +434,7 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
         .select({ actorId: orderGroupEvents.actorId })
         .from(orderGroupEvents)
         .where(
-          and(eq(orderGroupEvents.groupId, party.tarta.id), eq(orderGroupEvents.kind, "fired")),
+          and(eq(orderGroupEvents.groupId, party.cake.id), eq(orderGroupEvents.kind, "fired")),
         ),
     );
     expect(event).toEqual({ actorId: venue.operatorId });
@@ -447,7 +443,7 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
   it("answers a repeat with the first answer and writes nothing; a new id on the fired group is 409 group.not_held", async () => {
     const party = await withGroups();
     const body = { submissionId: randomUUID(), expectedPartyRevision: party.revision + 1 };
-    const path = `/api/parties/${party.partyId}/groups/${party.tarta.id}/fire`;
+    const path = `/api/parties/${party.partyId}/groups/${party.cake.id}/fire`;
     const first = await call("POST", path, body);
     const before = await snapshot(party);
 
@@ -461,14 +457,14 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
     expect(again.status).toBe(200);
     expect(again.json).toEqual(first.json);
     expect(refired.status).toBe(409);
-    expect(refired.json).toEqual(refusal("group.not_held", { groupId: party.tarta.id }));
+    expect(refired.json).toEqual(refusal("group.not_held", { groupId: party.cake.id }));
     expect(await snapshot(party)).toEqual(before);
   });
 
   it("refuses 409 submission.id_reused for an id first used on another group, and 409 party.out_of_date for a stale revision", async () => {
     const party = await withGroups();
     const submissionId = randomUUID();
-    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/fire`, {
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.cake.id}/fire`, {
       submissionId,
       expectedPartyRevision: await revisionOf(party.partyId),
     });
@@ -476,12 +472,12 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
 
     const reused = await call(
       "POST",
-      `/api/parties/${party.partyId}/groups/${party.croquetas.id}/fire`,
+      `/api/parties/${party.partyId}/groups/${party.croquettes.id}/fire`,
       { submissionId, expectedPartyRevision: await revisionOf(party.partyId) },
     );
     const stale = await call(
       "POST",
-      `/api/parties/${party.partyId}/groups/${party.croquetas.id}/fire`,
+      `/api/parties/${party.partyId}/groups/${party.croquettes.id}/fire`,
       { submissionId: randomUUID(), expectedPartyRevision: party.revision },
     );
 
@@ -536,7 +532,7 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
 
     const refused = await call(
       "POST",
-      `/api/parties/${party.partyId}/groups/${party.tarta.id}/fire`,
+      `/api/parties/${party.partyId}/groups/${party.cake.id}/fire`,
       body,
     );
 
@@ -554,7 +550,7 @@ describe("PUT /api/parties/:id/groups/order", () => {
     const reordered = await call("PUT", `/api/parties/${party.partyId}/groups/order`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
-      heldGroupIds: [party.croquetas.id, party.tarta.id],
+      heldGroupIds: [party.croquettes.id, party.cake.id],
     });
 
     expect(reordered.status).toBe(200);
@@ -564,8 +560,8 @@ describe("PUT /api/parties/:id/groups/order", () => {
       (listed.json.groups as { id: string; position: number }[]).map((g) => [g.id, g.position]),
     ).toEqual([
       [party.fired.id, 1],
-      [party.croquetas.id, 2],
-      [party.tarta.id, 3],
+      [party.croquettes.id, 2],
+      [party.cake.id, 3],
     ]);
   });
 
@@ -576,7 +572,7 @@ describe("PUT /api/parties/:id/groups/order", () => {
     const body = {
       submissionId,
       expectedPartyRevision: await revisionOf(party.partyId),
-      heldGroupIds: [party.croquetas.id, party.tarta.id],
+      heldGroupIds: [party.croquettes.id, party.cake.id],
     };
     const first = await call("PUT", path, body);
     const before = await snapshot(party);
@@ -584,7 +580,7 @@ describe("PUT /api/parties/:id/groups/order", () => {
     const again = await call("PUT", path, body);
     const reused = await call("PUT", path, {
       ...body,
-      heldGroupIds: [party.tarta.id, party.croquetas.id],
+      heldGroupIds: [party.cake.id, party.croquettes.id],
     });
 
     expect(again.status).toBe(200);
@@ -604,17 +600,17 @@ describe("PUT /api/parties/:id/groups/order", () => {
     const stale = await call("PUT", path, {
       submissionId: randomUUID(),
       expectedPartyRevision: party.revision,
-      heldGroupIds: [party.croquetas.id, party.tarta.id],
+      heldGroupIds: [party.croquettes.id, party.cake.id],
     });
     const fired = await call("PUT", path, {
       submissionId: randomUUID(),
       expectedPartyRevision: current,
-      heldGroupIds: [party.fired.id, party.croquetas.id, party.tarta.id],
+      heldGroupIds: [party.fired.id, party.croquettes.id, party.cake.id],
     });
     const unknown = await call("PUT", path, {
       submissionId: randomUUID(),
       expectedPartyRevision: current,
-      heldGroupIds: [missing, party.croquetas.id, party.tarta.id],
+      heldGroupIds: [missing, party.croquettes.id, party.cake.id],
     });
 
     expect(stale.status).toBe(409);
@@ -671,19 +667,19 @@ describe("POST /api/parties/:id/groups/move", () => {
   it("moves a line into another held group, or into a new one, and answers the party's revision", async () => {
     const party = await withGroups();
     const revision = await revisionOf(party.partyId);
-    const [tartaLine] = party.tarta.lineIds;
+    const [cakeLine] = party.cake.lineIds;
 
     const moved = await call("POST", `/api/parties/${party.partyId}/groups/move`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
-      moves: [{ lineId: tartaLine, quantity: "1" }],
-      target: { groupId: party.croquetas.id },
+      moves: [{ lineId: cakeLine, quantity: "1" }],
+      target: { groupId: party.croquettes.id },
     });
-    const [croquetasLine] = party.croquetas.lineIds;
+    const [croquettesLine] = party.croquettes.lineIds;
     const toNew = await call("POST", `/api/parties/${party.partyId}/groups/move`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revision + 1,
-      moves: [{ lineId: croquetasLine, quantity: "1" }],
+      moves: [{ lineId: croquettesLine, quantity: "1" }],
       target: "new",
     });
 
@@ -696,10 +692,10 @@ describe("POST /api/parties/:id/groups/move", () => {
     };
     expect(listed.groups.map((group) => group.lineIds)).toEqual([
       party.fired.lineIds,
-      [tartaLine],
-      [croquetasLine],
+      [cakeLine],
+      [croquettesLine],
     ]);
-    expect(listed.groups[1]!.id).toBe(party.croquetas.id);
+    expect(listed.groups[1]!.id).toBe(party.croquettes.id);
   });
 
   it("answers a repeat with the first answer and writes nothing, and refuses the id with another target 409 submission.id_reused", async () => {
@@ -709,8 +705,8 @@ describe("POST /api/parties/:id/groups/move", () => {
     const body = {
       submissionId,
       expectedPartyRevision: await revisionOf(party.partyId),
-      moves: [{ lineId: party.tarta.lineIds[0], quantity: "1" }],
-      target: { groupId: party.croquetas.id },
+      moves: [{ lineId: party.cake.lineIds[0], quantity: "1" }],
+      target: { groupId: party.croquettes.id },
     };
     const first = await call("POST", path, body);
     const before = await snapshot(party);
@@ -730,7 +726,7 @@ describe("POST /api/parties/:id/groups/move", () => {
     const before = await snapshot(party);
     const path = `/api/parties/${party.partyId}/groups/move`;
     const current = await revisionOf(party.partyId);
-    const moves = [{ lineId: party.tarta.lineIds[0], quantity: "1" }];
+    const moves = [{ lineId: party.cake.lineIds[0], quantity: "1" }];
     const missing = randomUUID();
 
     const stale = await call("POST", path, {
@@ -821,7 +817,7 @@ describe("GET /api/parties/:id/groups", () => {
           summary: "1 × Caña",
         },
         {
-          id: party.tarta.id,
+          id: party.cake.id,
           position: 2,
           displayNumber: 2,
           numberPartyId: party.partyId,
@@ -833,7 +829,7 @@ describe("GET /api/parties/:id/groups", () => {
           summary: "1 × Tarta",
         },
         {
-          id: party.croquetas.id,
+          id: party.croquettes.id,
           position: 3,
           displayNumber: 3,
           numberPartyId: party.partyId,
@@ -873,8 +869,8 @@ describe("GET /api/working-orders/:id/lines", () => {
       ),
     ).toEqual([
       { lineNo: 1, groupId: party.fired.id },
-      { lineNo: 2, groupId: party.tarta.id },
-      { lineNo: 3, groupId: party.croquetas.id },
+      { lineNo: 2, groupId: party.cake.id },
+      { lineNo: 3, groupId: party.croquettes.id },
     ]);
     expect(
       (noParty.json.lines as { lineNo: number; groupId: string | null }[]).map(
@@ -895,8 +891,8 @@ describe("GET /api/working-orders/:id/lines", () => {
       })),
     ).toEqual([
       { lineNo: 1, id: party.fired.lineIds[0] },
-      { lineNo: 2, id: party.tarta.lineIds[0] },
-      { lineNo: 3, id: party.croquetas.lineIds[0] },
+      { lineNo: 2, id: party.cake.lineIds[0] },
+      { lineNo: 3, id: party.croquettes.lineIds[0] },
     ]);
   });
 });
@@ -909,7 +905,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
         lineNo: number;
         groupId: string | null;
       }[]
-    ).find((line) => line.groupId === party.croquetas.id)!.lineNo;
+    ).find((line) => line.groupId === party.croquettes.id)!.lineNo;
     const before = await snapshot(party);
 
     const refused = await call("POST", `/api/working-orders/${party.tabId}/lines/send`, {
@@ -923,7 +919,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
   });
 
   it("fires the held group holding a course's dish through waiter group Fire, as the signed-in operator", async () => {
-    const [tarta] = await inTx(venue, (tx) =>
+    const [cake] = await inTx(venue, (tx) =>
       tx
         .select({ id: products.id, courseId: products.courseId })
         .from(products)
@@ -934,7 +930,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
         name: `Postres-${randomUUID().slice(0, 6)}`,
         displayOrder: 9,
       });
-      await setProductCourse(tx, venue.cfg, tarta!.id, course.id);
+      await setProductCourse(tx, venue.cfg, cake!.id, course.id);
       return course.id;
     });
     try {
@@ -943,7 +939,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
 
       const fired = await call(
         "POST",
-        `/api/parties/${party.partyId}/groups/${party.tarta.id}/fire`,
+        `/api/parties/${party.partyId}/groups/${party.cake.id}/fire`,
         { submissionId: randomUUID(), expectedPartyRevision: revision },
       );
 
@@ -954,15 +950,15 @@ describe("the tab routes that release lines, on a party with groups", () => {
       };
       expect(listed.groups.map((group) => [group.id, group.state])).toEqual([
         [party.fired.id, "fired"],
-        [party.tarta.id, "fired"],
-        [party.croquetas.id, "held"],
+        [party.cake.id, "fired"],
+        [party.croquettes.id, "held"],
       ]);
       const [event] = await inTx(venue, (tx) =>
         tx
           .select({ actorId: orderGroupEvents.actorId, detail: orderGroupEvents.detail })
           .from(orderGroupEvents)
           .where(
-            and(eq(orderGroupEvents.groupId, party.tarta.id), eq(orderGroupEvents.kind, "fired")),
+            and(eq(orderGroupEvents.groupId, party.cake.id), eq(orderGroupEvents.kind, "fired")),
           ),
       );
       expect(event).toEqual({
@@ -972,7 +968,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
     } finally {
       // The venue is shared by the whole file.
       await inTx(venue, async (tx) => {
-        await setProductCourse(tx, venue.cfg, tarta!.id, tarta!.courseId);
+        await setProductCourse(tx, venue.cfg, cake!.id, cake!.courseId);
         await deleteCourse(tx, venue.cfg, courseId);
       });
     }
@@ -1001,7 +997,7 @@ describe("the line-editing routes act as the session's operator", () => {
   it("removes the held group a void empties, naming the operator, and moves the party on", async () => {
     const party = await withGroups();
     const lineNo = (await tabLines(party.tabId)).lines.find(
-      (line) => line.groupId === party.croquetas.id,
+      (line) => line.groupId === party.croquettes.id,
     )!.lineNo;
     const revision = await revisionOf(party.partyId);
 
@@ -1012,7 +1008,7 @@ describe("the line-editing routes act as the session's operator", () => {
     );
 
     expect(voided.status).toBe(200);
-    expect(await eventsOfGroup(party.croquetas.id)).toEqual([
+    expect(await eventsOfGroup(party.croquettes.id)).toEqual([
       { kind: "submitted", actorId: venue.operatorId },
       { kind: "removed", actorId: venue.operatorId },
     ]);
@@ -1164,8 +1160,8 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
   it("answers each refusal with its status, writing nothing", async () => {
     const party = await withGroups();
     const lineId = party.fired.lineIds[0]!;
-    const held = party.tarta.lineIds[0]!;
-    const [tartaLine] = await inTx(venue, (tx) =>
+    const held = party.cake.lineIds[0]!;
+    const [cakeLine] = await inTx(venue, (tx) =>
       tx
         .select({ lineNo: workingOrderLines.lineNo, tabId: workingOrderLines.workingOrderId })
         .from(workingOrderLines)
@@ -1217,13 +1213,13 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
         `${base}/served`,
         at({ items: [{ lineId: held, quantity: "1" }] }),
         409,
-        refusal("group.line_held", { tabId: tartaLine!.tabId, lineNo: tartaLine!.lineNo }),
+        refusal("group.line_held", { tabId: cakeLine!.tabId, lineNo: cakeLine!.lineNo }),
       ],
       [
-        `${base}/groups/${party.tarta.id}/served`,
+        `${base}/groups/${party.cake.id}/served`,
         at({}),
         409,
-        refusal("group.line_held", { tabId: tartaLine!.tabId, lineNo: tartaLine!.lineNo }),
+        refusal("group.line_held", { tabId: cakeLine!.tabId, lineNo: cakeLine!.lineNo }),
       ],
       [
         `${base}/served`,
@@ -1447,14 +1443,14 @@ describe("the group routes without a session", () => {
         ...body,
         groups: [{ lines: [dish("Pulpo")], release: "hold" }],
       }),
-      await send(venue.app, "", "POST", `${base}/${party.tarta.id}/fire`, body),
+      await send(venue.app, "", "POST", `${base}/${party.cake.id}/fire`, body),
       await send(venue.app, "", "PUT", `${base}/order`, {
         ...body,
-        heldGroupIds: [party.croquetas.id, party.tarta.id],
+        heldGroupIds: [party.croquettes.id, party.cake.id],
       }),
       await send(venue.app, "", "POST", `${base}/move`, {
         ...body,
-        moves: [{ lineId: party.tarta.lineIds[0], quantity: "1" }],
+        moves: [{ lineId: party.cake.lineIds[0], quantity: "1" }],
         target: "new",
       }),
     ];
@@ -1515,7 +1511,7 @@ describe.each(["ready"] as const)("POST /api/parties/:id/groups/:gid/%s", (step)
     });
     const before = await passSnapshot(party, party.fired.id);
 
-    const reused = await call("POST", path(party.partyId, party.tarta.id), {
+    const reused = await call("POST", path(party.partyId, party.cake.id), {
       submissionId,
       expectedPartyRevision: await revisionOf(party.partyId),
     });
@@ -1609,7 +1605,7 @@ describe("the pass routes, one after the other", () => {
         expect(readied.status).toBe(200);
       }
       const groupId =
-        state === "held" ? party.tarta.id : state === "unknown" ? randomUUID() : party.fired.id;
+        state === "held" ? party.cake.id : state === "unknown" ? randomUUID() : party.fired.id;
       const body = {
         submissionId,
         expectedPartyRevision: state === "stale" ? 0 : await revisionOf(party.partyId),
@@ -1732,13 +1728,13 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
 
     const snoozed = await call(
       "POST",
-      `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`,
+      `/api/parties/${party.partyId}/groups/${party.cake.id}/snooze`,
       { submissionId: randomUUID(), expectedPartyRevision: revision, minutes: 5 },
     );
 
     expect(snoozed.status).toBe(200);
     expect(snoozed.json).toEqual({ revision: revision + 1 });
-    const remindAt = (await remindAts(party.partyId))[party.tarta.id]!;
+    const remindAt = (await remindAts(party.partyId))[party.cake.id]!;
     const ahead = Date.parse(remindAt) - from;
     expect(ahead).toBeGreaterThanOrEqual(5 * 60_000);
     expect(ahead).toBeLessThanOrEqual(5 * 60_000 + (Date.now() - from));
@@ -1747,12 +1743,12 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
     expect(waiting.status).toBe(200);
     expect(waiting.json).toMatchObject({
       revision: revision + 1,
-      reminder: { groupId: party.tarta.id, dueAt: null },
+      reminder: { groupId: party.cake.id, dueAt: null },
       groups: [
         { id: party.fired.id, state: "fired", sentAt: expect.any(String), sentBy: "Ana" },
-        { id: party.tarta.id, state: "held", remindAt, sentAt: expect.any(String), sentBy: "Ana" },
+        { id: party.cake.id, state: "held", remindAt, sentAt: expect.any(String), sentBy: "Ana" },
         {
-          id: party.croquetas.id,
+          id: party.croquettes.id,
           state: "held",
           remindAt: null,
           sentAt: expect.any(String),
@@ -1771,14 +1767,14 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
     const due = await call("GET", `/api/parties/${party.partyId}/current-orders`);
     expect(due.json).toMatchObject({
       revision: revision + 2,
-      reminder: { groupId: party.tarta.id, dueAt: remindAt },
+      reminder: { groupId: party.cake.id, dueAt: remindAt },
     });
   });
 
   it("answers each snooze refusal with its status, writing nothing", async () => {
     const party = await withGroups();
     const used = randomUUID();
-    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`, {
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.cake.id}/snooze`, {
       submissionId: used,
       expectedPartyRevision: await revisionOf(party.partyId),
       minutes: 5,
@@ -1791,7 +1787,7 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
       ...extra,
     });
     const base = `/api/parties/${party.partyId}/groups`;
-    const tarta = `${base}/${party.tarta.id}/snooze`;
+    const cake = `${base}/${party.cake.id}/snooze`;
     const unknown = randomUUID();
     const minutesInvalid = refusal("management.request_invalid", { field: "minutes" });
 
@@ -1815,43 +1811,43 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
         refusal("group.not_held", { groupId: party.fired.id }),
       ],
       [
-        `${base}/${party.croquetas.id}/snooze`,
+        `${base}/${party.croquettes.id}/snooze`,
         at({ minutes: 5 }),
         409,
-        refusal("group.not_waiting", { groupId: party.croquetas.id }),
+        refusal("group.not_waiting", { groupId: party.croquettes.id }),
       ],
-      [tarta, at({ minutes: 0 }), 400, minutesInvalid],
-      [tarta, at({ minutes: 121 }), 400, minutesInvalid],
-      [tarta, at({ minutes: 2.5 }), 400, minutesInvalid],
-      [tarta, at({ minutes: "5" }), 400, minutesInvalid],
-      [tarta, at({ minutes: null }), 400, minutesInvalid],
-      [tarta, at({}), 400, minutesInvalid],
+      [cake, at({ minutes: 0 }), 400, minutesInvalid],
+      [cake, at({ minutes: 121 }), 400, minutesInvalid],
+      [cake, at({ minutes: 2.5 }), 400, minutesInvalid],
+      [cake, at({ minutes: "5" }), 400, minutesInvalid],
+      [cake, at({ minutes: null }), 400, minutesInvalid],
+      [cake, at({}), 400, minutesInvalid],
       [
-        tarta,
+        cake,
         { submissionId: randomUUID(), expectedPartyRevision: revision - 1, minutes: 5 },
         409,
         refusal("party.out_of_date", { partyId: party.partyId, revision }),
       ],
       [
-        tarta,
+        cake,
         { submissionId: used, expectedPartyRevision: revision, minutes: 10 },
         409,
         refusal("submission.id_reused", { submissionId: used }),
       ],
       [
-        tarta,
+        cake,
         { expectedPartyRevision: revision, minutes: 5 },
         400,
         refusal("management.request_invalid", { field: "submissionId" }),
       ],
       [
-        tarta,
+        cake,
         { submissionId: randomUUID(), minutes: 5 },
         400,
         refusal("management.request_invalid", { field: "expectedPartyRevision" }),
       ],
       [
-        `/api/parties/not-a-party/groups/${party.tarta.id}/snooze`,
+        `/api/parties/not-a-party/groups/${party.cake.id}/snooze`,
         at({ minutes: 5 }),
         409,
         refusal("party.not_open", { partyId: "not-a-party" }),
@@ -1888,7 +1884,7 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
         venue.app,
         "",
         "POST",
-        `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`,
+        `/api/parties/${party.partyId}/groups/${party.cake.id}/snooze`,
         {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(party.partyId),
@@ -1910,33 +1906,33 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
 describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
   it("clears the waiting group's snooze, answering the party's revision", async () => {
     const party = await withGroups();
-    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`, {
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.cake.id}/snooze`, {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       minutes: 5,
     });
-    expect((await remindAts(party.partyId))[party.tarta.id]).not.toBeNull();
+    expect((await remindAts(party.partyId))[party.cake.id]).not.toBeNull();
     const revision = await revisionOf(party.partyId);
 
     const cleared = await call(
       "POST",
-      `/api/parties/${party.partyId}/groups/${party.tarta.id}/unsnooze`,
+      `/api/parties/${party.partyId}/groups/${party.cake.id}/unsnooze`,
       { submissionId: randomUUID(), expectedPartyRevision: revision },
     );
 
     expect(cleared.status).toBe(200);
     expect(cleared.json).toEqual({ revision: revision + 1 });
-    expect((await remindAts(party.partyId))[party.tarta.id]).toBeNull();
+    expect((await remindAts(party.partyId))[party.cake.id]).toBeNull();
   });
 
   it("answers each unsnooze refusal with its status, writing nothing", async () => {
     const party = await withGroups();
     const used = randomUUID();
-    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/unsnooze`, {
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.cake.id}/unsnooze`, {
       submissionId: used,
       expectedPartyRevision: await revisionOf(party.partyId),
     });
-    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`, {
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.cake.id}/snooze`, {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       minutes: 5,
@@ -1945,7 +1941,7 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
     const revision = await revisionOf(party.partyId);
     const at = () => ({ submissionId: randomUUID(), expectedPartyRevision: revision });
     const base = `/api/parties/${party.partyId}/groups`;
-    const tarta = `${base}/${party.tarta.id}/unsnooze`;
+    const cake = `${base}/${party.cake.id}/unsnooze`;
     const unknown = randomUUID();
 
     const cases: [string, unknown, number, unknown][] = [
@@ -1963,37 +1959,37 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
         refusal("group.not_held", { groupId: party.fired.id }),
       ],
       [
-        `${base}/${party.croquetas.id}/unsnooze`,
+        `${base}/${party.croquettes.id}/unsnooze`,
         at(),
         409,
-        refusal("group.not_waiting", { groupId: party.croquetas.id }),
+        refusal("group.not_waiting", { groupId: party.croquettes.id }),
       ],
       [
-        tarta,
+        cake,
         { submissionId: randomUUID(), expectedPartyRevision: revision - 1 },
         409,
         refusal("party.out_of_date", { partyId: party.partyId, revision }),
       ],
       [
-        `${base}/${party.croquetas.id}/unsnooze`,
+        `${base}/${party.croquettes.id}/unsnooze`,
         { submissionId: used, expectedPartyRevision: revision },
         409,
         refusal("submission.id_reused", { submissionId: used }),
       ],
       [
-        tarta,
+        cake,
         { expectedPartyRevision: revision },
         400,
         refusal("management.request_invalid", { field: "submissionId" }),
       ],
       [
-        tarta,
+        cake,
         { submissionId: randomUUID() },
         400,
         refusal("management.request_invalid", { field: "expectedPartyRevision" }),
       ],
       [
-        `/api/parties/not-a-party/groups/${party.tarta.id}/unsnooze`,
+        `/api/parties/not-a-party/groups/${party.cake.id}/unsnooze`,
         at(),
         409,
         refusal("party.not_open", { partyId: "not-a-party" }),
@@ -2016,7 +2012,7 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
       venue.app,
       "",
       "POST",
-      `/api/parties/${party.partyId}/groups/${party.tarta.id}/unsnooze`,
+      `/api/parties/${party.partyId}/groups/${party.cake.id}/unsnooze`,
       { submissionId: randomUUID(), expectedPartyRevision: await revisionOf(party.partyId) },
     );
 
@@ -2400,7 +2396,7 @@ describe("POST one held dish's Fire now", () => {
   it("fires the named dish using the authenticated operator, leaves other held groups and replays once", async () => {
     const party = await withGroups();
     const command = {
-      lineId: party.tarta.lineIds[0]!,
+      lineId: party.cake.lineIds[0]!,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       operatorId: randomUUID(),
@@ -2412,8 +2408,8 @@ describe("POST one held dish's Fire now", () => {
     const held = await venue.db
       .select()
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, party.croquetas.lineIds[0]!));
-    expect(held[0]!.groupId).toBe(party.croquetas.id);
+      .where(eq(workingOrderLines.id, party.croquettes.lineIds[0]!));
+    expect(held[0]!.groupId).toBe(party.croquettes.id);
     const fired = await venue.db
       .select()
       .from(orderGroupEvents)
@@ -2447,7 +2443,7 @@ describe("POST one held dish's Fire now", () => {
       "POST",
       `/api/parties/${party.partyId}/groups/fire-line`,
       {
-        lineId: party.tarta.lineIds[0],
+        lineId: party.cake.lineIds[0],
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
       },
@@ -2505,7 +2501,7 @@ describe("one held dish rechecks admission after reading its request", () => {
         ),
       );
     const text = JSON.stringify({
-      lineId: party.tarta.lineIds[0],
+      lineId: party.cake.lineIds[0],
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
     });

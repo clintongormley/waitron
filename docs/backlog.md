@@ -5703,7 +5703,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot/counter suites,
-  shared equipment helper exports, payment widgets, server till-API tests, other catalogue
+  shared equipment helper exports, payment widgets, other server till-API fixtures, catalogue
   fixtures, shared station fixtures and file names. Keep fixture text with A976.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
