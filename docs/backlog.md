@@ -1265,9 +1265,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   name and a latest date — left open by A506-5, #1603.
 
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
-  (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first, and a
-  mutation deleting it left 95 of 95 tests passing. Delete it or give it a case that needs it — left
-  open by A789 slice 1, #1948.
+  (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first.
+  Delete it or give it a case that needs it — left open by A789 slice 1, #1948.
 
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
   kitchen agreed for**

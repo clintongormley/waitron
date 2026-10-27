@@ -9,8 +9,7 @@ A till already signed in keeps its loaded payment flow when a department or zone
 Its menu-state poll does not carry the policy, and reloading offers after a menu change still
 keeps that flow. A fresh sign-in reads the changed policy. Decide when an empty till should adopt
 new settings and how an existing basket keeps its recorded facts, then update the poll and its
-consumer. Left open by A366 slice 6 Part A; the branch's real-route and browser probes are in
-its review receipts. This entry does not establish when the behavior began.
+consumer. Left open by A366 slice 6 Part A. This entry does not establish when the behavior began.
 
 ## Split an order's recorded service mode into two facts
 
@@ -371,8 +370,7 @@ bar is which department (hover shows it; the All departments Month has none eith
 - Look at a picked, focused today in the Month. `--wt-focus-offset` and
   `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
   on today, picked and focused, the focus ring covers the outer half of the wider picked ring
-  (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
-  themes that this combination reads well.
+  (`opening-hours-month.ts`). Check in both themes that this combination reads well.
 - The day box should re-place itself when its content changes. `calendar-day-box` measures its
   content only in `show()` and on a scroll or resize, so each host (Opening hours'
   `placeDayBox`, Staffing's month) must wait for every pending redraw first; A720 Part 5's first
@@ -396,11 +394,7 @@ bar is which department (hover shows it; the All departments Month has none eith
   gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
   `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
 - A896. The Venue details panel's Venue card keeps an open draft's unsaved-changes protection
-  when it turns read-only. Measured 2026-10-19 with a throwaway case in
-  `venue-details-panel.unsaved.test.ts`: after a Venue-card field change, setting `readOnly`
-  hid the form and the Edit button, a `beforeunload` event was still cancelled (the browser's
-  leave-page warning), and a request to navigate elsewhere in the dashboard had still not been
-  answered a second later; nothing was saved. The Defaults card drops its draft when it turns
+  when it turns read-only. The Defaults card drops its draft when it turns
   read-only (`willUpdate` in `venue-defaults-panel.ts`). Left open by A824.
 
 [Mockups](mockups/a755-venue-settings/)
@@ -452,7 +446,7 @@ A721's LOOK, 2026-10-18 (#1843). Left open by A721.
 ## A1073. Saving one field in the department dialog can undo another manager's change to a different field
 
 Edit only the name while another dashboard turns the reminder Off, then save, and the reminder is
-back at 10; Needs clearing behaves the same (both reproduced in Chromium during #2020's finish).
+back at 10; Needs clearing behaves the same.
 Once anything is edited the dialog keeps its whole draft (since #1891, `ef59aa44c`), so the fix is
 the dialog keeping each untouched field in step with incoming updates. Left open by A756 PR 4's
 review.
