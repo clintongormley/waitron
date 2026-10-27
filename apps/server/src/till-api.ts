@@ -3178,7 +3178,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const groups = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return listOrderGroups(tx, partyId);
+        return {
+          ...(await listOrderGroups(tx, partyId)),
+          printProblems: await listPrintProblems(tx, partyId),
+        };
       });
       return c.json(groups);
     }),
@@ -3193,18 +3196,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return readCurrentOrders(tx, partyId);
       });
       return c.json(current);
-    }),
-  );
-
-  app.get("/api/parties/:id/print-problems", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const partyId = requirePartyParam(c.req.param("id"));
-      const problems = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return listPrintProblems(tx, partyId);
-      });
-      return c.json({ problems });
     }),
   );
 

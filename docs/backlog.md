@@ -1634,9 +1634,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   problems).**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
 
-- **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
-  [Detail](backlog/kitchen.md#a809-the-table-screen-reads-its-printing-problems-in-the-groups-read-owner-2026-10-17)
-
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](backlog/kitchen.md#task-6-761-hold-tickets-in-advance)
 

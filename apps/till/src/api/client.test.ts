@@ -3964,12 +3964,23 @@ describe("TillApi: a seated party", () => {
     },
   ];
 
-  it("listGroups GETs the party's order groups and the revision they were read at", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 6, groups }));
+  it("listGroups GETs the party's order groups, the revision they were read at and the kitchen tickets that have not printed", async () => {
+    const printProblems = [
+      {
+        workingOrderId: "wo-4",
+        stationId: "st-1",
+        stationName: "Cocina",
+        since: "2026-09-27T12:00:00.000Z",
+      },
+    ];
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ revision: 6, groups, printProblems }));
 
     await expect(new TillApi("", fetchStub).listGroups("v1")).resolves.toEqual({
       revision: 6,
       groups,
+      printProblems,
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -4342,27 +4353,6 @@ describe("TillApi: a seated party", () => {
         expectedPartyRevision: 3,
       }),
     ).rejects.toMatchObject({ code: "party.out_of_date", status: 409 });
-  });
-
-  it("listPrintProblems GETs the party's kitchen tickets that have not printed", async () => {
-    const problems = [
-      {
-        workingOrderId: "wo-4",
-        stationId: "st-1",
-        stationName: "Cocina",
-        since: "2026-09-27T12:00:00.000Z",
-      },
-    ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ problems }));
-
-    await expect(new TillApi("", fetchStub).listPrintProblems("v1")).resolves.toEqual({
-      problems,
-    });
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/parties/v1/print-problems",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
   });
 
   it("reorderGroups PUTs the held groups in their new order and returns the party's revision", async () => {

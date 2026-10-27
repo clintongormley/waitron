@@ -49,7 +49,6 @@ Left open:
 - The pass's Ready records no `order_group_events` row, so who pressed them is
   recorded nowhere readable; a new kind changes that append-only table's check, which is a
   core migration.
-- The table screen's second request for printing problems is A809.
 
 ## Task 6 (#761, HOLD tickets in advance)
 
@@ -206,14 +205,6 @@ Decide whether departure should ask about each unserved dish and send kitchen
 cancellation slips before closing the party, using Finish table's choices without a refund.
 A773-2 retires the pass's per-device Done action; assess this decision against its service
 lifetime rather than adding another manual clearing action. Bring the owner a worked example.
-
-## A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17)
-
-Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
-`GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
-groups read and drop the second request; the exact-body assertion in
-`apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
-calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
 
 ## The earliest fire time is picked by comparing the stored times as text
 

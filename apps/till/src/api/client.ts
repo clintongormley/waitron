@@ -3831,11 +3831,12 @@ export class TillApi {
     return this.#request<PartyBill[]>(`/api/parties/${partyId}/bills`, "GET");
   }
 
-  /** A party's order groups in sequence, with its revision → `GET /api/parties/:partyId/groups`. */
+  /** A party's order groups in sequence, with its revision and its kitchen tickets that have not
+   * printed → `GET /api/parties/:partyId/groups`. */
   listGroups(
     partyId: string,
     options: ReadOptions = {},
-  ): Promise<{ revision: number; groups: OrderGroup[] }> {
+  ): Promise<{ revision: number; groups: OrderGroup[]; printProblems: PrintProblem[] }> {
     return this.#request(`/api/parties/${partyId}/groups`, "GET", undefined, options.signal);
   }
 
@@ -4108,11 +4109,6 @@ export class TillApi {
       undefined,
       options.signal,
     );
-  }
-
-  /** A party's kitchen tickets that have not printed → `GET /api/parties/:partyId/print-problems`. */
-  listPrintProblems(partyId: string): Promise<{ problems: PrintProblem[] }> {
-    return this.#request(`/api/parties/${partyId}/print-problems`, "GET");
   }
 
   /** Put a party's held groups in a new order → `PUT /api/parties/:partyId/groups/order`, naming every

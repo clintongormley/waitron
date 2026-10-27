@@ -51,7 +51,7 @@ async function changedEditor(el: Parameters<typeof dialog>[0]) {
 }
 function metadata(revision: number) {
   api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision }))]);
-  api.listGroups!.mockResolvedValue({ revision, groups: [] });
+  api.listGroups!.mockResolvedValue({ revision, groups: [], printProblems: [] });
   api.readCurrentOrders!.mockResolvedValue({
     revision,
     hasGroups: false,

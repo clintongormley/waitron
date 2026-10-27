@@ -238,7 +238,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([zone]),
     getPartyBills: vi.fn().mockResolvedValue([bill]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [wine], revision: 6 }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     logout: vi.fn().mockResolvedValue(undefined),
     openDrawer: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,

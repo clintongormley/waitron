@@ -102,7 +102,7 @@ it("reconsiders a changed group after a stale fire without carrying a removed di
   const { el } = await mountApp({ previewPartyAllergy: preview, fireGroup: release });
   const screen = await openTable(el);
   api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
-  api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+  api.listGroups!.mockResolvedValue({ revision: 4, groups: [], printProblems: [] });
   api.readCurrentOrders!.mockResolvedValue({
     revision: 4,
     hasGroups: true,

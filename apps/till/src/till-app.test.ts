@@ -508,7 +508,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markServed: vi.fn().mockResolvedValue({ revision: 4 }),
@@ -9354,7 +9354,9 @@ describe("till-app", () => {
           previewPartyAllergy: vi.fn().mockResolvedValue(tableWithoutAllergies()),
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [heldGroup] }),
+          listGroups: vi
+            .fn()
+            .mockResolvedValue({ revision: 3, groups: [heldGroup], printProblems: [] }),
           fireGroup,
           getTabLines,
         });
@@ -9384,7 +9386,9 @@ describe("till-app", () => {
           previewPartyAllergy: vi.fn().mockResolvedValue(tableWithoutAllergies()),
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [heldGroup] }),
+          listGroups: vi
+            .fn()
+            .mockResolvedValue({ revision: 3, groups: [heldGroup], printProblems: [] }),
           fireGroup,
           getTabLines: vi.fn().mockResolvedValue({ lines: [heldCourseLine], revision: 0 }),
         });
@@ -9408,7 +9412,9 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [heldCourseLine], revision: 0 }),
-          listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [heldGroup] }),
+          listGroups: vi
+            .fn()
+            .mockResolvedValue({ revision: 3, groups: [heldGroup], printProblems: [] }),
           fireGroup: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
         });
         const screen = await toTableOrder(el, openTable);
