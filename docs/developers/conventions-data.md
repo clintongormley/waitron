@@ -108,16 +108,19 @@ a test that checks the Spanish screen reads the expected text from that file rat
 it. Starter content Waitron writes into a new venue, from a module's seed or a core setup step, is
 English in its code and translated at setup from a translation file in the writing package,
 `src/starter-content.ts`, keyed by the English. So far that holds for the void and comp reasons
-(`packages/adjustments/src/starter-content.ts`) and for the default kitchen station and the device
-profiles (`packages/provisioning/src/starter-content.ts`), A918. A language map, such as a reason's
-names, gets the venue's starting content languages (the area's default content language, the
-languages the area requires every venue to keep, then English) that the file carries, plus
-English. A field holding one name, such as a reason's plain name, the station's or a profile's,
-gets the staff language: the receipt language when the staff screens have it, `es-ES` or `en-GB`,
-otherwise the area's screen language, cut to `es` or `en`. So a file of one-name rows carries only
-the staff languages other than English (`es`). The service steps, the seasons, the counter zone,
-the menu period, the units, and the first menu with its root section and home layout are still
-written from code (A918's open slices).
+(`packages/adjustments/src/starter-content.ts`), for the default kitchen station and the device
+profiles (`packages/provisioning/src/starter-content.ts`), and for the service steps, the default
+seasons, the counter zone and the starter menu period
+(`packages/venue-service/src/starter-content.ts`), A918; these four are written in the staff
+language whenever they are written, a department added later included.
+A language map, such as a reason's names, gets the venue's starting content languages (the area's
+default content language, the languages the area requires every venue to keep, then English) that
+the file carries, plus English. A field holding one name, such as a reason's plain name, the
+station's or a profile's, gets the staff language: the receipt language when the staff screens
+have it, `es-ES` or `en-GB`, otherwise the area's screen language, cut to `es` or `en`. So a file
+of one-name rows carries only the staff languages other than English (`es`). The units, and the
+first menu with its root section and home layout, are still written from code (A918's open
+slice).
 
 **What it cost.** A758-1 (branch `feat/a758-1-reason-rules`) seeded the starter reasons «Cambio del
 cliente» and «Queja del cliente» from `packages/adjustments/src/provisioning.ts`. The push hook's
@@ -644,9 +647,11 @@ exercises the request boundary.
 Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
 clock cannot be read, timetable resolution leaves the department's period menus orderable.
 
-Provisioning places the first department's Open period at 09:00–17:00 Monday to Friday when
-there is a catalogue and no existing period. Setup's completion screen shows those normal-week
-hours, with a link to Opening hours' Year, only when its saved schedule matches them.
+Provisioning places the first department's starter period (named "Open" in the staff language)
+at 09:00–17:00 Monday to Friday when there is a catalogue and no existing period. Setup's
+completion screen shows those normal-week hours, with a link to Opening hours' Year, only when its
+saved schedule matches them; the check finds that period by "Open" or any name the starter file
+gives it (`STARTER_OPEN_PERIOD_NAMES`, `menu-timetable.ts`).
 A different authored or demo schedule is not described as that first weekday schedule. The checks are in
 `apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
 `apps/server/src/setup-api.test.ts`.
@@ -713,7 +718,8 @@ changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu
 `packages/venue-service/src/routes.ts`) require `seasonId`: a missing or malformed one is refused
 `management.request_invalid`, an unknown or another venue's one `season.not_found` (404).
 In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetable.ts`), which gives a new
-department its first Open period at provisioning and whenever a department is created, and the demo
+department its first starter period (named "Open" in the staff language) at provisioning and
+whenever a department is created, and the demo
 seed, still write every season.
 
 **2026-10-13, A506-6** (its three writes and routes replaced by `saveSeasons` on 2026-10-17, A721,

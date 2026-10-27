@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-10-27, A918 slice 3: setup names the service steps, the default seasons, the counter zone and the starter period in English in code, translated from `packages/venue-service/src/starter-content.ts` into the staff language; the service-steps row below and the first finding's steps record the earlier tree._
+
 _2026-10-27, A918 slice 2: setup names the kitchen station and the device profiles in English in code, translated from `packages/provisioning/src/starter-content.ts` into the staff language; the «Cocina» and device-profile rows below, the first finding's station and profiles, and Bucket D's trap for the fix (the demo now finds the default station by `is_default`) record the earlier tree._
 
 _2026-10-27, A918 slice 1: the guard also skips a package's top-level `src/starter-content.ts`; item 4 of "What the English-only guard misses, and a proposal" lists the earlier exemptions._

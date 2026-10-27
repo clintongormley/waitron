@@ -1837,9 +1837,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish labels, the minutes
   field's screen-reader label ("Minutes" / "Minutos") and the required stars on the "Step" and
   "Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
-  from it, and that a step left first that started after the step before then starts When seated. The starter names are English when the venue's first receipt language is English and
-  Spanish otherwise (`packages/venue-service/src/service-steps.ts`), which the English-only rule
-  (owner, 2026-10-19) does not allow; A918 fixes it. Not put to the owner (plan's question 3): a department created
+  from it, and that a step left first that started after the step before then starts When seated.
+  Since A918 slice 3 (2026-10-27) the starter names come from
+  `packages/venue-service/src/starter-content.ts`, in the staff language. Not put to the owner
+  (plan's question 3): a department created
   later in the dashboard gets the starter steps. Also for the owner, from #1891's look and review: the
   start box cuts labels short — "Repeats after the last order" at every width (Chromium on macOS:
   the text needs 176 px and the box gives 150 on a desktop), and several more at phone width once
@@ -2000,10 +2001,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
   items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
   Slice 1 landed in #2128: the mechanism and the reasons; slice 2 in #2130: the kitchen station and
-  the device profiles. Left, each in [the
-  plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 3, venue-service's
-  steps, seasons, counter zone and period; slice 4, the catalogue's units and first menu. The owner
-  chose the staff language for one-name starter rows (2026-10-27), so neither waits.
+  the device profiles; slice 3 (branch `feat/a918-3-venue-service-starters`): the service steps,
+  the default seasons, the counter zone and the starter period, written in the staff language from
+  `packages/venue-service/src/starter-content.ts`, and setup's opening-hours check and the demo
+  find the period by any of its starter names. Left, in [the
+  plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 4, the
+  catalogue's units and first menu. The owner chose the staff language for one-name starter rows
+  (2026-10-27), so it does not wait.
   Follow-up from slice 2's review: three server tests still find the default station by the name
   «Cocina» (`apps/server/src/table-signals.test.ts:89-95`, `watchers.leave.test.ts:28-35`,
   `kitchen-print.test.ts:1253-1256`); they pass only because their venues have Spanish receipts.

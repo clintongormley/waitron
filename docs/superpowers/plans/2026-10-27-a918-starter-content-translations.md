@@ -1357,7 +1357,13 @@ Files: `packages/venue-service/src/opening-hours-calendar.test.ts`, `period-dele
    malformed-body case (`:487-509`), which is refused `management.request_invalid` for the body's
    shape whatever the names, so its meaning does not change (it passed in the round-3 prototype);
    `seasons.test.ts`'s `autumnVenue` hits (`:154`, `:156`), custom seasons inserted before
-   `ensureDefaultSeasons` runs, so no default is written. **Everything else** is an assertion
+   `ensureDefaultSeasons` runs, so no default is written; that file's other hits, for the same two
+   reasons (line numbers on `dd73ef87a`): `:75-78`, `:469-473` and `:561-564` are in cases whose
+   venues come from `newLocation`, which writes `en-GB` receipts (`:61`; `:69` on the slice's
+   branch), so their staff language is `en`; `:235`, `:237` (`THREE`, `autumnVenue`'s own seasons
+   as sent), `:317`, `:347`, `:349`, `:616` and `:707` are in `autumnVenue` cases, whose seasons
+   are inserted before `createDepartment`, so no default is written. **Everything else** is an
+   assertion
    already in the table, a venue whose staff language is `en` (`business-day-schedule.test.ts`, an
    `["en"]` venue with no tenant, `:124`; `service-delete-settings.test.ts:77`, venue-service's
    `configuration-transfer.test.ts:29` and `provisioning.test.ts:190-193`, all `en-GB`), or not a

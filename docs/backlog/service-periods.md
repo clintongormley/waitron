@@ -489,7 +489,9 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 - **Existing seasons became grey; a new venue's are Spring green, Summer amber, Autumn orange and
   Winter blue (A721 plan, Decision 2; plan default, sent to the owner as an FYI, 2026-10-17).** No
-  data migration, pre-live.
+  data migration, pre-live. (2026-10-27, A918 slice 3: the colours are the same in every
+  language; the names are now written in the venue's staff language, from
+  `packages/venue-service/src/starter-content.ts`.)
 
 - **Two seasons may share a colour (A721 plan, Decision 3; plan default).** The chooser names the
   other seasons that use each colour, as for periods.

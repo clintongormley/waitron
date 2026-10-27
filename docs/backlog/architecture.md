@@ -422,7 +422,9 @@ until A977).
   the default station by its Spanish name (`apps/server/scripts/demo-seed/seed-catalogue.ts:46–56`);
   find it by `is_default`, as `dev-setup.ts` does. (2026-10-27, A918 slice 2: the station and the
   profiles now take their words from `packages/provisioning/src/starter-content.ts`, and the demo
-  finds the default station by `is_default`.)
+  finds the default station by `is_default`.) (2026-10-27, A918 slice 3: the service steps, the
+  default seasons, the counter zone and the starter period now take their words from
+  `packages/venue-service/src/starter-content.ts`, in the staff language.)
 - **A963 — points 3(4) and 4.** Move the full-invoice address rule (`apps/server/src/invoice-selection.ts:20–46`:
   ends «España», five-digit postcode) into Spain's country pack beside the tax-ID check general code
   already asks it for. The till stops appending «España»
