@@ -1430,6 +1430,39 @@ it("with the database missing, confirmUnreadable beside the confirmation is refu
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
+it.each([
+  { which: "the database missing", database: "missing" as const },
+  { which: "confirmRecoveryDiscard beside it", database: "present" as const },
+])(
+  "with no password, confirmUnreadable sent with $which is refused setup.attempt_conflict, and nothing is written",
+  async ({ database }) => {
+    const { f, name, actions, startRequest } = await abandonedAttempt();
+    await damagePicks(f);
+    if (database === "missing") await rm(join(f.venueDir, "venue.db"));
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    const shown: StartAgainSummary = {
+      reached: "named",
+      lastName: name,
+      unreadable: { records: ["series-picks"], floorMs: EPOCH_MS + 60 * MINUTE_MS },
+    };
+    const before = await folderTrees(f);
+    await expect(
+      actions.startAgainFirstSetup({
+        ...startRequest,
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision!,
+        ownerGeneration: inspected.ownerGeneration!,
+        confirmUnreadable: { shown },
+        ...(database === "present" && { confirmRecoveryDiscard: { shown } }),
+      }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(await folderTrees(f)).toEqual(before);
+    await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readStartAgainNote(f.stateDir)).toBeNull();
+    expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  },
+);
+
 it("with the database present, a summary whose attempt read throws is refused setup.not_ready, not the read's own error", async () => {
   const { f, actions, owner, ids } = await presentDamagedPicks();
   const { store, resolution } = f.host;
