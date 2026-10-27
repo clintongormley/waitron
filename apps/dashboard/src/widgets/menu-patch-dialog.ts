@@ -1153,6 +1153,7 @@ export class MenuPatchDialog extends LitElement {
           .api=${this.#uploader}
           .image=${value as string | null}
           .invalid=${error !== ""}
+          .error=${error}
           @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
             event.stopPropagation();
             change(event.detail.image);

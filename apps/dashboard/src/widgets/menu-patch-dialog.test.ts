@@ -2347,3 +2347,40 @@ it("keeps focus inside the dialog when a Reload read during the send removes the
   expect(treeLabels(el)).not.toContain("Salad");
   expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "review"));
 });
+
+it("says under the picture why a refused picture was refused, as its chooser's description", async () => {
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", { change: 0, field: "image" });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  const pickPicture = (image: string) =>
+    form(el)
+      .querySelector("dashboard-image-upload")!
+      .dispatchEvent(
+        new CustomEvent("image-changed", { detail: { image }, bubbles: true, composed: true }),
+      );
+  pickPicture("media:deleted");
+  await el.updateComplete;
+  await press(el, "review");
+  await press(el, "put-live");
+  const upload = form(el).querySelector("dashboard-image-upload")!;
+  await upload.updateComplete;
+  expect(upload.shadowRoot!.querySelector('[data-test="image-error"]')!.textContent!.trim()).toBe(
+    "Check this value.",
+  );
+  const choose = upload.shadowRoot!.querySelector('wt-button[data-test="choose-image"]')!;
+  await expect
+    .element(page.elementLocator(choose.shadowRoot!.querySelector("button")!))
+    .toHaveAccessibleDescription("Check this value.");
+  pickPicture("media:soup");
+  await el.updateComplete;
+  await upload.updateComplete;
+  expect(upload.shadowRoot!.querySelector('[data-test="image-error"]')).toBeNull();
+  await expect
+    .element(page.elementLocator(choose.shadowRoot!.querySelector("button")!))
+    .toHaveAccessibleDescription("");
+});
