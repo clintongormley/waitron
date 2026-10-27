@@ -42,6 +42,7 @@ import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
 import "../widgets/home-shortcut-picker.js";
+import "../widgets/menu-patch-dialog.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
@@ -696,6 +697,7 @@ export class MenusScreen extends LitElement {
    * between, where the link sits under the status. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
+  @state() private patching = false;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -1289,6 +1291,7 @@ export class MenusScreen extends LitElement {
     this.priceRefusals = {};
     this.priceOutcome = null;
     this.publishResult = null;
+    this.patching = false;
     this.#releasePrices();
     this.#releasePreview();
     this.#releaseHome();
@@ -3292,7 +3295,40 @@ export class MenusScreen extends LitElement {
       : this.status === null
         ? t("menus.status_loading")
         : liveWords(this.status);
-    return html`<span class="live" data-test="menu-status">(${words})</span>`;
+    const live =
+      !this.statusError && (this.status?.state === "current" || this.status?.state === "changed");
+    return html`<span class="live" data-test="menu-status">(${words})</span>${
+        live
+          ? html`<wt-button
+              variant="secondary"
+              data-test="patch-live-menu"
+              @click=${() => {
+                this.patching = true;
+              }}
+              >${t("menus.patch_live")}</wt-button
+            >`
+          : nothing
+      }`;
+  }
+
+  #renderPatchDialog(menuId: string) {
+    return html`<dashboard-menu-patch-dialog
+      .api=${this.api}
+      menuId=${menuId}
+      menuName=${this.#menuName()}
+      .open=${this.patching}
+      @wt-close=${(event: Event) => {
+        // The picture picker's modal inside the dialog closes with a composed wt-close too.
+        this.patching = (
+          event.currentTarget as HTMLElementTagNameMap["dashboard-menu-patch-dialog"]
+        ).open;
+      }}
+      @wt-menu-patched=${(event: Event) => {
+        event.stopPropagation();
+        // The patch is not this screen's working state, so the status is read rather than set.
+        this.#followStatus(true);
+      }}
+    ></dashboard-menu-patch-dialog>`;
   }
 
   /** A menu never published has none of it live, so it is marked as well. */
@@ -3699,7 +3735,7 @@ export class MenusScreen extends LitElement {
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
-      ${this.#renderShortcutPicker()}`;
+      ${this.#renderShortcutPicker()} ${this.#renderPatchDialog(menuId)}`;
   }
 
   override render() {
