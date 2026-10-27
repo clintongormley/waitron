@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -65,17 +65,28 @@ describe("seedCatalogues", () => {
   it("finds the provisioned default station by its default flag, whatever setup named it", async () => {
     const { locationId } = await provisionVenue();
     const stations = await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`
-        update kitchen_stations set name = 'Galley'
-        where location_id = ${locationId} and is_default = 1`);
+      // The setup station stays active but stops being the default; it comes first by name, by id
+      // and by insertion, so a lookup that ignored the flag would find it instead.
+      const demoted = await tx.execute(sql`
+        update kitchen_stations set name = 'Bar prep', is_default = 0
+        where location_id = ${locationId} and is_default = 1
+        returning id`);
+      expect(demoted.rows).toHaveLength(1);
+      await tx
+        .insert(kitchenStations)
+        .values({ locationId, name: "Galley", colour: "blue", isDefault: true, active: true });
       await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
-        await tx.execute<{ name: string; colour: string }>(sql`
-        select name, colour from kitchen_stations
-        where location_id = ${locationId} and is_default = 1`)
+        await tx.execute<{ name: string; is_default: number }>(sql`
+        select name, is_default from kitchen_stations
+        where location_id = ${locationId} and name in ('Bar prep', 'Galley', 'Kitchen')
+        order by name`)
       ).rows;
     });
-    expect(stations).toEqual([{ name: "Kitchen", colour: "orange" }]);
+    expect(stations).toEqual([
+      { name: "Bar prep", is_default: 0 },
+      { name: "Kitchen", is_default: 1 },
+    ]);
   });
 
   it("includes Drinks as a folder in both restaurant menus", async () => {
