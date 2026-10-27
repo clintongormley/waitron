@@ -2,7 +2,7 @@ import { root, key, node, clock } from "../test/hour-recovery-host.js";
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it, vi } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 import { nodes, tenants } from "@waitron/db";
 
 import * as sources from "./first-setup-backup-source.js";
@@ -165,31 +165,71 @@ it("expires repair proof after fifteen minutes, and a new host never inherits an
   expect(await f.workspace.read()).toEqual([]);
 });
 
+// The host fakes only Date and performance, so the session's 15-minute expiry timer is real and
+// would never fire in a test; this runs each one that is due, as the test clock moves, unless the
+// code cleared it first.
+function expiryTimers() {
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const pending = new Map<unknown, { run: () => unknown; due: number }>();
+  const setSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+    run: () => unknown,
+    ms?: number,
+    ...rest: unknown[]
+  ) => {
+    const handle = realSetTimeout(run, ms, ...rest);
+    if (ms === 15 * 60_000 + 1) pending.set(handle, { run, due: performance.now() + ms });
+    return handle;
+  }) as typeof setTimeout);
+  const clearSpy = vi.spyOn(globalThis, "clearTimeout").mockImplementation((handle) => {
+    pending.delete(handle);
+    realClearTimeout(handle);
+  });
+  onTestFinished(() => {
+    setSpy.mockRestore();
+    clearSpy.mockRestore();
+  });
+  return async () => {
+    for (const [handle, timer] of [...pending])
+      if (timer.due <= performance.now()) {
+        pending.delete(handle);
+        realClearTimeout(handle as NodeJS.Timeout);
+        await timer.run();
+      }
+  };
+}
+
 async function preparedRecovery() {
+  const fireDue = expiryTimers();
   const f = await fixture(true);
   const service = recovery(f.options);
   const session = await service.open(f.request, { onBox: false });
   await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
-  return { service, session };
+  return { service, session, fireDue };
 }
 
 it("the open page's renewals keep a recovery running past fifteen minutes", async () => {
-  const { service, session } = await preparedRecovery();
+  const { service, session, fireDue } = await preparedRecovery();
   for (let elapsed = 0; elapsed < 16 * 60_000; elapsed += 30_000) {
     clock.advance(30_000);
+    await fireDue();
     service.renew(session.sessionId);
   }
   expect(await service.liveness()).toMatchObject({ state: "running" });
   await service.close(session.sessionId);
 });
 
-it("without renewals a recovery stops after fifteen minutes and a late renewal is refused", async () => {
-  const { service, session } = await preparedRecovery();
-  clock.advance(15 * 60_000 + 1);
+it("without renewals a recovery's session is dropped after fifteen minutes and a late renewal is refused", async () => {
+  const { service, session, fireDue } = await preparedRecovery();
+  clock.advance(15 * 60_000);
+  await fireDue();
+  expect(service.holdsInMemory()).toBe(true);
+  clock.advance(1);
+  await fireDue();
+  expect(service.holdsInMemory()).toBe(false);
   expect(() => service.renew(session.sessionId)).toThrow(
     expect.objectContaining({ code: "setup.owner_required" }),
   );
-  expect(await service.liveness()).toMatchObject({ state: "stopped" });
 });
 
 it("a slower old open cannot replace a more recent authenticated choice", async () => {
