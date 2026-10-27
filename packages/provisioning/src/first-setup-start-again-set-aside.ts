@@ -269,14 +269,17 @@ async function makeDestinationFolders(
   return folders;
 }
 
-/** Refuses a piece whose parent folders under `base` are not all real folders: a link there leads outside the roots. */
+/**
+ * Refuses a piece unless `base` and every folder between it and the piece are real folders: a
+ * link there could lead outside the roots.
+ */
 async function refuseUnrealParents(
   base: string,
   piece: string,
   label: string,
   io: SetAsideIo,
 ): Promise<void> {
-  for (const folder of chain(base, dirname(join(base, piece))).slice(1)) {
+  for (const folder of chain(base, dirname(join(base, piece)))) {
     const found = await notAFolder(folder, io);
     if (found !== null) throw failed(found, label);
   }

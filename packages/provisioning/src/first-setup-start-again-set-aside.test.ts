@@ -1176,6 +1176,71 @@ it("a link put in place of a moved piece's parent folder in the set-aside folder
   expect(await readFile(join(moved, "found.json"), "utf8")).toBe("found bytes");
 });
 
+it("a link put in place of a piece's parent folder at its source makes the Move refuse and moves nothing", async () => {
+  const base = await scratch();
+  const { roots, record, parent, piece } = await nestedFoundMove(base);
+  const elsewhere = join(base, "elsewhere");
+  await fs.rename(join(roots.stateDir, parent), elsewhere);
+  await fs.symlink(elsewhere, join(roots.stateDir, parent));
+  const before = await snapshot(base);
+
+  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${piece}`,
+  });
+
+  expect(await snapshot(base)).toEqual(before);
+  expect(await readFile(join(elsewhere, "found.json"), "utf8")).toBe("found bytes");
+});
+
+it("a link put in place of a piece's parent folder in the set-aside folder makes the Move refuse, and its target stays empty", async () => {
+  const base = await scratch();
+  const { roots, record, piece } = await nestedFoundMove(base);
+  const elsewhere = join(base, "elsewhere");
+  await mkdir(elsewhere);
+  await fs.symlink(elsewhere, join(setAsideFolderPaths(roots, record.setAside!).state, RECORDS));
+  const before = await snapshot(base);
+
+  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${piece}`,
+  });
+
+  expect(await snapshot(base)).toEqual(before);
+  expect(await readdir(elsewhere)).toEqual([]);
+});
+
+it("a link put in place of the set-aside's state folder after its folders are made makes the Move refuse, and moves nothing", async () => {
+  const base = await scratch();
+  const attempt = await startAgainAttempt(base);
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  const record = await prepared(roots, attempt.administratorId);
+  const destination = setAsideFolderPaths(roots, record.setAside!).state;
+  const elsewhere = join(base, "elsewhere");
+  let before: string[] | null = null;
+  const io: SetAsideIo = {
+    ...realIo,
+    lstat: (async (path: string, options?: unknown) => {
+      if (before === null && path === join(destination, "trading.env")) {
+        await fs.rename(destination, elsewhere);
+        await fs.symlink(elsewhere, destination);
+        before = await snapshot(base);
+      }
+      return fs.lstat(path, options as never);
+    }) as typeof fs.lstat,
+  };
+
+  await expect(moveStartAgainUnits(roots, record, io)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: symlink state/trading.env",
+  });
+
+  expect(await snapshot(base)).toEqual(before);
+  expect(await readdir(elsewhere)).toEqual([]);
+  expect(await readFile(join(roots.stateDir, "trading.env"), "utf8")).toBe("X=1\n");
+});
+
 it("a piece that cannot be looked at refuses naming it", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
