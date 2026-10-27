@@ -5,9 +5,8 @@ their full text.
 
 ## Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all four (C125, owner 2026-10-02) — PARKED
 
-- **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
-  four (C125, owner 2026-10-02) — PARKED by the owner (2026-10-02: "save the full translations for
-  much later"); taken out of the campaign queues the same day.** Asked for on C113's question
+- **PARKED by the owner (2026-10-02: "save the full translations for
+  much later").** Asked for on C113's question
   ("Land, review words later, and add full translations for catalán, valenciano, and gallego";
   "Receipt + whole app"; Basque: "Treat it like the others"). When it is picked up, the first step is a spec and plan, ending with the owner's choices:
   - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
@@ -26,7 +25,7 @@ their full text.
   these interface languages, give Valencian its own translated display name and check the picker.
   The review probe returned the raw `ca-ES-valencia` code in Galician and the compound
   `Català (Espanya, valencià)` in Catalan from `languageDisplayName`; A419 supplies the English and
-  Spanish names. Keep this with the parked interface work.
+  Spanish names.
 
 ## The payment slip was left alone
 
@@ -45,10 +44,9 @@ condition for go-live.
 
 ## The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
 
-- The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish
-  way (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The screen falls back
-  to the registry's `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot format. The printed receipt is
-  formatted on the server and keeps the language's own pattern.
+The amounts and date read `20,00 €`, `5 ago 2026`, while its words are Galician or Basque.
+The screen falls back to the registry's `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot
+format. The printed receipt is formatted on the server and keeps the language's own pattern.
 
 ## The dashboard's locale lookup reads inherited properties
 
@@ -60,8 +58,6 @@ caller admits those locales is unverified.
 **Next:** check own locale keys, test the English fallback and trace the callers.
 
 ## A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads
-
-Found while checking the guides for A582 slice 3. One clean-up of the dashboard's strings:
 
 - The image library marks a use by an inactive product "Disabled product" ("Producto
   deshabilitado"; `image.disabled_product`, `packages/media/src/dashboard/strings.ts`, drawn in
@@ -82,7 +78,7 @@ Done when the three are changed and the dashboard's strings tests pass.
 
 ## A887. Find a bill's state filter still says "Held" for an order the till now calls parked
 
-Found while checking the guides for A582 slice 3, narrowed in slice 4a. The English guides call an
+The English guides call an
 order set aside on the till a "parked order" (`grep -n "parked order" apps/server/src/guide/en/*.md`:
 `modifiers.md` and `products.md`), and since A738 (`d99a9f403`) the till's own button and list say
 **Park** and **Parked orders** (`action.hold`, `held.title`, `apps/till/src/i18n/strings.ts:317`,
@@ -90,7 +86,7 @@ order set aside on the till a "parked order" (`grep -n "parked order" apps/serve
 Park agree. What is left: Find a bill's state filter (`till-find-bill-screen.ts:42`, `:394`) calls
 an open, unpaid order with no table (`apps/server/src/find-bill-bills.ts:83`) **Held** /
 **En espera** (`find_page.held`, `strings.ts:525`, `:2125`). Done when that filter uses the till's
-word. Not renamed in A582: `strings.ts` was being changed heavily by two other lanes at the time.
+word.
 
 ## The adjustment-reason and venue delete windows still use older wording
 
