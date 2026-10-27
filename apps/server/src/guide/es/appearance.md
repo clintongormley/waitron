@@ -220,7 +220,7 @@ imprimen ningún logotipo, en lugar de uno que podría no ser el correcto.
 Debajo de las elecciones y de la vista previa, el editor tiene una sección titulada **Avanzado:
 fijar colores y texto a mano**. Empieza cerrada cada vez que se abre el editor, y su línea cerrada dice qué
 está fijado a mano: «Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.»,
-o un recuento y los nombres de los colores, por ejemplo «2 fijados a mano: Página (versión clara),
+o un recuento y los nombres de los colores y las filas de texto fijados a mano, por ejemplo «2 fijados a mano: Página (versión clara),
 Texto (versión clara)». Mientras haya colores o tamaños de texto fijados a mano que se leen mal, la línea añade
 cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». Pulsa el título para
 abrirla.
@@ -288,10 +288,10 @@ px (29 px al 130 %)**. La nota no es un aviso: nada la cuenta y puedes guardar e
 Un tamaño que no es un número entero del 8 al 40 no se usa. Guardar indica «Introduce un número
 entero del 8 al 40.» debajo, no guarda nada y abre Avanzado para mostrarlo.
 
-El tipo de letra y los grosores llegan a todas las pantallas que pinta el tema, y toda palabra en
-negrita, todo título y toda cabecera de tabla siguen el **Grosor de negrita**. El papel impreso, el
-botón de inicio de sesión de Google y el tipo de letra de los códigos conservan la letra de
-Waitron.
+El tipo de letra y los grosores llegan a todas las pantallas que pinta el tema, y una palabra en
+negrita, un título o una cabecera de tabla siguen el **Grosor de negrita** salvo que su pantalla les
+dé un grosor propio. El papel impreso y el tipo de letra de los códigos conservan la letra de
+Waitron, y el botón de inicio de sesión de Google conserva la de Google.
 
 ## Cuando un color se lee mal {#hard-to-read}
 
@@ -351,7 +351,7 @@ Si algo sigue leyéndose mal, Guardar abre primero el diálogo **Difícil de lee
 cada color o tamaño de texto afectado. Ofrece tres opciones:
 
 - **Volver** te devuelve al editor sin guardar nada.
-- **Guardar de todos modos** guarda los colores tal como los elegiste.
+- **Guardar de todos modos** guarda el tema tal como lo elegiste.
 - **Corregir y guardar** aplica todas las correcciones y después guarda. El diálogo solo la ofrece
   cuando corregirlo todo no dejaría ningún aviso.
 
@@ -378,7 +378,7 @@ elecciones con el nombre que le des, deja el tema que estabas editando tal como 
 vez y cierra el editor. Su interruptor **Usarlo ya en todas las pantallas** empieza activado cuando
 el tema que editas está en uso. Si algún color o tamaño de texto sigue leyéndose mal, primero aparece el diálogo
 **Difícil de leer**, igual que con Guardar. Como Guardar, te indica debajo del campo si un código de
-color que escribiste no es válido, y no guarda nada hasta que lo corriges.
+color o un tamaño de texto que escribiste no es válido, y no guarda nada hasta que lo corriges.
 
 ## Los temas del local {#themes}
 

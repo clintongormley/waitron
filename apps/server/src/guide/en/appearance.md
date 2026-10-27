@@ -197,8 +197,8 @@ rather than one that may be the wrong one.
 
 Below the choices and the preview, the editor has a section headed **Advanced: set colours and
 text by hand**. It starts closed each time the editor opens, and its closed line says what is set by hand:
-"None set by hand. Waitron works out every colour and text size.", or a count and the colours'
-names, such as "2 set by hand: Page (light), Text (light)". While colours or text sizes set by hand
+"None set by hand. Waitron works out every colour and text size.", or a count and the names
+of the colours and text rows set by hand, such as "2 set by hand: Page (light), Text (light)". While colours or text sizes set by hand
 are hard to read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
 heading to open it.
 
@@ -263,9 +263,9 @@ size as it is.
 A size that is not a whole number from 8 to 40 is not used. Save says "Enter a whole number from 8
 to 40." under it, saves nothing, and opens Advanced to show it.
 
-The typeface and the weights reach every screen the theme paints, and every bold word, heading and
-table header follows **Bold weight**. Printed paper, Google's sign-in button and the typeface used
-for codes keep Waitron's type.
+The typeface and the weights reach every screen the theme paints, and a bold word, heading or table
+header follows **Bold weight** unless its screen gives it a weight of its own. Printed paper and
+the typeface used for codes keep Waitron's type, and Google's sign-in button keeps Google's.
 
 ## When a colour is hard to read {#hard-to-read}
 
@@ -322,7 +322,7 @@ When something is still hard to read, Save first opens the **Hard to read** dial
 for each colour or text size that is. It offers three choices:
 
 - **Back** returns you to the editor with nothing saved.
-- **Save anyway** saves the colours as you chose them.
+- **Save anyway** saves the theme as you chose it.
 - **Fix and save** takes every fix, then saves. The dialog offers it only when fixing everything
   would leave no warning at all.
 
@@ -346,8 +346,8 @@ opens the name dialog with the theme's name followed by "(copy)", stores your ch
 you give, leaves the theme you were editing as it was last saved, and closes the editor. Its **Use
 it on every screen now** switch starts on when the theme you are editing is in use. When a colour or
 text size is still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
-tells you under the field when a colour code you typed is not valid, and saves nothing until you fix
-it.
+tells you under the field when a colour code or a text size you typed is not valid, and saves
+nothing until you fix it.
 
 ## The venue's themes {#themes}
 
