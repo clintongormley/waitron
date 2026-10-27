@@ -24,6 +24,7 @@ describe("resolveInstalledStarterLanguages", () => {
     ["ES", null, "es-ES", "es", ["es", "en"]],
     ["GB", "London", null, "en", ["en"]],
     ["XX", null, "es-ES", "es", ["en"]],
+    ["XX", null, null, "en", ["en"]],
   ] as const)(
     "%s / %s with %s receipts: staff %s, languages %j",
     (country, area, receiptLocale, staffLanguage, languages) => {
@@ -37,7 +38,7 @@ describe("resolveInstalledStarterLanguages", () => {
 
 describe("starterNames", () => {
   it("answers English and each of the venue's languages the entry has", () => {
-    expect(starterNames(FILE, "Alpha", ["ca-ES-valencia", "es", "en"])).toEqual({
+    expect(starterNames(FILE, "Alpha", ["ca-ES-valencia", "es", "en"])).toStrictEqual({
       en: "Alpha",
       "ca-ES-valencia": "alpha-val",
       es: "alpha-es",
@@ -45,15 +46,15 @@ describe("starterNames", () => {
   });
 
   it("includes English when the languages do not", () => {
-    expect(starterNames(FILE, "Alpha", ["es"])).toEqual({ en: "Alpha", es: "alpha-es" });
+    expect(starterNames(FILE, "Alpha", ["es"])).toStrictEqual({ en: "Alpha", es: "alpha-es" });
   });
 
   it("leaves out a language the entry does not have", () => {
-    expect(starterNames(FILE, "Alpha", ["fr", "en"])).toEqual({ en: "Alpha" });
+    expect(starterNames(FILE, "Alpha", ["fr", "en"])).toStrictEqual({ en: "Alpha" });
   });
 
   it("answers only English for a starter with no entry", () => {
-    expect(starterNames(FILE, "Beta-missing", ["es", "en"])).toEqual({ en: "Beta-missing" });
+    expect(starterNames(FILE, "Beta-missing", ["es", "en"])).toStrictEqual({ en: "Beta-missing" });
   });
 });
 

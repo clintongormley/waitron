@@ -37,24 +37,16 @@ export function resolveInstalledStarterLanguages(input: {
   };
 }
 
-function entryFor(
-  file: StarterTranslations<string>,
-  english: string,
-): Readonly<Record<string, string>> | undefined {
-  return Object.hasOwn(file, english) ? file[english] : undefined;
-}
-
 /** `english` under `en`, and its text in each of `languages` its entry has; nothing else. */
 export function starterNames(
   file: StarterTranslations<string>,
   english: string,
   languages: readonly string[],
 ): Record<string, string> {
-  const entry = entryFor(file, english);
+  const entry = file[english];
   const names: Record<string, string> = { en: english };
   for (const language of languages) {
-    const text =
-      entry !== undefined && Object.hasOwn(entry, language) ? entry[language] : undefined;
+    const text = entry?.[language];
     if (text !== undefined) names[language] = text;
   }
   return names;
@@ -67,5 +59,5 @@ export function starterName(
   staffLanguage: StarterStaffLanguage,
 ): string {
   if (staffLanguage === "en") return english;
-  return entryFor(file, english)?.[staffLanguage] ?? english;
+  return file[english]?.[staffLanguage] ?? english;
 }
