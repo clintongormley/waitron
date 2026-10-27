@@ -2947,7 +2947,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   invoices of every department with no receipt logo of its own and of a sale with no department, a
   department's own logo still first; a department whose receipt settings cannot be trusted prints
   no logo; the till's ticket view and a department's Receipts preview follow the same rule.
-  Next: 9b, 11, 12 and 14 (14 with A1096's last part, below).
+  Slice 9b landed 2026-10-27 (#2119): the Look card shows how the logo prints, and says when it
+  prints blank.
+  Next: 11, 12 and 14 (14 with A1096's last part, below).
 
 - **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
   A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
