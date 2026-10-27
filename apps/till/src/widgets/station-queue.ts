@@ -902,7 +902,7 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** A card with no fired dish is held: dashed, untimed (D3). */
+  /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */
   #card(card: KitchenCard): TemplateResult {
     const [first] = card.orders as [MergedQueueGroup, ...MergedQueueGroup[]];
     const { since, group } = card;
@@ -932,7 +932,7 @@ export class TillStationQueue extends LitElement {
     ${group === null ? nothing : html`<span class="group-name">${groupName(group)}</span>`}
     ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
     ${
-      group?.state === "held"
+      group?.state === "held" || since === null
         ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
         : nothing
     }

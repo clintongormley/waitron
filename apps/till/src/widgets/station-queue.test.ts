@@ -2807,6 +2807,35 @@ describe("the board's cards", () => {
     expect(flat(mixed!.querySelector(".ticket-head .age")!)).toBe(`7 ${t("station.min")}`);
   });
 
+  // A recall un-fires a fired group's dishes; a bill taken to the counter then leaves its group.
+  it("says a card is held whenever every dish on it is, in a fired group or in none", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("recalled", null, { group: sent("g-2", 2) }),
+          dish("fired", "2026-08-17T10:00:00.000Z", { group: sent("g-3", 3) }),
+          dish("kept-back", null, { group: sent("g-3", 3) }),
+        ]),
+        { ...groupA, orderId: "wo-2", orderNumber: 6, items: [dish("at-the-counter", null)] },
+      ],
+      stationId: "st-1",
+      now: Date.parse("2026-08-17T10:07:00.000Z"),
+    });
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-3", "g-2", "none"]);
+    const [mixed, ...held] = cards;
+    for (const card of held) {
+      expect(card.classList.contains("held")).toBe(true);
+      expect(card.querySelector("[data-card-head]")).toBeNull();
+      expect(flat(card.querySelector(".ticket-head")!)).toContain(t("station.group_held"));
+    }
+    // The control: a fired group's card with one dish fired says it only beside its held dish.
+    expect(flat(mixed!.querySelector(".ticket-head")!)).not.toContain(t("station.group_held"));
+    expect(flat(mixed!.querySelector('[data-item="kept-back"]')!)).toContain(
+      t("station.group_held"),
+    );
+  });
+
   const elsewhereDish = {
     id: "other-burger",
     name: "Burger",

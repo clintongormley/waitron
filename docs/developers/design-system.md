@@ -5479,7 +5479,7 @@ comes first, a card with no fired dish after every timed one, then the read's or
 first bill, then the group's position with the no-group card first (`kitchen-cards.ts`). Its
 heading holds each bill's number with any former numbers, the allergy marker, its bills' labels once
 each, the group's name, the course when every dish shares one, "Held, not released" when the group
-is held, and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
+is held or no dish on the card is fired, and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
 the heading can move something), each bill's kitchen note and printing problem, the dishes (course
 sub-heads only when the card has more than one course), and each bill's "Also on this order",
 Collect and Reprint where they apply, each naming its bill's number when the card merges bills (`#card`, `apps/till/src/widgets/station-queue.ts`). Its age band
@@ -5490,7 +5490,7 @@ fired dish is dashed, with no band and no minutes (`station-queue.ts`). A dish t
 time" moves that dish; in "Whole ticket at once" it moves the card's fired dishes at the tapped
 dish's stage; the heading is a `<button>` only while the card has a fired dish not Ready, and its
 tap moves the card's fired dishes at the least advanced such stage, never a dish further on
-(`headingStage`, `dishesAt`, `kitchen-cards.ts`); the screen sends each dish's own advance in turn
+(`headingStage`, `dishesAt`, `kitchen-cards.ts`); the screen sends each dish's own advance in turn, in the order the card draws them
 (`#onAdvanceDishes`, `apps/till/src/screens/till-station-screen.ts`). The line above the columns,
 "5 dishes to make · 1 late" in `--wt-font-size-sm`, bold, `--wt-color-text-muted`, counts the
 fired Waiting and Preparing dishes by quantity, a dish whose unit shows counting one, and the cards
