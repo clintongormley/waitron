@@ -1054,7 +1054,7 @@ may predate that branch:
   and are remembered on the device; the one Columns store A773-2 reuses,
   `apps/till/src/state/kitchen-columns.ts`) landed in #2129, from the plan's slice 9. Slice 9b (each
   kitchen board's header row with Columns, whose window moves columns up or down and hides or shows
-  them, kept on the device; every column may be hidden and Columns stays) is in review, from the
+  them, kept on the device; every column may be hidden and Columns stays) landed in #2135, from the
   plan's slice 9b; next, slice 9c (Overview and the narrow tabs), taking turns with lane G's A773-2
   on the station screen (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
