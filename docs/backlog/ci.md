@@ -132,10 +132,7 @@ assertion, and measure the resulting files on a slow CI runner. Refresh the dura
 measuring; moving this whole file to another shard cannot bring its own time below four minutes.
 The A731 repair suites are split separately; this existing fiscal-hour suite is outside that item.
 
-208 s median
-and 255 s worst over six runs in A938, since no packing goes below one file: on #1930's run
-39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
-split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
+Find why each restart test boots the real entry point twice. Left open by A938 (#1930).
 [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## Venue-service browser startup remains unexplained (#1557)
@@ -265,18 +262,16 @@ if there is none, say so in the comment and stop calling the case a guard test.
 
 ## Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
 
-- Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
-  change. Two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
+- Two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
   parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass,
-  so they check less than their titles say. Test titles #624 could
-  not touch: "(T12b)" in `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
+  so they check less than their titles say. Test titles left open by #624: "(T12b)" in
+  `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
   `boot.reconcile.test.ts`, "(C2)", "(pre-merge review)", "(I1)" and "skipped a tenant" in
   `health.test.ts`, "the new guard" in `config.test.ts`.
 
 ## The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was measured false
 
-- The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
-  measured false (identity, 2026-09-24, and #562's review). #585 took the reason out of
+- #585 took the reason out of
   `packages/db/src/schema`; the ignore pairs there stay. Four identity schema files and six in
   `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
   code change, for whoever next changes that package's code.
@@ -505,8 +500,7 @@ short-limit measurement is in [the CI guide](../developers/ci-and-gates.md#give-
 ## The step-watch guard received an undefined held-thread result
 
 On 2026-10-16, A737 Part 2's normal push at `877d14981`, rebased onto A751's
-`39d07827e`, ran `pnpm vitest run --coverage`. Vitest 4.1.11 reported 6,838 passing
-cases and one failure in 157.65 seconds. The failing case was
+`39d07827e`, ran `pnpm vitest run --coverage`. The failing case was
 `scripts/step-watch.test.mjs`'s "reports the phase a synchronous call holds the thread in,
 from another thread, counting from the last phase event". At line 557,
 `expect(seenWhileHeld).toMatch(...)` received undefined. Its callback assigns that value
@@ -570,10 +564,7 @@ output.
 
 ## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
 
-- Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
-  `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-  `.husky/pre-push` beside the same loop; it is not there.
-  Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
+- Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
   top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
   decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
   provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
@@ -621,8 +612,8 @@ and no file the guard names imports `season-tint`.
 
 ## Two browser tests failed once each during A454's work
 
-Two browser tests failed once each during A454's work (search everywhere), and neither was
-reproduced or checked on `main`: "edge scroll reaches hidden column choices during a stationary
+Neither was reproduced or checked on `main`: "edge scroll reaches hidden column choices during a
+stationary
 reorder" (`packages/ui/src/components/wt-data-table.test.ts`), once in a `packages/ui` coverage
 run; and "cancel keeps reassignment selections and target until explicit local Discard"
 (`apps/dashboard/src/screens/units-reassignment.unsaved.test.ts`), once in seven runs, then six
