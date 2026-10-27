@@ -5,6 +5,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { setTimeout as deadline } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import nodemailer from "nodemailer";
 import { createInvoiceEmailSender, createRoutedInvoiceEmailSender } from "./invoice-email.js";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -16,6 +17,7 @@ import {
   deleteCredential,
 } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
+import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 
 type Reply =
   | "accepted"
@@ -137,6 +139,25 @@ async function attachmentText(message: string) {
   } finally {
     await loading.destroy();
   }
+}
+
+function textPart(message: string) {
+  const boundary = /boundary="?([^"\r\n;]+)"?/.exec(message)?.[1];
+  expect(boundary).toBeDefined();
+  const part = message
+    .split(`--${boundary}`)
+    .find((section) => /^Content-Type: text\/plain/im.test(section.split("\r\n\r\n")[0]!));
+  expect(part).toBeDefined();
+  const [headers, ...body] = part!.replace(/^\r\n/, "").split("\r\n\r\n");
+  const value = body.join("\r\n\r\n").replace(/\r\n$/, "");
+  if (/Content-Transfer-Encoding: base64/i.test(headers!))
+    return Buffer.from(value.replace(/\s/g, ""), "base64").toString("utf8").replace(/\r\n/g, "\n");
+  return value
+    .replace(/=\r\n/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/(?:=[\dA-F]{2})+/g, (run) =>
+      Buffer.from(run.replaceAll("=", ""), "hex").toString("utf8"),
+    );
 }
 
 describe("invoice SMTP transport", () => {
@@ -385,3 +406,84 @@ it.each(["temporary-recipient-refused", "temporary-data-refused"] as const)(
     }
   },
 );
+
+describe("invoice email privacy notice", () => {
+  const venue = "Charcutería La Buena SL";
+  const notice = (language: "en" | "es", taxRecord: boolean, contacts: string): string => {
+    const words = INVOICE_EMAIL_NOTICE_WORDS[language];
+    return [
+      (taxRecord ? words.purposeWithRecord : words.purpose).replace("{venue}", () => venue),
+      words.contact.replace("{contacts}", () => contacts),
+    ].join("\n");
+  };
+  const email = "privacy@example.com";
+  const page = "https://example.com/privacy";
+  const sendText = async (message: {
+    document: typeof fixture;
+    privacy?: { privacyNoticeUrl: string | null; privacyEmail: string | null; taxRecord: boolean };
+  }) => {
+    const rig = await smtpRig("accepted");
+    try {
+      expect(
+        await createInvoiceEmailSender(rig.config)({
+          recipient: "customer@example.test",
+          ...message,
+        }),
+      ).toEqual({ status: "sent" });
+      expect(rig.messages).toHaveLength(1);
+      return textPart(rig.messages[0]!);
+    } finally {
+      await rig.close();
+    }
+  };
+
+  it.each([
+    ["es-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
+    ["es-ES", null, page, false, "Factura", notice("es", false, page)],
+    ["eu-ES", email, null, false, "Faktura", notice("es", false, email)],
+    ["ca-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
+    ["en-GB", email, page, false, "Factura", notice("en", false, `${email}, ${page}`)],
+    ["es-ES", null, null, true, "Factura", undefined],
+  ] as const)(
+    "a %s invoice with email %s and page %s (tax record %s) carries its notice in the text",
+    async (invoiceLocale, privacyEmail, privacyNoticeUrl, taxRecord, label, expected) => {
+      const text = await sendText({
+        document: { ...fixture, invoiceLocale },
+        privacy: { privacyEmail, privacyNoticeUrl, taxRecord },
+      });
+      const caption = `${label} FF/1`;
+      expect(text).toBe(expected === undefined ? caption : `${caption}\n\n${expected}`);
+    },
+  );
+
+  it("sends the caption alone when the message carries no privacy facts", async () => {
+    expect(await sendText({ document: fixture })).toBe("Factura FF/1");
+  });
+
+  it("puts the notice after a duplicate's marked caption and a blank line", async () => {
+    expect(
+      await sendText({
+        document: { ...fixture, duplicate: true },
+        privacy: { privacyEmail: email, privacyNoticeUrl: page, taxRecord: true },
+      }),
+    ).toBe(`Factura FF/1 — DUPLICADO\n\n${notice("es", true, `${email}, ${page}`)}`);
+  });
+
+  it("textPart decodes an accented line longer than a mail line", async () => {
+    const rig = await smtpRig("accepted");
+    const known = `Protección de datos: ${"ñandú ".repeat(20)}fin`;
+    try {
+      await nodemailer.createTransport({ url: rig.config.url }).sendMail({
+        from: rig.config.from,
+        to: "customer@example.test",
+        subject: "x",
+        text: known,
+        attachments: [{ filename: "a.txt", content: "a" }],
+      });
+      expect(rig.messages[0]).not.toContain(known);
+      expect(textPart(rig.messages[0]!)).toBe(known);
+    } finally {
+      await rig.close();
+    }
+  });
+});
