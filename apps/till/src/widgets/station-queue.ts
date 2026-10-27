@@ -28,6 +28,7 @@ import {
   lateCards,
   thousandthsToMake,
 } from "../state/kitchen-cards.js";
+import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -52,6 +53,10 @@ const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
 // Registered here rather than in main.ts: the icons are this widget's, and every surface that mounts it
 // needs them.
 registerIcons(NOTICE_ICONS);
+registerIcons({
+  "column-open": "M2 5.4 3.4 4 8 8.6 12.6 4 14 5.4 8 11.4Z",
+  "column-closed": "M5.4 2 4 3.4 8.6 8 4 12.6 5.4 14 11.4 8Z",
+});
 
 /** `ready` is terminal: a counter order's handover is an order-level collect, not a kitchen state. */
 const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
@@ -60,7 +65,14 @@ const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
   ready: undefined,
 };
 
+/** Kitchen-state order, which a dish's state word compares; the drawn order is {@link TillStationQueue.columns}. */
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
+
+const DRAWN: Partial<Record<ColumnKey, TicketState>> = {
+  waiting: "queued",
+  preparing: "preparing",
+  ready: "ready",
+};
 
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 
@@ -105,24 +117,65 @@ export class TillStationQueue extends LitElement {
       }
 
       .kanban {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        display: flex;
+        flex-wrap: wrap;
+        align-items: stretch;
         gap: var(--wt-space-3);
       }
 
       .column {
         display: flex;
+        flex: 1 1 11rem;
         flex-direction: column;
         gap: var(--wt-space-2);
         min-width: 0;
       }
 
-      .column-title {
+      .column.collapsed {
+        flex: 0 0 var(--wt-tap-min);
+      }
+
+      .column-heading {
+        display: flex;
         margin: 0 0 var(--wt-space-1);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text-muted);
         text-transform: uppercase;
+      }
+
+      .collapsed .column-heading {
+        flex: 1;
+        margin: 0;
+      }
+
+      .column-toggle {
+        display: flex;
+        flex: 1;
+        align-items: center;
+        gap: var(--wt-space-1);
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        margin: 0;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: inherit;
+        font: inherit;
+        text-align: start;
+        text-transform: inherit;
+        cursor: pointer;
+      }
+
+      .collapsed .column-toggle {
+        justify-content: flex-start;
+        padding: var(--wt-space-2) 0;
+        writing-mode: vertical-rl;
+      }
+
+      .column:not(.collapsed) .column-count {
+        margin-inline-start: auto;
       }
 
       .ticket {
@@ -606,6 +659,8 @@ export class TillStationQueue extends LitElement {
   /** Injectable clock for age colouring. Set in tests for deterministic bands. */
   @property({ attribute: false }) now?: number;
   @property({ attribute: false }) reducedMotion?: boolean;
+  /** The device's layout, owned by the screen: a heading tap only asks, through `toggle-column`. */
+  @property({ attribute: false }) columns: ColumnState = STATION_COLUMNS;
 
   /** Re-renders while the display sits idle, so a ticket can climb fresh → warm → overdue → forgotten
    *  between the container's own refreshes. */
@@ -892,15 +947,51 @@ export class TillStationQueue extends LitElement {
     </wt-button>`;
   }
 
+  #toggleColumn(key: ColumnKey): void {
+    this.dispatchEvent(
+      new CustomEvent("toggle-column", { detail: { key }, bubbles: true, composed: true }),
+    );
+  }
+
   #board(cards: readonly KitchenCard[]): TemplateResult {
+    const drawn = this.columns.order.flatMap((key) => {
+      const state = DRAWN[key];
+      return state === undefined ? [] : [{ key, state }];
+    });
     return html`<div class="kanban">
-      ${COLUMNS.map(
-        (state) =>
-          html`<section class="column column-${state}" data-column=${state}>
-            <h2 class="column-title">${t(`station.state.${state}` as const)}</h2>
-            ${cards.filter((card) => card.column === state).map((card) => this.#card(card))}
-          </section>`,
-      )}
+      ${drawn.map(({ key, state }) => {
+        const inColumn = cards.filter((card) => card.column === state);
+        const collapsed = this.columns.collapsed.includes(key);
+        // One button template for both states, so a redraw keeps the focused element.
+        return html`<section
+          class="column column-${state} ${collapsed ? "collapsed" : ""}"
+          data-column=${state}
+        >
+          <h2 class="column-heading">
+            <button
+              class="column-toggle"
+              data-column-toggle=${key}
+              aria-expanded=${collapsed ? "false" : "true"}
+              @click=${() => this.#toggleColumn(key)}
+            >
+              ${collapsed ? html`<wt-icon name="column-closed" aria-hidden="true"></wt-icon>` : nothing}<span
+                class="column-title"
+                >${t(`station.state.${state}` as const)}</span
+              >
+              ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
+                class="column-count"
+                data-column-count
+                >${inColumn.length}</span
+              >${
+                collapsed
+                  ? nothing
+                  : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`
+              }
+            </button>
+          </h2>
+          ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
+        </section>`;
+      })}
     </div>`;
   }
 

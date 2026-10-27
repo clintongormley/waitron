@@ -1,4 +1,4 @@
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
@@ -3743,5 +3743,197 @@ describe("till-station-queue: a card's place", () => {
     ]);
     expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(1);
     expect(placesOf(el)).toEqual(["T4"]);
+  });
+});
+
+describe("the board's columns", () => {
+  const fired = "2026-08-17T10:00:00.000Z";
+  const sent = (id: string, position: number, state: "held" | "fired" = "fired") => ({
+    id,
+    position,
+    displayNumber: position,
+    numberPartyId: "pa-1",
+    state,
+  });
+  const dish = (
+    id: string,
+    firedAt: string | null,
+    extra: Partial<StationQueueItem> = {},
+  ): StationQueueItem => ({
+    ...groupA.items[0]!,
+    id,
+    workingOrderLineId: `wol-${id}`,
+    name: `Dish ${id}`,
+    firedAt,
+    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+    ...extra,
+  });
+  const bill = (
+    orderId: string,
+    orderNumber: number,
+    items: StationQueueItem[],
+  ): StationQueueGroup => ({
+    ...groupA,
+    orderId,
+    orderNumber,
+    label: "Table 7",
+    party: { id: "pa-1", revision: 1 },
+    items,
+  });
+  const cardsIn = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>("[data-card]")];
+  const flat = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+  const column = (el: TillStationQueue, state: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-column="${state}"]`)!;
+  const drawn = (el: TillStationQueue) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column]")].map(
+      (section) => section.dataset.column,
+    );
+  const toggle = (el: TillStationQueue, key: string) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-column-toggle="${key}"]`)!;
+  const asked = (el: TillStationQueue) => {
+    const keys: unknown[] = [];
+    el.addEventListener("toggle-column", (event) => {
+      keys.push((event as CustomEvent<{ key: string }>).detail);
+    });
+    return keys;
+  };
+  const open = { order: ["waiting", "preparing", "ready"], hidden: [], collapsed: [] } as const;
+  const readyCollapsed = { ...open, collapsed: ["ready"] } as const;
+  const state = (value: typeof open | typeof readyCollapsed) => ({
+    order: [...value.order],
+    hidden: [...value.hidden],
+    collapsed: [...value.collapsed],
+  });
+
+  it("draws the columns in the order it is given", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      columns: { order: ["ready", "waiting", "preparing"], hidden: [], collapsed: [] },
+    });
+    expect(drawn(el)).toEqual(["ready", "queued", "preparing"]);
+  });
+
+  it("leaves out the columns it cannot draw yet", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      columns: {
+        order: ["overview", "held", "waiting", "preparing", "ready"],
+        hidden: [],
+        collapsed: [],
+      },
+    });
+    expect(drawn(el)).toEqual(["queued", "preparing", "ready"]);
+  });
+
+  it("each heading names its column and counts its cards", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("cooking", fired, { group: sent("g-1", 1) }),
+          dish("kept", null, { group: sent("g-2", 2, "held") }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    expect(cardsIn(column(el, "queued"))).toHaveLength(2);
+    expect(flat(column(el, "queued").querySelector("[data-column-count]")!)).toBe("2");
+    expect(flat(column(el, "preparing").querySelector("[data-column-count]")!)).toBe("0");
+    expect(column(el, "queued").querySelector(".column-title")!.textContent).toBe(
+      t("station.state.queued"),
+    );
+  });
+
+  it("a collapsed column keeps its heading and count and draws no cards", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    await expect.element(page.getByRole("button", { name: "Ready 1" })).toBeInTheDocument();
+    expect(toggle(el, "ready").getAttribute("aria-expanded")).toBe("true");
+    el.columns = state(readyCollapsed);
+    await el.updateComplete;
+    const ready = column(el, "ready");
+    expect(cardsIn(ready)).toHaveLength(0);
+    expect(flat(ready.querySelector(".column-heading")!)).toBe(`${t("station.state.ready")} · 1`);
+    expect(toggle(el, "ready").getAttribute("aria-expanded")).toBe("false");
+    expect(toggle(el, "waiting").getAttribute("aria-expanded")).toBe("true");
+    expect(toggle(el, "preparing").getAttribute("aria-expanded")).toBe("true");
+    await expect.element(page.getByRole("button", { name: "Ready 1" })).toBeInTheDocument();
+  });
+
+  it("tapping a heading asks for its column to collapse or open, and changes nothing itself", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    const keys = asked(el);
+    await userEvent.click(toggle(el, "ready"));
+    expect(keys).toEqual([{ key: "ready" }]);
+    await el.updateComplete;
+    expect(cardsIn(column(el, "ready"))).toHaveLength(1);
+    el.columns = state(readyCollapsed);
+    await el.updateComplete;
+    await userEvent.click(toggle(el, "ready"));
+    expect(keys).toEqual([{ key: "ready" }, { key: "ready" }]);
+    await el.updateComplete;
+    expect(cardsIn(column(el, "ready"))).toHaveLength(0);
+    expect(toggle(el, "ready").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("Enter and Space on a focused heading ask the same, and the focus stays on it", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    const keys = asked(el);
+    const button = toggle(el, "ready");
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(keys).toEqual([{ key: "ready" }]);
+    el.columns = state(readyCollapsed);
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(toggle(el, "ready"));
+    expect(toggle(el, "ready")).toBe(button);
+    await userEvent.keyboard(" ");
+    expect(keys).toEqual([{ key: "ready" }, { key: "ready" }]);
+  });
+
+  it("a collapsed column is a narrow strip with its heading top to bottom", async () => {
+    const previous = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups,
+        stationId: "st-1",
+        columns: state(readyCollapsed),
+      });
+      el.style.setProperty("--wt-tap-min", "44px");
+      await el.updateComplete;
+      const ready = column(el, "ready").getBoundingClientRect();
+      expect(ready.width).toBe(44);
+      expect(getComputedStyle(toggle(el, "ready")).writingMode).toBe("vertical-rl");
+      expect(column(el, "queued").getBoundingClientRect().width).toBeGreaterThan(ready.width);
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  });
+
+  it("a dish ahead of its card still says its state when Ready is drawn first", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        bill("wo-1", 5, [
+          dish("waiting", fired, { group: sent("g-1", 1) }),
+          dish("cooking", fired, { group: sent("g-1", 1), state: "preparing" }),
+        ]),
+      ],
+      stationId: "st-1",
+      columns: { order: ["ready", "waiting", "preparing"], hidden: [], collapsed: [] },
+    });
+    expect(drawn(el)[0]).toBe("ready");
+    const [card] = cardsIn(column(el, "queued"));
+    const word = card!.querySelector('[data-item="cooking"] .line-state');
+    expect(flat(word!)).toBe(t("station.state.preparing"));
   });
 });

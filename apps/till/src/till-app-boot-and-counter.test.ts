@@ -35,6 +35,7 @@ import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
+import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
@@ -382,6 +383,27 @@ describe("till-app session activity", () => {
     expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
     expect(getDevicePassScreen).not.toHaveBeenCalled();
+  });
+
+  it("a kitchen display's station screen gets its columns scope: this box and this device", async () => {
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "station-device",
+        name: "Grill",
+        formFactor: "kds",
+        kitchenScreens: [kitchenScreen("station")],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+      getDevicePassScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen");
+    expect(screen).not.toBeNull();
+    expect(screen!.serverOrigin).toBe(location.origin);
+    expect(screen!.deviceId).toBe("station-device");
   });
 
   it("a kitchen display whose board read fails falls back to the sign-in screen, which shows the logo and Powered by", async () => {

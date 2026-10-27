@@ -5502,6 +5502,20 @@ with such a dish whose band is overdue or forgotten; it shows while either count
 card's column shows no state word, a dish further on shows "Preparing" or "Ready", and a held dish on
 a card with a fired dish shows "Held, not released" (`#stateWord`, `station-queue.ts`).
 
+The columns are drawn in the device's stored order. The screen reads each board's layout once,
+the first time that board is drawn, with `readColumnState` (`apps/till/src/state/kitchen-columns.ts`)
+under `waitron.kitchenColumns.v1.` followed by the JSON array of the server's origin, the device's
+id, `"station"` and the station's id (`""` for the merged board), and never again on a refresh;
+without a device id or an origin it keeps the layout in memory only (`#columnsFor`,
+`till-station-screen.ts`). Each heading is an `h2` holding a `<button aria-expanded>` with the
+column's name, its count of cards (held cards included, 0 shown) and a decorative chevron, on
+`--wt-color-surface` with a 1 px `--wt-color-border` and `--wt-radius-md`; a tap sends
+`toggle-column`, and the screen applies `toggleColumnCollapsed` and saves (`#onToggleColumn`). A
+collapsed column draws no cards and is a strip `--wt-tap-min` wide, its heading written top to
+bottom with the chevron first ("› Ready · 3"; `#board`, `station-queue.ts`). The drawn order does
+not decide a dish's state word: `#stateWord` compares the kitchen-state order (`COLUMNS`,
+`station-queue.ts`). A layout's `hidden` list is stored but not yet drawn.
+
 ### The till's late-send mark and window
 
 An unsent dish whose period ended earlier the same business day carries "⚠ {period} ended"

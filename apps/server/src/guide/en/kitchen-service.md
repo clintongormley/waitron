@@ -122,7 +122,10 @@ allow.
 The kitchen screen shows a card for each group of dishes a table sent, and one for each counter
 order. A card names its table by the table's short name; a counter order with no table reads
 **Counter #12**. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
-**Ready**, with the card that has waited longest first. Tap a dish to move it on one step, or tap
+**Ready**, with the card that has waited longest first. Tap a column's heading, which shows how
+many cards the column holds, to collapse it to a narrow strip that keeps its name and count
+(**Ready · 3**); tap it again to open it. The screen remembers which columns are collapsed, for each
+station, even after it restarts. Tap a dish to move it on one step, or tap
 the card's heading to move the card on: only the dishes holding it back move, so a dish already
 further on stays where it is. The band along a card's top turns from green to amber to red as it
 waits, by the station's late flags, and a forgotten card's band pulses; it holds still on a device

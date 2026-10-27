@@ -139,7 +139,10 @@ sea cual sea el ajuste de las estaciones.
 La pantalla de cocina muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
 cada pedido de mostrador. Una tarjeta nombra su mesa por su nombre corto; un pedido de mostrador sin
 mesa dice **Mostrador #12**. Una tarjeta está en la columna de su plato menos avanzado,
-**Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Toca un
+**Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Toca la
+cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en una franja estrecha
+que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla. La pantalla
+recuerda qué columnas están plegadas, en cada estación, incluso después de reiniciarse. Toca un
 plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan
 los platos que la retienen, así que un plato que ya va más adelante se queda donde está. La franja
 de la parte superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos

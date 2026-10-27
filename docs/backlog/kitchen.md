@@ -319,7 +319,8 @@ Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitche
   dishes are all Ready keeps its minutes and band, so after a quiet hour it reads "277 min" and
   pulses as forgotten, while the header line's "late" leaves it out (A797 slice 8, D9). Before slice
   8 the Ready column's dishes carried the age border too. Should a Ready card stop ageing, age from
-  when it became Ready, or wait for slice 9's collapsed Ready column? Seen in A797 slice 8's LOOK.
+  when it became Ready, or is it enough that a cook can collapse Ready to a strip that draws no
+  cards (slice 9)? Seen in A797 slice 8's LOOK.
 
 ## Decisions and deliberate limits
 

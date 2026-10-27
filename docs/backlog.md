@@ -134,7 +134,11 @@ come after the list above:
   Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no Tickets
   view) landed in #2123, from the build plan's slice 8. Slice 8b (a kitchen card names its table
   by the table's short name, and a counter order at no table "Counter #12") landed in
-  #2126, from the build plan's slice 8b; next, slice 9, taking turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
+  #2126, from the build plan's slice 8b. Slice 9 (a kitchen screen's columns collapse by a tap
+  on their heading, which shows the column's count, and are remembered on the device; the one
+  Columns store A773-2 reuses) landed in #2129, from the build plan's slice 9; next, slices 9b (the
+  corner's Columns) and 9c (Overview and the narrow tabs), taking turns with lane G's A773-2 on
+  the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1639,8 +1643,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   after one; and at 390 px the cards are of uneven widths. Left open by A366 slice 5 Part A.
 
 - **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
-  Should a Ready card stop ageing, age from when it became Ready, or wait for slice 9's collapsed
-  Ready column? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
+  Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
+  collapse Ready to a strip that draws no cards (slice 9)? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
 
 - **The till's own Station and Pass screens, left with nothing to show, say nothing** — a kitchen
   display shows a sentence saying what to do, but a till or handheld whose choice a profile
@@ -2506,6 +2510,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   of slice 5 as too large for it.
   [Detail](backlog/till.md#a436--a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
 
+- **A kitchen display forgets its chosen language on a reload** (seen 2026-10-27 in A797 slice 9's
+  LOOK; open). Pick Español on a kitchen display, reload, and every heading is English again; a
+  till keeps the signed-in person's saved language. By the code, not a run of `main`: on a kitchen
+  display `#onLocaleSelected` (`apps/till/src/till-app.ts`) only switches the screen, since there is
+  no session to save the pick to, and `#preLoginLocale` returns the venue's language whenever
+  `deviceMode` is set. Decide whether a kitchen display keeps its pick on the device, as it keeps
+  its collapsed columns.
+
 - **Loose ends left by A366 slice 5 Part A (#1479).**
   Two device choices can lose a switched-off entry.
   [Detail](backlog/till.md#loose-ends-left-by-a366-slice-5-part-a-1479)
@@ -2668,7 +2680,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, and slice 8 (the kitchen screen's group cards) in #2123:
+  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, slice 8b (short names on kitchen cards) in #2126, and slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) in #2129:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
