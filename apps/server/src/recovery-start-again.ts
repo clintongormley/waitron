@@ -3,6 +3,7 @@ import { TLSSocket } from "node:tls";
 import type { Context, Hono } from "hono";
 import {
   chooseStartAgainLeftovers,
+  errnoOf,
   rootRelativePath,
   type StartAgainSurvey,
   type StartAgainUnit,
@@ -15,7 +16,6 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
-import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
@@ -215,8 +215,10 @@ function bottomText(message: StartAgainMessage, text: StartAgainPageText): strin
 
 /**
  * The found files and, over a secure request, the choice form. Placed between the action
- * paragraph and the Retry form; a `moved` answer is drawn in place of all three. The password box is the page's one native text field: the page
- * loads no script, so no field primitive can run on it (A1098 Q1).
+ * paragraph and the Retry form. A `moved` answer is the moved message over the found files, with
+ * no form, and the page draws it in place of the title, the action paragraph and the Retry form.
+ * The password box is the page's one native text field: the page loads no script, so no field
+ * primitive can run on it (A1098 Q1).
  */
 export function renderStartAgainSection(input: {
   survey: Choice;
@@ -485,7 +487,11 @@ export function mountStartAgainChoice(
         moveUnfinished = true;
         // Drawn first: the draw holds the page on this code, which a throwing logger must not skip.
         const answer = await page(409, { code: error.code, secure: true });
-        logChoiceFailed(error, deps, log);
+        try {
+          logChoiceFailed(error, deps, log);
+        } catch {
+          // The choice is answered; a failed log line must not turn the answer into a 500.
+        }
         return answer;
       }
       const refusal = error instanceof Refusal ? error : await refusalFor(error, deps, log);
@@ -517,7 +523,11 @@ export function mountStartAgainChoice(
     else outgoing.once("finish", () => void deps.onFinished());
     // Drawn first: the draw holds the page on the moved answer, which a throwing logger must not skip.
     const answer = await page(200, { code, secure: true, message: moved });
-    logChoice();
+    try {
+      logChoice();
+    } catch {
+      // The choice is answered; a failed log line must not turn the answer into a 500.
+    }
     return answer;
   });
 }

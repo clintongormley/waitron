@@ -1,4 +1,4 @@
-import { join, relative, sep } from "node:path";
+import { join } from "node:path";
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
@@ -17,6 +17,7 @@ import {
   isEmptiedTombstone,
   recordedStartAgainMove,
   resumeStartAgainSetAside,
+  rootRelativePath,
   type StartAgainSurvey,
 } from "@waitron/provisioning";
 import { AppError, sqliteFailureOf } from "@waitron/shared";
@@ -189,19 +190,14 @@ async function refusedAtStart(
   return undefined;
 }
 
-/** D1's `set-aside failed: <errno> <root>/<path>`, the path left out when the error names none. */
+/**
+ * D1's `set-aside failed: <errno> <root>/<path>`, the path left out when the error names none or
+ * one outside both roots.
+ */
 function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
   const code = error instanceof AppError ? error.code : (errnoOf(error) ?? "unknown");
-  const path: unknown = (Object(error) as { path?: unknown }).path;
-  if (typeof path !== "string") return `set-aside failed: ${code}`;
-  const under = (
-    [
-      ["state", roots.stateDir],
-      ["venue", roots.venueDir],
-    ] as const
-  ).find(([, root]) => path.startsWith(`${root}${sep}`));
-  const where = under === undefined ? path : `${under[0]}/${relative(under[1], path)}`;
-  return `set-aside failed: ${code} ${where}`;
+  const where = rootRelativePath(roots, error);
+  return `set-aside failed: ${code}${where === undefined ? "" : ` ${where}`}`;
 }
 
 /** Finishes a discard a power cut stopped after the abandon; a refusal is logged and the start goes on. */

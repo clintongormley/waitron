@@ -4,6 +4,7 @@ import { lockVenueDatabase } from "@waitron/db";
 import { verifyPassword } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { inTurn } from "./attempt-turns.js";
+import { errnoOf } from "./errno.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import {
   readStartAgainChoices,
@@ -50,7 +51,7 @@ export function rootRelativePath(roots: Roots, error: unknown): string | undefin
 const reasonOf = (roots: Roots, error: unknown) => {
   if (error instanceof AppError) return error.reason ?? error.code;
   const where = rootRelativePath(roots, error);
-  const code = String((Object(error) as { code?: unknown }).code ?? "unknown");
+  const code = errnoOf(error) ?? "unknown";
   return `move failed: ${code}${where === undefined ? "" : ` ${where}`}`;
 };
 

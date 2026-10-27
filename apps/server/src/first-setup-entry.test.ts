@@ -674,9 +674,9 @@ it.each([
     "set-aside failed: EIO venue/venue.db",
   ],
   [
-    "a path outside both folders",
+    "a path outside both folders, which is left out",
     () => Object.assign(new Error("io"), { code: "EIO", path: "/elsewhere/file" }),
-    "set-aside failed: EIO /elsewhere/file",
+    "set-aside failed: EIO",
   ],
 ])(
   "a resume that fails with %s names it in the reason",

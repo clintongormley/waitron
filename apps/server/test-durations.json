@@ -351,7 +351,6 @@
   "src/enrol-rate-limit.test.ts": 0.1,
   "src/equipment-label-api.test.ts": 9.9,
   "src/equipment-label.test.ts": 3.6,
-  "src/errno.test.ts": 0.1,
   "src/errors.test.ts": 0.3,
   "src/find-bill-api.test.ts": 20.9,
   "src/find-bill-bills.test.ts": 24.4,

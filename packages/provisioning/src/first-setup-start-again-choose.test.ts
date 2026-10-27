@@ -61,7 +61,7 @@ vi.mock("./first-setup-start-again-leftovers.js", async (original) => {
  * `write`: the next note raise writes through a folder that refuses to open its temporary file;
  * `throw`: it rejects with a plain error instead, as no current step after the record does.
  */
-let failNoteWrite: false | "write" | "throw" | "throwAt" = false;
+let failNoteWrite: false | "write" | "throw" | "throwAt" | { code: unknown } = false;
 vi.mock("./first-setup-start-again-note.js", async (original) => {
   const real = await original<typeof import("./first-setup-start-again-note.js")>();
   return {
@@ -71,6 +71,8 @@ vi.mock("./first-setup-start-again-note.js", async (original) => {
       failNoteWrite = false;
       if (mode === false) return real.raiseStartAgainNote(...args);
       if (mode === "throw") return Promise.reject(Object.assign(new Error("EIO"), { code: "EIO" }));
+      if (typeof mode === "object")
+        return Promise.reject(Object.assign(new Error("odd code"), { code: mode.code }));
       if (mode === "throwAt")
         return Promise.reject(
           Object.assign(new Error("EIO"), { code: "EIO", path: join(args[0], "note", "x.json") }),
@@ -873,6 +875,24 @@ it("a plain error after the Move's record is refused setup.start_again_move_unfi
   });
   expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["move"]);
 });
+
+it.each([
+  { name: "a path", code: "EACCES /srv/state/tls" },
+  { name: "a number", code: 13 },
+])(
+  "a plain error after the Move's record whose code is $name is refused naming no code",
+  async ({ code }) => {
+    const f = await found({
+      note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
+    });
+    failNoteWrite = { code };
+
+    await expect(choose(f, "move")).rejects.toMatchObject({
+      code: "setup.start_again_move_unfinished",
+      reason: "move failed: unknown",
+    });
+  },
+);
 
 it("rootRelativePath names a path under either root by its root, and leaves out any other", () => {
   const roots = { stateDir: "/box/state", venueDir: "/box/venue" };

@@ -827,6 +827,48 @@ describe("mountStartAgainChoice", () => {
     expect(onFinished).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    {
+      name: "a finished Move",
+      choose: () =>
+        Promise.resolve({
+          choice: "move" as const,
+          setAside: {
+            state: "first-setup-set-aside/s1/state",
+            venue: "first-setup-set-aside/s1/venue",
+          },
+        }),
+      status: 200,
+      body: "<main>setup.start_again_files_found</main>",
+    },
+    {
+      name: "a Move that did not finish",
+      choose: () => Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
+      status: 409,
+      body: "<main>setup.start_again_move_unfinished</main>",
+    },
+  ])("a throwing logger after $name still answers the choice", async (row) => {
+    const app = new Hono();
+    const log = vi.fn(() => {
+      throw new Error("log down");
+    });
+    mountStartAgainChoice(
+      app,
+      {
+        roots: ROOTS,
+        survey: ROUTE_SURVEY,
+        onFinished: () => Promise.resolve(),
+        choose: row.choose,
+      },
+      (view) => `<main>${view.code}</main>`,
+      log,
+    );
+    const response = await post(app, { ...FORM, choice: "move" });
+    expect(response.status).toBe(row.status);
+    expect(await response.text()).toBe(row.body);
+    expect(log).toHaveBeenCalledOnce();
+  });
+
   it("the log line names no person", async () => {
     const { app, log } = mounted({
       choose: () =>

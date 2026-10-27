@@ -1169,10 +1169,13 @@ can refuse the start four ways:
 The form is drawn only for `setup.start_again_files_found`, and only when the request's socket is
 TLS (`isSecure`, `apps/server/src/recovery-start-again.ts`); over anything else the page shows the
 list and "Open this page over the box's secure connection to choose." `POST
-/recovery-api/start-again` is mounted only on that page and refuses a request that is not TLS
-(403) or not from the page's own origin (403). The radios are a fieldset whose legend is
-`choiceLegend` ("What should the box do? *"). A refusal redraws the form with the person's choice
-checked again, except `moveUnavailable`, which redraws it with neither checked. The password box is
+/recovery-api/start-again` is mounted only on that page. Until a Move has been recorded it refuses
+a request that is not TLS (403) or not from the page's own origin (403); once a Move has finished,
+or been recorded without finishing, it answers every request 409 before either check. The radios
+are a fieldset whose legend is `choiceLegend` ("What should the box do? *"). A refusal of a form
+the route has read redraws it with the person's choice checked again, except `moveUnavailable`,
+which redraws it with neither checked; a refusal of a request from another page, or of a body the
+route cannot read, redraws it with neither checked. The password box is
 a plain HTML field, the one `ALLOWED` entry `scripts/native-form-fields.test.ts` holds for this file
 (A1098 Q1, owner, 2026-10-27): the page loads no script or front-end bundle, so no field primitive can run on it.
 
