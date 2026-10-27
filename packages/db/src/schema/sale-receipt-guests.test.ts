@@ -71,7 +71,9 @@ describe("sale receipt guests", () => {
   });
 
   const insert = (saleId: string, guests: number | null) =>
-    withTransaction(suite.db, (tx) => tx.insert(saleReceiptGuests).values({ saleId, guests }));
+    withTransaction(suite.db, (tx) =>
+      tx.insert(saleReceiptGuests).values({ saleId, guestCount: guests }),
+    );
 
   it("stores a guest count of 4, 1 or 999, or none", async () => {
     await insert(saleIds[0]!, 4);
@@ -79,7 +81,7 @@ describe("sale receipt guests", () => {
     await insert(saleIds[2]!, 1);
     await insert(saleIds[3]!, 999);
     const rows = await suite.db
-      .select({ saleId: saleReceiptGuests.saleId, guests: saleReceiptGuests.guests })
+      .select({ saleId: saleReceiptGuests.saleId, guests: saleReceiptGuests.guestCount })
       .from(saleReceiptGuests);
     expect(new Map(rows.map((r) => [r.saleId, r.guests]))).toEqual(
       new Map([
@@ -112,7 +114,7 @@ describe("sale receipt guests", () => {
     const updated = await captureError(() =>
       suite.db
         .update(saleReceiptGuests)
-        .set({ guests: 3 })
+        .set({ guestCount: 3 })
         .where(eq(saleReceiptGuests.saleId, saleIds[0]!)),
     );
     expect(isRefusal(updated, TRIGGER_ABORT)).toBe(true);

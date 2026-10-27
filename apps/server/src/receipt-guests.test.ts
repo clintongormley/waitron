@@ -336,14 +336,14 @@ function simplifiedSale(saleId: string, workingOrderId: string): RecordedSale {
 async function storedRows(saleId: string) {
   return inTx(v, (tx) =>
     tx
-      .select({ guests: saleReceiptGuests.guests })
+      .select({ guests: saleReceiptGuests.guestCount })
       .from(saleReceiptGuests)
       .where(eq(saleReceiptGuests.saleId, saleId)),
   );
 }
 
 async function storeRow(saleId: string, guests: number | null): Promise<void> {
-  await inTx(v, (tx) => tx.insert(saleReceiptGuests).values({ saleId, guests }));
+  await inTx(v, (tx) => tx.insert(saleReceiptGuests).values({ saleId, guestCount: guests }));
 }
 
 async function printed(saleId: string): Promise<number | undefined> {

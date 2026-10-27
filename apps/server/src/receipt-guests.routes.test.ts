@@ -271,7 +271,7 @@ async function sell(
 async function storedGuests(db: Database, workingOrderId: string) {
   return withTransaction(db, (tx) =>
     tx
-      .select({ guests: saleReceiptGuests.guests })
+      .select({ guests: saleReceiptGuests.guestCount })
       .from(saleReceiptGuests)
       .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
       .where(eq(sales.workingOrderId, workingOrderId)),

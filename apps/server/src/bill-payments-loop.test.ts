@@ -588,7 +588,7 @@ describe("the guests a finished card payment's receipt prints", () => {
       expect(await settle()).toMatchObject({ received: 1 });
       const stored = await inTx(venue, (tx) =>
         tx
-          .select({ saleId: sales.id, guests: saleReceiptGuests.guests })
+          .select({ saleId: sales.id, guests: saleReceiptGuests.guestCount })
           .from(saleReceiptGuests)
           .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
           .where(eq(sales.workingOrderId, billId)),

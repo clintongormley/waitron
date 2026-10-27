@@ -757,7 +757,7 @@ describe("the guests a manager's confirmation stores", () => {
     expect(
       await inTx((tx) =>
         tx
-          .select({ guests: saleReceiptGuests.guests })
+          .select({ guests: saleReceiptGuests.guestCount })
           .from(saleReceiptGuests)
           .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
           .where(eq(sales.workingOrderId, billId)),

@@ -45,7 +45,7 @@ export async function recordReceiptGuests(
 ): Promise<void> {
   if (sale.counterparty != null) return;
   const guests = choice === undefined ? await storableDefault(tx, sale.workingOrderId) : choice;
-  await tx.insert(saleReceiptGuests).values({ saleId: sale.saleId, guests });
+  await tx.insert(saleReceiptGuests).values({ saleId: sale.saleId, guestCount: guests });
 }
 
 /** The default as the row can hold it: a party's count above 999, which the parties table allows, stores no line. */
@@ -63,7 +63,7 @@ export async function readPrintedGuests(
     .select({
       counterpartyTaxId: sales.counterpartyTaxId,
       stored: saleReceiptGuests.saleId,
-      guests: saleReceiptGuests.guests,
+      guests: saleReceiptGuests.guestCount,
     })
     .from(sales)
     .leftJoin(saleReceiptGuests, eq(saleReceiptGuests.saleId, sales.id))
