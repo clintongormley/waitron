@@ -106,13 +106,14 @@ const visible = (node: Element | null) => expect(node!.checkVisibility()).toBe(t
 async function openAdvanced(el: Card) {
   await openDisclosure(
     inAdvanced(el, "[data-test=advanced]") as HTMLElementTagNameMap["wt-disclosure"],
+    { domClick: true },
   );
 }
 
 async function typeHand(el: Card, mode: string, key: string, value: string) {
   const field = inAdvanced(el, `wt-input[name="handSet.${mode}.${key}"]`)!;
   const inner = field.shadowRoot!.querySelector("input")!;
-  await openFoldsAround(inner);
+  await openFoldsAround(inner, { domClick: true });
   await page.elementLocator(inner).fill(value);
   await el.updateComplete;
 }
@@ -251,7 +252,7 @@ const states: Record<
     list: inUse(lucia),
     reach: async (el) => {
       await openAdvanced(el);
-      for (const id of ADVANCED_SECTIONS) await openDisclosure(section(el, id));
+      for (const id of ADVANCED_SECTIONS) await openDisclosure(section(el, id), { domClick: true });
       for (const { keys } of COLOUR_SECTIONS)
         visible(inAdvanced(el, `[data-test=hand-row-${keys[0]}]`));
       visible(inAdvanced(el, "dashboard-theme-text"));
@@ -264,7 +265,9 @@ const states: Record<
       await openAdvanced(el);
       const rows = inAdvanced(el, "dashboard-theme-text")!;
       expect(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')).not.toBeNull();
-      await openFoldsAround(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')!);
+      await openFoldsAround(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')!, {
+        domClick: true,
+      });
       visible(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]'));
       return "dashboard-theme-advanced";
     },
@@ -275,8 +278,12 @@ const states: Record<
       await openAdvanced(el);
       expect(inAdvanced(el, "[data-test=hand-warning-light-text]")).not.toBeNull();
       expect(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")).not.toBeNull();
-      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-text]")!);
-      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")!);
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-text]")!, {
+        domClick: true,
+      });
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")!, {
+        domClick: true,
+      });
       visible(inAdvanced(el, "[data-test=hand-warning-light-text]"));
       visible(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]"));
       return "dashboard-theme-advanced";
@@ -288,7 +295,9 @@ const states: Record<
       await press(el, "fix-all");
       await openAdvanced(el);
       await expect.poll(() => inAdvanced(el, "[data-test=hand-fixed-light-text]")).toBeTruthy();
-      await openFoldsAround(inAdvanced(el, "[data-test=hand-fixed-light-text]")!);
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-fixed-light-text]")!, {
+        domClick: true,
+      });
       visible(inAdvanced(el, "[data-test=hand-fixed-light-text]"));
       return "dashboard-theme-advanced";
     },

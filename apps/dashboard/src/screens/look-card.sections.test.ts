@@ -132,8 +132,8 @@ async function settle(el: Card) {
 }
 
 async function openSection(el: Card, id: AdvancedSectionId) {
-  await openDisclosure(disclosure(el));
-  await openDisclosure(section(el, id));
+  await openDisclosure(disclosure(el), { domClick: true });
+  await openDisclosure(section(el, id), { domClick: true });
 }
 
 async function close(fold: Disclosure) {
@@ -149,21 +149,21 @@ async function closeEverySection(el: Card) {
 
 async function typeHand(el: Card, mode: string, key: string, value: string) {
   const inner = handCode(el, mode, key).shadowRoot!.querySelector("input")!;
-  await openFoldsAround(inner);
+  await openFoldsAround(inner, { domClick: true });
   await page.elementLocator(inner).fill(value);
   await settle(el);
 }
 
 async function typeSize(el: Card, key: string, value: string) {
   const inner = sizeBox(el, key).shadowRoot!.querySelector("input")!;
-  await openFoldsAround(inner);
+  await openFoldsAround(inner, { domClick: true });
   await page.elementLocator(inner).fill(value);
   await settle(el);
   await textRows(el).updateComplete;
 }
 
 async function chooseText(el: Card, name: string, value: string) {
-  await openFoldsAround(choice(el, name));
+  await openFoldsAround(choice(el, name), { domClick: true });
   await chooseOption(choice(el, name), value);
   await settle(el);
   await textRows(el).updateComplete;
@@ -344,7 +344,7 @@ describe("sections are closed again the next time the editor opens", () => {
   it("after Cancel", async () => {
     const { el } = await mountEditing();
     await openSection(el, "buttons");
-    await openDisclosure(section(el, "text"));
+    await openDisclosure(section(el, "text"), { domClick: true });
     await userEvent.click(button(el, "cancel"));
     await el.updateComplete;
     expect(editing(el)).toBe(false);

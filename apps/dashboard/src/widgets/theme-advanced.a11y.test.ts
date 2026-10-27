@@ -39,7 +39,12 @@ const HALF_TYPED = typeHandCode(NONE, "light", "bg", "#12");
 
 const SMALL_TEXT = setTextSize(NONE, "sm", 10);
 
-const EVERY_SECTION = ADVANCED_SECTIONS;
+const q = <T extends Element = HTMLElement>(el: ThemeAdvanced, selector: string) =>
+  el.shadowRoot!.querySelector<T>(selector);
+const section = (el: ThemeAdvanced, id: AdvancedSectionId) =>
+  q<HTMLElementTagNameMap["wt-disclosure"]>(el, `[data-test=section-${id}]`)!;
+const drawnSummary = (fold: HTMLElementTagNameMap["wt-disclosure"]) =>
+  fold.shadowRoot!.querySelector(".summary")!.textContent!;
 const visible = (node: Element | null) => expect(node!.checkVisibility()).toBe(true);
 
 const states: Record<
@@ -63,7 +68,7 @@ const states: Record<
     open: true,
     sections: [],
     check: (el) => {
-      for (const id of EVERY_SECTION) {
+      for (const id of ADVANCED_SECTIONS) {
         expect(section(el, id).open).toBe(false);
         visible(section(el, id));
       }
@@ -72,7 +77,7 @@ const states: Record<
   "open, every section open, nothing set by hand": {
     draft: NONE,
     open: true,
-    sections: EVERY_SECTION,
+    sections: ADVANCED_SECTIONS,
     check: (el) => {
       for (const { keys } of COLOUR_SECTIONS) visible(q(el, `[data-test=hand-row-${keys[0]}]`));
       visible(q(el, "dashboard-theme-text"));
@@ -118,12 +123,12 @@ const states: Record<
     open: true,
     sections: [],
     check: (el, strings) => {
-      for (const id of ["surfaces", "text-colours"] as const) {
+      const counted = ` · ${strings["appearance.hard_to_read_count_one"]}`;
+      for (const id of ADVANCED_SECTIONS) {
         expect(section(el, id).open).toBe(false);
-        expect(
-          section(el, id).summary.endsWith(` · ${strings["appearance.hard_to_read_count_one"]}`),
-        ).toBe(true);
         visible(section(el, id));
+        const warned = id === "surfaces" || id === "text-colours";
+        expect(drawnSummary(section(el, id)).endsWith(counted)).toBe(warned);
       }
     },
   },
@@ -139,12 +144,6 @@ const states: Record<
       ),
   },
 };
-
-const section = (el: ThemeAdvanced, id: AdvancedSectionId) =>
-  q<HTMLElementTagNameMap["wt-disclosure"]>(el, `[data-test=section-${id}]`)!;
-
-const q = <T extends Element = HTMLElement>(el: ThemeAdvanced, selector: string) =>
-  el.shadowRoot!.querySelector<T>(selector);
 
 const cases = (["light", "dark"] as const).flatMap((mode) =>
   [1280, 390].flatMap((width) =>
@@ -179,11 +178,11 @@ it.each(cases)(
     const strings = locale === "es-ES" ? es : en;
     expect(disclosure.heading).toBe(strings["appearance.advanced"]);
     if (open) {
-      await openDisclosure(disclosure);
+      await openDisclosure(disclosure, { domClick: true });
       await el.updateComplete;
     }
     expect(disclosure.open).toBe(open);
-    for (const id of sections) await openDisclosure(section(el, id));
+    for (const id of sections) await openDisclosure(section(el, id), { domClick: true });
     await el.updateComplete;
     check(el, strings);
     await expectNoA11yViolations(host);

@@ -81,12 +81,24 @@ export function cleanupWidgets(): void {
   document.documentElement.style.background = "";
 }
 
+export interface OpenFoldOptions {
+  /**
+   * Clicks the header button in the page's own script instead of through the browser driver: no
+   * pointer, no scrolling into view, and no driver round trip (about 185 ms a click). For a fold
+   * opened as setup, never for a case about the header click itself.
+   */
+  readonly domClick?: boolean;
+}
+
 /** Clicks a closed wt-disclosure's header and waits for it to render open; does nothing when open. */
 export async function openDisclosure(
   disclosure: HTMLElementTagNameMap["wt-disclosure"],
+  { domClick = false }: OpenFoldOptions = {},
 ): Promise<void> {
   if (!disclosure.open) {
-    await userEvent.click(disclosure.shadowRoot!.querySelector("button.header")!);
+    const header = disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button.header")!;
+    if (domClick) header.click();
+    else await userEvent.click(header);
     await disclosure.updateComplete;
   }
   expect(disclosure.open).toBe(true);
@@ -97,7 +109,7 @@ export async function openDisclosure(
  * disclosure reached as a shadow root's host is skipped: `node` is in its header, not its body,
  * and opening it would make a click on that header close it.
  */
-export async function openFoldsAround(node: Element): Promise<void> {
+export async function openFoldsAround(node: Element, options: OpenFoldOptions = {}): Promise<void> {
   const folds: HTMLElementTagNameMap["wt-disclosure"][] = [];
   let at: Element | null = node;
   while (at) {
@@ -111,7 +123,7 @@ export async function openFoldsAround(node: Element): Promise<void> {
       at = root instanceof ShadowRoot ? root.host : null;
     }
   }
-  for (const fold of folds.reverse()) await openDisclosure(fold);
+  for (const fold of folds.reverse()) await openDisclosure(fold, options);
 }
 
 /**
