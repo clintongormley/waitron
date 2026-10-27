@@ -10,8 +10,10 @@ import {
   isCounterOrder,
   kitchenCards,
   lateCards,
+  overviewDishes,
   thousandthsToMake,
 } from "./kitchen-cards.js";
+import { overviewRows } from "./kitchen-overview.js";
 
 const THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
@@ -284,6 +286,52 @@ describe("thousandthsToMake", () => {
     ]);
 
     expect(thousandthsToMake(cards)).toBe(4500);
+  });
+});
+
+describe("the station's dishes for Overview", () => {
+  // Picture 03's scene (plan slice 9c): T2 the oldest, a Ready card, T5, T9, then T4 and T7 held.
+  const scene = (): MergedQueueGroup[] => [
+    bill("t2", [
+      dish("t2-sirloin", "20:40", { name: "Sirloin", state: "preparing" }),
+      dish("t2-burger", "20:40", { name: "Burger", state: "preparing" }),
+    ]),
+    bill("ready", [
+      dish("croquettes", "20:48", { name: "Croquettes", quantity: "2.000", state: "ready" }),
+    ]),
+    bill("t5", [dish("t5-potatoes", "20:52", { name: "Spicy potatoes", quantity: "2.000" })]),
+    bill("t9", [
+      dish("t9-pork", "20:57", { name: "Pork shoulder" }),
+      dish("t9-potatoes", "20:57", { name: "Spicy potatoes" }),
+    ]),
+    bill("t4", [
+      held("t4-pork", "20:45", { name: "Pork shoulder", quantity: "2.000" }),
+      held("t4-potatoes", "20:45", { name: "Spicy potatoes" }),
+    ]),
+    bill("t7", [held("t7-rib", "20:45", { name: "Rib steak" })]),
+  ];
+
+  it("the station's dishes for Overview: held, making, and no Ready", () => {
+    expect(overviewRows(overviewDishes(kitchenCards(scene())))).toEqual([
+      { name: "Sirloin", making: 1000, held: 0 },
+      { name: "Burger", making: 1000, held: 0 },
+      { name: "Spicy potatoes", making: 3000, held: 1000 },
+      { name: "Pork shoulder", making: 1000, held: 2000 },
+      { name: "Rib steak", making: 0, held: 1000 },
+    ]);
+  });
+
+  it("Overview's making counts add up to the dishes to make", () => {
+    const cards = kitchenCards([
+      ...scene(),
+      bill("octopus", [
+        dish("weighed", "20:55", { name: "Octopus", quantity: "0.350", unitName: { en: "kg" } }),
+      ]),
+    ]);
+    const making = overviewRows(overviewDishes(cards)).reduce((sum, row) => sum + row.making, 0);
+
+    expect(making).toBe(7000);
+    expect(making).toBe(thousandthsToMake(cards));
   });
 });
 
