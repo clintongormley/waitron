@@ -711,7 +711,7 @@ changes take their required review and existing protected-writer approvals.
 
 ### sign-in
 
-2026-10-25: the shared passkey refusal now asks your administrator to check your account, in English and Spanish. The login browser cases exercise the refusal followed by password sign-in in both languages. This wording applies to profile passkey registration too; it makes no claim about account status. The original audit above records the earlier wording. See [account access](../../apps/server/src/guide/en/staff.md#account-access).
+2026-10-25: the shared passkey refusal now asks your administrator to check your account, in English and Spanish. This wording applies to profile passkey registration too; it makes no claim about account status. See [account access](../../apps/server/src/guide/en/staff.md#account-access).
 
 **2026-10-25 self-service rework:** the shared refusal says the passkey could not be verified and
 offers retry. After an explicit passkey sign-in refusal, the screen explains that **Use your password**
@@ -741,7 +741,6 @@ error; the message does not promise that every apply starts the worker.
 **Still open:** guided diagnosis and correction when a host/key refusal persists after replacement.
 The screen displays a code, but this wording change adds no authenticated host repair. Do not
 replace recovery keys or discard backup files just because settings cannot be read.
-The original audit above retains its earlier words and source receipts.
 
 ### backup-stream
 
@@ -783,8 +782,7 @@ action this page provides.
 **Still open: space beyond the supported cleanup.** When no reclaimable files remain and a new
 backup cannot fit, there is no supported in-app disk-recovery workflow. Add an authenticated
 choice with evidence and a safe Stop; do not delete database files, keys or saved backups to
-silence the alert. Changing retention is not immediate full-disk recovery. The historical source
-inventory above remains unchanged.
+silence the alert. Changing retention is not immediate full-disk recovery.
 
 **Missing files and unknown preparation failures still need remedies.** Preserve the safe error
 category and establish the component's recovery route before replacing `recovery.state_incomplete`
@@ -797,8 +795,7 @@ before retrying, in English and Spanish. The browser cases exercise both applyin
 changing the key, retaining the displayed status after refusal and allowing a subsequent successful
 submission. The [recovery guide](../../apps/server/src/guide/en/backup-recovery.md#proof) tells you to
 keep both key records; the refusal does not establish which key opens a backup. Key persistence,
-effective-key checks and status handling are unchanged. The original source audit above records
-the earlier wording.
+effective-key checks and status handling are unchanged.
 
 **Reopened after the 14:02 owner correction:** replace the administrator referral with inspection
 and correction of the effective backup configuration, offering any needed sign-in there. Keep the
@@ -911,14 +908,13 @@ error details remain absent in the exercised browser cases.
 The substantial [authenticated server-certificate recovery](box.md#authenticated-server-certificate-recovery)
 workflow and [linked-layout repair](box.md#public-tls-repair-refuses-linked-layouts) remain OPEN.
 This slice does not qualify replacement of an external certificate or repair of a linked layout.
-The earlier audit and milestone above retain their historical wording.
 
 The same rework also removes the older `/setup/trust` page’s installer and administrator
 referrals. It offers another venue device if you cannot identify the old certificate or install
 its replacement; a separately supplied certificate keeps its HTTPS-address choice and explicit
 replacement limit. Linux and Chromebook notes carry the device alternative in both languages.
 Without JavaScript, the connection page hides its script-only actions and explains how to enable
-them. Tests cover a changed inspection after Check again and both pending repair and Reconnect.
+them.
 
 ### boot-recovery
 
@@ -931,8 +927,7 @@ The earlier server-page inventory did not exercise those recovery procedures.
 
 The `backup.effective_mismatch` refusal now says the saved key could not be confirmed, asks you
 to keep both key records and to stop changing keys, and states that this page cannot diagnose the
-conflicting settings or identify which key opens a backup. The original milestone and source audit
-above describe the earlier administrator referral.
+conflicting settings or identify which key opens a backup.
 
 The browser cases exercise apply and rotation refusals in both languages. After refusal, the
 new key's download remains readable; on rotation, both distinct key downloads remain readable.
