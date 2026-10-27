@@ -2,7 +2,11 @@ import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  mediaTestReference,
+  useMediaPresentations,
+} from "@waitron/ui/src/test-helpers.js";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
@@ -451,6 +455,50 @@ describe("the text size in an unsaved draft", () => {
     await slide(card, 110);
     expect(save(card).disabled).toBe(true);
     expect(save(card).variant).toBe("secondary");
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
+});
+
+describe("text set by hand in an unsaved draft", () => {
+  const textRows = (card: Card) =>
+    inAdvanced(card, "dashboard-theme-text") as HTMLElementTagNameMap["dashboard-theme-text"];
+  async function chooseBold(card: Card, value: string) {
+    await openAdvanced(card);
+    await chooseOption(
+      textRows(card).shadowRoot!.querySelector('wt-combobox[name="text.weight.bold"]')!,
+      value,
+    );
+    await settle(card);
+    await textRows(card).updateComplete;
+  }
+
+  it("a text change asks on leaving; Use worked-out asks nothing", async () => {
+    const { app, card } = await mount();
+    await chooseBold(card, "800");
+    expect(unload()).toBe(true);
+    await chooseBold(card, "600");
+    // 600 is Waitron's own Bold, but picked it is set by hand.
+    expect(unload()).toBe(true);
+    expect(save(card).disabled).toBe(false);
+    await userEvent.click(
+      textRows(card).shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="text-worked-out-weight.bold"]',
+      )!,
+    );
+    await settle(card);
+    expect(unload()).toBe(false);
+    expect(save(card).disabled).toBe(true);
+    expect(await leave(app)).toBe("proceeded");
+  });
+
+  it("after saving a text change, leaving asks nothing", async () => {
+    const { app, card, saveTheme } = await mount();
+    await chooseBold(card, "800");
+    await userEvent.click(save(card));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1].text).toEqual({ weight: { bold: 800 } });
+    await expect.poll(() => editing(card)).toBe(false);
     expect(unload()).toBe(false);
     expect(await leave(app)).toBe("proceeded");
   });

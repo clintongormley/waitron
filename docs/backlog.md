@@ -2981,7 +2981,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
-  its own button colour. Until slice 11b its heading and opening line leave out text, and until slice
+  its own button colour. Until slice
   12 it is one flat list. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
   library image and an optional one for dark screens — checked on save and on import; the image
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
@@ -3019,7 +3019,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   checked on save and import; the dashboard, the tills and the setup screens draw them, while the equipment label and
   the recovery sheet keep Waitron's type, Google's sign-in button keeps Google's, and the server's
   own pages, such as the help guide, take no theme; a size drawn under 12 px is counted as hard
-  to read, and every bold, heading and table header draws the theme's Bold weight — headings on the
+  to read, and every bold, heading and table header that sets no weight of its own draws the theme's Bold weight — headings on the
   dashboard, the tills and the setup screens now draw 600, not the browser's 700.
   Next: 11b, 12 and 14 (14 with A1096's last part, below).
 
@@ -3085,15 +3085,37 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   warning text's colour; the preview's colour-rebuild check (`theme-preview.test.ts`); Bar Lucía and
   lemon fixtures repeated across test files.
 
-- **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading "Advanced:
-  set colours by hand" and opening line "A colour you set here stays as you set it when you change
-  the brand colour, background or corners. Waitron still checks it can be read.", shortened from the
-  design's until slice 11b; the names given to colours outside the 22 (Error colour, Delete buttons
+- **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading and opening
+  line now carry text, as the design words them (slice 11b: "Advanced: set colours and text by
+  hand", and a sentence that a text size set there grows and shrinks with Text size); the names given to colours outside the 22 (Error colour, Delete buttons
   switched off, Warning colour, Google button outline, Search highlight, Floor map tables, Table
   card edge) and the folded "zone tab colours"; the two-sentence warning for a colour drawn both
   ways, and the one sentence when it has no fix; the row buttons' spoken names, "Use worked-out
   colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and the light form
   of the saved row's "set by hand".
+
+- **Advanced's Text rows sit after the colours in one flat list until A841 slice 12 folds Advanced
+  into sections** (A841 slice 11, D11 of
+  [the slice 11 plan](superpowers/plans/2026-10-27-a841-11-text-by-hand.md)).
+
+- **The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look
+  check).** The bar's middle strip scrolls sideways (`.till-strip`, `apps/till/src/widgets/till-shell.ts`)
+  and More repeats its actions, so nothing is lost, but buttons are scrolled out of view. Strip
+  content / visible width: 1280 × 800 in Spanish, Serif at 130%, 959 / 899 px ("Pase" out of
+  view); the device's own typeface at 130%, 921 / 917; Waitron's own look at 100%, 940 / 940. At
+  1024 × 768 the strip overflows in every setup measured, Waitron's own look at 100% included
+  (724 / 684 English, 789 / 684 Spanish). At 1024 × 768 and 130% the bill's scrolling area is
+  48–64 px tall, less than one bill line, against 110 px for Waitron's look at 100%. Not measured on
+  main, so whether the 1024 overflow predates slice 11 is unchecked. Readings:
+  `~/waitron-campaign/a841-11b-shots/look-report-11b.md` (lane A's machine).
+
+- **An error under a field in Advanced moves what sits beside it (measured 2026-10-27, A841 slice
+  11b).** With a code-box error, a colour row's picker sits about 10 px off the box's centre and
+  its "Set by hand" tag drops to its own line, even at 1280 px (`colourValueField`,
+  `apps/dashboard/src/widgets/color-field.ts`); the Text rows' typeface and weight dropdowns widen
+  to their error's width (a weight box from 74 to 190 px), moving the tag right. Slice 11b fixed the
+  size rows only (the stepper held to its box's width, the row lined up by baseline,
+  `apps/dashboard/src/widgets/theme-text.ts`); the same approach may fit both.
 
 - **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
   design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
@@ -3178,8 +3200,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   no screen waits for a file, registering each font for the whole page (a page-level `@font-face`
   or `document.fonts.add`) so the theme editor's preview can draw it — an `@font-face` inside a
   component's shadow stylesheet does nothing in Chromium 156 (A841 design, section 5a) — and re-running A841's 130% layout cases and hyphenation check in the
-  uploaded face. It plugs into A841's seam: the typeface list, `typefaceStack()` and `@font-face`
-  ahead of `/api/theme`'s blocks (A841 design, section 5a). Needs A841's slice 11 first.
+  uploaded face. It plugs into A841's seam: the typeface list (`TYPEFACES` in
+  `packages/ui-core/src/theme/text.ts`), `typefaceStack()`, the dashboard's
+  `appearance.typeface.<value>` words in English and Spanish, and `@font-face` ahead of
+  `/api/theme`'s blocks (A841 design, section 5a).
 
 - **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
   `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file

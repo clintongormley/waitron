@@ -109,7 +109,7 @@ describe("the read-only Look card", () => {
     expect(q(reader, "[data-test=edit]")).toBeNull();
   });
 
-  it("labels the rows in order: theme, logo, brand, background, corners, text size, colours set by hand", async () => {
+  it("labels the rows in order: theme, logo, brand, background, corners, text size, colours and text set by hand", async () => {
     setLocale("en-GB");
     const el = await mount(inUse(lucia));
     const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => text(dt));
@@ -121,7 +121,26 @@ describe("the read-only Look card", () => {
       "Corners",
       "Text size",
       "Colours set by hand",
+      "Text set by hand",
     ]);
+  });
+
+  it("the saved card names the text set by hand", async () => {
+    setLocale("en-GB");
+    expect(row(await mount(inUse(lucia)), "text")).toBe("None");
+    cleanupWidgets();
+    const set = theme("t-serif", "Serif", {
+      ...LUCIA,
+      text: { size: { sm: 10 }, family: "serif" },
+    });
+    expect(row(await mount(inUse(set)), "text")).toBe("Typeface, Small text");
+    cleanupWidgets();
+    setLocale("es-ES");
+    expect(row(await mount(inUse(lucia)), "text")).toBe(es["appearance.none"]);
+    cleanupWidgets();
+    expect(row(await mount(inUse(set)), "text")).toBe(
+      `${es["appearance.text.family"]}, ${es["appearance.text.size.sm"]}`,
+    );
   });
 
   it("the Text size row reads 100% (standard), or the step", async () => {

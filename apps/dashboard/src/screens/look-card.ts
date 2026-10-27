@@ -30,10 +30,12 @@ import {
   isTextScale,
   isTextWarning,
   normaliseChoices,
+  sameText,
   type Background,
   type Corners,
   type DerivedTheme,
   type Mode,
+  type TextSizeKey,
   type ThemeChoices,
   type ColourWarning,
   type ThemeColour,
@@ -49,6 +51,8 @@ import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 import {
   codeInvalid,
   invalidHandCodes,
+  TEXT_FIELDS,
+  invalidTextCodes,
   isWaitronLook,
   openDraft,
   pickBrand,
@@ -59,16 +63,23 @@ import {
   setCorners,
   setHand,
   setTextScale,
+  setTextSize,
+  setTypeface,
+  setWeight,
   typeCode,
   typeHandCode,
+  typeTextSize,
   useWorkedOut,
+  useWorkedOutText,
   waitronLook,
   type HandField,
+  type TextField,
   type LookDraft,
 } from "../widgets/look-draft.js";
 import "../widgets/theme-advanced.js";
 import "../widgets/theme-logo-field.js";
 import type { HandAction, HandFixed, ThemeAdvanced } from "../widgets/theme-advanced.js";
+import type { TextAction } from "../widgets/theme-text.js";
 import { copyName } from "../widgets/theme-names.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import "../widgets/hard-to-read-dialog.js";
@@ -88,6 +99,7 @@ import {
   savedWarningLine,
   textScaleLabel,
   textScaleRow,
+  textNames,
   textScaleSpoken,
   textSizesLine,
 } from "../widgets/theme-words.js";
@@ -152,15 +164,33 @@ function isHandField(field: unknown): field is HandField {
 }
 
 type HandErrors = Readonly<Partial<Record<HandField, string>>>;
+type TextErrors = Readonly<Partial<Record<TextField, string>>>;
 type HandFixes = Readonly<Partial<Record<HandField, HandFixed>>>;
 
-function sameErrors(a: HandErrors, b: HandErrors): boolean {
-  const keys = Object.keys(a) as HandField[];
+function sameErrors<K extends string>(
+  a: Readonly<Partial<Record<K, string>>>,
+  b: Readonly<Partial<Record<K, string>>>,
+): boolean {
+  const keys = Object.keys(a) as K[];
   return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 }
 
 function withoutField(fixes: HandFixes, field: HandField): HandFixes {
   return Object.fromEntries(Object.entries(fixes).filter(([key]) => key !== field));
+}
+
+function isTextField(field: unknown): field is TextField {
+  return (TEXT_FIELDS as readonly unknown[]).includes(field);
+}
+
+interface TextRefusal {
+  readonly field: TextField;
+  readonly message: string;
+}
+
+function textRow(choices: ThemeChoices): string {
+  const names = textNames(choices);
+  return names.length === 0 ? t("appearance.none") : names.join(", ");
 }
 
 function handRow(choices: ThemeChoices): string {
@@ -285,6 +315,7 @@ export class LookCard extends LitElement {
   @state() private refusedHand: HandField | "" = "";
   @state() private refusedLogo: LogoRefusal | null = null;
   @state() private refusedTextScale = "";
+  @state() private refusedText: TextRefusal | null = null;
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
@@ -292,6 +323,7 @@ export class LookCard extends LitElement {
   @state() private handFixed: HandFixes = {};
   @state() private showKeptNote = false;
   #handErrors: HandErrors = {};
+  #textErrors: TextErrors = {};
   #logoErrorsFrom: LogoRefusal | null = null;
   #logoErrorsShown: LogoErrors = {};
   #editing?: Editing;
@@ -391,6 +423,7 @@ export class LookCard extends LitElement {
     this.refusedHand = "";
     this.refusedLogo = null;
     this.refusedTextScale = "";
+    this.refusedText = null;
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -466,6 +499,7 @@ export class LookCard extends LitElement {
     this.refusedHand = "";
     this.refusedLogo = null;
     this.refusedTextScale = "";
+    this.refusedText = null;
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -505,6 +539,12 @@ export class LookCard extends LitElement {
     if (hand && after !== before) this.refusedHand = "";
     if (after.choices.logo !== before.choices.logo) this.refusedLogo = null;
     if (after.choices.textScale !== before.choices.textScale) this.refusedTextScale = "";
+    if (
+      !sameText(after.choices.text, before.choices.text) ||
+      !sameErrors(after.textCodes, before.textCodes)
+    ) {
+      this.refusedText = null;
+    }
     if (handNames(after.choices).length === 0) this.showKeptNote = false;
     else if (
       after.choices.brandColor !== before.choices.brandColor ||
@@ -561,6 +601,23 @@ export class LookCard extends LitElement {
       { hand: true },
     );
   }
+  #textNext(draft: LookDraft, action: TextAction): LookDraft {
+    switch (action.kind) {
+      case "family":
+        return setTypeface(draft, action.family);
+      case "size":
+        return typeTextSize(draft, action.key, action.text);
+      case "weight":
+        return setWeight(draft, action.key, action.weight);
+      case "worked-out":
+        return useWorkedOutText(draft, action.field);
+      case "fix":
+        return setTextSize(draft, action.key, action.px);
+    }
+  }
+  #text(action: TextAction): void {
+    this.#change((draft) => this.#textNext(draft, action));
+  }
   /** Fix all, and Fix and save: each hand value it changes is recorded, keeping an earlier `from`. */
   #takeAllFixes(): void {
     this.#change((draft) => this.#allFixed(draft), { hand: true });
@@ -582,7 +639,13 @@ export class LookCard extends LitElement {
       }
     }
     this.handFixed = fixes;
-    return { ...draft, choices, handCodes };
+    const textCodes = Object.fromEntries(
+      Object.entries(draft.textCodes).filter(
+        ([key]) =>
+          choices.text.size?.[key as TextSizeKey] === draft.choices.text.size?.[key as TextSizeKey],
+      ),
+    );
+    return { ...draft, choices, handCodes, textCodes };
   }
   /** The same object while its content holds, so the 44-value section is not redrawn for nothing. */
   #errorsFor(draft: LookDraft): HandErrors {
@@ -593,6 +656,16 @@ export class LookCard extends LitElement {
     if (this.refusedHand) errors[this.refusedHand] = t("appearance.bad_code");
     if (!sameErrors(errors, this.#handErrors)) this.#handErrors = errors;
     return this.#handErrors;
+  }
+  /** The same object while its content holds, as `#errorsFor`. */
+  #textErrorsFor(draft: LookDraft): TextErrors {
+    const errors: Partial<Record<TextField, string>> = {};
+    if (this.submitted) {
+      for (const field of invalidTextCodes(draft)) errors[field] = t("appearance.bad_text_px");
+    }
+    if (this.refusedText) errors[this.refusedText.field] = this.refusedText.message;
+    if (!sameErrors(errors, this.#textErrors)) this.#textErrors = errors;
+    return this.#textErrors;
   }
   /** The same object while the refusal holds, so the field is not redrawn for nothing. */
   #logoErrors(): LogoErrors {
@@ -738,8 +811,13 @@ export class LookCard extends LitElement {
     this.refusedHand = "";
     this.refusedLogo = null;
     this.refusedTextScale = "";
+    this.refusedText = null;
     this.actionError = "";
-    if (codeInvalid(draft) || invalidHandCodes(draft).length > 0) {
+    if (
+      codeInvalid(draft) ||
+      invalidHandCodes(draft).length > 0 ||
+      invalidTextCodes(draft).length > 0
+    ) {
       await this.#focusInvalid();
       return;
     }
@@ -790,6 +868,16 @@ export class LookCard extends LitElement {
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && field === "textScale") {
         this.refusedTextScale = t("appearance.bad_text_size");
+        await this.#focusInvalid();
+      } else if (code === "theme.invalid" && isTextField(field)) {
+        this.refusedText = {
+          field,
+          message: t(
+            field.startsWith("text.size.")
+              ? "appearance.bad_text_px"
+              : "appearance.bad_text_choice",
+          ),
+        };
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && field === "brandColor") {
         this.refusedCode = t("appearance.bad_code");
@@ -855,12 +943,21 @@ export class LookCard extends LitElement {
     const editing = this.#editing!;
     const inUse = this.#inUse(editing);
     const name = this.#name(editing);
-    const badForm = this.submitted && (codeInvalid(draft) || invalidHandCodes(draft).length > 0);
+    const badForm =
+      this.submitted &&
+      (codeInvalid(draft) ||
+        invalidHandCodes(draft).length > 0 ||
+        invalidTextCodes(draft).length > 0);
     const codeError =
       this.submitted && codeInvalid(draft) ? t("appearance.bad_code") : this.refusedCode;
     const handErrors = this.#errorsFor(draft);
+    const textErrors = this.#textErrorsFor(draft);
     const message =
-      codeError || Object.keys(handErrors).length > 0 || this.refusedLogo || this.refusedTextScale
+      codeError ||
+      Object.keys(handErrors).length > 0 ||
+      Object.keys(textErrors).length > 0 ||
+      this.refusedLogo ||
+      this.refusedTextScale
         ? t("form.fix_fields")
         : this.actionError;
     const saveAction = saveActionState(this.#scope);
@@ -976,11 +1073,16 @@ export class LookCard extends LitElement {
             .draft=${draft}
             .derived=${this.#derived!}
             .errors=${handErrors}
+            .textErrors=${textErrors}
             .fixed=${this.handFixed}
             ?busy=${busy}
             @hand-change=${(event: CustomEvent<HandAction>) => {
               event.stopPropagation();
               this.#hand(event.detail);
+            }}
+            @text-change=${(event: CustomEvent<TextAction>) => {
+              event.stopPropagation();
+              this.#text(event.detail);
             }}
           ></dashboard-theme-advanced>`,
         )}
@@ -1109,6 +1211,11 @@ export class LookCard extends LitElement {
             label: t("appearance.colours_by_hand"),
             value: handRow(choices),
             dataTest: "saved-hand",
+          },
+          {
+            label: t("appearance.text_by_hand"),
+            value: textRow(choices),
+            dataTest: "saved-text",
           },
         ])}
         ${warnings.map(

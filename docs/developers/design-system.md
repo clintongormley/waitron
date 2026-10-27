@@ -4113,7 +4113,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   screens / dark screens}" with a chip and either its Main buttons colour set by hand followed by
   ", set by hand" or the shade of its taken fix — A841 slice 6, D14; a kind of screen cannot hold
   both), Background, Corners, Text size ("100% (standard)", or the step, such as "115%") and
-  Colours set by hand. Below them comes one warning line for each warning the server
+  Colours set by hand and Text set by hand. Below them comes one warning line for each warning the server
   sends with the theme, then the note about each screen's own Theme setting.
 - **Edit opens the editor in place**, in the same card. It is offered to a person holding
   `layout.configure`, whichever theme is in use.
@@ -4152,14 +4152,14 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   with `marks` and `continuous`, so the draft and the preview follow it while it is dragged. Its
   value is drawn as a percentage and spoken as "{n} percent", its hint is "100% is Waitron's
   standard size. Larger text wraps long names onto more lines.", and a muted line under it names
-  the four sizes the step gives. A `theme.invalid` naming `textScale` shows under the slider, with
+  the four sizes drawn. A `theme.invalid` naming `textScale` shows under the slider, with
   the form's one message at the bottom; a change of size clears it. Each preview panel ends with a
   till product button and a bill line, the product named in the venue's default content language
   when the dashboard has strings for it, else in the screen's.
 - **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
   before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
   it is disabled only while a request is being sent, or after a save attempt while the brand colour's
-  code or a code in Advanced fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
+  code or a code or text size in Advanced fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
   edited theme is in use, and leaves the edited theme as it was saved.
 - **The editor lays out by the card's width, never the window's** (container queries): the choices
   and the preview sit side by side when the form is at least 900px wide, and the preview's two
@@ -4219,6 +4219,17 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   Undo" line until the value changes or the editor closes. Reset all to worked-out sits at the
   bottom, at the right. While a value shows an error, `has-error` holds the section open; a warning does not open
   it.
+- **Advanced's Text rows** (`apps/dashboard/src/widgets/theme-text.ts`, A841 slice 11) sit after
+  the colour rows and before Reset all, under an `h3` "Text", until slice 12 folds Advanced into
+  sections: Typeface and the three weights are `wt-combobox`es (`hide-label`, `search="never"`,
+  `stable-width`; weights drawn as digits), each size a `wt-number-stepper` from 8 to 40 with its −
+  and + named in the screen's language and "px" beside it, hidden from assistive technology. Rows
+  read "Worked out" or carry the "Set by hand" tag and a "Use worked-out size / typeface / weight"
+  link, as the colour rows do; from a 600 px section the name column is the colour rows' name
+  column. Away from 100% each size row has an "at {step}: {size} px" line; under it, a size drawn
+  under 12 px gets the warning line and its fix button, and one drawn above Waitron's own size at
+  130% gets a note in `--wt-color-text-muted` with no icon, and its own fix button. No "fixed from
+  · Undo" line follows a text fix.
 - **Save, or Save as new theme…, with a warning opens the Hard to read dialog**
   (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered

@@ -9,6 +9,15 @@ import {
   type ThemeColour,
   type ThemeLogo,
   type TextScale,
+  type TextSizeKey,
+  type TextWeight,
+  type TextWeightKey,
+  type ThemeText,
+  type Typeface,
+  TEXT_SIZE_KEYS,
+  TEXT_WEIGHT_KEYS,
+  isTextSize,
+  normaliseText,
   sameText,
 } from "@waitron/ui-core/theme";
 
@@ -16,14 +25,25 @@ export type HandField = `handSet.${Mode}.${ThemeColour}`;
 
 export type HandCodes = Readonly<Record<Mode, Readonly<Partial<Record<ThemeColour, string>>>>>;
 
+export type TextCodes = Readonly<Partial<Record<TextSizeKey, string>>>;
+
+export type TextField = "text.family" | `text.size.${TextSizeKey}` | `text.weight.${TextWeightKey}`;
+
+export const TEXT_FIELDS: readonly TextField[] = [
+  "text.family",
+  ...TEXT_SIZE_KEYS.map((key) => `text.size.${key}` as const),
+  ...TEXT_WEIGHT_KEYS.map((key) => `text.weight.${key}` as const),
+];
+
 /**
- * `choices` only ever holds a valid colour; `code` and `handCodes` are the code fields' text as
- * typed.
+ * `choices` only ever holds a valid colour and size; `code`, `handCodes` and `textCodes` are the
+ * fields' text as typed.
  */
 export interface LookDraft {
   readonly choices: ThemeChoices;
   readonly code: string;
   readonly handCodes: HandCodes;
+  readonly textCodes: TextCodes;
 }
 
 const NO_HAND_CODES: HandCodes = { light: {}, dark: {} };
@@ -34,7 +54,12 @@ const codeKey = (code: string) => code.trim().toLowerCase();
 
 export function openDraft(choices: ThemeChoices | null): LookDraft {
   const opened = choices ?? WAITRON_CHOICES;
-  return { choices: opened, code: opened.brandColor ?? "", handCodes: NO_HAND_CODES };
+  return {
+    choices: opened,
+    code: opened.brandColor ?? "",
+    handCodes: NO_HAND_CODES,
+    textCodes: {},
+  };
 }
 
 function sameHand(
@@ -58,6 +83,21 @@ function invalidHand(draft: LookDraft, mode: Mode, key: ThemeColour): string | u
   return CODE.test(typed) ? undefined : typed;
 }
 
+const SIZE_TEXT = /^\d+$/;
+
+function typedSize(text: string): number | undefined {
+  const typed = text.trim();
+  if (!SIZE_TEXT.test(typed)) return undefined;
+  const px = Number(typed);
+  return isTextSize(px) ? px : undefined;
+}
+
+function invalidSize(draft: LookDraft, key: TextSizeKey): string | undefined {
+  const text = draft.textCodes[key];
+  if (text === undefined) return undefined;
+  return typedSize(text) === undefined ? text.trim() : undefined;
+}
+
 function sameLogo(a: ThemeLogo | null, b: ThemeLogo | null): boolean {
   if (a === null || b === null) return a === b;
   return a.light === b.light && a.dark === b.dark;
@@ -78,6 +118,7 @@ export function sameDraft(a: LookDraft, b: LookDraft): boolean {
         sameHand(x.handSet[mode], y.handSet[mode]) &&
         THEME_COLOURS.every((key) => invalidHand(a, mode, key) === invalidHand(b, mode, key)),
     ) &&
+    TEXT_SIZE_KEYS.every((key) => invalidSize(a, key) === invalidSize(b, key)) &&
     codeKey(a.code) === codeKey(b.code) &&
     sameLogo(x.logo, y.logo)
   );
@@ -190,8 +231,9 @@ export function useWorkedOut(draft: LookDraft, mode: Mode, key: ThemeColour): Lo
 export function resetAllHand(draft: LookDraft): LookDraft {
   return {
     ...draft,
-    choices: { ...draft.choices, handSet: { light: {}, dark: {} } },
+    choices: { ...draft.choices, handSet: { light: {}, dark: {} }, text: {} },
     handCodes: NO_HAND_CODES,
+    textCodes: {},
   };
 }
 
@@ -208,11 +250,115 @@ export function handTouched(draft: LookDraft, mode: Mode, key: ThemeColour): boo
 }
 
 export function anyHandSet(draft: LookDraft): boolean {
-  return MODES.some((mode) => THEME_COLOURS.some((key) => handTouched(draft, mode, key)));
+  return (
+    MODES.some((mode) => THEME_COLOURS.some((key) => handTouched(draft, mode, key))) ||
+    anyTextSet(draft)
+  );
+}
+
+function withText(draft: LookDraft, text: ThemeText): ThemeChoices {
+  return { ...draft.choices, text: normaliseText(text) };
+}
+
+export function setTypeface(draft: LookDraft, family: Typeface): LookDraft {
+  return { ...draft, choices: withText(draft, { ...draft.choices.text, family }) };
+}
+
+export function setWeight(draft: LookDraft, key: TextWeightKey, weight: TextWeight): LookDraft {
+  const text = draft.choices.text;
+  return {
+    ...draft,
+    choices: withText(draft, { ...text, weight: { ...text.weight, [key]: weight } }),
+  };
+}
+
+function withSize(draft: LookDraft, key: TextSizeKey, px: number): ThemeChoices {
+  const text = draft.choices.text;
+  return withText(draft, { ...text, size: { ...text.size, [key]: px } });
+}
+
+export function setTextSize(draft: LookDraft, key: TextSizeKey, px: number): LookDraft {
+  return {
+    ...draft,
+    choices: withSize(draft, key, px),
+    textCodes: withoutKey(draft.textCodes, key),
+  };
+}
+
+export function typeTextSize(draft: LookDraft, key: TextSizeKey, text: string): LookDraft {
+  const px = typedSize(text);
+  return {
+    ...draft,
+    choices: px === undefined ? draft.choices : withSize(draft, key, px),
+    textCodes: { ...draft.textCodes, [key]: text },
+  };
+}
+
+type FieldParts =
+  | { readonly part: "family" }
+  | { readonly part: "size"; readonly key: TextSizeKey }
+  | { readonly part: "weight"; readonly key: TextWeightKey };
+
+function partsOf(field: TextField): FieldParts {
+  const [, part, key] = field.split(".");
+  if (part === "size") return { part, key: key as TextSizeKey };
+  if (part === "weight") return { part, key: key as TextWeightKey };
+  return { part: "family" };
+}
+
+export function useWorkedOutText(draft: LookDraft, field: TextField): LookDraft {
+  const parts = partsOf(field);
+  const text = draft.choices.text;
+  switch (parts.part) {
+    case "family":
+      return { ...draft, choices: withText(draft, { ...text, family: undefined }) };
+    case "size":
+      return {
+        ...draft,
+        choices: withText(draft, { ...text, size: withoutKey(text.size ?? {}, parts.key) }),
+        textCodes: withoutKey(draft.textCodes, parts.key),
+      };
+    case "weight":
+      return {
+        ...draft,
+        choices: withText(draft, { ...text, weight: withoutKey(text.weight ?? {}, parts.key) }),
+      };
+  }
+}
+
+export function invalidTextCodes(draft: LookDraft): readonly TextField[] {
+  return TEXT_SIZE_KEYS.filter((key) => invalidSize(draft, key) !== undefined).map(
+    (key): TextField => `text.size.${key}`,
+  );
+}
+
+export function textSetByHand(choices: ThemeChoices, field: TextField): boolean {
+  const parts = partsOf(field);
+  switch (parts.part) {
+    case "family":
+      return choices.text.family !== undefined;
+    case "size":
+      return choices.text.size?.[parts.key] !== undefined;
+    case "weight":
+      return choices.text.weight?.[parts.key] !== undefined;
+  }
+}
+
+/** Set by hand, or a size whose box holds typed text. */
+export function textTouched(draft: LookDraft, field: TextField): boolean {
+  const parts = partsOf(field);
+  return (
+    textSetByHand(draft.choices, field) ||
+    (parts.part === "size" && draft.textCodes[parts.key] !== undefined)
+  );
+}
+
+export function anyTextSet(draft: LookDraft): boolean {
+  return TEXT_FIELDS.some((field) => textTouched(draft, field));
 }
 
 export function waitronLook(): LookDraft {
-  return { choices: WAITRON_CHOICES, code: "", handCodes: NO_HAND_CODES };
+  return { choices: WAITRON_CHOICES, code: "", handCodes: NO_HAND_CODES, textCodes: {} };
 }
 
 export function isWaitronLook(draft: LookDraft): boolean {

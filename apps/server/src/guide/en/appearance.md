@@ -25,7 +25,9 @@ choices it is made of:
   step such as "115%".
 - **Colours set by hand**: any of the theme's colours that were given a value of their own rather
   than worked out from the brand colour, or **None**. The editor's **Advanced** section sets them,
-  as "Set colours by hand" below describes.
+  as "Set colours and text by hand" below describes.
+- **Text set by hand**: the text settings given a value of their own, such as **Small text**, or
+  **None**. "Set text by hand" below describes them.
 
 The note at the bottom of the card explains that one look covers the dashboard and every till.
 Each theme has a light version and a dark version, and each screen shows one of them, as its own
@@ -58,7 +60,7 @@ theme's four choices:
   followed by six digits or letters a to f, or Save tells you so under the field.
 - **Background**: **Neutral** or **Tinted**.
 - **Corners**: **Square**, **Standard** or **Round**.
-- **Text size**: a slider from 100% to 130% in steps of 5%, with the four sizes it gives under it,
+- **Text size**: a slider from 100% to 130% in steps of 5%, with the four sizes drawn under it,
   such as "Text on screens: small 12 px · normal 14 px · large 18 px · largest 22 px" at 100%.
 
 Under the brand colour, **Pick a different colour for dark screens** gives the dark version's main
@@ -80,7 +82,7 @@ dark one.
 
 Nothing else on the page, and no other screen, changes until you save. **Use Waitron's look**
 removes the logo and sets every choice back to Waitron's: Waitron's brand colour, Neutral, Standard
-corners, text size 100%, and no colours set by hand. It saves nothing by itself, and it is greyed
+corners, text size 100%, and nothing set by hand. It saves nothing by itself, and it is greyed
 out while there is no logo and the choices already are Waitron's look. **Cancel** closes the editor
 without saving. If you have changed something, Cancel, leaving the page, and opening another theme
 from the Themes card ask you first.
@@ -105,6 +107,9 @@ starts.
 
 Printed paper keeps Waitron's sizes: receipts, kitchen tickets, the equipment label and the node
 recovery pack. Google's sign-in button keeps Google's size.
+
+A size set by hand grows with the slider too, as [Set text by hand](appearance.md#text-by-hand)
+describes.
 
 ## Add your logo {#logo}
 
@@ -188,12 +193,12 @@ the tab, unless the department's saved receipt settings cannot be read: then it 
 When a department's receipt settings cannot be read, its receipts and invoices print no logo at all,
 rather than one that may be the wrong one.
 
-## Set colours by hand {#advanced}
+## Set colours and text by hand {#advanced}
 
-Below the choices and the preview, the editor has a section headed **Advanced: set colours by
-hand**. It starts closed each time the editor opens, and its closed line says what is set by hand:
-"None set by hand. Waitron works out every colour and text size.", or a count and the colours'
-names, such as "2 set by hand: Page (light), Text (light)". While colours or text sizes set by hand
+Below the choices and the preview, the editor has a section headed **Advanced: set colours and
+text by hand**. It starts closed each time the editor opens, and its closed line says what is set by hand:
+"None set by hand. Waitron works out every colour and text size.", or a count and the names
+of the colours and text rows set by hand, such as "2 set by hand: Page (light), Text (light)". While colours or text sizes set by hand
 are hard to read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
 heading to open it.
 
@@ -205,7 +210,9 @@ readable shade was taken for that kind of screen. Changing either value, with th
 typing a code, sets that value by hand and leaves the other kind of screen's value as it was. A
 value set by hand is marked **Set by hand**, with **Use worked-out colour** under it to go back to
 the value Waitron works out. **Reset all to worked-out**, at the bottom of the section, puts every
-value back to worked out; it is greyed out while nothing is set by hand.
+value back to worked out, the text rows included; it is greyed out while nothing is set by hand.
+After the colours, under **Text**, come the rows for the typeface, the text sizes and the weights,
+which "Set text by hand" below describes.
 
 A colour set by hand stays as you set it when you change the brand colour, the background or the
 corners. When you change the brand colour or the background while some colours are set by hand, a
@@ -218,6 +225,47 @@ shade taken for it there is dropped.
 A code must be `#` followed by six digits or letters a to f. When one is not, Save says so under
 that code box and saves nothing, and Advanced opens to show it, and it cannot be closed until the
 code is fixed.
+
+## Set text by hand {#text-by-hand}
+
+Under **Text**, after the colours, Advanced has eight rows: **Typeface**, **Small text**, **Normal
+text**, **Large text**, **Largest text**, **Normal weight**, **Medium weight** and **Bold weight**.
+Each shows Waitron's own value, marked **Worked out**, until you change it:
+
+- **Typeface** offers **The device's own**, the typeface each screen uses unless told otherwise,
+  and **Serif**, a typeface with small strokes at the ends of its letters. Which serif typeface a
+  screen draws depends on the device.
+- A size is a whole number of pixels from 8 to 40, typed or set with − and +. Waitron's own are 12,
+  14, 18 and 22.
+- A weight is 400, 500, 600, 700 or 800: the higher, the bolder. Waitron's own are 400, 500 and 600.
+
+Changing a row sets it by hand, even to Waitron's own value: its value turns bold, it is marked
+**Set by hand**, and **Use worked-out size**, **Use worked-out typeface** or **Use worked-out
+weight** under it puts it back. **Reset all to worked-out** puts the text rows back with the
+colours.
+
+A size you set is the size at 100%, and the **Text size** slider grows it as it grows Waitron's
+own. Away from 100%, each size row says what it draws, such as "at 115%: 16 px", and the line under
+the slider lists the sizes drawn.
+
+A size drawn smaller than 12 px warns under its row, such as "Small text: 10 px is smaller than 12
+px; text that small is often hard to read.", with a button that sets the smallest size that draws
+12 px: **Use 12 px** at 100%, or **Use 9 px (12 px at 130%)** with the slider at 130%. It counts as
+hard to read, as a colour does: Advanced's closed line, **Fix all**, the **Hard to read** dialog and
+the Themes card count it.
+
+A size drawn larger than Waitron checks the tills at, which is Waitron's own size at 130% (16, 18,
+23 and 29 px), gets a note instead: "Largest text: 33 px is larger than Waitron checks the tills at;
+long names may wrap more or be cut off.", with a button that sets the largest size within it, such
+as **Use 22 px (29 px at 130%)**. The note is not a warning: nothing counts it, and you can save the
+size as it is.
+
+A size that is not a whole number from 8 to 40 is not used. Save says "Enter a whole number from 8
+to 40." under it, saves nothing, and opens Advanced to show it.
+
+The typeface and the weights reach every screen the theme paints, and a bold word, heading or table
+header follows **Bold weight** unless its screen gives it a weight of its own. Printed paper and
+the typeface used for codes keep Waitron's type, and Google's sign-in button keeps Google's.
 
 ## When a colour is hard to read {#hard-to-read}
 
@@ -253,6 +301,9 @@ included.
 Waitron never refuses a colour. A warning is advice: you can save the colour you chose and live
 with it.
 
+A text size drawn smaller than 12 px counts as hard to read in the same way, and **Fix all** and
+**Fix and save** take its fix too: see [Set text by hand](appearance.md#text-by-hand).
+
 ## Save a theme {#save}
 
 **Save** is greyed out until you change something. What it does next depends on the theme you are
@@ -271,7 +322,7 @@ When something is still hard to read, Save first opens the **Hard to read** dial
 for each colour or text size that is. It offers three choices:
 
 - **Back** returns you to the editor with nothing saved.
-- **Save anyway** saves the colours as you chose them.
+- **Save anyway** saves the theme as you chose it.
 - **Fix and save** takes every fix, then saves. The dialog offers it only when fixing everything
   would leave no warning at all.
 
@@ -295,8 +346,8 @@ opens the name dialog with the theme's name followed by "(copy)", stores your ch
 you give, leaves the theme you were editing as it was last saved, and closes the editor. Its **Use
 it on every screen now** switch starts on when the theme you are editing is in use. When a colour or
 text size is still hard to read, the **Hard to read** dialog comes first, as it does for Save. Like Save, it
-tells you under the field when a colour code you typed is not valid, and saves nothing until you fix
-it.
+tells you under the field when a colour code or a text size you typed is not valid, and saves
+nothing until you fix it.
 
 ## The venue's themes {#themes}
 
