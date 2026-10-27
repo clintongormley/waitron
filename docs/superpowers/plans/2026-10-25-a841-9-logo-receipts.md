@@ -259,6 +259,11 @@ export interface ThemeLogoPrint {
 }
 ```
 
+(2026-10-27, from the slice's review: the answer also carries `address`, the `display` rendition
+address it drew from, and the widget compares it with the address the library gives; "writes
+nothing" holds for image and theme rows, while an ask that is not passive records the session's
+last activity through `authorizeManager`; the dashboard's ask is passive.)
+
 It draws the draft's image, not the stored `printedLogo`: the draft's logo may be unsaved, and the
 same `drawLogo` makes both pictures (`receipt-logo.ts:13-17,25,78`).
 
@@ -290,6 +295,10 @@ caption beside it on a wide card and under it on a phone, and, at zero dots, the
 **no picture** (`picture: null`) — nothing; **failed** — "Could not show how this logo prints." and
 **Try again**. An answer for an image the field no longer holds is dropped (a request generation,
 CLAUDE.md §4's in-flight rule).
+
+(2026-10-27, from the slice's review: the widget no longer takes the first address it hears as a
+baseline; it compares the library's address with the one the answer was drawn from, and draws
+nothing while the library no longer holds the image, asking afresh if it returns.)
 
 **D11. Nothing more for slice 7's paths.** Printing reads the dots slice 7 keeps current: a save
 stores them (`theme-store.ts:83-89`), a library reframe or replaced source redraws them for every

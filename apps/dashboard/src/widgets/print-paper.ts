@@ -1,5 +1,10 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import type { BlockRange, PrintJobPreview, PrintPreviewBlock } from "../api/client.js";
+import type {
+  BlockRange,
+  PrintJobPreview,
+  PrintPreviewBlock,
+  ThemeLogoPrint,
+} from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 type ImageBlock = Extract<PrintPreviewBlock, { kind: "image" }>;
@@ -64,10 +69,14 @@ function pictureKey(run: ImageRun): string {
   return `${run.blocks[0]!.width}:${run.blocks.map((block) => `${block.height}:${block.data}`).join(",")}`;
 }
 
-/** The run's own printed images stacked into one PNG. */
-function bitmapUrl(run: ImageRun): string {
-  const { blocks, height } = run;
-  const width = blocks[0]!.width;
+/** One bit a dot, each row padded to whole bytes, a set bit black. */
+interface Raster {
+  readonly height: number;
+  readonly data: string;
+}
+
+/** Rasters of one width stacked top to bottom into one PNG. */
+function stackedUrl(width: number, height: number, rasters: readonly Raster[]): string {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -76,9 +85,9 @@ function bitmapUrl(run: ImageRun): string {
   pixels.data.fill(255);
   const stride = Math.ceil(width / 8);
   let top = 0;
-  for (const block of blocks) {
-    const bytes = atob(block.data);
-    for (let y = 0; y < block.height; y++) {
+  for (const raster of rasters) {
+    const bytes = atob(raster.data);
+    for (let y = 0; y < raster.height; y++) {
       for (let byte = 0; byte < stride; byte++) {
         const bits = bytes.charCodeAt(y * stride + byte);
         if (bits === 0) continue;
@@ -90,10 +99,22 @@ function bitmapUrl(run: ImageRun): string {
         }
       }
     }
-    top += block.height;
+    top += raster.height;
   }
   context.putImageData(pixels, 0, 0);
   return canvas.toDataURL("image/png");
+}
+
+/** The run's own printed images stacked into one PNG. */
+function bitmapUrl(run: ImageRun): string {
+  return stackedUrl(run.blocks[0]!.width, run.height, run.blocks);
+}
+
+/** One printed raster as a PNG data URL. */
+export function rasterUrl(picture: NonNullable<ThemeLogoPrint["picture"]>): string {
+  return stackedUrl(picture.widthDots, picture.heightDots, [
+    { height: picture.heightDots, data: picture.data },
+  ]);
 }
 
 function renderPiece(piece: Piece, widthDots: number) {

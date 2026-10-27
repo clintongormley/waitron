@@ -446,7 +446,7 @@ describe("dashboard-themes-card actions", () => {
     expect(useTheme).toHaveBeenCalledTimes(2);
   });
 
-  it("the switch dialog says the text changes size between themes of different sizes", async () => {
+  it("the switch dialog says nothing about text size between themes of different sizes", async () => {
     const large = theme("t-large", "Large", { ...LUCIA, textScale: 120 });
     const larger = theme("t-larger", "Larger too", { ...LUCIA, textScale: 120 });
     const largest = theme("t-largest", "Largest", { ...LUCIA, textScale: 130 });
@@ -463,30 +463,30 @@ describe("dashboard-themes-card actions", () => {
     const noteFor = async (el: Card, key: string) => {
       await choose(el, key, "use");
       const dialog = await switchDialog(el);
-      const note = dialog.querySelector("[data-test=switch-text-size]")?.textContent ?? null;
+      const note =
+        [...dialog.querySelectorAll("p")].find((p) => p.textContent?.includes("changes size"))
+          ?.textContent ?? null;
       const closed = dialogClosed(dialog);
       await userEvent.click(switchButton(dialog, "back"));
       await closed;
       return note;
     };
-    const sentence = "Text on the tills changes size too.";
-
     const fromLarge = (await mount({ themes, inUse: "t-large" })).el;
-    expect(await noteFor(fromLarge, "t-lucia")).toBe(sentence);
+    expect(await noteFor(fromLarge, "t-lucia")).toBeNull();
     expect(await noteFor(fromLarge, "t-larger")).toBeNull();
-    expect(await noteFor(fromLarge, "t-unread")).toBe(sentence);
-    expect(await noteFor(fromLarge, "waitron")).toBe(sentence);
+    expect(await noteFor(fromLarge, "t-unread")).toBeNull();
+    expect(await noteFor(fromLarge, "waitron")).toBeNull();
     cleanupWidgets();
 
     const fromWaitron = (await mount({ themes, inUse: null })).el;
     expect(await noteFor(fromWaitron, "t-lucia")).toBeNull();
-    expect(await noteFor(fromWaitron, "t-largest")).toBe(sentence);
+    expect(await noteFor(fromWaitron, "t-largest")).toBeNull();
     expect(await noteFor(fromWaitron, "t-unread")).toBeNull();
     cleanupWidgets();
 
     const fromUnread = (await mount({ themes, inUse: "t-unread" })).el;
     expect(await noteFor(fromUnread, "t-lucia")).toBeNull();
-    expect(await noteFor(fromUnread, "t-large")).toBe(sentence);
+    expect(await noteFor(fromUnread, "t-large")).toBeNull();
   });
 
   it("a switch to a theme deleted elsewhere says so", async () => {

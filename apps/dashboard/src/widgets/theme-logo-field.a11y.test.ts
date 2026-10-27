@@ -1,7 +1,7 @@
-import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
+import { mediaTestReference, mediaTestRendition } from "@waitron/ui/src/test-helpers.js";
 import type { ThemeLogo } from "@waitron/ui-core/theme";
 import { afterEach, expect, it, vi } from "vitest";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { ThemeLogoField } from "./theme-logo-field.js";
@@ -9,6 +9,13 @@ import "./theme-logo-field.js";
 
 const LIGHT = mediaTestReference("lucia.png");
 const DARK = mediaTestReference("lucia-dark.png");
+
+const BLACK: ThemeLogoPrint = {
+  paperDots: 504,
+  address: mediaTestRendition(LIGHT, "display"),
+  picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+  blackDots: 8,
+};
 
 const states: Record<string, { logo: ThemeLogo | null; errors?: () => ThemeLogoField["errors"] }> =
   {
@@ -49,7 +56,10 @@ it.each(cases)("Logo field: $state, $locale / $mode", async ({ mode, state, loca
   const { el, host } = await mountWidget<ThemeLogoField>(
     "dashboard-theme-logo-field",
     {
-      api: { imageLibraryRequest: vi.fn() } as unknown as DashboardApi,
+      api: {
+        imageLibraryRequest: vi.fn(),
+        getThemeLogoPrint: vi.fn(async () => BLACK),
+      } as unknown as DashboardApi,
       logo,
       errors: errors?.() ?? {},
     },
@@ -58,5 +68,11 @@ it.each(cases)("Logo field: $state, $locale / $mode", async ({ mode, state, loca
   expect(el.shadowRoot!.querySelectorAll("p.error")).toHaveLength(
     Object.keys(errors?.() ?? {}).length,
   );
+  if (logo !== null) {
+    const print = el.shadowRoot!.querySelector("dashboard-theme-logo-print")!;
+    await vi.waitFor(() =>
+      expect(print.shadowRoot!.querySelector('[data-test="logo-print"] img')).not.toBeNull(),
+    );
+  }
   await expectNoA11yViolations(host);
 });

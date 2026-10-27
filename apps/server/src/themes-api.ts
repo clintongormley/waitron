@@ -5,12 +5,14 @@ import { authorizeManager } from "@waitron/identity";
 import {
   createCustomTheme,
   deleteCustomTheme,
+  encodeLogoRaster,
   listCustomThemes,
   prepareThemeSave,
   renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
   type ReceiptLogoRasters,
+  type StoredLogoRaster,
   type StoredTheme,
 } from "@waitron/layouts";
 import {
@@ -20,9 +22,17 @@ import {
   requireNullableString,
   requireString,
 } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { readCurrentImageMetadata } from "@waitron/media";
+import { safeWidthDots, type MonoRaster } from "@waitron/printing";
+import { AppError, MEDIA_FILENAME } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
+import {
+  countBlackDots,
+  createLogoCache,
+  drawLibraryLogo,
+  previewLogoAddress,
+} from "./receipt-logo.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 import { printedLogoFor, recheckThemeLogo, snapshotThemeLogo } from "./theme-logo.js";
 import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
@@ -59,6 +69,25 @@ export function themeAnswerOf(stored: StoredTheme): ThemeAnswer {
   }
   const { light, dark, warnings } = deriveThemeFrom(SERVER_THEME_DEFAULTS, choices);
   return { id, name, updatedAt, choices, light, dark, warnings };
+}
+
+export interface ThemeLogoPrint {
+  readonly paperDots: number;
+  /** The display rendition `picture` was drawn from; `null` when the library has no such image. */
+  readonly address: string | null;
+  /** The 80 mm picture; `null` when the image is gone or will not decode. */
+  readonly picture: StoredLogoRaster | null;
+  /** Set dots in `picture`; 0 means the logo prints blank. */
+  readonly blackDots: number;
+}
+
+function requireImageQuery(queries: Record<string, string[]>): string {
+  const keys = Object.keys(queries);
+  const values = queries.image;
+  if (keys.length !== 1 || values?.length !== 1 || !MEDIA_FILENAME.test(values[0]!)) {
+    throw new AppError("management.request_invalid", { field: "image" });
+  }
+  return values[0]!;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -106,6 +135,18 @@ async function saveWithLogo<T>(
 }
 
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
+  const logoCache = createLogoCache();
+  // Keyed on the cache's own raster objects, so a cached picture is encoded and counted once.
+  const printed = new WeakMap<MonoRaster, Pick<ThemeLogoPrint, "picture" | "blackDots">>();
+  const printedOf = (raster: MonoRaster) => {
+    let known = printed.get(raster);
+    if (known === undefined) {
+      known = { picture: encodeLogoRaster(raster), blackDots: countBlackDots(raster) };
+      printed.set(raster, known);
+    }
+    return known;
+  };
+
   // Deliberately unauthenticated: the answer is the theme in use's stylesheet, its hash and its
   // logo's public rendition addresses, and carries no secrets.
   app.get("/api/theme", (c) =>
@@ -123,6 +164,26 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
         return listCustomThemes(tx);
       });
       return c.json({ themes: list.themes.map(themeAnswerOf), inUse: list.inUse }, 200);
+    }),
+  );
+
+  app.get("/management-api/theme-logo-print", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const image = requireImageQuery(c.req.queries());
+      const current = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId, permission: "venue.view" });
+        return readCurrentImageMetadata(tx, image);
+      });
+      // Drawn outside the transaction: sharp must not run holding the write lock.
+      const raster =
+        current === null ? null : await drawLibraryLogo(deps.db, logoCache, image, current, "80mm");
+      const answer: ThemeLogoPrint = {
+        paperDots: safeWidthDots("80mm"),
+        address: current === null ? null : previewLogoAddress(current),
+        ...(raster === null ? { picture: null, blackDots: 0 } : printedOf(raster)),
+      };
+      return c.json(answer, 200);
     }),
   );
 

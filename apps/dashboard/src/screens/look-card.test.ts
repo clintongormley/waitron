@@ -5,6 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import {
   formMessageOf,
   mediaTestReference,
+  mediaTestRendition,
   useMediaPresentations,
 } from "@waitron/ui/src/test-helpers.js";
 import {
@@ -14,7 +15,7 @@ import {
   type ThemeChoices,
 } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
-import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import type { DashboardApi, ThemeList, ThemeLogoPrint, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
@@ -425,6 +426,12 @@ describe("the saved card's Logo row", () => {
 });
 
 type Choices = ThemeChoices;
+const blackPrint = (image: string): ThemeLogoPrint => ({
+  paperDots: 504,
+  address: mediaTestRendition(image, "display"),
+  picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+  blackDots: 8,
+});
 const saved = (id: string, name: string, choices: Choices) => theme(id, name, choices);
 
 function editRig(list: ThemeList) {
@@ -433,9 +440,11 @@ function editRig(list: ThemeList) {
     return saved(id, name, choices);
   });
   const imageLibraryRequest = vi.fn();
+  const getThemeLogoPrint = vi.fn(async (image: string) => blackPrint(image));
   return {
-    api: { saveTheme, imageLibraryRequest } as unknown as DashboardApi & {
+    api: { saveTheme, imageLibraryRequest, getThemeLogoPrint } as unknown as DashboardApi & {
       saveTheme: typeof saveTheme;
+      getThemeLogoPrint: typeof getThemeLogoPrint;
     },
   };
 }
@@ -449,7 +458,7 @@ async function mountEditing(list: ThemeList) {
   });
   await userEvent.click(q(el, "[data-test=edit]")!);
   await el.updateComplete;
-  return { el, saveTheme: rig.api.saveTheme };
+  return { el, saveTheme: rig.api.saveTheme, getThemeLogoPrint: rig.api.getThemeLogoPrint };
 }
 
 const button = (el: Card, name: string) =>
@@ -960,6 +969,78 @@ describe("the logo in the editor", () => {
       expect(button(el, "save").disabled).toBe(false);
     },
   );
+  describe("how the logo prints", () => {
+    const printed = (el: Card) => field(el).shadowRoot!.querySelector("dashboard-theme-logo-print");
+    const figure = (el: Card) =>
+      printed(el)?.shadowRoot?.querySelector<HTMLElement>("[data-test=logo-print]") ?? null;
+
+    it("opening the editor on a theme with a logo asks once how it prints, and Save stays quiet", async () => {
+      setLocale("en-GB");
+      const { el, getThemeLogoPrint } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
+      await expect.poll(() => figure(el)?.getAttribute("aria-busy")).toBe("false");
+      expect(getThemeLogoPrint.mock.calls).toEqual([[L]]);
+      expect(button(el, "save").variant).toBe("secondary");
+      expect(button(el, "save").disabled).toBe(true);
+    });
+
+    it("a dark image picked asks nothing more", async () => {
+      setLocale("en-GB");
+      const { el, getThemeLogoPrint } = await mountEditing(inUse(withLogo({ light: L })));
+      await expect.poll(() => figure(el)?.getAttribute("aria-busy")).toBe("false");
+      await pick(el, "dark", D);
+      await printed(el)!.updateComplete;
+      expect(printed(el)!.image).toBe(L);
+      expect(getThemeLogoPrint.mock.calls).toEqual([[L]]);
+    });
+
+    it("Remove hides it", async () => {
+      setLocale("en-GB");
+      const { el } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
+      await expect.poll(() => figure(el)).not.toBeNull();
+      await pick(el, "light", null);
+      expect(printed(el)).toBeNull();
+    });
+
+    /** The card's content box, its print figure, the figure's paper box and its caption. */
+    async function measuredAt(width: number) {
+      const before = { width: innerWidth, height: innerHeight };
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mountEditing(inUse(withLogo({ light: L })));
+        await expect.poll(() => figure(el)?.getAttribute("aria-busy")).toBe("false");
+        const section = q(el, "section.settings-card") as HTMLElement;
+        const outer = section.getBoundingClientRect();
+        const style = getComputedStyle(section);
+        const contentRight =
+          outer.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+        const shown = figure(el)!;
+        return {
+          contentRight,
+          box: shown.getBoundingClientRect(),
+          paper: shown.querySelector(".paper")!.getBoundingClientRect(),
+          caption: shown.querySelector("figcaption")!.getBoundingClientRect(),
+        };
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    }
+
+    it("on a 390 px screen the figure stays inside the card, its caption under the box", async () => {
+      setLocale("en-GB");
+      const { contentRight, box, paper, caption } = await measuredAt(390);
+      expect(box.right).toBeLessThanOrEqual(contentRight + 0.5);
+      expect(caption.top).toBeGreaterThanOrEqual(paper.bottom - 0.5);
+    });
+
+    it("on a 1280 px screen the caption sits beside the box", async () => {
+      setLocale("en-GB");
+      const { contentRight, box, paper, caption } = await measuredAt(1280);
+      expect(box.right).toBeLessThanOrEqual(contentRight + 0.5);
+      expect(caption.left).toBeGreaterThanOrEqual(paper.right);
+      expect(caption.top).toBeLessThan(paper.bottom);
+      expect(caption.bottom).toBeGreaterThan(paper.top);
+    });
+  });
 });
 
 describe("another dashboard changes the themes while this one edits", () => {

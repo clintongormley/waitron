@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
-import { DashboardApi, type BackupApplyBody, type ProductEditorInput } from "./client.js";
+import {
+  DashboardApi,
+  type BackupApplyBody,
+  type ProductEditorInput,
+  type ThemeLogoPrint,
+} from "./client.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -557,6 +562,26 @@ describe("DashboardApi routes", () => {
       ["/management-api/themes/t1", "DELETE", undefined],
       ["/management-api/theme-in-use", "PUT", { customThemeId: null }],
     ]);
+  });
+
+  it("asks how a theme logo prints, passively", async () => {
+    const answer: ThemeLogoPrint = {
+      paperDots: 576,
+      address: "/media/renditions/v1/a.webp/display/5000-5000-100.webp",
+      picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+      blackDots: 8,
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getThemeLogoPrint("a b.png")).resolves.toEqual(answer);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/theme-logo-print?image=a+b.png", "GET", undefined],
+    ]);
+    expect(
+      fetchImpl.mock.calls.map(([, init]) => new Headers(init.headers).get("x-waitron-live")),
+    ).toEqual(["1"]);
   });
 
   it("keeps background POST previews active unless the preview explicitly requests passive activity", async () => {

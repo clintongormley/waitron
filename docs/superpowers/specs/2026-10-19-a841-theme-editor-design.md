@@ -642,14 +642,14 @@ Product text, English (Spanish to be written with the strings):
 | Logo refused by the server | That image is no longer in the image library. Pick another. |
 | Dark version refused by the server (no main image) | Add the main logo before a version for dark screens. |
 | Sign-in screens, with a venue logo (Q6 A) | Powered by {Waitron's lockup, alternative text "Waitron"} |
-| Under the logo (Q5 A) | How it prints on receipts of departments with no receipt logo of their own. · This logo prints blank on receipts. |
+| Under the logo (Q5 A) | How it prints on receipts of departments with no receipt logo of their own. · This logo prints blank on receipts. · Could not show how this logo prints. · Try again |
 | Preview, under its heading | Each screen shows one version, as its own Theme setting says: Light, Dark or Follow device. |
 | Preview panels | Light version · Dark version |
 | Under Brand colour, while the dark version has no own colour | Pick a different colour for dark screens |
 | Under Brand colour, once it has | Buttons on dark screens: {colour}, set by hand · Use the brand colour (a link that wraps onto its own line drops the "·"; so does Undo) |
 | Name dialog (Save as new theme, Make a copy, Rename, first save of Waitron's) | Name this theme · Name · Use it on every screen now · Back · Save |
 | Name refused | A theme with this name already exists. / "Waitron" is the built-in theme's name. Pick another. |
-| Switch dialog | Use {name} on every screen? · Every dashboard changes now, and every signed-in till within 15 seconds. · Text on the tills changes size too. · Hard to read: {lines} · Back · Use it |
+| Switch dialog | Use {name} on every screen? · Every dashboard changes now, and every signed-in till within 15 seconds. · Text on the tills changes size too. (dropped 2026-10-25, section 16) · Hard to read: {lines} · Back · Use it |
 | Name dialog's messages | Enter a name. · Use 60 characters or fewer. · Correct the highlighted fields to continue. |
 | Delete dialog, theme in use | {name} is in use on every screen. Deleting it puts Waitron's theme on every screen. |
 
@@ -1803,7 +1803,7 @@ edited, so an unchanged draft is a valid copy (pictures 02 and 03 drew it quiet 
 
 **Switching.** **Use on every screen** asks once: "Use {name} on every screen?" with "Every
 dashboard changes now, and every signed-in till within 15 seconds.", "Text on the tills changes
-size too." when the two themes' text sizes differ, and, when the theme has
+size too." when the two themes' text sizes differ (dropped by the owner 2026-10-25, section 16), and, when the theme has
 warnings, a "Hard to read:" list worded as the Save dialog's (section 9); then **Use it** or
 **Back**. A switch never refuses a theme for being hard to read (Q2), and offers no fix — the
 fixes are in the editor. It stores one thing, which theme is in use (section 11). Rename, Make a
@@ -2727,6 +2727,23 @@ permission-gated write (CLAUDE.md's risk triggers).
   2026-10-25, slice 9 plan D2): when the stored `logo` key holds no usable name, the receipt still
   prints the department's phone and texts, and prints no logo at all, not even the venue's. Not
   taken: the empty receipt, which would drop fields that were never in doubt.
+- **"Prints blank" means zero black dots** (lane A ruling 2026-10-25, slice 9 plan D9) in the
+  80 mm picture: a near-white logo that prints a faint scatter is not blank, and the picture shows
+  the scatter. Not taken: a threshold, which would need a number this design never chose.
+- **"How it prints" is drawn by a read route from the draft's image** (lane A ruling 2026-10-25,
+  slice 9 plan D8): `GET /management-api/theme-logo-print`, under `venue.view`, draws the image the
+  editor holds as an 80 mm receipt prints it. Not taken: drawing the saved `printedLogo`, which an
+  unsaved logo does not have yet.
+- **"How it prints" follows a reframe in the image library** (lane A ruling 2026-10-25, slice 9
+  plan D10): it asks again when the main image's `display` address changes. Not taken: following
+  the image's name only, which would keep showing the old framing. Since 2026-10-27 (the slice's
+  review) the route's answer names the `display` address it drew from, and the picture compares it
+  with the library's, so a reframe heard before the first lookup is followed too; and while the
+  library no longer holds the image the picture is not drawn. Known gap: a reframe undone while the
+  picture is being drawn can leave it on the undone framing until the next change.
+- **No text-size line in the switch or delete dialog** (owner, 2026-10-25): switching or deleting
+  a theme says nothing about the tills' text size. Not taken: "Text on the tills changes size too."
+  in the switch dialog, which slice 10a showed and slice 9b removed.
 
 ## 17. Risks
 
@@ -2796,8 +2813,9 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **A switch can change text size under a waiter's finger.** Switching between themes with
   different text sizes reflows every signed-in till's buttons within one poll, at a moment nobody
   chose. My call: apply it like every other theme change, not at the till's next idle moment or
-  sign-in. A switch is a rare, deliberate manager action; its dialog says "Text on the tills
-  changes size too." when the sizes differ (section 8b); and holding one change back per till
+  sign-in. A switch is a rare, deliberate manager action; its dialog said "Text on the tills
+  changes size too." when the sizes differ (section 8b) until the owner dropped the line on
+  2026-10-25 (section 16); and holding one change back per till
   would need a second "pending look" state on every till for one case. The trade-off: a waiter
   mid-order sees the grid move once.
 - **"Theme" names two things** (the owner's choice, Q8 revised): the account menu's Light / Dark /

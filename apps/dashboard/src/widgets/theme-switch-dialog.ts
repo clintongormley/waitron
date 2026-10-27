@@ -27,7 +27,6 @@ export class ThemeSwitchDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property() name = "";
   @property({ attribute: false }) lines: string[] = [];
-  @property({ type: Boolean }) textSizeNote = false;
   @property({ type: Boolean }) busy = false;
   @property() error = "";
   @property({ attribute: false }) opener: HTMLElement | null = null;
@@ -86,11 +85,6 @@ export class ThemeSwitchDialog extends LitElement {
       }}
     >
       <p>${t("appearance.switch_body")}</p>
-      ${
-        this.textSizeNote
-          ? html`<p data-test="switch-text-size">${t("appearance.switch_text_size")}</p>`
-          : nothing
-      }
       ${
         this.lines.length === 0
           ? nothing

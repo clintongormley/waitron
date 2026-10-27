@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { PrintJobPreview } from "../api/client.js";
-import { PrintPaper, paperStyles, type PaperMark } from "./print-paper.js";
+import { PrintPaper, paperStyles, rasterUrl, type PaperMark } from "./print-paper.js";
 
 @customElement("test-print-paper-host")
 class TestPrintPaperHost extends LitElement {
@@ -132,4 +132,59 @@ it("encodes a picture once while successive previews keep it, and keeps only the
   await el.updateComplete;
   expect(encode).toHaveBeenCalledTimes(1);
   expect(sources()).toEqual(first);
+});
+
+it("draws a raster black on white", async () => {
+  const image = new Image();
+  image.src = rasterUrl({ widthDots: 16, heightDots: 1, data: "8A8=" });
+  await image.decode();
+  expect([image.naturalWidth, image.naturalHeight]).toEqual([16, 1]);
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 1;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, 16, 1);
+  const shades = Array.from({ length: 16 }, (_, x) => [
+    data[x * 4],
+    data[x * 4 + 1],
+    data[x * 4 + 2],
+    data[x * 4 + 3],
+  ]);
+  const black = [0, 0, 0, 255];
+  const white = [255, 255, 255, 255];
+  expect(shades).toEqual([
+    ...Array(4).fill(black),
+    ...Array(8).fill(white),
+    ...Array(4).fill(black),
+  ]);
+});
+
+it("reads each raster row from its own stride of bytes", async () => {
+  const image = new Image();
+  image.src = rasterUrl({ widthDots: 16, heightDots: 2, data: "8A8PAA==" });
+  await image.decode();
+  expect([image.naturalWidth, image.naturalHeight]).toEqual([16, 2]);
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 2;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, 16, 2);
+  const shades = Array.from({ length: 32 }, (_, i) => [
+    data[i * 4],
+    data[i * 4 + 1],
+    data[i * 4 + 2],
+    data[i * 4 + 3],
+  ]);
+  const black = [0, 0, 0, 255];
+  const white = [255, 255, 255, 255];
+  expect(shades).toEqual([
+    ...Array(4).fill(black),
+    ...Array(8).fill(white),
+    ...Array(4).fill(black),
+    ...Array(4).fill(white),
+    ...Array(4).fill(black),
+    ...Array(8).fill(white),
+  ]);
 });

@@ -3093,6 +3093,11 @@ export const en = {
   "appearance.logo_dark_without_light": "Add the main logo before a version for dark screens.",
   "appearance.logo_dark_own": "Dark screens: own version",
   "appearance.logo_dark_plate": "Dark screens: on a light plate",
+  "appearance.logo_print":
+    "How it prints on receipts of departments with no receipt logo of their own.",
+  "appearance.logo_print_blank": "This logo prints blank on receipts.",
+  "appearance.logo_print_failed": "Could not show how this logo prints.",
+  "appearance.logo_print_retry": "Try again",
   "appearance.theme_in_use": "Theme in use",
   "appearance.brand": "Brand colour",
   "appearance.brand_waitron": "Waitron's",
@@ -3116,7 +3121,6 @@ export const en = {
   "appearance.text_size_standard": "{size} (standard)",
   "appearance.bad_text_size": "Pick one of the steps from 100% to 130%.",
   "appearance.preview_product": "Sparkling elderflower lemonade",
-  "appearance.switch_text_size": "Text on the tills changes size too.",
   "appearance.note":
     "Applies to the dashboard and every till. Each screen shows this theme's light or dark version, as its own Theme setting says: Light, Dark or Follow device.",
   "appearance.editing_in_use": "Theme in use: {name}. Saving changes every screen.",
@@ -6540,6 +6544,11 @@ export const es: Record<StringKey, string> = {
     "Añade el logotipo principal antes de una versión para pantallas oscuras.",
   "appearance.logo_dark_own": "Pantallas oscuras: versión propia",
   "appearance.logo_dark_plate": "Pantallas oscuras: sobre una placa clara",
+  "appearance.logo_print":
+    "Así se imprime en los recibos de los departamentos sin logotipo de recibo propio.",
+  "appearance.logo_print_blank": "Este logotipo se imprime en blanco en los recibos.",
+  "appearance.logo_print_failed": "No se ha podido mostrar cómo se imprime este logotipo.",
+  "appearance.logo_print_retry": "Reintentar",
   "appearance.theme_in_use": "Tema en uso",
   "appearance.brand": "Color de marca",
   "appearance.brand_waitron": "De Waitron",
@@ -6563,7 +6572,6 @@ export const es: Record<StringKey, string> = {
   "appearance.text_size_standard": "{size} (estándar)",
   "appearance.bad_text_size": "Elige uno de los pasos del 100 % al 130 %.",
   "appearance.preview_product": "Tinto de verano con limón",
-  "appearance.switch_text_size": "El texto de las cajas también cambia de tamaño.",
   "appearance.note":
     "Se aplica al panel y a todas las cajas. Cada pantalla muestra la versión clara u oscura de este tema, según su propio ajuste de Tema: Claro, Oscuro o Según el dispositivo.",
   "appearance.editing_in_use": "Tema en uso: {name}. Al guardar cambian todas las pantallas.",

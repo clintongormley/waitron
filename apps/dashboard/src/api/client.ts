@@ -2244,6 +2244,21 @@ export interface ThemeList {
   readonly inUse: string | null;
 }
 
+export interface ThemeLogoPrint {
+  /** The paper's printable dots across. */
+  readonly paperDots: number;
+  /** The `display` address `picture` was drawn from; `null` when the library has no such image. */
+  readonly address: string | null;
+  /** The 80 mm picture; `null` when the image is gone or will not decode. */
+  readonly picture: {
+    readonly widthDots: number;
+    readonly heightDots: number;
+    readonly data: string;
+  } | null;
+  /** Set dots in `picture`; 0 means the logo prints blank. */
+  readonly blackDots: number;
+}
+
 export class DashboardApi {
   readonly liveData = new LiveData();
   #menuRevision: { value?: MenuReadRevision } = {};
@@ -2636,6 +2651,14 @@ export class DashboardApi {
     return this.#request<{ inUse: string | null }>("/management-api/theme-in-use", "PUT", {
       customThemeId,
     });
+  }
+
+  getThemeLogoPrint(image: string): Promise<ThemeLogoPrint> {
+    const query = new URLSearchParams({ image });
+    return this.background.#request<ThemeLogoPrint>(
+      `/management-api/theme-logo-print?${query}`,
+      "GET",
+    );
   }
 
   getContentLanguageRules(): Promise<ContentLanguageRules> {

@@ -1,5 +1,13 @@
 import { encodeLogoRaster, type ReceiptLogoRasters } from "@waitron/layouts";
-import { decodeLogoGreyscale } from "@waitron/media";
+import type { Database } from "@waitron/db";
+import {
+  decodeLogoGreyscale,
+  imageExists,
+  readImageBytes,
+  renderRendition,
+  renditionUrl,
+  type ImageFraming,
+} from "@waitron/media";
 import {
   LOGO_MAX_HEIGHT_DOTS,
   ditherToRaster,
@@ -82,4 +90,42 @@ export async function drawPreviewLogo(
   }
   cache.set(identity, paperWidth, raster);
   return raster;
+}
+
+/** A library image as it stands now: its source file and framing. */
+export interface CurrentLibraryImage {
+  readonly sourceFilename: string;
+  readonly framing: ImageFraming;
+}
+
+/** The display rendition a preview draws from, spelled as the library's presentation spells it. */
+export function previewLogoAddress(current: CurrentLibraryImage): string {
+  return renditionUrl(current.sourceFilename, "display", current.framing);
+}
+
+/** `drawPreviewLogo` for the library image `filename` as it stands in `current`. */
+export function drawLibraryLogo(
+  db: Database,
+  cache: LogoCache,
+  filename: string,
+  current: CurrentLibraryImage,
+  paperWidth: PaperWidth,
+): Promise<MonoRaster | null> {
+  return drawPreviewLogo(cache, previewLogoAddress(current), paperWidth, {
+    exists: () => imageExists(db, filename),
+    bytes: async () => {
+      const source = await readImageBytes(db, current.sourceFilename);
+      return source ? renderRendition(source.bytes, "display", current.framing) : null;
+    },
+  });
+}
+
+/** Set dots inside `widthDots` on each row; a row's padding bits are not dots. */
+export function countBlackDots(raster: MonoRaster): number {
+  const stride = Math.ceil(raster.widthDots / 8);
+  let count = 0;
+  for (let y = 0; y < raster.heightDots; y++)
+    for (let x = 0; x < raster.widthDots; x++)
+      if ((raster.bits[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) !== 0) count++;
+  return count;
 }

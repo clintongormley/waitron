@@ -1,6 +1,6 @@
 import { html, render, nothing } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { liveMediaImage, invalidateMediaImages } from "./live-media-image.js";
+import { liveMediaImage, invalidateMediaImages, watchMediaImage } from "./live-media-image.js";
 import "./components/wt-data-table.js";
 import type { WtDataTable } from "./components/wt-data-table.js";
 
@@ -333,4 +333,101 @@ it("finishes an in-flight lookup when another thumbnail arrives, then resolves t
     firstAnswer(reply({ [a]: entry("A") }));
     nextAnswer?.(reply({ [a]: entry("A"), [b]: entry("B") }));
   }
+});
+it("a watcher hears each refreshed address", async () => {
+  network.mockResolvedValueOnce(reply({ [a]: entry("1") }));
+  const heard: (string | undefined)[] = [];
+  const stop = watchMediaImage(a, "display", (address) => heard.push(address));
+  try {
+    await vi.waitFor(() => expect(heard).toEqual(["/media/1-display.webp"]));
+    network.mockResolvedValueOnce(reply({ [a]: entry("2") }));
+    invalidateMediaImages();
+    await vi.waitFor(() =>
+      expect(heard).toEqual(["/media/1-display.webp", "/media/2-display.webp"]),
+    );
+    expect(String(network.mock.calls[0]![0])).toBe(`/media/presentations?references=${a}`);
+  } finally {
+    stop();
+  }
+});
+it("a watcher shares the directive's batched refresh and hears its own shape", async () => {
+  const heard: (string | undefined)[] = [];
+  render(html`<img src=${liveMediaImage(b, "square")} />`, host);
+  const stop = watchMediaImage(a, "till", (address) => heard.push(address));
+  try {
+    await vi.waitFor(() => expect(heard).toEqual(["/media/A-till.webp"]));
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(String(network.mock.calls[0]![0])).toBe(`/media/presentations?references=${b}%2C${a}`);
+  } finally {
+    stop();
+  }
+});
+it("an explicitly missing image is heard as undefined", async () => {
+  network.mockResolvedValueOnce(reply({ [b]: entry("B") }));
+  const listener = vi.fn();
+  const stop = watchMediaImage(a, "display", listener);
+  try {
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(listener).toHaveBeenCalledWith(undefined);
+  } finally {
+    stop();
+  }
+});
+it("unsubscribing a watcher stops the calls and the poll", async () => {
+  const listener = vi.fn();
+  const stop = watchMediaImage(a, "display", listener);
+  await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  stop();
+  network.mockResolvedValueOnce(reply({ [a]: entry("after") }));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(src()).toBe("/media/after-square.webp"));
+  expect(listener).toHaveBeenCalledTimes(1);
+  const polled = network.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(15_000);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(polled + 1));
+  expect(listener).toHaveBeenCalledTimes(1);
+  render(nothing, host);
+  const calls = network.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60_000);
+  window.dispatchEvent(new Event("online"));
+  invalidateMediaImages();
+  await frame();
+  expect(network).toHaveBeenCalledTimes(calls);
+});
+it("the last watcher leaving stops the poll", async () => {
+  const listener = vi.fn();
+  const stop = watchMediaImage(a, "display", listener);
+  await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+  stop();
+  await vi.advanceTimersByTimeAsync(60_000);
+  window.dispatchEvent(new Event("online"));
+  invalidateMediaImages();
+  await frame();
+  expect(network).toHaveBeenCalledTimes(1);
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+it("a name that is not a library name subscribes nothing", async () => {
+  const listener = vi.fn();
+  const stop = watchMediaImage("../x.png", "display", listener);
+  await frame();
+  await vi.advanceTimersByTimeAsync(60_000);
+  invalidateMediaImages();
+  await frame();
+  expect(network).not.toHaveBeenCalled();
+  expect(listener).not.toHaveBeenCalled();
+  stop();
+});
+it("a watcher's stop called twice leaves another consumer of the same image subscribed", async () => {
+  const stop = watchMediaImage(a, "display", () => {});
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+  stop();
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+  stop();
+  network.mockResolvedValueOnce(reply({ [a]: entry("still") }));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(src()).toBe("/media/still-square.webp"));
+  await vi.advanceTimersByTimeAsync(15_000);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(4));
 });

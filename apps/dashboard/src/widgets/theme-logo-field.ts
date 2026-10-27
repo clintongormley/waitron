@@ -7,6 +7,7 @@ import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { withDarkLogo, withLightLogo } from "./look-draft.js";
 import "./image-upload.js";
+import "./theme-logo-print.js";
 
 /** The theme's logo: a main image and, once there is one, an optional version for dark screens. */
 @customElement("dashboard-theme-logo-field")
@@ -98,30 +99,34 @@ export class ThemeLogoField extends LitElement {
       ${
         logo
           ? html`<fieldset class="dark" data-test="logo-dark">
-              <legend>${t("appearance.logo_dark")}</legend>
-              <dashboard-image-upload
-                venue-logo
-                name="logo.dark"
+                <legend>${t("appearance.logo_dark")}</legend>
+                <dashboard-image-upload
+                  venue-logo
+                  name="logo.dark"
+                  .api=${this.api}
+                  .draftParent=${this.draftParent}
+                  .image=${logo.dark ?? null}
+                  addLabel=${t("appearance.logo_dark_add")}
+                  replaceName=${t("appearance.logo_dark_replace_name")}
+                  removeName=${t("appearance.logo_dark_remove_name")}
+                  ?invalid=${Boolean(this.errors.dark)}
+                  ?disabled=${this.busy}
+                  @image-changed=${(event: CustomEvent<{ image: string | null }>) =>
+                    this.#picked(event, "dark")}
+                ></dashboard-image-upload>
+                ${this.#error(this.errors.dark)}
+                ${
+                  logo.dark === undefined
+                    ? html`<p class="hint" data-test="logo-dark-hint">
+                        ${t("appearance.logo_dark_hint")}
+                      </p>`
+                    : nothing
+                }
+              </fieldset>
+              <dashboard-theme-logo-print
                 .api=${this.api}
-                .draftParent=${this.draftParent}
-                .image=${logo.dark ?? null}
-                addLabel=${t("appearance.logo_dark_add")}
-                replaceName=${t("appearance.logo_dark_replace_name")}
-                removeName=${t("appearance.logo_dark_remove_name")}
-                ?invalid=${Boolean(this.errors.dark)}
-                ?disabled=${this.busy}
-                @image-changed=${(event: CustomEvent<{ image: string | null }>) =>
-                  this.#picked(event, "dark")}
-              ></dashboard-image-upload>
-              ${this.#error(this.errors.dark)}
-              ${
-                logo.dark === undefined
-                  ? html`<p class="hint" data-test="logo-dark-hint">
-                      ${t("appearance.logo_dark_hint")}
-                    </p>`
-                  : nothing
-              }
-            </fieldset>`
+                .image=${logo.light}
+              ></dashboard-theme-logo-print>`
           : nothing
       }
     </fieldset>`;

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtButton, WtDialog } from "@waitron/ui";
 import { WAITRON_CHOICES } from "@waitron/ui-core/theme";
 import { es } from "../i18n/strings.js";
-import { setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
   dialogClosed,
@@ -75,19 +75,7 @@ describe("the switch dialog", () => {
       "Hard to read:",
     ]);
     expect(items(dialog)).toEqual(["Brand colour: buttons are hard to see on dark screens."]);
-  });
-
-  it("says the tills' text changes size when asked to", async () => {
-    const body = "Every dashboard changes now, and every signed-in till within 15 seconds.";
-    const plain = await mount();
-    expect(plain.dialog.querySelector("[data-test=switch-text-size]")).toBeNull();
-    expect(paragraphs(plain.dialog)).toEqual([body]);
-    cleanupWidgets();
-    const { dialog } = await mount({ textSizeNote: true, lines: [brandDark()] });
-    expect(paragraphs(dialog)).toEqual([body, t("appearance.switch_text_size"), "Hard to read:"]);
-    expect(dialog.querySelector("[data-test=switch-text-size]")?.textContent).toBe(
-      "Text on the tills changes size too.",
-    );
+    expect(dialog.textContent).not.toContain("changes size");
   });
 
   it("Use it sends theme-switch-confirm once, however often it is pressed", async () => {

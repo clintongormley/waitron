@@ -122,6 +122,14 @@ second picture, such as a light drawing of your logo, which dark screens show in
 one. Until you add one, the hint reads "Without one, dark screens show your logo on a light plate."
 The version for dark screens has its own Replace and Remove.
 
+Below **For dark screens (optional)**, a small picture shows how the main logo prints on receipts of
+departments with no receipt logo of their own: in the black dots of an 80 mm receipt printer. See
+[On receipts and invoices](appearance.md#logo-receipts). When the logo would print no dots at all,
+as a white logo on a see-through background does, "This logo prints blank on receipts." shows
+underneath the picture: pick a darker picture, or give the departments a receipt logo of their own.
+If asking for the picture fails, "Could not show how this logo prints." appears instead, with **Try
+again**.
+
 The preview shows the logo in the strip at the top of each version, followed by the venue's legal
 name: the main logo on the light version, and on the dark version the version for dark screens, or
 the main logo on its light plate. With no logo, the strip shows Waitron's own logo.
@@ -332,8 +340,7 @@ renaming a theme changes no screen's look.
 
 **Use on every screen** asks first, with a question such as "Use Terrace on every screen?" When
 the theme has colours that are hard to read, the question lists them under "Hard to read:".
-When the theme's text size differs from the one in use, the dialog also says "Text on the tills
-changes size too." **Use it** puts the theme in use, and **Back** changes nothing.
+**Use it** puts the theme in use, and **Back** changes nothing.
 
 Once a theme is in use, the dashboard you are using changes to it at once and other dashboards
 open at the same time follow on their own. Signed-in tills follow as they do when you save the

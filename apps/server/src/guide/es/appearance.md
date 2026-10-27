@@ -134,6 +134,15 @@ oscuras muestran en lugar de la principal. Hasta que añadas una, la pista dice 
 pantallas oscuras muestran tu logotipo sobre una placa clara.» La versión para pantallas oscuras
 tiene sus propios Sustituir y Quitar.
 
+Debajo de **Para pantallas oscuras (opcional)**, una imagen pequeña muestra cómo se imprime el
+logotipo principal en los recibos de los departamentos sin logotipo de recibo propio: en los puntos
+negros de una impresora de recibos de 80 mm. Consulta [En los tickets y las
+facturas](appearance.md#logo-receipts). Cuando el logotipo no imprimiría ningún punto, como ocurre
+con un logotipo blanco sobre fondo transparente, debajo de la imagen aparece «Este logotipo se
+imprime en blanco en los recibos.»: elige una imagen más oscura o da a los departamentos un logotipo
+de recibo propio. Si falla la consulta de la imagen, aparece en su lugar «No se ha podido mostrar cómo
+se imprime este logotipo.», con **Reintentar**.
+
 La vista previa muestra el logotipo en la franja superior de cada versión, seguido de la razón
 social del local: el logotipo principal en la versión clara y, en la versión oscura, la versión para
 pantallas oscuras o el logotipo principal sobre su placa clara. Sin logotipo, la franja muestra el
@@ -362,8 +371,7 @@ aspecto de ninguna pantalla.
 
 **Usar en todas las pantallas** pregunta antes, con una pregunta como «¿Usar Terraza en todas las
 pantallas?». Si el tema tiene colores que se leen mal, la pregunta los muestra bajo «Se leen mal:».
-Si el tamaño del texto del tema es distinto del que está en uso, el diálogo dice también «El texto
-de las cajas también cambia de tamaño.» **Usarlo** pone el tema en uso, y **Volver** no cambia nada.
+**Usarlo** pone el tema en uso, y **Volver** no cambia nada.
 
 Cuando un tema pasa a estar en uso, el panel que estás usando cambia a él al momento y los demás
 paneles abiertos a la vez lo siguen por su cuenta. Las cajas con la sesión iniciada lo siguen igual

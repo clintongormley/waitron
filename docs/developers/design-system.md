@@ -4122,6 +4122,14 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   it invalid (with an image, its plate's edge turns `--wt-color-danger`) and puts the form's one
   message at the bottom (D9); any other logo refusal is the code's own message at the bottom, with
   no field marked; inside the name dialog, the code's own message shows at the dialog's bottom instead; a logo change clears it.
+- **"How it prints" closes the Logo field** (`apps/dashboard/src/widgets/theme-logo-print.ts`,
+  A841 slice 9b), after "For dark screens (optional)", while there is a main image: a paper box
+  (`paperGround`, a 1px `--wt-color-border` edge) holding the main image's 80 mm receipt picture at
+  its share of the paper's width, captioned in muted small text beside the box where the card has
+  room and under it where it has not. A picture with no black dots adds "This logo prints blank on
+  receipts." under the whole figure as a `warning` line with its icon. A failed read replaces the
+  figure with "Could not show how this logo prints." and a `secondary` Try again. Nothing is drawn
+  while the image library no longer holds the image. It changes nothing in the draft.
 - **Text size comes after Corners**: a `wt-slider` named `textScale`, 100 to 130 in steps of 5,
   with `marks` and `continuous`, so the draft and the preview follow it while it is dragged. Its
   value is drawn as a percentage and spoken as "{n} percent", its hint is "100% is Waitron's
@@ -4227,9 +4235,7 @@ The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data
   dialog lists them under "Hard to read:". A name refusal (`theme.name_taken`, or `theme.invalid`
   naming the name field) shows under the field; any other refusal shows at the bottom.
 - **The switch dialog** (`apps/dashboard/src/widgets/theme-switch-dialog.ts`) asks "Use {name} on
-  every screen?", adds "Text on the tills changes size too." when the theme's text size differs
-  from the one in use's (Waitron's theme counts as 100%), lists the theme's warnings when it has
-  any, and never refuses a theme for them;
+  every screen?", lists the theme's warnings when it has any, and never refuses a theme for them;
   Back and Use it, with a refusal shown at the bottom.
 - **The delete dialog is `wt-delete-dialog`, its impact built from the card's live list**
   (`themeDeleteImpact`, `apps/dashboard/src/widgets/theme-delete.ts:7`) rather than read from the

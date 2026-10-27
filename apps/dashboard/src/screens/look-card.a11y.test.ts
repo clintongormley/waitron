@@ -1,9 +1,13 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import {
+  mediaTestReference,
+  mediaTestRendition,
+  useMediaPresentations,
+} from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import type { DashboardApi, ThemeList, ThemeLogoPrint, ThemeView } from "../api/client.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./look-card.js";
@@ -295,6 +299,16 @@ const states: Record<
   },
 };
 
+/** The editor's "How it prints" answer: a normal picture of whichever image it asks about. */
+const printing = () => ({
+  getThemeLogoPrint: vi.fn(async (image: string): Promise<ThemeLogoPrint> => ({
+    paperDots: 504,
+    address: mediaTestRendition(image, "display"),
+    picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+    blackDots: 8,
+  })),
+});
+
 const cases = ["light", "dark"].flatMap((mode) =>
   ["en-GB", "es-ES"].flatMap((locale) =>
     Object.keys(states).map((state) => ({ mode: mode as "light" | "dark", locale, state })),
@@ -311,7 +325,7 @@ it.each(cases)("Look card: $state, $locale / $mode", async ({ mode, locale, stat
   const { list, reach, api } = states[state]!;
   const { el, host } = await mountWidget<Card>(
     "dashboard-look-card",
-    { api: api?.() ?? ({} as DashboardApi), list, canEdit: true },
+    { api: { ...printing(), ...api?.() } as unknown as DashboardApi, list, canEdit: true },
     mode,
   );
   await press(el, "edit");
@@ -320,6 +334,13 @@ it.each(cases)("Look card: $state, $locale / $mode", async ({ mode, locale, stat
   if (state === "the code field's error") {
     expect((q(el, select) as HTMLElementTagNameMap["wt-input"]).error).not.toBe("");
   }
+  const printed = q(el, "dashboard-theme-logo-field")?.shadowRoot?.querySelector(
+    "dashboard-theme-logo-print",
+  );
+  if (printed)
+    await expect
+      .poll(() => printed.shadowRoot!.querySelector('[data-test="logo-print"] img'))
+      .toBeTruthy();
   await el.updateComplete;
   // The editor behind an open dialog is covered by the states above; "without Fix and save" draws
   // unreadable text in its preview by definition, and axe still reaches it behind this dialog.

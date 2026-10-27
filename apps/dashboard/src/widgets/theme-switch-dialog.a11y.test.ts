@@ -5,7 +5,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import type { ThemeSwitchDialog } from "./theme-switch-dialog.js";
 import "./theme-switch-dialog.js";
 
-const cases = (["none", "lines", "error", "text size note"] as const).flatMap((shape) =>
+const cases = (["none", "lines", "error"] as const).flatMap((shape) =>
   (["light", "dark"] as const).flatMap((mode) =>
     ["en-GB", "es-ES"].map((locale) => ({ shape, mode, locale })),
   ),
@@ -25,15 +25,11 @@ it.each(cases)("switch dialog, $shape, $locale / $mode", async ({ shape, mode, l
       name: "Summer terrace",
       lines: shape === "lines" ? [t("appearance.dialog_brand_dark")] : [],
       error: shape === "error" ? codeMessage("theme.name_taken") : "",
-      textSizeNote: shape === "text size note",
     },
     mode,
   );
   const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
   expect(dialog.querySelectorAll("li")).toHaveLength(shape === "lines" ? 1 : 0);
-  expect(dialog.querySelectorAll("[data-test=switch-text-size]")).toHaveLength(
-    shape === "text size note" ? 1 : 0,
-  );
   await expectNoA11yViolations(host);
 });
