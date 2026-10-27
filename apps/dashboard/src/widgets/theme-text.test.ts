@@ -80,6 +80,14 @@ describe("the Text rows", () => {
       "text.weight.medium",
       "text.weight.bold",
     ]);
+    for (const box of [family, ...weights]) {
+      expect([box.hideLabel, box.search, box.stableWidth], box.name).toEqual([true, "never", true]);
+    }
+    expect(weights.map((box) => box.label)).toEqual([
+      "Normal weight",
+      "Medium weight",
+      "Bold weight",
+    ]);
     for (const box of weights) {
       expect(box.options.map((option) => option.label)).toEqual([
         "400",
@@ -220,6 +228,16 @@ describe("the Text rows", () => {
     ]);
   });
 
+  it("keeps each control's own change event inside the rows", async () => {
+    const el = await mount(draftOf());
+    const escaped: Event[] = [];
+    el.parentElement!.addEventListener("wt-change", (event) => escaped.push(event));
+    await chooseOption(combobox(el, "text.family"), "serif");
+    await chooseOption(combobox(el, "text.weight.bold"), "800");
+    await userEvent.click(stepper(el, "md").shadowRoot!.querySelectorAll("button")[1]!);
+    expect(escaped).toEqual([]);
+  });
+
   it("sends no change for a weight or typeface outside the lists", async () => {
     const el = await mount(draftOf());
     const seen = actions(el);
@@ -287,6 +305,16 @@ describe("the Text rows' layout", () => {
     const { name, value } = await rowAt(800);
     expect(box(value).left).toBeGreaterThanOrEqual(box(name).right);
     expect(box(value).top).toBeLessThan(box(name).bottom);
+  });
+
+  it("when wide starts the values where Advanced's colour rows start their Light column", async () => {
+    await page.viewport(1280, 900);
+    const { name, value } = await rowAt(800);
+    const gap = parseFloat(getComputedStyle(value.parentElement!).columnGap);
+    // The colour rows split the width 1 : 1.5 : 1.5 between two gaps.
+    expect(
+      Math.abs(box(value).left - box(name).left - ((800 - 2 * gap) / 4 + gap)),
+    ).toBeLessThanOrEqual(1);
   });
 });
 

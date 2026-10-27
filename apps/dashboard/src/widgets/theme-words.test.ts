@@ -731,6 +731,14 @@ describe("the Text rows' words", () => {
     expect(advancedSummary(both, [])).toBe("2 set by hand: Page (light), Normal text");
     const text: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { md: 16 } } };
     expect(advancedSummary(text, [])).toBe("1 set by hand: Normal text");
+    setLocale("es-ES");
+    expect(textNames(text)).toEqual([es["appearance.text.size.md"]]);
+    expect(advancedSummary(both, [])).toBe(
+      esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${esFill("appearance.hand_item", { name: es["appearance.colour.bg"], mode: ES_LIGHT })}, ${es["appearance.text.size.md"]}`,
+      }),
+    );
   });
 
   it("says what a size draws at a step other than 100%", () => {

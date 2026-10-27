@@ -145,7 +145,8 @@ export class ThemeTextRows extends LitElement {
       }
       @container (min-width: 600px) {
         .row {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+          /* The name column of Advanced's colour rows (1 : 1.5 : 1.5 between two gaps). */
+          grid-template-columns: calc((100% - 2 * var(--wt-space-4)) / 4) minmax(0, 1fr);
           align-items: start;
           column-gap: var(--wt-space-4);
         }

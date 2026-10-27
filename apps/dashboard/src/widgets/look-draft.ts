@@ -332,17 +332,25 @@ export function invalidTextCodes(draft: LookDraft): readonly TextField[] {
   );
 }
 
-export function textTouched(draft: LookDraft, field: TextField): boolean {
+export function textSetByHand(choices: ThemeChoices, field: TextField): boolean {
   const parts = partsOf(field);
-  const text = draft.choices.text;
   switch (parts.part) {
     case "family":
-      return text.family !== undefined;
+      return choices.text.family !== undefined;
     case "size":
-      return text.size?.[parts.key] !== undefined || draft.textCodes[parts.key] !== undefined;
+      return choices.text.size?.[parts.key] !== undefined;
     case "weight":
-      return text.weight?.[parts.key] !== undefined;
+      return choices.text.weight?.[parts.key] !== undefined;
   }
+}
+
+/** Set by hand, or a size whose box holds typed text. */
+export function textTouched(draft: LookDraft, field: TextField): boolean {
+  const parts = partsOf(field);
+  return (
+    textSetByHand(draft.choices, field) ||
+    (parts.part === "size" && draft.textCodes[parts.key] !== undefined)
+  );
 }
 
 export function anyTextSet(draft: LookDraft): boolean {

@@ -24,7 +24,7 @@ import { currentContentLanguages } from "@waitron/ui";
 import { catalogues, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
-import { TEXT_FIELDS, type TextField } from "./look-draft.js";
+import { TEXT_FIELDS, textSetByHand, type TextField } from "./look-draft.js";
 
 const ZONE_TABS: ReadonlySet<string> = new Set([
   "tab-danger-tint",
@@ -72,15 +72,8 @@ export function textFieldName(field: TextField): string {
   return textRowName(field.slice("text.".length) as Parameters<typeof textRowName>[0]);
 }
 
-function textSet(choices: ThemeChoices, field: TextField): boolean {
-  const [, part, key] = field.split(".");
-  if (part === "size") return choices.text.size?.[key as TextSizeKey] !== undefined;
-  if (part === "weight") return choices.text.weight?.[key as TextWeightKey] !== undefined;
-  return choices.text.family !== undefined;
-}
-
 export function textNames(choices: ThemeChoices): string[] {
-  return TEXT_ROWS.filter((field) => textSet(choices, field)).map(textFieldName);
+  return TEXT_ROWS.filter((field) => textSetByHand(choices, field)).map(textFieldName);
 }
 
 export function textAtStep(textScale: TextScale, drawn: number): string {
