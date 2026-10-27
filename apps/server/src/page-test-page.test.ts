@@ -1,7 +1,7 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it, vi } from "vitest";
@@ -409,6 +409,38 @@ describe("requesting a test page", () => {
 });
 
 describe("printing a test page", () => {
+  it("A965 sample language queues no office page when the request transaction cannot commit", async () => {
+    const v = await venue();
+    const office = await printer(v, v.agentOne);
+    await suite.db.execute(sql`create table a965_parent (id integer primary key)`);
+    await suite.db.execute(
+      sql`create table a965_child (id integer primary key, parent_id integer references a965_parent(id) deferrable initially deferred)`,
+    );
+    let bodyCompleted = false;
+    const turn = suite.db.withWriteLock.bind(suite.db);
+    const fault = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce((body) =>
+      turn(async () => {
+        const answer = await body();
+        await suite.db.execute(sql`insert into a965_child (id, parent_id) values (1, 999)`);
+        bodyCompleted = true;
+        return answer;
+      }),
+    );
+    try {
+      const response = await requestPage(v, office);
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+    } finally {
+      fault.mockRestore();
+    }
+    expect(bodyCompleted).toBe(true);
+    expect((await suite.db.execute(sql`select * from a965_child`)).rows).toEqual([]);
+    expect(await outcome(v, office)).toBeNull();
+    expect(await claim(v)).toBeUndefined();
+    const page = await requested(v, office);
+    expect((await claim(v))?.id).toBe(page.id);
+  });
+
   it("A965 sample language retains the request language across deferred fetch and active-page repeats", async () => {
     const documents: ReceiptDocumentInput[] = [];
     const v = await venue({

@@ -3661,9 +3661,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   starts (again after a server switch or an enrolment), so a change reaches those after a
   reload. The on-screen ticket follows each sale's own language.
 
-- The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
-  English dish names; Venue settings' Defaults card shows it as the saved language although it is not
-  offered.
+- The dev and demo seed's English mode stores `en-GB`; Venue settings' Defaults card shows it as
+  the saved language although it is not offered.
 
 **Bluetooth (read, not run, unless a line says otherwise):**
 

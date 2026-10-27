@@ -12,6 +12,8 @@
 
 ## Global constraints
 
+- **Implementation ruling, 2026-10-27:** capture the office sample’s receipt language inside the authorized transaction, then call `testPages.request(id, locale)` after it commits. This supersedes Task 3’s instruction to register the page inside the gate: the commit-failure case in `page-test-page.test.ts` reproduced a waiting page after a failed request, using a deferred foreign-key refusal at COMMIT. Keep the request’s captured language and active-page deduplication.
+
 - This plan changes documentation only. Source observations below were read at `4b1a64803`; no product tests, renderers or visual checks were run for those observations. All implementation and qualification steps remain future work.
 - Ask O1 before translating the two internal sample values. While unanswered, preserve their existing text; independent resource, payment-document and sample-language work may proceed under the existing coordination rules. A recommendation is not an owner answer.
 - Scope verbatim: “country-es receipt words gain English, shown on English screens, never printed on a Spanish receipt; say in plan where each shown. payment-slip.ts words and tender-refund-receipt.ts heading table move into Spain receipt words, slip prints in receipt language; sample-receipt.ts takes receipt language.”
