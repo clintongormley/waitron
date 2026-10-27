@@ -436,6 +436,8 @@ until A977).
   An earlier owner ruling calls its «Mesa 6» and «Café y tostada» internal sample values
   ([printers.md](printers.md), A754); ask whether point 3 changes that before translating them. If it
   changes a word printed on a simplified or full invoice, the owner lands it (2026-10-21 rule).
+  The [implementation plan](../superpowers/plans/2026-10-27-a965-receipt-language.md) traces receipt, payment and sample callers.
+  Implementation remains open; O1 holds translation of the two internal sample values, not independent language plumbing.
 - **A966 — point 2: emails.** `account-email.ts:38–72, 125` and `attendance-email.ts:18–22, 46, 49`
   move into `apps/server/src/i18n/`. No visible change. After A964.
 - **A967 — point 2: printed pages, in two pull requests.** The working-time PDF's frame

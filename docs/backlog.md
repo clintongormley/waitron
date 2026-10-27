@@ -5790,7 +5790,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   before implementation. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A965. Spain's receipt words gain English; the card slip prints in the receipt language, and the
-  refund receipt's heading moves into Spain's pack.** [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  refund receipt's heading moves into Spain's pack.** Build from the [implementation plan](superpowers/plans/2026-10-27-a965-receipt-language.md).
+  Ask O1 before translating the two internal sample names; preserve them while unanswered.
+  Recheck the shared receipt/payment branches before implementation; the owner lands invoice-word changes.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A966. The server's emails move into `apps/server/src/i18n/`** (account and missed-clocking
   emails). No visible change. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
