@@ -2737,9 +2737,10 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **"How it prints" follows a reframe in the image library** (lane A ruling 2026-10-25, slice 9
   plan D10): it asks again when the main image's `display` address changes. Not taken: following
   the image's name only, which would keep showing the old framing. Since 2026-10-27 (the slice's
-  review) the route's answer names the `display` address it drew from, and the picture asks again
-  when the library's address changes to one it was not drawn from, so a reframe heard before the first
-  lookup is followed too; and while the library no longer holds the image the picture is not drawn.
+  review) the route's answer names the `display` address it drew from, and the picture compares it
+  with the library's, so a reframe heard before the first lookup is followed too; and while the
+  library no longer holds the image the picture is not drawn. Known gap: a reframe undone while the
+  picture is being drawn can leave it on the undone framing until the next change.
 - **No text-size line in the switch or delete dialog** (owner, 2026-10-25): switching or deleting
   a theme says nothing about the tills' text size. Not taken: "Text on the tills changes size too."
   in the switch dialog, which slice 10a showed and slice 9b removed.

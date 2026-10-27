@@ -297,9 +297,8 @@ caption beside it on a wide card and under it on a phone, and, at zero dots, the
 CLAUDE.md §4's in-flight rule).
 
 (2026-10-27, from the slice's review: the widget no longer takes the first address it hears as a
-baseline. It asks again when the library's address changes to one the shown answer was not drawn
-from, the first arrival included, and draws nothing while the library no longer holds the image,
-asking afresh if it returns.)
+baseline; it compares the library's address with the one the answer was drawn from, and draws
+nothing while the library no longer holds the image, asking afresh if it returns.)
 
 **D11. Nothing more for slice 7's paths.** Printing reads the dots slice 7 keeps current: a save
 stores them (`theme-store.ts:83-89`), a library reframe or replaced source redraws them for every
