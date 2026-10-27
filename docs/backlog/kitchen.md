@@ -83,7 +83,7 @@ Left open:
 
 ## Two follow-ups 3c-1 left
 
-- **Two follow-ups 3c-1 left:** units added to a discounted pay-first dish held in a group get a
+- Units added to a discounted pay-first dish held in a group get a
   held kitchen record of their own while the dish has none — observed on `main`, its history not
   checked, and whether it is wanted remains open; and a device's made-here stations do not travel
   in configuration export, because devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
@@ -126,7 +126,7 @@ and now records its stations. Left open by A756 PR 6's review.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
-- **A long word in a routing-grid row name still splits at 390 px** — since A507 part 2 a name
+- Since A507 part 2 a name
   breaks between words where each word fits ("AGAVE", "Café con / leche" stay whole), but a word
   wider than what is left of the capped first column beside the indent and the arrow still breaks
   inside itself ("BOCAD/ILLOS", "CLAN/DESTI/NA" one level down). The column is held at 96 px by the
@@ -137,7 +137,7 @@ and now records its stations. Left open by A756 PR 6's review.
 
 ## Routing reads do work only one screen uses
 
-- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review:
+- Left open by A366 slice 4 Part A's review:
   every read of the routing model works out each period's products (`readRoutingPeriods`,
   `packages/venue-service/src/routing-periods.ts`), which only the routing cell editor needs, so the
   catalogue's folder read pays for it too; and the Opening hours model reads every period's routing
@@ -203,8 +203,7 @@ printer and one notice per station.
 
 ## A routing period line naming another location's period is flagged but never drawn
 
-- **A routing period line naming another location's period is flagged but never drawn** (left open
-  by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
+- Left open by A455, #1492: the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
   an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
   Fix: show the line and make removing it an explicit choice.
@@ -234,16 +233,14 @@ calls `GET /api/parties/:id/print-problems` and the printing problems arrive in 
 
 ## `GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller
 
-- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
-  caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
+- Found while removing the Stations tab's health read (A366 slice 4 decision 34): the
   route (`apps/server/src/management-api.ts`) and the client method
   (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
   Decide whether to remove them or use them; slice 4 Part A leaves both.
 
 ## A selected tab that grows while its strip keeps its width is not scrolled back into view
 
-- **A selected tab that grows while its strip keeps its width is not scrolled back into view**
-  (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a
+- (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a
   longer label can leave it cut at the strip's edge, and `main` before #1540 behaved the same. Since
   #1540 the fade is resized when the tab grows; scrolling it back was not added because doing so
   broke the "leaves a strip the reader scrolled where it is when only its height changes" case.
@@ -315,7 +312,7 @@ Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitche
 
 ## A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question)
 
-- **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).** A card whose
+- A card whose
   dishes are all Ready keeps its minutes and band, so after a quiet hour it reads "277 min" and
   pulses as forgotten, while the header line's "late" leaves it out (A797 slice 8, D9). Before slice
   8 the Ready column's dishes carried the age border too. Should a Ready card stop ageing, age from
