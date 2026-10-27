@@ -1632,6 +1632,7 @@ function saleRefusalOf(
       }
     | undefined;
   switch (refusal?.code) {
+    case "sale.full_invoice_unavailable":
     case "fiscal.fingerprint_mismatch":
       return { code: refusal.code };
     case "storage.disk_full":

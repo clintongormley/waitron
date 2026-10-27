@@ -298,7 +298,8 @@ The till offers **Full invoice**. A saved Spanish recipient can be invoiced thro
 payments or an unpaid departure. Email and A4 originals use the existing delivery queue. Direct
 counter cash/manual-card sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`) and
 unissued counter collection still refuse F1 with `sale.full_invoice_unavailable` until A555.
-Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
+The shared Full invoice control and automatic recipient prompt are visible at the counter;
+payment still refuses that choice. A555 must complete that path. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
 zone setting creates no separate public issuance route. Zero-total F1 counter requests retain
 the same refusal. A saved F1 choice still permits the bill to grow above the simplified ceiling;
 the existing recipient checks and F1 series selection remain in place.

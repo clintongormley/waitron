@@ -2026,7 +2026,7 @@ describe("till-app simplified-invoice limit", () => {
     expect(c.store.total).toBe("3.00");
     expect(c.store.lines).toHaveLength(1);
     expect(said(el)).toBe(
-      "El pedido pasaría de 3,00 €, el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
+      "El pedido pasaría de 3,00 €, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
     );
   });
 
@@ -2186,7 +2186,7 @@ describe("till-app simplified-invoice limit", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(said(el)).toBe(
-      "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
+      "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
     );
     expect(c.store.lines).toHaveLength(1);
   });
@@ -2202,8 +2202,36 @@ describe("till-app simplified-invoice limit", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(banner(el)!.textContent).toBe(
-      "Este pedido supera el límite de una factura simplificada. Elige Factura completa para la cuenta o quita artículos.",
+      "Este pedido supera el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
     );
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "Counter payment cannot issue a full invoice yet. Use a table bill and its payments.",
+    ],
+    [
+      "es-ES",
+      "El cobro de mostrador todavía no puede emitir una factura completa. Usa una cuenta de mesa y sus pagos.",
+    ],
+  ])("explains the counter F1 refusal in %s and keeps its basket", async (locale, message) => {
+    try {
+      const { el } = await mountApp({
+        recordSale: vi
+          .fn()
+          .mockRejectedValue({ code: "sale.full_invoice_unavailable", status: 409 }),
+      });
+      const c = await toCounter(el);
+      setLocale(locale);
+      c.store.addProduct(c.products[0]!, "1");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(banner(el)!.textContent!.trim()).toBe(message);
+      expect(c.store.lines).toHaveLength(1);
+    } finally {
+      setLocale("es-ES");
+    }
   });
 
   it.each([
