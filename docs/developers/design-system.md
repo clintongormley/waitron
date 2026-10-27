@@ -4219,6 +4219,17 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   Undo" line until the value changes or the editor closes. Reset all to worked-out sits at the
   bottom, at the right. While a value shows an error, `has-error` holds the section open; a warning does not open
   it.
+- **Advanced's Text rows** (`apps/dashboard/src/widgets/theme-text.ts`, A841 slice 11) sit after
+  the colour rows and before Reset all, under an `h3` "Text", until slice 12 folds Advanced into
+  sections: Typeface and the three weights are `wt-combobox`es (`hide-label`, `search="never"`,
+  `stable-width`; weights drawn as digits), each size a `wt-number-stepper` from 8 to 40 with its −
+  and + named in the screen's language and "px" beside it, hidden from assistive technology. Rows
+  read "Worked out" or carry the "Set by hand" tag and a "Use worked-out size / typeface / weight"
+  link, as the colour rows do; from a 600 px section the name column is the colour rows' name
+  column. Away from 100% each size row has an "at {step}: {size} px" line; under it, a size drawn
+  under 12 px gets the warning line and its fix button, and one drawn above Waitron's own size at
+  130% gets a note in `--wt-color-text-muted` with no icon, and its own fix button. No "fixed from
+  · Undo" line follows a text fix.
 - **Save, or Save as new theme…, with a warning opens the Hard to read dialog**
   (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered

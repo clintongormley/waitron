@@ -27,7 +27,9 @@ elecciones que lo forman:
   (estándar)», o un paso mayor, como «115 %».
 - **Colores fijados a mano**: los colores del tema que recibieron un valor propio en lugar de
   calcularse a partir del color de marca, o **Ninguno**. La sección **Avanzado** del editor los
-  fija, como explica «Fija colores a mano», más abajo.
+  fija, como explica «Fija colores y texto a mano», más abajo.
+- **Texto fijado a mano**: los ajustes de texto que recibieron un valor propio, por ejemplo
+  **Texto pequeño**, o **Ninguno**. Los explica «Fija el texto a mano», más abajo.
 
 La nota al pie de la tarjeta explica que un mismo aspecto se aplica al panel y a todas las cajas.
 Cada tema tiene una versión clara y una oscura, y cada pantalla muestra una de ellas, según su
@@ -114,6 +116,9 @@ lo toma la próxima vez que se inicia.
 El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de cocina, la etiqueta
 del equipo y el kit de recuperación del nodo. El botón de inicio de sesión de Google conserva el
 tamaño de Google.
+
+Un tamaño fijado a mano también crece con el control, como explica [Fija el texto a
+mano](appearance.md#text-by-hand).
 
 ## Añade tu logotipo {#logo}
 
@@ -210,10 +215,10 @@ de ticket guardados del departamento: entonces no muestra ningún logotipo.
 Cuando no se pueden leer los ajustes de ticket de un departamento, sus tickets y facturas no
 imprimen ningún logotipo, en lugar de uno que podría no ser el correcto.
 
-## Fija colores a mano {#advanced}
+## Fija colores y texto a mano {#advanced}
 
 Debajo de las elecciones y de la vista previa, el editor tiene una sección titulada **Avanzado:
-fijar colores a mano**. Empieza cerrada cada vez que se abre el editor, y su línea cerrada dice qué
+fijar colores y texto a mano**. Empieza cerrada cada vez que se abre el editor, y su línea cerrada dice qué
 está fijado a mano: «Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.»,
 o un recuento y los nombres de los colores, por ejemplo «2 fijados a mano: Página (versión clara),
 Texto (versión clara)». Mientras haya colores o tamaños de texto fijados a mano que se leen mal, la línea añade
@@ -228,8 +233,10 @@ cada valor, o debajo en una pantalla estrecha, un color calculado dice **Calcula
 valores, con el selector o escribiendo un código, fija ese valor a mano y deja el del otro tipo de
 pantalla como estaba. Un valor fijado a mano lleva la marca **Fijado a mano**, con **Usar el color
 calculado** debajo para volver al valor que calcula Waitron. **Volver a calcularlos todos**, al
-final de la sección, devuelve todos los valores a calculados; aparece desactivado mientras no hay
-nada fijado a mano.
+final de la sección, devuelve todos los valores a calculados, también los del texto; aparece
+desactivado mientras no hay nada fijado a mano. Después de los colores, bajo **Texto**, vienen las
+filas del tipo de letra, los tamaños de texto y los grosores, que explica «Fija el texto a mano»,
+más abajo.
 
 Un color fijado a mano se queda como lo fijaste cuando cambias el color de marca, el fondo o las
 esquinas. Si cambias el color de marca o el fondo mientras hay colores fijados a mano, una nota
@@ -242,6 +249,49 @@ se descarta el tono legible que se hubiera elegido allí.
 Un código debe ser `#` seguido de seis dígitos o letras de la a a la f. Si no lo es, Guardar te lo
 indica debajo de esa casilla y no guarda nada, y Avanzado se abre para mostrarlo y no se puede cerrar
 hasta que corriges el código.
+
+## Fija el texto a mano {#text-by-hand}
+
+Bajo **Texto**, después de los colores, Avanzado tiene ocho filas: **Tipo de letra**, **Texto
+pequeño**, **Texto normal**, **Texto grande**, **Texto muy grande**, **Grosor normal**, **Grosor
+medio** y **Grosor de negrita**. Cada una muestra el valor propio de Waitron, con la marca
+**Calculado**, hasta que lo cambias:
+
+- **Tipo de letra** ofrece **El del dispositivo**, el tipo de letra que usa cada pantalla salvo que
+  se le indique otro, y **Con serifa**, un tipo de letra con pequeños remates en los extremos de las
+  letras. Qué tipo de letra con serifa dibuja una pantalla depende del dispositivo.
+- Un tamaño es un número entero de píxeles del 8 al 40, escrito o ajustado con − y +. Los de Waitron
+  son 12, 14, 18 y 22.
+- Un grosor es 400, 500, 600, 700 u 800: cuanto más alto, más grueso. Los de Waitron son 400, 500 y 600.
+
+Cambiar una fila la fija a mano, aunque elijas el valor propio de Waitron: su valor pasa a negrita,
+lleva la marca **Fijado a mano**, y **Usar el tamaño calculado**, **Usar el tipo de letra
+calculado** o **Usar el grosor calculado**, debajo, la devuelve. **Volver a calcularlos todos**
+devuelve las filas del texto junto con los colores.
+
+Un tamaño que fijas es el tamaño al 100 %, y el control **Tamaño del texto** lo agranda igual que
+los de Waitron. Fuera del 100 %, cada fila de tamaño dice lo que dibuja, por ejemplo «al 115 %: 16
+px», y la línea bajo el control da los tamaños dibujados.
+
+Un tamaño dibujado por debajo de 12 px avisa bajo su fila, por ejemplo «Texto pequeño: 10 px es
+menor que 12 px; un texto tan pequeño suele leerse mal.», con un botón que fija el tamaño más
+pequeño que dibuja 12 px: **Usar 12 px** al 100 %, o **Usar 9 px (12 px al 130 %)** con el control
+al 130 %. Cuenta como algo que se lee mal, igual que un color: lo cuentan la línea cerrada de
+Avanzado, **Corregir todos**, el diálogo **Difícil de leer** y la tarjeta Temas.
+
+Un tamaño dibujado por encima del tamaño con el que Waitron comprueba las cajas, que es el de
+Waitron al 130 % (16, 18, 23 y 29 px), recibe en cambio una nota: «Texto muy grande: 33 px es mayor
+que el tamaño con el que Waitron comprueba las cajas; los nombres largos pueden ocupar más líneas o
+cortarse.», con un botón que fija el tamaño más grande dentro de ese límite, por ejemplo **Usar 22
+px (29 px al 130 %)**. La nota no es un aviso: nada la cuenta y puedes guardar el tamaño tal cual.
+
+Un tamaño que no es un número entero del 8 al 40 no se usa. Guardar indica «Introduce un número
+entero del 8 al 40.» debajo, no guarda nada y abre Avanzado para mostrarlo.
+
+El tipo de letra y los grosores llegan a todas las pantallas que pinta el tema, y toda palabra en
+negrita, todo título y toda cabecera de tabla siguen el **Grosor de negrita**. El papel impreso, el
+botón de inicio de sesión de Google y el tipo de letra de los códigos conservan la letra de
+Waitron.
 
 ## Cuando un color se lee mal {#hard-to-read}
 
@@ -277,6 +327,10 @@ también las de los colores fijados a mano.
 
 Waitron nunca rechaza un color. Un aviso es un consejo: puedes guardar el color que elegiste y
 quedarte con él.
+
+Un tamaño de texto dibujado por debajo de 12 px cuenta igual como algo que se lee mal, y **Corregir
+todos** y **Corregir y guardar** también aplican su corrección: consulta [Fija el texto a
+mano](appearance.md#text-by-hand).
 
 ## Guarda un tema {#save}
 
