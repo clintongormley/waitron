@@ -1047,7 +1047,8 @@ it("until Task 10b, with the database present and the setup password, a damaged 
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
-async function presentDamagedPicks(options: { seat?: boolean } = {}) {
+/** `extraSeat` installs a copy of the frozen module, seat and all, under a name the attempt never froze. */
+async function presentDamagedPicks(options: { seat?: boolean; extraSeat?: boolean } = {}) {
   const base = await abandonedAttempt();
   const { f } = base;
   await damagePicks(f);
@@ -1088,8 +1089,17 @@ async function presentDamagedPicks(options: { seat?: boolean } = {}) {
                 },
               },
         )
-      : f.host.modules;
-  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules } });
+      : f.host.modules!;
+  const installed = options.extraSeat
+    ? [
+        ...modules,
+        { ...f.host.modules!.find((module) => module.name === f.module)!, name: "probe-extra" },
+      ]
+    : modules;
+  const actions = createFirstSetupResolutionActions({
+    ...f,
+    host: { ...f.host, modules: installed },
+  });
   const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
   const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
   return { ...base, actions, owner, ids, timeFloorMs };
@@ -1121,6 +1131,13 @@ it("with the database present, a damaged kept picks file still needs the recover
 it("with the database present, a damaged kept picks file of a frozen module with no start-again seat leaves the summary refused", async () => {
   const { f, actions, owner, ids } = await presentDamagedPicks({ seat: false });
   const response = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+
+it("with the database present, a damaged kept picks file read only by a module the attempt never froze leaves the summary refused before the password", async () => {
+  const { f, actions, ids } = await presentDamagedPicks({ seat: false, extraSeat: true });
+  const response = await postSummary(routes(f, actions), ids, ownerHeaders(f.ownerAttempt));
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
 });

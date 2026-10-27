@@ -403,7 +403,8 @@ export function createFirstSetupResolutionActions(
           const recovery = found?.kind === "stopped" ? found.shown : undefined;
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
-          const presentPicksOnly = inspection.database !== "missing" && recovery === undefined;
+          if (inspection.database !== "missing" && found?.kind === "unemptied") unavailable();
+          const presentPicksOnly = inspection.database !== "missing" && found === undefined;
           if (presentPicksOnly) {
             const attempt = await host.store.readForRepair().catch(() => null);
             if (

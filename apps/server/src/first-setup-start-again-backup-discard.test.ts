@@ -2,7 +2,16 @@ import { createHash, randomBytes } from "node:crypto";
 
 import "node:fs";
 
-import { access, lstat, readFile, readdir, utimes, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  readFile,
+  readdir,
+  symlink,
+  unlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 
 import { Socket } from "node:net";
 
@@ -712,6 +721,35 @@ it("with the database present and no recovery, the summary refuses setup.not_rea
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await expectNothingWritten(f, before);
 });
+
+it.each([
+  ["damaged", true],
+  ["intact", false],
+] as const)(
+  "with the database present, an abandoned recovery not yet emptied beside a %s picks file refuses the summary setup.not_ready",
+  async (_label, damaged) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    const planted = join(f.record.target.target.stateDir, "planted");
+    await symlink("/nonexistent", planted);
+    await expect((await presentOver(f, f.service)).run()).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+    await unlink(planted);
+    if (damaged)
+      await writeFile(join(f.roots.stateDir, "module-preparation-state.json"), "{damaged");
+    const { owner, ids } = await signedIn(f.host);
+    const actions = createFirstSetupResolutionActions({
+      ...f.roots,
+      host: databasePresent(f.host),
+      backupRecovery: f.service,
+    });
+    await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+  },
+);
 
 it.each([
   ["the venue database holds rows", (host: Host) => databasePresent(host, "occupied")],
