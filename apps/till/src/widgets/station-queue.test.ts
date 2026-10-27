@@ -3455,6 +3455,52 @@ describe("till-station-queue: a card's layout", () => {
     expect(rect(age).left - rect(group).right).toBeGreaterThan(space3);
   });
 
+  it.each(["en-GB", "es"])(
+    "a long heading wraps inside its card at 390 px, its minutes on one line (%s)",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        await pageAt(390, 844);
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [
+            ageBill(9, [ageDish("first-bill", 0, { group: fired })], { label: "T1" }),
+            ageBill(11, [ageDish("second-bill", 0, { group: fired })], {
+              label: null,
+              formerNumbers: [9],
+            }),
+          ],
+          stationId: "st-1",
+          now: AGE_NOW,
+        });
+        const card = cardOf(el, 9);
+        const head = card.querySelector<HTMLElement>(".ticket-head")!;
+        expect(head.querySelectorAll(".number")).toHaveLength(2);
+        expect(head.querySelector(".label")).not.toBeNull();
+        expect(head.querySelector(".group-name")).not.toBeNull();
+        const age = head.querySelector<HTMLElement>(".age")!;
+        expect(age.textContent!.replace(/\s+/g, " ").trim()).toBe(`20 ${t("station.min")}`);
+        const style = getComputedStyle(head);
+        const contentRight =
+          rect(head).right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+        const cardStyle = getComputedStyle(card);
+        const cardContentRight =
+          rect(card).right -
+          parseFloat(cardStyle.borderRightWidth) -
+          parseFloat(cardStyle.paddingRight);
+        expect(rect(age).right).toBeLessThanOrEqual(contentRight + 0.5);
+        expect(rect(age).right).toBeLessThanOrEqual(cardContentRight + 0.5);
+        // Its line-height computes to "normal", so count the lines its words are drawn on.
+        const words = document.createRange();
+        words.selectNodeContents(age);
+        const lineTops = new Set([...words.getClientRects()].map((line) => Math.round(line.top)));
+        expect(lineTops.size).toBe(1);
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
   it.each([
     [1280, 800],
     [390, 844],

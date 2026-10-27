@@ -155,6 +155,7 @@ export class TillStationQueue extends LitElement {
 
       .ticket-head {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
         min-height: var(--wt-tap-min);
