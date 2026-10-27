@@ -17,7 +17,7 @@ does not exist.
 Left open:
 
 - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
-- `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
+- `*** REPRINT HH:MM ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
   `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and
   cancel line follow the server's locale (`WAITRON_TILL_LOCALE`, `es-ES`
   when unset), so by default a held slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and
@@ -184,14 +184,6 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 `String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
 slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
 fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
-
-## A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17)
-
-Today a change or removal of the order's kitchen note prints one slip and
-raises one acknowledged notice for each affected dish (A743's default). Print one slip per printer
-listing the affected dishes, and raise ONE notice the cook acknowledges once per station. Done
-when `apps/server/src/order-kitchen-note.corrections.test.ts`'s three-dish edit shows one slip per
-printer and one notice per station.
 
 ## Supervisors have no dashboard path to a prep station's times
 
@@ -528,8 +520,9 @@ the change (plan PR 8 Decision 1).
 
 - **A whole-order kitchen-note change prints one slip per printer and raises one notice per
   station (owner, 2026-10-17).** The slip lists the affected dishes, and the cook acknowledges the
-  notice once per station, replacing A743's default of a slip and a notice per dish. To be built
-  as A807.
+  notice once per station, replacing A743's default of a slip and a notice per dish. Built in A807
+  (2026-10-27). The unit is the bill: a party with two bills gets a slip per printer and a notice
+  per station for each bill, each naming its own bill.
 
 - **Dishes that arrive in a party get a kitchen group at the receiving party (P16, owner,
   2026-10-17: kept).** Spec §15's "leaves with them outside any group" is read as the side the bill
