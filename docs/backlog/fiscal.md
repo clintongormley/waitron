@@ -1157,7 +1157,10 @@ October.
    which is why the scope page's old text could not be recovered. From now on it keeps, in the
    library repository, the normalised text of every HTML source and a copy of every PDF and
    schema it watches, updated by `--refresh` alongside the fingerprints, so the next alert can
-   show exactly what changed. Seed the archive with today's copies of the FAQ pages, saved on
-   2026-10-27 in `~/waitron-campaign-shared/aeat-faq-2026-10-27/` (raw HTML, plus the Wayback
-   copy of the index from 2026-09-20). Ignoring the date stamp is the wrong fix: a new date is
+   show exactly what changed. Seed the archive from
+   `~/waitron-campaign-shared/veri-factu-sources-2026-10-27/`: a copy, taken 2026-10-27, of
+   every source the watch follows (the AEAT pages, PDFs and schemas, and a tarball of each
+   watched GitHub repository at its watched commit), plus the Wayback copy of the FAQ index from
+   2026-09-20. Its `MANIFEST.tsv` records that 24 of the copies match the 2026-09-26 baseline
+   fingerprints and the 19 FAQ pages do not. Ignoring the date stamp is the wrong fix: a new date is
    AEAT telling us it revised the pages.
