@@ -142,9 +142,8 @@ for this docs task; no provider work is authorised.
 
 ## `docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node version the deleted comment had
 
-- Docs: `docs/developers/conventions-data.md`'s `busy_timeout` receipt, which
-  `recovery-lock.ts` now points at, should carry the date and Node version the deleted comment had
-  (2026-09-24, Node v26.7.0). Tests and code, read not run unless stated: three `adopt.test.ts`
+- `recovery-lock.ts` now points at this receipt; the missing date and version are
+  2026-09-24, Node v26.7.0. Tests and code, read not run unless stated: three `adopt.test.ts`
   titles say "before any mutation", but by then the primary has reserved an identity for the
   standby and added it to its membership list (the tests assert only on the mirror's own
   database); `adoptFromPrimary` (`adopt.ts`) spreads one adoption across several transactions with
@@ -162,10 +161,8 @@ for this docs task; no provider work is authorised.
 
 ## The boot-time fetch is given only the URL … and boot never reads the `superseded` that `reconcileMembershipOnBoot` returns
 
-- **Still open**
-  (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still open after A63**
-  in the #657 item above), and boot never reads the `superseded` that
-  `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
+- (Read, not run.) The fetch is item (ii) of **Still open after A63** above;
+  `reconcileMembershipOnBoot` is called in `apps/server/src/boot.ts`.
   `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
   `enrol-rate-limit.ts` keeps
   one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
@@ -262,8 +259,7 @@ Cloud's production store still needs its own run.
 
 ## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
 
-- The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
-  restored copy holds: a copy whose `nodes.public_key` for this node was rewritten, with its
+- A copy whose `nodes.public_key` for this node was rewritten, with its
   document re-signed by the matching key, passes, and the next term is signed over the added node
   (the case "passes a document re-signed with a key the copy's own node row was changed to name"
   pins that).
@@ -274,12 +270,7 @@ Cloud's production store still needs its own run.
   checks only that it can be read and is shaped as a document (A53); a start still finishing an
   adoption checks neither. Promotion, `retireSelf` and the standby chart append
   (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
-  sign over the held row without checking it. Gating promotion on the same check was measured and
-  not done, because it would refuse a genuine document: on 2026-09-26 a scratch case built the way
-  `promote.test.ts` builds a mirror found, after `setDeploymentMode(…, "mirror")` alone (what
-  `adoptFromPrimary` leaves), no document and an empty trust set; after
-  `establishReservedStandbyIdentity`, a trust set naming the standby alone; and a document the
-  primary signed with its real key, written there, verified as `untrusted_signer`. The owner's
+  sign over the held row without checking it. The owner's
   decision (2026-09-26) is under the failover residuals ("a standby checks a promotion against the
   primary's key"); a restored mirror's own start is not covered by it.
 
@@ -519,7 +510,7 @@ and documentation checks qualify no composed network or recovery lifecycle.
 ## A mirror keeps a renamed server's old chart (A917)
 
 A mirror node is given the venue's chart
-when it is paired; A917's round-3 review found no path that delivers a later one, so after a
+when it is paired; no path was found that delivers a later one, so after a
 rename its copy would name the old address until it is paired again. No reader routing by a
 mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
 
@@ -572,12 +563,12 @@ the field into text before checking it, so `["ready"]` passes as `"ready"`:
 `apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
 `cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
 `cloud-replacement.ts` (Cloud's `state`). A689's first PR fixed the same pattern in
-`cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
-(2026-10-15), not measured against a real Cloud.
+`cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Not measured against a
+real Cloud.
 
 ## Loose ends left by the SQLite failover-loop prototype gate
 
-Left open by #425; receipts in
+Receipts in
 [the results note](../research/2026-09-16-sqlite-failover-prototype.md).
 
 - **Validate every supported object store.**
@@ -594,10 +585,9 @@ Left open by #425; receipts in
 
 ## Task 1a — node filters and unverified concurrency claims
 
-Deny's delete is the one
-join-request node filter no test fails without (the `requirePending` read before it already
-refuses another node's row); and the run-it review did not reach three claims within its budget —
-holders torn by a concurrent promotion, credential sealing, and scheduler takeover.
+Deny's delete is the one join-request node filter no test fails without (the `requirePending`
+read before it already refuses another node's row). Holders torn by a concurrent promotion,
+credential sealing and scheduler takeover remain unverified.
 
 ## Loose ends left by SQLite slice 2 Task 9a
 
@@ -605,7 +595,7 @@ holders torn by a concurrent promotion, credential sealing, and scheduler takeov
   asserts it.
 - A comment claims more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
   says a signing failure "leaves the node exactly as it was". Signing empties pending
-  `change_log` rows (measured by #655's Codex seat), so they are not strictly untouched; no case
+  `change_log` rows, so they are not strictly untouched; no case
   losing a real one is known. Narrow it the next time the file is edited.
 - [Restore fencing when the cloud peer does not answer](#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker).
 - The pointer's term is taken without checking its signature, as the supervisor already does, so
@@ -627,7 +617,7 @@ writers live on, or the triggers stop writing it directly and something above th
 
 ## A promoting standby may list itself with an empty contactUrl
 
-Nothing the #600 review could find copies `node_membership` from the primary to a standby. A
+No path was found that copies `node_membership` from the primary to a standby. A
 standby whose own held membership list omits it takes the fallback in `nextStandings`
 (`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
 `routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
