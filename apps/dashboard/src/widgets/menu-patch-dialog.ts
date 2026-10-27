@@ -10,6 +10,8 @@ import {
   subscribeContentLanguages,
   visuallyHiddenStyles,
   type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -280,6 +282,9 @@ export class MenuPatchDialog extends LitElement {
    * could drop a change the answer's refusal still has to place, so it waits for the answer. */
   #held: { answer: LiveMenu | null } | null = null;
   #scope: DraftScope<MenuPatchChange[]> | undefined;
+  #leave: LeaveCoordinator | undefined;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
   /** Replaced whenever the dialog opens or closes, so an answer to an earlier opening is ignored. */
   #session = {};
   #taxCache: { key: string; options: { value: string; label: string }[] } | null = null;
@@ -346,14 +351,17 @@ export class MenuPatchDialog extends LitElement {
     this.#typed = new Map();
     this.#scope?.dispose();
     this.#scope = undefined;
+    this.#leave = undefined;
     if (wanted === null) return;
-    this.#scope = draftScopeFor<MenuPatchChange[]>(this, {
+    const { coordinator, scope } = draftScopeFor<MenuPatchChange[]>(this, {
       id: this,
       current: () => this.#current(),
       snapshot: (value) => structuredClone(value),
       equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
       restore: () => this.#discard(),
-    }).scope;
+    });
+    this.#scope = scope;
+    this.#leave = coordinator;
     void this.#load(wanted);
   }
 
@@ -452,7 +460,15 @@ export class MenuPatchDialog extends LitElement {
 
   #review(): void {
     if (saveActionState(this.#scope).unchanged || this.#hasErrors()) return;
-    this.step = "review";
+    void this.#toStep("review", "h3");
+  }
+
+  /** The button pressed to change step is gone afterwards; without a new focus inside the dialog,
+   * Escape and Tab start from the page behind it. */
+  async #toStep(step: "edit" | "review", focus: string): Promise<void> {
+    this.step = step;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(focus)?.focus();
   }
 
   async #putLive(): Promise<void> {
@@ -613,6 +629,7 @@ export class MenuPatchDialog extends LitElement {
       heading=${heading}
       aria-label=${this.menuName}
       .dismissible=${!this.busy}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => {
         if (event.target !== event.currentTarget) return;
         this.#close();
@@ -673,9 +690,7 @@ export class MenuPatchDialog extends LitElement {
                 variant="secondary"
                 data-test="keep-editing"
                 ?disabled=${this.busy}
-                @click=${() => {
-                  this.step = "edit";
-                }}
+                @click=${() => void this.#toStep("edit", '[data-test="review"]')}
                 >${t("menu_patch.keep_editing")}</wt-button
               >${reload}<wt-button
                 variant=${action.variant}
@@ -705,7 +720,7 @@ export class MenuPatchDialog extends LitElement {
     const languages = currentContentLanguages();
     return html`<div class="review" data-test="review-step">
       ${this.#renderDropped()}
-      <h3>${t("menu_patch.review_heading")}</h3>
+      <h3 tabindex="-1">${t("menu_patch.review_heading")}</h3>
       <ul class="changes">
         ${changeLines(this.live!.document, this.changes, languages).map(
           (line) => html`<li data-test="review-line">${line}</li>`,
