@@ -43,7 +43,7 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
-import { readSeriesPicks } from "./start-again-name-records.js";
+import { readSeriesPicks, seriesPicksUnreadable } from "./start-again-name-records.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -88,6 +88,15 @@ function unused(state: FirstSetupState) {
       ),
   );
 }
+function frozenModuleNames(state: FirstSetupState): string[] {
+  return [
+    ...new Set(
+      [state, ...state.previous].flatMap((attempt) =>
+        attempt.frozen.modules.map(({ module }) => module),
+      ),
+    ),
+  ];
+}
 /** Outside evidence refuses Start again, so only the attempt's own public evidence is read here. */
 async function gatherStartAgainFloor(
   roots: FirstSetupRoots,
@@ -99,9 +108,7 @@ async function gatherStartAgainFloor(
   databaseMissing: boolean,
 ) {
   const attempts = [state, ...state.previous];
-  const names = [
-    ...new Set(attempts.flatMap((attempt) => attempt.frozen.modules.map(({ module }) => module))),
-  ];
+  const names = frozenModuleNames(state);
   if (names.length === 0)
     return { floor: recoveryFloor, known: null, recoveryRecordDamaged: false };
   if (modules === undefined) unavailable();
@@ -505,8 +512,18 @@ export function createFirstSetupResolutionActions(
             return marker;
           };
           let marker = await markerFor(discarding);
-          if ((recoveryRecordDamaged || discardsStopped) && request.owner === undefined)
-            throw new AppError("setup.start_again_password_required", {});
+          const picksDamaged =
+            !missing &&
+            host.modules !== undefined &&
+            (await seriesPicksUnreadable(roots, host.modules, frozenModuleNames(state)));
+          if (
+            (recoveryRecordDamaged || discardsStopped || picksDamaged) &&
+            request.owner === undefined
+          )
+            throw new AppError(
+              "setup.start_again_password_required",
+              picksDamaged ? { seriesPicksUnreadable: true } : {},
+            );
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
           const gathered = await gatherStartAgainFloor(
