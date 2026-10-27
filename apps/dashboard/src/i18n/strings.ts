@@ -3130,7 +3130,6 @@ export const en = {
   "appearance.text.weight.bold": "Bold weight",
   "appearance.text_too_small":
     "{name}: {size} px is smaller than 12 px; text that small is often hard to read.",
-  "appearance.text_group": "Text",
   "appearance.typeface.system": "The device's own",
   "appearance.typeface.serif": "Serif",
   "appearance.text_px_label": "{name}, in pixels",
@@ -6620,7 +6619,6 @@ export const es: Record<StringKey, string> = {
   "appearance.text.weight.bold": "Grosor de negrita",
   "appearance.text_too_small":
     "{name}: {size} px es menor que 12 px; un texto tan pequeño suele leerse mal.",
-  "appearance.text_group": "Texto",
   "appearance.typeface.system": "El del dispositivo",
   "appearance.typeface.serif": "Con serifa",
   "appearance.text_px_label": "{name}, en píxeles",
