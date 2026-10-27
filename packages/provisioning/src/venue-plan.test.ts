@@ -77,13 +77,13 @@ describe("planVenue", () => {
     expect(actions[2]?.kind).toBe("seed-device-profiles");
   });
 
-  it("resolves the starter profiles' names from the venue's primary invoice locale (es → Spanish)", () => {
+  it("names the starter profiles in the staff language: the file's es words for an es-ES venue", () => {
     const action = planVenue(request(), MODULES).find((a) => a.kind === "seed-device-profiles");
     expect(action).toEqual({
       kind: "seed-device-profiles",
       profiles: [
         {
-          name: "Mostrador",
+          name: STARTER_PROFILE_NAMES.Counter.es,
           formFactor: "till",
           capabilities: [
             "integrated-card-payment",
@@ -103,13 +103,13 @@ describe("planVenue", () => {
           inactivityTimeoutSeconds: 300,
         },
         {
-          name: "Cocina",
+          name: STARTER_PROFILE_NAMES.Kitchen.es,
           formFactor: "kds",
           capabilities: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
           inactivityTimeoutSeconds: null,
         },
         {
-          name: "Móvil",
+          name: STARTER_PROFILE_NAMES.Handheld.es,
           formFactor: "phone-portrait",
           capabilities: [
             "take-orders",
@@ -450,7 +450,7 @@ describe("describeVenueAction", () => {
     expect(lines).toEqual([
       "ensure tenant ES/B12345678 (Deli SL)",
       "seed admin Owner",
-      "seed device profiles Mostrador, Cocina, Móvil",
+      `seed device profiles ${STARTER_PROFILE_NAMES.Counter.es}, ${STARTER_PROFILE_NAMES.Kitchen.es}, ${STARTER_PROFILE_NAMES.Handheld.es}`,
       "create location Mostrador in ES-common (es-ES)",
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",

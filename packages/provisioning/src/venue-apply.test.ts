@@ -11,7 +11,7 @@ import {
   locationBusinessDaySettings,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { STARTER_STATION_NAMES } from "./starter-content.js";
+import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 
@@ -59,7 +59,7 @@ it("A725 fresh provisioning starts with one red default kitchen", async () => {
     select name, colour, is_default from kitchen_stations where location_id = ${created.locationId}
   `)
     ).rows,
-  ).toEqual([{ name: "Cocina", colour: "red", is_default: 1 }]);
+  ).toEqual([{ name: STARTER_STATION_NAMES.Kitchen.es, colour: "red", is_default: 1 }]);
 });
 
 it("an English venue's default kitchen station is named in English", async () => {
@@ -91,7 +91,7 @@ it("a new venue's first station starts at the default late flags and keeps a sta
       from kitchen_stations where location_id = ${first.locationId}`);
   expect((await stations()).rows).toEqual([
     {
-      name: "Cocina",
+      name: STARTER_STATION_NAMES.Kitchen.es,
       warm_after_minutes: 5,
       overdue_after_minutes: 10,
       forgotten_after_minutes: 15,
@@ -101,7 +101,7 @@ it("a new venue's first station starts at the default late flags and keeps a sta
   await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
   expect((await stations()).rows).toEqual([
     {
-      name: "Cocina",
+      name: STARTER_STATION_NAMES.Kitchen.es,
       warm_after_minutes: 3,
       overdue_after_minutes: 10,
       forgotten_after_minutes: 15,
@@ -370,13 +370,28 @@ describe("applyVenue", () => {
       left join floor_zones z on z.id = a.starting_zone_id
       order by p.name`);
     expect(scopes.rows).toEqual([
-      { name: "Cocina", department: null, starting_zone: null, every_zone: null },
-      { name: "Mostrador", department: "Mostrador", starting_zone: "Counter", every_zone: 1 },
-      { name: "Móvil", department: "Mostrador", starting_zone: "Counter", every_zone: 1 },
+      {
+        name: STARTER_PROFILE_NAMES.Kitchen.es,
+        department: null,
+        starting_zone: null,
+        every_zone: null,
+      },
+      {
+        name: STARTER_PROFILE_NAMES.Counter.es,
+        department: "Mostrador",
+        starting_zone: "Counter",
+        every_zone: 1,
+      },
+      {
+        name: STARTER_PROFILE_NAMES.Handheld.es,
+        department: "Mostrador",
+        starting_zone: "Counter",
+        every_zone: 1,
+      },
     ]);
   });
 
-  it("seeds exactly the three starter device profiles (names per the venue locale, no canvas, form-factor caps)", async () => {
+  it("seeds exactly the three starter device profiles (names in the staff language, no canvas, form-factor caps)", async () => {
     await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -394,12 +409,12 @@ describe("applyVenue", () => {
       .orderBy(deviceProfiles.name);
     expect(profiles).toEqual([
       {
-        name: "Cocina",
+        name: STARTER_PROFILE_NAMES.Kitchen.es,
         capabilities: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
         inactivity_timeout_seconds: null,
       },
       {
-        name: "Mostrador",
+        name: STARTER_PROFILE_NAMES.Counter.es,
         capabilities: [
           "integrated-card-payment",
           "open-cash-drawer",
@@ -418,7 +433,7 @@ describe("applyVenue", () => {
         inactivity_timeout_seconds: 300,
       },
       {
-        name: "Móvil",
+        name: STARTER_PROFILE_NAMES.Handheld.es,
         capabilities: [
           "take-orders",
           "take-cash",
