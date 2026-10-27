@@ -580,9 +580,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   stay English under Spanish staff-facing dish names (the plan's known limit).
 
 - **The demo’s Catalan and Galician text needs a speaker’s check** (W109-3, #1321,
-  owner decision 4, 2026-10-06). A speaker of each
-  should read it. The demo's Drinks section labels in Catalan and Galician are drafts awaiting the
-  same check, left open by A321 (the demo's included Drinks menu opens onto four sections).
+  owner decision 4, 2026-10-06). A speaker of each should read it.
   [Detail](backlog/setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
 
 - **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
@@ -594,9 +592,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   behind](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).
 
 - **The till's "This device hasn't trusted the till yet" page has never been seen on a real
-  device.** **Next action:** during the on-device trust rows above, click past the certificate
-  warning on one device and confirm the page appears in the browser's preferred supported
-  language, falling back to English when none is supported.
+  device.**
   [Detail](backlog/setup.md#the-tills-this-device-hasnt-trusted-the-till-yet-page-has-never-been-seen-on-a-real-device)
 
 - **`pnpm dev:reset` deletes the venue folder before it refuses `WAITRON_ENV=production`.**

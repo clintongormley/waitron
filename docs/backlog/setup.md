@@ -46,12 +46,12 @@ What constrains the next change to the wizard:
 
 ## Open owner call — setup always stores a language on the account
 
-- **Open owner call — setup always stores a language on the account.** If the browser sends no
-  language, or one Waitron does not ship, the account gets the venue's language saved as though
-  chosen — so the stored value cannot tell "chose Spanish" from "said nothing", and it does not
-  follow a later change to the venue default. Keep this, or store a language only when the browser
-  asked for one? Since C42 a language picked in the wizard is sent as the provision's
-  `Accept-Language`, so a choice made there is stored like any other browser answer.
+If the browser sends no
+language, or one Waitron does not ship, the account gets the venue's language saved as though
+chosen — so the stored value cannot tell "chose Spanish" from "said nothing", and it does not
+follow a later change to the venue default. Keep this, or store a language only when the browser
+asked for one? Since C42 a language picked in the wizard is sent as the provision's
+`Accept-Language`, so a choice made there is stored like any other browser answer.
 
 ## The configuration preview names what it will copy by database table
 
@@ -67,7 +67,7 @@ What constrains the next change to the wizard:
 
 **Still open after #334:**
 
-- _The certificate export help has never been followed on a real machine._ Nobody exported a
+Nobody exported a
   certificate through Windows', macOS' or Firefox's own certificate store while reading the new
   guidance, so the instructions are unverified against the thing they describe. Fold this into the
   device walkthrough (item 1 of _What to work on next_) and tick it off per operating system in
@@ -94,7 +94,7 @@ It does not fetch FNMT or check its translations.
 
 **Still open after #334:**
 
-- _Switching setup mode does not clean up what the server already holds._ #334 clears the browser's
+#334 clears the browser's
   own record that a certificate import was requested, and nothing more. If someone fills in Demo,
   Prepare or Live far enough that the server has stored part of that answer and then switches mode,
   what the server kept is untested — write a test that stages configuration in one mode, switches,
@@ -104,7 +104,7 @@ It does not fetch FNMT or check its translations.
 
 **Still open after #334:**
 
-- _The setup app's catch-all redirect was not proven by deleting it._ Unknown setup addresses go
+Unknown setup addresses go
   to `/` while real files and API routes keep their own responses. The reviews checked this by
   running the route tests and the full server suites, not by removing each exclusion one at a time
   and watching a test fail, and no separate probe confirmed the trading app is untouched by the
@@ -115,8 +115,7 @@ It does not fetch FNMT or check its translations.
 **Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
 seen in a throwaway test, since deleted, and none has a test pinning it:
 
-- _A fiscal test or a provision that answers after the wizard has been removed from the page leaves
-  it stuck when it is put back_: the Run button stays on "Running test…", or the screen stays on
+The Run button stays on "Running test…", or the screen stays on
   "Provisioning…", with no retry. The connection check releases itself in the same case. The app
   mounts the wizard once and never removes it, so this may be unreachable in use.
 
@@ -125,7 +124,7 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
 **Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
 each says whether it was seen in a run or only read in the code:
 
-- _In Demo, a server refusal of a field Demo hides can only be retried unchanged._ The shell routes
+The shell routes
   a refused `seriesCode`, `rectificativeSeriesCode` or `operationDescription` back to the venue
   screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
   The refusal's sentence shows above Next and pressing Next moves on to the review screen, which
@@ -152,7 +151,7 @@ each says whether it was seen in a run or only read in the code:
 
 ## A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)
 
-**A venue's time zone must come from its country pack's list (A166, owner 2026-10-01) — OPEN.** The
+**OPEN.** The
 owner: _"in fact this should be chosen from a dropdown, and the options specified in the country
 package, eg Spain has two time zones, one for mainland and one for las canarias"_. Today setup does
 not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
@@ -174,7 +173,7 @@ not an edit through that applicator.
 
 ## Remaining "?" buttons that should be hints (A237, owner 2026-10-03)
 
-**Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
+**OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
 that starts filled in — was applied to the setup wizard's first four screens only, and nothing
 enforces it. Candidates still showing a "?" for a short explanation: every field on
@@ -203,8 +202,7 @@ covers only the label's centring.
 
 ## The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN
 
-**The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the
-text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
+Every customer-facing text
 in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
 `data-sets/casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
 wrote them until Task 4 (W109-4), which now does in the areas that use them. The PR carries the side-by-side table. A speaker of each should
@@ -213,9 +211,12 @@ bonito", "Luras á romana", "Polbo á feira", "Café só", "Tortilla de patacas"
 choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error en marcar" and
 "Invitació de l'encarregat".
 
+The demo's Drinks section labels in Catalan and Galician are drafts awaiting the
+same check, left open by A321 (the demo's included Drinks menu opens onto four sections).
+
 ## A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)
 
-**A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
+**OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
 that teaches a new user what to set up and in what order — devices, printers, device profiles, and
 the other settings a venue needs before it trades — shown in Demo and Preparation
@@ -278,120 +279,113 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
 
 ## Android/iOS on-device install and trust rows
 
-- **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
-  run. The name-constrained CA does NOT protect a personal Android phone (measured 2026-09-08); BYOD
-  Android either accepts broad trust in the box CA or uses the public-certificate path — an owner
-  call before go-live.
+Real phones on the shop WiFi, the owner's to
+run. The name-constrained CA does NOT protect a personal Android phone (measured 2026-09-08); BYOD
+Android either accepts broad trust in the box CA or uses the public-certificate path — an owner
+call before go-live.
 
 ## The till's "This device hasn't trusted the till yet" page has never been seen on a real device
 
-- **The till's "This device hasn't trusted the till yet" page has never been seen on a real
-  device.** `isTrustBroken` (`apps/till/src/trust-check.ts`) reads a `SecurityError` from
-  registering the non-existent `/sw-probe.js` as "certificate not trusted"; that signal is still a
-  belief, never checked on a device that clicked past the browser's warning. It runs only on pages
-  served over HTTPS. Two gaps remain: the signal is trustworthy only while the server answers the
-  probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
-  browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
-  above, click past the certificate warning on one device and confirm the page appears in the
-  browser's preferred supported language, falling back to English when none is supported.
+`isTrustBroken` (`apps/till/src/trust-check.ts`) reads a `SecurityError` from
+registering the non-existent `/sw-probe.js` as "certificate not trusted"; that signal is still a
+belief, never checked on a device that clicked past the browser's warning. It runs only on pages
+served over HTTPS. Two gaps remain: the signal is trustworthy only while the server answers the
+probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
+browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
+above, click past the certificate warning on one device and confirm the page appears in the
+browser's preferred supported language, falling back to English when none is supported.
 
 ## A fresh Demo venue opens its dashboard on a red tax-filing alert
 
-- **A fresh Demo venue opens its dashboard on a red tax-filing alert.** Seen on a box image during
-  A680, 2026-10-14: a Demo set up through the wizard showed "473 fiscal record(s) have been waiting
-  705h to reach the tax agency" (`fiscal.submission_delayed`). The 473 records are the demo seed's
-  back-dated sales, and a Demo venue sends nothing to the tax agency. A Preparation venue set up the
-  same way had no fiscal records and no fiscal alert. The alert is raised in
-  `packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
+Seen on a box image during
+A680, 2026-10-14: a Demo set up through the wizard showed "473 fiscal record(s) have been waiting
+705h to reach the tax agency" (`fiscal.submission_delayed`). The 473 records are the demo seed's
+back-dated sales, and a Demo venue sends nothing to the tax agency. A Preparation venue set up the
+same way had no fiscal records and no fiscal alert. The alert is raised in
+`packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
 
 ## Loose ends left by A496 (moving to a new tax ID).
 
-- **Loose ends left by A496 (moving to a new tax ID).**
-  - How long, and in what form, an old taxpayer's database must be kept. Not checked;
-    `deploy/README.md` → _Moving to a new tax ID_ says so.
-  - The new-tax-ID procedure cannot tell the operator when the old box has sent its last sales to
-    AEAT. Step 3 of `deploy/README.md` → _Moving to a new tax ID_ keeps the box on so it can; the
-    only signal it names is the delay alert (`fiscal.submission_delayed`), raised after four hours.
-  - A change of country cannot import a configuration. Setup refuses an export whose country
-    differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
-    countries needs its own design.
-  - The dashboard shows the configuration export card where the export route is not served, so its
-    download fails there: on a demo box, and on a box whose settings name no onboarding intent, such
-    as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
-    intent is preparation or live (`apps/server/src/boot.ts`).
+- How long, and in what form, an old taxpayer's database must be kept. Not checked;
+  `deploy/README.md` → _Moving to a new tax ID_ says so.
+- The new-tax-ID procedure cannot tell the operator when the old box has sent its last sales to
+  AEAT. Step 3 of `deploy/README.md` → _Moving to a new tax ID_ keeps the box on so it can; the
+  only signal it names is the delay alert (`fiscal.submission_delayed`), raised after four hours.
+- A change of country cannot import a configuration. Setup refuses an export whose country
+  differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
+  countries needs its own design.
+- The dashboard shows the configuration export card where the export route is not served, so its
+  download fails there: on a demo box, and on a box whose settings name no onboarding intent, such
+  as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
+  intent is preparation or live (`apps/server/src/boot.ts`).
 
 ## Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
 
-- **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
-  wizard).**
-  - The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
-    (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows
-    one sentence for all three, as the command line does.
-  - The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
-    confirmed attempt downloads it again; the HTTP request stays open for the whole download.
-  - Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
-    on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
-    through setup.
-  - After an archive restore or a Cloud restore the final screen does not show the device steps the
-    bucket rebuild's shows (`rebuilt` is set only on the bucket path,
-    `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
-    machine's addresses after an archive restore too.
+- The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
+  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows
+  one sentence for all three, as the command line does.
+- The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
+  confirmed attempt downloads it again; the HTTP request stays open for the whole download.
+- Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
+  on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
+  through setup.
+- After an archive restore or a Cloud restore the final screen does not show the device steps the
+  bucket rebuild's shows (`rebuilt` is set only on the bucket path,
+  `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
+  machine's addresses after an archive restore too.
 
 ## Loose ends left by A680 (#1718).
 
-- **Loose ends left by A680 (#1718).**
-  - The setup wizard has no text for `sif.throwaway_allocation_refused`. A box started with
-    `WAITRON_ENV=production` still offers Demo and Preparation
-    (`apps/setup/src/screens/mode-screen.ts` shows only a production warning), and either one is
-    refused with that code, so the operator sees the wizard's generic failure (its plan's D6).
-  - Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
-    #1700. Neither needs a supplied allocation since A680, so on a shared network a stranger can
-    set up an unconfigured box in either mode before its owner does. Only a preproduction venue can
-    come of it (its plan's unsure point 2).
-  - The throwaway-allocation seat names a Spanish term in a country-neutral contract:
-    `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
-    (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
-    Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
-    shape, so a rename changes both. Owner's call.
-  - The route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its plan's
-    table ("cell 1" … "cell 14"), which goes when plans are deleted at go-live, and the file does
-    not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
-    behaviour.
-  - Whether a throwaway venue can get an offline recovery pack is untested. #1717's recovery pack
-    checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
-    be refused one, which fits a practice-only venue, but nothing ran it.
+- The setup wizard has no text for `sif.throwaway_allocation_refused`. A box started with
+  `WAITRON_ENV=production` still offers Demo and Preparation
+  (`apps/setup/src/screens/mode-screen.ts` shows only a production warning), and either one is
+  refused with that code, so the operator sees the wizard's generic failure (its plan's D6).
+- Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
+  #1700. Neither needs a supplied allocation since A680, so on a shared network a stranger can
+  set up an unconfigured box in either mode before its owner does. Only a preproduction venue can
+  come of it (its plan's unsure point 2).
+- The throwaway-allocation seat names a Spanish term in a country-neutral contract:
+  `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
+  (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
+  Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
+  shape, so a rename changes both. Owner's call.
+- The route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its plan's
+  table ("cell 1" … "cell 14"), which goes when plans are deleted at go-live, and the file does
+  not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
+  behaviour.
+- Whether a throwaway venue can get an offline recovery pack is untested. #1717's recovery pack
+  checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
+  be refused one, which fits a practice-only venue, but nothing ran it.
 
 ## Loose ends left by #334.
 
-- **Loose ends left by #334.**
-  - The certificate export help has never been followed on a real machine. Nobody exported a
-    certificate through Windows', macOS' or Firefox's own certificate store while reading the new
-    guidance, so the instructions are unverified against the thing they describe. The Spanish
-    steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
-    Windows", "Acceso a Llaveros", "Sus certificados"…). The three FNMT links use its English
-    site, whose article text was still Spanish when opened on 2026-10-20; check the instructions
-    on real Spanish systems (left open by C42, #837).
-    [Detail](#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
-  - Switching setup mode does not clean up what the server already holds. If someone fills in
-    Demo, Prepare or Live far enough that the server has stored part of that answer and then
-    switches mode, what the server kept is untested — write a test that stages configuration in
-    one mode, switches, and asserts what survives.
-    [Detail](#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
-  - The setup app's catch-all redirect was not proven by deleting it. The reviews checked this by
-    running the route tests and the full server suites, not by removing each exclusion one at a
-    time and watching a test fail, and no separate probe confirmed the trading app is untouched by
-    the redirect.
-    [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
+- The certificate export help has never been followed on a real machine. Nobody exported a
+  certificate through Windows', macOS' or Firefox's own certificate store while reading the new
+  guidance, so the instructions are unverified against the thing they describe. The Spanish
+  steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
+  Windows", "Acceso a Llaveros", "Sus certificados"…). The three FNMT links use its English
+  site, whose article text was still Spanish when opened on 2026-10-20; check the instructions
+  on real Spanish systems (left open by C42, #837).
+  [Detail](#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
+- Switching setup mode does not clean up what the server already holds. If someone fills in
+  Demo, Prepare or Live far enough that the server has stored part of that answer and then
+  switches mode, what the server kept is untested — write a test that stages configuration in
+  one mode, switches, and asserts what survives.
+  [Detail](#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
+- The setup app's catch-all redirect was not proven by deleting it. The reviews checked this by
+  running the route tests and the full server suites, not by removing each exclusion one at a
+  time and watching a test fail, and no separate probe confirmed the trading app is untouched by
+  the redirect.
+  [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
 ## Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.
 
-- **Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.**
-  - In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
-    server ever refuses Demo's fixed series codes is not established.
-    [Detail](#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
-  - In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
-    not run; whether a real draft can reach that state has not been tested.
-    [Detail](#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
+- In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
+  server ever refuses Demo's fixed series codes is not established.
+  [Detail](#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
+- In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
+  not run; whether a real draft can reach that state has not been tested.
+  [Detail](#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
 ## Move the start-again note whenever a series name is put into use, and when a plain reset ends an unfinished setup
 
