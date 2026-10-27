@@ -541,7 +541,7 @@ export class LookCard extends LitElement {
     if (after.choices.textScale !== before.choices.textScale) this.refusedTextScale = "";
     if (
       !sameText(after.choices.text, before.choices.text) ||
-      after.textCodes !== before.textCodes
+      !sameErrors(after.textCodes, before.textCodes)
     ) {
       this.refusedText = null;
     }

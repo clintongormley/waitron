@@ -1259,6 +1259,49 @@ describe("a refused text setting and Advanced's closed line", () => {
     expect(sizeBox(el, "sm").error).toBe("Enter a whole number from 8 to 40.");
   });
 
+  it("a refusal under a row stays when Fix all fixes only colours", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await refusedOn(el, saveTheme, "text.size.sm");
+    await typeHand(el, "light", "text", "#6a6a6a");
+    await typeHand(el, "light", "surface-sunken", "#bbbbbb");
+    expect(button(el, "fix-all")).not.toBeNull();
+    await userEvent.click(button(el, "fix-all"));
+    await settleText(el);
+    expect(advanced(el).draft.choices.handSet.light.text).not.toBe("#6a6a6a");
+    expect(sizeBox(el, "sm").error).toBe("Enter a whole number from 8 to 40.");
+  });
+
+  it("a refusal under a row goes once Save is pressed again, while that save is under way", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await refusedOn(el, saveTheme, "text.size.sm");
+    let release!: () => void;
+    saveTheme.mockImplementationOnce(
+      (id: string, choices: ThemeChoices) =>
+        new Promise((resolve) => {
+          release = () => resolve(theme(id, "Bar Lucía", choices));
+        }),
+    );
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(2);
+    await settleText(el);
+    expect(sizeBox(el, "sm").error).toBe("");
+    release();
+  });
+
+  it("a refusal under a row is gone after Cancel and Edit again", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await refusedOn(el, saveTheme, "text.size.sm");
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    await userEvent.click(button(el, "edit"));
+    await settleText(el);
+    expect(sizeBox(el, "sm").error).toBe("");
+  });
+
   it("Advanced's closed line names Normal text and counts its warning", async () => {
     const normal = await mountChoices({ ...LUCIA, text: { size: { md: 16 } } });
     expect(disclosure(normal.el).summary).toBe("1 set by hand: Normal text");
