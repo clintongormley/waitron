@@ -338,6 +338,9 @@ A757's fast speed.
   late card has no mark of its own yet; see the build plan's slice 9, D5, D9, D14._
 - **Column order is not changed on the live screen** (the owner withdrew long-press dragging, so
   nobody reorders by mistake mid-service): it is set in corner → Columns (§3.6, picture 07).
+  _2026-10-27, slice 9b: each board has its own header row, with Columns at its end; the corner
+  keeps theme and language above the boards; a move or a Show tap applies at once and Done only
+  closes; every column may be hidden and Columns stays; see the build plan's slice 9b, D1–D3._
 
 ### 3.4 Kitchen screen, narrow (picture 05, left)
 

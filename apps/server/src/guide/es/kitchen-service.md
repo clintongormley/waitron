@@ -147,10 +147,17 @@ plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la t
 los platos que la retienen, así que un plato que ya va más adelante se queda donde está. La franja
 de la parte superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos
 de demora de la estación, y la franja de una tarjeta olvidada late; en un dispositivo configurado
-para reducir el movimiento se queda quieta. La línea encima de las columnas dice cuántos platos
-quedan por hacer y cuántas tarjetas van con retraso. Una tarjeta cuyos platos están todos en espera
-tiene el borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida
-la preparación](kitchen-service.md#request-cooking).
+para reducir el movimiento se queda quieta. Una tarjeta cuyos platos están todos en espera tiene el
+borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida la
+preparación](kitchen-service.md#request-cooking).
+
+Una fila encima de las columnas muestra la estación y si está abierta hoy, cuántos platos quedan
+por hacer y cuántas tarjetas van con retraso, y **Columnas** al final. Toca **Columnas** para
+ordenar las columnas: las flechas suben o bajan una columna en la lista, que es el orden en
+que la pantalla las muestra, y **Mostrar** la oculta o la muestra. Cada cambio se ve al
+momento y se guarda en este dispositivo; **Hecho** cierra la ventana. Las tarjetas de una columna
+oculta siguen contando en la fila. Con todas las columnas ocultas, la fila y **Columnas** siguen
+ahí, para que puedas mostrar una de nuevo.
 
 Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impresión. En un
 terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y

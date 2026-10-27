@@ -136,9 +136,10 @@ come after the list above:
   by the table's short name, and a counter order at no table "Counter #12") landed in
   #2126, from the build plan's slice 8b. Slice 9 (a kitchen screen's columns collapse by a tap
   on their heading, which shows the column's count, and are remembered on the device; the one
-  Columns store A773-2 reuses) landed in #2129, from the build plan's slice 9; next, slices 9b (the
-  corner's Columns) and 9c (Overview and the narrow tabs), taking turns with lane G's A773-2 on
-  the station screen. A773-2 builds the pass's part, and the phone's
+  Columns store A773-2 reuses) landed in #2129, from the build plan's slice 9. Slice 9b (each
+  kitchen board's header row with Columns, whose window moves columns up or down and hides or
+  shows them, kept on the device) is in review, from the build plan's slice 9b; next, slice 9c
+  (Overview and the narrow tabs), taking turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).

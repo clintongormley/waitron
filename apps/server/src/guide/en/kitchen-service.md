@@ -129,9 +129,15 @@ station, even after it restarts. Tap a dish to move it on one step, or tap
 the card's heading to move the card on: only the dishes holding it back move, so a dish already
 further on stays where it is. The band along a card's top turns from green to amber to red as it
 waits, by the station's late flags, and a forgotten card's band pulses; it holds still on a device
-set to reduce motion. The line above the columns says how many dishes are still to make and how
-many cards are late. A card whose dishes are all held is dashed, shows no minutes and waits under
+set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and waits under
 **Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
+
+A row above the columns shows the station and whether it is open today, how many dishes are still
+to make and how many cards are late, and **Columns** at its end. Tap **Columns** to arrange the
+columns: the arrows move a column up or down the list, which is the order the screen shows them in,
+and **Show** hides or shows it. Each change shows at once and stays on this device; **Done** closes
+the window. A hidden column's cards still count in the row. With every column hidden, the row and
+**Columns** stay, so you can bring a column back.
 
 Each card carries its order's kitchen note and any printing problem. On a till, a card also offers
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
