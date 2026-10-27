@@ -321,7 +321,7 @@ export class MenuPatchDialog extends LitElement {
   /** What each field shows, keyed `<target key>/<field>`, once the person has edited it, with its
    * error and, for a translated field, the language the error belongs under. A refresh never
    * replaces text the person typed; in a translated field, a language they left alone shows the
-   * newest stored text, judged by the base the draft keeps for the field. A value failing its own
+   * stored text of the version shown, judged by the base the draft keeps for the field. A value failing its own
    * check is not staged, and the draft keeps its base all the same (`MenuPatchDraft.hold`). */
   #typed = new Map<string, Typed>();
   #watching: string | null = null;
