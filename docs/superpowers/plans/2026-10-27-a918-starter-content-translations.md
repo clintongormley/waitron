@@ -1,9 +1,12 @@
 # A918: starter content in the venue's languages at setup
 
-**Status: plan, 2026-10-27. Nothing was built when this was written; no code was changed.** Branch
+**Status: plan, 2026-10-27, the fresh plan review folded in (0 Critical, 3 Important, 10 Minor,
+`~/waitron-campaign-b/a918-plan-review.md`) under the driver's rulings of the same day; see "Review
+rulings" at the end. Nothing was built when this was written; no code was changed.** Branch
 `feat/a918-starter-content-translations`, from `main` at `f320bd194`. Four pull requests, one per
 slice (below); this document holds full tasks for **slice 1** only, and a short paragraph for each
-later slice, whose task list is written when it is picked up.
+later slice, whose task list is written when it is picked up. **Slices 3 and 4 wait for the owner's
+answer to FYI A**; slices 1 and 2 do not.
 
 **No migration.** Every table that holds starter words already has the storage this design needs:
 the two kinds of row that carry a name per language (void and comp reasons, units) keep a language
@@ -115,8 +118,16 @@ Out of scope, by default (only what a real new venue gets at setup):
 - **Test helpers** with Spanish defaults (`packages/db/src/testing/seed.ts:44-52`, a default station «Cocina»,
   `apps/server/src/testing/*-venue.ts`): A976's.
 - **A venue set up from a configuration export**: not checked by this plan. The export replaces every
-  reason (`packages/adjustments/src/schema/adjustments.ts:60`); whether it replaces the other starter
-  rows was not looked at.
+  reason (`packages/adjustments/src/schema/adjustments.ts:60`). It also carries `kitchen_stations`,
+  `device_profiles`, `floor_zones`, `seasons`, `menu_periods`, `service_steps`, `units`, `catalogues`
+  and `sections` (the review's `git grep -l` over the configuration-transfer files); whether an
+  import replaces those rows or merges into them was not looked at, and each later slice checks it
+  before relying on its rows being written only at setup.
+- **The audit's fourth real-venue row**, `apps/server/scripts/settle-invoice-first.ts:126-177`
+  (`docs/backlog/english-only-audit.md:131`): not starter content, and the file no longer exists. It
+  was deleted by A973 (`8ab1799a9`, #1967; `ls` of the path prints "No such file or directory"), as
+  the audit's own dated note says (`english-only-audit.md:8`). So no backlog entry is added for it
+  (review M8; see "Review rulings").
 
 ## Printed and filed text
 
@@ -145,11 +156,27 @@ Searched `apps/server/src/receipt-document.ts`, `invoice-pdf.ts`, `receipt-ticke
 | --- | --- | --- | --- |
 | **1** | `feat/a918-1-starter-reasons` | The mechanism (decisions 1-6): the language helpers in `@waitron/country-packs`, the guard's allowance, the root `CLAUDE.md` and `conventions-data.md` wording; and the nine reasons from `packages/adjustments/src/starter-content.ts` | A Spanish venue's till shows the reasons in Spanish to Spanish-speaking staff and in English to English-speaking staff; the dashboard's reasons list shows the Spanish names; the reasons editor's "Name in Valencian/Catalan/Galician" fields are filled where the venue has that language |
 | **2** | `feat/a918-2-station-and-profiles` | The kitchen station and the three device profiles from `packages/provisioning/src/starter-content.ts` and `packages/layouts/src/starter-content.ts`; the demo finds the default station by `is_default` | None (probe 2: every Spanish area's staff language is Spanish, so «Cocina», «Mostrador», «Móvil» stay) |
-| **3** | `feat/a918-3-venue-service-starters` | Service steps, seasons, the counter zone and the "Open" period from `packages/venue-service/src/starter-content.ts`, at setup and when a department is added | Seasons, the counter zone and the period read in Spanish in a Spanish venue; steps unchanged |
-| **4** | `feat/a918-4-catalogue-starters` | Units and the first menu's names from `packages/catalogue/src/starter-content.ts`; the `EACH_UNIT` backlog entry; A918 deleted from the backlog | Units carry only the venue's languages (owner FYI B); the first menu is named in Spanish in a Spanish venue |
+| **3** | `feat/a918-3-venue-service-starters` — **waits for FYI A** | Service steps, seasons, the counter zone and the "Open" period from `packages/venue-service/src/starter-content.ts`, at setup and when a department is added; the three places that find the starter period by the name "Open" | With FYI A's default: seasons, the counter zone and the period, English today, read in Spanish in a Spanish venue, for English-speaking staff too; steps unchanged |
+| **4** | `feat/a918-4-catalogue-starters` — **waits for FYI A** | Units and the first menu's names from `packages/catalogue/src/starter-content.ts`; the `EACH_UNIT` backlog entry; A918 deleted from the backlog | Units carry only the venue's languages (owner FYI B); with FYI A's default, the first menu and the units' staff names, English today, are Spanish in a Spanish venue |
 
 Slice 1 goes first; slices 2-4 depend only on it and on nothing of each other's, and each leaves
 `main` green on its own. None is parked for the owner.
+
+**Why slices 3 and 4 wait and slices 1 and 2 do not** (driver ruling on review I1). FYI A's default
+writes each one-name row in the staff language, which is Spanish in every Spanish venue (probe 2).
+Where a row is **English today**, that takes words away from an English-speaking waiter or manager.
+That is true of slice 3's seasons (`packages/venue-service/src/season-rules.ts:29-32`), counter zone
+(`venue-service/src/provisioning.ts:105`) and period (`menu-timetable.ts:73`). It is equally true
+of slice 4's first menu (`catalogue/src/provisioning.ts:153`) and units' staff names (`:99-139`),
+which the driver's ruling did not name; verified here, so slice 4 waits too. Slice 2's rows are
+**Spanish today** for every venue a real setup can make: the station is always «Cocina»
+(`venue-apply.ts:306`), and the profiles take the receipt language's subtag, falling back to Spanish
+(`device-profile.ts:155-161`), where every real receipt language is `es-ES`, `ca-ES`, `gl-ES` or
+`eu-ES` (`spain.ts:293`, `setup-api.ts:457-466`). So slice 2 changes nothing anyone sees, whatever the
+owner answers, unless the answer is FYI A's alternative (2), which the slice would then follow.
+Slice 1's one-name field, a reason's plain name, is FYI C. Under the driver's ruling slice 1 does
+not wait: an English-speaking waiter still sees English on the till (`reasonNameIn`), and only the
+dashboard's list changes (FYI C's example).
 
 ## What was run while writing this plan
 
@@ -204,17 +231,25 @@ developer's English demo in Madrid (receipts `en-GB`).
    in setup's transaction) and the staff language (decision 3). Each seed reads `tenants.country`,
    `locations.province` and `locations.invoice_locales[0]` itself. Reasons: the core steps that write
    the station and the profiles run before the saved row exists; adjustments neither depends on the
-   catalogue nor has its table in its test database (`provisioning.test.ts:12`); and a module reading
-   another module's table is the coupling the module rule forbids
-   (`docs/developers/conventions-data.md:271-278`). Cost: a seed re-run after a manager changed the
+   catalogue nor has its table in its test database (`provisioning.test.ts:12`); and reading the
+   saved row would make adjustments declare the catalogue's migration set in its `requires`
+   (`docs/developers/conventions-data.md:4606-4610`, as media does, `:1527`) for a single row. Cost: a seed re-run after a manager changed the
    content languages writes the setup-time languages. Every starter seed writes only when its rows
    are absent (`adjustments/src/provisioning.ts:72-74`, `seasons.ts:45-46`, `units` through
    `unit_seed_states`, `catalogue/src/provisioning.ts:90-95`), so a re-run writes nothing. Adding a
    department later (row 4, row 7) reads the same geography each time.
 
-3. **A one-name row is written in the staff language; the staff language is the receipt language
-   when the staff screens can show it, else the venue's screen language from its geography.** In
-   code: `resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, { override: receiptLocale, country, area, fallback: FALLBACK_LOCALE })`
+3. **A one-name row is written in the staff language: the receipt language when it is one the staff
+   screens have (`es-ES`, `en-GB`), else the screen language the venue's geography gives.** This is
+   not quite the venue's display language as the server defines it: `readVenueLocale`
+   (`apps/server/src/venue-locale.ts:49-68`) is "DELIBERATELY separate from the location's receipt
+   language" and takes only `WAITRON_TILL_LOCALE` as its override. For every venue a real setup can
+   make the two agree (Spain's receipt languages, `spain.ts:293`; the UK pack is closed to setup,
+   `packages/country-gb/src/united-kingdom.ts:13`). They differ only for an `en-GB`-receipt demo or
+   developer venue, whose starter rows come out English while its till, with `WAITRON_TILL_LOCALE`
+   unset, shows Spanish screens and the reasons' `names.es`, and whose dashboard list shows the
+   English plain name. The receipt override is kept so that an English demo stays English, as its
+   profiles and steps are today. In code: `resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, { override: receiptLocale, country, area, fallback: FALLBACK_LOCALE })`
    (`packages/country-packs/src/registry.ts:46-73`), cut to its language subtag. The receipt
    language is a candidate only when it is one the screens show (`es-ES`, `en-GB`); `ca-ES` or
    `gl-ES` falls through to the area's and then the pack's default (`packages/country/src/country.ts:211-234`).
@@ -311,14 +346,30 @@ Waitron's own, unchecked by a native speaker (owner FYI D).
 
 ## Open decisions for the owner (FYI, built with the default)
 
-- **A. A one-name row gets one language: the staff language** (decision 3). Worked example: Bar
-  Ejemplo in Valencia gets its reasons in Valencian, Spanish and English, but one kitchen station
-  «Cocina», seasons «Primavera», «Verano», «Otoño», «Invierno» and a counter zone «Mostrador», all
-  Spanish, because those rows hold one name and its staff screens are Spanish. This departs from
-  "writes every language the venue uses" for those rows only, because the tables cannot hold more.
-  Alternatives: (1) write those rows in the venue's default content language, so Bar Ejemplo's
-  station is «Cuina» and Bar Exemple's too, among Spanish screen words; (2) give stations, profiles,
-  steps, seasons, zones and periods a name per language, a migration per table and its own item.
+- **A. A one-name row gets one language: the staff language** (decision 3). **Slices 3 and 4 wait
+  for this answer.** Worked examples:
+  - *Your own example, the English-speaking waiter.* You chose the design whose example was "a
+    Spanish-speaking waiter sees «Cambio de opinión»; an English-speaking one sees "Customer changed
+    mind"". That holds for the reasons, which keep a name per language. It cannot hold for a
+    one-name row. In Bar Ejemplo today, an English-speaking waiter or manager sees the seasons
+    "Spring", "Summer", "Autumn", "Winter", the counter zone "Counter" and the menu period "Open"
+    (`season-rules.ts:29-32`, `venue-service/src/provisioning.ts:105`, `menu-timetable.ts:73`). With
+    the default, slice 3 renames them «Primavera», «Verano», «Otoño», «Invierno», «Mostrador» and
+    «Abierto» for **everyone** in a Spanish venue, that waiter included. Slice 4 does the same to
+    the first menu ("Menu" becomes «Carta») and the units' staff names ("Gram" becomes «Gramo»).
+  - *The regional languages.* Bar Ejemplo in Valencia gets its reasons in Valencian, Spanish and
+    English, but one kitchen station «Cocina» and the Spanish names above, because those rows hold
+    one name and its staff screens are Spanish.
+  This departs from "writes every language the venue uses" for those rows only, because the tables
+  cannot hold more without a migration. Alternatives:
+  1. **Keep the one-name rows as they are today**: the seasons, counter zone, period, first menu and
+     units' staff names stay English, and the station, profiles and steps stay as they are (Spanish
+     for every real venue). Only their words move out of general code. The English-speaking waiter
+     loses nothing, and the Spanish-speaking one keeps today's English words.
+  2. **Write those rows in the venue's default content language**: Bar Ejemplo's and Bar Exemple's
+     station is «Cuina», among Spanish screen words. This is the only answer that changes slice 2.
+  3. **Give stations, profiles, steps, seasons, zones, periods, menus and units' staff names a name
+     per language**: a migration per table, and its own item.
 - **B. A language map gets only the venue's content languages, plus English** (decision 4). Worked
   example: a Madrid venue (`es`, `en`) gets its reasons in Spanish and English; if the manager later
   adds Catalan, the nine reasons' "Name in Catalan" fields are empty and must be filled by hand. In
@@ -327,7 +378,9 @@ Waitron's own, unchecked by a native speaker (owner FYI D).
   later is already filled for the starters.
 - **C. A reason's plain name is in the staff language, not English** (decision 4). Worked example:
   Bar Ejemplo's dashboard lists «Error al marcar», «Producto agotado»…, and a manager who adds a
-  reason «Descuento» is told the name is taken. Alternative: keep the plain name English; the
+  reason «Descuento» is told the name is taken. An English-speaking manager there sees that Spanish
+  list where today it is English; on the till an English-speaking waiter still sees "Entry error",
+  because the till shows the name in the person's own language (`reasonNameIn`). Alternative: keep the plain name English; the
   dashboard list then shows "Entry error" to a Spanish manager while the till shows «Error al
   marcar».
 - **D. The Catalan, Valencian and Galician words ship unchecked by a native speaker** (the table
@@ -356,7 +409,10 @@ Waitron's own, unchecked by a native speaker (owner FYI D).
   `packages/adjustments/src/starter-content.ts` and the Spanish guide (`apps/server/src/guide/es/`).
   No test spells a non-English word: expected text is read from `STARTER_REASON_NAMES`
   (`expected[english].es`), as screen tests read their strings file. Language codes (`es`,
-  `ca-ES-valencia`) are codes, not words, and may be written.
+  `ca-ES-valencia`) are codes, not words, and may be written. One exception, the guard's own
+  suite: its subject is Spanish words, and it already spells them (its `FIXTURE` set,
+  `scripts/english-only.test.ts:32-50`), so Task 3's fixture `{ es: "Mesa" }` follows that
+  precedent.
 - **Fixtures use venues the two sides could treat differently**: Valencia (default content language
   `ca-ES-valencia`, not `ca`; staff language `es`), Barcelona with `ca-ES` receipts (a receipt
   language the screens cannot show), Madrid with `en-GB` receipts (the receipt overrides the area),
@@ -390,7 +446,8 @@ has to change is a STOP: say why in the handover.
 | Where | Now | Becomes | Task |
 | --- | --- | --- | --- |
 | `packages/adjustments/src/provisioning.test.ts:33` (title) and `:64-76` | "named in English only even where the venue's language is Spanish"; each `[name, names]` is `[english, { en: english }]` | each is `[expected[english].es, { en: english, es: expected[english].es }]` for that Spain-no-province venue (content languages `es`, `en`, staff `es`); title says the reasons are named in the staff language with a name in each content language | 2 |
-| `packages/adjustments/src/provisioning.test.ts:93-113` | an `en-GB`-first venue: `names` equal `{ en: name }` (`:99-101`), plain names English (`:102-112`) | `names` equal `{ en: name, es: expected[name].es }`; the plain names stay English, unedited | 2 |
+| `packages/adjustments/src/provisioning.test.ts:93-113` | an `en-GB`-first venue: `names` equal `{ en: name }` (`:99-101`), plain names English (`:102-112`) | `names` equal `{ en: name, es: expected[name].es }`; the plain names stay English, unedited; the title (`:93`, "names it in English only…") becomes false and changes, to say the plain name is English and the map holds each content language | 2 |
+| `packages/adjustments/src/provisioning.test.ts:116`, `:127` (the two "adds nothing" cases) | call `provisionedNode(["es-ES"])` | call the helper's new object form, `{ country: "ES", province: null, invoiceLocales: ["es-ES"] }`; their assertions do not change | 2 |
 | `apps/server/src/default-cancel-reason.test.ts:72-82`, and `:51` | the till lists the nine English names; `startsFinishTable: name === "Not served"` | the nine `es` names from `STARTER_REASON_NAMES` (a Madrid venue, `es-ES`, `apps/server/src/testing/bill-venue.ts:64`, `:145`), compared against `expected["Not served"].es` | 3 |
 | `apps/server/src/default-cancel-reason.test.ts:133` | `reason.name === "Not served"` | `reason.names.en === "Not served"` | 3 |
 | `apps/server/src/default-cancel-reason.test.ts:151` | `toEqual(["Not served"])` | `toEqual([expected["Not served"].es])` | 3 |
@@ -533,7 +590,10 @@ export const STARTER_REASON_NAMES = {
 1. Tests first, in `provisioning.test.ts`:
    - Change `provisionedNode` to take `{ country, province, invoiceLocales }` (country set on the
      `seedTenant` row as `packages/catalogue/src/provisioning.test.ts:29-31` does). Make the two
-     changed checks of "Changed test checks" (rows 1-2), reading `STARTER_REASON_NAMES` as `expected`.
+     changed checks of "Changed test checks" (rows 1-3), reading the file through a typed name, so
+     that indexing it with a `string` is not error TS7053 under `strict` (`tsconfig.base.json:7`;
+     `packages/adjustments/tsconfig.json` includes the tests), and no cast is needed:
+     `const expected: StarterTranslations<StarterContentLanguage> = STARTER_REASON_NAMES;`
    - A new `it.each` over four venues, expecting for every seeded reason `names` (`toEqual`) and `name`,
      all computed from `expected` and the literal language codes:
      `["ES", "Valencia", "es-ES"]` → names `en`, `ca-ES-valencia`, `es`, plain `es`;
@@ -542,7 +602,8 @@ export const STARTER_REASON_NAMES = {
      `["GB", "London", "en-GB"]` → `en` only, plain English.
    - "names every starter in the file, and nothing else": the seeded `names.en`, in order, equal
      `Object.keys(STARTER_REASON_NAMES)`.
-   - The two "adds nothing" cases (`:115-145`) stay unedited.
+   - The two "adds nothing" cases (`:115-145`) change only their `provisionedNode` call (row 3 of
+     "Changed test checks"); their assertions stay as they are.
 
    Run `pnpm --filter @waitron/adjustments exec vitest run --project node src/provisioning.test.ts`;
    expected failure: the import of `./starter-content.js` does not resolve; once the file exists, the
@@ -566,8 +627,10 @@ export const STARTER_REASON_NAMES = {
      the Valencia row fails, `expected 'Error en marcar' to be 'Error al marcar'` (read from the
      file, not typed).
    - Delete the `"Discount"` row from the starter file: `typecheck` still passes (decision 6's
-     English fallback) and the "names every starter" case fails, the received keys lacking
-     `Discount`.
+     English fallback). The four-venue `it.each` fails first, with a `TypeError` reading `es` of
+     `expected["Discount"]`; and the "names every starter" case fails because the seed still writes
+     "Discount" (the English fallback), so the **received** `names.en` list holds `Discount` and the
+     expected `Object.keys(STARTER_REASON_NAMES)` lacks it.
 6. `pnpm --filter @waitron/adjustments test:coverage` (node and browser projects; check
    `memory_pressure | grep free` first, and run beside another session only well above 15% free).
 
@@ -592,8 +655,8 @@ Files: `apps/server/src/default-cancel-reason.test.ts`, `apps/server/scripts/dem
      write `export const x = { es: "Mesa" };` to `src/starter-content.ts`,
      `src/dashboard/starter-content.ts`, `src/starter-content.test.ts`, `src/my-starter-content.ts`
      and `src/other.ts`; `sourceFilesIn(relative(PACKAGES_ROOT, fixture))` equals the last four
-     (sorted); and `findSpanish` over that content with `FORBIDDEN` reports `["mesa"]`, so the
-     fixture is one the scan would refuse.
+     (sorted); and `findSpanish(content, FORBIDDEN).map((v) => v.word)` equals `["mesa"]` (it answers
+     `Violation[]`), so the fixture is one the scan would refuse.
    - "drops adjustments' starter-content translations from the scan while keeping its other files":
      `packages/adjustments/src/starter-content.ts` exists, `sourceFilesIn("adjustments")` does not
      contain it and does contain `provisioning.ts`.
@@ -610,28 +673,41 @@ Files: `apps/server/src/default-cancel-reason.test.ts`, `apps/server/scripts/dem
    export const STARTER_CONTENT_FILE = "starter-content.ts";
    ```
 
-   and in `sourceFilesIn`, `.filter((entry) => entry !== STARTER_CONTENT_FILE)`. Run the suite again:
-   every case passes; read the `Tests` line.
+   and in `sourceFilesIn`, `.filter((entry) => entry !== STARTER_CONTENT_FILE)`. Two comments in the
+   same file stop being true and are reworded or cut, as the house rule on touched comments asks:
+   "There is deliberately no exception list…" (`english-only.ts:100-103`), which now sits beside two
+   path exclusions, is cut or narrowed to say it is about columns; and "SELF and I18N_CATALOGUES
+   match by `endsWith`" (`:229-230`) names the new exact match too. Run the suite again: every case
+   passes; read the `Tests` line.
 4. Controls, each run and reverted:
    - Delete the filter line: the fixture case fails, received five files with `src/starter-content.ts`
      among them; the adjustments case fails, `expected [...] not to include …/starter-content.ts`.
-   - Match with `entry.endsWith(STARTER_CONTENT_FILE)`: the fixture case fails, received three files,
-     `dashboard/starter-content.ts` and `my-starter-content.ts` missing.
+   - Match with `entry.endsWith(STARTER_CONTENT_FILE)`: the fixture case fails, received **two**
+     files (`starter-content.test.ts` and `other.ts`); `dashboard/starter-content.ts` and
+     `my-starter-content.ts` are missing (the review simulated this with `node -e`).
 5. The root `CLAUDE.md`, in the "General code is English only" line (`:368-376`), replace
    "Module starter content is English, translated at setup;" with:
-   "Module starter content is English in code, translated at setup from the writing package's
-   `src/starter-content.ts`, a translation file the guard skips by exact path (owner, 2026-10-20,
-   A918);". No other line changes. (`src/starter-content.ts` is not rooted at a top-level folder, so
+   "Module starter content is English in code and translated at setup; its words in other languages
+   live in the writing package's `src/starter-content.ts`, which the guard skips by exact path
+   (owner, 2026-10-20, A918: the reasons so far, the rest in A918's open slices);". This states the
+   rule and where its translations live, and claims only the reasons as done (review I2). Slice 4,
+   the last, drops the words after the colon. No other line changes. (`src/starter-content.ts` is not rooted at a top-level folder, so
    `scripts/claude-md-pointers.test.ts` does not read it as a file pointer, `:31-42`.)
 6. `docs/developers/conventions-data.md`:
    - `:108-109` ("What it covers"): replace "Starter content a module writes into a new venue
-     (A758-1's void and comp reasons) is seeded in English." with "Starter content a module writes
-     into a new venue is English in its code and translated at setup: the package's
-     `src/starter-content.ts` holds each starter's words in every language a new venue can start
-     with, keyed by the English, and the seed writes the venue's content languages from it into a
-     language map and the staff language into a one-name row (A918)."
-   - `:147-153` ("What the guard does not see"): add "a package's top-level `src/starter-content.ts`"
-     to the list after "any `dashboard/strings.ts`".
+     (A758-1's void and comp reasons) is seeded in English." with a sentence that is true once slice
+     1 alone has landed (review I2): "Starter content a module writes into a new venue is English in
+     its code and translated at setup from a translation file in the writing package,
+     `src/starter-content.ts`, keyed by the English. So far that holds for the void and comp reasons
+     (`packages/adjustments/src/starter-content.ts`, A918): each reason's language map gets the
+     venue's starting content languages the file carries, plus English, and its plain name gets the
+     staff language. The kitchen station, the device profiles, the service steps, the seasons, the
+     counter zone, the menu period, the units and the first menu are still written from code (A918's
+     open slices)." Each later slice moves its rows out of that last sentence and, for a one-name
+     row, says its file holds the staff languages only.
+   - `:147-153` ("What the guard does not see"): add "a package's top-level `src/starter-content.ts`,
+     whole: comments and identifiers included, with nothing checking that the file holds only data"
+     to the list after "any `dashboard/strings.ts`" (review M6).
    - `:4467-4468` (the root-detail copy): replace "Starter content a module writes into a new venue is English, translated when the box is set up;" with the sentence step 5 writes, beginning "Module starter content is English in code".
 7. Root guards, each read for its `Tests` line:
    `pnpm exec vitest run scripts/english-only.test.ts scripts/module-seams.test.ts scripts/workspace-cycles.test.ts scripts/write-path-tables.test.ts scripts/claude-md-pointers.test.ts`
@@ -655,9 +731,14 @@ Files: `apps/server/src/guide/es/table-service.md`, `docs/backlog.md`.
    The A977 entry (`:5696`): add `src/starter-content.ts` to the homes it exempts. The backlog is
    under `docs/`, which prettier ignores (`pnpm exec prettier --file-info docs/backlog.md` prints
    `"ignored": true`).
-4. `git diff main...HEAD -- apps packages scripts CLAUDE.md | /usr/bin/grep -n "^+" | /usr/bin/grep -n "[áéíóúñçàèòïü·¿¡]"`:
-   expected hits only in `packages/adjustments/src/starter-content.ts` and
-   `apps/server/src/guide/es/table-service.md`.
+4. `git diff -U0 main...HEAD -- apps packages scripts CLAUDE.md | /usr/bin/grep -E '^\+\+\+ |^\+.*([áéíóúñçàèòïü·¿¡]|Queja|Descuento|motivo|servido|Mesa)'`
+   keeps each file's `+++ b/<file>` header, so the output shows which file every hit is in, and
+   catches the unaccented words too (review M7). Expected: hits under
+   `packages/adjustments/src/starter-content.ts`, `apps/server/src/guide/es/table-service.md` and the
+   guard's fixture in `scripts/english-only.test.ts` (`Mesa`), and headers alone for every other
+   file.
+5. The audit's `settle-invoice-first.ts` row needs no backlog entry: the script was deleted by A973
+   (`8ab1799a9`). Nothing to add (see "Review rulings", M8).
 
 At the end of slice 1, before `/finish-branch`: `git diff --stat main...HEAD -- packages/fiscal-verifactu packages/core apps/server/src/receipt-document.ts apps/server/src/invoice-pdf.ts apps/server/src/receipt-figures.ts`
 prints nothing.
@@ -682,11 +763,20 @@ because the station is written before any seed reads the database. The demo's st
 (`apps/server/scripts/demo-seed/seed-catalogue.ts:44-56`) finds the default station by `is_default`,
 as `dev-setup.ts:293` does, because an English demo's station is now "Kitchen". Changed checks:
 `packages/provisioning/src/venue-plan.test.ts:20` and any case pinning a profile or station name,
-read from the files; the English demo's station name at provisioning. No visible change for a real
-venue (decision 3). Review path: light unless the action's new field is judged a cross-package
+read from the files; `apps/server/src/payments-api.test.ts:1377-1381`, which reads
+`DEFAULT_DEVICE_PROFILES[].nameByLocale.es` and breaks when `nameByLocale` goes (review M10a); the
+English demo's station name at provisioning. It extends `conventions-data.md`'s slice-1 sentence:
+the station and the profiles leave its "still written from code" list, and it says their files
+hold the staff languages only (`es`). Its Task 0 checks whether a configuration import replaces or
+merges `kitchen_stations` and `device_profiles` (review M10c). No visible change for a real venue
+(decision 3), whatever the owner answers to FYI A except its alternative 2, so it does not wait. Review path: light unless the action's new field is judged a cross-package
 contract (it is read only inside `@waitron/provisioning`).
 
-**Slice 3 — `feat/a918-3-venue-service-starters`.** `packages/venue-service/src/starter-content.ts`
+**Slice 3 — `feat/a918-3-venue-service-starters`. Waits for the owner's answer to FYI A**: with the
+default, an English-speaking waiter in a Spanish venue loses today's English seasons, counter zone
+and period; with alternative 1, this slice only moves the words out of general code and renames
+nothing; with alternative 3 it becomes a migration item. The paragraph below is the default's.
+`packages/venue-service/src/starter-content.ts`
 holds the steps (today's «Montar mesa», «Tomar nota», «¿Algo más?», `service-steps.ts:111-113`), the
 seasons («Primavera», «Verano», «Otoño», «Invierno»), the counter zone («Mostrador», the profile's
 word for the same English) and the period («Abierto»), typed `StarterTranslations<"es">` because each
@@ -695,10 +785,35 @@ is a one-name row. `addStarterServiceSteps`, `ensureDefaultSeasons`, the seed's 
 they run, which covers a department added later. `venue-service` is not a package the guard scans
 (`GENERIC_PACKAGES`, `packages/db/src/english-only.ts:15-57`), and its file holds «Montar mesa»,
 which the guard would refuse (probe 1), so the allowance matters there once A977 widens the scan.
+**Three places find the starter period by its English name "Open"** (review I3, re-verified):
+`apps/server/src/setup-opening-hours.ts:27` (`if (period.name !== "Open") return undefined;`, in
+`readSetupOpeningHours`, passed to setup at `boot.ts:1408`, imported at `:262`), which decides whether
+the default department still has its starter hours; and the demo's
+`apps/server/scripts/demo-seed/seed-floor.ts:174` (`eq(menuPeriods.name, "Open")`) and
+`seed-catalogue.ts:108` (`d.name = 'Open'`). In a Spanish venue the period is «Abierto», so the first
+quietly answers `undefined` and the demo's two lookups find nothing. No column marks the starter
+period: `menu_periods` holds `id`, `department_id`, `name`, `colour`, `menu_id` and
+`floor_plan_set_id` (`packages/venue-service/src/schema/menus.ts:20-35`), and adding a marker would be
+a migration. So the default is that venue-service exports the set of names its file gives "Open"
+(the English plus each language's word, as the reasons are matched by `names.en ?? name`) and all
+three match against that set; `seed-catalogue.ts:108` binds them as an `in (…)` list. The
+setup-hours check keeps every other test it already makes (exactly one period in the default
+department, weekdays 09:00-17:00, `setup-opening-hours.ts:24-39`), so a manager who renames the
+period to another word is still told apart (`setup-opening-hours.test.ts:77-81`, renamed to
+"Lunch"). Its cost: a manager who renames the period to «Abierto» in an English venue is read as
+starter, if the hours also match. Tests: `apps/server/src/setup-opening-hours.test.ts` gains a
+Spanish venue whose period is «Abierto» (read from the file) and still gets its summary; the demo's
+`scripts/demo-seed/seed.test.ts` runs a Spanish demo through both lookups. The other starter words
+("Menu", "Home", "Counter", "Kitchen", the seasons, the steps) are found by name nowhere in
+production code (the review's grep). Its Task 0 checks whether a configuration import replaces or
+merges these tables (review M10c). It extends `conventions-data.md`'s sentence as slice 2 does.
 Changed checks: venue-service and server cases pinning "Spring", "Counter" or "Open" for a Spanish
 venue, read from the file. Visible: seasons, zone and period in Spanish in a Spanish venue.
 
-**Slice 4 — `feat/a918-4-catalogue-starters`.** `packages/catalogue/src/starter-content.ts` holds the
+**Slice 4 — `feat/a918-4-catalogue-starters`. Waits for the owner's answer to FYI A**, because the
+first menu's name and the units' staff names are one-name fields that are English today ("Menu",
+`catalogue/src/provisioning.ts:153`; "Gram"…, `:99-139`). The units' language maps follow FYI B
+and do not wait. The paragraph below is the default's. `packages/catalogue/src/starter-content.ts` holds the
 units' names (today's `es`, `ca`, `ca-ES-valencia` and `gl` words from `provisioning.ts:12-39`,
 keyed by `seedKey`; the `eu` words go, because no venue can start in Basque), the staff names in
 Spanish («Gramo»…), and the first menu's «Carta» and, if Task 0 finds it shown on a screen, the home
@@ -706,7 +821,14 @@ layout's «Inicio». Abbreviations stay as letters equal to the staff abbreviati
 pinned by a case, so receipts print the same; Task 0 confirms no unit's full name reaches a receipt
 (if one does, that part splits off, parked for the owner). Changed checks:
 `packages/catalogue/src/provisioning.test.ts:180-255` (each unit's maps now hold the venue's
-languages only). The slice adds a backlog entry for `EACH_UNIT`'s non-English words
+languages only). The root section's `sections.names` is a language map
+(`packages/catalogue/src/schema/sections.ts:36`) that the seed leaves `{}` today; this plan has not
+established where a root section's customer name is shown, so slice 4's Task 0 finds out, and if a
+screen or receipt shows it the slice fills it by decision 4 (review M10b), otherwise it stays `{}`
+and the slice says why. Its Task 0 also checks whether a configuration import replaces or merges
+`units`, `catalogues` and `sections` (review M10c). As the last slice it finishes
+`conventions-data.md`'s sentence (nothing left "still written from code") and drops the words after
+the colon in the root `CLAUDE.md` line. The slice adds a backlog entry for `EACH_UNIT`'s non-English words
 (`packages/catalogue/src/units.ts:28-36`, read by `receipt-figures.ts:205-212`, so its own pull
 request would change printed words and wait for the owner), deletes A918 from `docs/backlog.md`, and
 updates `docs/backlog/architecture.md`'s "Point 1 → A918" bullet (`:435-440`).
@@ -718,3 +840,24 @@ and `pnpm exec vitest run scripts/changed-scope.test.mjs`. No root guard pins a 
 provisioning action list (`git grep -ln "seed-module\|provisioning.seed\|\.seed!" -- 'scripts/*.test.*'`
 printed nothing); `packages/provisioning/src/venue-plan.test.ts` and `venue-apply.test.ts` pin the
 plan and the seed reports inside the package, and slice 2 runs them.
+
+## Review rulings
+
+The fresh plan review (`~/waitron-campaign-b/a918-plan-review.md`, on `24d1a0bfd`) found 0 Critical,
+3 Important and 10 Minor. The driver ruled against none. Each is folded in as follows:
+
+| Finding | Ruling | Folded into |
+| --- | --- | --- |
+| **I1**: FYI A left out the owner's own example (the English-speaking waiter), so the departure looked smaller than it is | Take it; slice 3 waits for FYI A; slices 1 and 2 do not, verified | FYI A gains the English-speaking waiter's example (seasons, counter zone and period becoming «Primavera»…, «Mostrador», «Abierto») and, as alternative 1, keeping the one-name rows as today. The slice table and "Why slices 3 and 4 wait" record who waits. Verified, not assumed: slice 2's rows are Spanish today for every real venue, so it does not wait. **Slice 4 waits too**: its first menu and units' staff names are one-name fields that are English today, the same case as slice 3 (not named in the ruling; found while verifying). Slice 1 does not wait, per the ruling; FYI C now states the English-speaking manager's dashboard change |
+| **I2**: the new `conventions-data.md` sentence claimed more than slice 1 delivers | Narrow it to what is true after slice 1; later slices extend it | Task 3 step 6's sentence names only the reasons as done and lists the rest as still written from code; step 5's `CLAUDE.md` wording claims only the reasons. Slices 2, 3 and 4 each say how they extend the sentence; slice 4 finishes it |
+| **I3**: slice 3 missed code that finds the starter period by its English name | Name the three sites and how they move off the English name | Slice 3's paragraph names `setup-opening-hours.ts:27`, `seed-floor.ts:174` and `seed-catalogue.ts:108` (re-verified). No column marks the starter period (`menus.ts:20-35`), so the default matches against the set of names the starter file gives "Open", with no migration; it names the tests |
+| **M1**: the `endsWith` control predicted three files; `findSpanish` answers `Violation[]` | Fix as the review says | Task 3 step 4 predicts two files; step 2 maps to `.word` |
+| **M2**: the "delete Discount" control described its failure backwards | Fix | Task 2 step 5 states the `TypeError` in the four-venue case and the received side holding `Discount` |
+| **M3**: decision 2 cited a rule that does not forbid one module reading another's table | Fix | Decision 2's third reason now says adjustments would have to `require` the catalogue's migration set for a single row (`conventions-data.md:4606-4610`, `:1527`) |
+| **M4**: decision 3's staff language is not `readVenueLocale`'s display language | Fix | Decision 3 drops the old definition, says where the two differ (only an `en-GB`-receipt demo or developer venue) and why the receipt override is kept |
+| **M5**: two required test edits were missing from "Changed test checks" | Fix | A row for the `:116` and `:127` call sites; the `:93` title change added to row 2; Task 2's "stay unedited" corrected |
+| **M6**: the guard fixture spells «Mesa»; two `english-only.ts` comments go stale; the whole-file skip needs its hedge | Fix | Global constraints name the guard suite's existing exception (`FIXTURE`, `english-only.test.ts:32-50`); Task 3 step 3 rewords `:100-103` and `:229-230`; step 6's "What the guard does not see" line says the whole file is skipped and nothing checks that it holds only data |
+| **M7**: Task 4 step 4's grep dropped the file headers and missed unaccented words | Fix | The review's `git diff -U0 … grep -E '^\+\+\+ |^\+.*(…)'` command, with the expected output |
+| **M8**: the audit's `settle-invoice-first.ts` row was accounted for nowhere | A one-line leave-out note, and a backlog entry added in slice 1's docs task | **Folded differently, on evidence.** The leave-out note is added. But the script no longer exists: A973 deleted it (`8ab1799a9`, #1967; `ls apps/server/scripts/settle-invoice-first.ts` prints "No such file or directory"), and the audit's own dated note says so (`english-only-audit.md:8`). A backlog entry would track nothing, so Task 4 step 5 records why none is added. This is for the driver to overrule |
+| **M9**: indexing the `as const` file with a `string` is TS7053 under `strict` | Fix | Task 2 step 1 declares `const expected: StarterTranslations<StarterContentLanguage> = STARTER_REASON_NAMES;` |
+| **M10**: three facts for the later slices | Fix | (a) slice 2 names `payments-api.test.ts:1377-1381`; (b) slice 4 says why the root section's `names` stays `{}` until its Task 0 finds where it is shown; (c) the leave-outs list the tables a configuration export carries, and slices 2, 3 and 4 each check, in their Task 0, whether an import replaces or merges them |
