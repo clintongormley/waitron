@@ -381,4 +381,27 @@ describe("MenuPatchDraft", () => {
     next.unclonable = () => undefined;
     expect(() => draft.rebase(next)).toThrow(DOMException);
   });
+
+  it("on rebase takes the content languages it is given, dropping and counting what they refuse", () => {
+    const fixedNames = () => {
+      const document = menuDocument([documentSection("sec-drinks", "Drinks", [])], {});
+      const drinks = document.root.members[0] as Extract<
+        MenuDocument["root"]["members"][number],
+        { kind: "section" }
+      >;
+      drinks.names = { en: "Bar", es: "Bebidas" };
+      drinks.fixed = { names: { en: "Bar" } };
+      return document;
+    };
+    const target = { kind: "section", sectionId: "sec-drinks" } as const;
+    const draft = new MenuPatchDraft(fixedNames(), languages);
+    draft.set({ target, field: "names", value: { en: "Bar", es: "Copas" } });
+    expect(draft.changes()).toHaveLength(1);
+    expect(draft.rebase(fixedNames(), languages)).toEqual({ dropped: 0 });
+    expect(draft.changes()).toHaveLength(1);
+    expect(draft.rebase(fixedNames(), { defaultLanguage: "en", languages: ["en"] })).toEqual({
+      dropped: 1,
+    });
+    expect(draft.changes()).toEqual([]);
+  });
 });

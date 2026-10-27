@@ -245,6 +245,6 @@ it("words a bottom refusal, filling its placeholders and saying when a change no
     "Version {liveNumber} went live",
   );
   expect(refusalWords({ code: "menu_patch.invalid", params: { change: 0, field: "target" } })).toBe(
-    "One of these changes no longer fits the live menu, for example because the menu's languages or its live version changed while you were editing. Nothing was put live. Reload to read the live menu again; changes that still fit it are kept.",
+    "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",
   );
 });

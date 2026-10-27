@@ -7,6 +7,7 @@ import {
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
+  subscribeContentLanguages,
   visuallyHiddenStyles,
   type DraftScope,
 } from "@waitron/ui";
@@ -296,6 +297,16 @@ export class MenuPatchDialog extends LitElement {
     super();
     new LocaleChangeController(this);
     new ContentLanguageController(this);
+    // The venue's content languages decide what a patch may hold, so the draft follows them.
+    let unsubscribe: (() => void) | undefined;
+    this.addController({
+      hostConnected: () => {
+        unsubscribe = subscribeContentLanguages(() => {
+          if (this.live !== null) this.#applyLive(this.live);
+        });
+      },
+      hostDisconnected: () => unsubscribe!(),
+    });
   }
 
   /** The staged changes, as a save would send them. */
@@ -385,7 +396,7 @@ export class MenuPatchDialog extends LitElement {
         if (this.refusal?.code === "menu_patch.base_changed") this.refusal = null;
         this.reloadFailure = null;
       }
-      this.dropped += this.#draft.rebase(answer.document).dropped;
+      this.dropped += this.#draft.rebase(answer.document, currentContentLanguages()).dropped;
       this.#forgetSettled(answer.document);
       this.#scope!.changed();
     }

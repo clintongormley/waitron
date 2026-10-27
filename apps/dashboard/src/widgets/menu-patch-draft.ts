@@ -148,7 +148,7 @@ export class MenuPatchDraft {
 
   constructor(
     private document: MenuDocument,
-    private readonly languages: ContentLanguages,
+    private languages: ContentLanguages,
   ) {}
 
   /** Whether `change` leaves its field as the live version holds it, judged as `applyMenuPatch`
@@ -214,10 +214,12 @@ export class MenuPatchDraft {
     return this.perTarget.has(targetKey(target));
   }
 
-  /** Moves the draft onto a newer live version. A change that version already holds goes without
-   * being counted; one `applyMenuPatch` refuses on it is dropped and counted. */
-  rebase(document: MenuDocument): { dropped: number } {
+  /** Moves the draft onto a newer live version, judged with `languages`. A change that version
+   * already holds goes without being counted; one `applyMenuPatch` refuses on it is dropped and
+   * counted. */
+  rebase(document: MenuDocument, languages = this.languages): { dropped: number } {
     this.document = document;
+    this.languages = languages;
     for (const [key, change] of this.staged) if (this.isLive(change)) this.unstage(key);
     let dropped = 0;
     for (;;) {

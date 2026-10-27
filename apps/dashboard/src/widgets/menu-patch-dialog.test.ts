@@ -824,7 +824,7 @@ it("explains a refusal that names no field shown, at the bottom, and keeps Put l
     ],
     [
       refusal("menu_patch.invalid", { change: 0, field: "target" }),
-      "One of these changes no longer fits the live menu, for example because the menu's languages or its live version changed while you were editing. Nothing was put live. Reload to read the live menu again; changes that still fit it are kept.",
+      "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",
     ],
     [new Error("the box is unreachable"), codeMessage("server.internal")],
   ] as const) {
@@ -834,7 +834,7 @@ it("explains a refusal that names no field shown, at the bottom, and keeps Put l
     await press(el, "review");
     await press(el, "put-live");
     expect(bottomMessage(el)).toBe(message);
-    // Only the change that no longer fits offers to read the live menu again.
+    // Of these refusals, only the change that no longer fits offers Reload.
     expect(footerButton(el, "reload") !== null).toBe(message.startsWith("One of these changes"));
     expect(reviewLines(el)).toEqual(["Soup: Price €3.00 → €4.00"]);
     expect(footerButton(el, "put-live")!.disabled).toBe(false);
@@ -1226,4 +1226,26 @@ it("keeps the newer-version refusal when the same version is read again", async 
   await vi.waitFor(() => expect(getLiveMenu).toHaveBeenCalledTimes(2));
   await flush(el);
   expect(footerButton(el, "reload")).not.toBeNull();
+});
+
+it("drops and counts a change the venue's new content languages refuse, as they change", async () => {
+  const document = lunch();
+  const drinks = document.root.members[1] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  drinks.names = { en: "Bar", es: "Bebidas" };
+  drinks.fixed = { names: { en: "Bar" } };
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Drinks");
+  await type(el, "wt-input", "names-es", "Copas");
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  expect(el.changes).toHaveLength(2);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
+    "1 change no longer fits the live version and was dropped.",
+  );
 });

@@ -2955,7 +2955,7 @@ export const en = {
   "menu_patch.needs_correcting": "Needs correcting",
   "menu_patch.fix_items": "Correct the fields marked on {items} to continue.",
   "menu_patch.no_longer_fits":
-    "One of these changes no longer fits the live menu, for example because the menu's languages or its live version changed while you were editing. Nothing was put live. Reload to read the live menu again; changes that still fit it are kept.",
+    "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",
   "menu_patch.products_note":
     "The next normal publish from the products puts the old values back unless you fix the products too.",
   "menu_patch.keep_editing": "Keep editing",
@@ -6475,7 +6475,7 @@ export const es: Record<StringKey, string> = {
   "menu_patch.needs_correcting": "Necesita corrección",
   "menu_patch.fix_items": "Corrige los campos marcados en {items} para continuar.",
   "menu_patch.no_longer_fits":
-    "Una de estas correcciones ya no encaja en la carta publicada, por ejemplo porque los idiomas de la carta o su versión publicada han cambiado mientras editabas. No se ha publicado nada. Vuelve a cargar para leer de nuevo la carta publicada; se conservan las correcciones que todavía encajan.",
+    "Una de estas correcciones ya no encaja en la carta publicada, por ejemplo porque los idiomas del contenido del local han cambiado mientras editabas. No se ha publicado nada. Volver a cargar lee de nuevo la carta publicada y comprueba cada corrección con los idiomas del contenido que tiene esta página: descarta las que no encajan, dice cuántas y conserva el resto.",
   "menu_patch.products_note":
     "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, salvo que corrijas también los productos.",
   "menu_patch.keep_editing": "Seguir editando",
