@@ -370,6 +370,8 @@ describe("till-station-queue", () => {
             groups: [{ ...moved(formerNumbers), label: "Mesa 91" }],
             stationId: "st-1",
           });
+          el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')!.click();
+          await el.updateComplete;
           const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
           expect(flat(name)).toBe("2× Paella");
           expect(name.clientWidth).toBeGreaterThan(0);
@@ -3075,11 +3077,10 @@ describe("the board's cards", () => {
     }
   });
 
-  it("keeps a long dish name whole inside its card at 1024 px", async () => {
-    const previous = { width: innerWidth, height: innerHeight };
-    await page.viewport(1024, 844);
-    try {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+  it("a long dish name at a 1024 px kitchen display: cut beside Overview, whole without it", async () => {
+    await pageAt(1024, 844);
+    const atDisplay = async (hidden: ColumnKey[]) => {
+      const { el, host } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [
           {
             ...groupA,
@@ -3090,18 +3091,27 @@ describe("the board's cards", () => {
           },
         ],
         stationId: "st-1",
+        columns: { order: [...STATION_COLUMNS.order], hidden, collapsed: [] },
       });
+      // The station screen's own padding, inside the page's.
+      host.style.paddingInline = "var(--wt-space-4)";
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(el.getBoundingClientRect().width).toBe(944);
+      expect(el.shadowRoot!.querySelector(".kanban")).not.toBeNull();
       const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
       expect(flat(name)).toBe("2× Grilled octopus with paprika");
       expect(name.clientWidth).toBeGreaterThan(0);
-      expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
       const box = name.getBoundingClientRect();
       const card = name.closest("[data-card]")!.getBoundingClientRect();
       expect(box.left).toBeGreaterThanOrEqual(card.left);
       expect(box.right).toBeLessThanOrEqual(card.right);
-    } finally {
-      await page.viewport(previous.width, previous.height);
-    }
+      return name.scrollWidth > name.clientWidth;
+    };
+    expect(STATION_COLUMNS.order[0]).toBe("overview");
+    expect(await atDisplay([]), "cut beside Overview").toBe(true);
+    cleanupWidgets();
+    expect(await atDisplay(["overview"]), "cut without Overview").toBe(false);
   });
 });
 
@@ -3570,6 +3580,8 @@ describe("till-station-queue: a card's layout", () => {
           stationId: "st-1",
           now: AGE_NOW,
         });
+        el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')!.click();
+        await el.updateComplete;
         const card = cardOf(el, 9);
         const head = card.querySelector<HTMLElement>(".ticket-head")!;
         expect(head.querySelectorAll(".number")).toHaveLength(2);
@@ -3614,8 +3626,10 @@ describe("till-station-queue: a card's layout", () => {
         canMove: true,
         now: AGE_NOW,
       });
-      expect(el.shadowRoot!.querySelector('[data-move-station="waiting"]')).not.toBeNull();
       // At 390 px the board draws tabs, so each card is checked under its own tab.
+      el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')?.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-move-station="waiting"]')).not.toBeNull();
       const spans = async (order: number, item: string, tab: ColumnKey) => {
         el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-column-tab="${tab}"]`)?.click();
         await el.updateComplete;
@@ -3897,6 +3911,7 @@ describe("the board's columns", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       stationId: "st-1",
+      columns: state(open),
     });
     const keys = asked(el);
     const button = toggle(el, "ready");
@@ -4489,7 +4504,7 @@ describe("the board's header row and hidden columns", () => {
     expect(asked[0]!.detail.opener).toBe(columnsButton(el));
     expect(el.columns).toBe(columns);
     expect(columns).toEqual({
-      order: ["waiting", "preparing", "ready"],
+      order: ["overview", "waiting", "preparing", "ready"],
       hidden: [],
       collapsed: [],
     });

@@ -89,6 +89,8 @@ describe("kitchen instructions on station work", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [{ ...group, kitchenNote: "instruction".repeat(180) }],
     });
+    el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')!.click();
+    await el.updateComplete;
     const heading = el.shadowRoot!.querySelector<HTMLElement>("[data-kitchen-note]")!;
     const bounds = heading.getBoundingClientRect();
     expect(window.innerWidth).toBe(390);

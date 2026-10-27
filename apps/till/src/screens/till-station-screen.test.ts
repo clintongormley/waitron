@@ -2813,7 +2813,7 @@ describe("till-station-screen 15-second refresh", () => {
       await flush(el);
       expect(api.getStationQueue).toHaveBeenCalledTimes(2);
       expect(columnsWindow(el)).not.toBeNull();
-      expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+      expect(queueWidget(el)!.columns.order).toEqual(["overview", "waiting", "ready", "preparing"]);
     });
 
     it("the board's narrow tabs: the chosen tab survives the screen's 15-second refresh", async () => {
@@ -5324,7 +5324,7 @@ describe("the device's kitchen columns", () => {
     expect(storedColumnKeys()).toEqual([columnsKey("st-1")]);
     expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!)).toEqual({
       version: 1,
-      order: ["waiting", "preparing", "ready"],
+      order: ["overview", "waiting", "preparing", "ready"],
       hidden: [],
       collapsed: ["ready"],
     });
@@ -5406,6 +5406,43 @@ describe("the device's kitchen columns", () => {
     expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
     expect(escaped).not.toHaveBeenCalled();
   });
+
+  it("the device's kitchen columns: Overview comes first by default", async () => {
+    const { el } = await mountOperator();
+    const queue = queueWidget(el)!;
+    expect(queue.columns.order).toEqual(["overview", "waiting", "preparing", "ready"]);
+    expect(queue.shadowRoot!.querySelector("[data-column]")!.getAttribute("data-column")).toBe(
+      "overview",
+    );
+  });
+
+  it("the device's kitchen columns: a layout saved before Overview shows Overview first, shown and open", async () => {
+    localStorage.setItem(
+      columnsKey("st-1"),
+      JSON.stringify({
+        version: 1,
+        order: ["ready", "waiting", "preparing"],
+        hidden: [],
+        collapsed: ["ready"],
+      }),
+    );
+    const { el } = await mountOperator();
+    const queue = queueWidget(el)!;
+    expect(queue.columns.order).toEqual(["overview", "ready", "waiting", "preparing"]);
+    expect(queue.columns.hidden).not.toContain("overview");
+    expect(queue.columns.collapsed).not.toContain("overview");
+    expect(isCollapsed(queue, "overview")).toBe(false);
+    expect(isCollapsed(queue, "ready")).toBe(true);
+  });
+
+  it("the device's kitchen columns: the Columns window lists Overview", async () => {
+    const { el } = await mountOperator();
+    await openColumns(el);
+    const names = [
+      ...columnsWindow(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-name]"),
+    ].map((name) => name.textContent!.trim());
+    expect(names[0]).toBe(t("station.overview"));
+  });
 });
 
 describe("the Columns window on the till", () => {
@@ -5438,15 +5475,21 @@ describe("the Columns window on the till", () => {
     await openColumns(el);
     await pressInWindow(el, '[data-column-up="ready"]');
     expect(columnsWindow(el)).not.toBeNull();
-    expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+    expect(queueWidget(el)!.columns.order).toEqual(["overview", "waiting", "ready", "preparing"]);
     expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!).order).toEqual([
+      "overview",
       "waiting",
       "ready",
       "preparing",
     ]);
     cleanupWidgets();
     const again = await mountOperator();
-    expect(queueWidget(again.el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+    expect(queueWidget(again.el)!.columns.order).toEqual([
+      "overview",
+      "waiting",
+      "ready",
+      "preparing",
+    ]);
   });
 
   it("the Columns window: its events stop at the screen", async () => {
@@ -5467,7 +5510,7 @@ describe("the Columns window on the till", () => {
     const { el } = await mountOperator({ serverOrigin: undefined });
     await openColumns(el);
     await pressInWindow(el, '[data-column-up="ready"]');
-    expect(queueWidget(el)!.columns.order).toEqual(["waiting", "ready", "preparing"]);
+    expect(queueWidget(el)!.columns.order).toEqual(["overview", "waiting", "ready", "preparing"]);
     expect(storedColumnKeys()).toEqual([]);
   });
 
