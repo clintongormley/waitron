@@ -221,7 +221,8 @@ developer's English demo in Madrid (receipts `en-GB`).
 
 1. **The starter file is `src/starter-content.ts` in the package whose seed writes the words.** It
    holds only data: one exported object per kind of starter, keyed by the starter's English text
-   (units by their existing `seedKey`), each value the starter's words in the other languages. Typed
+   (units by their existing `seedKey`; 2026-10-27, slice 4: units are keyed by their English staff
+   name instead, slice 4 decision 1), each value the starter's words in the other languages. Typed
    with the `StarterTranslations` type from `@waitron/country-packs` (decision 5), so a missing
    language is a type error. English stays in the seed's code, where the rule allows it, and is the
    key, because the code already finds starters by English (`NOT_SERVED_REASON`,
@@ -1659,7 +1660,7 @@ starting content languages. It also renamed the home layout's `HOME_SECTION_NAME
      ticket prints a section (item 2's readers print lines only). It is shown to staff on that same
      folder tile, and the gap report lists the first menu as missing customer text in each enabled
      language (`content-translation-candidates.ts:26-30`, `:87-90`), as it does today. So it stays
-     `{}` (decision 4 below).
+     `{}` (decision 5 below).
    - The home layout's `internal_name` "Home": **shown nowhere.** `readMenuHome` returns no name
      (`packages/catalogue/src/menu-home.ts:75-95`), a home layout cannot be edited or
      given members by the section writes (`packages/catalogue/src/sections.ts:88-93`, `:192-193`), and the gap report leaves it out
@@ -1779,7 +1780,10 @@ note.
    falls back to the internal name, which is the same for everyone as the owner chose for one-name
    rows (filling `{ en: "Menu", es: "Carta" }` would show an English-speaking waiter "Menu" on that
    tile while the menus list says «Carta»), and the gap report keeps asking a manager for the menu's
-   customer names, as today. **The home layout stays "Home", in code, and `createMenuShell` does
+   customer names, as today. This departs from the M10b fold ("fills it if a screen shows it"):
+   Task 0 found the till's folder tile and the gap report show it, to staff only; filling it would
+   split the one-name menu across languages, so it stays `{}` (review I2; the driver may overrule).
+   **The home layout stays "Home", in code, and `createMenuShell` does
    not change**: it is shown nowhere (Task 0 item 3), so it is not starter content as this plan
    defines it ("words a person reads"); and so `createMenuShell` needs no language for the menus a
    manager adds, whose root takes the name the manager typed (`operations.ts:325-342`).
@@ -1789,13 +1793,19 @@ note.
 
 - **Bar Ejemplo, Valencia, `es-ES` receipts** (staff `es`; content `ca-ES-valencia`, `es`, `en`):
   its units' staff names are «Gramo», «Kilogramo», «Miligramo», «Mililitro», «Litro», where today
-  they are "Gram"…, for everyone, an English-speaking manager included; each unit's `name` holds
+  they are "Gram"…. The staff name shows in three places: the unit editor's Staff name field
+  (`apps/dashboard/src/widgets/unit-form.ts:364-370`), the translation gap report's unit rows
+  (`packages/catalogue/src/content-translation-candidates.ts:101`), and as the fallback wherever a
+  unit's name is blank. The units list, the product screens and the till show `name` in each
+  person's screen language (`unitPresentation`, `packages/catalogue/src/unit-presentation.ts:14-23`),
+  so an English-speaking manager still reads "Gram" there and a Spanish-speaking one «Gramo», as
+  today (review I1). Each unit's `name` holds
   English, Valencian and Spanish (today also `ca`, `gl`, `eu`), its `abbreviation` the same three
   languages, each the staff abbreviation. Its first menu is «Carta» (today "Menu"), its root
   section «Carta», the root's customer names empty, the home layout "Home". A receipt still prints
   "0.35 kg".
 - **Bar Exemple, Barcelona, `ca-ES` receipts** (staff `es`, the screens have no Catalan): the same
-  Spanish staff names and «Carta»; the maps hold English, Catalan and Spanish.
+  Spanish staff names (shown in the same three places) and «Carta»; the maps hold English, Catalan and Spanish.
 - **A Madrid demo with `en-GB` receipts** (staff `en`): staff names "Gram"… and the menu "Menu",
   as today; maps hold English and Spanish. The demo then renames the menu and makes its own units,
   as today.
@@ -1820,7 +1830,8 @@ only in `packages/catalogue/src/starter-content.ts` and the docs that name the w
 expected words from that file (`expected[english].es`, through a variable typed
 `StarterTranslations<StarterContentLanguage>` so a string index compiles, slice 1's M9). Two words
 already in `provisioning.test.ts`, a test's own edits («pieza» at `:260`, «Masa» at `:294`), are not
-starter words and are left as they are. No migration, no error code, no receipt, invoice,
+starter words; Task 1 replaces them with English test data ("piece" alone in the map, "Mass"), the
+checks after them comparing against the same new values (review M7). No migration, no error code, no receipt, invoice,
 filed-record or report change. New test file: `packages/catalogue/src/starter-content.test.ts`; no
 new server test file, no manifest change. Every implementer runs `pnpm format:check` before each
 commit.
@@ -1864,7 +1875,9 @@ Files: `packages/catalogue/src/starter-content.ts` (new), `starter-content.test.
      receipt)` helper (`:29-44`), each row stating its expected staff language and languages as
      literals: Valencia `ES`/`"Valencia"`/`es-ES` → `es`, `["ca-ES-valencia", "es", "en"]`;
      Barcelona `ES`/`"Barcelona"`/`ca-ES` → `es`, `["ca", "es", "en"]`; Madrid `ES`/`"Madrid"`/`en-GB`
-     → `en`, `["es", "en"]`; London `GB`/`"London"`/`en-GB` → `en`, `["en"]`. For each seeded unit
+     → `en`, `["es", "en"]`; London `GB`/`"London"`/`en-GB` → `en`, `["en"]`; and a fifth row, Madrid
+     with receipts `["en-GB", "es-ES"]` → `en`, `["es", "en"]`, so reading any receipt language but
+     the first is caught (review M2; `venue()` takes a list as well as one language). For each seeded unit
      (`toEqual`, ordered by `seed_key`): `staffName` is `english` for `en` and
      `expected[english][staffLanguage]` otherwise; `staffAbbreviation` is today's letters; `name`
      equals `Object.fromEntries(languages.map((l) => [l, l === "en" ? english : expected[english][l]]))`;
@@ -1896,8 +1909,13 @@ Files: `packages/catalogue/src/starter-content.ts` (new), `starter-content.test.
    - Write `name` with `STARTER_CONTENT_LANGUAGES` instead of the venue's `languages`: the Valencia
      row fails, receiving `ca` and `gl` keys.
    - Give the `kg` unit's `es` abbreviation the text `"kgs"`: the abbreviation pin fails.
-   - Delete the `Litre` entry from `STARTER_UNIT_NAMES`: the key case fails, and the Valencia row
-     fails receiving "Litre" where it expected the `es` word.
+   - Delete the `Litre` entry from `STARTER_UNIT_NAMES`: the key case fails; the Valencia, Barcelona
+     and Madrid rows fail with a `TypeError` reading the missing entry; London passes (review M1).
+   - Put `eu: "Gramo"` into one entry: `pnpm --filter @waitron/catalogue typecheck` fails with
+     TS2353 (no test checks it; the type does, review M3).
+   - Before deleting `UNIT_NAMES`, a one-off `node` check that each new entry equals today's
+     `UNIT_NAMES[seedKey]` without `en` and `eu`; the command and its output go in the commit
+     message (review M3).
 
 ## Task 2: the first menu
 
@@ -1939,7 +1957,7 @@ The root `CLAUDE.md`, the guides and the audit do not change (Task 0, "Guides an
    A918", and says the one-name rows (the station, the profiles, the steps, the seasons, the zone,
    the period, the first menu and the units' staff names) are written in the staff language.
    Replace the last sentence ("The units, and the first menu with its root section and home layout,
-   are still written from code (A918's open slice).") with: "A unit's abbreviation is the same
+   are still written from code (A918's open slice).") with: "A starter unit's abbreviation is the same
    letters in every language, so it is not in the file: its map holds the staff abbreviation under
    each language its name holds. The first menu's root section takes the menu's name and starts
    with no customer-facing names; the home layout's internal name, "Home", is shown nowhere and
@@ -1953,7 +1971,7 @@ The root `CLAUDE.md`, the guides and the audit do not change (Task 0, "Guides an
      today (`:2012-2016`).
    - A new entry under "Menus and the catalogue" (`:617`), beside the `EACH_UNIT` id entry
      (`:1055-1058`): "**`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general
-     code (found by A918's sweep).** `packages/catalogue/src/units.ts:28-36` is never written into
+     code (left open by A918 slice 4, #<this PR>).** `packages/catalogue/src/units.ts:28-36` is never written into
      a venue, but the receipt reads its abbreviations to decide whether a line prints a unit
      (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text:
      its own pull request waits for the owner."
@@ -1964,6 +1982,10 @@ The root `CLAUDE.md`, the guides and the audit do not change (Task 0, "Guides an
 3. `docs/backlog/architecture.md`:
    - The "Point 1 → A918" bullet (`:417-427`) is finished: delete it (the backlog's rule, a change
      that finishes an entry deletes it, `docs/backlog.md:6316-6321`). Its trap was fixed in slice 2.
+   - `:411-412`'s intro ("Point 1 follows from … A918's answer") says Point 1 was A918, finished
+     2026-10-27, its decision under Decisions and deliberate limits (review M5).
+   - `docs/backlog/english-only-audit.md:25` ("are A918 and A963–A977"): a dated note as at its
+     `:3-7`, saying A918 finished 2026-10-27 (review M5).
    - `:477` (A972): drop "After A918."; `:508` (A977): "after A918 and A963–A975 land" becomes
      "after A963–A975 land".
    - Under "Decisions and deliberate limits" (`:634`), a new entry, because the root `CLAUDE.md`
@@ -1973,7 +1995,8 @@ The root `CLAUDE.md`, the guides and the audit do not change (Task 0, "Guides an
      answer, B to F the defaults), one sentence each on what they mean (a translation file per
      writing package; one-name rows in the staff language, the same for everyone, existing venues
      keep theirs; language maps hold the venue's content languages the file carries, plus English),
-     and a pointer to `conventions-data.md#general-code-is-english-only` and this plan.
+     and `conventions-data.md#general-code-is-english-only` as its lasting pointer (this plan a
+     secondary one; the entry carries the owner's words itself, review M6).
 4. The English-only check of the diff, outside the plans folder:
    `LC_ALL=en_US.UTF-8 git diff -U0 main...HEAD -- . ':!docs/superpowers/plans' | /usr/bin/grep -E '^\+\+\+ |^\+.*(Gramo|Kilogramo|Quilogram|Miligramo|Mil·ligram|Mililitro|Mil·lilitre|Litro|Carta|Cocina|[áéíóúñ¿·])'`:
    hits only in `packages/catalogue/src/starter-content.ts` and in the docs lines that name the
@@ -1984,6 +2007,17 @@ The root `CLAUDE.md`, the guides and the audit do not change (Task 0, "Guides an
 Root guards before `/finish-branch`: the plan's list (below). At the end of the slice:
 `git diff --stat main...HEAD -- packages/fiscal-verifactu packages/core packages/db apps/server/src`
 prints nothing.
+
+## Review rulings (slice 4)
+
+The fresh plan review (`~/waitron-campaign-b/a918-4-plan-review.md`, on `a5d1d7924`) found 0
+Critical, 2 Important and 7 Minor; it ran a prototype of Tasks 1-2 in a throwaway copy (the two
+listed checks were the only existing failures; the new cases failed against today's seed). The
+driver took all nine, folded above: I1 (where a unit's staff name actually shows), I2 (the root's
+names stay `{}`, stated as a departure from M10b), M1 (the Litre control's failure), M2 (a
+two-language receipt row), M3 (the `eu` and moved-words controls), M4 (top decision 1's dated
+note), M5 (two more A918 pointers), M6 (the backlog entries' wording), M7 ("starter unit", English
+test data). Review path: light (the review agreed).
 
 ## Review focus (slice 4)
 
