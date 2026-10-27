@@ -193,6 +193,8 @@ the tab, unless the department's saved receipt settings cannot be read: then it 
 When a department's receipt settings cannot be read, its receipts and invoices print no logo at all,
 rather than one that may be the wrong one.
 
+In a department’s **Receipts** preview, fixed receipt words follow the selected receipt language. The language of your dashboard controls does not change those words.
+
 ## Set colours and text by hand {#advanced}
 
 Below the choices and the preview, the editor has a section headed **Advanced: set colours and

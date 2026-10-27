@@ -23,6 +23,8 @@ Desactivar y volver a activar el mismo lector conserva tu elección, igual que v
 ese lector conservado. Si lo eliminas y lo añades como uno nuevo, el ajuste empieza desactivado.
 La exportación de configuración incluye la política de pagos, pero no los lectores ni este ajuste.
 
+Cuando Waitron imprime el justificante de tarjeta de una venta, sus palabras, fecha e importes siguen el idioma de ticket guardado con esa venta. Cambiar el idioma de tu pantalla o el idioma de ticket actual del local conserva el idioma original del justificante de la venta anterior.
+
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
 La página de la caja **Este dispositivo todavía no confía en la caja** usa el idioma compatible
@@ -49,6 +51,8 @@ con el importe que sobra. Elígelo para abrir los pagos de la cuenta. Si solo se
 pago, se abre su ventana de devolución con el importe que sobra seleccionado. Si se pueden
 devolver varios pagos, elige cuál quieres devolver. Si no se pueden consultar los pagos, la
 ventana explica el problema; ciérrala y vuelve a abrirla antes de elegir un pago.
+
+El justificante de devolución usa por defecto el idioma de ticket de la venta original, aunque tu pantalla use otro idioma.
 
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 

@@ -427,17 +427,6 @@ until A977).
   snapshot units and card-slip formatting keep their separate inputs. Implementation remains open,
   subject to A773-2's printing reservations (A807/A808 landed 2026-10-27). A966–A968 depend on the implementation,
   not the plan's publication.
-- **A965 — points 3(1), 3(2), 3(5) and 5's English.** `country-es`'s receipt words
-  (`packages/country-es/src/receipt-labels.ts`) gain English, shown on English screens, never printed
-  on a Spanish receipt; say in the plan where each is shown. The card payment slip's words
-  (`apps/server/src/payment-slip.ts:21–55`, no English, no language choice) and the refund receipt's
-  heading table (`tender-refund-receipt.ts:94–99`, already keyed by language) move into Spain's
-  receipt words, and the slip prints in the receipt language; the sample receipt (`sample-receipt.ts:14–39`) takes the receipt language.
-  An earlier owner ruling calls its «Mesa 6» and «Café y tostada» internal sample values
-  ([printers.md](printers.md), A754); ask whether point 3 changes that before translating them. If it
-  changes a word printed on a simplified or full invoice, the owner lands it (2026-10-21 rule).
-  The [implementation plan](../superpowers/plans/2026-10-27-a965-receipt-language.md) traces receipt, payment and sample callers.
-  Implementation remains open; O1 holds translation of the two internal sample values, not independent language plumbing.
 - **A966 — point 2: emails.** `account-email.ts:38–72, 125` and `attendance-email.ts:18–22, 46, 49`
   move into `apps/server/src/i18n/`. No visible change. After A964.
 - **A967 — point 2: printed pages, in two pull requests.** The working-time PDF's frame

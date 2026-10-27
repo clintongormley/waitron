@@ -4439,8 +4439,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **Future-tense lines outside the delete windows were left alone.**
   [Detail](backlog/languages.md#future-tense-lines-outside-the-delete-windows)
 
-- **The payment slip was left alone.** See A964 and A965.
-  [Detail](backlog/languages.md#the-payment-slip-was-left-alone)
 
 - **The translations need a native or official check.**
   [Detail](backlog/languages.md#the-translations-need-a-native-or-official-check)
@@ -4452,8 +4450,9 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
   paper it drops to its own line wherever it prints in words.
 
-- The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
-  «Café y tostada») in every language; only its fixed words change. A965 asks whether that stays.
+- **The two internal sample names:** the owner question about translating «Mesa 6» and
+  «Café y tostada» remains open. Keep their existing values meanwhile.
+  [Decision](backlog/printers.md#decisions-and-deliberate-limits)
 
 ### Alerts, logging and diagnostics
 
@@ -5809,7 +5808,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
   ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's answers became the
-  items below. A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  items below. A963 and A964 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A963. A full invoice's address: Spain's rule moves to Spain's pack, the till stores a country
   code.** `apps/server/src/invoice-selection.ts` refuses an address not ending «España» with a
@@ -5820,11 +5819,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   using the saved default content language. Recheck A773-2's printing reservations before
   implementation; A807/A808 have landed (see the plan's BUILD gate). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A965. Spain's receipt words gain English; the card slip prints in the receipt language, and the
-  refund receipt's heading moves into Spain's pack.** Build from the [implementation plan](superpowers/plans/2026-10-27-a965-receipt-language.md).
-  Ask O1 before translating the two internal sample names; preserve them while unanswered.
-  English receipt resources, payment documents and sample-language plumbing are implemented on the active branch; final qualification and review remain. The owner lands invoice-word changes.
-  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A966. The server's emails move into `apps/server/src/i18n/`** (account and missed-clocking
   emails). No visible change. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)

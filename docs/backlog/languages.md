@@ -27,14 +27,6 @@ their full text.
   `Català (Espanya, valencià)` in Catalan from `languageDisplayName`; A419 supplies the English and
   Spanish names.
 
-## The payment slip was left alone
-
-Its words («JUSTIFICANTE DE PAGO», «Importe»,
-«Cobrado») stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still
-follow `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). It is not the
-invoice, but art. 128-1.2.a also covers «els altres documents que hi facin referència o que
-en derivin», so a Catalan venue's slip is arguably covered.
-
 ## The translations need a native or official check
 
 Go live with the current words;

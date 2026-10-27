@@ -400,11 +400,11 @@ settled it: the locked confirmation stays, and its Comprobar de nuevo replays th
 shows the ticket (`apps/till/src/till-app-bill-payments.test.ts`, "keeps the locked
 confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket").
 
-## Three small tip display gaps
+## Tip display gaps
 
 (found by A793's design, read): the dashboard's order detail shows
 a bill payment's applied amount without its tip (`apps/dashboard/src/widgets/order-detail-dialog.ts:398`);
-the card slip's words are fixed Spanish (`apps/server/src/payment-slip.ts:55-59`); and the Spanish
+and the Spanish
 refund slip says "Propina" where the English says "Tip returned"
 (`apps/server/src/tender-refund-receipt.ts:79-92`).
 

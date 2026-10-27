@@ -145,9 +145,7 @@ catalán demo in Catalunya." So `country-es`, `workforce-es` and `reporting`'s m
 the Veri\*Factu package, for text official only in Spain (BOE holiday names, INE province names,
 AEAT's form descriptions), for Spanish-specific terms, and for Spain-only printed text with its
 translations in Spain's official languages; Spain-only text or logic found in general code moves
-into them. Every country pack must also carry English for the words it shows (Spain's
-does not yet), and a receipt in Spain prints in the venue's receipt language, never English; A963 and A965 fix what
-does not yet. The fixes are queued as A963–A977
+into them. Every country pack must also carry English for the words it shows, and a receipt in Spain prints in the venue's receipt language, never English. The fixes are queued as A963–A977
 ([A913 in the backlog](../backlog/architecture.md#a913s-fix-items-general-code-english-only)).
 
 ## Spanish domain terms are deliberate, and a module declares its own
@@ -4483,8 +4481,8 @@ wire-protocol names, translation files (such as a module's `dashboard/strings.ts
 packages written for Spain (`country-es`, `workforce-es`, `reporting`'s modelo 303), which hold
 text official only in Spain, Spanish-specific terms, and Spain-only printed text in Spain's
 official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and
-demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
-Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
+demo data belongs in its country's pack; a receipt in
+Spain prints in the venue's receipt language, never English.
 Starter content (module seeds, core setup) is English in code and translated at setup; its words
 in other languages go in the writing package's `src/starter-content.ts`, which the guard skips by
 exact path (owner, 2026-10-20, A918); a test of a non-English screen reads its expected text from

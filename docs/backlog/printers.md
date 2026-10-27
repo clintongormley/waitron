@@ -246,9 +246,7 @@ those letters (not checked).
      it. **Open question for the task:** is the QR measurement needed at all, or does the ruler
      alone settle what printing needs? Answer it from the code (does anything need the width in
      millimetres rather than dots?) before redesigning.
-  3. **The sample receipt (calibration step 2).** Print it in the venue's default receipt language,
-     which follows the province chosen at setup (Catalan for the owner's venue), not always
-     Spanish. Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
+  3. **The sample receipt (calibration step 2).** Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
      letters as ordered items instead (for Catalan: à è é í ï ò ó ú ü ç and l·l). Add horizontal
      rules so the receipt reads in blocks: after the venue name and NIF, before the first item,
      before the tax lines, and before the total. (The owner's photo showed TOTAL and Cambio printed a
@@ -657,6 +655,8 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`PUT /api/parties/:id/guests`), file and table names, the printed receipt's guests line
   (`ReceiptDocument.guests`), and many function, property and event names (for example
   `readReceiptGuests`, `setPartyGuests`) keep the word.
+
+- **Sample wording (A965, 2026-10-27).** The question about translating the two internal sample names is unanswered. Retain A754’s existing values meanwhile; the synthetic number and character-probe footer also remain. Removing the footer and changing the calibration layout remain in A404.
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
   «Pedido N» on the right (the order alone on the right when there is no table). Then:

@@ -1,5 +1,8 @@
 # A964 Kitchen Language Implementation Plan
 
+> 2026-10-27, A965: card slips now take wording, dates and amounts from the saved sale’s receipt language. The `cfg.locale` card-slip trace below records the earlier input; A964 still preserves its other configuration meanings. See [A965’s plan](2026-10-27-a965-receipt-language.md).
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline, the owner-selected method, task by task. Steps use checkbox (`- [ ]`)
 > syntax. Do not dispatch per-task implementer/reviewer pairs.
 
