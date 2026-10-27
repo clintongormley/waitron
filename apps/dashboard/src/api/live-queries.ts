@@ -517,6 +517,7 @@ export const QUERY_DEPENDENCIES = {
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.
   getLocales: ["tenants"],
+  // `tenants` holds the venue's privacy page, which this answer carries.
   getGoogleConfig: ["google_config", "tenants"],
   getEmailInbox: ["email_inbox"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.

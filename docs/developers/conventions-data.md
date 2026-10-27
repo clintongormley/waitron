@@ -2682,9 +2682,10 @@ Since A980 S1b, `GET /management-api/google/config` reads the venue's privacy pa
 `withTransaction`, so on a full disk with a change waiting it should answer 507, through the
 change-log drain measured below (M2 under "What refused them", and M1 under "The dashboard's
 full-disk reads", where a passive read answered 507 that way) and the error boundary's full-disk
-status; this route was read, not run. The sign-in page then shows no privacy link and offers no
-working Google sign-in. This is accepted: the page's locales read and password sign-in already go
-through `withTransaction` there (the S1b plan's decision 3).
+status; this route was read, not run. The sign-in page, and the pages an email's link opens, then
+show no privacy link, and the sign-in page offers no working Google sign-in. This is accepted: the
+page's locales read and password sign-in already go through `withTransaction` there (the S1b plan's
+decision 3).
 
 Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in

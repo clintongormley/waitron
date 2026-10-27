@@ -86,7 +86,7 @@ lane D (§7).
   database, whichever of the two ways a manager deactivates them, and those copies go to the
   backup storage too.
 - The privacy-notice link can only be set by editing the server's environment, which a box owner
-  cannot do; staff invitations go out without it.
+  cannot do; staff invitations go out without it. _(Fixed by S1b, 2026-10-27.)_
 - One gap rather than a fault: nothing checks whether the venue's own backup storage encrypts what
   it holds or where it keeps it. You chose to build nothing for it (O8).
 
@@ -654,7 +654,7 @@ Missing-clock emails (`apps/server/src/attendance-email.ts:30-39`) touch the rig
 | Working-time export | own record and manager's, PDF or CSV (`apps/server/src/attendance-export-api.ts:77-80`, `report.export` at `:45-52`) |
 | Invoice PDF | one at a time (`apps/server/src/orders-api.ts:364-383`) |
 | Booking end | cancel is a status; no delete verb (`packages/bookings/src/schema/bookings.ts:20-25`) |
-| Privacy link | `WAITRON_PRIVACY_NOTICE_URL`, environment only (`apps/server/src/config.ts:503-511`); shown in account emails, login and profile |
+| Privacy link | `WAITRON_PRIVACY_NOTICE_URL`, environment only (`apps/server/src/config.ts:503-511`); shown in account emails, login and profile. _2026-10-27: since S1b, the page saved on the Privacy card (`tenants.privacy_notice_url`); the environment setting is gone._ |
 | Configuration export | omits sign-in secrets; carries staff contact details, former staff included, and employment records with pay rates (§2.4 r4) |
 | Anything named anonymise, erase, forget or redact for personal data | nothing |
 
@@ -710,6 +710,7 @@ _2026-10-26: S6's templates, record of processing and breach checklist are the g
 _2026-10-26: the build plan now splits S1 in three (S1a, S1a2, S1b); S1a2 carries the setting in
 the configuration export, and the card is read under `venue.view`
 ([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md), owner answers B and C)._
+_2026-10-27: four, with S1b2 split from S1b._
 
 | Slice | What | Migration | Fiscal | Permission | Tests | Gate |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -69,9 +69,10 @@ The last line points to your full notice, which goes on your own web page. See
 
 Waitron shows your privacy page, the one you set on the **Privacy** card (see
 [Your privacy page and email in Waitron](data-protection.md#privacy-settings)), in the emails it
-sends staff to set up an account, reset a password or confirm a new email address, on the sign-in
-page, in **Account settings** and in the `README.txt` of a data download. Waitron holds one page, so
-use the page of your full notice, which covers staff and customers alike.
+sends staff to set up an account, reset a password or confirm a new email address, on the
+dashboard's sign-in page and the pages an email's link opens to set up an account or reset a
+password, in **Account settings** and in the `README.txt` of a data download. Waitron holds one
+page, so use the page of your full notice, which covers staff and customers alike.
 
 ## A privacy notice for invoice customers {#invoice-notice}
 
@@ -174,10 +175,11 @@ them. If you set it up with **New tax ID**, check them here: they are still the 
 you change them.
 
 Waitron shows the page in the emails it sends staff to set up an account, reset a password or
-confirm a new email address, on the sign-in page, in **Account settings** and in the `README.txt` of
-a data download. A change shows in the next email or download; a page already
-open shows it once reloaded, except **Account settings**, which follows it at once. For now, only the
-**Privacy** card shows the privacy email.
+confirm a new email address, on the dashboard's sign-in page and the pages an email's link opens to
+set up an account or reset a password, in **Account settings** and in the `README.txt` of a data
+download. A change shows in the next email or download; a page already open shows it once reloaded,
+except **Account settings**, which follows it at once. For now, only the **Privacy** card shows the
+privacy email.
 
 ## Your record of processing {#record}
 

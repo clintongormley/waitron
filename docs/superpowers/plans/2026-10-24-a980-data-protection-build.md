@@ -92,8 +92,9 @@ S11 also wait for the labour and privacy specialists (A664's gates G2 and G3).
 
 ## The slices
 
-S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in three (S1a, S1a2, S1b) _2026-10-27: and S1b2, split from S1b._ so that each fits one implementer
-well under about 100 tool calls. Slice numbers are the design's; S5, S7 and S8 were dropped by the
+S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in three (S1a, S1a2, S1b;
+_2026-10-27: four, with S1b2 split from S1b_) so that each fits one implementer well under about
+100 tool calls. Slice numbers are the design's; S5, S7 and S8 were dropped by the
 owner's answers.
 
 | Slice | Scope, in one sentence | Migration (what was read) | Review | Waits for | Buildable now? |

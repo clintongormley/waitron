@@ -76,9 +76,10 @@ La última línea remite a tu aviso completo, que va en tu propia página web. C
 Waitron muestra tu página de privacidad, la que indicas en la tarjeta **Privacidad** (consulta
 [Tu página y tu correo de privacidad en Waitron](data-protection.md#privacy-settings)), en los
 correos que envía al personal para crear una cuenta, restablecer una contraseña o confirmar un
-correo nuevo, en la página de inicio de sesión, en **Configuración de la cuenta** y en el
-`README.txt` de una descarga de datos. Waitron guarda una sola página, así que usa la de tu aviso
-completo, que cubre por igual al personal y a los clientes.
+correo nuevo, en la página de inicio de sesión del panel y en las páginas que abre el enlace de un
+correo para configurar una cuenta o restablecer una contraseña, en **Configuración de la cuenta** y
+en el `README.txt` de una descarga de datos. Waitron guarda una sola página, así que usa la de tu
+aviso completo, que cubre por igual al personal y a los clientes.
 
 ## Un aviso de privacidad para los clientes con factura {#invoice-notice}
 
@@ -182,9 +183,10 @@ un equipo nuevo preparado a partir de ella los muestra. Si lo preparas con **NIF
 aquí: siguen siendo los del negocio anterior hasta que los cambies.
 
 Waitron muestra la página en los correos que envía al personal para crear una cuenta, restablecer
-una contraseña o confirmar un correo nuevo, en la página de inicio de sesión, en **Configuración de
-la cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en el
-siguiente correo o la siguiente descarga; una página ya abierta lo muestra al volver a cargarla,
+una contraseña o confirmar un correo nuevo, en la página de inicio de sesión del panel y en las
+páginas que abre el enlace de un correo para configurar una cuenta o restablecer una contraseña, en
+**Configuración de la cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en
+el siguiente correo o la siguiente descarga; una página ya abierta lo muestra al volver a cargarla,
 salvo **Configuración de la cuenta**, que lo sigue al momento. Por ahora, solo la tarjeta
 **Privacidad** muestra el correo de privacidad.
 

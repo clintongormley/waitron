@@ -480,6 +480,12 @@ Once SMTP is restored, request another reset or resend the invitation from Users
 `WAITRON_MANAGEMENT_ORIGIN` determines the link host. It must use HTTPS unless it is a loopback
 development origin; the server refuses an insecure LAN or public origin at boot.
 
+Waitron shows the restaurant's privacy notice page in the emails it sends staff to set up an
+account, reset a password or confirm a new email address, on the dashboard's sign-in page and the
+pages an email's link opens to set up an account or reset a password, in **Account settings** and
+in the `README.txt` of a data download. It is set on the **Privacy** card in **Venue settings →
+Venue details**; there is no environment setting for it.
+
 ### Optional Google login
 
 Set `WAITRON_GOOGLE_CLIENT_ID` and `WAITRON_GOOGLE_CLIENT_SECRET` together to offer Google login.
@@ -489,15 +495,10 @@ Create a web OAuth client in Google and register this exact redirect URI:
 <WAITRON_MANAGEMENT_ORIGIN>/management-api/google/callback
 ```
 
-Waitron shows the restaurant's privacy notice page in the emails it sends staff to set up an
-account, reset a password or confirm a new email address, on the sign-in page, in **Account
-settings** and in the `README.txt` of a data download. It is set on the **Privacy** card in **Venue
-settings → Venue details**; there is no environment setting for it.
-
-The server refuses a partial client configuration. A person links Google from Your profile before
-the public Google button can identify their Waitron account. Waitron stores Google's stable subject
-identifier and does not retain Google access or refresh tokens. Password, passkey and PIN login keep
-working when Google is unavailable.
+The server refuses a partial client configuration. A person links Google from **Account
+settings** before the public Google button can identify their Waitron account. Waitron stores
+Google's stable subject identifier and does not retain Google access or refresh tokens. Password,
+passkey and PIN login keep working when Google is unavailable.
 
 ## Backup archive settings
 
