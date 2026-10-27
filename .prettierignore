@@ -34,3 +34,9 @@ deploy/third-party/iosevka/LICENSE.md
 # SHA-256 the shipped data names (packages/country-es/src/data/sources/README.md).
 packages/country-es/src/data/sources/*.htm
 packages/country-es/src/data/sources/*.xml
+
+# Frozen original Madrid capture and exporter source. Their recorded digests identify exact bytes.
+packages/country-es/test-fixtures/demo/madrid-before-move.en.json
+packages/country-es/test-fixtures/demo/madrid-before-move.es.json
+packages/country-es/test-fixtures/demo/madrid-before-move.manifest.json
+packages/country-es/test-fixtures/demo/original-exporter.ts.txt

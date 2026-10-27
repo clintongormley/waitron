@@ -24,3 +24,17 @@ it("retains the exact original exporter named by the frozen manifest", () => {
     manifest.exporterSha256,
   );
 });
+
+it("keeps captured fixture bytes equal to their original manifest digests", () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("madrid-before-move.manifest.json", DEMO_BASELINE_FIXTURE_ROOT), "utf8"),
+  ) as { fixtures: Record<string, string> };
+  for (const [filename, digest] of Object.entries(manifest.fixtures)) {
+    expect(
+      createHash("sha256")
+        .update(readFileSync(new URL(filename, DEMO_BASELINE_FIXTURE_ROOT)))
+        .digest("hex"),
+      filename,
+    ).toBe(digest);
+  }
+});

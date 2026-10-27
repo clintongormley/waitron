@@ -434,3 +434,10 @@ Matched provisioned adjustment reasons keep their existing policies, as the
 unchanged seed writer specifies. Changing the pack's Not served note rule leaves
 the original Madrid rows unchanged. This move preserves that priority; raw pack
 policy records do not promise to replace an existing reason's rules.
+
+The first normal push stopped at formatting the frozen JSON. The repository's
+existing `.prettierignore` already preserves byte-identified reference sources;
+this cut lists only the three frozen capture files and original exporter text
+there. Source and test code stay formatted. A digest test rejects a reformatted
+copy and passes after the original bytes are restored. The earlier scoped format
+check covered source files, not these capture files.
