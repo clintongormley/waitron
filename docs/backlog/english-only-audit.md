@@ -351,3 +351,8 @@ inventory have moved to `packages/country-es/src/demo/` and
 in the server. Plain-name translation is the next cut; the historical rows above
 have not been rewritten. See the
 [A972 plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md).
+
+2026-10-27 A972 cut 2: demo staff and kitchen names now have English and Spanish values,
+including option labels, extras, reporting categories, stations and menu periods.
+English setup writes Set lunch; customer wording and the historical capture remain unchanged.
+The three regional datasets remain open in the [A972 plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md).

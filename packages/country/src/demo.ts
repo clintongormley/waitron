@@ -1,24 +1,28 @@
+export type DemoPlainText<L extends string = string> = Readonly<
+  Record<"en" | "es", string> & Partial<Record<L, string>>
+>;
+
 export type StaffText = Readonly<Record<"en" | "es", string>>;
 
 export type DemoText<L extends string> = Readonly<Record<"en" | "es", string> & Record<L, string>>;
 
 interface CountryDemoProductFields<L extends string = string> {
   customerName: DemoText<L>;
-  staffName?: string;
+  staffName?: DemoPlainText<L>;
   description?: DemoText<L>;
-  kitchenName?: string;
+  kitchenName?: DemoPlainText<L>;
   dietaryDeclarations?: string[];
   unit?: {
-    staffName: string;
-    staffAbbreviation: string;
+    staffName: DemoPlainText<L>;
+    staffAbbreviation: DemoPlainText<L>;
     name: DemoText<L>;
     precision: number;
     abbreviation: DemoText<L>;
   };
   variants?: {
     customerName: DemoText<L>;
-    staffName?: string;
-    kitchenName?: string;
+    staffName?: DemoPlainText<L>;
+    kitchenName?: DemoPlainText<L>;
 
     unitPrice: string | null;
     available: boolean;
@@ -34,30 +38,30 @@ interface CountryDemoProductFields<L extends string = string> {
 interface CountryDemoCategoryFields<L extends string = string> {
   name: DemoText<L>;
 
-  categoryName?: string;
+  categoryName?: DemoPlainText<L>;
   color: string;
   station: "kitchen" | "bar" | "deli" | null;
   products: CountryDemoProduct<L>[];
 }
 
 interface CountryDemoCatalogueFields<L extends string = string> {
-  name: StaffText;
+  name: DemoPlainText<L>;
   customerName: DemoText<L>;
   categories: CountryDemoCategory<L>[];
 }
 
 interface CountryDemoOptionLabelFields<L extends string = string> {
-  name: string;
+  name: DemoPlainText<L>;
   customerName: DemoText<L>;
-  kitchenName: string;
+  kitchenName: DemoPlainText<L>;
 
   preselected?: boolean;
 }
 
 interface CountryDemoOptionListFields<L extends string = string> {
-  name: string;
+  name: DemoPlainText<L>;
   customerName: DemoText<L>;
-  kitchenName: string;
+  kitchenName: DemoPlainText<L>;
   labels: CountryDemoOptionLabel<L>[];
 }
 
@@ -69,9 +73,9 @@ interface CountryDemoProductOptionListsFields<L extends string = string> {
 interface CountryDemoProductExtraListsFields<L extends string = string> {
   productImage: string;
   lists: {
-    name: string;
+    name: DemoPlainText<L>;
     customerName: DemoText<L>;
-    kitchenName: string;
+    kitchenName: DemoPlainText<L>;
     minPicks: number;
     maxPicks: number;
     items: { productImage: string; price: string; portion: string; maxQuantity: number }[];
@@ -81,10 +85,15 @@ interface CountryDemoProductExtraListsFields<L extends string = string> {
 interface CountryDemoDataFields<L extends string = string> {
   readonly id: string;
   readonly mediaDataSet: string;
-  readonly stations: { kitchen: string; downstairsBar: string; upstairsBar: string; deli: string };
-  readonly printerName: string;
-  readonly specialDayName: string;
-  readonly menuPeriodName: string;
+  readonly stations: {
+    kitchen: DemoPlainText<L>;
+    downstairsBar: DemoPlainText<L>;
+    upstairsBar: DemoPlainText<L>;
+    deli: DemoPlainText<L>;
+  };
+  readonly printerName: DemoPlainText<L>;
+  readonly specialDayName: DemoPlainText<L>;
+  readonly menuPeriodName: DemoPlainText<L>;
   readonly menuPriceOverrides: readonly {
     menu: "drinks" | "lunch";
     productImage: string;
@@ -96,18 +105,21 @@ interface CountryDemoDataFields<L extends string = string> {
     readonly restaurant: CountryDemoCatalogue<L>;
     readonly deli: CountryDemoCatalogue<L>;
     readonly lunch: CountryDemoCatalogue<L>;
-    readonly drinksName: StaffText;
+    readonly drinksName: DemoPlainText<L>;
     readonly drinksCustomerName: DemoText<L>;
   };
   readonly productOptionLists: readonly CountryDemoProductOptionLists<L>[];
   readonly productExtraLists: readonly CountryDemoProductExtraLists<L>[];
   readonly floor: {
-    readonly setName: StaffText;
+    readonly setName: DemoPlainText<L>;
     readonly zones: readonly CountryDemoZone[];
     readonly tables: readonly CountryDemoRawTable[];
-    readonly departmentNames: { readonly restaurant: StaffText; readonly deli: StaffText };
-    readonly upstairsBarZone: StaffText;
-    readonly deliCounterZone: StaffText;
+    readonly departmentNames: {
+      readonly restaurant: DemoPlainText<L>;
+      readonly deli: DemoPlainText<L>;
+    };
+    readonly upstairsBarZone: DemoPlainText<L>;
+    readonly deliCounterZone: DemoPlainText<L>;
   };
   readonly staff: readonly CountryDemoPerson[];
   readonly adjustmentReasons: readonly CountryDemoReason<L>[];
@@ -145,7 +157,7 @@ type ReadonlyDemo<T> = T extends object ? { readonly [K in keyof T]: ReadonlyDem
 export type CountryDemoData<L extends string = string> = ReadonlyDemo<CountryDemoDataFields<L>>;
 export interface CountryDemoZone {
   readonly key: string;
-  readonly name: StaffText;
+  readonly name: DemoPlainText;
   readonly displayOrder: number;
 }
 export interface CountryDemoRawTable {

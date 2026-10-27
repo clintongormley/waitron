@@ -2,6 +2,7 @@ import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
 import type { PersonRoleValue } from "@waitron/identity";
 import type { AdjustmentReasonInput } from "@waitron/adjustments";
 import type {
+  DemoPlainText,
   CountryDemoIdentity,
   CountryDemoData,
   CountryDemoProduct,
@@ -27,7 +28,7 @@ import { onGrid, type SeedRawTable, type SeedTable, type SeedZone } from "./floo
 import type { SeedReason } from "./seed-adjustments.js";
 import type { SeedLocale } from "./locale.js";
 export { inLanguages } from "./in-languages.js";
-export type { DemoText } from "@waitron/country";
+export type { DemoText, DemoPlainText } from "@waitron/country";
 export type StaffLanguage = SeedLocale;
 export type StaffText = Readonly<Record<StaffLanguage, string>>;
 export type SeedProduct<L extends string = string> = Omit<
@@ -141,4 +142,12 @@ export function demoLanguagesFor(set: DemoDataSet, geography: VenueGeography): D
   return getCountryPack(geography.country ?? "")?.demo?.dataSet === set.id
     ? starting
     : englishFallbackLanguages(starting);
+}
+
+export function demoPlainText(
+  text: DemoPlainText,
+  _set: DemoDataSet,
+  locale: StaffLanguage,
+): string {
+  return text[locale];
 }

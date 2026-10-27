@@ -9,7 +9,7 @@ import {
   type AdjustmentReasonInput,
 } from "@waitron/adjustments";
 import type { SeedLocale } from "./locale.js";
-import type { DemoDataSet, DemoText } from "./data-set.js";
+import { demoPlainText, type DemoDataSet, type DemoText } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export type SeedReason<L extends string = string> = Omit<
@@ -39,7 +39,7 @@ export async function seedAdjustmentReasons(
   const byName = new Map(existing.map((reason) => [reason.name, reason]));
   for (const reason of dataSet.adjustmentReasons) {
     const names = inLanguages(reason.names, languages);
-    const name = reason.names[locale];
+    const name = demoPlainText(reason.names, dataSet, locale);
     const present = byEnglish.get(reason.names.en) ?? byName.get(name);
     if (present === undefined) {
       await createAdjustmentReason(tx, { ...reason, names, name });

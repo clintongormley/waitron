@@ -92,10 +92,10 @@ describe("demo seed end-to-end", () => {
     const { products } = await withTransaction(suite.db, (tx) =>
       listAvailableProducts(tx, venue.locationId),
     );
-    const chicken = products.find((product) => product.name === "Pollo asado")!;
+    const chicken = products.find((product) => product.name === "Roast chicken")!;
     expect(chicken.offeredModifiers.map((list) => [list.kind, list.name])).toEqual([
-      ["options", "Punto"],
-      ["extras", "Guarniciones"],
+      ["options", "Doneness"],
+      ["extras", "Sides"],
     ]);
   });
 
@@ -154,42 +154,42 @@ describe("demo seed end-to-end", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
-      "Menú del Día",
+      "Set lunch",
     ]);
     expect(read.menus[0]!.isDefault).toBe(true);
-    const menuDelDia = read.menus.find((m) => m.name === "Menú del Día")!;
+    const menuDelDia = read.menus.find((m) => m.name === "Set lunch")!;
     expect(menuDelDia.isDefault).toBe(false);
 
     const chickens = [
-      read.products.find((product) => product.name === "Pollo asado")!,
-      read.publishedOffers.find((offer) => offer.name === "Pollo asado")!,
+      read.products.find((product) => product.name === "Roast chicken")!,
+      read.publishedOffers.find((offer) => offer.name === "Roast chicken")!,
     ];
     for (const chicken of chickens) {
       expect(chicken.offeredModifiers).toHaveLength(1);
       expect(chicken.offeredModifiers[0]).toMatchObject({
         kind: "extras",
-        name: "Guarniciones",
+        name: "Sides",
         customerName: { en: "Choose your sides", es: "Elige tus acompañamientos" },
-        kitchenName: "GUARNICIÓN POLLO",
+        kitchenName: "CHICKEN SIDES",
         minPicks: 0,
         maxPicks: 3,
         items: [
           {
-            name: "Padrón peppers",
+            name: "Peppers",
             price: "2.00",
             portion: "1.000",
             maxQuantity: 1,
             preselected: false,
           },
           {
-            name: "Mixed salad",
+            name: "Salad",
             price: "1.50",
             portion: "1.000",
             maxQuantity: 1,
             preselected: false,
           },
           {
-            name: "House bread",
+            name: "Bread",
             price: "0.50",
             portion: "1.000",
             maxQuantity: 1,
@@ -200,7 +200,7 @@ describe("demo seed end-to-end", () => {
     }
 
     const casaProducts = read.products.filter((p) => p.catalogueName === "Casa Delgado");
-    const diaProducts = read.products.filter((p) => p.catalogueName === "Menú del Día");
+    const diaProducts = read.products.filter((p) => p.catalogueName === "Set lunch");
     expect(casaProducts.length).toBeGreaterThan(0);
     expect(diaProducts.length).toBeGreaterThan(0);
 

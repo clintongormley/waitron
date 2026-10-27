@@ -1,0 +1,1038 @@
+[
+  {
+    "table": "products",
+    "row": "@products:[\"d49be28a244507dab5af0fca2bca1959bd259bdd27b9ebf006d9615194dc8371.webp\"]",
+    "column": "kitchen_name",
+    "old": "BRAVAS",
+    "new": "POTATOES · TAPAS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"ed08ae854f04b8be771bfaa4724ec4b19b8fe8c206e7a9d7e3c42f6d1074d573.webp\"]",
+    "column": "name",
+    "old": "Croquetas",
+    "new": "Croquettes"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"ed08ae854f04b8be771bfaa4724ec4b19b8fe8c206e7a9d7e3c42f6d1074d573.webp\"]",
+    "column": "kitchen_name",
+    "old": "CROQ JAMON",
+    "new": "HAM CROQUETTES · TAPAS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"ed08ae854f04b8be771bfaa4724ec4b19b8fe8c206e7a9d7e3c42f6d1074d573.webp\"]",
+    "column": "name_key",
+    "old": "croquetas",
+    "new": "croquettes"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"e53dbad71034da108bb71460466973c3ce06e79c28af3c4da0c963ab478f426a.webp\"]",
+    "column": "name",
+    "old": "Gambas",
+    "new": "Prawns"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"e53dbad71034da108bb71460466973c3ce06e79c28af3c4da0c963ab478f426a.webp\"]",
+    "column": "kitchen_name",
+    "old": "GAMBAS AJILLO",
+    "new": "GARLIC PRAWNS · TAPAS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"e53dbad71034da108bb71460466973c3ce06e79c28af3c4da0c963ab478f426a.webp\"]",
+    "column": "name_key",
+    "old": "gambas",
+    "new": "prawns"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"a17520994fdfe27dc1cd4dd038bec8ffea7d76b703986e1b2426e8986581ca6c.webp\"]",
+    "column": "name",
+    "old": "Spanish omelette",
+    "new": "Omelette"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"a17520994fdfe27dc1cd4dd038bec8ffea7d76b703986e1b2426e8986581ca6c.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "OMELETTE · TAPAS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"a17520994fdfe27dc1cd4dd038bec8ffea7d76b703986e1b2426e8986581ca6c.webp\"]",
+    "column": "name_key",
+    "old": "spanish omelette",
+    "new": "omelette"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f4ae2b215528535991520043d04b31ec065084db5e64ad95c0649588d9f1cd0a.webp\"]",
+    "column": "name",
+    "old": "House bread",
+    "new": "Bread"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f4ae2b215528535991520043d04b31ec065084db5e64ad95c0649588d9f1cd0a.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "BREAD · TAPAS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f4ae2b215528535991520043d04b31ec065084db5e64ad95c0649588d9f1cd0a.webp\"]",
+    "column": "name_key",
+    "old": "house bread",
+    "new": "bread"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8e8885526a2036685dbf0429249c7f2673d1e14ccb90a9135abeee861394b921.webp\"]",
+    "column": "name",
+    "old": "Bread with tomato",
+    "new": "Tomato toast"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8e8885526a2036685dbf0429249c7f2673d1e14ccb90a9135abeee861394b921.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "TOMATO BREAD · TAPAS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8e8885526a2036685dbf0429249c7f2673d1e14ccb90a9135abeee861394b921.webp\"]",
+    "column": "name_key",
+    "old": "bread with tomato",
+    "new": "tomato toast"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"2607330c4b5eec75d9c9be5f617288c414f97817348d5a72e130a52d9efa5f17.webp\"]",
+    "column": "name",
+    "old": "Pulpo",
+    "new": "Octopus"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"2607330c4b5eec75d9c9be5f617288c414f97817348d5a72e130a52d9efa5f17.webp\"]",
+    "column": "kitchen_name",
+    "old": "PULPO GALLEGA",
+    "new": "OCTOPUS · SHARING"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"2607330c4b5eec75d9c9be5f617288c414f97817348d5a72e130a52d9efa5f17.webp\"]",
+    "column": "name_key",
+    "old": "pulpo",
+    "new": "octopus"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"b8504218c965d9c80f5093cd1eaa4582f6f37d5c790ac92b0966504b86c7caac.webp\"]",
+    "column": "name",
+    "old": "Padrón peppers",
+    "new": "Peppers"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"b8504218c965d9c80f5093cd1eaa4582f6f37d5c790ac92b0966504b86c7caac.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "PEPPERS · SHARING"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"b8504218c965d9c80f5093cd1eaa4582f6f37d5c790ac92b0966504b86c7caac.webp\"]",
+    "column": "name_key",
+    "old": "padrón peppers",
+    "new": "peppers"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"7e7a74ed32549f2eff477c59854d0a8f5df71abbcec353bf72ae7d030d1e9c55.webp\"]",
+    "column": "name",
+    "old": "Fried calamari",
+    "new": "Calamari"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"7e7a74ed32549f2eff477c59854d0a8f5df71abbcec353bf72ae7d030d1e9c55.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "CALAMARI · SHARING"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"7e7a74ed32549f2eff477c59854d0a8f5df71abbcec353bf72ae7d030d1e9c55.webp\"]",
+    "column": "name_key",
+    "old": "fried calamari",
+    "new": "calamari"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f983fcc6e515837a11f7ed51b4c9879debeb5ff36778eed3422b6251f88b7130.webp\"]",
+    "column": "name",
+    "old": "Cheese board",
+    "new": "Cheeses"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f983fcc6e515837a11f7ed51b4c9879debeb5ff36778eed3422b6251f88b7130.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "CHEESE BOARD · SHARING"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f983fcc6e515837a11f7ed51b4c9879debeb5ff36778eed3422b6251f88b7130.webp\"]",
+    "column": "name_key",
+    "old": "cheese board",
+    "new": "cheeses"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"68803c9bb2909010cf808940039a9d2c0ab0dde4d6fafc98a7f2a496ae70a84f.webp\"]",
+    "column": "kitchen_name",
+    "old": "PAELLA MARISCO",
+    "new": "SEAFOOD PAELLA · MAINS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"06b1051001b6808cf1efe4137463d87c1fec6ba8bf98959bb91e53c3263a9cd3.webp\"]",
+    "column": "name",
+    "old": "Solomillo",
+    "new": "Sirloin"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"06b1051001b6808cf1efe4137463d87c1fec6ba8bf98959bb91e53c3263a9cd3.webp\"]",
+    "column": "kitchen_name",
+    "old": "SOLOMILLO WHISKY",
+    "new": "SIRLOIN · WHISKY SAUCE"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"06b1051001b6808cf1efe4137463d87c1fec6ba8bf98959bb91e53c3263a9cd3.webp\"]",
+    "column": "name_key",
+    "old": "solomillo",
+    "new": "sirloin"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"92076369da5685cc8b54bb0b394ad8b29fc1901a150b4fedc3f4989ed05e62c1.webp\"]",
+    "column": "name",
+    "old": "Cod pil-pil",
+    "new": "Cod"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"92076369da5685cc8b54bb0b394ad8b29fc1901a150b4fedc3f4989ed05e62c1.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "COD · PIL-PIL"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"92076369da5685cc8b54bb0b394ad8b29fc1901a150b4fedc3f4989ed05e62c1.webp\"]",
+    "column": "name_key",
+    "old": "cod pil-pil",
+    "new": "cod"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"040a9fa93a079da044a85f9b345ba862d8572c951d10a8df9fb589c9c3c1e7ea.webp\"]",
+    "column": "name",
+    "old": "Grilled hake",
+    "new": "Hake"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"040a9fa93a079da044a85f9b345ba862d8572c951d10a8df9fb589c9c3c1e7ea.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "HAKE · GRILL"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"040a9fa93a079da044a85f9b345ba862d8572c951d10a8df9fb589c9c3c1e7ea.webp\"]",
+    "column": "name_key",
+    "old": "grilled hake",
+    "new": "hake"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8dd01d0d4a51cbf677806732b3a77f295642c6e73c50bd7542b68af506af0ea7.webp\"]",
+    "column": "name",
+    "old": "Catalan cream",
+    "new": "Catalan custard"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8dd01d0d4a51cbf677806732b3a77f295642c6e73c50bd7542b68af506af0ea7.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "CUSTARD · DESSERT"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8dd01d0d4a51cbf677806732b3a77f295642c6e73c50bd7542b68af506af0ea7.webp\"]",
+    "column": "name_key",
+    "old": "catalan cream",
+    "new": "catalan custard"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"5296df56d2cd991edb142282278f58e88c1ea6befb0e23652dab741231f4ba32.webp\"]",
+    "column": "name",
+    "old": "Tarta Santiago",
+    "new": "Almond cake"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"5296df56d2cd991edb142282278f58e88c1ea6befb0e23652dab741231f4ba32.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "ALMOND CAKE · DESSERT"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"5296df56d2cd991edb142282278f58e88c1ea6befb0e23652dab741231f4ba32.webp\"]",
+    "column": "name_key",
+    "old": "tarta santiago",
+    "new": "almond cake"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"09a213789fc068eb571a691fa6d71d3086d0775d20c9a1819c92d414fdf86565.webp\"]",
+    "column": "name",
+    "old": "Home-made flan",
+    "new": "Flan"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"09a213789fc068eb571a691fa6d71d3086d0775d20c9a1819c92d414fdf86565.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "FLAN · DESSERT"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"09a213789fc068eb571a691fa6d71d3086d0775d20c9a1819c92d414fdf86565.webp\"]",
+    "column": "name_key",
+    "old": "home-made flan",
+    "new": "flan"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"278ac91f6524450d1a1669822fd85fbd12b3d071878f1bab96635b838d31a71c.webp\"]",
+    "column": "name",
+    "old": "Rice pudding",
+    "new": "Rice dessert"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"278ac91f6524450d1a1669822fd85fbd12b3d071878f1bab96635b838d31a71c.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "RICE PUDDING · DESSERT"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"278ac91f6524450d1a1669822fd85fbd12b3d071878f1bab96635b838d31a71c.webp\"]",
+    "column": "name_key",
+    "old": "rice pudding",
+    "new": "rice dessert"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e.webp\"]",
+    "column": "name",
+    "old": "Negroni",
+    "new": "House Negroni"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "NEGRONI · BAR"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e.webp\"]",
+    "column": "name_key",
+    "old": "negroni",
+    "new": "house negroni"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"6a8776dad20e3c5c33c9250d1a6194a4a2ed84d0801d4d8a6ee369898191766c.webp\"]",
+    "column": "name",
+    "old": "Tinto casa",
+    "new": "House red"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"6a8776dad20e3c5c33c9250d1a6194a4a2ed84d0801d4d8a6ee369898191766c.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "RED WINE · BAR"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"6a8776dad20e3c5c33c9250d1a6194a4a2ed84d0801d4d8a6ee369898191766c.webp\"]",
+    "column": "name_key",
+    "old": "tinto casa",
+    "new": "house red"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"3484f1297e957c98ea54ac37a61f8bc699987bca90de4038d5255aa253110bfc.webp\"]",
+    "column": "name",
+    "old": "Caña",
+    "new": "Beer"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"3484f1297e957c98ea54ac37a61f8bc699987bca90de4038d5255aa253110bfc.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "DRAUGHT BEER · BAR"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"3484f1297e957c98ea54ac37a61f8bc699987bca90de4038d5255aa253110bfc.webp\"]",
+    "column": "name_key",
+    "old": "caña",
+    "new": "beer"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1.webp\"]",
+    "column": "name",
+    "old": "Cola soft drink",
+    "new": "Cola"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "COLA · BAR"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1.webp\"]",
+    "column": "name_key",
+    "old": "cola soft drink",
+    "new": "cola"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"ac59a4a923518a49e0f5402af6ab42e9ac6bc932f84d600294bc6ffc6f26d6e4.webp\"]",
+    "column": "name",
+    "old": "Bottled mineral water",
+    "new": "Water"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"ac59a4a923518a49e0f5402af6ab42e9ac6bc932f84d600294bc6ffc6f26d6e4.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "MINERAL WATER · BAR"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"ac59a4a923518a49e0f5402af6ab42e9ac6bc932f84d600294bc6ffc6f26d6e4.webp\"]",
+    "column": "name_key",
+    "old": "bottled mineral water",
+    "new": "water"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"881a1845feb901650439bc8782fe901e1dfa72ddfa2f3a6eb567ff38571d2db9.webp\"]",
+    "column": "name",
+    "old": "Orange juice",
+    "new": "Orange"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"881a1845feb901650439bc8782fe901e1dfa72ddfa2f3a6eb567ff38571d2db9.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "ORANGE JUICE · BAR"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"881a1845feb901650439bc8782fe901e1dfa72ddfa2f3a6eb567ff38571d2db9.webp\"]",
+    "column": "name_key",
+    "old": "orange juice",
+    "new": "orange"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\"]",
+    "column": "name",
+    "old": "Café",
+    "new": "House coffee"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\"]",
+    "column": "name_key",
+    "old": "café",
+    "new": "house coffee"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"63834db86cdf53f4dd4b9876784eeafe2230cf41a0fd7d2a69ec189393ce6310.webp\"]",
+    "column": "name",
+    "old": "Sliced Iberian ham (per kg)",
+    "new": "Iberian ham"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"63834db86cdf53f4dd4b9876784eeafe2230cf41a0fd7d2a69ec189393ce6310.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "IBERIAN HAM · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"63834db86cdf53f4dd4b9876784eeafe2230cf41a0fd7d2a69ec189393ce6310.webp\"]",
+    "column": "name_key",
+    "old": "sliced iberian ham (per kg)",
+    "new": "iberian ham"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"cc8338d32860c77c02205db75f283143832d893e29fffd9e02d1b2934d9b0828.webp\"]",
+    "column": "name",
+    "old": "Iberian chorizo (per kg)",
+    "new": "Chorizo"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"cc8338d32860c77c02205db75f283143832d893e29fffd9e02d1b2934d9b0828.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "CHORIZO · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"cc8338d32860c77c02205db75f283143832d893e29fffd9e02d1b2934d9b0828.webp\"]",
+    "column": "name_key",
+    "old": "iberian chorizo (per kg)",
+    "new": "chorizo"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"a5cd7222b61563c708390b6a0f514e1681cdc6c17cbc9ce431e5362103891ec4.webp\"]",
+    "column": "name",
+    "old": "Cured pork loin (per kg)",
+    "new": "Pork loin"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"a5cd7222b61563c708390b6a0f514e1681cdc6c17cbc9ce431e5362103891ec4.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "PORK LOIN · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"a5cd7222b61563c708390b6a0f514e1681cdc6c17cbc9ce431e5362103891ec4.webp\"]",
+    "column": "name_key",
+    "old": "cured pork loin (per kg)",
+    "new": "pork loin"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"0f4c54ce58bb85e42285f76eff7303443aac8a835f062bf27158d19c3f1b592c.webp\"]",
+    "column": "name",
+    "old": "Salchichón sausage (per kg)",
+    "new": "Salchichón"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"0f4c54ce58bb85e42285f76eff7303443aac8a835f062bf27158d19c3f1b592c.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "SALCHICHÓN · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"0f4c54ce58bb85e42285f76eff7303443aac8a835f062bf27158d19c3f1b592c.webp\"]",
+    "column": "name_key",
+    "old": "salchichón sausage (per kg)",
+    "new": "salchichón"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"5074470f224e41a0887a1475c6fe29664d7323f69bba2c8dde09f846c3d30e67.webp\"]",
+    "column": "name",
+    "old": "Cured beef cecina (per kg)",
+    "new": "Cecina"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"5074470f224e41a0887a1475c6fe29664d7323f69bba2c8dde09f846c3d30e67.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "CECINA · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"5074470f224e41a0887a1475c6fe29664d7323f69bba2c8dde09f846c3d30e67.webp\"]",
+    "column": "name_key",
+    "old": "cured beef cecina (per kg)",
+    "new": "cecina"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"da0cf62a26a63e3ee5e435bd228f9ae73449a9e8a75d36cf39759f2815ba9fe8.webp\"]",
+    "column": "name",
+    "old": "Mallorcan sobrasada (per kg)",
+    "new": "Sobrasada"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"da0cf62a26a63e3ee5e435bd228f9ae73449a9e8a75d36cf39759f2815ba9fe8.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "SOBRASADA · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"da0cf62a26a63e3ee5e435bd228f9ae73449a9e8a75d36cf39759f2815ba9fe8.webp\"]",
+    "column": "name_key",
+    "old": "mallorcan sobrasada (per kg)",
+    "new": "sobrasada"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"9aac018dd11a92b4e5ebd758d6b20546e8950d4afe302ba785b8c1b1d55ad4c7.webp\"]",
+    "column": "name",
+    "old": "Cured Manchego (per kg)",
+    "new": "Manchego"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"9aac018dd11a92b4e5ebd758d6b20546e8950d4afe302ba785b8c1b1d55ad4c7.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "MANCHEGO · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"9aac018dd11a92b4e5ebd758d6b20546e8950d4afe302ba785b8c1b1d55ad4c7.webp\"]",
+    "column": "name_key",
+    "old": "cured manchego (per kg)",
+    "new": "manchego"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"e3b26cf7fdac8abf2376845694333860c2d1ea55879192c260da50e5ee753b60.webp\"]",
+    "column": "name",
+    "old": "Cabrales blue cheese (per kg)",
+    "new": "Cabrales"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"e3b26cf7fdac8abf2376845694333860c2d1ea55879192c260da50e5ee753b60.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "CABRALES · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"e3b26cf7fdac8abf2376845694333860c2d1ea55879192c260da50e5ee753b60.webp\"]",
+    "column": "name_key",
+    "old": "cabrales blue cheese (per kg)",
+    "new": "cabrales"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"480a3dcb16ce22d82ffbffbd33eb533533371bf424ebc3cdd3a447bae089e721.webp\"]",
+    "column": "name",
+    "old": "Idiazábal smoked cheese (per kg)",
+    "new": "Idiazábal"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"480a3dcb16ce22d82ffbffbd33eb533533371bf424ebc3cdd3a447bae089e721.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "IDIAZÁBAL · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"480a3dcb16ce22d82ffbffbd33eb533533371bf424ebc3cdd3a447bae089e721.webp\"]",
+    "column": "name_key",
+    "old": "idiazábal smoked cheese (per kg)",
+    "new": "idiazábal"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"97ea61c280d89434fd67716ef312f28862c9b689c8d8fb397408cff31a39c1f0.webp\"]",
+    "column": "name",
+    "old": "Torta del Casar (per kg)",
+    "new": "Torta cheese"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"97ea61c280d89434fd67716ef312f28862c9b689c8d8fb397408cff31a39c1f0.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "TORTA · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"97ea61c280d89434fd67716ef312f28862c9b689c8d8fb397408cff31a39c1f0.webp\"]",
+    "column": "name_key",
+    "old": "torta del casar (per kg)",
+    "new": "torta cheese"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401.webp\"]",
+    "column": "name",
+    "old": "Mahón cheese (per kg)",
+    "new": "Mahón"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "MAHÓN · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401.webp\"]",
+    "column": "name_key",
+    "old": "mahón cheese (per kg)",
+    "new": "mahón"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"c8c8f8af340fbba2220f6a01e3b4627448922f9572adffd43b920ff1db9bd0b0.webp\"]",
+    "column": "name",
+    "old": "Cantabrian anchovies (per kg)",
+    "new": "Anchovies"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"c8c8f8af340fbba2220f6a01e3b4627448922f9572adffd43b920ff1db9bd0b0.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "ANCHOVIES · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"c8c8f8af340fbba2220f6a01e3b4627448922f9572adffd43b920ff1db9bd0b0.webp\"]",
+    "column": "name_key",
+    "old": "cantabrian anchovies (per kg)",
+    "new": "anchovies"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"847b887f65b9cc13fde6cc6518115cff73a547d1b84c5200fa4274ab88236c36.webp\"]",
+    "column": "name",
+    "old": "Marinated olives (per kg)",
+    "new": "Olives"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"847b887f65b9cc13fde6cc6518115cff73a547d1b84c5200fa4274ab88236c36.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "OLIVES · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"847b887f65b9cc13fde6cc6518115cff73a547d1b84c5200fa4274ab88236c36.webp\"]",
+    "column": "name_key",
+    "old": "marinated olives (per kg)",
+    "new": "olives"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f9d6f98f58d22bc4e2f358366137ad0bc7571b42f02c015077c044cf38fceedd.webp\"]",
+    "column": "name",
+    "old": "Octopus in olive oil (per kg)",
+    "new": "Octopus in oil"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f9d6f98f58d22bc4e2f358366137ad0bc7571b42f02c015077c044cf38fceedd.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "OCTOPUS · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"f9d6f98f58d22bc4e2f358366137ad0bc7571b42f02c015077c044cf38fceedd.webp\"]",
+    "column": "name_key",
+    "old": "octopus in olive oil (per kg)",
+    "new": "octopus in oil"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"d2d30d3817ed435d5bfd2841bb6e444653919bb8aa80c313833f195ef9a2ce76.webp\"]",
+    "column": "name",
+    "old": "White tuna belly (per kg)",
+    "new": "Tuna belly"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"d2d30d3817ed435d5bfd2841bb6e444653919bb8aa80c313833f195ef9a2ce76.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "TUNA BELLY · DELI"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"d2d30d3817ed435d5bfd2841bb6e444653919bb8aa80c313833f195ef9a2ce76.webp\"]",
+    "column": "name_key",
+    "old": "white tuna belly (per kg)",
+    "new": "tuna belly"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"45d9cc4d08682c83c28045faa8e68ae91ad02e545afba16e930e546f8d7af756.webp\"]",
+    "column": "name",
+    "old": "Mixed salad",
+    "new": "Salad"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"45d9cc4d08682c83c28045faa8e68ae91ad02e545afba16e930e546f8d7af756.webp\"]",
+    "column": "kitchen_name",
+    "old": "MIXED SALAD",
+    "new": "SALAD · LUNCH"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"45d9cc4d08682c83c28045faa8e68ae91ad02e545afba16e930e546f8d7af756.webp\"]",
+    "column": "name_key",
+    "old": "mixed salad",
+    "new": "salad"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"72ecc5c66f5780ec3e889e5bafceccf40c2388b81b9c28ca44cdadc63ab7f6ab.webp\"]",
+    "column": "kitchen_name",
+    "old": "GAZPACHO",
+    "new": "GAZPACHO · LUNCH"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"7e5d3f2e400785f0250cfe98d6aa16e5b3b0aa881fe3b15378b29e324cee666a.webp\"]",
+    "column": "name",
+    "old": "Stewed lentils",
+    "new": "Lentils"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"7e5d3f2e400785f0250cfe98d6aa16e5b3b0aa881fe3b15378b29e324cee666a.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "LENTILS · LUNCH"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"7e5d3f2e400785f0250cfe98d6aa16e5b3b0aa881fe3b15378b29e324cee666a.webp\"]",
+    "column": "name_key",
+    "old": "stewed lentils",
+    "new": "lentils"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"fe70545d06ddb3460d4a9925ee3d6800f6158d6bd2e3591c8a277fab68867b18.webp\"]",
+    "column": "name",
+    "old": "Pollo asado",
+    "new": "Roast chicken"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"fe70545d06ddb3460d4a9925ee3d6800f6158d6bd2e3591c8a277fab68867b18.webp\"]",
+    "column": "kitchen_name",
+    "old": "POLLO + PATATAS",
+    "new": "CHICKEN + CHIPS"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"fe70545d06ddb3460d4a9925ee3d6800f6158d6bd2e3591c8a277fab68867b18.webp\"]",
+    "column": "name_key",
+    "old": "pollo asado",
+    "new": "roast chicken"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"52f497e8a18692913305b6f4f8de6b31e61149f8efb9a5d17efc5cbc239d23dd.webp\"]",
+    "column": "name",
+    "old": "Battered hake",
+    "new": "Hake in batter"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"52f497e8a18692913305b6f4f8de6b31e61149f8efb9a5d17efc5cbc239d23dd.webp\"]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "BATTERED HAKE · LUNCH"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"52f497e8a18692913305b6f4f8de6b31e61149f8efb9a5d17efc5cbc239d23dd.webp\"]",
+    "column": "name_key",
+    "old": "battered hake",
+    "new": "hake in batter"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"@products:[\\\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\\\"]\",0]",
+    "column": "name",
+    "old": "Solo",
+    "new": "Single coffee"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"@products:[\\\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\\\"]\",0]",
+    "column": "kitchen_name",
+    "old": "SOLO",
+    "new": "COFFEE · SINGLE"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"@products:[\\\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\\\"]\",0]",
+    "column": "name_key",
+    "old": "solo",
+    "new": "single coffee"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"@products:[\\\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\\\"]\",1]",
+    "column": "name",
+    "old": "Doble",
+    "new": "Double coffee"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"@products:[\\\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\\\"]\",1]",
+    "column": "kitchen_name",
+    "old": null,
+    "new": "COFFEE · DOUBLE"
+  },
+  {
+    "table": "products",
+    "row": "@products:[\"@products:[\\\"b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c.webp\\\"]\",1]",
+    "column": "name_key",
+    "old": "doble",
+    "new": "double coffee"
+  },
+  {
+    "table": "option_lists",
+    "row": "@option_lists:[\"Punto\"]",
+    "column": "name",
+    "old": "Punto",
+    "new": "Doneness"
+  },
+  {
+    "table": "option_lists",
+    "row": "@option_lists:[\"Punto\"]",
+    "column": "kitchen_name",
+    "old": "PUNTO CARNE",
+    "new": "MEAT TEMPERATURE"
+  },
+  {
+    "table": "extra_lists",
+    "row": "@extra_lists:[\"Guarniciones\"]",
+    "column": "name",
+    "old": "Guarniciones",
+    "new": "Sides"
+  },
+  {
+    "table": "extra_lists",
+    "row": "@extra_lists:[\"Guarniciones\"]",
+    "column": "kitchen_name",
+    "old": "GUARNICIÓN POLLO",
+    "new": "CHICKEN SIDES"
+  },
+  {
+    "table": "option_labels",
+    "row": "@option_labels:[\"@option_lists:[\\\"Punto\\\"]\",0]",
+    "column": "name",
+    "old": "Poco",
+    "new": "Rare"
+  },
+  {
+    "table": "option_labels",
+    "row": "@option_labels:[\"@option_lists:[\\\"Punto\\\"]\",0]",
+    "column": "kitchen_name",
+    "old": "POCO HECHO",
+    "new": "RARE MEAT"
+  },
+  {
+    "table": "option_labels",
+    "row": "@option_labels:[\"@option_lists:[\\\"Punto\\\"]\",1]",
+    "column": "name",
+    "old": "Punto medio",
+    "new": "Medium"
+  },
+  {
+    "table": "option_labels",
+    "row": "@option_labels:[\"@option_lists:[\\\"Punto\\\"]\",1]",
+    "column": "kitchen_name",
+    "old": "AL PUNTO",
+    "new": "MEDIUM MEAT"
+  },
+  {
+    "table": "option_labels",
+    "row": "@option_labels:[\"@option_lists:[\\\"Punto\\\"]\",2]",
+    "column": "name",
+    "old": "Muy",
+    "new": "Well done"
+  },
+  {
+    "table": "option_labels",
+    "row": "@option_labels:[\"@option_lists:[\\\"Punto\\\"]\",2]",
+    "column": "kitchen_name",
+    "old": "MUY HECHO",
+    "new": "WELL DONE MEAT"
+  },
+  {
+    "table": "units",
+    "row": "@units:[null,\"Portion\"]",
+    "column": "staff_abbreviation",
+    "old": "rac",
+    "new": "ptn"
+  },
+  {
+    "table": "menu_periods",
+    "row": "@menu_periods:[\"@departments:[\\\"Restaurant and bar\\\"]\",\"Abierto\"]",
+    "column": "name",
+    "old": "Abierto",
+    "new": "Open"
+  },
+  {
+    "table": "catalogues",
+    "row": "@catalogues:[\"Menú del Día\"]",
+    "column": "name",
+    "old": "Menú del Día",
+    "new": "Set lunch"
+  },
+  {
+    "table": "sections",
+    "row": "@sections:[\"@catalogues:[\\\"Menú del Día\\\"]\",\"menu_root\",\"Menú del Día\"]",
+    "column": "internal_name",
+    "old": "Menú del Día",
+    "new": "Set lunch"
+  }
+]

@@ -51,10 +51,10 @@ describe("pack-owned Spanish demo", () => {
     );
     expect(JSON.stringify(set)).not.toContain("dashPass123");
     expect(set.stations).toEqual({
-      kitchen: "Kitchen",
-      downstairsBar: "Downstairs bar",
-      upstairsBar: "Upstairs bar",
-      deli: "Deli counter",
+      kitchen: { en: "Kitchen", es: "Cocina" },
+      downstairsBar: { en: "Downstairs bar", es: "Bar de abajo" },
+      upstairsBar: { en: "Upstairs bar", es: "Bar de arriba" },
+      deli: { en: "Deli counter", es: "Mostrador de charcutería" },
     });
     expect(set.menuPriceOverrides).toEqual([
       { menu: "drinks", productImage: "cana-cerveza.png", grossPrice: "3.00" },
@@ -94,6 +94,61 @@ describe("pack-owned Spanish demo", () => {
 });
 
 type Text = Readonly<Record<string, string>>;
+
+it("provides English and Spanish for every authored staff and kitchen field", () => {
+  const set: CountryDemoData = CASA_DELGADO_ES;
+  const texts: (readonly [string, Readonly<Record<string, string | undefined>> | undefined])[] = [
+    ...Object.entries(set.stations),
+    ["printer", set.printerName],
+    ["special day", set.specialDayName],
+    ["menu period", set.menuPeriodName],
+    ["drinks menu", set.menus.drinksName],
+    ["floor set", set.floor.setName],
+    ...Object.entries(set.floor.departmentNames),
+    ["upstairs bar zone", set.floor.upstairsBarZone],
+    ["deli counter zone", set.floor.deliCounterZone],
+    ...set.floor.zones.map((zone) => [zone.key, zone.name] as const),
+  ];
+  for (const [id, menu] of Object.entries({
+    restaurant: set.menus.restaurant,
+    deli: set.menus.deli,
+    lunch: set.menus.lunch,
+  })) {
+    texts.push([id, menu.name]);
+    for (const category of menu.categories) {
+      texts.push([`${id} category`, category.categoryName ?? category.name]);
+      for (const product of category.products) {
+        texts.push(
+          [`${product.image} staff`, product.staffName],
+          [`${product.image} kitchen`, product.kitchenName],
+        );
+        if (product.unit)
+          texts.push(
+            [`${product.image} unit`, product.unit.staffName],
+            [`${product.image} abbreviation`, product.unit.staffAbbreviation],
+          );
+        for (const [i, variant] of (product.variants ?? []).entries())
+          texts.push(
+            [`${product.image} variant ${i} staff`, variant.staffName],
+            [`${product.image} variant ${i} kitchen`, variant.kitchenName],
+          );
+      }
+    }
+  }
+  for (const { lists } of set.productOptionLists)
+    for (const list of lists) {
+      texts.push(["options staff", list.name], ["options kitchen", list.kitchenName]);
+      for (const label of list.labels)
+        texts.push(["label staff", label.name], ["label kitchen", label.kitchenName]);
+    }
+  for (const { lists } of set.productExtraLists)
+    for (const list of lists)
+      texts.push(["extras staff", list.name], ["extras kitchen", list.kitchenName]);
+  for (const reason of set.adjustmentReasons) texts.push(["reason", reason.names]);
+  for (const [where, text] of texts)
+    for (const language of ["en", "es"])
+      expect(text?.[language]?.trim(), `${where} ${language}`).toBeTruthy();
+});
 
 /** Every customer-facing text a data set carries, each with where it sits. */
 function customerTexts(set: CountryDemoData): [string, Text][] {

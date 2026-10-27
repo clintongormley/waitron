@@ -1,0 +1,575 @@
+{
+  "products": {
+    "patatas-bravas.png": {
+      "staff": {
+        "en": "Bravas",
+        "es": "Bravas"
+      },
+      "kitchen": {
+        "en": "POTATOES · TAPAS",
+        "es": "PATATAS · TAPAS"
+      },
+      "customerEnglish": "Spicy potatoes"
+    },
+    "croquetas.png": {
+      "staff": {
+        "en": "Croquettes",
+        "es": "Croquetas"
+      },
+      "kitchen": {
+        "en": "HAM CROQUETTES · TAPAS",
+        "es": "CROQ JAMON"
+      },
+      "customerEnglish": "Ham croquettes"
+    },
+    "gambas-al-ajillo.png": {
+      "staff": {
+        "en": "Prawns",
+        "es": "Gambas"
+      },
+      "kitchen": {
+        "en": "GARLIC PRAWNS · TAPAS",
+        "es": "GAMBAS AJILLO"
+      },
+      "customerEnglish": "Garlic prawns"
+    },
+    "tortilla.png": {
+      "staff": {
+        "en": "Omelette",
+        "es": "Tortilla"
+      },
+      "kitchen": {
+        "en": "OMELETTE · TAPAS",
+        "es": "TORTILLA · TAPAS"
+      },
+      "customerEnglish": "Spanish omelette"
+    },
+    "pan-de-la-casa.png": {
+      "staff": {
+        "en": "Bread",
+        "es": "Pan"
+      },
+      "kitchen": {
+        "en": "BREAD · TAPAS",
+        "es": "PAN · TAPAS"
+      },
+      "customerEnglish": "House bread"
+    },
+    "pan-con-tomate.png": {
+      "staff": {
+        "en": "Tomato toast",
+        "es": "Tostada de tomate"
+      },
+      "kitchen": {
+        "en": "TOMATO BREAD · TAPAS",
+        "es": "PAN TOMATE · TAPAS"
+      },
+      "customerEnglish": "Bread with tomato"
+    },
+    "pulpo-a-la-gallega.png": {
+      "staff": {
+        "en": "Octopus",
+        "es": "Pulpo"
+      },
+      "kitchen": {
+        "en": "OCTOPUS · SHARING",
+        "es": "PULPO GALLEGA"
+      },
+      "customerEnglish": "Galician-style octopus"
+    },
+    "pimientos-de-padron.png": {
+      "staff": {
+        "en": "Peppers",
+        "es": "Pimientos"
+      },
+      "kitchen": {
+        "en": "PEPPERS · SHARING",
+        "es": "PIMIENTOS · RACIONES"
+      },
+      "customerEnglish": "Padrón peppers"
+    },
+    "calamares.png": {
+      "staff": {
+        "en": "Calamari",
+        "es": "Calamares"
+      },
+      "kitchen": {
+        "en": "CALAMARI · SHARING",
+        "es": "CALAMARES · RACIONES"
+      },
+      "customerEnglish": "Fried calamari"
+    },
+    "tabla-de-quesos.png": {
+      "staff": {
+        "en": "Cheeses",
+        "es": "Quesos"
+      },
+      "kitchen": {
+        "en": "CHEESE BOARD · SHARING",
+        "es": "QUESOS · RACIONES"
+      },
+      "customerEnglish": "Cheese board"
+    },
+    "paella.png": {
+      "staff": {
+        "en": "Paella",
+        "es": "Paella"
+      },
+      "kitchen": {
+        "en": "SEAFOOD PAELLA · MAINS",
+        "es": "PAELLA MARISCO"
+      },
+      "customerEnglish": "Seafood paella"
+    },
+    "solomillo.png": {
+      "staff": {
+        "en": "Sirloin",
+        "es": "Solomillo"
+      },
+      "kitchen": {
+        "en": "SIRLOIN · WHISKY SAUCE",
+        "es": "SOLOMILLO WHISKY"
+      },
+      "customerEnglish": "Sirloin in whisky sauce"
+    },
+    "bacalao.png": {
+      "staff": {
+        "en": "Cod",
+        "es": "Bacalao"
+      },
+      "kitchen": {
+        "en": "COD · PIL-PIL",
+        "es": "BACALAO · PIL-PIL"
+      },
+      "customerEnglish": "Cod pil-pil"
+    },
+    "merluza.png": {
+      "staff": {
+        "en": "Hake",
+        "es": "Merluza"
+      },
+      "kitchen": {
+        "en": "HAKE · GRILL",
+        "es": "MERLUZA · PLANCHA"
+      },
+      "customerEnglish": "Grilled hake"
+    },
+    "crema-catalana.png": {
+      "staff": {
+        "en": "Catalan custard",
+        "es": "Crema"
+      },
+      "kitchen": {
+        "en": "CUSTARD · DESSERT",
+        "es": "CREMA · POSTRES"
+      },
+      "customerEnglish": "Catalan cream"
+    },
+    "tarta-de-santiago.png": {
+      "staff": {
+        "en": "Almond cake",
+        "es": "Tarta Santiago"
+      },
+      "kitchen": {
+        "en": "ALMOND CAKE · DESSERT",
+        "es": "TARTA · POSTRES"
+      },
+      "customerEnglish": "Santiago almond cake"
+    },
+    "flan.png": {
+      "staff": {
+        "en": "Flan",
+        "es": "Flan"
+      },
+      "kitchen": {
+        "en": "FLAN · DESSERT",
+        "es": "FLAN · POSTRES"
+      },
+      "customerEnglish": "Home-made flan"
+    },
+    "arroz-con-leche.png": {
+      "staff": {
+        "en": "Rice dessert",
+        "es": "Arroz dulce"
+      },
+      "kitchen": {
+        "en": "RICE PUDDING · DESSERT",
+        "es": "ARROZ LECHE · POSTRES"
+      },
+      "customerEnglish": "Rice pudding"
+    },
+    "negroni.png": {
+      "staff": {
+        "en": "House Negroni",
+        "es": "Negroni de la casa"
+      },
+      "kitchen": {
+        "en": "NEGRONI · BAR",
+        "es": "NEGRONI · BARRA"
+      },
+      "customerEnglish": "Negroni"
+    },
+    "vino-tinto.png": {
+      "staff": {
+        "en": "House red",
+        "es": "Tinto casa"
+      },
+      "kitchen": {
+        "en": "RED WINE · BAR",
+        "es": "TINTO · BARRA"
+      },
+      "customerEnglish": "Glass of house red"
+    },
+    "cana-cerveza.png": {
+      "staff": {
+        "en": "Beer",
+        "es": "Caña"
+      },
+      "kitchen": {
+        "en": "DRAUGHT BEER · BAR",
+        "es": "CERVEZA · BARRA"
+      },
+      "customerEnglish": "Draught beer"
+    },
+    "refresco-cola.png": {
+      "staff": {
+        "en": "Cola",
+        "es": "Cola"
+      },
+      "kitchen": {
+        "en": "COLA · BAR",
+        "es": "COLA · BARRA"
+      },
+      "customerEnglish": "Cola soft drink"
+    },
+    "agua-mineral.png": {
+      "staff": {
+        "en": "Water",
+        "es": "Agua"
+      },
+      "kitchen": {
+        "en": "MINERAL WATER · BAR",
+        "es": "AGUA · BARRA"
+      },
+      "customerEnglish": "Bottled mineral water"
+    },
+    "zumo-naranja.png": {
+      "staff": {
+        "en": "Orange",
+        "es": "Naranja"
+      },
+      "kitchen": {
+        "en": "ORANGE JUICE · BAR",
+        "es": "NARANJA · BARRA"
+      },
+      "customerEnglish": "Orange juice"
+    },
+    "cafe-solo.png": {
+      "staff": {
+        "en": "House coffee",
+        "es": "Café de la casa"
+      },
+      "kitchen": {
+        "en": "COFFEE · DOWNSTAIRS BAR",
+        "es": "CAFÉ · BAR DE ABAJO"
+      },
+      "customerEnglish": "Coffee"
+    },
+    "jamon-iberico.png": {
+      "staff": {
+        "en": "Iberian ham",
+        "es": "Jamón ibérico"
+      },
+      "kitchen": {
+        "en": "IBERIAN HAM · DELI",
+        "es": "JAMÓN · CHARCUTERÍA"
+      },
+      "customerEnglish": "Sliced Iberian ham (per kg)"
+    },
+    "chorizo-iberico.png": {
+      "staff": {
+        "en": "Chorizo",
+        "es": "Chorizo"
+      },
+      "kitchen": {
+        "en": "CHORIZO · DELI",
+        "es": "CHORIZO · CHARCUTERÍA"
+      },
+      "customerEnglish": "Iberian chorizo (per kg)"
+    },
+    "lomo-embuchado.png": {
+      "staff": {
+        "en": "Pork loin",
+        "es": "Lomo"
+      },
+      "kitchen": {
+        "en": "PORK LOIN · DELI",
+        "es": "LOMO · CHARCUTERÍA"
+      },
+      "customerEnglish": "Cured pork loin (per kg)"
+    },
+    "salchichon.png": {
+      "staff": {
+        "en": "Salchichón",
+        "es": "Salchichón al peso"
+      },
+      "kitchen": {
+        "en": "SALCHICHÓN · DELI",
+        "es": "SALCHICHÓN · CHARCUTERÍA"
+      },
+      "customerEnglish": "Salchichón sausage (per kg)"
+    },
+    "cecina.png": {
+      "staff": {
+        "en": "Cecina",
+        "es": "Cecina"
+      },
+      "kitchen": {
+        "en": "CECINA · DELI",
+        "es": "CECINA · CHARCUTERÍA"
+      },
+      "customerEnglish": "Cured beef cecina (per kg)"
+    },
+    "sobrasada.png": {
+      "staff": {
+        "en": "Sobrasada",
+        "es": "Sobrasada al peso"
+      },
+      "kitchen": {
+        "en": "SOBRASADA · DELI",
+        "es": "SOBRASADA · CHARCUTERÍA"
+      },
+      "customerEnglish": "Mallorcan sobrasada (per kg)"
+    },
+    "manchego-curado.png": {
+      "staff": {
+        "en": "Manchego",
+        "es": "Manchego"
+      },
+      "kitchen": {
+        "en": "MANCHEGO · DELI",
+        "es": "MANCHEGO · CHARCUTERÍA"
+      },
+      "customerEnglish": "Cured Manchego (per kg)"
+    },
+    "cabrales.png": {
+      "staff": {
+        "en": "Cabrales",
+        "es": "Cabrales al peso"
+      },
+      "kitchen": {
+        "en": "CABRALES · DELI",
+        "es": "CABRALES · CHARCUTERÍA"
+      },
+      "customerEnglish": "Cabrales blue cheese (per kg)"
+    },
+    "idiazabal.png": {
+      "staff": {
+        "en": "Idiazábal",
+        "es": "Idiazábal al peso"
+      },
+      "kitchen": {
+        "en": "IDIAZÁBAL · DELI",
+        "es": "IDIAZÁBAL · CHARCUTERÍA"
+      },
+      "customerEnglish": "Idiazábal smoked cheese (per kg)"
+    },
+    "torta-del-casar.png": {
+      "staff": {
+        "en": "Torta cheese",
+        "es": "Torta"
+      },
+      "kitchen": {
+        "en": "TORTA · DELI",
+        "es": "TORTA · CHARCUTERÍA"
+      },
+      "customerEnglish": "Torta del Casar (per kg)"
+    },
+    "mahon.png": {
+      "staff": {
+        "en": "Mahón",
+        "es": "Mahón"
+      },
+      "kitchen": {
+        "en": "MAHÓN · DELI",
+        "es": "MAHÓN · CHARCUTERÍA"
+      },
+      "customerEnglish": "Mahón cheese (per kg)"
+    },
+    "anchoas.png": {
+      "staff": {
+        "en": "Anchovies",
+        "es": "Anchoas"
+      },
+      "kitchen": {
+        "en": "ANCHOVIES · DELI",
+        "es": "ANCHOAS · CHARCUTERÍA"
+      },
+      "customerEnglish": "Cantabrian anchovies (per kg)"
+    },
+    "aceitunas.png": {
+      "staff": {
+        "en": "Olives",
+        "es": "Aceitunas"
+      },
+      "kitchen": {
+        "en": "OLIVES · DELI",
+        "es": "ACEITUNAS · CHARCUTERÍA"
+      },
+      "customerEnglish": "Marinated olives (per kg)"
+    },
+    "pulpo-en-aceite.png": {
+      "staff": {
+        "en": "Octopus in oil",
+        "es": "Pulpo en aceite"
+      },
+      "kitchen": {
+        "en": "OCTOPUS · DELI",
+        "es": "PULPO · CHARCUTERÍA"
+      },
+      "customerEnglish": "Octopus in olive oil (per kg)"
+    },
+    "bonito.png": {
+      "staff": {
+        "en": "Tuna belly",
+        "es": "Ventresca"
+      },
+      "kitchen": {
+        "en": "TUNA BELLY · DELI",
+        "es": "VENTRESCA · CHARCUTERÍA"
+      },
+      "customerEnglish": "White tuna belly (per kg)"
+    },
+    "ensalada-mixta.png": {
+      "staff": {
+        "en": "Salad",
+        "es": "Ensalada"
+      },
+      "kitchen": {
+        "en": "SALAD · LUNCH",
+        "es": "ENSALADA · MENÚ"
+      },
+      "customerEnglish": "Mixed salad"
+    },
+    "gazpacho.png": {
+      "staff": {
+        "en": "Gazpacho",
+        "es": "Gazpacho"
+      },
+      "kitchen": {
+        "en": "GAZPACHO · LUNCH",
+        "es": "GAZPACHO · MENÚ"
+      },
+      "customerEnglish": "Andalusian gazpacho"
+    },
+    "lentejas.png": {
+      "staff": {
+        "en": "Lentils",
+        "es": "Lentejas"
+      },
+      "kitchen": {
+        "en": "LENTILS · LUNCH",
+        "es": "LENTEJAS · MENÚ"
+      },
+      "customerEnglish": "Stewed lentils"
+    },
+    "pollo-asado.png": {
+      "staff": {
+        "en": "Roast chicken",
+        "es": "Pollo asado"
+      },
+      "kitchen": {
+        "en": "CHICKEN + CHIPS",
+        "es": "POLLO + PATATAS"
+      },
+      "customerEnglish": "Roast chicken with chips"
+    },
+    "merluza-rebozada.png": {
+      "staff": {
+        "en": "Hake in batter",
+        "es": "Merluza frita"
+      },
+      "kitchen": {
+        "en": "BATTERED HAKE · LUNCH",
+        "es": "MERLUZA · MENÚ"
+      },
+      "customerEnglish": "Battered hake"
+    }
+  },
+  "variants": [
+    {
+      "customerEnglish": "Single",
+      "staff": {
+        "en": "Single coffee",
+        "es": "Café solo"
+      },
+      "kitchen": {
+        "en": "COFFEE · SINGLE",
+        "es": "CAFÉ · SOLO"
+      }
+    },
+    {
+      "customerEnglish": "Double",
+      "staff": {
+        "en": "Double coffee",
+        "es": "Café doble"
+      },
+      "kitchen": {
+        "en": "COFFEE · DOUBLE",
+        "es": "CAFÉ · DOBLE"
+      }
+    }
+  ],
+  "options": {
+    "name": {
+      "en": "Doneness",
+      "es": "Punto"
+    },
+    "kitchen": {
+      "en": "MEAT TEMPERATURE",
+      "es": "PUNTO CARNE"
+    },
+    "labels": [
+      {
+        "name": {
+          "en": "Rare",
+          "es": "Poco"
+        },
+        "kitchen": {
+          "en": "RARE MEAT",
+          "es": "POCO HECHO"
+        }
+      },
+      {
+        "name": {
+          "en": "Medium",
+          "es": "Punto medio"
+        },
+        "kitchen": {
+          "en": "MEDIUM MEAT",
+          "es": "AL PUNTO"
+        }
+      },
+      {
+        "name": {
+          "en": "Well done",
+          "es": "Muy"
+        },
+        "kitchen": {
+          "en": "WELL DONE MEAT",
+          "es": "MUY HECHO"
+        }
+      }
+    ]
+  },
+  "extras": {
+    "name": {
+      "en": "Sides",
+      "es": "Guarniciones"
+    },
+    "kitchen": {
+      "en": "CHICKEN SIDES",
+      "es": "GUARNICIÓN POLLO"
+    }
+  }
+}

@@ -29,7 +29,7 @@ import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./locale.js";
-import type { DemoDataSet } from "./data-set.js";
+import { demoPlainText, type DemoDataSet } from "./data-set.js";
 import { DEMO_PRINTER_KEY, routeToDemoPrinter } from "../../src/demo-printer.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
@@ -86,7 +86,7 @@ export async function seedDemoRestaurant(
       tx,
       { locationId },
       {
-        name: dataSet.printerName,
+        name: demoPlainText(dataSet.printerName, dataSet, locale),
         transport: "usb",
         localKey: DEMO_PRINTER_KEY,
         hasCashDrawer: true,
@@ -136,7 +136,12 @@ export async function seedDemoRestaurant(
     const [zone] = await tx
       .select({ id: floorZones.id })
       .from(floorZones)
-      .where(and(eq(floorZones.locationId, locationId), eq(floorZones.name, terrace.name[locale])));
+      .where(
+        and(
+          eq(floorZones.locationId, locationId),
+          eq(floorZones.name, demoPlainText(terrace.name, dataSet, locale)),
+        ),
+      );
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
     const cfg = { locationId: brandLocationId(locationId) };
     const clock = await readLocationClock(tx, locationId);
@@ -157,7 +162,7 @@ export async function seedDemoRestaurant(
       cfg,
       null,
       {
-        name: dataSet.specialDayName,
+        name: demoPlainText(dataSet.specialDayName, dataSet, locale),
         repeatsYearly: true,
         dates: [{ date: `${year}-12-25`, closedAllDay: true }],
       },

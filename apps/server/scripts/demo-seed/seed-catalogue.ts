@@ -20,8 +20,14 @@ import {
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
+import type { DemoPlainText } from "@waitron/country";
 import type { SeedLocale } from "./locale.js";
-import { demoLanguagesFor, type DemoDataSet, type SeedCatalogue } from "./data-set.js";
+import {
+  demoPlainText,
+  demoLanguagesFor,
+  type DemoDataSet,
+  type SeedCatalogue,
+} from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedCataloguesInput {
@@ -45,8 +51,11 @@ type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
 async function resolveStationIds(
   tx: Transaction,
   locationId: string,
-  names: DemoDataSet["stations"],
+  dataSet: DemoDataSet,
+  locale: SeedLocale,
 ): Promise<StationIds> {
+  const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
+  const names = dataSet.stations;
   const { rows: defaults } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${locationId} and is_default = 1 and active = 1
@@ -56,7 +65,7 @@ async function resolveStationIds(
     throw new Error(`seedCatalogues: no default station found for location ${locationId}`);
   }
   await tx.execute(sql`
-    update kitchen_stations set name = ${names.kitchen}, colour = 'orange'
+    update kitchen_stations set name = ${plain(names.kitchen)}, colour = 'orange'
     where id = ${kitchen}`);
   // Seed scripts have no management session, so insert directly — through the table definition,
   // because the insert BUILDER generates `kitchen_stations.id` and `created_at`.
@@ -64,9 +73,9 @@ async function resolveStationIds(
     .insert(kitchenStations)
     .values(
       [
-        { name: names.downstairsBar, colour: "blue" as const },
-        { name: names.upstairsBar, colour: "indigo" as const },
-        { name: names.deli, colour: "green" as const },
+        { name: plain(names.downstairsBar), colour: "blue" as const },
+        { name: plain(names.upstairsBar), colour: "indigo" as const },
+        { name: plain(names.deli), colour: "green" as const },
       ].map(({ name, colour }) => ({
         locationId,
         name,
@@ -92,7 +101,8 @@ export async function seedCatalogues(
   tx: Transaction,
   { locationId, locale, dataSet }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
-  const stationIds = await resolveStationIds(tx, locationId, dataSet.stations);
+  const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
+  const stationIds = await resolveStationIds(tx, locationId, dataSet, locale);
   const { rows: geography } = await tx.execute<{ province: string | null; country: string }>(sql`
     select l.province, t.country from locations l
     cross join tenants t
@@ -120,19 +130,19 @@ export async function seedCatalogues(
     const catalogue =
       existingMenuId === undefined
         ? await createCatalogue(tx, {
-            name: data.name[locale],
+            name: plain(data.name),
             names: translated(data.customerName),
           })
         : { id: existingMenuId };
     if (existingMenuId !== undefined)
       await updateMenuDetails(tx, existingMenuId, {
-        name: data.name[locale],
+        name: plain(data.name),
         names: translated(data.customerName),
       });
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, {
-        name: cat.categoryName ?? cat.name.en,
+        name: plain(cat.categoryName ?? cat.name),
         color: cat.color,
       });
       await setRoutingCell(
@@ -146,7 +156,7 @@ export async function seedCatalogues(
       const section = await createSectionIn(
         tx,
         rootSectionId,
-        { internalName: cat.name[locale], names: translated(cat.name) },
+        { internalName: plain(cat.name), names: translated(cat.name) },
         undefined,
         locale,
       );
@@ -157,8 +167,8 @@ export async function seedCatalogues(
               await createUnit(
                 tx,
                 {
-                  staffName: product.unit.staffName,
-                  staffAbbreviation: product.unit.staffAbbreviation,
+                  staffName: plain(product.unit.staffName),
+                  staffAbbreviation: plain(product.unit.staffAbbreviation),
                   name: translated(product.unit.name),
                   precision: product.unit.precision,
                   abbreviation: translated(product.unit.abbreviation),
@@ -170,11 +180,11 @@ export async function seedCatalogues(
         const created = await createProduct(tx, {
           catalogueId: catalogue.id,
           categoryId: category.id,
-          name: product.staffName ?? product.customerName[locale],
+          name: plain(product.staffName ?? product.customerName),
           customerName: translated(product.customerName),
           description:
             product.description === undefined ? undefined : translated(product.description),
-          kitchenName: product.kitchenName,
+          kitchenName: product.kitchenName === undefined ? undefined : plain(product.kitchenName),
           dietaryDeclarations:
             product.dietaryDeclarations === undefined
               ? undefined
@@ -189,9 +199,9 @@ export async function seedCatalogues(
             tx,
             created.id,
             product.variants.map((variant) => ({
-              name: variant.staffName ?? variant.customerName[locale],
+              name: plain(variant.staffName ?? variant.customerName),
               customerName: translated(variant.customerName),
-              kitchenName: variant.kitchenName ?? null,
+              kitchenName: variant.kitchenName === undefined ? null : plain(variant.kitchenName),
               image: null,
               unitPrice: variant.unitPrice,
               available: variant.available,
@@ -212,7 +222,7 @@ export async function seedCatalogues(
         .from(menuItems)
         .where(and(eq(menuItems.menuId, catalogue.id), inArray(menuItems.productId, productIds)));
       if (rows.length !== productIds.length)
-        throw new Error(`demo-seed: a product of '${cat.name[locale]}' has no row on its menu`);
+        throw new Error(`demo-seed: a product of '${plain(cat.name)}' has no row on its menu`);
       for (const row of rows) menuItemsByProduct.set(row.productId, row.id);
     }
     return catalogue.id;

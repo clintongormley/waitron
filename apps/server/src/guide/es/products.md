@@ -272,16 +272,21 @@ el nombre de cocina, los precios y las respuestas de los modificadores. Los camb
 catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de cocina, el ticket y la
 reimpresión siguen mostrando los datos guardados con ese pedido.
 
-El local de demostración incluye un café con nombre en cada idioma de contenido del local, con dos
-variantes, un nombre de cocina aparte y declaraciones dietéticas directas; la Ensalada mixta tiene una
-unidad propia. Casa Delgado y Menú del Día incluyen una carta **Bebidas** como carpeta. Bebidas pone la
-Caña a 3,00 en lugar de su precio de producto de 2,80; las dos cartas que la incluyen heredan ese
-precio. Menú del Día fija su propio precio del Negroni en 9,00. Las variantes del café conservan sus
-propios precios. El solomillo de demostración lleva una lista de opciones de ejemplo, **Punto**, que
-pregunta cómo se hace la carne. En **Pollo asado** puedes elegir hasta tres guarniciones opcionales de
-**Guarniciones**: pimientos de Padrón (2,00), ensalada mixta (1,50) y pan de la casa (0,50). Estos
-precios se aplican a una ración añadida al pollo, así que puedes probar un extra con un precio distinto
-del mismo producto vendido por separado.
+Cuando preparas una demostración en español, los nombres del personal y de cocina están en
+español. La caja muestra **Menú del Día**, mientras que su nombre para el cliente es **Menú del
+mediodía**. **Ensalada** usa el nombre de cocina **ENSALADA · MENÚ** y una unidad propia,
+**Ración**, abreviada **rac**. **Café de la casa** tiene dos variantes y el nombre de cocina
+**CAFÉ · BAR DE ABAJO**. Los nombres para el cliente conservan los idiomas de contenido del
+local, por lo que cambiar los nombres internos no sustituye las palabras del ticket.
+
+Casa Delgado y Menú del Día incluyen una carta **Bebidas** como carpeta. Bebidas pone la
+**Caña** a 3,00 en lugar de su precio de producto de 2,80; las dos cartas que la incluyen
+heredan ese precio. Menú del Día fija su propio precio del **Negroni de la casa** en 9,00.
+Las variantes del café conservan sus propios precios. El **Solomillo** lleva la lista de
+opciones **Punto**. En **Pollo asado** puedes elegir hasta tres **Guarniciones** opcionales:
+pimientos (2,00), ensalada (1,50) y pan (0,50). Estos precios se aplican a una ración añadida al
+pollo, así que puedes probar un extra con un precio distinto del mismo producto vendido por
+separado.
 
 ## Consulta la información nutricional de un plato en la caja {#nutrition-at-the-till}
 

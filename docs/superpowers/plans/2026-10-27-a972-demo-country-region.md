@@ -191,24 +191,24 @@ These are reading receipts at the checkpoint, not runtime qualifications:
 **Produces (new):** `DemoPlainText<L> = Readonly<Record<"en" | "es", string> & Partial<Record<L, string>>>`; server `demoPlainText(text: DemoPlainText<string>, set: DemoDataSet, locale:
 StaffLanguage): string`. In this cut it selects only EN/ES; cut 3 adds the optional dataset override.
 
-- [ ] **1. RED:** Add `seed-names.test.ts`, seeding Madrid independently in EN and ES. Assert concrete written values across products/variants, units and abbreviations, categories/sections, menus,
+- [x] **1. RED:** Add `seed-names.test.ts`, seeding Madrid independently in EN and ES. Assert concrete written values across products/variants, units and abbreviations, categories/sections, menus,
   option lists/labels, extras, stations, printer, special day, periods, floor sets/zones, departments and reason names. Pin English lunch staff **Set lunch**, customer **Lunch menu**; Spanish lunch
   **Menú del Día**, customer **Menú del mediodía**. Pin English mixed-salad kitchen **SALAD · LUNCH**, Spanish **ENSALADA · MENÚ**; coffee kitchen **COFFEE · DOWNSTAIRS BAR** / **CAFÉ · BAR DE
   ABAJO**; unit **Portion** / **Ración**, abbreviation **ptn** / **rac**. Run `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-names.test.ts`; observe the incorrect
   English/Spanish names.
-- [ ] **2. Implement:** Convert every authored plain-name field to `DemoPlainText`, including currently omitted product/variant kitchen names; supply distinct staff/customer/kitchen wording, not just
+- [x] **2. Implement:** Convert every authored plain-name field to `DemoPlainText`, including currently omitted product/variant kitchen names; supply distinct staff/customer/kitchen wording, not just
   different casing. Keep proper dish/person/restaurant names where appropriate. Translate category overrides, stations, printer, special day and new/existing menu periods (including renaming the
   reused period), rather than leaving English writer literals. Resolve via `demoPlainText`; preserve identifiers, roles, permissions, prices, customer maps and all sale writers. Make category/station
   routing use the same selected values or ids on both write and lookup paths.
-- [ ] **3. GREEN:** Run the new names suite, then `seed-catalogue.test.ts`, `seed-floor.test.ts`, `seed-option-lists.test.ts`, `seed-adjustments.test.ts`, `seed.integration.test.ts`, `seed.test.ts`
+- [x] **3. GREEN:** Run the new names suite, then `seed-catalogue.test.ts`, `seed-floor.test.ts`, `seed-option-lists.test.ts`, `seed-adjustments.test.ts`, `seed.integration.test.ts`, `seed.test.ts`
   and country-es `src/demo/data.test.ts` with the explicit commands from cut 1, grouped by package. Add assertions enumerating every product/variant/list/label so an omitted field cannot hide behind a
   fallback. Check three distinct resolved names per EN/ES case. Keep live module `starter-content.ts` files untouched.
-- [ ] The frozen cut-1 snapshot is historical: keep its JSON/manifest untouched. Extend the comparator with an explicit row/field old→new **name-only** expectation map for this authorized cut, failing
+- [x] The frozen cut-1 snapshot is historical: keep its JSON/manifest untouched. Extend the comparator with an explicit row/field old→new **name-only** expectation map for this authorized cut, failing
   unused entries and every unlisted difference; never regenerate its expected data from candidate imports. Preserve all non-name and relationship assertions. Include each changed pre-existing
   nonfiscal check in the inventory; do not change any fiscal assertion or golden.
-- [ ] **4. Control:** Remove one English name, substitute Spanish into one English plain field, and remove one lookup translation in a disposable candidate; each relevant named test must fail. Restore
+- [x] **4. Control:** Remove one English name, substitute Spanish into one English plain field, and remove one lookup translation in a disposable candidate; each relevant named test must fail. Restore
   and rerun the focused cases. Build/check both browser bundles again because data contracts/exports changed. Update EN/ES demo guide examples and remaining backlog entries.
-- [ ] **5. Commit:** `git commit -s -m "fix: seed demo plain names in English and Spanish"`; run the common finish protocol with low-risk review.
+- [x] **5. Commit:** `git commit -s -m "fix: seed demo plain names in English and Spanish"`; run the common finish protocol with low-risk review.
 
 ## Cut 3: Catalonia, shared Balearic demo and geography-aware setup
 
@@ -470,3 +470,29 @@ entries retain their earlier estimates. The focused duration-sequencer guard
 passes all twenty cases. This metadata change retains the completed Claude
 review. Final current-head coverage, image and landing results are recorded in
 the cut's pull request and campaign ledger.
+
+### Cut 2 local qualification — 2026-10-27
+
+The new English/Spanish names cases failed before implementation. The full demo
+seed and its setup/developer callers pass focused checks, including the unedited
+practice-sales golden and fiscal huella/immutability suites. The original Madrid
+JSON, manifest, exporter and pictures remain byte-identical. Pack-owned explicit
+row/field old-to-new name maps update only the comparator's expected names and
+their dependent semantic identities and published-menu hashes. Unused, repeated
+and non-name allowances are refused. Customer wording, prices and relationships
+still compare against the original capture.
+
+In a disposable installed candidate, removing English from an authored field,
+substituting Spanish into its English value, dropping reporting-category lookup
+translation and changing a product price each fail the owning test. Restored
+controls pass. Setup and till bundles build and pass the identity-present,
+demo-data-absent checker. This cut uses the approved low-risk review path.
+
+Changed existing checks are confined to the catalogue, floor, options, seed,
+integration, Madrid comparison and country-es data suites. They replace plain
+name strings with the authorized English/Spanish values or read the new pair
+shape. Modifier order/defaults, kitchen routing, menu inclusion, variants, prices,
+customer translations, credentials and sale assertions remain. The frozen
+comparison retains its original manifest checks before applying the explicit
+name allowances. Full package coverage and the final landing result belong to
+the current-head CI and campaign ledger.

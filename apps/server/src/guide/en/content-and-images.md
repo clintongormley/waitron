@@ -7,6 +7,8 @@ Your products, sections, [modifiers](modifiers.md) and units share these languag
 The image library uses them too, but a photo still needs a name in your default language when
 you upload or edit it.
 
+In an English demo, the photograph library shows staff names such as **House coffee** and **Roast chicken**. In a Spanish demo, it shows **Café de la casa** and **Pollo asado**. The pictures and customer translations stay the same.
+
 ## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled

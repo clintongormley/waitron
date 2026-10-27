@@ -55,7 +55,7 @@ describe("seedCatalogues", () => {
       deli: CASA_DELGADO_ES.menus.deli,
       lunch: CASA_DELGADO_ES.menus.lunch,
     }).flatMap((menu) =>
-      menu.categories.map((category) => category.categoryName ?? category.name.en),
+      menu.categories.map((category) => category.categoryName?.en ?? category.name.en),
     );
     expect(rows.map((row) => row.name).sort()).toEqual(expected.sort());
     for (const row of rows) expect(row.color, row.name).toMatch(/^#[0-9a-f]{6}$/);
@@ -230,7 +230,7 @@ describe("seedCatalogues", () => {
     expect(named).toEqual([
       { menu: "Casa Delgado", root: "Casa Delgado" },
       { menu: "Deli takeaway", root: "Deli takeaway" },
-      { menu: "Menú del Día", root: "Menú del Día" },
+      { menu: "Set lunch", root: "Set lunch" },
     ]);
   });
 
@@ -287,7 +287,7 @@ describe("seedCatalogues", () => {
         from products p
         join categories c on c.id = p.category_id
         join products v on v.parent_id = p.id
-        where p.name = 'Café' and p.parent_id is null
+        where p.name = 'House coffee' and p.parent_id is null
         group by p.id, c.name`);
       const { rows: coffeeVariants } = await tx.execute<{
         name: string;
@@ -297,7 +297,7 @@ describe("seedCatalogues", () => {
         select v.name, v.customer_name->>'en' as customer_en, v.kitchen_name
         from products v
         join products p on p.id = v.parent_id
-        where p.name = 'Café'
+        where p.name = 'House coffee'
         order by v.variant_order`);
       const editorDemo = editorDemoRaw.map((row) => ({
         ...row,
@@ -335,7 +335,7 @@ describe("seedCatalogues", () => {
         select u.precision, u.name, u.abbreviation from units u
         join product_units pu on pu.unit_id = u.id
         join products p on p.id = pu.product_id
-        where p.name = 'Mixed salad'`);
+        where p.name = 'Salad'`);
       const customUnit = customUnitRaw.map((row) => ({
         precision: row.precision,
         name: JSON.parse(row.name) as Record<string, string>,
@@ -361,10 +361,10 @@ describe("seedCatalogues", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
-      "Menú del Día",
+      "Set lunch",
     ]);
     expect(res.menus.find((m) => m.name === "Casa Delgado")!.isDefault).toBe(true);
-    expect(res.menus.find((m) => m.name === "Menú del Día")!.isDefault).toBe(false);
+    expect(res.menus.find((m) => m.name === "Set lunch")!.isDefault).toBe(false);
     expect(res.contentLanguages).toEqual({
       defaultLanguage: "es",
       languages: ["es", "en"],
@@ -372,10 +372,10 @@ describe("seedCatalogues", () => {
 
     expect(res.products.length).toBeGreaterThan(35);
     const menuNames = new Set(res.products.map((p) => p.catalogueName));
-    expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día", "Deli takeaway", "Drinks"]));
+    expect(menuNames).toEqual(new Set(["Casa Delgado", "Set lunch", "Deli takeaway", "Drinks"]));
 
-    expect(res.products.some((p) => p.name === "Sliced Iberian ham (per kg)")).toBe(true);
-    expect(res.products.some((p) => p.name === "Mixed salad")).toBe(true);
+    expect(res.products.some((p) => p.name === "Iberian ham")).toBe(true);
+    expect(res.products.some((p) => p.name === "Salad")).toBe(true);
 
     const cocina = res.stations.find((s) => s.name === "Kitchen");
     const downstairsBar = res.stations.find((s) => s.name === "Downstairs bar");
@@ -397,7 +397,7 @@ describe("seedCatalogues", () => {
     // One product's three names in full, then a floor across the whole seed — so flattening the names
     // back onto one authored string fails here rather than quietly producing an unusable demo.
     expect(res.threeNames).toEqual([
-      { name: "Bravas", customer_en: "Spicy potatoes", kitchen_name: "BRAVAS" },
+      { name: "Bravas", customer_en: "Spicy potatoes", kitchen_name: "POTATOES · TAPAS" },
     ]);
     expect(res.distinctNames[0]!.differing).toBeGreaterThanOrEqual(10);
     expect(res.distinctNames[0]!.with_kitchen).toBeGreaterThanOrEqual(5);
@@ -417,8 +417,8 @@ describe("seedCatalogues", () => {
       },
     ]);
     expect(res.coffeeVariants).toEqual([
-      { name: "Solo", customer_en: "Single", kitchen_name: "SOLO" },
-      { name: "Doble", customer_en: "Double", kitchen_name: null },
+      { name: "Single coffee", customer_en: "Single", kitchen_name: "COFFEE · SINGLE" },
+      { name: "Double coffee", customer_en: "Double", kitchen_name: "COFFEE · DOUBLE" },
     ]);
     expect(res.customUnit).toEqual([
       {
@@ -460,12 +460,12 @@ it("seeds every dish and pricing unit with Spanish text for a Spanish demo", asy
   expect(read.seeded.productsByImage.size).toBe(authored.length);
   for (const dish of authored) {
     const row = byId.get(read.seeded.productsByImage.get(dish.image)!);
-    expect(row?.name, dish.image).toBe(dish.staffName ?? dish.customerName.es);
+    expect(row?.name, dish.image).toBe(dish.staffName?.es ?? dish.customerName.es);
     expect(row?.customer_es, dish.image).toBe(dish.customerName.es);
     expect(row?.customer_es?.trim(), dish.image).not.toBe("");
   }
-  expect(read.rows.some((row) => row.name === "Tortilla española")).toBe(true);
-  expect(read.rows.some((row) => row.name === "Pan de la casa")).toBe(true);
+  expect(read.rows.some((row) => row.name === "Tortilla")).toBe(true);
+  expect(read.rows.some((row) => row.name === "Pan")).toBe(true);
   expect(read.rows.some((row) => ["Spanish omelette", "House bread"].includes(row.name))).toBe(
     false,
   );
