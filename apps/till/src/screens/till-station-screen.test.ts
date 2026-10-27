@@ -134,7 +134,6 @@ function stubApi(
       .fn()
       .mockResolvedValue({ printersDown: [], items: kitchenQueue, notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
-    advanceTicket: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
@@ -283,28 +282,6 @@ describe("till-station-screen", () => {
     // Reloaded: once on connect, once after the advance.
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     expect(escaped).not.toHaveBeenCalled();
-  });
-
-  it("an advance-ticket from the widget calls advanceTicket then reloads the active queue", async () => {
-    const api = stubApi({
-      getStationQueue: vi.fn().mockResolvedValue({
-        printersDown: [],
-        items: kitchenQueue.map((group) => ({ ...group, bumpMode: "ticket" as const })),
-        notices: [],
-      }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
-    await flush(el);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("advance-ticket", {
-        detail: { orderId: "wo-1", stationId: "st-1", to: "ready" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(api.advanceTicket).toHaveBeenCalledWith("wo-1", "st-1", "ready");
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
   });
 
   it("a mark-collected from the widget calls markCollected then reloads the active queue, and does not escape the screen", async () => {
@@ -715,28 +692,6 @@ describe("till-station-screen", () => {
     expect(queueWidget(el)!.groups).toEqual([]);
   });
 
-  it("a failed whole-ticket advance still reloads the queue (reconciling)", async () => {
-    const api = stubApi({
-      getStationQueue: vi.fn().mockResolvedValue({
-        printersDown: [],
-        items: kitchenQueue.map((group) => ({ ...group, bumpMode: "ticket" as const })),
-        notices: [],
-      }),
-      advanceTicket: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
-    await flush(el);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("advance-ticket", {
-        detail: { orderId: "wo-1", stationId: "st-1", to: "ready" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
-  });
-
   it("suppresses its own header + Back when embedded, keeping the view toggle", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -811,7 +766,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         .fn()
         .mockResolvedValue({ printersDown: [], items: kitchenQueue, notices: [] }),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
-      advanceTicket: vi.fn().mockResolvedValue(undefined),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as TillApi;
@@ -1170,9 +1124,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     }
   });
 
-  it("a whole-ticket bump expands to a deviceAdvance for each advanceable item at the station", async () => {
-    // `bump_mode = ticket` fires `advance-ticket`; the device API has only a per-line advance, so the
-    // screen advances every fired item whose legitimate next step is `to` — never the session verb.
+  it("a heading tap on a kitchen display advances each of its dishes through deviceAdvance", async () => {
     const twoLine: StationQueueGroup[] = [
       {
         kitchenNote: null,
@@ -1213,7 +1165,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       getDeviceStationScreen: vi.fn().mockResolvedValue({
         stations: [
           {
-            name: "Cocina",
+            name: "Kitchen",
             available: true,
             today: {
               open: true,
@@ -1235,17 +1187,15 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       deviceMode: true,
     });
     await flush(el);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("advance-ticket", {
-        detail: { orderId: "wo-1", stationId: "st-dev", to: "preparing" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-a", "preparing");
-    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-b", "preparing");
-    expect(api.advanceTicket).not.toHaveBeenCalled();
+    const queue = queueWidget(el)!;
+    await queue.updateComplete;
+    queue.shadowRoot!.querySelector<HTMLElement>("button[data-card-head]")!.click();
+    await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.deviceAdvance).mock.calls).toEqual([
+      ["ti-a", "preparing"],
+      ["ti-b", "preparing"],
+    ]);
+    expect(api.advanceTicketItem).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1258,8 +1208,8 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     [
       "a whole-ticket bump",
       "ticket",
-      "advance-ticket",
-      { orderId: "wo-1", stationId: "st-dev", to: "preparing" },
+      "advance-dishes",
+      { itemIds: ["ti-1"], stationId: "st-dev", to: "preparing" },
     ],
   ] as const)(
     "%s refused device.unauthorized asks at once to switch, naming the station screen",
@@ -1297,114 +1247,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       }
     },
   );
-});
-
-describe("till-station-screen device-mode whole-ticket bump selection", () => {
-  const firedAt = "2026-08-17T10:00:00.000Z";
-  const mixed: StationQueueGroup[] = [
-    {
-      kitchenNote: null,
-      orderId: "wo-1",
-      orderNumber: 5,
-      label: null,
-      queuedAt: firedAt,
-      status: "placed",
-      thresholds: DEFAULT_THRESHOLDS,
-      bumpMode: "ticket",
-      items: [
-        {
-          allergy: null,
-          id: "ti-fired-queued",
-          workingOrderLineId: "wl-1",
-          state: "queued",
-          name: "A",
-          quantity: "1.000",
-          course: null,
-          firedAt,
-          queuedAt: firedAt,
-        },
-        {
-          allergy: null,
-          id: "ti-held",
-          workingOrderLineId: "wl-2",
-          state: "queued",
-          name: "B",
-          quantity: "1.000",
-          course: null,
-          firedAt: null,
-          queuedAt: firedAt,
-        },
-        {
-          allergy: null,
-          id: "ti-already-preparing",
-          workingOrderLineId: "wl-3",
-          state: "preparing",
-          name: "C",
-          quantity: "1.000",
-          course: null,
-          firedAt,
-          queuedAt: firedAt,
-        },
-      ],
-    },
-  ];
-
-  function deviceApi(): TillApi {
-    return {
-      getDeviceStationScreen: vi.fn().mockResolvedValue({
-        stations: [
-          {
-            name: "Cocina",
-            available: true,
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
-            },
-            id: "st-dev",
-            printersDown: [],
-            queue: mixed,
-            notices: [],
-          },
-        ],
-      }),
-      deviceAdvance: vi.fn().mockResolvedValue(undefined),
-      advanceTicket: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TillApi;
-  }
-
-  async function bump(api: TillApi, orderId: string): Promise<void> {
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      deviceMode: true,
-    });
-    await flush(el);
-    queueWidget(el)!.dispatchEvent(
-      new CustomEvent("advance-ticket", {
-        detail: { orderId, stationId: "st-dev", to: "preparing" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
-  }
-
-  it("advances only the fired lines whose next step is the target, skipping held and later lines", async () => {
-    const api = deviceApi();
-    await bump(api, "wo-1");
-    expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
-    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-fired-queued", "preparing");
-    expect(api.advanceTicket).not.toHaveBeenCalled();
-  });
-
-  it("advances nothing for an order no longer on the loaded queue, and still reloads", async () => {
-    const api = deviceApi();
-    await bump(api, "wo-gone");
-    expect(api.deviceAdvance).not.toHaveBeenCalled();
-    expect(api.advanceTicket).not.toHaveBeenCalled();
-  });
 });
 
 describe("till-station-screen device mode with several stations (A366 decision 7)", () => {
@@ -1480,7 +1322,6 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       getDeviceStationScreen: vi.fn().mockResolvedValue(screen),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
-      advanceTicket: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as TillApi;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -1549,6 +1390,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       {
         ...barQueue[0]!,
         orderId: "wo-1",
+        bumpMode: "ticket",
         items: [{ ...barQueue[0]!.items[0]!, state: "queued" }],
       },
     ];
@@ -1558,13 +1400,9 @@ describe("till-station-screen device mode with several stations (A366 decision 7
         available("st-2", "Barra", sameOrderAtBarra),
       ],
     });
-    sectionQueue(sections(el)[1]!)!.dispatchEvent(
-      new CustomEvent("advance-ticket", {
-        detail: { orderId: "wo-1", stationId: "st-2", to: "preparing" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    const barra = sectionQueue(sections(el)[1]!)!;
+    await barra.updateComplete;
+    barra.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-2"]')!.click();
     await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
     expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-2", "preparing");
@@ -1799,7 +1637,6 @@ describe("till-station-screen device mode with several stations (A366 decision 7
         getDeviceStationScreen: vi.fn().mockResolvedValue(screen),
         deviceAdvance: vi.fn().mockResolvedValue(undefined),
         advanceTicketItem: vi.fn().mockResolvedValue(undefined),
-        advanceTicket: vi.fn().mockResolvedValue(undefined),
       } as unknown as TillApi;
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
@@ -1955,11 +1792,15 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       expect(holder("ti-2").querySelector("[data-whole-ticket]")).toBeNull();
       const ticket = vi.fn();
       const item = vi.fn();
-      queue.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+      queue.addEventListener("advance-dishes", (e) => ticket((e as CustomEvent).detail));
       queue.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
       queue.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
       await vi.waitFor(() => expect(api.getDeviceStationScreen).toHaveBeenCalledTimes(2));
-      expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+      expect(ticket).toHaveBeenCalledWith({
+        itemIds: ["ti-1", "ti-1b"],
+        stationId: "st-1",
+        to: "preparing",
+      });
       expect(item).not.toHaveBeenCalled();
       expect(api.deviceAdvance).toHaveBeenCalledTimes(2);
       expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
@@ -2841,7 +2682,6 @@ describe("till-station-screen 15-second refresh", () => {
         .mockResolvedValueOnce(screen("line"))
         .mockResolvedValue(screen("ticket")),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
-      advanceTicket: vi.fn().mockResolvedValue(undefined),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -2856,11 +2696,15 @@ describe("till-station-screen 15-second refresh", () => {
     await queue.updateComplete;
     const ticket = vi.fn();
     const item = vi.fn();
-    queue.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    queue.addEventListener("advance-dishes", (e) => ticket((e as CustomEvent).detail));
     queue.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
     queue.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     await flush(el);
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-dev", to: "preparing" });
+    expect(ticket).toHaveBeenCalledWith({
+      itemIds: ["ti-1", "ti-1b"],
+      stationId: "st-dev",
+      to: "preparing",
+    });
     expect(item).not.toHaveBeenCalled();
     expect(api.deviceAdvance).toHaveBeenCalledTimes(2);
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
@@ -5050,7 +4894,6 @@ describe("moving the dishes a card names", () => {
         .fn()
         .mockResolvedValue({ printersDown: [], items: kitchenQueue, notices: [] }),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
-      advanceTicket: vi.fn().mockResolvedValue(undefined),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as TillApi;

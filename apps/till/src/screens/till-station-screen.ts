@@ -38,16 +38,6 @@ import type {
   TillApi,
 } from "../api/client.js";
 
-/**
- * The one item state a per-line advance to `to` legitimately STARTS from. A DEVICE has only a per-line
- * advance verb, so a whole-ticket bump expands to one advance per FIRED item at this state — never an
- * invalid skip such as a queued item jumped straight to `ready`.
- */
-const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
-  preparing: "queued",
-  ready: "preparing",
-};
-
 /** How often the screen re-reads its queue and notices (plan decision D11). */
 const REFRESH_MS = 15_000;
 
@@ -625,38 +615,6 @@ export class TillStationScreen extends LitElement {
     });
   }
 
-  async #onAdvanceTicket(event: Event): Promise<void> {
-    event.stopPropagation();
-    const { orderId, stationId, to } = (
-      event as CustomEvent<{
-        orderId: string;
-        stationId: string;
-        to: Exclude<TicketState, "queued">;
-      }>
-    ).detail;
-    await this.#advance(() =>
-      this.deviceMode
-        ? this.#deviceAdvanceTicket(orderId, stationId, to)
-        : this.api.advanceTicket(orderId, stationId, to),
-    );
-  }
-
-  async #deviceAdvanceTicket(
-    orderId: string,
-    stationId: string,
-    to: Exclude<TicketState, "queued">,
-  ): Promise<void> {
-    const station = this.deviceStations.find((candidate) => candidate.id === stationId);
-    if (station === undefined || !worked(station)) return;
-    const group = station.queue.find((candidate) => candidate.orderId === orderId);
-    if (group === undefined) return;
-    for (const item of group.items) {
-      if (item.firedAt !== null && item.state === ADVANCE_FROM[to]) {
-        await this.api.deviceAdvance(item.id, to);
-      }
-    }
-  }
-
   async #onMarkCollected(event: Event): Promise<void> {
     event.stopPropagation();
     // A device holds no session for this verb; the advance-only widget hides the button, and this guards
@@ -1000,7 +958,6 @@ export class TillStationScreen extends LitElement {
         aria-label=${t("station.title")}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @advance-dishes=${(event: Event) => void this.#onAdvanceDishes(event)}
-        @advance-ticket=${(event: Event) => void this.#onAdvanceTicket(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @reprint-order=${(event: Event) => void this.#onReprintOrder(event)}
         @acknowledge-notice=${(event: Event) => void this.#onAcknowledgeNotice(event)}

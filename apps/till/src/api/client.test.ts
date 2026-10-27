@@ -1452,24 +1452,6 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "ticket.invalid_transition" });
   });
 
-  it("advanceTicket POSTs { to } to the whole-ticket advance route (order + station, empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(
-      new TillApi("", fetchStub).advanceTicket("wo-1", "st-1", "ready"),
-    ).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/orders/wo-1/stations/st-1/advance",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ to: "ready" }),
-      }),
-    );
-  });
-
   it("sendToPrep POSTs an empty object (no `to`) to the addressed order's /prep route", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

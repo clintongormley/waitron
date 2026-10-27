@@ -865,18 +865,18 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('button[data-item="ti-3"]')).toBeNull();
   });
 
-  it("ticket mode: tapping a line emits advance-ticket { orderId, stationId, to } (whole-ticket)", async () => {
+  it("ticket mode: tapping a line emits advance-dishes { itemIds, stationId, to } for its card's dishes at its stage", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
       stationId: "st-1",
     });
     const item = vi.fn();
-    const ticket = vi.fn();
+    const dishes = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
-    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(item).not.toHaveBeenCalled();
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(dishes).toHaveBeenCalledWith({ itemIds: ["ti-1"], stationId: "st-1", to: "preparing" });
   });
 
   it("ticket mode without a stationId cannot fire a whole-ticket bump (the route is station-keyed)", async () => {
@@ -2153,10 +2153,10 @@ describe("till-station-queue — a merged queue's station labels", () => {
       stationNames,
       stationId: "st-2",
     });
-    const ticket = vi.fn();
-    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    const dishes = vi.fn();
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(dishes).toHaveBeenCalledWith({ itemIds: ["ti-1"], stationId: "st-1", to: "preparing" });
   });
 
   it("a merged queue bumps each order by its own station's mode", async () => {
@@ -2175,10 +2175,10 @@ describe("till-station-queue — a merged queue's station labels", () => {
     const item = vi.fn();
     const ticket = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
-    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => ticket((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(ticket).toHaveBeenCalledOnce();
-    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(ticket).toHaveBeenCalledWith({ itemIds: ["ti-1"], stationId: "st-1", to: "preparing" });
     expect(item).not.toHaveBeenCalled();
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-4"]')!.click();
     expect(item).toHaveBeenCalledOnce();
@@ -2219,10 +2219,10 @@ describe("till-station-queue — a merged queue's station labels", () => {
       const item = vi.fn();
       const ticket = vi.fn();
       el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
-      el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+      el.addEventListener("advance-dishes", (e) => ticket((e as CustomEvent).detail));
       el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-1"]')!.click();
       expect(ticket).toHaveBeenCalledExactlyOnceWith({
-        orderId: "wo-1",
+        itemIds: ["ti-1"],
         stationId: "st-1",
         to: "preparing",
       });
@@ -3403,5 +3403,139 @@ describe("till-station-queue: the dishes-to-make line", () => {
       now: AGE_NOW,
     });
     expect(line(el)).toBe("3 dishes to make · 1 late");
+  });
+});
+
+describe("till-station-queue: a card's heading and whole-ticket taps", () => {
+  const head = (el: TillStationQueue, orderNumber: number) =>
+    cardOf(el, orderNumber).querySelector<HTMLButtonElement>("button[data-card-head]");
+  const listen = (el: TillStationQueue) => {
+    const dishes: CustomEvent[] = [];
+    const item = vi.fn();
+    el.addEventListener("advance-dishes", (e) => dishes.push(e as CustomEvent));
+    el.addEventListener("advance-ticket-item", item);
+    return { dishes, details: () => dishes.map((e) => e.detail as unknown), item };
+  };
+  const sentIn = (id: string, position: number) => ({
+    id,
+    position,
+    displayNumber: position,
+    numberPartyId: "pa-1",
+    state: "fired" as const,
+  });
+
+  it("a heading tap sends the card's least advanced dishes on, never one further on", async () => {
+    const bill = ageBill(7, [
+      ageDish("ti-waiting", 15),
+      ageDish("ti-preparing", 15, { state: "preparing" }),
+      ageDish("ti-ready", 15, { state: "ready" }),
+      ageDish("ti-held", 15, { firedAt: null }),
+    ]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    head(el, 7)!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-waiting"], stationId: "st-1", to: "preparing" },
+    ]);
+    expect(taps.dishes.every((e) => e.bubbles && e.composed)).toBe(true);
+    expect(taps.item).not.toHaveBeenCalled();
+  });
+
+  it("a whole-ticket dish tap sends that card's dishes at the tapped dish's stage", async () => {
+    const bill = ageBill(
+      7,
+      [
+        ageDish("ti-waiting", 15),
+        ageDish("ti-preparing-1", 15, { state: "preparing" }),
+        ageDish("ti-preparing-2", 15, { state: "preparing" }),
+      ],
+      { bumpMode: "ticket" },
+    );
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-preparing-1"]')!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-preparing-1", "ti-preparing-2"], stationId: "st-1", to: "ready" },
+    ]);
+    expect(taps.item).not.toHaveBeenCalled();
+  });
+
+  it("a whole-ticket tap on a party's card leaves its other group's card alone", async () => {
+    const bill = ageBill(
+      7,
+      [
+        ageDish("ti-first-a", 5, { group: sentIn("gr-1", 1) }),
+        ageDish("ti-first-b", 5, { group: sentIn("gr-1", 1) }),
+        ageDish("ti-second", 15, { group: sentIn("gr-2", 2) }),
+      ],
+      { bumpMode: "ticket", party: { id: "pa-1", revision: 1 } },
+    );
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(2);
+    const taps = listen(el);
+    el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-first-a"]')!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-first-a", "ti-first-b"], stationId: "st-1", to: "preparing" },
+    ]);
+  });
+
+  it("a heading is a button only while a tap can move something", async () => {
+    const allReady = ageBill(7, [ageDish("ti-ready", 15, { state: "ready" })]);
+    const allHeld = ageBill(8, [ageDish("ti-held", 15, { firedAt: null })]);
+    const moving = ageBill(9, [ageDish("ti-moving", 15)]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [allReady, allHeld, moving],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    expect(head(el, 7)).toBeNull();
+    expect(head(el, 8)).toBeNull();
+    expect(cardOf(el, 7).querySelector(".ticket-head")).not.toBeNull();
+    expect(cardOf(el, 8).querySelector(".ticket-head")).not.toBeNull();
+    expect(head(el, 9)).not.toBeNull();
+  });
+
+  it("a heading's name starts with its words and ends with Advance ticket", async () => {
+    const bill = ageBill(7, [ageDish("ti-waiting", 15)]);
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-1",
+      now: AGE_NOW,
+    });
+    const button = head(el, 7)!;
+    const advance = `${t("station.bump_ticket")} #7`;
+    await expect
+      .element(page.elementLocator(button))
+      .toHaveAccessibleName(new RegExp(`^#7 Table 7 .*${advance.replace("#", "\\#")}$`));
+    const hidden = button.querySelector(".visually-hidden")!;
+    expect(hidden.textContent).toBe(advance);
+    expect(hidden.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+  });
+
+  it("a merged heading tap names its own station", async () => {
+    const bill = ageBill(7, [ageDish("ti-waiting", 15)], { stationId: "st-2" });
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [bill],
+      stationId: "st-9",
+      stationNames: new Map([["st-2", "Bar"]]),
+      now: AGE_NOW,
+    });
+    const taps = listen(el);
+    head(el, 7)!.click();
+    expect(taps.details()).toEqual([
+      { itemIds: ["ti-waiting"], stationId: "st-2", to: "preparing" },
+    ]);
   });
 });

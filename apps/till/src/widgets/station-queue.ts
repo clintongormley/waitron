@@ -19,6 +19,8 @@ import { dishLine, snapshotDescriptionFor, trimQuantity } from "./dish-format.js
 import {
   type KitchenCard,
   type MergedQueueGroup,
+  dishesAt,
+  headingStage,
   kitchenCards,
   lateCards,
   thousandthsToMake,
@@ -157,6 +159,19 @@ export class TillStationQueue extends LitElement {
         align-items: baseline;
         justify-content: space-between;
         gap: var(--wt-space-2);
+      }
+
+      button.ticket-head {
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--wt-color-text);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
       }
 
       .number {
@@ -606,17 +621,16 @@ export class TillStationQueue extends LitElement {
    *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
-  #bump(group: MergedQueueGroup, item: StationQueueItem, to: Exclude<TicketState, "queued">): void {
+  #bump(
+    card: KitchenCard,
+    group: MergedQueueGroup,
+    item: StationQueueItem,
+    to: Exclude<TicketState, "queued">,
+  ): void {
     const stationId = group.stationId ?? this.stationId;
     if (stationId === undefined) return;
     if (group.bumpMode === "ticket") {
-      this.dispatchEvent(
-        new CustomEvent("advance-ticket", {
-          detail: { orderId: group.orderId, stationId, to },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      this.#advanceDishes(dishesAt(card, item.state), stationId, to);
     } else {
       this.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
@@ -626,6 +640,25 @@ export class TillStationQueue extends LitElement {
         }),
       );
     }
+  }
+
+  /** Moves only the dishes holding the card back, so the card moves one column (D8). */
+  #advanceHeading(card: KitchenCard, stage: TicketState): void {
+    const [first] = card.orders as [MergedQueueGroup, ...MergedQueueGroup[]];
+    const stationId = first.stationId ?? this.stationId;
+    const to = NEXT[stage];
+    if (stationId === undefined || to === undefined) return;
+    this.#advanceDishes(dishesAt(card, stage), stationId, to);
+  }
+
+  #advanceDishes(itemIds: string[], stationId: string, to: Exclude<TicketState, "queued">): void {
+    this.dispatchEvent(
+      new CustomEvent("advance-dishes", {
+        detail: { itemIds, stationId, to },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #collect(group: StationQueueGroup): void {
@@ -910,42 +943,54 @@ export class TillStationQueue extends LitElement {
         : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
     const labels = [...new Set(card.orders.map((order) => order.label).filter((label) => !!label))];
     const row = (item: StationQueueItem) =>
-      this.#renderLine(card.orderOf.get(item.id)!, item, this.#stateWord(card, item));
+      this.#renderLine(card, card.orderOf.get(item.id)!, item, this.#stateWord(card, item));
     const sections = this.#courseSections(card.items);
     // One shared course is named in the heading; its dishes keep their `.course` wrapper (D5).
     const sharedCourse = sections.length === 1 ? sections[0]!.course : null;
     // On a card merging bills, each bill's facts and actions name their bill (D11).
     const tag = (order: StationQueueGroup) =>
       card.orders.length === 1 ? "" : ` #${order.orderNumber}`;
+    const stage = headingStage(card);
+    const head = html`${card.orders.map(
+      (order, index) =>
+        html`${index === 0 ? nothing : " · "}<span class="number"
+            >${orderNumber(order.orderNumber, order.formerNumbers)}</span
+          >`,
+    )}
+    ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
+    ${labels.map((label) => html`<span class="label">${label}</span>`)}
+    ${group === null ? nothing : html`<span class="group-name">${groupName(group)}</span>`}
+    ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
+    ${
+      group?.state === "held"
+        ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
+        : nothing
+    }
+    ${
+      since === null
+        ? nothing
+        : html`<span class="age">${this.#elapsedMinutes(since)} ${t("station.min")}</span>`
+    }`;
     return html`<article
       class="ticket ${accent}"
       data-card=${card.key}
       data-order=${first.orderNumber}
       data-card-group=${group?.id ?? "none"}
     >
-      <div class="ticket-head">
-        ${card.orders.map(
-          (order, index) =>
-            html`${index === 0 ? nothing : " · "}<span class="number"
-                >${orderNumber(order.orderNumber, order.formerNumbers)}</span
-              >`,
-        )}
-        ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
-        ${labels.map((label) => html`<span class="label">${label}</span>`)}
-        ${group === null ? nothing : html`<span class="group-name">${groupName(group)}</span>`}
-        ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
-        ${
-          group?.state === "held"
-            ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
-            : nothing
-        }
-        ${
-          since === null
-            ? nothing
-            : html`<span class="age">${this.#elapsedMinutes(since)} ${t("station.min")}</span>`
-        }
-      </div>
-      ${card.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(first) : nothing}
+      ${
+        stage === undefined
+          ? html`<div class="ticket-head">${head}</div>`
+          : html`<button
+              class="ticket-head"
+              data-card-head
+              @click=${() => this.#advanceHeading(card, stage)}
+            >
+              ${head}<span class="visually-hidden"
+                >${t("station.bump_ticket")} #${first.orderNumber}</span
+              >
+            </button>`
+      }
+      ${stage === undefined ? nothing : this.#wholeTicket(first)}
       ${card.orders.map((order) => this.#kitchenNote(order, tag(order)))}
       ${card.orders.map((order) => this.#printProblem(order, tag(order)))}
       ${sections.map((section) => this.#courseSection(section, row, sections.length > 1))}
@@ -974,10 +1019,6 @@ export class TillStationQueue extends LitElement {
     return html`<span class="whole-ticket" data-whole-ticket>${t("station.whole_ticket")}</span>`;
   }
 
-  #bumpable(item: StationQueueItem): boolean {
-    return item.firedAt !== null && NEXT[item.state] !== undefined;
-  }
-
   /** A dish at its card's column says nothing, the column does; one further on says its state, and a
    * held dish on a card that is not itself held says so (D12). */
   #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
@@ -991,6 +1032,7 @@ export class TillStationQueue extends LitElement {
   }
 
   #renderLine(
+    card: KitchenCard,
     group: MergedQueueGroup,
     item: StationQueueItem,
     state: TemplateResult | typeof nothing,
@@ -1036,7 +1078,7 @@ export class TillStationQueue extends LitElement {
         : html`<button
             class="line state-${item.state}"
             data-item=${item.id}
-            @click=${() => this.#bump(group, item, next)}
+            @click=${() => this.#bump(card, group, item, next)}
           >
             ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}
             <span class="visually-hidden">${this.#bumpLabel(group)}</span>

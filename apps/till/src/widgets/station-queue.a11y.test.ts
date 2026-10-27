@@ -489,8 +489,8 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     },
   );
 
-  it("whole-ticket bump mode has no violations", async () => {
-    const { host } = await mountWidget<TillStationQueue>(
+  it("whole-ticket bump mode, with a card's heading button, has no violations", async () => {
+    const { host, el } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
         groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
@@ -499,6 +499,8 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
       },
       theme,
     );
+    if (el.shadowRoot!.querySelector("button[data-card-head]") === null)
+      throw new Error("heading button missing");
     await expectNoA11yViolations(host);
   });
 

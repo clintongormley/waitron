@@ -136,7 +136,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     getStationQueue: vi.fn().mockResolvedValue({ items: groups, notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
-    advanceTicket: vi.fn().mockResolvedValue(undefined),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;

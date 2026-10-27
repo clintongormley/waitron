@@ -3337,21 +3337,6 @@ export class TillApi {
     await this.#request<void>(`/api/ticket-items/${itemId}/advance`, "POST", { to, stationId });
   }
 
-  /**
-   * Advance a WHOLE ticket → `POST /api/orders/:id/stations/:sid/advance`: every not-yet-`to` line of
-   * the order at the station. An empty match is a no-op, so unlike {@link advanceTicketItem} it never
-   * rejects on a transition.
-   */
-  async advanceTicket(
-    orderId: string,
-    stationId: string,
-    to: Exclude<TicketState, "queued">,
-  ): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/stations/${stationId}/advance`, "POST", {
-      to,
-    });
-  }
-
   // --- Device mode: these verbs need NO operator session; the httpOnly device cookie rides
   // `credentials: "include"` like the session cookie. ---
 
