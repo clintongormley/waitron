@@ -7,8 +7,8 @@ import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import {
-  LECTOR_2,
-  LECTOR_3,
+  SECOND_READER,
+  THIRD_READER,
   twoReaderEquipment as equipmentWith,
 } from "../../test/pay-equipment-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
@@ -1634,7 +1634,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       takesReaderCard: true,
       takesCash: true,
       takesManualCard: true,
-      equipment: equipmentWith(LECTOR_2),
+      equipment: equipmentWith(SECOND_READER),
       ...over,
     });
   const radios = (el: TillBillPayDialog, name: string) =>
@@ -1844,7 +1844,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
       takesCash: true,
       takesManualCard: true,
       balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
-      equipment: equipmentWith(LECTOR_2),
+      equipment: equipmentWith(SECOND_READER),
       ...over,
     });
   const row = (el: TillBillPayDialog) =>
@@ -1887,7 +1887,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
     await previewed(el, cardPreview);
 
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
     expect(text(button(el, "[data-pay-confirm]"))).toBe(
       `Cobrar ${money("20.80")} en Lector 3`.replace(/\s+/g, " "),
@@ -1917,7 +1917,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(row(el)!.open).toBe(false);
     expect(button(el, "[data-pay-continue]").disabled).toBe(true);
 
-    el.equipment = equipmentWith(LECTOR_2);
+    el.equipment = equipmentWith(SECOND_READER);
     await el.updateComplete;
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
   });
@@ -1964,7 +1964,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     await el.updateComplete;
     expect(row(el)!.open).toBe(true);
 
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
     expect(row(el)!.open).toBe(true);
   });
@@ -1972,7 +1972,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
   it("keeps the row closed while the reader is being picked up by itself, then opens it only if none came", async () => {
     const picked = await handheld({ equipment: equipmentWith(null), autoPicking: true });
     expect(row(picked)!.open).toBe(false);
-    picked.equipment = equipmentWith(LECTOR_2);
+    picked.equipment = equipmentWith(SECOND_READER);
     picked.autoPicking = false;
     await picked.updateComplete;
     expect(row(picked)!.open).toBe(false);
@@ -2228,7 +2228,7 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
       takesCash: true,
       takesManualCard: true,
       balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
-      equipment: equipmentWith(LECTOR_2),
+      equipment: equipmentWith(SECOND_READER),
     });
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
     await previewed(el, {
@@ -2251,7 +2251,7 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
     await click(el, "[data-pay-confirm]");
     expect(confirmed).toEqual([{}]);
 
-    el.equipment = equipmentWith(LECTOR_2);
+    el.equipment = equipmentWith(SECOND_READER);
     el.equipmentBusy = true;
     await el.updateComplete;
     expect(confirm(el).disabled).toBe(false);
@@ -2321,7 +2321,7 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
       takesCash: true,
       takesManualCard: true,
       balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
-      equipment: equipmentWith(LECTOR_2),
+      equipment: equipmentWith(SECOND_READER),
       ...over,
     });
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
@@ -2363,7 +2363,7 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
   it("keeps naming the reader the payment was sent to when the phone's reader changes", async () => {
     const { el } = await sent();
 
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
     await waiting(el)!.updateComplete;
     expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
@@ -2386,7 +2386,7 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
 
   it("after a decline, keeps today's words and retries on the phone's reader now, as Try again on Lector 3", async () => {
     const { el, confirmed } = await sent();
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     el.busy = false;
     el.refusal = { code: "declined" };
     await el.updateComplete;
@@ -2413,7 +2413,7 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
 
   it("a retry after a decline shows the panel again, naming the reader it was sent to", async () => {
     const { el } = await sent();
-    el.equipment = equipmentWith(LECTOR_3);
+    el.equipment = equipmentWith(THIRD_READER);
     el.busy = false;
     el.refusal = { code: "declined" };
     await el.updateComplete;
@@ -2468,7 +2468,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
       takesReaderCard: true,
       takesCash: true,
       takesManualCard: true,
-      equipment: equipmentWith(LECTOR_2),
+      equipment: equipmentWith(SECOND_READER),
       balance: balanceOf({ total: "62.40", outstanding: "62.40" }),
       ...over,
     });
@@ -3072,7 +3072,7 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
       cardReader: "stripe_terminal",
       takesReaderCard: true,
       takesCash: true,
-      equipment: equipmentWith(LECTOR_2),
+      equipment: equipmentWith(SECOND_READER),
     });
     const equipmentRow = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       "till-pay-equipment",

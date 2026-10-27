@@ -19,7 +19,7 @@ import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import { mountWidget } from "./widgets/test-helpers.js";
 import {
   balanceOf,
-  BARRA as BAR_PRINTER,
+  BAR_PRINTER,
   billOf,
   inDialog,
   money,
@@ -27,7 +27,7 @@ import {
   press,
   equipmentItem,
   flush,
-  LECTOR_2 as SECOND_READER,
+  SECOND_READER,
   openTable,
   resetBillPayDrafts,
   roleOf,
