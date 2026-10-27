@@ -37,6 +37,7 @@ import {
   assertOtherFirstSetupAllowed,
   createFirstSetupBackupWorkspace,
   type FirstSetupChange,
+  type StartAgainSummary,
 } from "@waitron/provisioning";
 import {
   EPOCH_MS,
@@ -713,6 +714,58 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
   expect(reached).toEqual([{ shown }, { shown: damaged }]);
 });
 
+it("the Start again route takes a shown unreadable only in its exact shape, and passes it on", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const reached: unknown[] = [];
+  const app = routes(f, {
+    ...actions,
+    startAgainFirstSetup: async (body) => {
+      reached.push(body.confirmMissingDatabase?.shown);
+    },
+  });
+  const unreadable = { records: ["series-picks", "public-record"], floorMs: 1_792_162_020_000 };
+  const send = (value: unknown) =>
+    sendStartAgain(app, owner, {
+      ...ids,
+      register: request.register,
+      confirmMissingDatabase: {
+        nothingFiledOrSold: true,
+        shown: { reached: "named", lastName: name, unreadable: value },
+      },
+    });
+  for (const malformed of [
+    { floorMs: unreadable.floorMs },
+    { records: [], floorMs: unreadable.floorMs },
+    { records: ["node-key"], floorMs: unreadable.floorMs },
+    { records: ["series-picks", "series-picks"], floorMs: unreadable.floorMs },
+    { records: ["public-record", "series-picks"], floorMs: unreadable.floorMs },
+    { records: "series-picks", floorMs: unreadable.floorMs },
+    { ...unreadable, extra: 1 },
+    { records: unreadable.records },
+    { ...unreadable, floorMs: String(unreadable.floorMs) },
+    { ...unreadable, floorMs: 1.5 },
+    null,
+  ]) {
+    const refused = await send(malformed);
+    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+  expect(reached).toEqual([]);
+  const all = {
+    records: ["series-picks", "public-record", "fiscal-documents"],
+    floorMs: unreadable.floorMs,
+  };
+  for (const value of [unreadable, all]) {
+    const passed = await send(value);
+    expect(passed.status, await passed.clone().text()).toBe(200);
+  }
+  expect(reached).toEqual([
+    { reached: "named", lastName: name, unreadable },
+    { reached: "named", lastName: name, unreadable: all },
+  ]);
+});
+
 function recoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   return join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`);
 }
@@ -957,6 +1010,82 @@ it("with the database present, a damaged kept picks file still refuses Start aga
   expect(await folderTrees(f)).toEqual(before);
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+it.each([
+  [
+    "lacks the unreadable records",
+    (shown: StartAgainSummary) => ({ ...shown, unreadable: undefined }),
+  ],
+  [
+    "shows a floor one minute earlier",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs - MINUTE_MS },
+    }),
+  ],
+  [
+    "shows a floor one minute later",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs + MINUTE_MS },
+    }),
+  ],
+])(
+  "with the database missing, a Start again whose shown summary %s is refused setup.attempt_conflict, and nothing is written",
+  async (_label, change) => {
+    const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+    const { f, actions, owner, ids, request } = base;
+    const app = routes(f, actions);
+    const shown = (await (
+      await postSummary(app, ids, ownerHeaders(owner))
+    ).json()) as StartAgainSummary;
+    expect(shown.unreadable).toEqual({ records: ["series-picks"], floorMs: base.timeFloorMs });
+    const before = await folderTrees(f);
+    const refused = await sendStartAgain(app, owner, {
+      ...ids,
+      register: request.register,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown: change(shown) },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
+    expect(await folderTrees(f)).toEqual(before);
+    await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readStartAgainNote(f.stateDir)).toBeNull();
+    expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  },
+);
+
+it("with the database missing, the exact shown summary with unreadable records starts again over the route, and the confirmation record holds it", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: true });
+  const { f, actions, owner, ids, request } = base;
+  const app = routes(f, actions);
+  const shown = (await (
+    await postSummary(app, ids, ownerHeaders(owner))
+  ).json()) as StartAgainSummary;
+  const accepted = await sendStartAgain(app, owner, {
+    ...ids,
+    register: request.register,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  expect(accepted.status, await accepted.clone().text()).toBe(200);
+  const files = await readdir(join(f.stateDir, CONFIRMATIONS));
+  expect(files).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8")).shown,
+  ).toEqual({
+    reached: "named",
+    lastName: base.name,
+    recoveryRecordDamaged: true,
+    unreadable: { records: ["series-picks"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  await expectStartAgainDeleted(f);
 });
 
 function publicRecordFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {

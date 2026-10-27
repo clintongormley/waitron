@@ -17,8 +17,10 @@ export type StartAgainSummary = {
   readonly unreadable?: StartAgainUnreadable;
 };
 
+const UNREADABLE_RECORDS = ["series-picks", "public-record", "fiscal-documents"] as const;
+
 export type StartAgainUnreadable = {
-  readonly records: readonly ("series-picks" | "public-record" | "fiscal-documents")[];
+  readonly records: readonly (typeof UNREADABLE_RECORDS)[number][];
   readonly floorMs: number;
 };
 
@@ -95,6 +97,31 @@ function recoveryShown(value: unknown): StartAgainRecoveryShown {
   };
 }
 
+/** Records named in the fixed order, each at most once. */
+function unreadableShown(value: unknown): StartAgainUnreadable {
+  if (
+    !object(value) ||
+    Object.keys(value).some((key) => key !== "records" && key !== "floorMs") ||
+    !Array.isArray(value.records) ||
+    value.records.length === 0 ||
+    !Number.isSafeInteger(value.floorMs)
+  )
+    throw invalid();
+  const positions = value.records.map((record) =>
+    (UNREADABLE_RECORDS as readonly unknown[]).indexOf(record),
+  );
+  if (
+    positions.some(
+      (position, index) => position < 0 || (index > 0 && position <= positions[index - 1]!),
+    )
+  )
+    throw invalid();
+  return {
+    records: value.records as StartAgainUnreadable["records"],
+    floorMs: value.floorMs as number,
+  };
+}
+
 function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgainConfirmation {
   const { at, attemptId, database, administrator, ownerGeneration, shown } = value as Record<
     string,
@@ -130,6 +157,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
       lastName: shown.lastName as string | null,
       ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
       ...(Object.hasOwn(shown, "recovery") && { recovery: recoveryShown(shown.recovery) }),
+      ...(Object.hasOwn(shown, "unreadable") && { unreadable: unreadableShown(shown.unreadable) }),
     },
   };
 }

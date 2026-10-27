@@ -574,6 +574,22 @@ it("with the database present, a stopped recovery's discard past a damaged picks
   });
 });
 
+it("with the database present, a stopped recovery's discard past a damaged picks file keeps the unreadable records in its confirmation record", async () => {
+  const { f, startAgain, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
+    listedMs: nameMs + MINUTE_MS,
+    picksMs: nameMs + 120 * MINUTE_MS,
+  }));
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
+    {
+      reached: startAgain.shown.reached,
+      lastName: startAgain.shown.lastName,
+      recovery: startAgain.shown.recovery,
+      unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+    },
+  ]);
+});
+
 it("with the database present, a stopped recovery's later floor wins over a damaged picks file's time floor", async () => {
   const { f, startAgain, recoveryFloorMs, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
     listedMs: nameMs - 120 * MINUTE_MS,
