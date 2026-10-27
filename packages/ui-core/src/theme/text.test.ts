@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { TextScale } from "./tokens.js";
+import { WAITRON_CHOICES, type ThemeChoices } from "./theme.js";
+import { TEXT_SCALES, type TextScale } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
 import {
   drawnSize,
+  drawnTextSize,
+  isTextWarning,
+  TEXT_FLOOR_PX,
+  textLimit,
+  textNotes,
+  textWarnings,
+  withTextFixes,
   isTextSize,
   normaliseText,
   sameText,
@@ -173,6 +181,164 @@ describe("textTokens", () => {
     delete withoutBold["--wt-font-weight-bold"];
     expect(() => textTokens(100, {}, { ...WAITRON_DEFAULTS, structure: withoutBold })).toThrow(
       new RangeError("not a whole-hundred weight: --wt-font-weight-bold"),
+    );
+  });
+});
+
+const withSizes = (
+  textScale: TextScale,
+  size: NonNullable<ThemeChoices["text"]["size"]>,
+): ThemeChoices => ({ ...WAITRON_CHOICES, textScale, text: { size } });
+
+describe("text warnings", () => {
+  it("the floor is 12 px", () => {
+    expect(TEXT_FLOOR_PX).toBe(12);
+  });
+
+  it.each(TEXT_SCALES)("Waitron's own theme never warns, at %i%%", (textScale) => {
+    expect(textWarnings({ ...WAITRON_CHOICES, textScale }, WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("Small text set by hand to 10 at 100% warns, offering 12", () => {
+    expect(textWarnings(withSizes(100, { sm: 10 }), WAITRON_DEFAULTS)).toEqual([
+      { field: "text.size.sm", mode: null, against: [], fix: 12, blockedBy: [] },
+    ]);
+  });
+
+  it("at 130%, Small text set by hand to 8 draws 10 px and the fix offers 9", () => {
+    const choices = withSizes(130, { sm: 8 });
+    expect(drawnTextSize(choices, "sm", WAITRON_DEFAULTS)).toBe(10);
+    expect(textWarnings(choices, WAITRON_DEFAULTS).map((w) => w.fix)).toEqual([9]);
+    const fixed = withSizes(130, { sm: 9 });
+    expect(drawnTextSize(fixed, "sm", WAITRON_DEFAULTS)).toBe(12);
+    expect(textWarnings(fixed, WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("an unset size draws Waitron's own size at the step", () => {
+    expect(drawnTextSize(withSizes(130, {}), "md", WAITRON_DEFAULTS)).toBe(18);
+    expect(drawnTextSize(withSizes(100, { sm: 9 }), "md", WAITRON_DEFAULTS)).toBe(14);
+  });
+
+  it.each([
+    [100, 9, 12],
+    [105, 9, 11],
+    [110, 10, 11],
+    [115, 10, 10],
+    [120, 11, 10],
+    [125, 11, 10],
+  ] as const)(
+    "a Small text fixed to 9 warns again at %i%%: draws %i px, offers %i",
+    (textScale, drawn, fix) => {
+      const choices = withSizes(textScale, { sm: 9 });
+      expect(drawnTextSize(choices, "sm", WAITRON_DEFAULTS)).toBe(drawn);
+      expect(textWarnings(choices, WAITRON_DEFAULTS)).toEqual([
+        { field: "text.size.sm", mode: null, against: [], fix, blockedBy: [] },
+      ]);
+    },
+  );
+
+  it("a Small text fixed to 9 at 130% draws 12 px and does not warn", () => {
+    const choices = withSizes(130, { sm: 9 });
+    expect(drawnTextSize(choices, "sm", WAITRON_DEFAULTS)).toBe(12);
+    expect(textWarnings(choices, WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("a size drawing exactly 12 px does not warn, and 11 px does", () => {
+    expect(textWarnings(withSizes(100, { sm: 12 }), WAITRON_DEFAULTS)).toEqual([]);
+    expect(textWarnings(withSizes(100, { sm: 11 }), WAITRON_DEFAULTS).map((w) => w.fix)).toEqual([
+      12,
+    ]);
+  });
+
+  it("warns in the order sm, md, lg, xl", () => {
+    const choices = withSizes(100, { xl: 8, md: 9, lg: 10, sm: 11 });
+    expect(textWarnings(choices, WAITRON_DEFAULTS).map((w) => w.field)).toEqual([
+      "text.size.sm",
+      "text.size.md",
+      "text.size.lg",
+      "text.size.xl",
+    ]);
+  });
+
+  it.each([400, 800] as const)("a weight or a typeface never warns: Serif at %i", (weight) => {
+    const choices: ThemeChoices = {
+      ...WAITRON_CHOICES,
+      text: { family: "serif", weight: { normal: weight, medium: weight, bold: weight } },
+    };
+    expect(textWarnings(choices, WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("taking the fixes leaves no text warning and touches nothing else", () => {
+    const choices: ThemeChoices = {
+      ...withSizes(100, { sm: 10, md: 9, lg: 30 }),
+      brandColor: "#f2d300",
+      text: { family: "serif", size: { sm: 10, md: 9, lg: 30 }, weight: { bold: 800 } },
+    };
+    const fixed = withTextFixes(choices, WAITRON_DEFAULTS);
+    expect(fixed).toEqual({
+      ...choices,
+      text: { family: "serif", size: { sm: 12, md: 12, lg: 30 }, weight: { bold: 800 } },
+    });
+    expect(textWarnings(fixed, WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("taking no fixes answers the same choices", () => {
+    const choices = withSizes(100, { lg: 30 });
+    expect(withTextFixes(choices, WAITRON_DEFAULTS)).toBe(choices);
+  });
+
+  it("tells a text warning from a colour one by its mode", () => {
+    expect(isTextWarning({ mode: null })).toBe(true);
+    expect(isTextWarning({ mode: "light" })).toBe(false);
+    expect(isTextWarning({ mode: "dark" })).toBe(false);
+  });
+});
+
+describe("larger than checked", () => {
+  it("the limits are Waitron's sizes at 130%", () => {
+    expect(TEXT_SIZE_KEYS.map((key) => textLimit(key, WAITRON_DEFAULTS))).toEqual([16, 18, 23, 29]);
+  });
+
+  it("at 130%, Largest text set by hand to 25 draws 33 px and the fix offers 22, which draws 29", () => {
+    expect(textNotes(withSizes(130, { xl: 25 }), WAITRON_DEFAULTS)).toEqual([
+      { key: "xl", drawn: 33, fix: 22 },
+    ]);
+    expect(drawnTextSize(withSizes(130, { xl: 22 }), "xl", WAITRON_DEFAULTS)).toBe(29);
+    expect(textNotes(withSizes(130, { xl: 22 }), WAITRON_DEFAULTS)).toEqual([]);
+    expect(drawnTextSize(withSizes(130, { xl: 23 }), "xl", WAITRON_DEFAULTS)).toBe(30);
+    expect(textNotes(withSizes(130, { xl: 23 }), WAITRON_DEFAULTS)).toEqual([
+      { key: "xl", drawn: 30, fix: 22 },
+    ]);
+  });
+
+  it("at 100% the fix is the limit itself", () => {
+    expect(textNotes(withSizes(100, { sm: 17, md: 40 }), WAITRON_DEFAULTS)).toEqual([
+      { key: "sm", drawn: 17, fix: 16 },
+      { key: "md", drawn: 40, fix: 18 },
+    ]);
+    expect(textNotes(withSizes(100, { sm: 16 }), WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it.each(TEXT_SCALES)("Waitron's own sizes get no note, at %i%%", (textScale) => {
+    expect(textNotes({ ...WAITRON_CHOICES, textScale }, WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("a note is never a warning", () => {
+    expect(textWarnings(withSizes(130, { xl: 25 }), WAITRON_DEFAULTS)).toEqual([]);
+  });
+
+  it("a missing default size is refused", () => {
+    const structure: Record<string, string> = { ...WAITRON_DEFAULTS.structure };
+    delete structure["--wt-font-size-lg"];
+    expect(() => textLimit("lg", { ...WAITRON_DEFAULTS, structure })).toThrow(
+      new RangeError("not a whole-pixel size: --wt-font-size-lg"),
+    );
+  });
+
+  it.each(["1rem", "x12px", "12pxx"])("a default size of %s is refused", (value) => {
+    const structure = { ...WAITRON_DEFAULTS.structure, "--wt-font-size-sm": value };
+    expect(() => textLimit("sm", { ...WAITRON_DEFAULTS, structure })).toThrow(
+      new RangeError("not a whole-pixel size: --wt-font-size-sm"),
     );
   });
 });

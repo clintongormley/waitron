@@ -1,4 +1,5 @@
-import type { WaitronDefaults } from "./defaults.js";
+import type { Mode, WaitronDefaults } from "./defaults.js";
+import type { ThemeChoices } from "./theme.js";
 import { fontSizes, type TextScale } from "./tokens.js";
 
 export const TYPEFACES = ["system", "serif"] as const;
@@ -99,4 +100,93 @@ export function textTokens(
     "--wt-font-family": typefaceStack(text.family ?? "system", defaults),
     ...Object.fromEntries(weights),
   };
+}
+
+/** The smallest drawn size a hand-set size may have without a warning. */
+export const TEXT_FLOOR_PX = 12;
+
+/** The tills are checked at Waitron's own sizes at the largest step. */
+const CHECKED_SCALE: TextScale = 130;
+
+export type TextSizeField = `text.size.${TextSizeKey}`;
+
+export interface TextWarning {
+  readonly field: TextSizeField;
+  readonly mode: null;
+  /** Always empty: the shape is a colour warning's. */
+  readonly against: readonly string[];
+  /** The smallest size from 8 that draws at least 12 px at the current step. */
+  readonly fix: number;
+  /** Always empty. */
+  readonly blockedBy: readonly string[];
+}
+
+export interface TextNote {
+  readonly key: TextSizeKey;
+  readonly drawn: number;
+  /** The largest size that draws within the limit at the current step. */
+  readonly fix: number;
+}
+
+export const isTextWarning = (warning: { readonly mode: Mode | null }): warning is TextWarning =>
+  warning.mode === null;
+
+function ownSize(key: TextSizeKey, defaults: WaitronDefaults): number {
+  const name = `--wt-font-size-${key}`;
+  const match = /^(\d+)px$/.exec(defaults.structure[name] ?? "");
+  if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
+  return Number(match[1]);
+}
+
+export function drawnTextSize(
+  choices: Pick<ThemeChoices, "text" | "textScale">,
+  key: TextSizeKey,
+  defaults: WaitronDefaults,
+): number {
+  return drawnSize(choices.text.size?.[key] ?? ownSize(key, defaults), choices.textScale);
+}
+
+/** Waitron's own size at 130%. */
+export const textLimit = (key: TextSizeKey, defaults: WaitronDefaults): number =>
+  drawnSize(ownSize(key, defaults), CHECKED_SCALE);
+
+export function textWarnings(
+  choices: Pick<ThemeChoices, "text" | "textScale">,
+  defaults: WaitronDefaults,
+): TextWarning[] {
+  return TEXT_SIZE_KEYS.flatMap((key) => {
+    if (drawnTextSize(choices, key, defaults) >= TEXT_FLOOR_PX) return [];
+    // Ends by 12: no step draws a size smaller than itself.
+    let fix = TEXT_SIZE_MIN;
+    while (drawnSize(fix, choices.textScale) < TEXT_FLOOR_PX) fix += 1;
+    return [{ field: `text.size.${key}` as const, mode: null, against: [], fix, blockedBy: [] }];
+  });
+}
+
+export function textNotes(
+  choices: Pick<ThemeChoices, "text" | "textScale">,
+  defaults: WaitronDefaults,
+): TextNote[] {
+  return TEXT_SIZE_KEYS.flatMap((key) => {
+    // Waitron's own size never draws over its limit, so only a hand-set one is read.
+    const set = choices.text.size?.[key];
+    const limit = textLimit(key, defaults);
+    if (set === undefined) return [];
+    const drawn = drawnSize(set, choices.textScale);
+    if (drawn <= limit) return [];
+    let fix = set;
+    while (drawnSize(fix, choices.textScale) > limit) fix -= 1;
+    return [{ key, drawn, fix }];
+  });
+}
+
+/** Sets each warned size to its fix; a size with only a note is left alone. */
+export function withTextFixes(choices: ThemeChoices, defaults: WaitronDefaults): ThemeChoices {
+  const warnings = textWarnings(choices, defaults);
+  if (warnings.length === 0) return choices;
+  const size = { ...choices.text.size };
+  for (const warning of warnings) {
+    size[warning.field.slice("text.size.".length) as TextSizeKey] = warning.fix;
+  }
+  return { ...choices, text: normaliseText({ ...choices.text, size }) };
 }
