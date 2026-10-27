@@ -14,7 +14,7 @@ import { TLSSocket } from "node:tls";
 
 import "hono";
 
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 
 import "@waitron/provisioning";
 
@@ -241,13 +241,71 @@ it("reports an open's own times while it runs beside an older, lapsed session", 
   expect(running).toEqual({ state: "running", startedAt: openedAt, lastActiveAt: openedAt });
 });
 
-it("never extends the 15 unused minutes by renewing", async () => {
+// The host fakes only Date and performance, so the session's real 15-minute expiry timer never
+// fires within a test.
+function expiryTimers() {
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const pending = new Map<unknown, { run: () => unknown; due: number }>();
+  const setSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+    run: () => unknown,
+    ms?: number,
+    ...rest: unknown[]
+  ) => {
+    const handle = realSetTimeout(run, ms, ...rest);
+    if (ms === 15 * 60_000 + 1) pending.set(handle, { run, due: performance.now() + ms });
+    return handle;
+  }) as typeof setTimeout);
+  const clearSpy = vi.spyOn(globalThis, "clearTimeout").mockImplementation((handle) => {
+    pending.delete(handle);
+    realClearTimeout(handle);
+  });
+  onTestFinished(() => {
+    setSpy.mockRestore();
+    clearSpy.mockRestore();
+  });
+  return async () => {
+    for (const [handle, timer] of [...pending])
+      if (timer.due <= performance.now()) {
+        pending.delete(handle);
+        realClearTimeout(handle as NodeJS.Timeout);
+        await timer.run();
+      }
+  };
+}
+
+it("keeps a renewed session past 15 minutes, and drops it 15 minutes after its last renewal", async () => {
+  const fireDue = expiryTimers();
   const f = await preparedSession();
-  for (let minute = 4; minute <= 12; minute += 4) {
-    clock.advance(4 * 60_000);
+  for (let elapsed = 0; elapsed < 16 * 60_000; elapsed += 30_000) {
+    clock.advance(30_000);
+    await fireDue();
     f.service.renew(f.session.sessionId);
   }
-  clock.advance(3 * 60_000 + 1);
+  expect(await f.service.liveness()).toMatchObject({ state: "running" });
+  for (let elapsed = 0; elapsed < 15 * 60_000; elapsed += 60_000) {
+    clock.advance(60_000);
+    await fireDue();
+  }
+  expect(f.service.holdsInMemory()).toBe(true);
+  expect(await f.service.liveness()).toMatchObject({ state: "stopped" });
+  clock.advance(1);
+  await fireDue();
+  expect(f.service.holdsInMemory()).toBe(false);
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(
+    expect.objectContaining({ code: "setup.owner_required" }),
+  );
+});
+
+it("drops an unrenewed session after 15 minutes, refuses a late renewal, and reads it as stopped", async () => {
+  const fireDue = expiryTimers();
+  const f = await preparedSession();
+  clock.advance(15 * 60_000);
+  await fireDue();
+  expect(f.service.holdsInMemory()).toBe(true);
+  clock.advance(1);
+  await fireDue();
+  expect(f.service.holdsInMemory()).toBe(false);
   expect(() => f.service.renew(f.session.sessionId)).toThrow(
     expect.objectContaining({ code: "setup.owner_required" }),
   );

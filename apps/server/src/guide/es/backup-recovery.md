@@ -113,12 +113,12 @@ conservado ni edites sus registros de recuperación.
 
 ## Si una recuperación se interrumpe {#resume}
 
-Mientras la página de recuperación siga abierta, continúa donde lo dejaste. La recuperación se
-detiene si el equipo se reinicia o si pasan 15 minutos sin ningún paso de recuperación, aunque la
-página siga abierta. Salir de la página o cerrar su pestaña también la detiene, en menos de cinco
-minutos. Si la recuperación ya había guardado progreso, la página de reparación la muestra entonces
-como detenida y no ofrece **Recuperar desde una copia** junto a ella; **Empezar de nuevo** la borra,
-como se explica más arriba. Si no, vuelve a abrir la copia.
+Mientras la página de recuperación siga abierta y pueda conectar con el equipo, continúa donde lo
+dejaste. La recuperación se detiene si el equipo se reinicia. Salir de la página o cerrar su pestaña
+también la detiene, en menos de cinco minutos. Si la recuperación ya había guardado progreso, la
+página de reparación la muestra entonces como detenida y no ofrece **Recuperar desde una copia**
+junto a ella; **Empezar de nuevo** la borra, como se explica más arriba. Si no, vuelve a abrir la
+copia.
 Si la recuperación ya está guardada, reconecta con el equipo en lugar de volver a identificarte o colocarla.
 
 Cambiar el origen o el entorno vacía los controles autenticados de la página. No borra la operación

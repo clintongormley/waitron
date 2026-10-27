@@ -105,11 +105,11 @@ recovery records.
 
 ## If a recovery is interrupted {#resume}
 
-While the recovery page stays open, continue where you left off. The recovery stops if the box
-restarts, or if 15 minutes pass without a recovery step, even with the page open. Leaving the page
-or closing its tab also stops it, within five minutes. If the recovery had saved progress, the
-repair page then shows it as stopped and does not offer **Recover from backup** beside it; **Start
-again** deletes it, as described above. Otherwise, open the backup again.
+While the recovery page stays open and can reach the box, continue where you left off. The recovery
+stops if the box restarts. Leaving the page or closing its tab also stops it, within five minutes.
+If the recovery had saved progress, the repair page then shows it as stopped and does not offer
+**Recover from backup** beside it; **Start again** deletes it, as described above. Otherwise, open
+the backup again.
 If recovery is already saved, reconnect to the box rather than proving or placing it again.
 
 Changing the source or environment clears the page's authenticated controls. It does not delete

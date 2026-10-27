@@ -603,20 +603,6 @@ finishing, the connection closing, or a connection already over. For the Retry t
 run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
 once-only restart, with a test that closes the connection before the answer is written.
 
-## A1130: a renewal from the open recovery page extends the backup-recovery session's 15 minutes
-
-Left open by A1042 (#2101). The box's backup-recovery session (from A731) ends after 15 minutes
-without a recovery step, and the page's 30-second renewals do not extend it. Someone still filling
-in the recovery form at minute 15 is told the recovery stopped, and another browser may then
-discard it. Codex reproduced it on #2101: renewing every 30 seconds, a 14-minute run stayed
-running; a 16-minute run was refused at 930 seconds (`setup.owner_required`, state `stopped`).
-This conflicts with the owner's 2026-10-25 14:38 rule that an open page keeps a recovery running.
-
-Owner, 2026-10-26 ~15:45 (option B): a renewal from the open page extends the 15 minutes. The owner
-accepts that an open tab keeps the session holding the decrypted backup key alive while it stays
-open. Update the guides' "if 15 minutes pass without a recovery step, even with the page open"
-lines (`apps/server/src/guide/en/backup-recovery.md` and its Spanish twin) in the same change.
-
 ## A1131: Start again stays enabled beside a stopped recovery or an unreadable recovery record
 
 Left open by A1042 (#2101), points 2 and 3 of its owner questions.
@@ -670,6 +656,14 @@ main at 21d01dfac gave the same result. A Cloud download may run for up to 14 mi
 reading when it places the recovery. Next step: measure that on a box.
 
 ## Decisions and deliberate limits
+
+**DECIDED (owner, 2026-10-26 ~15:45; built as A1130): a renewal from the open backup recovery page
+extends the recovery session's 15 minutes.** The page renews every 30 seconds while it is open
+(`apps/setup/src/first-setup-backup-session.ts`), so the session that holds the decrypted backup key
+can stay alive with no time limit while the open page's renewals keep reaching the box. The owner
+accepted that cost so that someone still filling in the recovery form at minute 15 is not told the
+recovery stopped. Without renewals or steps, the session still ends after 15 minutes
+(`apps/server/src/first-setup-backup-lease.test.ts`).
 
 **DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database
 proof (or, with the database missing, after the person's recorded confirmation) and keeps one small
