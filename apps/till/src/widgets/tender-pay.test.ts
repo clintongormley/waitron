@@ -8,7 +8,7 @@ import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client
 import { userEvent } from "vitest/browser";
 import { dialogOpenUnder } from "./track-dialog.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -27,7 +27,7 @@ const cafe: TillProduct = {
   allergens: null,
 };
 
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -47,7 +47,7 @@ const jamon: TillProduct = {
 };
 
 const portion: TillProduct = {
-  ...cafe,
+  ...coffee,
   id: "portion",
   unit: {
     staffName: "Staff unit",
@@ -106,7 +106,7 @@ afterEach(cleanupWidgets);
 describe("A738 Park name dialog", () => {
   async function open() {
     const store = new WorkingOrderStore();
-    store.addProduct({ ...cafe, name: "Staff coffee" }, "1");
+    store.addProduct({ ...coffee, name: "Staff coffee" }, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".hold");
     await el.updateComplete;
@@ -268,7 +268,7 @@ describe("till-tender-pay", () => {
 
   it("waits for a counter cash question before opening amount entry and stays idle on cancel", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     let answer: ((proceed: boolean) => void) | undefined;
     el.addEventListener("check-before-tender", (event) => {
@@ -289,7 +289,7 @@ describe("till-tender-pay", () => {
 
   it("waits for the question before integrated card collection", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       cardProvider: "simulator",
@@ -321,14 +321,14 @@ describe("till-tender-pay", () => {
   it("enables Cash once a line is rung up, reacting to store changes", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("offers no Full invoice while full invoices are off", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
 
     expect(query(el, ".hold")).not.toBeNull();
@@ -337,7 +337,7 @@ describe("till-tender-pay", () => {
 
   it("offers Full invoice before payment and requests the choice without starting a tender", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       fullInvoices: true,
@@ -362,7 +362,7 @@ describe("till-tender-pay", () => {
 
     it("offers no language button when one receipt language is offered", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         receiptLanguages: ["es-ES"],
@@ -375,7 +375,7 @@ describe("till-tender-pay", () => {
     it("names the chosen language and asks for another without starting a tender", async () => {
       setLocale("es-ES");
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         receiptLanguages: ["es-ES", "ca-ES"],
@@ -398,7 +398,7 @@ describe("till-tender-pay", () => {
 
     it("offers the language button when collecting a placed order", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         mode: "ticket_then_pay",
@@ -428,7 +428,7 @@ describe("till-tender-pay", () => {
 
   it("opens the cash screen showing the total when Cash is tapped", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -440,7 +440,7 @@ describe("till-tender-pay", () => {
 
   it("shows the change once the tendered amount reaches the total", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -451,7 +451,7 @@ describe("till-tender-pay", () => {
 
   it("hides the change while the tender is short", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -461,7 +461,7 @@ describe("till-tender-pay", () => {
 
   it("disables Confirm while the tender is short and enables it at/above the total", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -477,7 +477,7 @@ describe("till-tender-pay", () => {
     // The Confirm gate reads `store.total`, so it must demand 4.00, not the dish-only 3.00 `priceBasket`
     // would report — otherwise a short 3.00 tender would settle a 4.00 order.
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2", {
+    store.addProduct(coffee, "2", {
       extras: [
         {
           listId: "list-milk",
@@ -501,7 +501,7 @@ describe("till-tender-pay", () => {
 
   it("emits confirm-payment with the full operator-entered tendered amount", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
@@ -514,7 +514,7 @@ describe("till-tender-pay", () => {
 
   it("confirms a total of 0.00 in cash with nothing typed, and by card", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct({ ...cafe, id: "agua", name: "Agua", unitPrice: "0.00" }, "1");
+    store.addProduct({ ...coffee, id: "agua", name: "Agua", unitPrice: "0.00" }, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
@@ -536,7 +536,7 @@ describe("till-tender-pay", () => {
 
   it("does not emit confirm-payment for a short tender even if Confirm is force-clicked", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", () => spy());
@@ -549,7 +549,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle after a confirmed payment", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -562,14 +562,14 @@ describe("till-tender-pay", () => {
 
   it("disables Cash while busy (a sale is in flight), even with a rung-up basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // Cash would otherwise be enabled
+    store.addProduct(coffee, "2"); // Cash would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("disables Confirm while busy even when the tender covers the total", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -584,7 +584,7 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     const addSpy = vi.spyOn(store, "addProduct");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     await type(el, "0.320");
     click(el, ".add");
@@ -595,7 +595,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle from the cash screen when Cancel is tapped, emitting nothing", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", () => spy());
@@ -613,7 +613,7 @@ describe("till-tender-pay", () => {
   it("returns to idle from the weigh screen when Cancel is tapped, adding no line", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     await type(el, "0.320");
     click(el, ".cancel");
@@ -626,7 +626,7 @@ describe("till-tender-pay", () => {
   it("prompts for kg when a weight product is selected", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("weigh.prompt"));
     expect(query(el, "till-numeric-pad")).not.toBeNull();
@@ -635,7 +635,7 @@ describe("till-tender-pay", () => {
   it("ignores a non-weight product selection", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", cafe); // an `each` product never weighs
+    store.emit("product-selected", coffee); // an `each` product never weighs
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt"));
     expect(query(el, ".pay")).not.toBeNull(); // still idle
@@ -644,13 +644,13 @@ describe("till-tender-pay", () => {
   it("adds a weight line via the store and returns to idle", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     await type(el, "0.320");
     click(el, ".add");
     await el.updateComplete;
     expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.product).toBe(jamon);
+    expect(store.lines[0]!.product).toBe(ham);
     expect(store.lines[0]!.quantity).toBe("0.320");
     expect(query(el, ".pay")).not.toBeNull();
   });
@@ -669,7 +669,7 @@ describe("till-tender-pay", () => {
   it("disables Add and refuses a zero or empty weight", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true); // empty
     click(el, ".add"); // force-click the disabled Add: the guard must no-op
@@ -684,7 +684,7 @@ describe("till-tender-pay", () => {
   it("disables Add when the quantity exceeds the selected unit's precision", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     await type(el, "0.1234");
     expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
@@ -702,21 +702,21 @@ describe("till-tender-pay", () => {
   it("enables Hold once a line is rung up, reacting to store changes", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     expect(query(el, ".hold")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("disables Hold while busy (a sale is in flight), even with a rung-up basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // Hold would otherwise be enabled
+    store.addProduct(coffee, "2"); // Hold would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
     expect(query(el, ".hold")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("opens the label prompt when Hold is tapped", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".hold");
     await el.updateComplete;
@@ -727,7 +727,7 @@ describe("till-tender-pay", () => {
 
   it("emits park-order with the entered label", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("park-order", (e) => spy((e as CustomEvent).detail));
@@ -740,7 +740,7 @@ describe("till-tender-pay", () => {
 
   it("emits park-order with no label when the field is left empty", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("park-order", (e) => spy((e as CustomEvent).detail));
@@ -752,7 +752,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle after Hold is confirmed", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".hold");
     await el.updateComplete;
@@ -764,7 +764,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle from the label prompt when Cancel is tapped, emitting nothing", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("park-order", () => spy());
@@ -789,21 +789,21 @@ describe("till-tender-pay", () => {
   it("enables Card once a line is rung up, reacting to store changes", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     expect(query(el, ".pay-card")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("disables Card while busy (a sale is in flight), even with a rung-up basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // Card would otherwise be enabled
+    store.addProduct(coffee, "2"); // Card would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
     expect(query(el, ".pay-card")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("opens the card screen showing the total, with no keypad, when Card is tapped", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay-card");
     await el.updateComplete;
@@ -816,7 +816,7 @@ describe("till-tender-pay", () => {
 
   it("emits confirm-payment method:card with amount == total, no change entry", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // total 1.50
+    store.addProduct(coffee, "1"); // total 1.50
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
@@ -828,7 +828,7 @@ describe("till-tender-pay", () => {
 
   it("rides an entered externalRef along with the card tender", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // total 1.50
+    store.addProduct(coffee, "1"); // total 1.50
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
@@ -841,7 +841,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle after a confirmed card payment", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay-card");
     await el.updateComplete;
@@ -853,7 +853,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle from the card screen when Cancel is tapped, emitting nothing", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     const spy = vi.fn();
     el.addEventListener("confirm-payment", () => spy());
@@ -872,7 +872,7 @@ describe("till-tender-pay", () => {
     "offers no cash at the %s stage on a device that does not take cash, and says to take it at a till",
     async (stage) => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "2");
+      store.addProduct(coffee, "2");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         mode: "ticket_then_pay",
@@ -887,7 +887,7 @@ describe("till-tender-pay", () => {
 
   it("offers cash by default, with no line about taking it at a till", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     expect(query(el, ".pay")).not.toBeNull();
     expect(query(el, ".cash-at-till")).toBeNull();
@@ -895,12 +895,12 @@ describe("till-tender-pay", () => {
 
   it("both idle views (pay + collect) render the Card button by default", async () => {
     const payStore = new WorkingOrderStore();
-    payStore.addProduct(cafe, "2");
+    payStore.addProduct(coffee, "2");
     const pay = await mountWidget<TillTenderPay>("till-tender-pay", { store: payStore });
     expect(query(pay.el, ".pay-card")).not.toBeNull(); // Mode P (prepay) pay view
 
     const collectStore = new WorkingOrderStore();
-    collectStore.addProduct(cafe, "2");
+    collectStore.addProduct(coffee, "2");
     const collect = await mountWidget<TillTenderPay>("till-tender-pay", {
       store: collectStore,
       mode: "ticket_then_pay",
@@ -911,7 +911,7 @@ describe("till-tender-pay", () => {
 
   it("defaults to mode prepay / stage order, unaffected by stage when mode is prepay", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, stage: "collect" });
     expect(query(el, ".pay")).not.toBeNull();
     expect(query(el, ".hold")).not.toBeNull();
@@ -920,7 +920,7 @@ describe("till-tender-pay", () => {
 
   it("Modes I/T at the order stage show Cash + Card beside Place + Hold", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -935,7 +935,7 @@ describe("till-tender-pay", () => {
 
   it("Mode T (ticket_then_pay) at the order stage also shows Place + Hold", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -950,7 +950,7 @@ describe("till-tender-pay", () => {
     (mode) => {
       async function mountOrderStage() {
         const store = new WorkingOrderStore();
-        store.addProduct(cafe, "2"); // total 3.00
+        store.addProduct(coffee, "2"); // total 3.00
         return mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage: "order" });
       }
 
@@ -1010,7 +1010,7 @@ describe("till-tender-pay", () => {
     expect(query(empty, ".place")!.hasAttribute("disabled")).toBe(true);
 
     const busyStore = new WorkingOrderStore();
-    busyStore.addProduct(cafe, "2");
+    busyStore.addProduct(coffee, "2");
     const { el: busy } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store: busyStore,
       mode: "ticket_then_pay",
@@ -1021,7 +1021,7 @@ describe("till-tender-pay", () => {
 
   it("Place emits a composed, bubbling place-order with no detail", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -1037,7 +1037,7 @@ describe("till-tender-pay", () => {
 
   it("Modes I/T at the collect stage show Cash + Card, not Place/Hold", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -1053,7 +1053,7 @@ describe("till-tender-pay", () => {
 
   it("Mode T at the collect stage also shows Cash + Card", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -1080,7 +1080,7 @@ describe("till-tender-pay", () => {
     async function mountAt(mode: OrderFlow, stage: "order" | "collect", width?: string) {
       setLocale(locale);
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "2");
+      store.addProduct(coffee, "2");
       const mounted = await mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage });
       if (width !== undefined) {
         mounted.host.style.width = width;
@@ -1134,7 +1134,7 @@ describe("till-tender-pay", () => {
 
   it("at the collect stage, the cash screen's Confirm emits collect-order (not confirm-payment)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // total 3.00
+    store.addProduct(coffee, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -1155,7 +1155,7 @@ describe("till-tender-pay", () => {
 
   it("at the collect stage, the card screen's Confirm emits collect-order, keeping the ref field", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // total 1.50
+    store.addProduct(coffee, "1"); // total 1.50
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -1180,7 +1180,7 @@ describe("till-tender-pay", () => {
 
   it("returns to idle (Collect view) after a collect-order is confirmed", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       mode: "ticket_then_pay",
@@ -1199,8 +1199,8 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     host.remove(); // disconnectedCallback → both subscriptions disposed
-    store.addProduct(cafe, "1");
-    store.emit("product-selected", jamon);
+    store.addProduct(coffee, "1");
+    store.emit("product-selected", ham);
     await el.updateComplete;
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true); // never heard the add
     expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt")); // never heard the pick
@@ -1209,7 +1209,7 @@ describe("till-tender-pay", () => {
   describe("integrated card terminal (Task 9)", () => {
     it("shows local simulator outcomes and sends the selected decline scenario", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "simulator",
@@ -1226,7 +1226,7 @@ describe("till-tender-pay", () => {
 
     it("offers the pretend reader beside the instant simulator and clears it on Cancel", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const readerId = "00000000-0000-4000-8000-000000000247";
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
@@ -1271,7 +1271,7 @@ describe("till-tender-pay", () => {
       setLocale("es-ES");
       try {
         const store = new WorkingOrderStore();
-        store.addProduct(cafe, "1");
+        store.addProduct(coffee, "1");
         const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
           store,
           cardProvider: "simulator",
@@ -1304,7 +1304,7 @@ describe("till-tender-pay", () => {
 
     it("returns from the pretend reader to the plain simulator", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const readerId = "00000000-0000-4000-8000-000000000247";
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
@@ -1352,7 +1352,7 @@ describe("till-tender-pay", () => {
 
     it("does not label a real reader as the instant simulator when no default is set", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1371,7 +1371,7 @@ describe("till-tender-pay", () => {
 
     it("with cardProvider 'none' (default), Card stays the #62 manual path — no collecting state", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1"); // total 1.50
+      store.addProduct(coffee, "1"); // total 1.50
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
       const collectSpy = vi.fn();
       const confirmSpy = vi.fn();
@@ -1388,7 +1388,7 @@ describe("till-tender-pay", () => {
 
     it("integrated Card (stripe_terminal) enters the collecting state and emits collect-card", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1404,7 +1404,7 @@ describe("till-tender-pay", () => {
 
     it("Cancel on collecting returns to idle (client-side abort, no event)", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1435,7 +1435,7 @@ describe("till-tender-pay", () => {
 
     it("Retry re-emits collect-card with the SAME detail and returns to collecting", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1485,7 +1485,7 @@ describe("till-tender-pay", () => {
 
     it("a finished attempt with no card outcome takes the spinner back to the choices", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1502,7 +1502,7 @@ describe("till-tender-pay", () => {
 
     it("a finished attempt leaves cash entry alone when the operator has moved on to it", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1522,7 +1522,7 @@ describe("till-tender-pay", () => {
 
     it("a finished attempt leaves the card outcome on screen", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1539,7 +1539,7 @@ describe("till-tender-pay", () => {
 
     it("a card outcome arriving with the finished attempt shows the outcome, not the choices", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1593,7 +1593,7 @@ describe("till-tender-pay", () => {
 
     it("reads the entered tip and offline-consent onto the emitted collect-card detail", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_on_device",
@@ -1609,7 +1609,7 @@ describe("till-tender-pay", () => {
 
     it("omits tip/allowOffline from the emitted detail when neither is entered/enabled", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_on_device",
@@ -1623,7 +1623,7 @@ describe("till-tender-pay", () => {
 
     it("Modes I/T at the collect stage also route the integrated Card tap through collect-card", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         mode: "ticket_then_pay",
@@ -1741,7 +1741,7 @@ describe("till-tender-pay", () => {
 
     it("choosing a reader updates the displayed name, closes the picker, and rides the next collect-card", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1771,7 +1771,7 @@ describe("till-tender-pay", () => {
 
     it("cancelling the picker leaves the prior selection untouched", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1797,7 +1797,7 @@ describe("till-tender-pay", () => {
 
     it("Retry replays the SAME chosen readerId, not a re-read of the (long gone) idle control", async () => {
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
@@ -1888,7 +1888,7 @@ describe("a dish not sold by the unit offers its options but no extras", () => {
   };
 
   it.each([
-    ["weighed on a scale", jamon],
+    ["weighed on a scale", ham],
     ["in a unit with decimal places and no scale", portion],
   ])("adds a dish %s with only extras lists straight to the basket", async (_, dish) => {
     const store = new WorkingOrderStore();
@@ -1906,7 +1906,7 @@ describe("a dish not sold by the unit offers its options but no extras", () => {
   });
 
   it.each([
-    ["weighed on a scale", jamon],
+    ["weighed on a scale", ham],
     ["in a unit with decimal places and no scale", portion],
   ])("asks a dish %s its options list and offers no extras list", async (_, dish) => {
     const store = new WorkingOrderStore();
@@ -1939,10 +1939,10 @@ it("asks for the variant of a weighed dish whose only question is one", async ()
   // `addProduct`, so ringing the dish up without asking would file it at the base product's price.
   const store = new WorkingOrderStore();
   const product: TillProduct = {
-    ...jamon,
+    ...ham,
     variants: [
       {
-        ...sellingValuesOf(jamon),
+        ...sellingValuesOf(ham),
         id: "v-iberico",
         name: "Ibérico",
         unitPrice: "30.00",
@@ -1950,7 +1950,7 @@ it("asks for the variant of a weighed dish whose only question is one", async ()
         available: true,
       },
       {
-        ...sellingValuesOf(jamon),
+        ...sellingValuesOf(ham),
         id: "v-serrano",
         name: "Serrano",
         unitPrice: "10.00",
@@ -1984,7 +1984,7 @@ it("rings a weighed dish up unasked when it offers neither a variant nor a list"
   // The control for the case above: nothing to ask, so the keypad's Add is still one tap.
   const store = new WorkingOrderStore();
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-  store.emit("product-selected", jamon);
+  store.emit("product-selected", ham);
   await el.updateComplete;
   await type(el, "0.250");
   click(el, ".add");
@@ -1997,7 +1997,7 @@ for (const locale of ["en", "es"]) {
   it(`decimal input card tip accepts both marks and displays ${locale}`, async () => {
     setLocale(locale);
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       cardProvider: "stripe_on_device",
@@ -2020,7 +2020,7 @@ for (const locale of ["en", "es"]) {
 it("decimal input refuses a grouped card tip beside its field until corrected", async () => {
   setLocale("es");
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
     cardProvider: "stripe_on_device",
@@ -2054,7 +2054,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
     theme?: "light" | "dark",
   ) {
     const store = new WorkingOrderStore();
-    if (lines > 0) store.addProduct(cafe, String(lines));
+    if (lines > 0) store.addProduct(coffee, String(lines));
     const mounted = await mountWidget<TillTenderPay>("till-tender-pay", { store, ...props }, theme);
     return { ...mounted, store };
   }
@@ -2112,7 +2112,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
       await cash.updateComplete;
       expect(buttonFill(cash)).toBe(buttonFill(hold));
       expect(buttonFill(card)).toBe(buttonFill(hold));
-      store.addProduct(cafe, "1");
+      store.addProduct(coffee, "1");
       await el.updateComplete;
       await cash.updateComplete;
       await card.updateComplete;
@@ -2138,7 +2138,7 @@ describe("the receipt's guests field", () => {
 
   async function mount(props: Record<string, unknown> = {}) {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // total 1.50
+    store.addProduct(coffee, "1"); // total 1.50
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
       store,
       asksGuests: true,
@@ -2184,7 +2184,7 @@ describe("the receipt's guests field", () => {
     await payCash(el);
     expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 5 });
     store.clear();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
     expect(guests(el)!.value).toBe("4");
   });
@@ -2443,7 +2443,7 @@ describe("the receipt's guests field", () => {
     click(el, ".pay");
     await el.updateComplete;
     store.clear();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
     expect(guests(el)!.value).toBe("4");
     expect(guests(el)!.error).toBe("");
