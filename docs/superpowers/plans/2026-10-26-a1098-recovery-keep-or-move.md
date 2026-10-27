@@ -25,6 +25,8 @@
 
 ## OPEN QUESTIONS (for the owner)
 
+**Owner answers (Task 0 Step 1).** Q1: **A** (2026-10-27 ~01:22, `~/waitron-campaign/questions.md` "OWNER ANSWER — A1098 Q1: A": a plain HTML password field with one `ALLOWED` entry, its reason stated). Q2, Q3, Q5, Q6: not changed — each built with its A. Q4: withdrawn. Task 0 Step 2: rebased onto main c94a30e4d on 2026-10-27; none of the files Step 2 lists changed since ef4322c82.
+
 Each is a point where the code or a house rule does not fit the approved shape as it stands. Q1 blocks the tasks named. Q2, Q3, Q5 and Q6 block nothing: the build uses the recommended answer unless the owner answers otherwise, and the PR lists them for approval. Q4 was withdrawn in revision 2.
 
 **While Q1 is open, Tasks 0–6, 10a, 10b's cases other than full disk, and 11 can be built** (Q2 is built with its option A; lane A, 2026-10-26 18:25). Task 12 (guides and backlog) describes the finished behaviour, so it waits for Q1's answer. Task 13 waits for everything.
