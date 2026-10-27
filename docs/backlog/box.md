@@ -5,7 +5,6 @@ their full text.
 
 ## The box the customer buys probably doubles as a till, so the image ships a screen and a browser
 
-**The box the customer buys probably doubles as a till, so the image ships a screen and a browser**
 (owner, 2026-09-29: "we probably want the server the customer buys to also serve as a till, which
 means that we need to ship Debian with a UI and chromium"). A lean then; **decided 2026-10-21 in
 B3's answers**: every box carries Chromium under `cage`, no desktop, and its screen opens the
@@ -66,7 +65,7 @@ Three parts:
 
 ## Automatic upgrades that can be undone until the first order
 
-- **Automatic upgrades that can be undone until the first order** (owner, 2026-10-02). Today an
+- (owner, 2026-10-02). Today an
   upgrade is `waitron.sh install`, run by hand at the box's terminal: it pulls the new images,
   restarts, and waits about three minutes for the app to report healthy (`wait_healthy`,
   `deploy/waitron.sh`). It takes no backup first, and once the new image has migrated the database
@@ -199,7 +198,7 @@ carry none.
 
 ## Resetting a box without a terminal
 
-- **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
+- (owner, 2026-10-02). An operator who set the box up in
   Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
   `waitron.sh reset` or `waitron.sh --reset install` (`wipe_box`, `deploy/waitron.sh`), run with `sudo` at the box's terminal —
   which a box operator does not have. Going from Prepare to Live needs a fresh database too (one
@@ -215,7 +214,7 @@ carry none.
 
 ## Two concurrent first provisions can still race past the venue guard
 
-- **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
+- (2026-09-14). Both can
   pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
   says in as many words that callers must serialise provisioning, and nothing enforces it — the
   setup route's latch is process-local. #378 closed only the taxpayer row's part of
@@ -348,7 +347,7 @@ Open:
 
 ## Litestream at trace logging deadlocked sales for five seconds
 
-- **Open: Litestream at trace logging deadlocked sales for five seconds.** The probe first ran it at
+- The probe first ran it at
   trace level by mistake, and 13 of 24 runs failed with a 500, each one looked at being
   `begin immediate` failing `database is locked` after 5,006 to 5,008 ms. The inferred mechanism:
   Litestream held the write lock while blocked writing its log to a pipe that only the server's main
@@ -700,7 +699,7 @@ for this case (`packages/store/src/node-sqlite-adapter.ts`).
 
 ## Recovery actions the 2026-09-08 node-containers design handed on
 
-**Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
+(§9.3, §12) — starting without
 a module that fails at start, undoing the last module change, and a migration that applied only in
 part. Not designed. Only undoing the last module change waits for modules that can be installed on
 a running box; a migration that applies only in part can happen on any upgrade today. A798 covers a
@@ -970,8 +969,7 @@ more lenient than the writer.
 
 ## Two small leftovers in the Backups destination form (A639, #1695)
 
-**Two small leftovers in the Backups destination form, reported by A639's review and not fixed
-there (#1695).** (1) A folder typed in the settings editor and then cancelled can reappear in the
+(1) A folder typed in the settings editor and then cancelled can reappear in the
 "Turn on backups" form later; it is never sent and never counts as a change. (2) A refusal of the
 other bucket's secret that arrives after the owner switched the bucket choice away from "Another
 S3-compatible bucket" is dropped, so the next Save asks again. Neither was reproduced outside the
@@ -1391,11 +1389,8 @@ Whatever their browser sends counts:
 
 ## The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock behind the latest sale — during a stop, and under a confirmation that lifted it — or while a clock check whose stop has ended waits for its witness
 
-**The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that
-  clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock
-  behind the latest sale — during a stop, and under a confirmation that lifted it — or while a
-  clock check whose stop has ended waits for its witness**, on a primary that files records. The
-  module reports no stop while the clock reads a date before 28-10-2024, so no HEAD is sent then.
+This applies on a primary that files records. The module reports no stop while the clock reads
+a date before 28-10-2024, so no HEAD is sent then.
   Left open by A798-B slice 9 (#2025).
 
 ## AEAT's time outranks the devices.
@@ -1441,7 +1436,7 @@ For a card taken from a bill's payment options (Whole bill, Pay items, Contribut
 
 ## The Clock row says 'connect the box to the internet' where that may not help.
 
-**The Clock row says 'connect the box to the internet' where that may not help.** On a box that
+On a box that
   does not keep its clock in step with internet time (since A798-B slice 10, `waitron.sh install`
   switches synchronisation on where the system provides it, and says so where it cannot);
   and on one that does, the same advice shows where the clock is right and the latest record's time
