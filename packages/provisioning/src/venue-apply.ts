@@ -303,7 +303,7 @@ export async function applyVenue(
           // default, firing fails with `station.no_default`. So a fresh venue ships one.
           await tx.insert(kitchenStations).values({
             locationId,
-            name: "Cocina",
+            name: action.stationName,
             colour: await nextStationColour(tx, locationId),
             isDefault: true,
             active: true,

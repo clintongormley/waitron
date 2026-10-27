@@ -127,8 +127,8 @@ export interface DefaultDeviceProfile {
   /** Seconds; `null` or omitted means never. The operator-facing profiles carry one so the next
    * operator does not inherit the last one's session. */
   inactivityTimeoutSeconds?: number | null;
-  /** Keyed by bare language subtag (`"es"`). */
-  nameByLocale: Record<string, string>;
+  /** English; provisioning's `src/starter-content.ts` holds its other staff languages. */
+  name: string;
 }
 
 /** Seeded by provisioning's `planVenue`, which `dev:setup` also runs. */
@@ -136,26 +136,18 @@ export const DEFAULT_DEVICE_PROFILES: readonly DefaultDeviceProfile[] = [
   {
     formFactor: "till",
     capabilities: DEFAULT_PROFILE_CAPABILITIES.till,
-    nameByLocale: { es: "Mostrador", en: "Counter" },
+    name: "Counter",
     inactivityTimeoutSeconds: 300,
   },
   {
     formFactor: "kds",
     capabilities: DEFAULT_PROFILE_CAPABILITIES.kds,
-    nameByLocale: { es: "Cocina", en: "Kitchen" },
+    name: "Kitchen",
   },
   {
     formFactor: "phone-portrait",
     capabilities: DEFAULT_PROFILE_CAPABILITIES["phone-portrait"],
-    nameByLocale: { es: "Móvil", en: "Handheld" },
+    name: "Handheld",
     inactivityTimeoutSeconds: 300,
   },
 ];
-
-const DEFAULT_PROFILE_LANGUAGE = "es";
-
-/** `locale` is a full tag such as `"es-ES"`; only its language subtag is read. */
-export function defaultProfileName(profile: DefaultDeviceProfile, locale: string): string {
-  const language = locale.split("-")[0]!.toLowerCase();
-  return profile.nameByLocale[language] ?? profile.nameByLocale[DEFAULT_PROFILE_LANGUAGE]!;
-}

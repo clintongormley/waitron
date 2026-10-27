@@ -11,6 +11,7 @@ import {
   locationBusinessDaySettings,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { STARTER_STATION_NAMES } from "./starter-content.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 
@@ -59,6 +60,22 @@ it("A725 fresh provisioning starts with one red default kitchen", async () => {
   `)
     ).rows,
   ).toEqual([{ name: "Cocina", colour: "red", is_default: 1 }]);
+});
+
+it("an English venue's default kitchen station is named in English", async () => {
+  const english = request("B10000015");
+  english.location.invoiceLocales = ["en-GB"];
+  const created = await applyVenue(planVenue(english, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect(
+    (
+      await suite.db.execute(sql`
+    select name, is_default from kitchen_stations where location_id = ${created.locationId}
+  `)
+    ).rows,
+  ).toEqual([{ name: "Kitchen", is_default: 1 }]);
 });
 
 it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
@@ -645,6 +662,7 @@ describe("applyVenue", () => {
         province: "Madrid",
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
+        stationName: STARTER_STATION_NAMES.Kitchen.es,
       },
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
@@ -697,6 +715,7 @@ describe("applyVenue", () => {
       province: "Madrid",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
+      stationName: STARTER_STATION_NAMES.Kitchen.es,
     };
 
     it.each([
