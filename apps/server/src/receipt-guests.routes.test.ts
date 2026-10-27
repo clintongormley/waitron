@@ -893,7 +893,7 @@ describe("a bill payment's retry is matched on the payment alone, never its gues
   });
 });
 
-describe("A988: the payment routes read guestCount", () => {
+describe("the payment routes read guestCount and ignore guests", () => {
   const REFUSED = {
     error: { code: "management.request_invalid", params: { field: "guestCount" } },
   };

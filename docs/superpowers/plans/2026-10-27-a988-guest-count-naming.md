@@ -20,11 +20,11 @@ SQLite in `packages/db`, Vitest (the till runs in headless Chromium). No new dep
 
 ## Decisions already made (not reopened here)
 
-1. **A party's or a receipt's number of guests is `guestCount` in code and on the wire** — the
+1. **A party's or a receipt's number of guests is `guestCount` on the wire and in the `sale_receipt_guests` drizzle property** — the
    party's existing name (`parties.guest_count`, the seat route's `guestCount`). So the
    receipt-guests choice on the till's pay, collect and bill-payment routes takes body field
    `guestCount` and refuses as field `guestCount`; the `sale_receipt_guests` drizzle field becomes
-   `guestCount`; code identifiers that hold the count follow. The column itself stays `guests` in
+   `guestCount`. The column itself stays `guests` in
    this PR (Q1 = B); its rename to `guest_count`, with its CHECK name, is a follow-up. Function and file names that name the
    receipt's guests LINE stay unless they would mislead.
 2. **Split a table's `guests: { staying, leaving }` body becomes `guestCounts: { staying,
@@ -100,11 +100,11 @@ afterwards with `git worktree remove --force`), with the schema edited to
    ```sql
    PRAGMA foreign_keys=OFF;--> statement-breakpoint
    CREATE TABLE `__new_sale_receipt_guests` (
-   	`sale_id` text PRIMARY KEY NOT NULL,
-   	`guest_count` integer,
-   	`created_at` text NOT NULL,
-   	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
-   	CONSTRAINT "sale_receipt_guests_guest_count_ck" CHECK("__new_sale_receipt_guests"."guest_count" is null or (typeof("__new_sale_receipt_guests"."guest_count") = 'integer' and "__new_sale_receipt_guests"."guest_count" between 1 and 999))
+       `sale_id` text PRIMARY KEY NOT NULL,
+       `guest_count` integer,
+       `created_at` text NOT NULL,
+       FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+       CONSTRAINT "sale_receipt_guests_guest_count_ck" CHECK("__new_sale_receipt_guests"."guest_count" is null or (typeof("__new_sale_receipt_guests"."guest_count") = 'integer' and "__new_sale_receipt_guests"."guest_count" between 1 and 999))
    );
    --> statement-breakpoint
    INSERT INTO `__new_sale_receipt_guests`("sale_id", "guest_count", "created_at") SELECT "sale_id", "guest_count", "created_at" FROM `sale_receipt_guests`;--> statement-breakpoint
@@ -186,8 +186,7 @@ because the table keeps its name.
 | 6 | Documentation and backlog | docs |
 
 Task 5 comes after the code renames so that, whatever the lane answers, Tasks 1–4 and 6 land; if
-the lane keeps the column, Task 5 is skipped and the only `guests` left for this count is the SQL
-column name.
+the lane keeps the column, Task 5 is skipped.
 
 ---
 
@@ -482,8 +481,8 @@ item 7). The fixture must not be edited or regenerated. Choose one:
 - [ ] `docs/backlog/printers.md`, _Loose ends left by A663 Part 3b (#1827)_: delete the third bullet
   (this item). In the next bullet change "a server refusal naming `guests` … `refusalField` has no
   `guests` case" to `guestCount`. Under B, add a line to the area's
-  `## Decisions and deliberate limits`: the receipt-guests count is `guestCount` in code and on the
-  wire but the column stays `guests` because the frozen Madrid fixture pins it.
+  `## Decisions and deliberate limits`: the receipt-guests count is `guestCount` in every till request and in the drizzle property, but
+  the column stays `guests` because the frozen Madrid fixture pins it.
 - [ ] `docs/developers/conventions-data.md` ~4165–4180: Split a table's fields become
   `guestCounts.staying` / `guestCounts.leaving`; "The payment routes' `guests`" becomes
   `guestCount`. Test titles cited there are unchanged by this plan.
