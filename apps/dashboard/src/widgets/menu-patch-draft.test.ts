@@ -358,7 +358,7 @@ describe("MenuPatchDraft", () => {
     expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
   });
 
-  it("on rebase lets go of wording in a switched-off language, counting it, and keeps the rest of its change", () => {
+  it("on rebase lets go without counting text in a switched-off language the person left as it was, and keeps the rest of its change", () => {
     const document = lunch();
     document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
     const draft = new MenuPatchDraft(document, languages);
@@ -370,6 +370,25 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: salad, field: "price", value: "5.00" });
     const next = lunch();
     next.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Potage" };
+    expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.changes()).toEqual([
+      { target: soup, field: "customerName", value: { en: "Soup", es: "Caldo" } },
+      { target: salad, field: "price", value: "5.00" },
+    ]);
+  });
+
+  it("on rebase counts text typed in a switched-off language that it lets go, and keeps the rest of its change", () => {
+    const document = lunch();
+    document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
+    const draft = new MenuPatchDraft(document, languages);
+    draft.set({
+      target: soup,
+      field: "customerName",
+      value: { en: "Soup", es: "Caldo", fr: "Bouillon" },
+    });
+    draft.set({ target: salad, field: "price", value: "5.00" });
+    const next = lunch();
+    next.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Potage" };
     expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: ["offer:mi-soup/customerName"] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "customerName", value: { en: "Soup", es: "Caldo" } },
@@ -377,7 +396,7 @@ describe("MenuPatchDraft", () => {
     ]);
   });
 
-  it("on rebase drops and counts a change that held new wording only in a switched-off language", () => {
+  it("on rebase removes a change typed only in a switched-off language, counting it as text let go rather than dropped", () => {
     const document = lunch();
     document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
     const draft = new MenuPatchDraft(document, languages);
@@ -386,7 +405,7 @@ describe("MenuPatchDraft", () => {
       field: "customerName",
       value: { en: "Soup", es: "Sopa", fr: "Bouillon" },
     });
-    expect(draft.rebase(document)).toEqual({ dropped: 1, trimmed: [] });
+    expect(draft.rebase(document)).toEqual({ dropped: 0, trimmed: ["offer:mi-soup/customerName"] });
     expect(draft.changes()).toEqual([]);
   });
 
@@ -429,6 +448,62 @@ describe("MenuPatchDraft", () => {
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "Old soup", es: "Sopa nueva" } },
     ]);
+  });
+
+  it("on rebase moves text the person left as it was onto a newer version's, keeping only what they typed", () => {
+    const description = (en: string, es: string) => {
+      const document = lunch();
+      document.offers["mi-soup"]!.description = { en, es };
+      return document;
+    };
+    const draft = new MenuPatchDraft(description("Old soup", "Sopa vieja"), languages);
+    draft.set({
+      target: soup,
+      field: "description",
+      value: { en: "New soup", es: "Sopa vieja" },
+    });
+    expect(draft.rebase(description("Other soup", "Sopa de otro"))).toEqual({
+      dropped: 0,
+      trimmed: [],
+    });
+    expect(draft.changes()).toEqual([
+      { target: soup, field: "description", value: { en: "New soup", es: "Sopa de otro" } },
+    ]);
+    expect(draft.rebase(description("Other soup", "Sopa cinco"))).toEqual({
+      dropped: 0,
+      trimmed: [],
+    });
+    expect(draft.changes()).toEqual([
+      { target: soup, field: "description", value: { en: "New soup", es: "Sopa cinco" } },
+    ]);
+    expect(
+      draft.rebase(description("Other soup", "Sopa cinco"), {
+        defaultLanguage: "en",
+        languages: ["en"],
+      }),
+    ).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.changes()).toEqual([
+      { target: soup, field: "description", value: { en: "New soup" } },
+    ]);
+  });
+
+  it("on rebase removes without counting a change whose typed text a newer version already holds", () => {
+    const description = (en: string, es: string) => {
+      const document = lunch();
+      document.offers["mi-soup"]!.description = { en, es };
+      return document;
+    };
+    const draft = new MenuPatchDraft(description("Old soup", "Sopa vieja"), languages);
+    draft.set({
+      target: soup,
+      field: "description",
+      value: { en: "Old soup", es: "Sopa nueva" },
+    });
+    expect(draft.rebase(description("Other soup", "Sopa nueva"))).toEqual({
+      dropped: 0,
+      trimmed: [],
+    });
+    expect(draft.changes()).toEqual([]);
   });
 
   it("on rebase sends a language switched on with its stored text, or blank when it has none", () => {
@@ -483,7 +558,7 @@ describe("MenuPatchDraft", () => {
     expect(() => draft.rebase(next)).toThrow(DOMException);
   });
 
-  it("on rebase takes the content languages it is given, dropping and counting what they refuse", () => {
+  it("on rebase takes the content languages it is given, counting a change typed only in one they remove", () => {
     const fixedNames = () => {
       const document = menuDocument([documentSection("sec-drinks", "Drinks", [])], {});
       const drinks = document.root.members[0] as Extract<
@@ -501,8 +576,8 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(fixedNames(), languages)).toEqual({ dropped: 0, trimmed: [] });
     expect(draft.changes()).toHaveLength(1);
     expect(draft.rebase(fixedNames(), { defaultLanguage: "en", languages: ["en"] })).toEqual({
-      dropped: 1,
-      trimmed: [],
+      dropped: 0,
+      trimmed: ["section:sec-drinks/names"],
     });
     expect(draft.changes()).toEqual([]);
   });

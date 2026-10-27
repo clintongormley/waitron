@@ -2971,9 +2971,10 @@ export const en = {
     "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   "menu_patch.dropped_one": "1 change no longer fits the live version and was dropped.",
   "menu_patch.dropped_many": "{count} changes no longer fit the live version and were dropped.",
-  "menu_patch.trimmed_one": "1 change lost its wording in a language that was switched off.",
+  "menu_patch.trimmed_one":
+    "1 change lost what was typed in a language removed from the content languages.",
   "menu_patch.trimmed_many":
-    "{count} changes lost their wording in a language that was switched off.",
+    "{count} changes lost what was typed in a language removed from the content languages.",
   "menu_publications.version": "Version {number}",
   "menu_publications.state_queued": "Scheduled",
   "menu_publications.state_cancelled": "Cancelled",
@@ -6503,9 +6504,10 @@ export const es: Record<StringKey, string> = {
   "menu_patch.dropped_one": "1 corrección ya no encaja en la versión publicada y se ha descartado.",
   "menu_patch.dropped_many":
     "{count} correcciones ya no encajan en la versión publicada y se han descartado.",
-  "menu_patch.trimmed_one": "1 corrección ha perdido su texto en un idioma que se ha desactivado.",
+  "menu_patch.trimmed_one":
+    "1 corrección ha perdido lo escrito en un idioma que se ha quitado de los idiomas del contenido.",
   "menu_patch.trimmed_many":
-    "{count} correcciones han perdido su texto en un idioma que se ha desactivado.",
+    "{count} correcciones han perdido lo escrito en un idioma que se ha quitado de los idiomas del contenido.",
   "menu_publications.version": "Versión {number}",
   "menu_publications.state_queued": "Programada",
   "menu_publications.state_cancelled": "Cancelada",

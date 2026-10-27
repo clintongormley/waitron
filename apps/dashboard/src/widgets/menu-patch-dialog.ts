@@ -306,8 +306,8 @@ export class MenuPatchDialog extends LitElement {
   @state() private reloadFailure: string | null = null;
   /** How many staged changes newer live versions have dropped since the dialog opened. */
   @state() private dropped = 0;
-  /** The `changeKey`s of the staged changes that have let go of new text in a language the venue
-   * switched off. */
+  /** The `changeKey`s of the changes that have let go of typed text in a language removed since the
+   * dialog opened. */
   @state() private trimmed = new Set<string>();
   @state() private queued: LocalTime[] = [];
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
@@ -520,31 +520,24 @@ export class MenuPatchDialog extends LitElement {
     const { dropped, trimmed } = this.#draft!.rebase(document, currentContentLanguages());
     this.dropped += dropped;
     if (trimmed.length > 0) this.trimmed = new Set([...this.trimmed, ...trimmed]);
-    this.#typeSettled(document);
+    this.#typeSettled();
     this.dropped += this.#forgetSettled(document);
     this.#retireRefusal();
     this.#scope?.changed();
     this.requestUpdate();
   }
 
-  /** A staged translated change holds text in exactly the content languages, the stored text in a
-   * language switched on since it was typed, and a staged name change holds the live text in each
-   * language every folder fixes; its field takes the same, so the field shows what a send carries. */
-  #typeSettled(document: MenuDocument): void {
+  /** After a rebase a staged translated change can hold text the person did not type (stored text
+   * in a language they left alone, or a fixed name), so its field takes the change's text and shows
+   * what a send carries. */
+  #typeSettled(): void {
     const languages = currentContentLanguages();
     for (const change of this.#draft!.changes()) {
       const typed = this.#typed.get(changeKey(change));
       if (!TRANSLATED.has(change.field) || typed === undefined) continue;
       const value = change.value as Record<string, string>;
-      const shown = typed.value as Record<string, string>;
-      const fixed = fixedLanguages(document, change.target, change.field, languages);
       typed.value = Object.fromEntries(
-        languages.languages.map((language) => [
-          language,
-          fixed.includes(language) || !Object.hasOwn(shown, language)
-            ? (value[language] ?? "")
-            : shown[language],
-        ]),
+        languages.languages.map((language) => [language, value[language] ?? ""]),
       );
     }
   }

@@ -1636,7 +1636,7 @@ it("keeps the newer-version refusal when the same version is read again", async 
   expect(footerButton(el, "reload")).not.toBeNull();
 });
 
-it("drops and counts a change the venue's new content languages refuse, as they change", async () => {
+it("counts as text let go a change typed only in a language the venue's content languages remove", async () => {
   const document = lunch();
   const drinks = document.root.members[1] as Extract<
     MenuDocument["root"]["members"][number],
@@ -1653,8 +1653,9 @@ it("drops and counts a change the venue's new content languages refuse, as they 
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
   );
 });
 
@@ -1715,8 +1716,9 @@ it("shows a refusal for a change the venue's content languages drop while it is 
     expect(failures).toEqual([]);
     expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
     expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Drinks");
-    expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-      "1 change no longer fits the live version and was dropped.",
+    expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+      "1 change lost what was typed in a language removed from the content languages.",
     );
     expect(bottomMessage(el)).toBe("");
   } finally {
@@ -1961,8 +1963,9 @@ it("retires a no-longer-fits refusal once the content languages drop the change 
   footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
   await flush(el);
   expect(patchLiveMenu).toHaveBeenCalledTimes(1);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
   );
 });
 
@@ -2191,7 +2194,7 @@ it("leaves focus on the refused field when a Reload read during the send moves t
   expect(bottomMessage(el)).toBe("Correct the fields marked on Salad to continue.");
 });
 
-it("shows in a section name's field the fixed text a newer version put in its staged change", async () => {
+it("shows in a section name's field the live text once a newer version stops fixing the language it put in the staged change", async () => {
   const data = new LiveData();
   const before = lunch();
   (before.root.members[0] as { names: Record<string, string> }).names = {
@@ -2212,12 +2215,12 @@ it("shows in a section name's field the fixed text a newer version put in its st
   await press(el, "reload");
   expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
   expect(field(el, "wt-input", "names-en").disabled).toBe(false);
-  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  expect(field(el, "wt-input", "names-en").value).toBe("Starters");
   expect(el.changes).toEqual([
     {
       target: { kind: "section", sectionId: "sec-starters" },
       field: "names",
-      value: { en: "Fixed English", es: "Para empezar" },
+      value: { en: "Starters", es: "Para empezar" },
     },
   ]);
 });
@@ -2443,7 +2446,7 @@ it("lets go of a refusal under a language the venue switches off, keeping its ch
   expect(footerButton(el, "review")!.disabled).toBe(false);
 });
 
-it("keeps a translated change in the languages the venue keeps, says what it lost, and counts one it cannot keep", async () => {
+it("keeps a translated change in the languages the venue keeps, and counts each change that lost typed text", async () => {
   const document = lunch();
   document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
   const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
@@ -2456,11 +2459,9 @@ it("keeps a translated change in the languages the venue keeps, says what it los
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
-  );
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
-    "1 change lost its wording in a language that was switched off.",
+    "2 changes lost what was typed in a language removed from the content languages.",
   );
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
   await el.updateComplete;
@@ -2540,6 +2541,51 @@ it("counts a change once however many times it loses wording to a switched-off l
     await el.updateComplete;
   }
   expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
-    "1 change lost its wording in a language that was switched off.",
+    "1 change lost what was typed in a language removed from the content languages.",
   );
+});
+
+/** Soup's description is "Old soup" in English throughout; version 3's Spanish is "Sopa vieja",
+ * and a Reload reads version 4, whose Spanish is "Sopa de otro". */
+async function reloadedOntoOtherSpanish() {
+  const description = (es: string) => {
+    const document = lunch();
+    document.offers["mi-soup"]!.description = { en: "Old soup", es };
+    return document;
+  };
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, description("Sopa vieja")))
+    .mockResolvedValue(live(4, description("Sopa de otro")));
+  const api = stubApi({ liveData: data, getLiveMenu });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-en", "New soup");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  return { api, el };
+}
+
+it("moves text the person left as it was onto the version a Reload reads, and sends only what they typed", async () => {
+  const { api, el } = await reloadedOntoOtherSpanish();
+  expect(field(el, "wt-input", "description-es").value).toBe("Sopa de otro");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Soup: Description (EN) Old soup → New soup"]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-4",
+    changes: [
+      { target: soup, field: "description", value: { en: "New soup", es: "Sopa de otro" } },
+    ],
+  });
+});
+
+it("says nothing was lost when a language the person never typed in is removed after a Reload", async () => {
+  const { el } = await reloadedOntoOtherSpanish();
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "description", value: { en: "New soup" } }]);
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
 });

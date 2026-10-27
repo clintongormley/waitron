@@ -148,6 +148,11 @@ it("reads a content language a change holds no text in as blank", () => {
   expect(
     changeLines(lunch(), [{ target: soup, field: "description", value: { en: "Hot" } }], languages),
   ).toEqual(["Soup: Description (EN) (empty) → Hot"]);
+  const stored = lunch();
+  stored.offers["mi-soup"]!.description = { en: "Old", es: "Vieja" };
+  expect(
+    changeLines(stored, [{ target: soup, field: "description", value: { en: "Hot" } }], languages),
+  ).toEqual(["Soup: Description (EN) Old → Hot", "Soup: Description (ES) Vieja → (empty)"]);
 });
 
 it("never words a change to a name language every copy's folder fixes", () => {

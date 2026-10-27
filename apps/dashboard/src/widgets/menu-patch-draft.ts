@@ -205,22 +205,33 @@ export class MenuPatchDraft {
     return { ...change, value: settled };
   }
 
-  /** A translated `change` holding text in exactly the content languages: a language switched on
-   * that it lacks takes the stored text, or a blank, so a send clears nothing the person did not;
-   * a switched-off language's text goes, since the patch keeps each copy's stored text there and
-   * copies may differ in it. `lost` says whether text that went differed from the stored text. */
-  private inLanguages(change: MenuPatchChange): { change: MenuPatchChange; lost: boolean } {
+  /** A translated `change`, typed over the text `left` stores, holding text in exactly the content
+   * languages. A language whose text still equals what `left` stores takes the stored text, or a
+   * blank, so a send clears nothing the person did not and never puts back text a newer version
+   * replaced; a switched-off language's text goes, since the patch keeps each copy's stored text
+   * there and copies may differ in it. `lost` says whether text that went was typed. */
+  private inLanguages(
+    change: MenuPatchChange,
+    left: { document: MenuDocument; languages: ContentLanguages },
+  ): { change: MenuPatchChange; lost: boolean } {
     const value = change.value;
     if (!TRANSLATED.has(change.field) || typeof value !== "object" || value === null)
       return { change, lost: false };
     const text = value as Record<string, string>;
+    const base = (patchFieldValue(left.document, change.target, change.field, left.languages) ??
+      {}) as Record<string, string>;
     const enabled = this.languages.languages;
     const stored = (patchFieldValue(this.document, change.target, change.field, this.languages) ??
       {}) as Record<string, string>;
-    const lost = Object.entries(text).some(
-      ([language, typed]) => !enabled.includes(language) && typed !== (stored[language] ?? ""),
+    const typed = (language: string) =>
+      Object.hasOwn(text, language) && text[language] !== (base[language] ?? "");
+    const lost = Object.keys(text).some(
+      (language) => !enabled.includes(language) && typed(language),
     );
-    const kept = enabled.map((language) => [language, text[language] ?? stored[language] ?? ""]);
+    const kept = enabled.map((language) => [
+      language,
+      typed(language) ? text[language] : (stored[language] ?? ""),
+    ]);
     return sameTranslations(Object.fromEntries(kept), text)
       ? { change, lost }
       : { change: { ...change, value: Object.fromEntries(kept) }, lost };
@@ -262,31 +273,31 @@ export class MenuPatchDraft {
     return this.perTarget.has(targetKey(target));
   }
 
-  /** Moves the draft onto a newer live version, judged with `languages`. A change that version
-   * already holds goes without being counted; one `applyMenuPatch` refuses on it is dropped and
-   * counted, and so is one left holding only the live text once its new text in a switched-off
-   * language is let go, or a name language every folder now fixes takes the live text in place of
-   * what was typed. `trimmed` holds the keys of the changes still staged that let go of new text
-   * in a switched-off language. */
+  /** Moves the draft onto a newer live version, judged with `languages`. Every staged change was
+   * typed over the version the draft is leaving, so that version's stored text tells what the
+   * person typed. A change that version already holds goes without being counted; one
+   * `applyMenuPatch` refuses on it is dropped and counted, and so is one left holding only the
+   * live text once a name language every folder now fixes takes the live text in place of what was
+   * typed. `trimmed` holds the keys of the changes, kept or gone, whose typed text in a
+   * switched-off language was let go, less any refused afterwards. */
   rebase(
     document: MenuDocument,
     languages = this.languages,
   ): { dropped: number; trimmed: string[] } {
+    const left = { document: this.document, languages: this.languages };
     this.document = document;
     this.languages = languages;
     const dropped = new Set<string>();
     const trimmed = new Set<string>();
     for (const [key, staged] of this.staged) {
-      const { change: inLanguages, lost } = this.inLanguages(staged);
+      const { change: inLanguages, lost } = this.inLanguages(staged, left);
       const change = this.settled(inLanguages);
       const lostFixed = change !== inLanguages && lostText(inLanguages, change);
+      if (lost) trimmed.add(key);
       if (this.isLive(change)) {
-        if (lost || lostFixed) dropped.add(key);
+        if (lostFixed) dropped.add(key);
         this.unstage(key);
-      } else {
-        this.staged.set(key, change);
-        if (lost) trimmed.add(key);
-      }
+      } else this.staged.set(key, change);
     }
     for (;;) {
       const entries = [...this.staged];
