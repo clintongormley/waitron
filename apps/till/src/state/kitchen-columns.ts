@@ -58,10 +58,11 @@ function sanitise(raw: string, defaults: ColumnState): ColumnState | null {
   if (!isStringArray(order) || !isStringArray(hidden) || !isStringArray(collapsed)) return null;
 
   const registered = defaults.order;
+  const stored = registeredOnce(order, registered);
   const state: ColumnState = {
-    order: registeredOnce(order, registered),
-    hidden: registeredOnce(hidden, registered),
-    collapsed: registeredOnce(collapsed, registered),
+    order: stored,
+    hidden: registeredOnce(hidden, stored),
+    collapsed: registeredOnce(collapsed, stored),
   };
   registered.forEach((key, index) => {
     if (state.order.includes(key)) return;

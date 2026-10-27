@@ -265,4 +265,41 @@ describe("A773 columns state: the device's kitchen columns", () => {
     });
     expect(keepsOpen.collapsed).toEqual(["overview"]);
   });
+
+  it("a column put back ignores its stored hidden and collapsed when its defaults hold neither", () => {
+    const storage = fakeStorage();
+    storage.values.set(
+      st1Key,
+      JSON.stringify({
+        version: 1,
+        order: ["waiting", "preparing"],
+        hidden: ["ready"],
+        collapsed: ["ready"],
+      }),
+    );
+    expect(readColumnState(storage, scope, STATION_COLUMNS)).toEqual(STATION_COLUMNS);
+  });
+
+  it("a column put back is hidden and collapsed once each when its defaults hold it and so does the store", () => {
+    const storage = fakeStorage();
+    storage.values.set(
+      st1Key,
+      JSON.stringify({
+        version: 1,
+        order: ["waiting", "preparing"],
+        hidden: ["ready", "waiting"],
+        collapsed: ["preparing", "ready"],
+      }),
+    );
+    const defaults: ColumnState = {
+      order: ["waiting", "preparing", "ready"],
+      hidden: ["ready"],
+      collapsed: ["ready"],
+    };
+    expect(readColumnState(storage, scope, defaults)).toEqual({
+      order: ["waiting", "preparing", "ready"],
+      hidden: ["waiting", "ready"],
+      collapsed: ["preparing", "ready"],
+    });
+  });
 });
