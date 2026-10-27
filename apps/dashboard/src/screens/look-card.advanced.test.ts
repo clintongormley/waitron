@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   WAITRON_CHOICES,
   fixAll,
@@ -976,5 +976,187 @@ describe("a card action taken while a picked colour waits for its frame", () => 
     expect(advanced(el).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
     expect(advanced(el).draft.choices.background).toBe("neutral");
     expect(words(q(el, "[data-test=kept-note]"))).toBe(keptNote(advanced(el).draft.choices));
+  });
+});
+
+describe("text set by hand in Advanced", () => {
+  const textRows = (el: Card) =>
+    advanced(el).shadowRoot!.querySelector(
+      "dashboard-theme-text",
+    ) as HTMLElementTagNameMap["dashboard-theme-text"];
+  const inText = (el: Card, selector: string) => textRows(el).shadowRoot!.querySelector(selector);
+  const sizeBox = (el: Card, key: string) =>
+    inText(
+      el,
+      `wt-number-stepper[name="text.size.${key}"]`,
+    ) as HTMLElementTagNameMap["wt-number-stepper"];
+  const choice = (el: Card, name: string) =>
+    inText(el, `wt-combobox[name="${name}"]`) as HTMLElementTagNameMap["wt-combobox"];
+  const panel = (el: Card) => preview(el).shadowRoot!.querySelector(".panel")!;
+
+  async function settleText(el: Card) {
+    await settle(el);
+    await textRows(el).updateComplete;
+  }
+  async function typeSize(el: Card, key: string, value: string) {
+    if (!disclosure(el).open) await openAdvanced(el);
+    const inner = sizeBox(el, key).shadowRoot!.querySelector("input")!;
+    await page.elementLocator(inner).fill(value);
+    await settleText(el);
+  }
+  async function choose(el: Card, name: string, value: string) {
+    if (!disclosure(el).open) await openAdvanced(el);
+    await chooseOption(choice(el, name), value);
+    await settleText(el);
+  }
+  async function pressText(el: Card, name: string) {
+    await userEvent.click(inText(el, `[data-test="${name}"]`)!);
+    await settleText(el);
+  }
+  async function slide(el: Card, value: number) {
+    const input = (
+      q(el, "wt-slider[name=textScale]") as HTMLElementTagNameMap["wt-slider"]
+    ).shadowRoot!.querySelector("input")!;
+    input.value = String(value);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await settleText(el);
+  }
+
+  it("setting a size repaints the preview at that size and nothing outside it", async () => {
+    const { el } = await mountEditing();
+    await typeSize(el, "md", "16");
+    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("16px");
+    await preview(el).updateComplete;
+    expect(getComputedStyle(panel(el)).fontSize).toBe("16px");
+    expect(getComputedStyle(q(el, "section.settings-card")!).fontSize).toBe("14px");
+  });
+
+  it("the line under the slider follows a hand-set size", async () => {
+    const { el } = await mountEditing();
+    await typeSize(el, "sm", "10");
+    expect(words(q(el, "[data-test=text-sizes]"))).toBe(
+      "Text on screens: small 10 px · normal 14 px · large 18 px · largest 22 px",
+    );
+  });
+
+  it("Serif and Bold 800 reach the preview", async () => {
+    const { el } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await choose(el, "text.weight.bold", "800");
+    await preview(el).updateComplete;
+    expect(getComputedStyle(panel(el)).fontFamily.startsWith("ui-serif")).toBe(true);
+    const name = preview(el).shadowRoot!.querySelector("[data-test=preview-tile] .tile-name")!;
+    expect(getComputedStyle(name).fontWeight).toBe("800");
+  });
+
+  it("Save sends the text set by hand", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await typeSize(el, "sm", "13");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme).toHaveBeenCalledWith("t-lucia", {
+      ...LUCIA,
+      text: { family: "serif", size: { sm: 13 } },
+    });
+  });
+
+  it("an invalid size shows its error after Save and keeps Save disabled; fixing it clears both", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await typeSize(el, "sm", "50");
+    await closeAdvanced(el);
+    expect(sizeBox(el, "sm").error).toBe("");
+    expect(button(el, "save").disabled).toBe(false);
+    await userEvent.click(button(el, "save"));
+    await settleText(el);
+    expect(saveTheme).not.toHaveBeenCalled();
+    await expect.poll(() => disclosure(el).open).toBe(true);
+    expect(disclosure(el).hasAttribute("has-error")).toBe(true);
+    expect(sizeBox(el, "sm").error).toBe("Enter a whole number from 8 to 40.");
+    expect(sizeBox(el, "md").error).toBe("");
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    const inner = sizeBox(el, "sm").shadowRoot!.querySelector("input");
+    await expect.poll(() => focused(el)).toBe(inner);
+    expect(button(el, "save").disabled).toBe(true);
+    expect(button(el, "save-as-new").disabled).toBe(true);
+
+    await typeSize(el, "sm", "13");
+    expect(sizeBox(el, "sm").error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
+  it("Use Waitron's look and Reset all clear the text", async () => {
+    const { el } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await typeSize(el, "lg", "x");
+    await userEvent.click(button(el, "use-waitron"));
+    await settleText(el);
+    expect(advanced(el).draft.choices.text).toEqual({});
+    expect(advanced(el).draft.textCodes).toEqual({});
+    expect(sizeBox(el, "lg").value).toBe("18");
+
+    await choose(el, "text.weight.bold", "800");
+    await typeSize(el, "lg", "x");
+    await press(el, "reset-all");
+    await settleText(el);
+    expect(advanced(el).draft.choices.text).toEqual({});
+    expect(advanced(el).draft.textCodes).toEqual({});
+    expect(choice(el, "text.weight.bold").value).toBe("600");
+  });
+
+  it("the slider moves a hand-set size's step line", async () => {
+    const { el } = await mountEditing();
+    await typeSize(el, "md", "16");
+    expect(inText(el, '[data-test="text-step-size.md"]')).toBeNull();
+    await slide(el, 130);
+    expect(words(inText(el, '[data-test="text-step-size.md"]'))).toBe("at 130%: 21 px");
+  });
+
+  it("a size fix replaces the typed text", async () => {
+    const { el } = await mountEditing();
+    await typeSize(el, "sm", "10");
+    expect(sizeBox(el, "sm").value).toBe("10");
+    await pressText(el, "text-fix-size.sm");
+    expect(sizeBox(el, "sm").value).toBe("12");
+    expect(advanced(el).draft.textCodes).toEqual({});
+    expect(advanced(el).draft.choices.text).toEqual({ size: { sm: 12 } });
+  });
+
+  it("Fix all takes a typed size's fix and drops its typed text", async () => {
+    const { el } = await mountEditing();
+    await typeSize(el, "sm", "10");
+    await typeSize(el, "md", "9");
+    expect(words(q(el, "[data-test=fix-all-line]"))).toBe("2 text sizes are hard to read.");
+    await userEvent.click(button(el, "fix-all"));
+    await settleText(el);
+    expect(advanced(el).draft.choices.text).toEqual({ size: { sm: 12, md: 12 } });
+    expect(advanced(el).draft.textCodes).toEqual({});
+    expect(sizeBox(el, "sm").value).toBe("12");
+  });
+
+  it("a text change while a save is under way changes nothing", async () => {
+    const { el, saveTheme } = await mountEditing();
+    let release!: () => void;
+    saveTheme.mockImplementationOnce(
+      (id: string, choices: ThemeChoices) =>
+        new Promise((resolve) => {
+          release = () => resolve(theme(id, "Bar Lucía", choices));
+        }),
+    );
+    await typeSize(el, "md", "16");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    textRows(el).dispatchEvent(
+      new CustomEvent("text-change", {
+        detail: { kind: "family", family: "serif" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settleText(el);
+    expect(advanced(el).draft.choices.text).toEqual({ size: { md: 16 } });
+    release();
   });
 });

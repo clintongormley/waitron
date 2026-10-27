@@ -18,7 +18,14 @@ import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { colourValueField, colourValueStyles } from "./color-field.js";
 import { fixLineStyles } from "./fix-line-styles.js";
-import { anyHandSet, handTouched, type HandField, type LookDraft } from "./look-draft.js";
+import {
+  anyHandSet,
+  handTouched,
+  type HandField,
+  type LookDraft,
+  type TextField,
+} from "./look-draft.js";
+import "./theme-text.js";
 import {
   advancedSummary,
   handFixLabel,
@@ -128,6 +135,10 @@ export class ThemeAdvanced extends LitElement {
       .notes > .warning {
         margin: 0;
       }
+      .text-group {
+        margin: var(--wt-space-5) 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
+      }
       .reset {
         display: flex;
         justify-content: flex-end;
@@ -159,6 +170,7 @@ export class ThemeAdvanced extends LitElement {
   @property({ attribute: false }) derived!: DerivedTheme;
   @property({ attribute: false }) errors: Readonly<Partial<Record<HandField, string>>> = {};
   @property({ attribute: false }) fixed: Readonly<Partial<Record<HandField, HandFixed>>> = {};
+  @property({ attribute: false }) textErrors: Readonly<Partial<Record<TextField, string>>> = {};
   @property({ type: Boolean }) busy = false;
 
   #waitingPick: { mode: Mode; key: ThemeColour; colour: string } | undefined;
@@ -348,7 +360,9 @@ export class ThemeAdvanced extends LitElement {
       data-test="advanced"
       heading=${t("appearance.advanced")}
       summary=${advancedSummary(this.draft.choices, this.derived.warnings)}
-      ?has-error=${Object.values(this.errors).some(Boolean)}
+      ?has-error=${
+        Object.values(this.errors).some(Boolean) || Object.values(this.textErrors).some(Boolean)
+      }
     >
       <p class="intro" data-test="advanced-intro">${t("appearance.advanced_intro")}</p>
       <div class="table">
@@ -365,6 +379,13 @@ export class ThemeAdvanced extends LitElement {
             </div>`,
         )}
       </div>
+      <h3 class="text-group">${t("appearance.text_group")}</h3>
+      <dashboard-theme-text
+        .draft=${this.draft}
+        .derived=${this.derived}
+        .errors=${this.textErrors}
+        ?busy=${this.busy}
+      ></dashboard-theme-text>
       <p class="reset">
         <wt-button
           data-test="reset-all"

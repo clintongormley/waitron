@@ -10,7 +10,14 @@ import {
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
-import { openDraft, setHand, typeHandCode, type LookDraft } from "./look-draft.js";
+import {
+  openDraft,
+  setHand,
+  setTypeface,
+  typeHandCode,
+  typeTextSize,
+  type LookDraft,
+} from "./look-draft.js";
 import { cleanupWidgets, computedColour, dotOf, mountWidget } from "./test-helpers.js";
 import { advancedSummary, handWarningLines, themeColourName } from "./theme-words.js";
 import type { HandAction, ThemeAdvanced } from "./theme-advanced.js";
@@ -638,5 +645,66 @@ describe("one pick per frame", () => {
     expect(id).toBe(before + 1);
     el.remove();
     expect(cancel).toHaveBeenCalledWith(id);
+  });
+});
+
+describe("the Text block", () => {
+  const textRows = (el: ThemeAdvanced) =>
+    q<HTMLElementTagNameMap["dashboard-theme-text"]>(el, "dashboard-theme-text");
+
+  it("holds the Text block after the colours and before Reset all, under a Text heading", async () => {
+    const draft = typeTextSize(openDraft(LUCIA), "sm", "10");
+    const el = await mount(draft);
+    const d = disclosure(el);
+    const heading = q(el, "h3.text-group");
+    expect(heading.textContent!.trim()).toBe("Text");
+    expect(d.contains(textRows(el))).toBe(true);
+    const order = (a: Node, b: Node) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(order(q(el, ".table"), heading)).toBeTruthy();
+    expect(order(heading, textRows(el))).toBeTruthy();
+    expect(order(textRows(el), q(el, "[data-test=reset-all]"))).toBeTruthy();
+    expect(textRows(el).draft).toBe(draft);
+    expect(textRows(el).derived).toBe(el.derived);
+  });
+
+  it("passes the text errors and busy to the rows, and passes their changes on", async () => {
+    const errors = { "text.size.sm": t("appearance.bad_text_px") };
+    const el = await mount(openDraft(LUCIA), { textErrors: errors, busy: true });
+    expect(textRows(el).errors).toBe(errors);
+    expect(textRows(el).busy).toBe(true);
+    const seen: Event[] = [];
+    el.parentElement!.addEventListener("text-change", (event) => seen.push(event));
+    textRows(el).dispatchEvent(
+      new CustomEvent("text-change", {
+        detail: { kind: "family", family: "serif" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(seen).toHaveLength(1);
+  });
+
+  it("opens itself while a text value holds an error", async () => {
+    const el = await mount(openDraft(LUCIA), {
+      textErrors: { "text.size.sm": t("appearance.bad_text_px") },
+    });
+    expect(disclosure(el).hasAttribute("has-error")).toBe(true);
+    el.textErrors = {};
+    await el.updateComplete;
+    expect(disclosure(el).hasAttribute("has-error")).toBe(false);
+  });
+
+  it("offers Reset all while only text is set by hand", async () => {
+    const el = await mount(setTypeface(openDraft(LUCIA), "serif"));
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=reset-all]").disabled).toBe(false);
+  });
+
+  it("names colours and text in its heading and opening line", async () => {
+    const el = await mount(openDraft(LUCIA));
+    expect(disclosure(el).heading).toBe("Advanced: set colours and text by hand");
+    expect(q(el, "[data-test=advanced-intro]").textContent!.trim()).toBe(
+      "A colour you set here stays as you set it when you change the brand colour, background or corners. A text size you set here grows and shrinks with Text size. Waitron still checks both can be read.",
+    );
   });
 });

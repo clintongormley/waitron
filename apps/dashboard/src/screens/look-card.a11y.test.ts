@@ -54,6 +54,10 @@ const withLogo = theme("t-logo", "With a logo", {
   ...WAITRON_CHOICES,
   logo: { light: mediaTestReference("lucia.png"), dark: mediaTestReference("lucia-dark.png") },
 });
+const smallText = theme("t-small", "Small text", {
+  ...WAITRON_CHOICES,
+  text: { size: { sm: 10 } },
+});
 const inUse = (view: ThemeView): ThemeList => ({ themes: [view], inUse: view.id });
 
 useMediaPresentations();
@@ -225,6 +229,15 @@ const states: Record<
     list: inUse(lucia),
     reach: async (el) => {
       await openAdvanced(el);
+      return "dashboard-theme-advanced";
+    },
+  },
+  "Advanced open with a text size warning": {
+    list: inUse(smallText),
+    reach: async (el) => {
+      await openAdvanced(el);
+      const rows = inAdvanced(el, "dashboard-theme-text")!;
+      expect(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')).not.toBeNull();
       return "dashboard-theme-advanced";
     },
   },
