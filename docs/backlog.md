@@ -5372,10 +5372,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Read the earlier code run's final result after docs skip its package suites (A1153, CI).**
-  Keep the earlier code's validation open until its own run finishes; a passing docs run does
-  not qualify that code.
-
 - **Audit the other coverage download actions for retained refused responses.**
   The server helper closes this response; other merge jobs still use the action exercised by
   the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).
