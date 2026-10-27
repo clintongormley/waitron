@@ -4275,6 +4275,44 @@ describe("the board's narrow tabs", () => {
     expect(panels(el)[0]!.dataset.column).toBe("preparing");
   });
 
+  it.each([
+    ["Enter", "{Enter}"],
+    ["Space", " "],
+  ])(
+    "the board's narrow tabs: %s on a focused heading that turns the board to tabs moves the focus to that column's tab",
+    async (_, key) => {
+      await pageAt(1024, 768, 130);
+      const { el } = await mountBoard(layout(["preparing", "ready"]));
+      shadow(el).querySelector<HTMLButtonElement>('[data-column-toggle="ready"]')!.click();
+      el.columns = layout(["preparing"]);
+      await el.updateComplete;
+      expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+
+      shadow(el).querySelector<HTMLButtonElement>('[data-column-toggle="preparing"]')!.focus();
+      await userEvent.keyboard(key);
+      el.columns = layout([]);
+      await el.updateComplete;
+      expect(shadow(el).querySelector(".kanban")).toBeNull();
+      expect(shadow(el).activeElement).toBe(tab(el, "preparing"));
+    },
+  );
+
+  it("the board's narrow tabs: a heading tap that turns the board to tabs leaves the focus where it was", async () => {
+    await pageAt(1024, 768, 130);
+    const { el } = await mountBoard(layout(["preparing", "ready"]));
+    shadow(el).querySelector<HTMLButtonElement>('[data-column-toggle="ready"]')!.click();
+    el.columns = layout(["preparing"]);
+    await el.updateComplete;
+    const columnsButton = shadow(el).querySelector<HTMLElement>("[data-columns-open]")!;
+    columnsButton.focus();
+
+    shadow(el).querySelector<HTMLButtonElement>('[data-column-toggle="preparing"]')!.click();
+    el.columns = layout([]);
+    await el.updateComplete;
+    expect(tab(el, "preparing").getAttribute("aria-pressed")).toBe("true");
+    expect(shadow(el).activeElement).toBe(columnsButton);
+  });
+
   it("the board's narrow tabs: with no orders at 390 px there are no tabs, only Nothing in the kitchen", async () => {
     await pageAt(390, 844);
     const { el } = await mountBoard(layout(), []);
@@ -4331,6 +4369,19 @@ describe("the board's narrow tabs", () => {
     el.columns = hiding(["waiting", "ready"]);
     await el.updateComplete;
     expect(tabs(el).map((button) => button.dataset.columnTab)).toEqual(["overview", "preparing"]);
+    expect(chosen(el)).toEqual(["overview"]);
+    expect(panels(el).map((panel) => panel.dataset.tabPanel)).toEqual(["overview"]);
+  });
+
+  it("the board's narrow tabs: once a hidden column's tab has given way, showing the column again keeps the tab drawn chosen", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    await choose(el, "ready");
+    el.columns = hiding(["ready"]);
+    await el.updateComplete;
+    expect(chosen(el)).toEqual(["overview"]);
+    el.columns = layout();
+    await el.updateComplete;
     expect(chosen(el)).toEqual(["overview"]);
     expect(panels(el).map((panel) => panel.dataset.tabPanel)).toEqual(["overview"]);
   });

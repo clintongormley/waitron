@@ -5591,8 +5591,10 @@ frame. The tabs (`#tabs`, `station-queue.ts`) are a `role="group"` row named "Co
 till's pressed pickers (`segmentedOptionStyles`) with `aria-pressed`, one per shown column in the
 layout's order, each "Waiting · 2" with the "·" hidden from screen readers, Overview's count being
 its rows to make. The first tab is chosen until a tap; the choice is kept while the widget is
-mounted and falls back to the first shown tab when its column is hidden. A heading tap that opens a
-collapsed column, and so stops the columns fitting, chooses that column's tab. A collapsed column
+mounted, and when the tabs are drawn with its column hidden the first shown tab becomes the choice,
+so showing the column again does not bring its tab back. A heading tap that opens a collapsed
+column, and so stops the columns fitting, chooses that column's tab, and moves the focus to it when
+the heading held the focus. A collapsed column
 keeps its tab and shows its cards when chosen, and the stored layout does not change. Under the
 tabs, one `section.tab-panel` carrying the column's `data-column` holds the chosen column's cards or
 Overview's list, with no heading. There Overview's list is no wider than a card column (16.5 times

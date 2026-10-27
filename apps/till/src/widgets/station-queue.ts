@@ -781,6 +781,8 @@ export class TillStationQueue extends LitElement {
   @state() private chosenTab?: ColumnKey;
   /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
   #opening?: ColumnKey;
+  /** The tab that takes the focus from the heading its column was opened with, which the tabs remove. */
+  #focusTab?: ColumnKey;
   #drewTabs = false;
 
   override connectedCallback(): void {
@@ -818,9 +820,25 @@ export class TillStationQueue extends LitElement {
       gapPx: px("--wt-space-3"),
     };
     const tabs = this.groups.length > 0 && !this.#fits();
-    if (this.#opening !== undefined && tabs && !this.#drewTabs) this.chosenTab = this.#opening;
+    if (this.#opening !== undefined && tabs && !this.#drewTabs) {
+      this.chosenTab = this.#opening;
+      const focused = (this.renderRoot as ShadowRoot).activeElement;
+      if (focused instanceof HTMLElement && focused.dataset.columnToggle === this.#opening) {
+        this.#focusTab = this.#opening;
+      }
+    }
     this.#opening = undefined;
     this.#drewTabs = tabs;
+    const shown = this.#shown();
+    if (tabs && this.chosenTab !== undefined && !shown.includes(this.chosenTab)) {
+      this.chosenTab = shown[0]!;
+    }
+  }
+
+  override updated(): void {
+    if (this.#focusTab === undefined) return;
+    this.renderRoot.querySelector<HTMLElement>(`[data-column-tab="${this.#focusTab}"]`)!.focus();
+    this.#focusTab = undefined;
   }
 
   /** The columns this board can draw that are not hidden, in the layout's order. */
