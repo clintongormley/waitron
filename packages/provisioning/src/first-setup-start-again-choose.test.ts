@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import * as fsPromises from "node:fs/promises";
 import {
   lstat,
   mkdir,
@@ -56,6 +57,29 @@ vi.mock("./first-setup-start-again-leftovers.js", async (original) => {
   };
 });
 
+/**
+ * `write`: the next note raise writes through a folder that refuses to open its temporary file;
+ * `throw`: it rejects with a plain error instead, as no current step after the record does.
+ */
+let failNoteWrite: false | "write" | "throw" = false;
+vi.mock("./first-setup-start-again-note.js", async (original) => {
+  const real = await original<typeof import("./first-setup-start-again-note.js")>();
+  return {
+    ...real,
+    raiseStartAgainNote: (...args: Parameters<typeof real.raiseStartAgainNote>) => {
+      const mode = failNoteWrite;
+      failNoteWrite = false;
+      if (mode === false) return real.raiseStartAgainNote(...args);
+      if (mode === "throw") return Promise.reject(Object.assign(new Error("EIO"), { code: "EIO" }));
+      const [stateDir, next] = args;
+      return real.raiseStartAgainNote(stateDir, next, {
+        ...fsPromises,
+        open: () => Promise.reject(Object.assign(new Error("EIO"), { code: "EIO" })),
+      });
+    },
+  };
+});
+
 const children: ChildProcess[] = [];
 const dirs: string[] = [];
 async function scratch() {
@@ -65,6 +89,7 @@ async function scratch() {
 }
 afterEach(async () => {
   afterSurvey = undefined;
+  failNoteWrite = false;
   for (const child of children.splice(0)) child.kill("SIGKILL");
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -765,6 +790,84 @@ it("a set-aside folder that cannot be removed after a failed record write stays,
 
   expect(refused.length).toBeGreaterThan(0);
   for (const path of refused) expect((await lstat(path)).isDirectory()).toBe(true);
+});
+
+it("a Move whose second rename fails after its record is written is refused setup.start_again_move_unfinished, keeping the rename's cause, with the record in place", async () => {
+  const base = await found();
+  await writeFile(join(base.roots.venueDir, "venue.db-wal"), "found pages");
+  const f = { ...base, listed: (await choiceSurvey(base)).digest };
+  let renames = 0;
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      if (!from.includes(PROBE) && ++renames === 2) throw errno("EIO");
+      await rename(from, to);
+    },
+  };
+
+  await expect(choose(f, "move", { io })).rejects.toMatchObject({
+    code: "setup.start_again_move_unfinished",
+    reason: "set-aside failed: EIO venue/venue.db",
+  });
+
+  expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["move"]);
+  await absent(join(f.roots.venueDir, "venue.db-wal"));
+  expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a Move whose finisher refuses after every piece moved is refused setup.start_again_move_unfinished, keeping the finisher's cause", async () => {
+  const f = await found();
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      await rename(from, to);
+      // A side file the finisher did not expect, appearing once the only piece is aside.
+      if (!from.includes(PROBE)) await writeFile(join(f.roots.venueDir, "venue.db-wal"), "late");
+    },
+  };
+
+  const refused = await choose(f, "move", { io }).then(
+    () => null,
+    (error: unknown) => error as { code?: string; reason?: string },
+  );
+
+  expect(refused).toMatchObject({ code: "setup.start_again_move_unfinished" });
+  expect(refused?.reason).toContain("venue.db-wal");
+  const [record] = await recordsOf(f);
+  expect(record).toMatchObject({ choice: "move" });
+  expect(await readFile(join(f.roots.stateDir, record!.setAside!.venue, "venue.db"), "utf8")).toBe(
+    "found database",
+  );
+});
+
+it("a Move whose note cannot be written after its record is refused setup.start_again_move_unfinished, and moves nothing", async () => {
+  const f = await found({
+    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
+  });
+  expect((await choiceSurvey(f)).noteFloorMs).not.toBeNull();
+  failNoteWrite = "write";
+
+  await expect(choose(f, "move")).rejects.toMatchObject({
+    code: "setup.start_again_move_unfinished",
+    reason: "setup.attempt_invalid",
+  });
+
+  expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["move"]);
+  expect((await readStartAgainNote(f.roots.stateDir))?.floorMs).toBe(T0 - 60 * MINUTE);
+  expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a plain error after the Move's record is refused setup.start_again_move_unfinished, naming its errno", async () => {
+  const f = await found({
+    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
+  });
+  failNoteWrite = "throw";
+
+  await expect(choose(f, "move")).rejects.toMatchObject({
+    code: "setup.start_again_move_unfinished",
+    reason: "move failed: EIO",
+  });
+  expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["move"]);
 });
 
 it("no log call and no thrown error carries the administrator's name or email", async () => {

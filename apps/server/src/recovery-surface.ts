@@ -665,17 +665,28 @@ ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 `;
 }
 
-/** The recovery page, drawn as the kept page once `isKept()` answers true or the view's code is the kept one. */
+/**
+ * The recovery page, drawn as the kept page once `isKept()` answers true or the view's code is the
+ * kept one, and as the move-unfinished page, with no choice, from the first view that asks for it.
+ */
 export function startAgainDraw(
   deps: RecoveryDeps,
   isKept: () => boolean,
 ): (view: Omit<StartAgainView, "code"> & { code?: StartAgainView["code"] }) => Promise<string> {
   const { startAgain } = deps;
+  // A recorded Move has changed the files the survey listed, so its form must not come back.
+  let moveUnfinished = false;
   return async (view) => {
     const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
     if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes);
-    if (isKept() || view.code === "setup.start_again_kept") {
-      const state: RecoveryState = { ...deps.state, lastErrorCode: "setup.start_again_kept" };
+    if (view.code === "setup.start_again_move_unfinished") moveUnfinished = true;
+    const settled = moveUnfinished
+      ? "setup.start_again_move_unfinished"
+      : isKept() || view.code === "setup.start_again_kept"
+        ? "setup.start_again_kept"
+        : null;
+    if (settled !== null) {
+      const state: RecoveryState = { ...deps.state, lastErrorCode: settled };
       return renderPage(deps, log, view.locale, freeBytes, state);
     }
     const section = renderStartAgainSection({

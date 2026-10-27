@@ -272,7 +272,10 @@ ${bottom}<button type="submit">${escapeHtml(text.continue)}</button>
 }
 
 export interface StartAgainView {
-  code: "setup.start_again_files_found" | "setup.start_again_kept";
+  code:
+    | "setup.start_again_files_found"
+    | "setup.start_again_kept"
+    | "setup.start_again_move_unfinished";
   locale: SupportedLocale;
   secure: boolean;
   message?: StartAgainMessage;
@@ -451,6 +454,10 @@ export function mountStartAgainChoice(
         now,
       });
     } catch (error) {
+      if (isAppError(error) && hasCode(error, "setup.start_again_move_unfinished")) {
+        log?.("warn", "recovery.start_again_choice_failed", { errorCode: error.code });
+        return page(409, { code: error.code, secure: true });
+      }
       const refusal = error instanceof Refusal ? error : await refusalFor(error, deps, log);
       if (isAppError(error) && hasCode(error, "password.throttled"))
         c.header("Retry-After", String(error.params.retryAfterSeconds));

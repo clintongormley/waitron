@@ -31,6 +31,11 @@ type Choice = Extract<StartAgainSurvey, { kind: "choice" }>;
 
 const turns = {};
 
+const reasonOf = (error: unknown) =>
+  error instanceof AppError
+    ? (error.reason ?? error.code)
+    : `move failed: ${String((Object(error) as { code?: unknown }).code ?? "unknown")}`;
+
 async function assertNotKept(stateDir: string, survey: Choice): Promise<void> {
   const records = await readStartAgainChoices(stateDir, survey);
   if (records.some((record) => record.choice === "keep"))
@@ -55,7 +60,8 @@ async function setupRecord(roots: Roots, survey: Choice): Promise<FirstSetupStat
  * longer the box's before counting a guess; counts the guess before checking the password; then,
  * under the venue lock, refuses unless the box still shows the list the page showed. Keep records
  * the choice. Move probes the renames, records the choice, raises the note, moves the units aside
- * and finishes Start again.
+ * and finishes Start again; any failure once the Move is recorded is
+ * `setup.start_again_move_unfinished`, carrying the cause as its reason.
  */
 export async function chooseStartAgainLeftovers(input: {
   roots: Roots;
@@ -123,8 +129,13 @@ export async function chooseStartAgainLeftovers(input: {
         for (const folder of made) await rmdir(folder).catch(() => undefined);
         throw error;
       }
-      await moveStartAgainUnits(roots, { version: 1, ...move }, input.io);
-      await finishStartAgainDeletion(roots);
+      try {
+        await moveStartAgainUnits(roots, { version: 1, ...move }, input.io);
+        await finishStartAgainDeletion(roots);
+      } catch (error) {
+        // The Move is recorded, so no refusal may say the files are unchanged or nothing was saved.
+        throw new AppError("setup.start_again_move_unfinished", {}, { reason: reasonOf(error) });
+      }
       return { choice: "move", setAside };
     } finally {
       hold.release();

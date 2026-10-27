@@ -7,6 +7,7 @@ import {
   collectStartAgainFindings,
   type StartAgainFinding,
 } from "./first-setup-start-again-deletion.js";
+import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import { parseState } from "./first-setup-state.js";
 import "./errors.js";
 
@@ -36,6 +37,7 @@ export type StartAgainSurvey =
       readonly markerSha256: string;
       readonly units: readonly StartAgainUnit[];
       readonly digest: string;
+      /** Null on a box with no start-again note, which a Move has nothing to raise. */
       readonly noteFloorMs: number | null;
     }
   | { readonly kind: "explain"; readonly reason: string };
@@ -240,7 +242,10 @@ export async function surveyStartAgainLeftovers(roots: Roots): Promise<StartAgai
       markerSha256,
       units,
       digest: sha256(JSON.stringify([marker.attemptId, marker.frozenDigest, markerSha256, units])),
-      noteFloorMs: startAgainSetAsideFloorMs(units),
+      noteFloorMs:
+        (await readStartAgainNote(canonical.stateDir)) === null
+          ? null
+          : startAgainSetAsideFloorMs(units),
     };
   } catch (error) {
     if (error instanceof Explain) return { kind: "explain", reason: error.message };

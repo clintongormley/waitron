@@ -1459,6 +1459,46 @@ describe("recoveryApp's Start again choice", () => {
     expect(onFinished).toHaveBeenCalledOnce();
   });
 
+  it("a Move that failed after its record answers 409 with the move-unfinished page in each language, no choice form, no restart, and GET / stays on it", async () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const text = OPERATOR_TEXT["setup.start_again_move_unfinished"]![locale];
+      const { app: surface, onFinished } = app(() =>
+        Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
+      );
+      const answer = await surface.request(
+        "/recovery-api/start-again",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Language": locale,
+          },
+          body: new URLSearchParams({
+            password: "pw",
+            choice: "move",
+            listed: SURVEY.digest,
+          }).toString(),
+        },
+        tls(),
+      );
+      expect(answer.status, locale).toBe(409);
+      const after = await surface.request("/", { headers: { "Accept-Language": locale } }, tls());
+      for (const page of [await answer.text(), await after.text()]) {
+        expect(page, locale).toContain(escapeHtml(text.title));
+        expect(page, locale).toContain(escapeHtml(text.action));
+        expect(page, locale).not.toContain(
+          escapeHtml(OPERATOR_TEXT["setup.start_again_files_found"]![locale].title),
+        );
+        expect(page, locale).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].filesFound));
+        expect(page, locale).not.toContain(FORM_ACTION);
+        expect(page, locale).not.toContain("<fieldset");
+        expect(page, locale).not.toContain('type="password"');
+        expect(page, locale).toContain(RETRY_ACTION);
+      }
+      expect(onFinished, locale).not.toHaveBeenCalled();
+    }
+  });
+
   it("a logger that throws on the recorded choice still restarts after a Move", async () => {
     const { app: surface, onFinished } = app(MOVED, throwingOnChoice);
     await choose(surface, "move");

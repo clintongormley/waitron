@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -332,6 +332,29 @@ describe("renderStartAgainSection", () => {
     }
   });
 
+  it("a found file dated hours ahead shows moveFloor from a real survey only on a box with a note", async () => {
+    const floorStart = escapeHtml(
+      START_AGAIN_PAGE_TEXT["en-GB"].moveFloor("TIME").split("TIME")[0]!,
+    );
+    const ahead = new Date(NOW.getTime() + 5 * 60 * 60_000);
+    const sectionFor = async (note?: { floorMs: number; lastName: string; module: string }) => {
+      const base = await mkdtemp(join(tmpdir(), "recovery-start-again-floor-"));
+      dirs.push(base);
+      const attempt = await startAgainAttempt(base, note === undefined ? {} : { note });
+      const database = join(attempt.roots.venueDir, "venue.db");
+      await writeFile(database, "found database");
+      await utimes(database, ahead, ahead);
+      const found = await surveyStartAgainLeftovers(attempt.roots);
+      if (found?.kind !== "choice")
+        throw new Error(`expected choice, got ${JSON.stringify(found)}`);
+      return render({ survey: found });
+    };
+    expect(await sectionFor()).not.toContain(floorStart);
+    expect(
+      await sectionFor({ floorMs: NOW.getTime() - 60_000, lastName: "AB123", module: "probe" }),
+    ).toContain(floorStart);
+  });
+
   it("a Spanish string differs from its English twin for every key", () => {
     const english = START_AGAIN_PAGE_TEXT["en-GB"];
     const spanish = START_AGAIN_PAGE_TEXT["es-ES"];
@@ -616,6 +639,28 @@ describe("mountStartAgainChoice", () => {
     } else {
       expect(log).not.toHaveBeenCalled();
     }
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("a Move that failed after its record answers 409 with the move-unfinished page, logs the code and does not restart", async () => {
+    const { app, render, log, onFinished } = mounted({
+      choose: () =>
+        Promise.reject(
+          new AppError("setup.start_again_move_unfinished", {}, { reason: "set-aside failed" }),
+        ),
+    });
+    const response = await post(app, { ...FORM, choice: "move" });
+    expect(response.status).toBe(409);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).toBe("<main>setup.start_again_move_unfinished</main>");
+    expect(render).toHaveBeenLastCalledWith({
+      code: "setup.start_again_move_unfinished",
+      locale: "en-GB",
+      secure: true,
+    });
+    expect(log).toHaveBeenCalledExactlyOnceWith("warn", "recovery.start_again_choice_failed", {
+      errorCode: "setup.start_again_move_unfinished",
+    });
     expect(onFinished).not.toHaveBeenCalled();
   });
 

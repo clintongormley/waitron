@@ -329,9 +329,11 @@ it("the inode alone changes the digest", async () => {
   expect(second.digest).not.toBe(first.digest);
 });
 
-it("the note floor is the newest moved file time plus 150 s, rounded up to the minute", async () => {
+it("on a box with a note, the note floor is the newest moved file time plus 150 s, rounded up to the minute", async () => {
   expect(START_AGAIN_FLOOR_MARGIN_MS).toBe(150_000);
-  const { roots } = await startAgainAttempt(await scratch());
+  const { roots } = await startAgainAttempt(await scratch(), {
+    note: { floorMs: Date.parse("2026-10-26T00:00:00Z"), lastName: "AB123", module: "probe" },
+  });
   const database = join(roots.venueDir, "venue.db");
   const wal = join(roots.venueDir, "venue.db-wal");
   await writeFile(database, "found database");
@@ -351,6 +353,17 @@ it("the note floor is the newest moved file time plus 150 s, rounded up to the m
   expect(choice(await surveyStartAgainLeftovers(roots)).noteFloorMs).toBe(
     Date.parse("2026-10-26T16:56:00Z"),
   );
+});
+
+it("on a box with no note, the note floor is null even when a found file is dated hours ahead", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  const database = join(roots.venueDir, "venue.db");
+  await writeFile(database, "found database");
+  const ahead = new Date(Date.now() + 5 * 60 * 60_000);
+  await utimes(database, ahead, ahead);
+  const survey = choice(await surveyStartAgainLeftovers(roots));
+  expect(startAgainSetAsideFloorMs(survey.units)).toBeGreaterThan(ahead.getTime());
+  expect(survey.noteFloorMs).toBeNull();
 });
 
 it("the note floor is null when no unit holds a file", async () => {
