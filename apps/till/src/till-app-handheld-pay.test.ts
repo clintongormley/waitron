@@ -137,7 +137,7 @@ async function pressPaySheet(el: TillApp, order: Element): Promise<void> {
 }
 
 const THIRD_READER = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
-const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
+const FOURTH_READER = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
   portable: true,
   provider: "sumup",
 });
@@ -1156,7 +1156,7 @@ describe("till-app: a pick from the sheet", () => {
     return {
       roles: [
         roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
-        roleOf("card_terminal", chosen, [SECOND_READER, THIRD_READER, LECTOR_4]),
+        roleOf("card_terminal", chosen, [SECOND_READER, THIRD_READER, FOURTH_READER]),
       ],
     };
   }
@@ -1168,7 +1168,9 @@ describe("till-app: a pick from the sheet", () => {
       (change: EquipmentChange) =>
         new Promise<DeviceEquipment>((resolve) => {
           const id = typeof change.selection === "object" ? change.selection.id : "";
-          const chosen = [SECOND_READER, THIRD_READER, LECTOR_4].find((each) => each.id === id)!;
+          const chosen = [SECOND_READER, THIRD_READER, FOURTH_READER].find(
+            (each) => each.id === id,
+          )!;
           answers.push(() => resolve(readers(chosen)));
         }),
     );
@@ -1382,7 +1384,7 @@ describe("till-app: a pick from the sheet", () => {
     changes[0]!.fail({ status: 409, code: "device.equipment_held" });
     await flush(el);
     expect(reads).toHaveLength(1);
-    (await nfcReader()).read(`waitron-equipment:reader:${LECTOR_4.id}`);
+    (await nfcReader()).read(`waitron-equipment:reader:${FOURTH_READER.id}`);
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
     reads[0]!(readers(SECOND_READER));
     await flush(el);
@@ -1480,13 +1482,13 @@ describe("till-app: a pick from the sheet", () => {
 });
 
 describe("till-app: a pick from the sheet that fails", () => {
-  const COCINA = equipmentItem("p2", "Cocina");
+  const KITCHEN_PRINTER = equipmentItem("p2", "Cocina");
 
   function equipmentOf(reader: EquipmentItem): DeviceEquipment {
     return {
       roles: [
-        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER, COCINA]),
-        roleOf("card_terminal", reader, [SECOND_READER, THIRD_READER, LECTOR_4]),
+        roleOf("receipt", BAR_PRINTER, [BAR_PRINTER, KITCHEN_PRINTER]),
+        roleOf("card_terminal", reader, [SECOND_READER, THIRD_READER, FOURTH_READER]),
       ],
     };
   }
@@ -1626,14 +1628,14 @@ describe("till-app: a pick from the sheet that fails", () => {
     const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(SECOND_READER));
     const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
     const readsBefore = getDeviceEquipment.mock.calls.length;
-    getDeviceEquipment.mockResolvedValue(equipmentOf(LECTOR_4));
+    getDeviceEquipment.mockResolvedValue(equipmentOf(FOURTH_READER));
 
     await pick(el, "cardReaderId", "Lector 3");
     await flush(el);
 
     expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
     const reader = await field(el, "cardReaderId");
-    expect(reader.value).toBe(LECTOR_4.id);
+    expect(reader.value).toBe(FOURTH_READER.id);
     expect(reader.error).toBe(t("pay_equipment.not_saved"));
     expect(continueButton(el).disabled).toBe(false);
   });
@@ -4528,8 +4530,8 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
 });
 
 describe("till-app: a reader refused at Take payment, and a printer that has gone (default 19)", () => {
-  const TERRAZA = equipmentItem("p2", "Terraza");
-  const BARRA_OFF = { ...BAR_PRINTER, available: false };
+  const TERRACE_PRINTER = equipmentItem("p2", "Terraza");
+  const UNAVAILABLE_BAR_PRINTER = { ...BAR_PRINTER, available: false };
 
   const holding = (
     receipt: RoleEquipment = roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]),
@@ -4777,7 +4779,14 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       const getDeviceEquipment = vi
         .fn()
         .mockResolvedValue(
-          refused ? holding() : holding(roleOf("receipt", BARRA_OFF, [BARRA_OFF, TERRAZA])),
+          refused
+            ? holding()
+            : holding(
+                roleOf("receipt", UNAVAILABLE_BAR_PRINTER, [
+                  UNAVAILABLE_BAR_PRINTER,
+                  TERRACE_PRINTER,
+                ]),
+              ),
         );
       api = stubApi(
         onPhone(
@@ -5286,13 +5295,16 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
   describe("a printer that would print nothing", () => {
     const off = (selection: "item" | "default"): RoleEquipment =>
       selection === "item"
-        ? roleOf("receipt", BARRA_OFF, [BARRA_OFF, TERRAZA])
+        ? roleOf("receipt", UNAVAILABLE_BAR_PRINTER, [UNAVAILABLE_BAR_PRINTER, TERRACE_PRINTER])
         : {
-            ...roleOf("receipt", BARRA_OFF, [BARRA_OFF, TERRAZA]),
+            ...roleOf("receipt", UNAVAILABLE_BAR_PRINTER, [
+              UNAVAILABLE_BAR_PRINTER,
+              TERRACE_PRINTER,
+            ]),
             selection: "default",
             chosenId: null,
             chosen: null,
-            default: BARRA_OFF,
+            default: UNAVAILABLE_BAR_PRINTER,
           };
     const switchedOffLine = () =>
       t("pay_equipment.printer_switched_off").replace("{item}", "Barra");
@@ -5321,7 +5333,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       ["the default, switched off", off("default"), switchedOffLine],
       [
         "listed with none set",
-        roleOf("receipt", null, [BAR_PRINTER, TERRAZA]),
+        roleOf("receipt", null, [BAR_PRINTER, TERRACE_PRINTER]),
         () => t("pay_equipment.printer_none"),
       ],
     ] as const)(
@@ -5339,11 +5351,11 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
 
     it("a printer the server forgot falls back to the profile's default: row closed, labelled, and the card is sent", async () => {
       const el = await onForm({
-        ...roleOf("receipt", TERRAZA, [TERRAZA]),
+        ...roleOf("receipt", TERRACE_PRINTER, [TERRACE_PRINTER]),
         selection: "default",
         chosenId: null,
         chosen: null,
-        default: TERRAZA,
+        default: TERRACE_PRINTER,
       });
 
       expect(row(el).open).toBe(false);
