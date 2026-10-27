@@ -74,6 +74,7 @@ import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitro
 import {
   advanceTicketItem,
   listStationQueues,
+  stationHasWork,
   type StationQueueGroup,
   type TicketState,
 } from "./working-order.js";
@@ -1073,7 +1074,7 @@ async function worksStation(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.locationId, cfg.locationId)));
   if (station === undefined || station.active) return false;
-  return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;
+  return stationHasWork(tx, stationId);
 }
 
 /** The location's stations, historical rows included. */

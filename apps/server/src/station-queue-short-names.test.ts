@@ -131,7 +131,7 @@ describe("the station read names each bill's tables by their short names", () =>
     expect((await queued(billId)).tableShortNames).toEqual([row!.label]);
   });
 
-  it("a party at two joined tables names both, in the order they joined", async () => {
+  it("a party at two tables names both, in the order they joined", async () => {
     const first = await table("Patio", "P");
     const second = await table("Patio", "Q");
     const { partyId } = await seat(v, first);
@@ -184,6 +184,20 @@ describe("the station read names each bill's tables by their short names", () =>
     );
 
     expect((await queued(billId)).tableShortNames).toEqual([await shortOf(tableId)]);
+  });
+});
+
+describe("a delivered counter order whose table was let go", () => {
+  it("names the table by the name kept when it was let go", async () => {
+    const billId = await counterBurger();
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: null, deliveryTableLabel: "Garden 9" })
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    expect((await queued(billId)).tableShortNames).toEqual(["Garden 9"]);
   });
 });
 

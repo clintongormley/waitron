@@ -8,15 +8,18 @@ import {
   deviceMadeHereStations,
   devices,
   deviceProfiles,
+  diningTables,
   floorZones,
   kitchenStations,
   locations,
   pagePrinters,
   printJobs,
   printers,
+  shortNameColumns,
   stationPrinters,
   ticketItems,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1150,7 +1153,7 @@ describe("Device API — the device-guarded routes", () => {
       available: boolean;
       switchedOff?: boolean;
       today?: { why: string };
-      queue?: { items: { id: string }[] }[];
+      queue?: { items: { id: string }[]; tableShortNames?: string[] }[];
       notices?: { id: string }[];
     };
     const queued = (entry: Entry) =>
@@ -1350,6 +1353,31 @@ describe("Device API — the device-guarded routes", () => {
       expect(rows.map(({ name }) => name)).toEqual(["Ásador", "Cocina"]);
       expect(rows[0]).toMatchObject({ id: fria, available: false, switchedOff: true });
       expect(queued(rows[0]!)).toEqual([items[1]]);
+    });
+
+    it("names a delivered counter order's table by its short name on the kitchen screen", async () => {
+      const { venue, app, orderId } = await seed();
+      const [zone] = await suite.db
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(eq(floorZones.locationId, venue.cfg.locationId));
+      const [table] = await suite.db
+        .insert(diningTables)
+        .values({
+          locationId: venue.cfg.locationId,
+          label: "Garden 4",
+          zoneId: zone!.id,
+          ...shortNameColumns("G4"),
+        })
+        .returning({ id: diningTables.id });
+      await suite.db
+        .update(workingOrders)
+        .set({ deliveryTableId: table!.id })
+        .where(eq(workingOrders.id, orderId));
+      const { jar } = await enrolStationScreen(app, venue, null);
+
+      const grill = (await read(app, jar)).find((entry) => entry.id === venue.defaultStationId);
+      expect(grill?.queue?.map((group) => group.tableShortNames)).toEqual([["G4"]]);
     });
 
     it("lists it on an every-station screen under an every-station profile only while dishes wait there", async () => {
