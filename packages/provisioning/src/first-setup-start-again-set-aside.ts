@@ -270,8 +270,8 @@ async function makeDestinationFolders(
 }
 
 /**
- * Refuses a piece unless `base` and every folder between it and the piece are real folders: a
- * link there could lead outside the roots.
+ * Refuses a piece when `base` or any folder between it and the piece is a link, a file or anything
+ * else but a folder (a missing one passes): a link there could lead outside the roots.
  */
 async function refuseUnrealParents(
   base: string,

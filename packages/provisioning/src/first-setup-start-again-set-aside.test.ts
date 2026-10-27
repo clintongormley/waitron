@@ -1193,7 +1193,7 @@ it("a link put in place of a piece's parent folder at its source makes the Move 
   expect(await readFile(join(elsewhere, "found.json"), "utf8")).toBe("found bytes");
 });
 
-it("a link put in place of a piece's parent folder in the set-aside folder makes the Move refuse, and its target stays empty", async () => {
+it("a link put in place of a folder above a piece in the set-aside folder makes the Move refuse, and its target stays empty", async () => {
   const base = await scratch();
   const { roots, record, piece } = await nestedFoundMove(base);
   const elsewhere = join(base, "elsewhere");
