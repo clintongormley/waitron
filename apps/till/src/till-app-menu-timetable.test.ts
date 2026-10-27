@@ -22,9 +22,9 @@ interface Menu {
   name: string;
   product: string;
 }
-const DESAYUNOS: Menu = { id: "desayunos", name: "Desayunos", product: "Tostada" };
-const ALMUERZO: Menu = { id: "almuerzo", name: "Almuerzo", product: "Menú del día" };
-const CENA: Menu = { id: "cena", name: "Cena", product: "Croquetas" };
+const BREAKFAST: Menu = { id: "desayunos", name: "Desayunos", product: "Tostada" };
+const LUNCH: Menu = { id: "almuerzo", name: "Almuerzo", product: "Menú del día" };
+const DINNER: Menu = { id: "cena", name: "Cena", product: "Croquetas" };
 
 const unit = {
   staffName: "Staff unit",
@@ -120,10 +120,8 @@ function offers(
   };
 }
 
-/** Barra opens on Desayunos, beside Almuerzo. */
-const BARRA = offers("zone-barra", [DESAYUNOS, ALMUERZO], "desayunos");
-/** Terraza opens on Cena, beside Almuerzo and Desayunos. */
-const TERRAZA = offers("zone-terraza", [CENA, ALMUERZO, DESAYUNOS], "cena");
+const BAR_OFFERS = offers("zone-barra", [BREAKFAST, LUNCH], "desayunos");
+const TERRACE_OFFERS = offers("zone-terraza", [DINNER, LUNCH, BREAKFAST], "cena");
 
 function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenuId?: string } {
   return {
@@ -212,10 +210,12 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       formFactor: "till",
     }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn(async () => BARRA),
-    listZoneOffers: vi.fn(async (zoneId: string) => (zoneId === "zone-terraza" ? TERRAZA : BARRA)),
+    listDefaultZoneOffers: vi.fn(async () => BAR_OFFERS),
+    listZoneOffers: vi.fn(async (zoneId: string) =>
+      zoneId === "zone-terraza" ? TERRACE_OFFERS : BAR_OFFERS,
+    ),
     menuState: vi.fn(async (zoneId: string) =>
-      zoneId === "zone-terraza" ? state([CENA, ALMUERZO, DESAYUNOS]) : state([DESAYUNOS, ALMUERZO]),
+      zoneId === "zone-terraza" ? state([DINNER, LUNCH, BREAKFAST]) : state([BREAKFAST, LUNCH]),
     ),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
@@ -316,11 +316,13 @@ describe("device and zone period memory", () => {
     await flush(el);
   }
   const catalogueApi = () => ({
-    listDefaultZoneOffers: vi.fn(async () => running(BARRA)),
-    listZoneOffers: vi.fn(async (id: string) => running(id === "zone-terraza" ? TERRAZA : BARRA)),
+    listDefaultZoneOffers: vi.fn(async () => running(BAR_OFFERS)),
+    listZoneOffers: vi.fn(async (id: string) =>
+      running(id === "zone-terraza" ? TERRACE_OFFERS : BAR_OFFERS),
+    ),
     menuState: vi.fn(async (id: string) => ({
-      ...state(id === "zone-terraza" ? [CENA, ALMUERZO, DESAYUNOS] : [DESAYUNOS, ALMUERZO]),
-      service: running(BARRA).service,
+      ...state(id === "zone-terraza" ? [DINNER, LUNCH, BREAKFAST] : [BREAKFAST, LUNCH]),
+      service: running(BAR_OFFERS).service,
     })),
   });
 
@@ -394,18 +396,18 @@ describe("device and zone period memory", () => {
   });
 
   it("expires a manual menu on a new occurrence even with the same name, versions and default", async () => {
-    let current = running(BARRA);
+    let current = running(BAR_OFFERS);
     const { el } = await mountApp({
       ...catalogueApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
-        ...state([DESAYUNOS, ALMUERZO], "desayunos"),
+        ...state([BREAKFAST, LUNCH], "desayunos"),
         service: current.service,
       })),
     });
     await signIn(el);
     await pick(el, "almuerzo");
-    current = running(BARRA, "lunch-day-2");
+    current = running(BAR_OFFERS, "lunch-day-2");
     await poll(el);
     expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
     expect(selected(el)).toBe("desayunos");
@@ -413,19 +415,19 @@ describe("device and zone period memory", () => {
   });
 
   it("defers the new occurrence selection until the basket clears while retaining its original price", async () => {
-    let current = running(BARRA);
+    let current = running(BAR_OFFERS);
     const { el } = await mountApp({
       ...catalogueApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
-        ...state([DESAYUNOS, ALMUERZO], "desayunos"),
+        ...state([BREAKFAST, LUNCH], "desayunos"),
         service: current.service,
       })),
     });
     await signIn(el);
     await pick(el, "almuerzo");
-    add(el, ALMUERZO);
-    current = running(BARRA, "lunch-day-2");
+    add(el, LUNCH);
+    current = running(BAR_OFFERS, "lunch-day-2");
     await poll(el);
     expect(selected(el)).toBe("almuerzo");
     expect(
@@ -447,7 +449,7 @@ describe("device and zone period memory", () => {
       const { el } = await mountApp(catalogueApi());
       await signIn(el);
       await selectZone(el, "zone-terraza");
-      add(el, CENA);
+      add(el, DINNER);
       const before = counter(el).store.lines.map((line) => [
         line.product.productId,
         line.quantity,
@@ -470,7 +472,7 @@ describe("device and zone period memory", () => {
       expect(api.recordSale).not.toHaveBeenCalled();
       expect(api.parkOrder).not.toHaveBeenCalled();
       if (refused) {
-        counter(el).store.addProduct(menuOfferToTillProduct(offer(CENA), "v1"), "1");
+        counter(el).store.addProduct(menuOfferToTillProduct(offer(DINNER), "v1"), "1");
         expect(
           counter(el).store.lines.map((line) => [
             line.product.productId,
@@ -484,7 +486,7 @@ describe("device and zone period memory", () => {
   );
 
   it("keeps the visible grid and menu list through a boundary until the basket is held", async () => {
-    let current = running(BARRA);
+    let current = running(BAR_OFFERS);
     const { el } = await mountApp({
       ...catalogueApi(),
       listZoneOffers: vi.fn(async () => current),
@@ -496,11 +498,11 @@ describe("device and zone period memory", () => {
     });
     await signIn(el);
     await pick(el, "almuerzo");
-    add(el, ALMUERZO);
+    add(el, LUNCH);
     const store = counter(el).store;
     const orderId = store.id;
-    const laterLunch = { ...ALMUERZO, product: "Afternoon sandwich" };
-    current = running(offers("zone-barra", [CENA, laterLunch], "cena"), "afternoon");
+    const laterLunch = { ...LUNCH, product: "Afternoon sandwich" };
+    current = running(offers("zone-barra", [DINNER, laterLunch], "cena"), "afternoon");
     await poll(el);
     expect(names(el)).toEqual(["Menú del día"]);
     expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
@@ -516,7 +518,7 @@ describe("device and zone period memory", () => {
   });
 
   it("loads a boundary skipped during a real card request before the next empty order", async () => {
-    let current = running(BARRA);
+    let current = running(BAR_OFFERS);
     let answer!: (value: { outcome: "captured"; ticket: TillSaleResult }) => void;
     const payment = new Promise<{ outcome: "captured"; ticket: TillSaleResult }>((resolve) => {
       answer = resolve;
@@ -536,14 +538,14 @@ describe("device and zone period memory", () => {
     });
     await signIn(el);
     await pick(el, "almuerzo");
-    add(el, ALMUERZO);
+    add(el, LUNCH);
     const store = counter(el).store;
     const orderId = store.id;
     emit(counter(el), "collect-card", { readerId: "reader-1" });
     await flush(el);
     expect(pay).toHaveBeenCalledOnce();
     const submitted = structuredClone(pay.mock.calls[0]);
-    current = running(offers("zone-barra", [CENA], "cena"), "afternoon");
+    current = running(offers("zone-barra", [DINNER], "cena"), "afternoon");
     await poll(el);
     expect(names(el)).toEqual(["Menú del día"]);
     expect(store.id).toBe(orderId);
@@ -567,7 +569,7 @@ describe("device and zone period memory", () => {
   });
 
   it("keeps old grid prices and live unavailability until an unchanged default is safe to show", async () => {
-    let current = running(BARRA);
+    let current = running(BAR_OFFERS);
     let unavailable: string[] = [];
     const { el } = await mountApp({
       ...catalogueApi(),
@@ -585,14 +587,14 @@ describe("device and zone period memory", () => {
       })),
     });
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     const store = counter(el).store;
     const refusals: unknown[] = [];
     store.on("refused", (value) => refusals.push(value));
     current = {
-      ...running(BARRA, "afternoon"),
-      menus: BARRA.menus.map((menu) => ({ ...menu, versionId: "v2" })),
-      offers: BARRA.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+      ...running(BAR_OFFERS, "afternoon"),
+      menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: BAR_OFFERS.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
     };
     await poll(el);
     expect(counter(el).products.map((product) => product.unitPrice)).toEqual(["3.00", "3.00"]);
@@ -614,7 +616,7 @@ describe("device and zone period memory", () => {
   });
 
   it("recovers a deferred boundary offers read after its first safe-order read fails", async () => {
-    let current = running(BARRA);
+    let current = running(BAR_OFFERS);
     const { el } = await mountApp({
       ...catalogueApi(),
       listZoneOffers: vi.fn(async () => current),
@@ -626,7 +628,7 @@ describe("device and zone period memory", () => {
     });
     await signIn(el);
     Object.assign(el, { submitting: true });
-    current = running(offers("zone-barra", [CENA], "cena"), "afternoon");
+    current = running(offers("zone-barra", [DINNER], "cena"), "afternoon");
     await poll(el);
     api.listZoneOffers.mockRejectedValueOnce(new TypeError("offline"));
     Object.assign(el, { submitting: false });
@@ -641,12 +643,12 @@ describe("device and zone period memory", () => {
   });
 
   it("respects an explicit null default after memory expires instead of selecting the first menu", async () => {
-    let current: ZoneOfferCatalogue = running(BARRA);
+    let current: ZoneOfferCatalogue = running(BAR_OFFERS);
     const { el } = await mountApp({
       ...catalogueApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
-        ...state([DESAYUNOS, ALMUERZO]),
+        ...state([BREAKFAST, LUNCH]),
         defaultMenuId: current.defaultMenuId,
         service: current.service,
       })),
@@ -654,9 +656,9 @@ describe("device and zone period memory", () => {
     await signIn(el);
     await pick(el, "almuerzo");
     current = {
-      ...running(BARRA, "lunch-day-2"),
+      ...running(BAR_OFFERS, "lunch-day-2"),
       defaultMenuId: null,
-      menus: BARRA.menus.map((menu) => ({ ...menu, isDefault: false })),
+      menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, isDefault: false })),
     };
     await poll(el);
     expect(selected(el)).toBe("");
@@ -667,7 +669,7 @@ describe("device and zone period memory", () => {
 describe("period service at the counter", () => {
   it("a poll that stops the running menu blocks its dish and holds Pay", async () => {
     const running = {
-      ...BARRA,
+      ...BAR_OFFERS,
       service: {
         open: true,
         zoneOpen: true,
@@ -679,7 +681,7 @@ describe("period service at the counter", () => {
     };
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => running) });
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
     const expired = {
       ...running,
@@ -693,9 +695,9 @@ describe("period service at the counter", () => {
     };
     api.listZoneOffers.mockResolvedValue(expired);
     api.menuState.mockResolvedValue({
-      ...state([DESAYUNOS, ALMUERZO]),
+      ...state([BREAKFAST, LUNCH]),
       service: running.service,
-      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
+      menus: state([BREAKFAST, LUNCH]).menus.map((menu) => ({
         ...menu,
         orderable: false,
         endedPeriodName: null,
@@ -718,8 +720,12 @@ describe("period service at the counter", () => {
 
   it("names the newly selected counter department when it is closed", async () => {
     const closed = {
-      ...TERRAZA,
-      context: { ...TERRAZA.context, departmentId: "department-deli", departmentName: "Deli" },
+      ...TERRACE_OFFERS,
+      context: {
+        ...TERRACE_OFFERS.context,
+        departmentId: "department-deli",
+        departmentName: "Deli",
+      },
       service: {
         open: false,
         zoneOpen: true,
@@ -728,7 +734,7 @@ describe("period service at the counter", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: TERRAZA.menus.map((menu) => ({ ...menu, orderable: false })),
+      menus: TERRACE_OFFERS.menus.map((menu) => ({ ...menu, orderable: false })),
     };
     const { el } = await mountApp({ listZoneOffers: vi.fn(async () => closed) });
     await signIn(el);
@@ -761,7 +767,7 @@ describe("period service at the counter", () => {
         });
         await signIn(el);
         setLocale(locale);
-        add(el, DESAYUNOS);
+        add(el, BREAKFAST);
         await flush(el);
         emit(counter(el), "confirm-payment", { method: "cash", amount: "20" });
         await flush(el);
@@ -779,7 +785,7 @@ describe("period service at the counter", () => {
 
   it("shows the initial closed department and refuses additions while retaining offers", async () => {
     const closed = {
-      ...BARRA,
+      ...BAR_OFFERS,
       service: {
         open: false,
         zoneOpen: true,
@@ -789,11 +795,11 @@ describe("period service at the counter", () => {
         zoneKeepOpen: null,
       },
       defaultMenuId: null,
-      menus: BARRA.menus.map((menu) => ({ ...menu, orderable: false, isDefault: false })),
+      menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, orderable: false, isDefault: false })),
     };
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => closed) });
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
     const screen = counter(el);
     expect(screen.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(
@@ -812,10 +818,10 @@ describe("period service at the counter", () => {
   it("closes and reopens at a poll without losing the pending basket", async () => {
     const { el } = await mountApp();
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
     const closed = {
-      ...BARRA,
+      ...BAR_OFFERS,
       service: {
         open: false,
         zoneOpen: true,
@@ -825,11 +831,11 @@ describe("period service at the counter", () => {
         zoneKeepOpen: null,
       },
       defaultMenuId: null,
-      menus: BARRA.menus.map((menu) => ({ ...menu, isDefault: false, orderable: false })),
+      menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, isDefault: false, orderable: false })),
     };
     api.listZoneOffers.mockResolvedValue(closed);
     api.menuState.mockResolvedValue({
-      ...state([DESAYUNOS, ALMUERZO]),
+      ...state([BREAKFAST, LUNCH]),
       service: closed.service,
       defaultMenuId: null,
     });
@@ -837,8 +843,8 @@ describe("period service at the counter", () => {
     expect(counter(el).shadowRoot!.querySelector("[data-service-closed]")).not.toBeNull();
     expect(counter(el).store.lineCount).toBe(1);
     expect(selected(el)).toBe("desayunos");
-    api.listZoneOffers.mockResolvedValue(BARRA);
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "desayunos"));
+    api.listZoneOffers.mockResolvedValue(BAR_OFFERS);
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "desayunos"));
     await poll(el);
     expect(counter(el).shadowRoot!.querySelector("[data-service-closed]")).toBeNull();
     expect(selected(el)).toBe("desayunos");
@@ -859,10 +865,10 @@ describe("period service at the counter", () => {
     const endedAs = (name: string | null) => (menuId: string) =>
       menuId === "desayunos" ? name : null;
     const catalogue = (ended: (menuId: string) => string | null) => ({
-      ...BARRA,
+      ...BAR_OFFERS,
       service,
       defaultMenuId: null,
-      menus: BARRA.menus.map((menu) => ({
+      menus: BAR_OFFERS.menus.map((menu) => ({
         ...menu,
         isDefault: false,
         orderable: false,
@@ -870,9 +876,9 @@ describe("period service at the counter", () => {
       })),
     });
     const polled = (ended: (menuId: string) => string | null) => ({
-      ...state([DESAYUNOS, ALMUERZO]),
+      ...state([BREAKFAST, LUNCH]),
       service,
-      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
+      menus: state([BREAKFAST, LUNCH]).menus.map((menu) => ({
         ...menu,
         orderable: false,
         endedPeriodName: ended(menu.menuId),
@@ -898,7 +904,7 @@ describe("period service at the counter", () => {
 
   it("refreshes unchanged versions on a period change, chooses the running menu and keeps every basket line", async () => {
     const breakfast = {
-      ...BARRA,
+      ...BAR_OFFERS,
       service: {
         open: true,
         zoneOpen: true,
@@ -907,10 +913,10 @@ describe("period service at the counter", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: BARRA.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
+      menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
     const lunch = {
-      ...BARRA,
+      ...BAR_OFFERS,
       defaultMenuId: "almuerzo",
       service: {
         open: true,
@@ -920,7 +926,7 @@ describe("period service at the counter", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: BARRA.menus.map((menu) => ({
+      menus: BAR_OFFERS.menus.map((menu) => ({
         ...menu,
         isDefault: menu.id === "almuerzo",
         orderable: menu.id === "almuerzo",
@@ -932,10 +938,10 @@ describe("period service at the counter", () => {
     });
     await signIn(el);
     emit(counter(el), "menu-selected", { id: "desayunos" });
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
     api.menuState.mockResolvedValue({
-      ...state([DESAYUNOS, ALMUERZO], "almuerzo"),
+      ...state([BREAKFAST, LUNCH], "almuerzo"),
       service: lunch.service,
     });
     await poll(el);
@@ -961,7 +967,7 @@ describe("a counter following its zone's default menu", () => {
     await signIn(el);
     expect(selected(el)).toBe("desayunos");
 
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(selected(el)).toBe("almuerzo");
   });
@@ -969,10 +975,10 @@ describe("a counter following its zone's default menu", () => {
   it("stays put while the basket has lines, and moves as soon as the sale is over", async () => {
     const { el } = await mountApp();
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
 
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(selected(el)).toBe("desayunos");
 
@@ -990,14 +996,14 @@ describe("a counter following its zone's default menu", () => {
 
   it("reloads the offers first when the polled default is a menu it has not loaded", async () => {
     const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [DESAYUNOS], "desayunos")),
+      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [BREAKFAST], "desayunos")),
       // The reload still names Desayunos: the poll is the newer word on the default.
-      listZoneOffers: vi.fn(async () => BARRA),
+      listZoneOffers: vi.fn(async () => BAR_OFFERS),
     });
     await signIn(el);
     expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos"]);
 
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
     expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
@@ -1007,13 +1013,13 @@ describe("a counter following its zone's default menu", () => {
   it("changes nothing when the poll's answer carries no default", async () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn(async () =>
-        offers("zone-barra", [DESAYUNOS, ALMUERZO], "almuerzo"),
+        offers("zone-barra", [BREAKFAST, LUNCH], "almuerzo"),
       ),
     });
     await signIn(el);
     expect(selected(el)).toBe("almuerzo");
 
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO]));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH]));
     await poll(el);
     expect(selected(el)).toBe("almuerzo");
     expect(api.listZoneOffers).not.toHaveBeenCalled();
@@ -1027,7 +1033,7 @@ describe("a menu the person picked", () => {
     emit(counter(el), "menu-selected", { id: "desayunos" });
     await flush(el);
 
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(selected(el)).toBe("desayunos");
 
@@ -1042,13 +1048,13 @@ describe("the remembered default", () => {
   it("belongs to its zone, and is dropped when the counter leaves the zone", async () => {
     const { el } = await mountApp();
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
-    const terraza: { defaultMenuId?: string } = {};
+    const terraceSelection: { defaultMenuId?: string } = {};
     api.menuState.mockImplementation(async (zoneId: string) =>
       zoneId === "zone-terraza"
-        ? state([CENA, ALMUERZO, DESAYUNOS], terraza.defaultMenuId)
-        : state([DESAYUNOS, ALMUERZO], "almuerzo"),
+        ? state([DINNER, LUNCH, BREAKFAST], terraceSelection.defaultMenuId)
+        : state([BREAKFAST, LUNCH], "almuerzo"),
     );
     await poll(el);
     expect(selected(el)).toBe("desayunos");
@@ -1057,13 +1063,13 @@ describe("the remembered default", () => {
     emit(counter(el), "counter-zone-selected", { zoneId: "zone-terraza" });
     await flush(el);
     expect(selected(el)).toBe("cena");
-    add(el, CENA);
+    add(el, DINNER);
     await park(el);
     expect(counter(el).store.lineCount).toBe(0);
     expect(selected(el)).toBe("cena");
 
-    add(el, CENA);
-    terraza.defaultMenuId = "desayunos";
+    add(el, DINNER);
+    terraceSelection.defaultMenuId = "desayunos";
     await poll(el);
     expect(selected(el)).toBe("cena");
     await park(el);
@@ -1074,7 +1080,7 @@ describe("the remembered default", () => {
     emit(counter(el), "counter-zone-selected", { zoneId: "zone-terraza" });
     await flush(el);
     expect(selected(el)).toBe("cena");
-    add(el, CENA);
+    add(el, DINNER);
     await park(el);
     expect(selected(el)).toBe("cena");
   });
@@ -1082,9 +1088,9 @@ describe("the remembered default", () => {
   it("is forgotten by signing out and in again before the basket is cleared", async () => {
     const { el } = await mountApp();
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(selected(el)).toBe("desayunos");
 
@@ -1095,7 +1101,7 @@ describe("the remembered default", () => {
     expect(counter(el).store.lineCount).toBe(0);
     expect(selected(el)).toBe("desayunos");
 
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await poll(el);
     expect(selected(el)).toBe("desayunos");
     await park(el);
@@ -1107,11 +1113,11 @@ describe("the remembered default and the session", () => {
   it("is not applied by an offers reload that finishes after the sign-out", async () => {
     let reload!: (value: ZoneOfferCatalogue) => void;
     const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [DESAYUNOS], "desayunos")),
+      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [BREAKFAST], "desayunos")),
       listZoneOffers: vi.fn(() => new Promise<ZoneOfferCatalogue>((resolve) => (reload = resolve))),
     });
     await signIn(el);
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
 
@@ -1120,7 +1126,7 @@ describe("the remembered default and the session", () => {
     await signIn(el, "p2");
     emit(counter(el), "menu-selected", { id: "desayunos" });
     await flush(el);
-    reload(TERRAZA);
+    reload(TERRACE_OFFERS);
     await flush(el);
     expect(selected(el)).toBe("desayunos");
     expect(counter(el).selectedServiceZoneId).toBe("zone-barra");
@@ -1137,13 +1143,13 @@ describe("the remembered default and the session", () => {
             answer = resolve;
           }),
       )
-      .mockResolvedValue(BARRA);
+      .mockResolvedValue(BAR_OFFERS);
     const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [DESAYUNOS], "desayunos")),
+      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [BREAKFAST], "desayunos")),
       listZoneOffers,
     });
     await signIn(el);
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(listZoneOffers).toHaveBeenCalledTimes(1);
     emit(counter(el), "logout");
@@ -1152,7 +1158,7 @@ describe("the remembered default and the session", () => {
     await poll(el);
     expect(listZoneOffers).toHaveBeenCalledTimes(2);
     expect(selected(el)).toBe("almuerzo");
-    answer(TERRAZA);
+    answer(TERRACE_OFFERS);
     await flush(el);
     expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
     expect(selected(el)).toBe("almuerzo");
@@ -1181,12 +1187,12 @@ describe("the remembered default and the session", () => {
       }),
     });
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
     await poll(el);
     expect(selected(el)).toBe("desayunos");
-    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO]));
+    api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH]));
 
     counter(el).store.removeLine(0);
     el.shadowRoot!.querySelector("till-shell")!
@@ -1200,7 +1206,7 @@ describe("the remembered default and the session", () => {
     await flush(el);
     expect(api.switchDeviceProfile).toHaveBeenCalledOnce();
     expect(selected(el)).toBe("desayunos");
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await park(el);
     expect(counter(el).store.lineCount).toBe(0);
     expect(selected(el)).toBe("desayunos");
@@ -1238,7 +1244,7 @@ describe("an open table's order", () => {
       reminder: null,
     },
   };
-  const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");
+  const DINING_ROOM_OFFERS = offers("zone-comedor", [BREAKFAST, LUNCH], "desayunos", "table_tab");
   const shellGrid = (el: TillApp) => el;
   const tableScreen = (el: TillApp) =>
     shellGrid(el).shadowRoot!.querySelector<HTMLElement & { selectedMenuId: string }>(
@@ -1247,7 +1253,7 @@ describe("an open table's order", () => {
 
   async function openRememberedTable(current: () => ZoneOfferCatalogue) {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn(async (id: string) => (id === "zone-comedor" ? current() : BARRA)),
+      listZoneOffers: vi.fn(async (id: string) => (id === "zone-comedor" ? current() : BAR_OFFERS)),
       getTablesState: vi.fn(async () => [table]),
       listZones: vi.fn(async () => [
         {
@@ -1265,11 +1271,11 @@ describe("an open table's order", () => {
       menuState: vi.fn(async (id: string) =>
         id === "zone-comedor"
           ? {
-              ...state([DESAYUNOS, ALMUERZO]),
+              ...state([BREAKFAST, LUNCH]),
               defaultMenuId: current().defaultMenuId,
               service: current().service,
             }
-          : state([DESAYUNOS, ALMUERZO]),
+          : state([BREAKFAST, LUNCH]),
       ),
     });
     await signIn(el);
@@ -1283,8 +1289,12 @@ describe("an open table's order", () => {
     return el;
   }
   const runningTable = (occurrence = "table-lunch-1"): ZoneOfferCatalogue => ({
-    ...COMEDOR,
-    service: { ...COMEDOR.service, periodName: "Lunch", periodOccurrenceKey: occurrence },
+    ...DINING_ROOM_OFFERS,
+    service: {
+      ...DINING_ROOM_OFFERS.service,
+      periodName: "Lunch",
+      periodOccurrenceKey: occurrence,
+    },
   });
 
   it("keeps the table grid through a boundary until its draft clears", async () => {
@@ -1296,7 +1306,7 @@ describe("an open table's order", () => {
       tableScreen(el).shadowRoot!.querySelector<
         import("./widgets/menu-browser.js").TillMenuBrowser
       >("till-menu-browser")!;
-    browser.store.addProduct(menuOfferToTillProduct(offer(ALMUERZO), "v1"), "1");
+    browser.store.addProduct(menuOfferToTillProduct(offer(LUNCH), "v1"), "1");
     await flush(el);
     const id = browser.store.id;
     const names = () =>
@@ -1308,7 +1318,7 @@ describe("an open table's order", () => {
     current = {
       ...offers(
         "zone-comedor",
-        [CENA, { ...ALMUERZO, product: "Afternoon sandwich" }],
+        [DINNER, { ...LUNCH, product: "Afternoon sandwich" }],
         "cena",
         "table_tab",
       ),
@@ -1346,13 +1356,13 @@ describe("an open table's order", () => {
             })),
             unavailable: { products: [], optionLabels: [] },
           }
-        : state([DESAYUNOS, ALMUERZO]),
+        : state([BREAKFAST, LUNCH]),
     );
     const browser =
       tableScreen(el).shadowRoot!.querySelector<
         import("./widgets/menu-browser.js").TillMenuBrowser
       >("till-menu-browser")!;
-    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    browser.store.addProduct(menuOfferToTillProduct(offer(BREAKFAST), "v1"), "1");
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-shell")!, "open-settings");
     await flush(el);
@@ -1360,8 +1370,8 @@ describe("an open table's order", () => {
     expect(settings.open).toBe(true);
     current = {
       ...runningTable(),
-      menus: COMEDOR.menus.map((menu) => ({ ...menu, versionId: "v2" })),
-      offers: COMEDOR.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: DINING_ROOM_OFFERS.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
     };
     await poll(el);
     expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).toBeNull();
@@ -1384,12 +1394,12 @@ describe("an open table's order", () => {
       tableScreen(el).shadowRoot!.querySelector<
         import("./widgets/menu-browser.js").TillMenuBrowser
       >("till-menu-browser")!;
-    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    browser.store.addProduct(menuOfferToTillProduct(offer(BREAKFAST), "v1"), "1");
     await flush(el);
     current = {
       ...runningTable("afternoon"),
-      menus: COMEDOR.menus.map((menu) => ({ ...menu, versionId: "v2" })),
-      offers: COMEDOR.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: DINING_ROOM_OFFERS.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
     };
     await poll(el);
     const refusals: unknown[] = [];
@@ -1422,7 +1432,7 @@ describe("an open table's order", () => {
     current = {
       ...runningTable("table-lunch-2"),
       defaultMenuId: null,
-      menus: COMEDOR.menus.map((menu) => ({ ...menu, isDefault: false })),
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({ ...menu, isDefault: false })),
     };
     await poll(el);
     expect(tableScreen(el).selectedMenuId).toBe("");
@@ -1458,7 +1468,7 @@ describe("an open table's order", () => {
       const browser = tableScreen(el).shadowRoot!.querySelector<
         HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
       >("till-menu-browser")!;
-      if (hasDraft) browser.store.addProduct(menuOfferToTillProduct(offer(ALMUERZO), "v1"), "1");
+      if (hasDraft) browser.store.addProduct(menuOfferToTillProduct(offer(LUNCH), "v1"), "1");
       await flush(el);
       current = runningTable("table-lunch-2");
       await poll(el);
@@ -1484,8 +1494,12 @@ describe("an open table's order", () => {
 
   it("names the table's department independently of the counter when it is closed", async () => {
     const closed = {
-      ...COMEDOR,
-      context: { ...COMEDOR.context, departmentId: "department-deli", departmentName: "Deli" },
+      ...DINING_ROOM_OFFERS,
+      context: {
+        ...DINING_ROOM_OFFERS.context,
+        departmentId: "department-deli",
+        departmentName: "Deli",
+      },
       service: {
         open: false,
         zoneOpen: true,
@@ -1494,7 +1508,7 @@ describe("an open table's order", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: false })),
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({ ...menu, orderable: false })),
     };
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
@@ -1529,7 +1543,7 @@ describe("an open table's order", () => {
 
   it("moves a table off an ended menu while retaining its draft and the counter's selection", async () => {
     const breakfast = {
-      ...COMEDOR,
+      ...DINING_ROOM_OFFERS,
       service: {
         open: true,
         zoneOpen: true,
@@ -1538,10 +1552,13 @@ describe("an open table's order", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
+        ...menu,
+        orderable: menu.id === "desayunos",
+      })),
     };
     const lunch = {
-      ...COMEDOR,
+      ...DINING_ROOM_OFFERS,
       service: {
         open: true,
         zoneOpen: true,
@@ -1551,7 +1568,7 @@ describe("an open table's order", () => {
         zoneKeepOpen: null,
       },
       defaultMenuId: "almuerzo",
-      menus: COMEDOR.menus.map((menu) => ({
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
         ...menu,
         orderable: menu.id === "almuerzo",
         isDefault: menu.id === "almuerzo",
@@ -1561,7 +1578,7 @@ describe("an open table's order", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
-        zoneId === "zone-comedor" ? current : BARRA,
+        zoneId === "zone-comedor" ? current : BAR_OFFERS,
       ),
       getTablesState: vi.fn().mockResolvedValue([table]),
       listZones: vi.fn().mockResolvedValue([
@@ -1580,10 +1597,10 @@ describe("an open table's order", () => {
       menuState: vi.fn(async (zoneId: string) =>
         zoneId === "zone-comedor"
           ? {
-              ...state([DESAYUNOS, ALMUERZO], current.defaultMenuId ?? undefined),
+              ...state([BREAKFAST, LUNCH], current.defaultMenuId ?? undefined),
               service: current.service,
             }
-          : state([DESAYUNOS, ALMUERZO], "desayunos"),
+          : state([BREAKFAST, LUNCH], "desayunos"),
       ),
     });
     await signIn(el);
@@ -1598,7 +1615,7 @@ describe("an open table's order", () => {
     const browser = screen.shadowRoot!.querySelector<
       HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
     >("till-menu-browser")!;
-    browser.store.addProduct({ ...menuOfferToTillProduct(offer(DESAYUNOS), "v1") }, "1");
+    browser.store.addProduct({ ...menuOfferToTillProduct(offer(BREAKFAST), "v1") }, "1");
     await flush(el);
     current = lunch;
     await poll(el);
@@ -1620,7 +1637,7 @@ describe("an open table's order", () => {
 
   it("a table poll that stops the running menu blocks its dish and leaves nothing to send", async () => {
     const breakfast = {
-      ...COMEDOR,
+      ...DINING_ROOM_OFFERS,
       service: {
         open: true,
         zoneOpen: true,
@@ -1629,12 +1646,15 @@ describe("an open table's order", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
+        ...menu,
+        orderable: menu.id === "desayunos",
+      })),
     };
     const ended = {
       ...breakfast,
       defaultMenuId: null,
-      menus: COMEDOR.menus.map((menu) => ({
+      menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
         ...menu,
         orderable: false,
         endedPeriodName: null,
@@ -1645,7 +1665,7 @@ describe("an open table's order", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
-        zoneId === "zone-comedor" ? current : BARRA,
+        zoneId === "zone-comedor" ? current : BAR_OFFERS,
       ),
       getTablesState: vi.fn().mockResolvedValue([table]),
       listZones: vi.fn().mockResolvedValue([
@@ -1664,7 +1684,7 @@ describe("an open table's order", () => {
       menuState: vi.fn(async (zoneId: string) =>
         zoneId === "zone-comedor"
           ? {
-              ...state([DESAYUNOS, ALMUERZO], current.defaultMenuId ?? undefined),
+              ...state([BREAKFAST, LUNCH], current.defaultMenuId ?? undefined),
               service: current.service,
               menus: current.menus.map((menu) => ({
                 menuId: menu.id,
@@ -1673,7 +1693,7 @@ describe("an open table's order", () => {
                 endedPeriodName: menu.endedPeriodName,
               })),
             }
-          : state([DESAYUNOS, ALMUERZO], "desayunos"),
+          : state([BREAKFAST, LUNCH], "desayunos"),
       ),
     });
     await signIn(el);
@@ -1688,7 +1708,7 @@ describe("an open table's order", () => {
     const browser = screen.shadowRoot!.querySelector<
       HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
     >("till-menu-browser")!;
-    browser.store.addProduct({ ...menuOfferToTillProduct(offer(DESAYUNOS), "v1") }, "1");
+    browser.store.addProduct({ ...menuOfferToTillProduct(offer(BREAKFAST), "v1") }, "1");
     await flush(el);
     current = ended;
     await poll(el);
@@ -1696,7 +1716,7 @@ describe("an open table's order", () => {
     expect(
       tableScreen(el).shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim(),
     ).toBe("Last orders have ended");
-    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    browser.store.addProduct(menuOfferToTillProduct(offer(BREAKFAST), "v1"), "1");
     browser.store.setLineQuantity(0, "2");
     expect(browser.store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
       ["Tostada", "1"],
@@ -1719,7 +1739,7 @@ describe("an open table's order", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
-        zoneId === "zone-comedor" ? COMEDOR : BARRA,
+        zoneId === "zone-comedor" ? DINING_ROOM_OFFERS : BAR_OFFERS,
       ),
       getTablesState: vi.fn().mockResolvedValue([table]),
       listZones: vi.fn().mockResolvedValue([
@@ -1737,7 +1757,7 @@ describe("an open table's order", () => {
       submitDraft: drafts.submitDraft,
       // Both zones name a default other than the table's menu, so a counter that follows its own
       // default cannot leave the table on Desayunos by coincidence.
-      menuState: vi.fn(async () => state([DESAYUNOS, ALMUERZO], "almuerzo")),
+      menuState: vi.fn(async () => state([BREAKFAST, LUNCH], "almuerzo")),
     });
     await signIn(el);
     emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
@@ -1789,7 +1809,7 @@ describe("a dish whose period ended earlier today", () => {
     };
   }
   const polled = (current: ZoneOfferCatalogue) => ({
-    ...state([DESAYUNOS, ALMUERZO], current.defaultMenuId ?? undefined),
+    ...state([BREAKFAST, LUNCH], current.defaultMenuId ?? undefined),
     service: current.service,
     menus: current.menus.map((menu) => ({
       menuId: menu.id,
@@ -1803,7 +1823,7 @@ describe("a dish whose period ended earlier today", () => {
     ...base,
     offers: [
       ...base.offers,
-      { ...offer(ALMUERZO), id: "offer-almuerzo-toast", productId: DESAYUNOS.product },
+      { ...offer(LUNCH), id: "offer-almuerzo-toast", productId: BREAKFAST.product },
     ],
   });
 
@@ -1815,7 +1835,7 @@ describe("a dish whose period ended earlier today", () => {
       menuState: vi.fn(async () => polled(current)),
     });
     await signIn(el);
-    add(el, DESAYUNOS);
+    add(el, BREAKFAST);
     await flush(el);
     current = catalogue(base, "lunch", endedName);
     await poll(el);
@@ -1831,7 +1851,7 @@ describe("a dish whose period ended earlier today", () => {
     async (locale) => {
       const previousLocale = currentLocale();
       try {
-        const el = await counterAt(BARRA);
+        const el = await counterAt(BAR_OFFERS);
         setLocale(locale);
         counter(el).store.emit("changed");
         await flush(el);
@@ -1850,14 +1870,14 @@ describe("a dish whose period ended earlier today", () => {
   );
 
   it("is not marked when the running menu also sells it", async () => {
-    const el = await counterAt(sharedDish(BARRA));
+    const el = await counterAt(sharedDish(BAR_OFFERS));
     expect(counter(el).store.lines[0]?.blocked).toBeUndefined();
     expect(basketRoot(el).querySelector("[data-period-ended]")).toBeNull();
     expect(payHeld(el)).toBe(false);
   });
 
   it("from a menu neither running nor ended today stays blocked and holds Pay", async () => {
-    const el = await counterAt(BARRA, null);
+    const el = await counterAt(BAR_OFFERS, null);
     expect(counter(el).store.lines[0]?.blocked).toBe("period_ended");
     expect(basketRoot(el).querySelector("[data-period-ended]")).toBeNull();
     expect(basketRoot(el).textContent).toContain("Last orders have ended");
@@ -1895,16 +1915,16 @@ describe("a dish whose period ended earlier today", () => {
         reminder: null,
       },
     };
-    const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");
+    const DINING_ROOM_OFFERS = offers("zone-comedor", [BREAKFAST, LUNCH], "desayunos", "table_tab");
 
     /** Opens the table during Breakfast; `lunch` polls into Lunch with `endedName` as
      * Desayunos' ended period. */
     async function openTable() {
-      let current = catalogue(COMEDOR, "breakfast");
+      let current = catalogue(DINING_ROOM_OFFERS, "breakfast");
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
         listZoneOffers: vi.fn(async (zoneId: string) =>
-          zoneId === "zone-comedor" ? current : BARRA,
+          zoneId === "zone-comedor" ? current : BAR_OFFERS,
         ),
         getTablesState: vi.fn().mockResolvedValue([table]),
         listZones: vi.fn().mockResolvedValue([
@@ -1921,7 +1941,7 @@ describe("a dish whose period ended earlier today", () => {
         saveDraft: drafts.saveDraft,
         submitDraft: drafts.submitDraft,
         menuState: vi.fn(async (zoneId: string) =>
-          zoneId === "zone-comedor" ? polled(current) : state([DESAYUNOS, ALMUERZO], "desayunos"),
+          zoneId === "zone-comedor" ? polled(current) : state([BREAKFAST, LUNCH], "desayunos"),
         ),
       });
       await signIn(el);
@@ -1938,7 +1958,7 @@ describe("a dish whose period ended earlier today", () => {
         HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
       >("till-menu-browser")!;
       const lunch = async (endedName: string | null = "Breakfast") => {
-        current = catalogue(COMEDOR, "lunch", endedName);
+        current = catalogue(DINING_ROOM_OFFERS, "lunch", endedName);
         await poll(el);
       };
       const marks = () =>
@@ -1950,7 +1970,7 @@ describe("a dish whose period ended earlier today", () => {
 
     it("marks the draft line and leaves Send all enabled", async () => {
       const { el, screen, browser, lunch, marks } = await openTable();
-      browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+      browser.store.addProduct(menuOfferToTillProduct(offer(BREAKFAST), "v1"), "1");
       await flush(el);
       await lunch();
       expect(browser.store.lines[0]?.blocked).toBeUndefined();
@@ -1970,10 +1990,10 @@ describe("a dish whose period ended earlier today", () => {
       const line: import("./api/client.js").RecalledDraftLine["source"]["line"] = {
         changesAfterSending: null,
         id: "sent-toast",
-        name: DESAYUNOS.product,
-        productId: DESAYUNOS.product,
+        name: BREAKFAST.product,
+        productId: BREAKFAST.product,
         parentProductId: null,
-        menuItemId: `offer-${DESAYUNOS.id}`,
+        menuItemId: `offer-${BREAKFAST.id}`,
         lineNo: 1,
         parentLineNo: null,
         quantity: "1",
