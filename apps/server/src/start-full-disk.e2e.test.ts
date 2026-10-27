@@ -1377,7 +1377,7 @@ describe("a start on a real full disk", () => {
 });
 
 describe("a Start again choice on a real full disk", () => {
-  it("a Move on a full disk: the guess counter cannot be written, so the password is not checked, nothing is recorded or moved, and the page says the disk is full with its next step", async (ctx) => {
+  it("a Move on a full disk: a wrong password is answered as a full disk, nothing is recorded or moved, and the page says the disk is full with its next step", async (ctx) => {
     const small = needDisk(ctx);
     const attempt = await startAgainAttempt(realpathSync(small.folder("start-again-move")));
     const { stateDir, venueDir } = attempt.roots;
@@ -1415,7 +1415,7 @@ describe("a Start again choice on a real full disk", () => {
       expect(small.free()).toBeLessThan(65_536);
 
       const diskFull = escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].diskFull);
-      // A wrong password, so a password checked before the counter would answer wrongPassword.
+      // A wrong password is answered diskFull, not wrongPassword.
       for (const password of ["not-the-password", START_AGAIN_ADMIN_PASSWORD]) {
         const answer = await postFormOver(port!, ca, "/recovery-api/start-again", {
           password,

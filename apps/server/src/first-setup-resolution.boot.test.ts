@@ -1,4 +1,14 @@
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { IncomingHttpHeaders } from "node:http";
@@ -828,12 +838,11 @@ it.each(MODES)(
   async (mode) => {
     const note = { floorMs: 60_000, lastName: "S000001-W1-A", module: "probe" };
     const f = await foundFilesBox(note);
-    const { mtimeNs } = await stat(join(f.venueDir, "venue.db"), { bigint: true });
-    const minuteNs = 60_000_000_000n;
-    const floorMs = Number(
-      ((mtimeNs + BigInt(START_AGAIN_FLOOR_MARGIN_MS) * 1_000_000n + minuteNs - 1n) / minuteNs) *
-        60_000n,
-    );
+    // Hours ahead of the clock, on the hour, so a floor taken from the clock cannot match.
+    const hourMs = 3_600_000;
+    const fileMs = Math.ceil(Date.now() / hourMs) * hourMs + 5 * hourMs;
+    await utimes(join(f.venueDir, "venue.db"), fileMs / 1000, fileMs / 1000);
+    const floorMs = fileMs + Math.ceil(START_AGAIN_FLOOR_MARGIN_MS / 60_000) * 60_000;
     expect(floorMs).toBeGreaterThan(note.floorMs);
     const started = await startIn(mode, f);
     const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {

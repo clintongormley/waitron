@@ -229,6 +229,36 @@ it("a digest from an older page is refused setup.start_again_files_changed and c
   expect(await folders(f.roots)).toEqual(before);
 });
 
+it("a guess counter that cannot be written refuses setup.attempt_invalid before the password is checked, and records and moves nothing", async () => {
+  const f = await found();
+  // A folder where the counter file goes: the counter writer refuses to write over it.
+  await mkdir(join(f.roots.stateDir, START_AGAIN_GUESSES_FILE));
+  const verify = vi.fn(async () => true);
+  const before = await folders(f.roots);
+  await expect(
+    chooseStartAgainLeftovers({
+      roots: f.roots,
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "move",
+      listed: f.listed,
+      now: () => new Date(T0),
+      verify,
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(verify).not.toHaveBeenCalled();
+  await expect(lstat(join(f.roots.stateDir, START_AGAIN_CHOICES_DIR))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  await expect(lstat(join(f.roots.stateDir, START_AGAIN_SET_ASIDE_DIR))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  await expect(lstat(join(f.roots.venueDir, START_AGAIN_SET_ASIDE_DIR))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+  expect(await folders(f.roots)).toEqual(before);
+});
+
 it("files changed between the password and the lock: refused, nothing changed", async () => {
   const f = await found();
   let after: Record<string, string> | undefined;
