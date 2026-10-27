@@ -474,7 +474,7 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
-  naming sites remain in the till's boot/counter and parties suites;
+  naming sites remain in the till's boot/counter suites;
   the payment widget's idle-choice and main suites,
   the server's till API tests, other catalogue fixtures, and shared station fixtures.
   Shared equipment fixture exports and their other consumers still need English names.
