@@ -4834,7 +4834,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   monitor calls it every minute (design section 5). It must exercise the server, not only its
   front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
-- **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. Owner, 2026-10-24 (A1042 Q5): a rollback never takes the start-again note backwards — it keeps the newer one. An ordinary upgrade never writes the note; it moves only when a new installation name is picked (setup, restore, re-registration, promotion, or an exceptional change such as the software provider's name). [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
+- **Automatic upgrades that can be undone until the first order (A950)** — required before go-live; [design proposal](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), no approval or build.
+  One owner question: should the first live change or automatic action, such as a refund or fiscal filing, close rollback before it executes? The broader boundary and automatic scheduling are proposed, not approved.
+  B3 layout/key/Wi-Fi and A1042's newer start-again floor stay; host admission, whole-state rollback, frozen bucket/spare publication and A799/runtime qualification remain gates.
+  [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** [Detail](backlog/box.md#every-migrating-path-but-boot-and-the-bucket-rebuild-runs-with-no-ahead-of-image-check)
 

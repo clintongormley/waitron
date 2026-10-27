@@ -65,70 +65,43 @@ Three parts:
 
 ## Automatic upgrades that can be undone until the first order
 
-- (owner, 2026-10-02). Today an
-  upgrade is `waitron.sh install`, run by hand at the box's terminal: it pulls the new images,
-  restarts, and waits about three minutes for the app to report healthy (`wait_healthy`,
-  `deploy/waitron.sh`). It takes no backup first, and once the new image has migrated the database
-  there is no way back — an older image then refuses to start with `provisioning.database_ahead`
-  (`deploy/README.md`, "It can migrate the box's database one way"). Wanted: the box upgrades
-  itself, in this order:
-  1. stop the app and take a snapshot of the box's state;
-  2. start the new image and let it migrate, with sales refused;
-  3. check that it started properly;
-  4. only then take orders. If the check fails, put back the snapshot and the old image, and
-     report the failure.
+**A950 design proposal, 2026-10-27; no approval or build.** The
+[proposal](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) keeps the owner's
+2026-10-02 sequence: stop, snapshot the whole state, migrate with sales refused, check, then
+use; restore the matching old state and image if the check fails. “Rolling back is not a fix.”
+The first order, rather than the restart, is the owner's stated point of no return. Automatic
+rollback is required before go-live (owner, 2026-10-21).
 
-  **Rolling back is not a fix** (owner, 2026-10-02): it keeps the venue trading on the version that
-  worked while the failed upgrade is reported and fixed. The point of no return is the first order
-  taken on the new version, not the restart: rolling back after that would lose the order.
+One policy question remains: a clock-in, PIN change, refund or automatic filing can precede the first new order.
+The proposal recommends closing rollback before the first state-changing use or external effect,
+with a durable host admission marker written before execution. That broader boundary is
+**not approved**. Automatic-on, the 03:00–05:00 quiet window, bounded attempts/quarantine and
+spare-first sequencing are explicitly proposed defaults.
 
-  **The snapshot is a filesystem snapshot where the disk allows it** (owner, 2026-10-02). Debian's
-  default filesystem, ext4, has none; btrfs (in Debian's own kernel) and LVM thin volumes do. ZFS
-  does too but is built outside Debian's kernel because of its licence. The B3 installer lays the
-  disk out, so it can put the folder holding Docker's volumes on btrfs — inside an encrypted
-  container since B3's revision (2026-10-21, B3 design §6–§7), which A950's snapshots do not see:
-  they are btrfs operations on the unlocked filesystem (B3's reading; its slice 1 tries a rollback on
-  the encrypted disk). B3 also gives A950 the host service it needs (§8) and holds the packages that
-  change the box's start-up back for A950's quiet hour, with a step that re-seals the disk key
-  (§7.4). What it should buy, none of
-  it measured yet: taking and restoring a snapshot costs about the same whatever the size of
-  `venue.db`, which holds the product photos, where a file copy grows with it; and it takes every
-  volume at once, so nobody keeps a list of the files a restore needs (the hand-kept list already
-  went stale once — B2's whole-state-volume bullet). What it does not cover:
-  - the old image, which is not in the snapshot: `waitron.sh install` deletes it once the new box
-    comes up healthy, and on Docker's containerd image store Docker has already deleted it
-    (`deploy/README.md`, Updating and operating);
-  - a box whose disk the installer did not lay out (ext4), which needs a fallback copy;
-  - the failed attempt's own logs, which a rollback of the logs volume would erase — keep them out
-    of the rollback, or send the report before rolling back.
+The design fits B3's five encrypted subvolumes. It specifies complete stopped-state inventory,
+old images retained by immutable digest plus container references, logs/host recovery evidence
+outside rollback, a monotonic start-again overlay bound after A1099's release, trial suppression
+of every external/background effect, readiness beyond `/health`, frozen bucket/spare heads and
+qualified postcommit publication. Healthy overnight readiness waits for a real staff or scheduled
+action; it has no idle timeout or acceptance button that closes rollback. Stop leaves the screen
+and cannot cancel an admitted operation. It separates app updates from B3 host/TPM updates and proposes
+the signed release manifest/A1049 hold boundary without changing Cloud. Non-B3 disks need a
+separately qualified whole-state copy adapter. Failure reporting stays local with existing
+authorised notifications; A9/Cloud reporting and A1016 backup/support choices remain open.
 
-  Questions to settle in the brainstorm:
-  - **Where the failure is reported.** To the owner, as a dashboard alert once the old version is
-    back; to Waitron as well, which needs the one-touch bug report (A9, Logging Slice 2) or
-    something like it.
-  - **What counts as "started properly".** `/health` returning 200 says the duty loop runs; that
-    may be too little — every module opened, the fiscal chain read back and checked, the till able
-    to load its menu.
-  - **Nothing fiscal before the check passes.** The new version must not file a record with AEAT
-    or use an invoice number before step 4, or a rollback would leave AEAT holding a record the
-    restored database does not, or a gap in the series.
-  - **The bucket stream.** The new version streams `venue.db` while it starts; a rollback must not
-    put back a copy that the bucket's newer data then overrides, or the reverse.
-  - **When it runs and who starts it.** A quiet hour outside trading, and something outside the app
-    container, since it replaces that container (a timer on the host running `waitron.sh`, or a
-    small updater with access to Docker). Where the box learns a release exists is B3's open
-    question, "unattended updates for a box we did not sell".
-  - **Upgrade testing above still comes first**: a rollback keeps the venue trading through a
-    failed migration; it does not prevent one.
+**The series-name note** (owner, 2026-10-24, A1042 Q5): rollback keeps the newer floor. An ordinary
+upgrade never advances it or chooses a new installation name. Moving it when setup, restore,
+re-registration, promotion or an exceptional provider-name change chooses a name remains the
+separate setup entry, “Move the start-again note whenever a series name is put into use, and when
+a plain reset ends an unfinished setup”. Preserve future name/damage-unknown evidence, not just
+known-name notes; no downgrade bypass or direct recovery/lock-file rewrite is proposed.
 
-  **The series-name note** (owner, 2026-10-24, A1042 Q5): a rollback never takes the start-again
-  note backwards — it keeps the newer one. An ordinary upgrade never writes the note; it moves only
-  when a new installation name is picked (setup, restore, re-registration, promotion, or an
-  exceptional change such as the software provider's name). The note is
-  `first-setup-start-again.json` in the state folder, so rolling the state volume back to its
-  snapshot would otherwise put an older note back. Today only Start again writes the note; moving
-  it at the other moments is its own setup entry, "Move the start-again note whenever a series name
-  is put into use, and when a plain reset ends an unfinished setup".
+Source inspection is READ evidence only, with literal anchors in the proposal. No A950 Linux,
+VM, TPM, btrfs, bucket or two-box runtime qualification has run; A799's actual historical
+qualification, B3's hardware/trust holds and separate build authority remain gates. The
+[proposed static mockups](mockups/a950-automatic-upgrades/README.md) illustrate status only, not
+product-rendering evidence. One fresh builder review is incorporated; the next step is the one
+policy question.
 
 ## Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check
 
