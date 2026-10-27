@@ -1607,7 +1607,8 @@ export type KitchenNoticeKind =
 export interface KitchenNotice {
   allergyBlock?: KitchenAllergyBlock | null;
   orderNoteChange?: { before: string | null; after: string | null };
-  /** On a kitchen-note change, the dishes it affects at this station, merged where the slip merges them. */
+  /** On a kitchen-note change, the dishes it affects at this station; matching counted dishes (no
+   *  unit or sold in each, whole-number quantity) are merged. */
   dishes?: {
     lineName: string;
     unitName: Record<string, string> | null;

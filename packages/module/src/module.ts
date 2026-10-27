@@ -640,8 +640,8 @@ export interface StationNoticeDish {
 
 export interface StationNotice {
   orderNoteChange?: KitchenNoteChange;
-  /** On a kitchen-note change, the dishes it affects at this station, merged where the slip
-   *  merges them. */
+  /** On a kitchen-note change, the dishes it affects at this station; matching counted dishes (no
+   *  unit or sold in each, whole-number quantity) are merged. */
   dishes?: StationNoticeDish[];
   allergyBlock?: KitchenAllergyBlock | null;
   id: string;

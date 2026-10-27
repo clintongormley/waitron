@@ -130,7 +130,9 @@ KDS-4 line).
    every round's dishes (`planKitchenTickets`, `kitchen-print.ts:603-617`). So three one-burger rounds print
    `3.000 x BURG` under the default `combined`. The notice merges identical dishes the same way (Architecture), so the
    screen lists `3× BURG` too. A station set to `separate` prints one entry per unit while the screen still shows one
-   merged line; the screen has no grouping setting to follow. Group headings work
+   merged line; the screen has no grouping setting to follow. **2026-10-27, finish-branch review:** the notice merges
+   only counted dishes (no unit or sold in each, whole-number quantity); measured and fractional portions stay apart, as
+   on the slip. Group headings work
    as on a ticket: `GROUP n` once under the header when every dish shares a group (`onlyGroupOf`), otherwise before each
    run, with no late-send marks (a correction describes the change, not the agreed send, as the MOVED slip does,
    `kitchen-ticket.ts:279-283`).
