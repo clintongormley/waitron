@@ -1495,14 +1495,14 @@ describe("waitron.sh reset", () => {
 
   // Weaker than its name: under the stubbed docker it can only match the command's text. The next
   // case runs the command itself.
-  it("a plain reset's state clean-up spares the start-again note and the confirmation records", () => {
+  it("a plain reset's state clean-up spares the start-again note, the confirmation records, the choice records and the set-aside folder", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
     expect(composeCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations /,
+        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
       ),
     );
   });
@@ -1703,14 +1703,14 @@ describe("waitron.sh --reset install", () => {
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
   });
 
-  it("--reset install keeps the start-again note and the confirmation records too", () => {
+  it("--reset install keeps the start-again note, the confirmation records, the choice records and the set-aside folder too", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
     expect(r.status).toBe(0);
     expect(loggedCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations /,
+        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
       ),
     );
   });
