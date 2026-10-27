@@ -4,15 +4,56 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import type { FiscalBackend } from "@waitron/fiscal";
+import { readPrivacyContact } from "@waitron/provisioning";
+import { saleId as brandSaleId } from "@waitron/shared";
 import type { KeyRing } from "@waitron/credentials";
 import type { OnboardingIntent } from "./trading-config.js";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
+
+export interface InvoiceEmailPrivacy {
+  privacyNoticeUrl: string | null;
+  privacyEmail: string | null;
+  /** The sale has a filed tax record, which the box sends to the tax authority. */
+  taxRecord: boolean;
+}
 
 export type InvoiceEmailSender = (message: {
   recipient: string;
   document: ReceiptDocumentInput;
+  privacy?: InvoiceEmailPrivacy;
 }) => Promise<InvoiceDeliveryOutcome>;
+
+export async function readInvoiceEmailPrivacy(
+  backend: FiscalBackend,
+  tx: Transaction,
+  saleId: string,
+): Promise<InvoiceEmailPrivacy> {
+  const contact = await readPrivacyContact(tx);
+  const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
+  return {
+    privacyNoticeUrl: contact?.privacyNoticeUrl ?? null,
+    privacyEmail: contact?.privacyEmail ?? null,
+    taxRecord: filed !== undefined,
+  };
+}
+
+function privacyNotice(document: ReceiptDocumentInput, privacy: InvoiceEmailPrivacy | undefined) {
+  if (privacy === undefined) return undefined;
+  const contacts = [privacy.privacyEmail, privacy.privacyNoticeUrl].filter(
+    (contact): contact is string => contact !== null,
+  );
+  if (contacts.length === 0) return undefined;
+  const words =
+    INVOICE_EMAIL_NOTICE_WORDS[document.invoiceLocale.split("-")[0] === "en" ? "en" : "es"];
+  const venue = (document.result.issuer ?? document.issuer).venueName;
+  return [
+    (privacy.taxRecord ? words.purposeWithRecord : words.purpose).replace("{venue}", () => venue),
+    words.contact.replace("{contacts}", () => contacts.join(", ")),
+  ].join("\n");
+}
 
 export function createRoutedInvoiceEmailSender(deps: {
   db: Database;
@@ -32,10 +73,13 @@ export function createInvoiceEmailSender(config: {
   url: string;
   from: string;
 }): InvoiceEmailSender {
-  return async ({ recipient, document }) => {
+  return async ({ recipient, document, privacy }) => {
     const pdf = await renderInvoicePdf(document);
     const labels = receiptLabelsFor(document.invoiceLocale);
     const caption = `${labels.invoice} ${document.result.invoiceNumber}`;
+    const notice = privacyNotice(document, privacy);
+    const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;
+    const text = notice === undefined ? marked : `${marked}\n\n${notice}`;
     // Own the socket so the deadline can cancel an in-flight SMTP exchange.
     const socket = new Socket();
     const transport = nodemailer.createTransport({ url: config.url, socket });
@@ -52,7 +96,7 @@ export function createInvoiceEmailSender(config: {
         from: config.from,
         to: recipient,
         subject: caption,
-        text: `${caption}${document.duplicate === true ? ` — ${labels.duplicate}` : ""}`,
+        text,
         attachments: [{ filename: "invoice.pdf", contentType: "application/pdf", content: pdf }],
       })
       .then<InvoiceDeliveryOutcome, InvoiceDeliveryOutcome>(

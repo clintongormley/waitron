@@ -5,8 +5,15 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { setTimeout as deadline } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { createInvoiceEmailSender, createRoutedInvoiceEmailSender } from "./invoice-email.js";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import nodemailer from "nodemailer";
+import {
+  createInvoiceEmailSender,
+  createRoutedInvoiceEmailSender,
+  readInvoiceEmailPrivacy,
+} from "./invoice-email.js";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
+import { savePrivacyContact } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -16,6 +23,7 @@ import {
   deleteCredential,
 } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
+import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 
 type Reply =
   | "accepted"
@@ -137,6 +145,27 @@ async function attachmentText(message: string) {
   } finally {
     await loading.destroy();
   }
+}
+
+function textPart(message: string) {
+  const boundary = /boundary="?([^"\r\n;]+)"?/.exec(message)?.[1];
+  expect(boundary).toBeDefined();
+  // The rig records the SMTP data stream, where a line starting with "." carries a second one.
+  const part = message
+    .replace(/\r\n\.\./g, "\r\n.")
+    .split(`--${boundary}`)
+    .find((section) => /^Content-Type: text\/plain/im.test(section.split("\r\n\r\n")[0]!));
+  expect(part).toBeDefined();
+  const [headers, ...body] = part!.replace(/^\r\n/, "").split("\r\n\r\n");
+  const value = body.join("\r\n\r\n").replace(/\r\n$/, "");
+  if (/Content-Transfer-Encoding: base64/i.test(headers!))
+    return Buffer.from(value.replace(/\s/g, ""), "base64").toString("utf8").replace(/\r\n/g, "\n");
+  return value
+    .replace(/=\r\n/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/(?:=[\dA-F]{2})+/g, (run) =>
+      Buffer.from(run.replaceAll("=", ""), "hex").toString("utf8"),
+    );
 }
 
 describe("invoice SMTP transport", () => {
@@ -385,3 +414,165 @@ it.each(["temporary-recipient-refused", "temporary-data-refused"] as const)(
     }
   },
 );
+
+describe("invoice email privacy notice", () => {
+  const venue = "Charcutería La Buena SL";
+  const notice = (language: "en" | "es", taxRecord: boolean, contacts: string): string => {
+    const words = INVOICE_EMAIL_NOTICE_WORDS[language];
+    return [
+      (taxRecord ? words.purposeWithRecord : words.purpose).replace("{venue}", () => venue),
+      words.contact.replace("{contacts}", () => contacts),
+    ].join("\n");
+  };
+  const email = "privacy@example.com";
+  const page = "https://example.com/privacy";
+  const sendText = async (message: {
+    document: typeof fixture;
+    privacy?: { privacyNoticeUrl: string | null; privacyEmail: string | null; taxRecord: boolean };
+  }) => {
+    const rig = await smtpRig("accepted");
+    try {
+      expect(
+        await createInvoiceEmailSender(rig.config)({
+          recipient: "customer@example.test",
+          ...message,
+        }),
+      ).toEqual({ status: "sent" });
+      expect(rig.messages).toHaveLength(1);
+      return textPart(rig.messages[0]!);
+    } finally {
+      await rig.close();
+    }
+  };
+
+  it.each([
+    ["es-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
+    ["es-ES", null, page, false, "Factura", notice("es", false, page)],
+    ["eu-ES", email, null, false, "Faktura", notice("es", false, email)],
+    ["ca-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
+    ["en-GB", email, page, false, "Factura", notice("en", false, `${email}, ${page}`)],
+    ["es-ES", null, null, true, "Factura", undefined],
+  ] as const)(
+    "a %s invoice with email %s and page %s (tax record %s) carries its notice in the text",
+    async (invoiceLocale, privacyEmail, privacyNoticeUrl, taxRecord, label, expected) => {
+      const text = await sendText({
+        document: { ...fixture, invoiceLocale },
+        privacy: { privacyEmail, privacyNoticeUrl, taxRecord },
+      });
+      const caption = `${label} FF/1`;
+      expect(text).toBe(expected === undefined ? caption : `${caption}\n\n${expected}`);
+    },
+  );
+
+  it("sends the caption alone when the message carries no privacy facts", async () => {
+    expect(await sendText({ document: fixture })).toBe("Factura FF/1");
+  });
+
+  it("prints a venue name holding a replacement pattern as typed", async () => {
+    const typed = "Bar $& Co";
+    const words = INVOICE_EMAIL_NOTICE_WORDS.es;
+    expect(
+      await sendText({
+        document: {
+          ...fixture,
+          result: { ...fixture.result, issuer: { ...fixture.result.issuer!, venueName: typed } },
+        },
+        privacy: { privacyEmail: email, privacyNoticeUrl: null, taxRecord: false },
+      }),
+    ).toBe(
+      `Factura FF/1\n\n${words.purpose.split("{venue}").join(typed)}\n${words.contact.split("{contacts}").join(email)}`,
+    );
+  });
+
+  it("puts the notice after a duplicate's marked caption and a blank line", async () => {
+    expect(
+      await sendText({
+        document: { ...fixture, duplicate: true },
+        privacy: { privacyEmail: email, privacyNoticeUrl: page, taxRecord: true },
+      }),
+    ).toBe(`Factura FF/1 — DUPLICADO\n\n${notice("es", true, `${email}, ${page}`)}`);
+  });
+
+  it("textPart decodes an accented line longer than a mail line", async () => {
+    const rig = await smtpRig("accepted");
+    const known = `Data protection: ${"naïve café ".repeat(20)}end`;
+    try {
+      await nodemailer.createTransport({ url: rig.config.url }).sendMail({
+        from: rig.config.from,
+        to: "customer@example.test",
+        subject: "x",
+        text: known,
+        attachments: [{ filename: "a.txt", content: "a" }],
+      });
+      expect(rig.messages[0]).not.toContain(known);
+      expect(textPart(rig.messages[0]!)).toBe(known);
+    } finally {
+      await rig.close();
+    }
+  });
+});
+
+describe("readInvoiceEmailPrivacy reads the privacy facts", () => {
+  const saleId = "0193a4f2-7c1e-7b3a-9d4e-5f6a7b8c9d0e";
+  const filed: FiledReceipt = { verificationUrl: "https://example.com/verify", vatBreakdown: [] };
+  /** A backend that answers `filedReceiptFor` alone, recording the sale it was asked about. */
+  function backendAnswering(receipt: FiledReceipt | undefined) {
+    const asked: string[] = [];
+    const backend = new Proxy({} as FiscalBackend, {
+      get(_target, prop) {
+        if (prop === "filedReceiptFor") {
+          return (_tx: Transaction, saleId: string) => {
+            asked.push(saleId);
+            return Promise.resolve(receipt);
+          };
+        }
+        throw new Error(`unexpected backend read: ${String(prop)}`);
+      },
+    });
+    return { backend, asked };
+  }
+
+  it.each([
+    {
+      name: "the stored values and a filed record",
+      taxpayer: true,
+      receipt: filed,
+      expected: {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+        taxRecord: true,
+      },
+    },
+    {
+      name: "the stored values and no filed record",
+      taxpayer: true,
+      receipt: undefined,
+      expected: {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+        taxRecord: false,
+      },
+    },
+    {
+      name: "no taxpayer row",
+      taxpayer: false,
+      receipt: filed,
+      expected: { privacyNoticeUrl: null, privacyEmail: null, taxRecord: true },
+    },
+  ])("reads $name", async ({ taxpayer, receipt, expected }) => {
+    if (taxpayer) {
+      await seedTenant(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        await savePrivacyContact(tx, {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        });
+      });
+    }
+    const { backend, asked } = backendAnswering(receipt);
+    expect(
+      await withTransaction(suite.db, (tx) => readInvoiceEmailPrivacy(backend, tx, saleId)),
+    ).toEqual(expected);
+    expect(asked).toEqual([saleId]);
+  });
+});

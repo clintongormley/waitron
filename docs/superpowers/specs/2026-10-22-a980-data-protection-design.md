@@ -342,6 +342,10 @@ S1 puts this text in the email's body, not on the PDF invoice the email attaches
 adviser whether the PDF itself should carry a line, so an answer of yes could put the same notice in
 one email twice.
 
+_2026-10-27: S1b2 sends the help guide's wording in the invoice email body, the Tax Agency part only
+for an invoice with a tax record, in Spanish unless the invoice is in English
+([the S1b plan](../plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._
+
 **Booking guests** (bookings are taken by staff, `packages/bookings/src/schema/bookings.ts:50-52`,
 and the box sends guests nothing, so the first layer is spoken):
 

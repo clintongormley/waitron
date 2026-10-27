@@ -195,7 +195,7 @@ import { createPageTestPages } from "./page-test-pages.js";
 import { configureDemoPrinter, startDemoPrinterLoop } from "./demo-printer.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { readInvoiceDocument } from "./invoice-document.js";
-import { createRoutedInvoiceEmailSender } from "./invoice-email.js";
+import { createRoutedInvoiceEmailSender, readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { beginAttendanceDiscovery } from "./attendance-discovery.js";
@@ -1914,6 +1914,7 @@ async function bootServer(
       signal: invoiceEmailController.signal,
       isPrimary: () => holders.singletonRole.current === "primary",
       readDocument: (tx, delivery) => readInvoiceDocument(tillBackend, tx, till, delivery.saleId),
+      readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(tillBackend, tx, delivery.saleId),
       send: createRoutedInvoiceEmailSender({ db, ring, config }),
       onError: (error) =>
         log("error", "invoice_delivery.email_failed", { errorCode: codeOf(error) }),
