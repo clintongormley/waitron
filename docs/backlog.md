@@ -5372,6 +5372,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Verify main CI's range selection under queued code runs (A1153, CI).**
+  After the classifier change lands, read two real main pushes, including docs pushed while
+  a code merge's own run is queued. Confirm the docs run skips package suites and retain the
+  earlier code run's final result. The fixture checks do not qualify Actions scheduling.
+
 - **Audit the other coverage download actions for retained refused responses.**
   The server helper closes this response; other merge jobs still use the action exercised by
   the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).

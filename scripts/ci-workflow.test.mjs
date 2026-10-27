@@ -2095,6 +2095,26 @@ describe("the image smoke's scoping", () => {
   });
 });
 
+describe("main push package gates", () => {
+  it.each([
+    ["docs behind a queued code run", "false", false],
+    ["docs behind a cancelled code run", "true", true],
+    ["a code push", "true", true],
+  ])("evaluates shard gates with the supplied code output for %s", (_name, code, expected) => {
+    expect(testShardJobs.length).toBeGreaterThan(0);
+    for (const { id, body } of testShardJobs) {
+      const line = body.find((entry) => /^ {4}if:/.test(entry));
+      expect(line, id).toBeDefined();
+      const expression = line
+        .replace(/^ {4}if:\s*/, "")
+        .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
+        .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
+        .replace(/==/g, "===");
+      expect(Boolean(new Function(`return (${expression});`)()), id).toBe(expected);
+    }
+  });
+});
+
 describe("the sharded jobs", () => {
   it("bound every browser package's shard command and retain deadline diagnostics", () => {
     const browser = browserPackages();
