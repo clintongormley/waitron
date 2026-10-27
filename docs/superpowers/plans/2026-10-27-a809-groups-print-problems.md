@@ -35,8 +35,8 @@ runs its full wave.
   `#readGroups` (≈ 11103). A failed groups read leaves the groups "unread" (`null`, which makes
   held-group commands refuse); a failed problems read shows no problem (`[]`).
 - Two other `listGroups` callers in `till-app.ts` (`#refreshAllergyMetadata` ≈ 3816, the draft-sync
-  refresh ≈ 11766) read groups only. **Leave them as they are**: they do not set `printProblems`
-  today and the item does not ask them to.
+  refresh ≈ 11766) replace `tabGroups` from their read (≈ 3831, ≈ 11837). After this change their
+  answer carries the printing problems too, which they would throw away (D6).
 - No dashboard or other caller of `/print-problems` exists (`git grep -n print-problems -- apps
   packages` on 9d5853c31: only the route, the client method and tests).
 
@@ -57,6 +57,11 @@ runs its full wave.
   gain `printProblems: []` (adding what a stub lacks — the owner's 2026-09-27 rule; name each grown
   file in the PR).
 
+- **D6. The other two groups reads use the problems they now receive.** `#refreshAllergyMetadata`
+  and the draft-sync refresh set `this.printProblems` from their groups answer at the point they set
+  `this.tabGroups`, so every groups read the till pays for (each now runs the printing-problems
+  queries: party, family, join) keeps the notice current. One test each.
+
 ## Task 1 — the groups read carries the party's printing problems (server)
 
 Files: `apps/server/src/till-api.ts`, `apps/server/src/till-api.print-problems.test.ts`,
@@ -65,13 +70,14 @@ Files: `apps/server/src/till-api.ts`, `apps/server/src/till-api.print-problems.t
 1. Test first, in `till-api.print-problems.test.ts`: a new case "the groups read carries the
    party's printing problems" — `tableWithFailedTicket()`, then `GET /api/parties/:id/groups`;
    expect status 200 and `json.printProblems` `toEqual` the one-element list the existing 200 case
-   expects for `/print-problems`. A second case: a table whose ticket printed (or no ticket at all)
-   answers `printProblems: []`. Run it; watch both fail (field absent).
+   expects for `/print-problems`. A second case: a table with a fresh ticket still WAITING (not yet
+   past `JOBS_WAITING_MS`, `apps/server/src/print-job-trouble.ts:15`) answers `printProblems: []` —
+   a table with no ticket would also pass an implementation that lists every ticket. Run it; watch both fail (field absent).
 2. In the groups route: `return { ...(await listOrderGroups(tx, partyId)), printProblems: await
    listPrintProblems(tx, partyId) }` inside the existing transaction (D2).
-3. `till-api.groups.test.ts`: every `toEqual` on the WHOLE groups answer (the backlog names one
-   exact-body assertion; find every one with `grep -n 'toEqual' ` near `GET .../groups` calls)
-   gains `printProblems: []` (or the expected list). This is the "assertion pinning a whole shape
+3. `till-api.groups.test.ts:804` — the one `toEqual` on the WHOLE groups answer (plan review
+   checked every suite; `snapshot()` at `:168` reads both sides so needs nothing) — gains
+   `printProblems: []`. This is the "assertion pinning a whole shape
    may gain the key a new field adds" exception — no existing value changes. List each in the
    ledger's changed-checks table.
 4. Run: `pnpm --filter @waitron/server exec vitest run src/till-api.print-problems.test.ts
@@ -88,12 +94,15 @@ Files: `apps/till/src/api/client.ts`, `apps/till/src/api/client.test.ts`, `apps/
 1. Test first, in `till-app-parties.test.ts`, beside the existing printing-problem cases (≈ 7130):
    rewrite those cases' stubs to deliver the problems through `listGroups`'s answer
    (`{ revision, groups, printProblems }`) instead of `listPrintProblems`, keeping every assertion
-   on what the screen shows. Add the done-criterion case: a table load makes NO request for
-   printing problems — assert the stub API has no `listPrintProblems` call (once the method is
-   gone, assert via a `fetch` stub or the `TillApi` instance that no URL ending `/print-problems`
-   was requested; pick whichever the file's existing tests already use for "was not requested").
-   Keep the failed-read case: a `listGroups` that rejects shows no printing problem AND leaves the
-   groups unread (D4) — assert both. Run; watch the new/rewritten cases fail.
+   on what the screen shows. Add the done-criterion case: the stub carries an explicit
+   `listPrintProblems: vi.fn()`; open the table; assert `listGroups` was called with `"v1"` and
+   `listPrintProblems` was NOT called (without the explicit stub, `not.toHaveBeenCalled` fails for
+   the wrong reason). The D4 failed-read case: stub `listPrintProblems: vi.fn().mockResolvedValue({
+   problems })` AND a rejecting `listGroups`; assert `printProblems` is `[]` (today it equals
+   `problems`, so this fails first). The groups-unread half is already covered at ≈ 7079 — point to
+   it, do not duplicate it. D6: one case each for `#refreshAllergyMetadata` and the draft-sync
+   refresh, showing the problems from their groups answer replace the shown ones. Run; watch the
+   new/rewritten cases fail.
 2. `client.ts`: `listGroups`'s answer type gains `printProblems: PrintProblem[]`; delete
    `listPrintProblems`. `client.test.ts`: delete the `listPrintProblems` case; the `listGroups`
    client case (find it) stubs and expects the new field.
@@ -103,9 +112,12 @@ Files: `apps/till/src/api/client.ts`, `apps/till/src/api/client.test.ts`, `apps/
    `read !== this.#tabLinesRead` check). Keep `#readGroups`'s and `#loadTabLines`'s other behaviour
    exactly as today. Update `#readGroups`'s doc comment only if it becomes false.
 4. Stubs: remove every `listPrintProblems:` stub entry in till tests and
-   `apps/till/test/allergy-app-fixture.ts`; add `printProblems: []` to `listGroups` stubs whose
-   answer reaches `#loadTabLines` and now fails without it. Find them by running the till tests
-   below, not by guessing. Assertions do not change except the ones step 1 rewrites (list each in
+   `apps/till/test/allergy-app-fixture.ts` (except the two explicit ones step 1 adds); add
+   `printProblems: []` to EVERY `listGroups` stub in the files that mention `listGroups` (about 22:
+   `git grep -l listGroups -- apps/till`). Typecheck is no evidence about stubs — every stub is cast
+   `as unknown as TillApi` and `apps/till/tsconfig.json` includes only `src` — and a stub without
+   the field leaves the state `undefined`, which throws only when the screen draws
+   (`till-table-order-screen.ts` ≈ 3138). Assertions do not change except the ones step 1 rewrites (list each in
    the ledger's changed-checks table with before/after).
 5. Run: `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts
    src/api/client.test.ts`, then every till test file that named `listPrintProblems` or stubs
@@ -126,10 +138,10 @@ Files: `apps/server/src/till-api.ts`, `apps/server/src/till-api.print-problems.t
    watch it fail (route still there).
 2. Delete the route from `till-api.ts`; drop `listPrintProblems` from the import only if nothing
    else in the file uses it (the groups route now does — it stays).
-3. `till-api.print-problems.test.ts`: the old `/print-problems` 200 case is now covered by Task 1's
-   case — delete it; its 401 and 409 cases move to the groups route only if
-   `till-api.groups.test.ts` does not already cover them (it covers 409 `party.not_open` at ≈ 849;
-   check 401). Update the file's header comment to name the groups read.
+3. `till-api.print-problems.test.ts`: delete all three `/print-problems` cases. The 200 case is
+   Task 1's; the groups route's 401 is covered at `till-api.groups.test.ts:1441` and its 409
+   `party.not_open` (random id and not-an-id) at ≈ 847 — the groups read throws it first
+   (`order-groups.ts:2371`). Update the file's header comment to name the groups read.
 4. `print-api.unpair-kitchen.test.ts`: both reads (≈ 155 and ≈ 176) become `GET
    /api/parties/:id/groups`, comparing `json.printProblems` with the same values (`[]` before, the
    one-element list after). Its header comment (≈ 26) follows.
