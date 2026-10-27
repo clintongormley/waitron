@@ -3,9 +3,9 @@ import { userEvent } from "vitest/browser";
 import type { WtButton, WtInput } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import type { FirstSetupInspection } from "./api/first-setup-types.js";
+import type { FirstSetupInspection, StartAgainSummary } from "./api/first-setup-types.js";
 import { setLocale } from "./i18n/t.js";
-import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import { initialOwnerStrings, namesFromText } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial, venue, wizardApi } from "../test/first-setup-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -609,6 +609,10 @@ async function damagedRecord(
     inspectionFailsAfterRefusal?: boolean;
     /** Merged into every inspection read after the refused send. */
     inspectionAfterRefusal?: Partial<FirstSetupInspection>;
+    /** The password refusal says the series picks file is damaged; the summary route answers this. */
+    damagedSummary?: StartAgainSummary;
+    /** The summary route refuses instead of answering `damagedSummary`. */
+    summaryRefused?: boolean;
   } = {},
 ) {
   let generation = 1;
@@ -618,9 +622,18 @@ async function damagedRecord(
     intercept(path, body, headers) {
       if (path.endsWith("/resolution/start-again") && !headers.has(ownerHeader))
         return Response.json(
-          { error: { code: "setup.start_again_password_required", params: {} } },
+          {
+            error: {
+              code: "setup.start_again_password_required",
+              params: options.damagedSummary ? { seriesPicksUnreadable: true } : {},
+            },
+          },
           { status: 403 },
         );
+      if (path.endsWith("/start-again/summary") && options.damagedSummary)
+        return options.summaryRefused
+          ? Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 })
+          : Response.json(options.damagedSummary);
       if (path.endsWith("/resolution/start-again") && refusals > 0) {
         refusals -= 1;
         refused = true;
@@ -697,6 +710,100 @@ async function unlockDamagedRecord(app: SetupApp) {
   );
   await expect.poll(() => q(app, "recovery-record-damaged")).not.toBeNull();
 }
+
+const picksFloorMs = new Date(2026, 9, 25, 15, 3).getTime();
+const picksSummary = (recoveryDamaged: boolean): StartAgainSummary => ({
+  reached: "claimed",
+  lastName: null,
+  ...(recoveryDamaged ? { recoveryRecordDamaged: true as const } : {}),
+  unreadable: { records: ["series-picks"], floorMs: picksFloorMs },
+});
+const summaryRequests = <R extends { path: string }>(requests: R[]) =>
+  requests.filter((r) => r.path.endsWith("/start-again/summary"));
+
+it("with the database present and only the series picks file damaged: the password, then the summary's lines, and no damaged recovery-key line; Cancel sends nothing, Confirm sends the summary", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await damagedRecord({ damagedSummary: picksSummary(false) });
+  expect(summaryRequests(requests)).toEqual([]);
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(summaryRequests(requests)).toHaveLength(1);
+  expect(summaryRequests(requests)[0]!.headers.get(ownerHeader)).toBe("B".repeat(43));
+  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
+  expect(
+    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
+      p.textContent!.trim(),
+    ),
+  ).toEqual([t.seriesPicksDamaged]);
+  expect(app.shadowRoot!.textContent).toContain(t.startAgainHelp);
+  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
+  expect(q(app, "retire-confirmed")).not.toBeNull();
+  expect(startAgainRequests(requests)).toHaveLength(1);
+  await click(app, "cancel-start-again");
+  await app.updateComplete;
+  expect(startAgainRequests(requests)).toHaveLength(1);
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
+  const sent = startAgainRequests(requests)[1]!;
+  expect(sent.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    confirmUnreadable: { shown: picksSummary(false) },
+  });
+  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
+});
+
+it("with the database present, the series picks file and the recovery-key record both damaged: both lines, and the request carries both keys", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await damagedRecord({ damagedSummary: picksSummary(true) });
+  await unlockDamagedRecord(app);
+  expect(q(app, "recovery-record-damaged").textContent).toBe(t.recoveryRecordDamaged);
+  expect(
+    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
+      p.textContent!.trim(),
+    ),
+  ).toEqual([t.seriesPicksDamaged]);
+  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
+  expect(startAgainRequests(requests)[1]!.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    recoveryRecordDamagedShown: true,
+    confirmUnreadable: { shown: picksSummary(true) },
+  });
+});
+
+it("with the database present, a failed read of the damaged records' summary offers no Start again and says the details could not be read", async () => {
+  const { app, requests } = await damagedRecord({
+    damagedSummary: picksSummary(false),
+    summaryRefused: true,
+  });
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => q(app, "check-again")).not.toBeNull();
+  expect(summaryRequests(requests)).toHaveLength(1);
+  expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+  expect(formErrors(app)).toContain(initialOwnerStrings.en.recoveryDetailsUnread);
+  expect(startAgainRequests(requests)).toHaveLength(1);
+});
+
+it("with the database present, a password refusal without the picks flag reads no summary and keeps today's warning", async () => {
+  const { app, requests } = await damagedRecord();
+  await unlockDamagedRecord(app);
+  expect(summaryRequests(requests)).toEqual([]);
+  expect(app.shadowRoot!.querySelector("[data-test=name-record-damaged]")).toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=names-from]")).toBeNull();
+});
 
 it.each(["en-GB", "es-ES"])(
   "a damaged recovery-key record asks for the administrator password, and shows no error, in %s",

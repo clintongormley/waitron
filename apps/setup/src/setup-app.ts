@@ -1107,6 +1107,8 @@ export class SetupApp extends LitElement {
   @state() private firstDamagedRecord?: "password" | "confirm" | "unread";
   /** With the database present, the summary of a stopped backup recovery read after the password. */
   @state() private firstStoppedSummary?: StartAgainSummary;
+  /** With the database present and no stopped recovery, the summary naming damaged name records. */
+  @state() private firstDamagedSummary?: StartAgainSummary;
   @state() private firstBackupPhase?: BackupRepairStatus["phase"];
   /** Read before anything is offered on this page, so nothing is offered while a recovery runs elsewhere. */
   @state() private firstActivity?: BackupRepairActivity | null;
@@ -1120,6 +1122,8 @@ export class SetupApp extends LitElement {
   #firstReplacing = false;
   /** The password step was asked for by a refusal while no recovery was known: the record is damaged. */
   #damagedInferred = false;
+  /** The password refusal said the series picks file is damaged. */
+  #seriesPicksUnreadable = false;
   #firstPasswordOwner = {};
   #firstPasswordScope?: DraftScope<string>;
 
@@ -1379,6 +1383,7 @@ export class SetupApp extends LitElement {
     this.#firstSession = undefined;
     this.firstDamagedRecord = undefined;
     this.firstStoppedSummary = undefined;
+    this.firstDamagedSummary = undefined;
     await session?.forgetOwner();
   }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
@@ -1413,7 +1418,9 @@ export class SetupApp extends LitElement {
     try {
       if (missing) await this.#firstSession!.retireMissingDatabase(shown!);
       else if (this.firstDamagedRecord === "confirm")
-        await this.#firstSession!.retireDamagedRecord(this.firstStoppedSummary);
+        await this.#firstSession!.retireDamagedRecord(
+          this.firstStoppedSummary ?? this.firstDamagedSummary,
+        );
       else await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
       if (!current()) return;
       this.firstDamagedRecord = undefined;
@@ -1444,6 +1451,8 @@ export class SetupApp extends LitElement {
             this.#watchActivity();
           }
           this.#damagedInferred = activity === null;
+          this.#seriesPicksUnreadable =
+            (error as { params?: Record<string, unknown> }).params?.seriesPicksUnreadable === true;
           this.firstDamagedRecord = "password";
           return;
         } else if (this.firstDamagedRecord === "confirm") {
@@ -1453,6 +1462,7 @@ export class SetupApp extends LitElement {
           this.firstRetireConfirmed = false;
           this.firstDamagedRecord = "password";
           this.firstStoppedSummary = undefined;
+          this.firstDamagedSummary = undefined;
           this.firstOwnerError = this.#describeFirstError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
           if (!current() || !inspection) return;
@@ -1499,6 +1509,7 @@ export class SetupApp extends LitElement {
     current: () => boolean,
   ): Promise<void> {
     this.firstStoppedSummary = undefined;
+    this.firstDamagedSummary = undefined;
     let activity: BackupRepairActivity | null;
     try {
       activity = await this.#readActivityAnswer();
@@ -1518,6 +1529,15 @@ export class SetupApp extends LitElement {
         const summary = await session.stoppedRecoverySummary();
         if (!current()) return;
         this.firstStoppedSummary = summary;
+      } catch (error) {
+        if (current()) this.#presentReadsFailed(error);
+        return;
+      }
+    } else if (this.#damagedInferred && this.#seriesPicksUnreadable) {
+      try {
+        const summary = await session.damagedRecordSummary();
+        if (!current()) return;
+        this.firstDamagedSummary = summary;
       } catch (error) {
         if (current()) this.#presentReadsFailed(error);
         return;
@@ -1584,6 +1604,7 @@ export class SetupApp extends LitElement {
     }
     this.firstDamagedRecord = undefined;
     this.firstStoppedSummary = undefined;
+    this.firstDamagedSummary = undefined;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
     this.firstPasswordAttempted = false;
@@ -1596,10 +1617,10 @@ export class SetupApp extends LitElement {
   }
   #showsDamagedRecord(missing: boolean, ask: StartAgainSummary | undefined): boolean {
     if (missing) return ask?.recoveryRecordDamaged === true;
-    const stopped = this.firstStoppedSummary;
+    const summary = this.firstStoppedSummary ?? this.firstDamagedSummary;
     return (
       this.firstDamagedRecord === "confirm" &&
-      (stopped === undefined || stopped.recoveryRecordDamaged === true)
+      (summary === undefined || summary.recoveryRecordDamaged === true)
     );
   }
   async #reconnectFirstSetup(): Promise<void> {
@@ -1620,6 +1641,7 @@ export class SetupApp extends LitElement {
       this.firstMissingSummary = undefined;
       this.firstDamagedRecord = undefined;
       this.firstStoppedSummary = undefined;
+      this.firstDamagedSummary = undefined;
       this.firstBackupPhase = undefined;
       this.firstRecoveryUnsettled = false;
       this.#stopActivityWatch();
@@ -2460,6 +2482,7 @@ export class SetupApp extends LitElement {
       !this.#firstSession?.recoveryRequired &&
       state.status !== "complete";
     const ask = authenticatedMissing ? this.firstMissingSummary : undefined;
+    const unreadable = (missing ? ask : this.firstDamagedSummary)?.unreadable;
     // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
     const recoveryStarted = this.firstBackupPhase !== "unstarted";
     const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
@@ -2512,6 +2535,7 @@ export class SetupApp extends LitElement {
         if (stoppedHere && damaged === undefined) {
           this.firstDamagedRecord = "password";
           this.#damagedInferred = false;
+          this.#seriesPicksUnreadable = false;
         } else if (damaged === "confirm" && this.firstStoppedSummary)
           void this.#checkPresentAgain();
         else this.firstRestartConfirm = true;
@@ -2562,7 +2586,7 @@ export class SetupApp extends LitElement {
               ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
               : nothing
           }
-          ${(ask?.unreadable?.records ?? []).map(
+          ${(unreadable?.records ?? []).map(
             (record) =>
               html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
           )}
@@ -2573,9 +2597,9 @@ export class SetupApp extends LitElement {
           }
           <p>${t.startAgainHelp}</p>
           ${
-            ask?.unreadable
+            unreadable
               ? html`<p data-test="names-from">
-                  ${namesFromText(currentLocale(), ask.unreadable.floorMs)}
+                  ${namesFromText(currentLocale(), unreadable.floorMs)}
                 </p>`
               : nothing
           }
