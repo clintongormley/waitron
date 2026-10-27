@@ -685,8 +685,8 @@ export async function readLiveMenu(
  * Puts `changes` live at once as a new version of the menu's live version `baseVersionId`, inside
  * the caller's one transaction, then queues every still-queued version again after it, with the
  * same content and date. The products, the working menu and every other menu are left as they
- * were. Refused, writing nothing, when the menu has no live version, its live version is no longer
- * `baseVersionId`, a picture is not in the library, or the patch changes nothing.
+ * were. Translated fields merge against the venue's saved content languages, or `fallbackLanguage`
+ * alone when none are saved.
  */
 export async function patchLiveMenu(
   tx: Transaction,
@@ -694,7 +694,7 @@ export async function patchLiveMenu(
   baseVersionId: string,
   changes: unknown,
   personId: string,
-  options: { at?: Date } = {},
+  options: { at?: Date; fallbackLanguage?: string } = {},
 ): Promise<MenuPatchResult> {
   const at = options.at ?? now();
   await settleDue(tx, at, [menuId]);
@@ -714,7 +714,7 @@ export async function patchLiveMenu(
   const document = applyMenuPatch(
     live.document!,
     parsed,
-    await readContentLanguages(tx, FALLBACK_LOCALE),
+    await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE),
   );
   const contentHash = menuDocumentHash(document);
   if (contentHash === live.contentHash) throw new AppError("menu_patch.unchanged", { menuId });

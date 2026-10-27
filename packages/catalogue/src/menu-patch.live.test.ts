@@ -16,6 +16,7 @@ import {
   queueMenuPublication,
 } from "./menu-schedule.js";
 import { updateProduct } from "./operations.js";
+import { writeContentLanguages } from "./content-languages.js";
 import {
   menuPublications,
   menuScheduledPublications,
@@ -348,6 +349,48 @@ describe("patchLiveMenu", () => {
     expect(result.number).toBe(2);
     const live = await app((tx) => readLiveMenu(tx, f.lunch));
     expect(live!.document.offers[item]).toMatchObject({ image: null, unitPrice: "5.50" });
+  });
+
+  it("merges translations against the venue's saved content languages", async () => {
+    const target = { kind: "offer", menuItemId: await lemonadeItem() };
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] }),
+    );
+    const named = await patch(v1, [
+      {
+        target,
+        field: "customerName",
+        value: { en: "Lemonade", es: "Limonada", fr: "Citronnade" },
+      },
+    ]);
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
+    await patch(named.versionId, [
+      { target, field: "customerName", value: { en: "Fresh lemonade", es: "" } },
+    ]);
+    const live = await app((tx) => readLiveMenu(tx, f.lunch));
+    expect(live!.document.offers[target.menuItemId]!.customerName).toEqual({
+      en: "Fresh lemonade",
+      fr: "Citronnade",
+    });
+  });
+
+  it("merges against the fallback language when no content languages are saved", async () => {
+    const target = { kind: "offer", menuItemId: await lemonadeItem() };
+    const changes = [{ target, field: "customerName", value: { es: "Limonada" } }];
+    await refuses(() => patch(v1, changes), {
+      code: "menu_patch.invalid",
+      params: { change: 0, field: "customerName" },
+    });
+    await app((tx) =>
+      patchLiveMenu(tx, f.lunch, v1, changes, ANA, { at: NOW, fallbackLanguage: "es" }),
+    );
+    const live = await app((tx) => readLiveMenu(tx, f.lunch));
+    expect(live!.document.offers[target.menuItemId]!.customerName).toEqual({
+      en: "Lemonade for guests",
+      es: "Limonada",
+    });
   });
 
   it("writes only the publication tables", async () => {
