@@ -1,3 +1,5 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
+import { renderInvoicePdf } from "./invoice-pdf.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -132,6 +134,7 @@ async function venue(opts: { render?: Render } = {}) {
   );
   return {
     app,
+    cfg,
     state,
     backend,
     locationId,
@@ -406,6 +409,49 @@ describe("requesting a test page", () => {
 });
 
 describe("printing a test page", () => {
+  it("A965 sample language retains the request language across deferred fetch and active-page repeats", async () => {
+    const documents: ReceiptDocumentInput[] = [];
+    const v = await venue({
+      render: async (document) => {
+        documents.push(document);
+        return renderInvoicePdf(document);
+      },
+    });
+    const office = await printer(v, v.agentOne);
+    await suite.db
+      .update(locations)
+      .set({ invoiceLocales: ["ca-ES"] })
+      .where(eq(locations.id, v.locationId));
+    const first = await requested(v, office);
+    await suite.db
+      .update(locations)
+      .set({ invoiceLocales: ["es-ES"] })
+      .where(eq(locations.id, v.locationId));
+    v.cfg.locale = "en-GB";
+    v.cfg.invoiceLocales = ["en-GB"];
+    await suite.db.update(persons).set({ locale: "en-GB" });
+    expect(await requested(v, office)).toEqual(first);
+    const job = (await claim(v))!;
+    expect(await requested(v, office)).toEqual({ id: first.id, status: "printing" });
+    const response = await agentPost(v, `${job.id}/document`, held(job));
+    expect(response.status).toBe(200);
+    const text = await pdfText(new Uint8Array(await response.arrayBuffer()));
+    expect(text).toContain(receiptLabelsFor("ca-ES").sampleIssuerName);
+    expect(text).toContain(receiptLabelsFor("ca-ES").cash);
+    expect(documents[0]!.invoiceLocale).toBe("ca-ES");
+    expect(documents[0]!.result.locale).toBe("ca-ES");
+    expect((await agentPost(v, `${job.id}/result`, { ...held(job), status: "sent" })).status).toBe(
+      204,
+    );
+    const second = await requested(v, office);
+    expect(second.id).not.toBe(first.id);
+    const next = (await claim(v))!;
+    expect((await agentPost(v, `${next.id}/document`, held(next))).status).toBe(200);
+    expect(documents[1]!.invoiceLocale).toBe("es-ES");
+    expect(documents[1]!.result.locale).toBe("es-ES");
+    expect(await deliveryRows()).toBe(0);
+  });
+
   it("hands it to the printer's own agent in the printer's format, renders the sample sale and writes no delivery row", async () => {
     const rendered: { document: ReceiptDocumentInput; format: string; dpi: number }[] = [];
     const v = await venue({
@@ -452,7 +498,7 @@ describe("printing a test page", () => {
     expect(rendered[0]!.format).toBe("image/urf");
     expect(rendered[0]!.dpi).toBe(600);
     expect(rendered[0]!.document.surface).toBe("a4");
-    expect(rendered[0]!.document.result).toEqual(sampleSale(QR_TEXT));
+    expect(rendered[0]!.document.result).toEqual(sampleSale(QR_TEXT, "es-ES"));
     expect(rendered[0]!.document.result.invoiceNumber).toBe("MUESTRA/1");
 
     expect((await agentPost(v, `${job.id}/result`, { ...held(job), status: "sent" })).status).toBe(
@@ -875,8 +921,8 @@ describe("a test page the printer is holding", () => {
       resolutionDpi: 300,
     }));
     expect(pages.holdOn("x")).toBeNull();
-    pages.request("x");
-    pages.request("y");
+    pages.request("x", "es-ES");
+    pages.request("y", "es-ES");
     expect(pages.holdOn("x")).toBeNull();
     const onX = pages.claim("agent", printers)!;
     const onY = pages.claim("agent", printers)!;

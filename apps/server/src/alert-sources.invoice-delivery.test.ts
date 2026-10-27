@@ -211,7 +211,7 @@ async function secondPrinter(v: Venue): Promise<string> {
 /** A store whose test page on `pagePrinterId` is printing and held for `hold`. */
 function heldTestPage(pagePrinterId: string, hold: A4HoldCode, now: Date): PageTestPages {
   const pages = createPageTestPages(() => now);
-  pages.request(pagePrinterId);
+  pages.request(pagePrinterId, "es-ES");
   const job = pages.claim("agent", [
     {
       id: pagePrinterId,

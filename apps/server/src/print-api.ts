@@ -1,3 +1,4 @@
+import { readReceiptLanguage } from "@waitron/catalogue";
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
 import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
@@ -1347,14 +1348,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const payload = formatSampleReceipt(
-        {
-          paperWidth: requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues),
-          resolution: requireEnum(body.resolution, "resolution", printResolution.enumValues),
-        },
-        deps.receiptQrText,
-      );
-      const result = await gated(sessionId, (tx) => enqueuePrintJob(tx, deps.cfg, id, payload));
+      const printer = {
+        paperWidth: requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues),
+        resolution: requireEnum(body.resolution, "resolution", printResolution.enumValues),
+      };
+      const result = await gated(sessionId, async (tx) => {
+        const { locale } = await readReceiptLanguage(tx, deps.cfg.locationId);
+        const payload = formatSampleReceipt(printer, deps.receiptQrText, locale);
+        return enqueuePrintJob(tx, deps.cfg, id, payload);
+      });
       return c.json(result, 202);
     }),
   );
