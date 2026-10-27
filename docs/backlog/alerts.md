@@ -19,7 +19,7 @@ their full text.
 
 Found by A798-B slice 4 (#1958). `readOpenAlerts` (`apps/server/src/alerts.ts`) asks
 each source inside a savepoint so a failed source's writes go with it, but removing the savepoint
-left every test file that reaches `readOpenAlerts` passing (nine files, 2026-10-22): their failing
+left every test file that reaches `readOpenAlerts` passing: their failing
 sources fail a query or throw before writing anything, so nothing is left for the savepoint to
 undo. A failing source that writes before it throws would pin it, as
 `apps/server/src/staff-notices.test.ts` does. It also reads each source's answer after the
@@ -85,7 +85,7 @@ server-log access. The older slice descriptions and decisions below retain their
 
 ## The Alerts table makes long station warnings hard to read on a phone
 
-- **The Alerts table makes long station warnings hard to read on a phone.** A 390 px mounted
+- A 390 px mounted
   dashboard fixture for `route.released_at_closed_station` showed only the start of its warning at
   first; its 340 px table viewport had 906 px of scrollable content, and a 566 px horizontal pan
   reached the remaining text. Give the alert text more room at phone width while keeping its
@@ -97,7 +97,7 @@ server-log access. The older slice descriptions and decisions below retain their
 
 ## A1047. Send a problem report to Waitron Cloud
 
-**A1047. Send a problem report to Waitron Cloud (owner, 2026-10-24).** The follow-up A982
+(owner, 2026-10-24). The follow-up A982
 leaves open. Cloud's approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 11) has its triage agent
 sort reports by urgency. A report's errors, version and installation details go at once; the
 typed description goes only when someone with the venue's admin permission sends it (owner:
@@ -106,8 +106,8 @@ the report and sends it later, and the sender sees which.
 
 ## A1048. Opt-in automatic error reports to Waitron Cloud
 
-**A1048. Opt-in automatic error reports to Waitron Cloud (owner, 2026-10-24: "Should be opt
-in").** Setup asks plainly, unticked; settings can change it. A report holds only the error's
+(owner, 2026-10-24: "Should be opt
+in"). Setup asks plainly, unticked; settings can change it. A report holds only the error's
 code and source, the version, counts and masked log lines (A980 O9; the log's own mask covers only listed detail names, not
 free text), is signed with the box's
 Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
@@ -115,7 +115,7 @@ by version to catch a bad release (design section 10).
 
 ## The alert pop-up can split a written time across two lines
 
-- **The alert pop-up can split a written time across two lines.** The Box status page's rows, its
+- The Box status page's rows, its
   clock check dialog and its list of wrongly dated sales, the bell and the Alerts screen keep each
   `YYYY-MM-DD HH:MM` whole (`wholeTimes`, `apps/dashboard/src/widgets/alert-format.ts`); the pop-up
   (`wt-toast`) takes a plain string, so keeping times whole there needs `wt-toast` to take more than

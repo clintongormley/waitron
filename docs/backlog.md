@@ -4271,10 +4271,9 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
 
-- **The alert registry's per-source savepoint has no test that fails without it.** Removing the
-  savepoint in `readOpenAlerts` (`apps/server/src/alerts.ts`) left every test that reaches it
-  passing, and it reads each source's answer after the savepoint closes. Found by A798-B slice 4
-  (#1958).
+- **The alert registry's per-source savepoint has no test that fails without it.** Removing the savepoint in
+  `readOpenAlerts` (`apps/server/src/alerts.ts`) left every test that reaches it passing, and it reads each
+  source's answer after the savepoint closes. Found by A798-B slice 4 (#1958).
   [Detail](backlog/alerts.md#the-alert-registrys-per-source-savepoint-has-no-test-that-fails-without-it)
 
 - **`redact-secrets.ts` was written against the PostgreSQL connection-string parser** — found by
@@ -4297,9 +4296,7 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   and `expected`, so a new money slot under another name is unseen.** Left open by C43 (money in
   the dashboard shows its currency sign, #830).
 
-- **A982. Logging Slice 2 — one-touch bug report.** The
-  [implementation plan](superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) splits the
-  build into trail privacy hardening, frozen local reports with manager read/download, then the
+- **A982. Logging Slice 2 — one-touch bug report.** The [implementation plan](superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) splits the build into trail privacy hardening, frozen local reports with manager read/download, then the
   shared dialog and app buttons, including setup. Planning only; all three implementation PRs
   remain open. Cloud forwarding and automatic crash/freeze reporting remain separate follow-ups.
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
