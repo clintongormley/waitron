@@ -475,8 +475,8 @@ export function createFirstSetupResolutionActions(
             discarding,
             found?.kind === "stopped" ? found.floor : null,
           );
-          // Only the database-missing and recovery-discard paths show the person a damaged name
-          // record before Start again, so any other path refuses one.
+          // Only the database-missing and recovery-discard paths carry a damaged name record in
+          // the summary the person confirms, so any other path refuses one.
           if (gathered.unreadable !== undefined && !missing && !discardsStopped)
             throw new AppError("setup.attempt_invalid", {});
           const { floor } = gathered;

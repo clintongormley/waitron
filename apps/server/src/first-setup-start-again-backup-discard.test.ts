@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import "node:fs";
 
-import { access, lstat, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, lstat, readFile, readdir, utimes, writeFile } from "node:fs/promises";
 
 import { Socket } from "node:net";
 
@@ -26,7 +26,11 @@ import {
   type StartAgainSummary,
 } from "@waitron/provisioning";
 
-import "@waitron/fiscal-verifactu/src/hour-identity.js";
+import {
+  EPOCH_MS,
+  MINUTE_MS,
+  decodeMinuteIdentity,
+} from "@waitron/fiscal-verifactu/src/hour-identity.js";
 
 import { clock } from "../test/hour-recovery-host.js";
 
@@ -480,8 +484,13 @@ function attemptAt(host: Host, status: AttemptStatus): Host {
   };
 }
 
-async function presentOver(f: Pick<Repair, "host" | "roots">, backupRecovery: Service) {
+async function presentOver(
+  f: Pick<Repair, "host" | "roots">,
+  backupRecovery: Service,
+  stamp?: () => Promise<void>,
+) {
   const { owner, ids } = await signedIn(f.host);
+  await stamp?.();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: databasePresent(f.host),
@@ -511,6 +520,76 @@ it("with the database present, the password and the confirmed summary discard a 
   expect(records[0]).toMatchObject({
     database: "present",
     administrator: { displayName: "Elena", email: "elena@example.test" },
+  });
+});
+
+async function stampTree(path: string, at: Date) {
+  const found = await lstat(path).catch(() => null);
+  if (found === null) return;
+  if (found.isDirectory())
+    for (const entry of await readdir(path)) {
+      // A kept backup recovery is not on the attempt's list (`itemsOnDisk`), so it keeps its times.
+      if (entry === "backup-recovery") continue;
+      await stampTree(join(path, entry), at);
+    }
+  await utimes(path, at, at);
+}
+
+/** Every attempt file at `listedMs`, the damaged picks file at `picksMs`. */
+async function damagedPicksDiscard(
+  times: (nameMs: number) => { listedMs: number; picksMs: number },
+) {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const picks = join(f.roots.stateDir, "module-preparation-state.json");
+  await writeFile(picks, "{damaged");
+  const recoveryNameMs = EPOCH_MS + decodeMinuteIdentity(f.selected.identity) * MINUTE_MS;
+  const { listedMs, picksMs } = times(recoveryNameMs);
+  const startAgain = await presentOver(f, f.service, async () => {
+    await stampTree(f.roots.stateDir, new Date(listedMs));
+    await stampTree(join(f.roots.venueDir, "first-setup-claim.json"), new Date(listedMs));
+    await utimes(picks, new Date(picksMs), new Date(picksMs));
+  });
+  return {
+    f,
+    startAgain,
+    recoveryFloorMs: recoveryNameMs + MINUTE_MS,
+    timeFloorMs: (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS,
+  };
+}
+
+it("with the database present, a stopped recovery's discard past a damaged picks file shows it, and the note keeps the later time floor with no name", async () => {
+  const { f, startAgain, recoveryFloorMs, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
+    listedMs: nameMs + MINUTE_MS,
+    picksMs: nameMs + 120 * MINUTE_MS,
+  }));
+  expect(timeFloorMs).toBeGreaterThan(recoveryFloorMs);
+  expect(startAgain.shown.unreadable).toEqual({ records: ["series-picks"], floorMs: timeFloorMs });
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  expect(await readStartAgainNote(f.roots.stateDir)).toEqual({
+    version: 1,
+    floorMs: timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+});
+
+it("with the database present, a stopped recovery's later floor wins over a damaged picks file's time floor", async () => {
+  const { f, startAgain, recoveryFloorMs, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
+    listedMs: nameMs - 120 * MINUTE_MS,
+    picksMs: nameMs - 120 * MINUTE_MS,
+  }));
+  expect(timeFloorMs).toBeLessThan(recoveryFloorMs);
+  expect(startAgain.shown.unreadable).toEqual({
+    records: ["series-picks"],
+    floorMs: recoveryFloorMs,
+  });
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  expect(await readStartAgainNote(f.roots.stateDir)).toEqual({
+    version: 1,
+    floorMs: recoveryFloorMs,
+    lastName: f.selected.identity,
+    module: "fiscal-verifactu",
   });
 });
 
