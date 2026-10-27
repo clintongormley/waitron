@@ -26,6 +26,7 @@ import { readContentLanguages } from "./content-languages.js";
 import { applyMenuPatch, parseMenuPatch } from "./menu-patch.js";
 import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
+import { catalogueExists } from "./operations.js";
 import type {
   MenuChangeBody,
   MenuDocument,
@@ -665,6 +666,11 @@ async function pointTo(
     .onConflictDoUpdate({ target: menuPublications.menuId, set: { versionId, publishedAt } });
 }
 
+async function requireMenu(tx: Transaction, menuId: string): Promise<void> {
+  if (!(await catalogueExists(tx, menuId)))
+    throw new AppError("catalogue.not_found", { catalogueId: menuId });
+}
+
 /** The menu's version live at `at` and its document, or `null` when it has none. */
 export async function readLiveMenu(
   tx: Transaction,
@@ -672,7 +678,10 @@ export async function readLiveMenu(
   at: Date = now(),
 ): Promise<LiveMenu | null> {
   const live = (await liveVersions(tx, [menuId], "document", at)).get(menuId);
-  if (live === undefined) return null;
+  if (live === undefined) {
+    await requireMenu(tx, menuId);
+    return null;
+  }
   return {
     versionId: live.versionId,
     number: live.number,
@@ -699,7 +708,10 @@ export async function patchLiveMenu(
   const at = options.at ?? now();
   await settleDue(tx, at, [menuId]);
   const live = (await liveVersions(tx, [menuId], "document", at)).get(menuId);
-  if (live === undefined) throw new AppError("menu_patch.not_published", { menuId });
+  if (live === undefined) {
+    await requireMenu(tx, menuId);
+    throw new AppError("menu_patch.not_published", { menuId });
+  }
   if (live.versionId !== baseVersionId)
     throw new AppError("menu_patch.base_changed", {
       menuId,

@@ -145,6 +145,13 @@ const price = (itemId: string, value: string) => ({
   value,
 });
 
+function revisionOf(response: Response): { epoch: string; sequence: number } {
+  return JSON.parse(response.headers.get("x-waitron-menu-revision")!) as {
+    epoch: string;
+    sequence: number;
+  };
+}
+
 async function publicationTables() {
   return {
     versions: await suite.db.all(sql`select * from menu_versions order by id`),
@@ -168,12 +175,16 @@ describe("reading and patching a menu's live version", () => {
     const app = mountApp();
     const { menuId, itemId } = await lunchWithSoup(app);
     await publish(app, menuId);
-    const base = await json<LiveMenu>(await live(app, menuId), 200);
+    const read = await live(app, menuId);
+    const revisionBefore = revisionOf(read);
+    const base = await json<LiveMenu>(read, 200);
     const res = await patch(app, menuId, {
       baseVersionId: base.versionId,
       changes: [price(itemId, "4.50")],
     });
-    expect(res.headers.get("x-waitron-menu-revision")).not.toBeNull();
+    const revisionAfter = revisionOf(res);
+    expect(revisionAfter.epoch).toBe(revisionBefore.epoch);
+    expect(revisionAfter.sequence).toBeGreaterThan(revisionBefore.sequence);
     const result = await json<MenuPatchResult>(res, 200);
     expect(result).toEqual({ versionId: expect.any(String), number: 2, requeued: [] });
     const after = await json<LiveMenu>(await live(app, menuId), 200);
@@ -245,6 +256,26 @@ describe("reading and patching a menu's live version", () => {
     for (const res of refused)
       expect(await json(res, 403)).toMatchObject({
         error: { code: "authorization.not_permitted" },
+      });
+    expect(await publicationTables()).toEqual(before);
+  });
+
+  it("refuses an id that names no menu as not found, writing nothing", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const before = await publicationTables();
+    const missing = crypto.randomUUID();
+    const refused = [
+      await live(app, missing),
+      await patch(app, missing, {
+        baseVersionId: crypto.randomUUID(),
+        changes: [price(itemId, "4.50")],
+      }),
+    ];
+    for (const res of refused)
+      expect(await json(res, 404)).toMatchObject({
+        error: { code: "catalogue.not_found", params: { catalogueId: missing } },
       });
     expect(await publicationTables()).toEqual(before);
   });

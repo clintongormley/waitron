@@ -168,6 +168,14 @@ describe("patchLiveMenu", () => {
     });
   });
 
+  it("readLiveMenu refuses an id that names no menu", async () => {
+    const missing = "00000000-0000-4000-8000-000000000000";
+    await expect(app((tx) => readLiveMenu(tx, missing))).rejects.toMatchObject({
+      code: "catalogue.not_found",
+      params: { catalogueId: missing },
+    });
+  });
+
   it("leaves the products and the working menu untouched", async () => {
     const before = await hashOf(f.lunch);
     await patch(v1, await priceChange("5.5"));
@@ -311,6 +319,14 @@ describe("patchLiveMenu", () => {
           ]),
         { code: "menu_patch.unchanged", params: { menuId: f.lunch } },
       );
+    });
+
+    it("a menu id that names no menu", async () => {
+      const missing = "00000000-0000-4000-8000-000000000000";
+      await refuses(async () => patch(v1, await priceChange("5.5"), NOW, missing), {
+        code: "catalogue.not_found",
+        params: { catalogueId: missing },
+      });
     });
 
     it("a malformed patch", async () => {
