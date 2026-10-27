@@ -257,14 +257,14 @@ describe("the submission id of a confirmation", () => {
     const original = {
       ...tenEuros,
       expectedEdit: { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null },
-      guests: 4,
+      guestCount: 4,
     };
     const first = submissionFor("wo-1", original, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, noAnswer);
     const refreshed = {
       ...original,
       expectedEdit: { billId: "wo-1", editorVersion: 4, draftId: null, draftRevision: null },
-      guests: 9,
+      guestCount: 9,
       amount: "30.00",
       applied: "30.00",
     };

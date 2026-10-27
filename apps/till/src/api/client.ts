@@ -1135,7 +1135,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   /** The practice simulator only. */
   simulationOutcome?: "captured" | "declined";
   allowOffline?: false;
-  guests?: number | null;
+  guestCount?: number | null;
 }
 
 /** How one payment splits between the bill, change and tip, or the two ways an item payment that
@@ -2836,7 +2836,7 @@ export class TillApi {
       | undefined,
     receiptLanguage: string | undefined,
     kitchenNote: string | null | undefined,
-    guests: number | null | undefined,
+    guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
     lateSend?: LateSend,
   ): Promise<TillSaleResult> {
@@ -2848,7 +2848,7 @@ export class TillApi {
       ...invoice,
       receiptLanguage,
       kitchenNote,
-      ...(guests === undefined ? {} : { guests }),
+      ...(guestCount === undefined ? {} : { guestCount }),
       expectedEdit,
       ...(lateSend === undefined ? {} : { lateSend }),
     });
@@ -2875,7 +2875,7 @@ export class TillApi {
     demoAttemptId?: string;
     receiptLanguage?: string;
     kitchenNote?: string | null;
-    guests?: number | null;
+    guestCount?: number | null;
     lateSend?: LateSend;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
@@ -3226,13 +3226,13 @@ export class TillApi {
     id: string,
     tender: Tender,
     receiptLanguage: string | undefined,
-    guests: number | null | undefined,
+    guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
       tender,
       receiptLanguage,
-      ...(guests === undefined ? {} : { guests }),
+      ...(guestCount === undefined ? {} : { guestCount }),
       expectedEdit,
     });
   }

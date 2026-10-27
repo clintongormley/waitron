@@ -10725,12 +10725,12 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(pay).toHaveBeenCalledOnce();
-      expect(pay.mock.calls[0]![0]).toMatchObject({ id: c.store.id, guests: 3 });
+      expect(pay.mock.calls[0]![0]).toMatchObject({ id: c.store.id, guestCount: 3 });
 
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".retry")!.click();
       await flush(el);
       expect(pay).toHaveBeenCalledTimes(2);
-      expect(pay.mock.calls[1]![0]).toMatchObject({ id: c.store.id, guests: 3 });
+      expect(pay.mock.calls[1]![0]).toMatchObject({ id: c.store.id, guestCount: 3 });
     });
 
     it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {

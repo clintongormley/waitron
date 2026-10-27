@@ -78,7 +78,7 @@ describe("TillApi", () => {
       expect(JSON.parse(fetchStub.mock.calls[0]![1].body)).toEqual({
         ...(state === "open" ? { lines: [], workingOrderId: "wo-4" } : {}),
         tender,
-        guests: 4,
+        guestCount: 4,
         expectedEdit,
       });
     },
@@ -427,10 +427,10 @@ describe("TillApi", () => {
   });
 
   describe.each([
-    { label: "a guest count", guests: 5, sent: { guests: 5 } },
-    { label: "no guests line", guests: null, sent: { guests: null } },
-    { label: "no choice", guests: undefined, sent: {} },
-  ])("sending $label", ({ guests, sent }) => {
+    { label: "a guest count", guestCount: 5, sent: { guestCount: 5 } },
+    { label: "no guests line", guestCount: null, sent: { guestCount: null } },
+    { label: "no choice", guestCount: undefined, sent: {} },
+  ])("sending $label", ({ guestCount, sent }) => {
     const tender = { method: "cash", amount: "5.00" } as const;
     const lines = [{ menuItemId: "mi-cafe", quantity: "1" }];
     const sentBody = (fetchStub: ReturnType<typeof vi.fn>): unknown =>
@@ -447,7 +447,7 @@ describe("TillApi", () => {
         undefined,
         undefined,
         undefined,
-        guests,
+        guestCount,
         null,
       );
       expect(sentBody(fetchStub)).toStrictEqual({
@@ -461,13 +461,13 @@ describe("TillApi", () => {
 
     it("with a card payment", async () => {
       const fetchStub = stub();
-      await new TillApi("", fetchStub).pay({ expectedEdit: null, id: "wo2", lines, guests });
+      await new TillApi("", fetchStub).pay({ expectedEdit: null, id: "wo2", lines, guestCount });
       expect(sentBody(fetchStub)).toStrictEqual({ expectedEdit: null, id: "wo2", lines, ...sent });
     });
 
     it("with a collect", async () => {
       const fetchStub = stub();
-      await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guests, null);
+      await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guestCount, null);
       expect(sentBody(fetchStub)).toStrictEqual({ tender, ...sent, expectedEdit: null });
     });
 
@@ -482,7 +482,7 @@ describe("TillApi", () => {
         applied: "5.00",
         tip: "0.00",
       };
-      await new TillApi("", fetchStub).takeBillPayment("wo4", { ...billPayment, guests });
+      await new TillApi("", fetchStub).takeBillPayment("wo4", { ...billPayment, guestCount });
       expect(sentBody(fetchStub)).toStrictEqual({ ...billPayment, ...sent });
     });
   });

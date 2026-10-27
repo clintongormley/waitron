@@ -2380,7 +2380,7 @@ describe("till-app counter: the guests the receipt prints", () => {
 
   it("identifies a counter collection as having no table editor", async () => {
     const { el, c } = await counterWithCafe();
-    emit(c, "collect-order", { method: "cash", amount: "5", guests: 2 });
+    emit(c, "collect-order", { method: "cash", amount: "5", guestCount: 2 });
     await flush(el);
     expect(vi.mocked(api.collectOrder).mock.calls[0]).toHaveLength(5);
     expect(vi.mocked(api.collectOrder).mock.calls[0]![4]).toBeNull();
@@ -2400,7 +2400,7 @@ describe("till-app counter: the guests the receipt prints", () => {
   it("collecting a placed counter order sends the count beside a bare tender", async () => {
     const { el, c } = await counterWithCafe();
 
-    emit(c, "collect-order", { method: "cash", amount: "5", guests: 2 });
+    emit(c, "collect-order", { method: "cash", amount: "5", guestCount: 2 });
     await flush(el);
 
     expect(vi.mocked(api.collectOrder).mock.calls).toStrictEqual([

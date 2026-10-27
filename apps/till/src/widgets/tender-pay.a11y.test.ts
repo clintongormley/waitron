@@ -102,7 +102,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
                 ? { method, amount: "150.00" }
                 : { method, amount: "120.00", externalRef: "operation-17" },
             outstanding: "120.00",
-            guests: 4,
+            guestCount: 4,
           },
         },
         theme,

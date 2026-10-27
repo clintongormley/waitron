@@ -208,7 +208,7 @@ describe("till-tender-pay", () => {
         confirmation: {
           tender: { method: "cash", amount: "150.00" },
           outstanding: "120.00",
-          ...(guests === undefined ? {} : { guests }),
+          ...(guests === undefined ? {} : { guestCount: guests }),
         },
       });
       const confirm = vi.fn();
@@ -227,7 +227,7 @@ describe("till-tender-pay", () => {
       expect(confirm).toHaveBeenCalledWith({
         method: "cash",
         amount: "150.00",
-        ...(guests === undefined ? {} : { guests }),
+        ...(guests === undefined ? {} : { guestCount: guests }),
       });
     },
   );
@@ -253,7 +253,7 @@ describe("till-tender-pay", () => {
     el.confirmation = {
       tender: { method: "cash", amount: "25.00" },
       outstanding: "20.00",
-      guests: null,
+      guestCount: null,
     };
     old.click();
     expect(confirm).not.toHaveBeenCalled();
@@ -262,7 +262,7 @@ describe("till-tender-pay", () => {
     expect(confirm).toHaveBeenCalledExactlyOnceWith({
       method: "cash",
       amount: "25.00",
-      guests: null,
+      guestCount: null,
     });
   });
 
@@ -2173,7 +2173,7 @@ describe("the receipt's guests field", () => {
     ).toBeTruthy();
     const spy = listen(el, "confirm-payment");
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: 4 });
   });
 
   it("carries a stepped-up count, then starts again on the default for the next order", async () => {
@@ -2182,7 +2182,7 @@ describe("the receipt's guests field", () => {
     expect(guests(el)!.value).toBe("5");
     const spy = listen(el, "confirm-payment");
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 5 });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: 5 });
     store.clear();
     store.addProduct(coffee, "1");
     await el.updateComplete;
@@ -2199,7 +2199,7 @@ describe("the receipt's guests field", () => {
     await el.updateComplete;
     click(el, ".confirm");
     await el.updateComplete;
-    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guests: 5 });
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guestCount: 5 });
     expect(guests(el)!.value).toBe("5");
   });
 
@@ -2215,7 +2215,7 @@ describe("the receipt's guests field", () => {
     expect(guests(el)!.value).toBe("4");
     const spy = listen(el, "confirm-payment");
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: 4 });
   });
 
   it.each([
@@ -2257,7 +2257,7 @@ describe("the receipt's guests field", () => {
     expect(stepper.shadowRoot!.querySelector("input")!.placeholder).toBe(placeholder);
     const spy = listen(el, "confirm-payment");
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: null });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: null });
   });
 
   it("opens empty when there is no default and carries null", async () => {
@@ -2265,7 +2265,7 @@ describe("the receipt's guests field", () => {
     expect(guests(el)!.value).toBe("");
     const spy = listen(el, "confirm-payment");
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: null });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: null });
   });
 
   it("follows a new default until the waiter changes it", async () => {
@@ -2285,7 +2285,7 @@ describe("the receipt's guests field", () => {
     click(el, ".pay-card");
     await el.updateComplete;
     click(el, ".confirm");
-    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guests: 4 });
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guestCount: 4 });
   });
 
   it("carries the count on a reader's collect, and again on a retry after a decline", async () => {
@@ -2294,19 +2294,19 @@ describe("the receipt's guests field", () => {
     const spy = listen(el, "collect-card");
     click(el, ".pay-card");
     await el.updateComplete;
-    expect(spy).toHaveBeenLastCalledWith({ guests: 5 });
+    expect(spy).toHaveBeenLastCalledWith({ guestCount: 5 });
     el.cardOutcome = { outcome: "declined" };
     await el.updateComplete;
     click(el, ".retry");
     expect(spy).toHaveBeenCalledTimes(2);
-    expect(spy).toHaveBeenLastCalledWith({ guests: 5 });
+    expect(spy).toHaveBeenLastCalledWith({ guestCount: 5 });
   });
 
   it("carries the count on collect-order at the collect stage", async () => {
     const { el } = await mount({ mode: "ticket_then_pay", stage: "collect" });
     const spy = listen(el, "collect-order");
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: 4 });
   });
 
   it("says nothing about a bad count until Cash or Card is pressed", async () => {
@@ -2336,7 +2336,7 @@ describe("the receipt's guests field", () => {
     expect(disabled(el, ".pay")).toBe(false);
     expect(disabled(el, ".pay-card")).toBe(false);
     await payCash(el);
-    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 3 });
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guestCount: 3 });
   });
 
   it.each(["1000", "2.5", "abc"])("a Card press with %s opens nothing", async (value) => {
@@ -2362,27 +2362,27 @@ describe("the receipt's guests field", () => {
   }
 
   it.each([
-    ["Cash", ".pay", {}, "confirm-payment", { method: "cash", amount: "5", guests: 3 }],
+    ["Cash", ".pay", {}, "confirm-payment", { method: "cash", amount: "5", guestCount: 3 }],
     [
       "Card typed by hand",
       ".pay-card",
       {},
       "confirm-payment",
-      { method: "card", amount: "1.50", guests: 3 },
+      { method: "card", amount: "1.50", guestCount: 3 },
     ],
     [
       "Cash at the collect stage",
       ".pay",
       { mode: "ticket_then_pay", stage: "collect" },
       "collect-order",
-      { method: "cash", amount: "5", guests: 3 },
+      { method: "cash", amount: "5", guestCount: 3 },
     ],
     [
       "Card on a reader",
       ".pay-card",
       { cardProvider: "stripe_terminal" },
       "collect-card",
-      { guests: 3 },
+      { guestCount: 3 },
     ],
   ])(
     "a count made bad while %s waits on the check before payment starts nothing until it is fixed",
@@ -2434,7 +2434,7 @@ describe("the receipt's guests field", () => {
     answer(true);
     await el.updateComplete;
     expect(spy).toHaveBeenCalledOnce();
-    expect(spy).toHaveBeenCalledWith({ tip: "0.50", guests: 4 });
+    expect(spy).toHaveBeenCalledWith({ tip: "0.50", guestCount: 4 });
   });
 
   it("a new order puts the field back on the default and clears the messages", async () => {
@@ -2451,15 +2451,15 @@ describe("the receipt's guests field", () => {
     expect(disabled(el, ".pay")).toBe(false);
   });
 
-  it("draws no field and sends no guests key when the screen does not ask", async () => {
+  it("draws no field and sends no guestCount key when the screen does not ask", async () => {
     const { el } = await mount({ asksGuests: false, cardProvider: "stripe_terminal" });
     expect(guests(el)).toBeNull();
     const cash = listen(el, "confirm-payment");
     await payCash(el);
-    expect(cash.mock.calls[0]![0]).not.toHaveProperty("guests");
+    expect(cash.mock.calls[0]![0]).not.toHaveProperty("guestCount");
     const card = listen(el, "collect-card");
     click(el, ".pay-card");
     await el.updateComplete;
-    expect(card.mock.calls[0]![0]).not.toHaveProperty("guests");
+    expect(card.mock.calls[0]![0]).not.toHaveProperty("guestCount");
   });
 });

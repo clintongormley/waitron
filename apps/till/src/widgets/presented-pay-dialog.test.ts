@@ -485,9 +485,9 @@ describe("till-presented-pay-dialog: the receipt's guests", () => {
     await type(el, "tendered", "70");
     await take(el);
     expect(paid).toEqual([
-      { method: "card", readerId: "r2", guests: 4 },
-      { method: "manual", guests: 6 },
-      { method: "cash", tendered: "70", guests: null },
+      { method: "card", readerId: "r2", guestCount: 4 },
+      { method: "manual", guestCount: 6 },
+      { method: "cash", tendered: "70", guestCount: null },
     ]);
   });
 
@@ -526,7 +526,7 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
   it("a refusal naming the guests shows under the guests field", async () => {
     const el = await mount({
       asksGuests: true,
-      refusal: { code: "management.request_invalid", field: "guests" },
+      refusal: { code: "management.request_invalid", field: "guestCount" },
     });
     expect(
       root(el).querySelector<HTMLElement & { error: string }>('wt-number-stepper[name="guests"]')!
@@ -548,7 +548,9 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
   });
 
   it("a refusal naming a field not shown goes above the action", async () => {
-    const el = await mount({ refusal: { code: "management.request_invalid", field: "guests" } });
+    const el = await mount({
+      refusal: { code: "management.request_invalid", field: "guestCount" },
+    });
     expect(actions(el).error).toBe(codeMessage("management.request_invalid"));
   });
 
@@ -710,7 +712,7 @@ describe("till-presented-pay-dialog: locked on a payment with no answer", () => 
   const manual = {
     tender: { method: "card" as const, amount: "62.40", externalRef: "operation-17" },
     outstanding: "62.40",
-    guests: 4,
+    guestCount: 4,
   };
   const resend = (el: TillPresentedPayDialog) =>
     root(el).querySelector<HTMLElement & { disabled: boolean; loading: boolean }>(
@@ -966,7 +968,7 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
       confirmation: {
         tender: { method: "card", amount: "62.40", externalRef: "A-1" },
         outstanding: "62.40",
-        guests: 4,
+        guestCount: 4,
       },
     });
 

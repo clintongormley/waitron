@@ -331,7 +331,7 @@ describe("a presented bill on a handheld", () => {
     });
     expect(presented(el)!.asksGuests).toBe(false);
     await takeOnReader(el);
-    expect(vi.mocked(api.pay).mock.calls[0]![0]).not.toHaveProperty("guests");
+    expect(vi.mocked(api.pay).mock.calls[0]![0]).not.toHaveProperty("guestCount");
   });
 
   it("another card machine with no operation number sends none", async () => {
@@ -357,7 +357,7 @@ describe("a presented bill on a handheld", () => {
       id: "wo-4",
       lines: [],
       readerId: "r2",
-      guests: 4,
+      guestCount: 4,
     });
     expect(vi.mocked(api.takeBillPayment)).not.toHaveBeenCalled();
     expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
@@ -367,7 +367,7 @@ describe("a presented bill on a handheld", () => {
 
   it("cash is collected with what was handed over and the guests, then the paid screen shows", async () => {
     const { el } = await openPresented();
-    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 3 });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 3 });
 
     expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
     expect(vi.mocked(api.collectOrder).mock.calls[0]).toEqual([
@@ -388,7 +388,7 @@ describe("a presented bill on a handheld", () => {
         .fn()
         .mockResolvedValue({ ...ticket(), tender: { method: "cash", change: "30.00" } }),
     });
-    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 3 });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 3 });
 
     const paid = el.shadowRoot!.querySelector("till-paid-view")!;
     await paid.updateComplete;
@@ -404,7 +404,7 @@ describe("a presented bill on a handheld", () => {
         tender: { method: "card", charged: "120.00", tip: "0.00", reference: "op-1" },
       }),
     });
-    await payFromSheet(el, { method: "manual", externalRef: "op-1", guests: 3 });
+    await payFromSheet(el, { method: "manual", externalRef: "op-1", guestCount: 3 });
 
     const paid = el.shadowRoot!.querySelector("till-paid-view")!;
     await paid.updateComplete;
@@ -413,7 +413,7 @@ describe("a presented bill on a handheld", () => {
 
   it("another card machine is collected as a card of the whole amount with its operation number", async () => {
     const { el } = await openPresented();
-    await payFromSheet(el, { method: "manual", externalRef: "OP-7", guests: null });
+    await payFromSheet(el, { method: "manual", externalRef: "OP-7", guestCount: null });
 
     expect(vi.mocked(api.collectOrder).mock.calls[0]).toEqual([
       "wo-4",
@@ -446,7 +446,7 @@ describe("a presented bill on a handheld", () => {
       expect(vi.mocked(api.setKitchenNote)).toHaveBeenCalledOnce();
       await pressPaySheet(el, order);
       if (method === "card") await takeOnReader(el);
-      else await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+      else await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 4 });
       expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
       expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
 
@@ -546,7 +546,7 @@ describe("a presented bill on a handheld", () => {
     [{ code: "storage.disk_full", status: 507 }, "sale.disk_full"],
   ] as const)("a cash send refused as %o says %s, as the pay card does", async (error, key) => {
     const { el } = await openPresented({ collectOrder: vi.fn().mockRejectedValue(error) });
-    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 4 });
 
     expect(presented(el)!.open).toBe(true);
     expect(await sheetMessage(el)).toBe(t(key));
@@ -562,7 +562,7 @@ describe("a presented bill on a handheld", () => {
         status: 409,
       }),
     });
-    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 4 });
 
     expect(await sheetMessage(el)).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
   });
@@ -614,7 +614,7 @@ describe("a presented bill on a handheld", () => {
       collectOrder: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     });
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
-    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 4 });
 
     expect(presented(el)!.open).toBe(true);
     expect(await sheetMessage(el)).toBe(t("bill.pay_with_bill_payments"));
@@ -626,7 +626,7 @@ describe("a presented bill on a handheld", () => {
     const { el, order } = await openPresented({
       collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 4 });
 
     expect(presented(el)).toBeNull();
     expect(order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")).toBeNull();
@@ -692,8 +692,8 @@ describe("an unanswered presented payment on a handheld", () => {
   const placedBill = billOf({ status: "placed", receiptAvailable: true });
   const noAnswer = () => new TypeError("Failed to fetch");
   const asked = {
-    cash: { method: "cash", tendered: "150.00", guests: 4 },
-    manual: { method: "manual", externalRef: "operation-17", guests: 4 },
+    cash: { method: "cash", tendered: "150.00", guestCount: 4 },
+    manual: { method: "manual", externalRef: "operation-17", guestCount: 4 },
   } as const satisfies Record<string, PresentedPayDetail>;
   const tenderOf = {
     cash: { method: "cash", amount: "150.00" },
@@ -723,7 +723,7 @@ describe("an unanswered presented payment on a handheld", () => {
     await sheet.updateComplete;
     expect(sheet.open).toBe(true);
     expect(sheet.confirmation?.tender).toEqual(tenderOf[method]);
-    expect(sheet.confirmation?.guests).toBe(4);
+    expect(sheet.confirmation?.guestCount).toBe(4);
     expect(inPresented(el, "[data-presented-pay-resend]")).not.toBeNull();
     expect(inPresented(el, "till-pay-equipment")).toBeNull();
     expect(text(inPresented(el, '[role="status"]'))).toBe(t("sale.unconfirmed"));
@@ -849,7 +849,7 @@ describe("an unanswered presented payment on a handheld", () => {
   it.each([
     ["cash", asked.cash],
     ["another card machine", asked.manual],
-    ["a card on the reader", { method: "card", readerId: "r2", guests: 4 }],
+    ["a card on the reader", { method: "card", readerId: "r2", guestCount: 4 }],
   ] as const)(
     "%s sent from a presented sheet still open when a bill payment began holding the bill is refused on the sheet",
     async (_name, detail: PresentedPayDetail) => {
@@ -2233,7 +2233,7 @@ describe("till-app: a sticker's notice inside the sheet", () => {
       getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
       collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
-    emit(presented(el)!, "presented-pay", { method: "cash", tendered: "150.00", guests: 4 });
+    emit(presented(el)!, "presented-pay", { method: "cash", tendered: "150.00", guestCount: 4 });
     await flush(el);
     await pressPaySheet(el, order);
     await presented(el)!.updateComplete;
@@ -3661,8 +3661,8 @@ describe("the paid screen on a handheld", () => {
     });
 
     it.each([
-      ["cash", { method: "cash", tendered: "150.00", guests: 4 }],
-      ["another card machine", { method: "manual", externalRef: "OP-7", guests: 4 }],
+      ["cash", { method: "cash", tendered: "150.00", guestCount: 4 }],
+      ["another card machine", { method: "manual", externalRef: "OP-7", guestCount: 4 }],
     ] as const)(
       "%s with a simplified invoice shows the paid screen, with no list of payments",
       async (_, detail) => {
@@ -3680,7 +3680,7 @@ describe("the paid screen on a handheld", () => {
       const { el } = await payPresented(
         simplified(),
         undefined,
-        { method: "cash", tendered: "150.00", guests: 4 },
+        { method: "cash", tendered: "150.00", guestCount: 4 },
         { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
       );
       await vi.waitFor(() => expect(inPaid(el, '[data-test="open-drawer"]')).not.toBeNull());
@@ -3696,7 +3696,7 @@ describe("the paid screen on a handheld", () => {
       const { el } = await payPresented(simplified(), undefined, {
         method: "cash",
         tendered: "150.00",
-        guests: 4,
+        guestCount: 4,
       });
       await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
       await paidView(el)!.updateComplete;
@@ -3774,7 +3774,7 @@ describe("the paid screen on a handheld", () => {
               ? await payPresented(
                   simplified(),
                   theme,
-                  { method: "cash", tendered: "150.00", guests: 4 },
+                  { method: "cash", tendered: "150.00", guestCount: 4 },
                   { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
                 )
               : await payPresented(simplified(), theme);

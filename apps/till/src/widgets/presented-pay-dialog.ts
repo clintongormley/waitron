@@ -39,11 +39,11 @@ import {
 type Method = "card" | "cash" | "manual";
 type Field = "tendered" | "externalRef" | "guests";
 
-/** `presented-pay`'s detail; `guests` is absent unless the venue asks for it, null for none. */
+/** `presented-pay`'s detail; `guestCount` is absent unless the venue asks for it, null for none. */
 export type PresentedPayDetail =
-  | { method: "card"; readerId: string; guests?: number | null }
-  | { method: "cash"; tendered: string; guests?: number | null }
-  | { method: "manual"; externalRef?: string; guests?: number | null };
+  | { method: "card"; readerId: string; guestCount?: number | null }
+  | { method: "cash"; tendered: string; guestCount?: number | null }
+  | { method: "manual"; externalRef?: string; guestCount?: number | null };
 
 /** What the waiter has typed: the cash handed over and the operation number. */
 interface EntryDraft {
@@ -308,7 +308,7 @@ export class TillPresentedPayDialog extends LitElement {
     const named = this.shownRefusal?.field;
     if (named === "tendered" && this.method === "cash") return "tendered";
     if (named === "externalRef" && this.method === "manual") return "externalRef";
-    if (named === "guests" && this.asksGuests) return "guests";
+    if (named === "guestCount" && this.asksGuests) return "guests";
     return null;
   }
 
@@ -362,7 +362,7 @@ export class TillPresentedPayDialog extends LitElement {
       return;
     }
     const guests = this.asksGuests
-      ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null }
+      ? { guestCount: parseGuestCount(this.#guestsText())?.guestCount ?? null }
       : {};
     const ref = this.externalRef.trim();
     const reader =
@@ -449,7 +449,7 @@ export class TillPresentedPayDialog extends LitElement {
 
   /** The payment sent with no answer, as it was sent; nothing in it can change. */
   #locked(confirmation: RetainedTender): SheetView {
-    const { tender, outstanding, guests } = confirmation;
+    const { tender, outstanding, guestCount } = confirmation;
     const body = html`<dl class="balance" data-presented-pay-balance>
         <dt>${t("presented_pay.balance")}</dt>
         <dd>${this.#money(outstanding)}</dd>
@@ -483,10 +483,10 @@ export class TillPresentedPayDialog extends LitElement {
             ></wt-input>`
       }
       ${
-        guests === undefined
+        guestCount === undefined
           ? nothing
           : guestsStepper({
-              text: guests === null ? "" : String(guests),
+              text: guestCount === null ? "" : String(guestCount),
               disabled: true,
               error: "",
               onChange: (event) => event.stopPropagation(),
