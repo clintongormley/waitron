@@ -5,9 +5,11 @@
 **Goal:** Give future completed-meal F1 invoices the saved venue calendar day of meal end,
 retaining it across midnight, payment waits and restart, with no staff date choice.
 
-**Architecture:** Capture completion automatically at the earliest qualifying existing final-service
-command, with optional earlier Bill requested capture separate from its retractable signal. Copy the fact into durable accepted payment intent, then into the
-sale and, only with exact H2 permission, the fiscal record. Render saved facts on every surface.
+**Architecture:** Capture completion automatically when the bill closes: the earliest qualifying
+whole/final balance payment acceptance, first completed-meal F1 issuance commit, settling edit
+acceptance or accepted unpaid departure. Bill requested never captures, even when fully served;
+retain its signal/replay behavior. Copy the fact into durable accepted payment intent, then into
+the sale and fiscal record within the granted H2 scope. Render saved facts on every surface.
 
 **Tech Stack:** TypeScript, Drizzle/SQLite, existing service-command replay and A739 payment
 contexts, A696 venue clocks, Vitest/useVenueDb, Lit/Chromium, installed @waitron/verifactu.
@@ -19,19 +21,28 @@ are future execution instructions. No tests were run to write this plan.
 ## Global constraints and the build gate
 
 - Owner approved meal-end date, separate issue date, and **no date entry/choice/confirmation**.
+  The 27 October about 12:00 CET answer defines meal end as the bill-close events above and
+  grants the exact H2 scope recorded below; this docs revision authorizes no build or fiscal landing.
   S4 remains with the adviser; partial service/prepay remains S3/A447, Counter expansion A555,
   public F3 replacement A556. No historical invoice backfill or compatibility machinery.
-- **BLOCKED before Task 1 code/tests:** driver records the exact H2 exception listed in the
-  spec, released A696/A739 interfaces, reservations and the one-fiscal-branch slot. F/A739 has
+- **Build waits before Task 1 code/tests only for:** released A696/A739 integration and the actual
+  one-fiscal-branch slot. Driver records released interfaces and reservations. F/A739 has
   precedence; parked E/A696 `c79b2c03d` and retained F/A739 `3e45abdc6` are read-only references.
   Rebase/reorient on released code, not a foreign worktree or cherry-picked partial payment tree.
-- The spec defines the automatic capture rule within the owner's examples: preserve the earliest
-  qualifying final action, or capture at final payment/issuance acceptance without a prior Bill
-  requested signal. An earlier unrecorded physical end cannot be reconstructed. State that limit;
+- The spec applies the owner's exact bill-close rule: preserve the earliest qualifying accepted
+  close event; payment acceptance precedes provider work, while first F1 issuance captures in its
+  committing transaction. Bill requested is signal-only. An earlier unrecorded physical end cannot
+  be reconstructed. State that limit;
   do not add a missing-date refusal, new staff action or another general approval gate.
-- H2 still forbids changes to hash/chain/number allocation, library alta builders, registerSif,
-  restoreFiscal and protected tests. Permission to finish/land is not an exception. If the scoped
-  record-field exception is absent, stop build, not just its final fiscal task. No partial PR.
+- **Exact H2 scope GRANTED, owner answer 27 October about 12:00 CET:** trusted completion day
+  through `packages/core/src/record-sale.ts` and `packages/fiscal/src/backend.ts`;
+  `AltaInput.FechaOperacion` in `packages/fiscal-verifactu/src/backend.ts`; nullable
+  `fechaOperacion` in `packages/fiscal-verifactu/src/schema/registros.ts` with a **new** migration;
+  both mappings in `packages/fiscal-verifactu/src/registro-row.ts`; the saved day in
+  `packages/fiscal-verifactu/src/drain.ts` / `src/reconcile.ts` consultation periods, including
+  cancellation's original operation period. Later expansion stops for its precise dependency.
+  No permission for `computeHuella`, chain, allocation/numbering, library alta builders,
+  `registerSif`/`restoreFiscal`, shipped migrations, historical facts or protected tests. No partial PR.
 - Preserve every existing behavioral assertion and guard. Add cases for the new completed-meal
   contract; retain the existing provisional/out-of-scope controls. Any existing assertion that
   conflicts after integration is an explicit authorization dependency, never silently deleted.
@@ -42,7 +53,10 @@ are future execution instructions. No tests were run to write this plan.
 
 ## Review focus
 
-1. A final bill request while a dessert/draft remains must not become whole-meal completion (Task 1).
+1. Bill requested never captures, whether service is complete or a dessert/draft remains.
+   Fully served Bill requested before midnight followed by final payment acceptance after midnight
+   uses the latter day; payment accepted before midnight retains its day through a charge wait
+   across midnight (Tasks 1–3).
 2. An older partial payer must not date a later resumed meal, and an unresolved card must retain
    accepted evidence while blocking incompatible edits (Tasks 2–3).
 3. An unpaid or zero completion, or an edit that settles a balance, must use the same date contract
@@ -55,7 +69,7 @@ are future execution instructions. No tests were run to write this plan.
 ## Task 0: clear dependencies and inventory the released tree
 
 - [ ] Read both linked specs/plans, relevant developer topic files and current RUNNER H2. Record
-      fresh main SHA, precise scoped permission, automatic capture boundaries and released payment
+      fresh main SHA, granted exact H2 scope, automatic capture boundaries and released payment
       context/zone helpers. Keep campaign changes with the driver, outside this documentation task.
 - [ ] Repeat `rg -n 'recordSale\(|issueIfFullyPaid\(|issueUnpaidInvoice\(' apps packages --glob
 '!*.test.ts'` and `rg -n 'operationDate|operation_date|FechaOperacion|billRequestedAt|paymentAttemptAt'
@@ -63,7 +77,8 @@ apps packages --glob '!**/meta/**'`. Read actual consumers, including scripts/fi
       submission replay, draft commit, group submit/fire/release, party merge and department transfer.
       Compare with the source table; name every changed path in reservations before touching it.
 - [ ] Require the existing registered feature worktree for build, separate from this docs worktree.
-      No new overall approval round; unresolved exact H2/path ownership remains a real stop.
+      No new approval round for the granted scope; wait for released integration and the actual
+      fiscal-branch slot. Any later scope expansion stops for its exact dependency.
 
 ## Task 1: capture a real service-ending command and store its fact
 
@@ -71,35 +86,44 @@ apps packages --glob '!**/meta/**'`. Read actual consumers, including scripts/fi
 `apps/server/src/meal-completion.ts`, `apps/server/src/meal-completion.test.ts`,
 `packages/db/src/schema/meal-completion.test.ts`. Extend shared `index.ts`, db
 `src/schema/orders.ts`, new generated/custom `packages/db/drizzle/` migrations,
-server `bill-request.ts`, `unpaid-departure.ts`, `till-api.ts`, domain `errors.ts` and EN/ES
+server `unpaid-departure.ts`, `till-api.ts`, domain `errors.ts` and EN/ES
 refusal text. Extend `apps/server/src/table-signals.test.ts`, `unpaid-departure.test.ts`.
 
 **Interfaces (new):** shared `MealCompletion` is exactly the spec's four string fields.
 Server `mealServiceState(tx: Transaction, billId: string): Promise<"complete" | "continuing">`
 implements the spec's exact family/draft/remaining-quantity predicate.
 `captureMealCompletion(tx: Transaction, scope: {billId: string}, commandId: string,
-clock: TrustedClock, source: "final_bill" | "final_invoice" | "final_payment" | "settling_edit" | "unpaid_departure"): Promise<MealCompletion | null>`
+clock: TrustedClock, source: "final_invoice" | "final_payment" | "settling_edit" | "unpaid_departure"): Promise<MealCompletion | null>`
 validates the whole family and stores one server reading on its affected unissued bills. It returns null
-for an early bill signal; it never derives completion from servedAt alone. Existing
-`requestBill` gains explicit injected clock/scope context; update its real direct test callers
-without weakening their signal/replay assertions. New `readMealCompletion(tx, billId: string):
+for continuing service; it never derives completion from servedAt alone. `final_invoice` means
+first completed-meal F1 issuance committed; `final_payment` means whole/final balance payment
+accepted before provider work; the other sources are accepted settling edit and accepted unpaid
+departure. `requestBill` never calls capture and gains no completion clock/scope dependency.
+Keep `bill-request.ts` out of completion capture changes.
+Retain all its positive signal/replay assertions and real direct callers. New `readMealCompletion(tx, billId: string):
 Promise<MealCompletion | null>` validates saved shape/date for later tasks.
 
-- [ ] **Red:** Add `captures final request after midnight, not opening day`: open 27 Oct 23:30,
-      final request 28 Oct 00:40 Madrid; assert saved endedAt `2026-10-27T23:40:00.000Z`, zone
+- [ ] **Red:** Add `captures whole payment acceptance after midnight, not opening or bill-request day`:
+      open 27 Oct 23:30, fully served Bill requested 23:50, whole payment accepted 28 Oct 00:40
+      Madrid; assert completion is null after Bill requested, then saved endedAt `2026-10-27T23:40:00.000Z`, zone
       `Europe/Madrid`, operationDate `2026-10-28` and original command id across every family bill.
-      Add early request with unserved/held/unsent/draft work: signal present, completion null. After
-      marking the last dish served, still null; a new qualifying command captures, old replay does not.
+      Add Bill requested with unserved/held/unsent/draft work AND with fully served work: positive
+      signal present, completion null in both. After marking the last dish served, still null;
+      a new whole/final payment acceptance captures, bill-request replay does not. Repeat Bill
+      requested after a saved completion and assert it preserves the exact snapshot without recapture.
+      Cover first F1 commit, accepted settling edit and accepted unpaid departure independently.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/meal-completion.test.ts
 src/table-signals.test.ts src/unpaid-departure.test.ts --reporter=dot`.
-      Expected red: qualifying request has no saved completion; do not count a missing column error.
+      Expected red: payment acceptance has no saved completion; do not count a missing column error.
       First make new storage tests red against the migration/schema invariant, then add storage;
       keep server assertions red until capture is implemented. Also test command rollback/lost answer,
       surviving merged family, differing process/venue zone, Canary and DST, unpaid departure with
-      and without prior completion, and first qualifying final command after midnight with no earlier observable completion.
+      and without prior completion, and first completed-meal F1 commit after midnight with no
+      earlier accepted close event.
 - [ ] **Implement:** use vocabulary `json<MealCompletion>` for `mealCompletion`, nullable and no
       default-derived timestamp. No new table or FK. Capture only after existing authority, revision,
-      service/cancellation and replay checks. Preserve existing early-request signal behavior and
+      service/cancellation and replay checks. Capture only at the four declared close sources;
+      Bill requested is never a source, even when fully served. Preserve its signal/replay behavior and
       paid-signal clearing. Add date-free help wording; no confirmation dialog.
 - [ ] **Schema red/green:** in `src/schema/meal-completion.test.ts`, assert a valid snapshot can be
       inserted/read, malformed shape/day refuses, and placed/settled exception updates cannot change
@@ -147,7 +171,9 @@ src/bill-editing.bill-moves.test.ts --reporter=dot`; expected red: stale snapsho
       answer and reopen it: assert the exact original snapshot. Try resumption/withdrawal/merge while
       unresolved: assert `meal.completion_in_flight` and unchanged bill, context and provider count.
       Known decline unlocks resumption without erasing the prior fact by itself. Received partial
-      payment followed by resumed service/new final request uses the new date, not the old context.
+      payment followed by resumed service/new final-balance payment acceptance uses the new date,
+      not the old context. The accepted close instant/day survives provider waits, lost answers
+      and restart independently of actual invoice issue day.
       Run `pnpm --filter @waitron/server exec vitest run src/meal-completion.intent.test.ts
 src/bill-payments.in-flight.test.ts --reporter=dot`; expected red: context lacks the saved fact
       or incompatible mutation succeeds. Implement context copy and domain hold, then require green.
@@ -170,8 +196,14 @@ paths retain their current contract. Pre-provider admission distinguishes those 
 completed-meal F1 using `mealServiceState`, not snapshot presence. A qualifying final acceptance
 creates completion automatically when absent, before provider work; arbitrary partial/early
 payment attempts and invoice-identity selection do not.
+At every caller, select only the four declared close sources: whole/final payment admission uses
+`final_payment`; first completed-meal F1 committing without an earlier close uses `final_invoice`;
+an accepted balance-settling edit uses `settling_edit`; accepted unpaid departure uses
+`unpaid_departure`. Zero issuance needs no tender. Bill-request commands and their replays never
+invoke capture, even for fully served bills. Recovery reads accepted evidence without recapturing.
 
-- [ ] **Red:** Complete service 27 Oct 23:50 and issue 28 Oct 00:10; assert sale operationDate
+- [ ] **Red:** Service complete; final-balance payment accepted 27 Oct 23:50; first F1 commits
+      28 Oct 00:10; assert sale operationDate
       `2026-10-27`, actual issue instant/offset and backend input day. Opening is another date.
       Keep the original core timezone, issue-date, no-bill and F2 assertions; add this independently
       with explicit completion. Run `pnpm --filter @waitron/core exec vitest run
@@ -191,8 +223,12 @@ src/record-sale.test.ts --reporter=dot`; expected red: opening-day value or omit
 src/adjustments-bill-payments.test.ts src/unpaid-departure.test.ts --reporter=dot`.
       Expected red: opening/recovery date or missing snapshot at a bypassing caller; adapt all callers
       through existing orchestration. Keep S3/prepay and synthetic F2 positive controls.
-- [ ] **Red:** Defer provider response from 23:55 to 00:05; finalize 00:10, then simulate restart
-      29 Oct and lost final answer. Assert retained operation date, actual issue/money times, one
+- [ ] **Red:** Fully served Bill requested 27 Oct 23:50 captures nothing. Whole/final payment
+      accepted 23:55 saves that instant/day before reader work; defer provider charge/response to
+      28 Oct 00:05; first F1 commits 00:10. Repeat with payment accepted after midnight at 00:05:
+      assert operation 28 Oct/issue 28 Oct, with no differing date printed. In the before-midnight
+      acceptance case assert operation 27 Oct/issue 28 Oct. Simulate restart
+      29 Oct and lost final answer. Assert retained acceptance instant/date, actual issue/money times, one
       charge and one invoice. Exercise pending loop and attestation plus restart stale-mark release.
       Missing accepted evidence after charge must preserve money, show a data fault, and never file
       a guessed date or charge again. With complete service and no snapshot, fresh final acceptance must capture automatically before
@@ -206,16 +242,19 @@ src/pending-card-recovery.test.ts src/bill-payments.issue-clock.test.ts --report
       after the input extension. Do not change F3/R5 writers, historical sales or protected assertions.
       Commit after focused green and `git diff --check`.
 
-## Task 4: persist and send the operation day, only within the exact H2 exception
+## Task 4: persist and send the operation day within the granted exact H2 scope
 
 **Files:** fiscal-verifactu `src/backend.ts`, `src/schema/registros.ts`, `src/registro-row.ts`,
 `src/drain.ts`, `src/reconcile.ts`, new generated `drizzle/` migration. Create
 `src/operation-date.test.ts`, `src/operation-date.drain.test.ts`; extend existing
 `registro-row.roundtrip.test.ts`, `reconcile.period.test.ts` with additional cases only.
 
-- [ ] Re-read the recorded exception against this path set. If absent/insufficient, **BLOCKED**;
-      do not proceed with a receipt-only PR or edit a protected test to make the change permissible.
-- [ ] **Red:** Through real backend/store/reconstruction and installed serializer, assert differing
+- [ ] Re-read the granted exact scope against this path set; it is approved, not an unanswered
+      permission request. Stop only if implementation needs additional scope; do not widen the
+      grant, proceed with a receipt-only PR or edit a protected test.
+- [ ] **Red:** Use a completed meal's final-balance payment accepted 27 Oct 23:55 and first F1
+      committed 28 Oct 00:10; for the same-day control accept payment and commit F1 on 28 Oct.
+      Through real backend/store/reconstruction and installed serializer, assert differing
       dates yield `FechaOperacion` `27-10-2026`, same-day omits it, raw POS day remains ISO, and
       `fromRegistroRow` after closing/reopening the database reproduces the field. Test issue offsets
       +01:00, negative offset and a capture/issue DST difference. Expected red: missing wire/stored
@@ -226,7 +265,8 @@ exec vitest run src/operation-date.test.ts src/registro-row.roundtrip.test.ts --
       case, vary only FechaOperacion with identical issue/amount/predecessor inputs and assert equal
       huellas. This is an execution check, not permission to change hash code or golden fixtures.
       No new chain or hash implementation.
-- [ ] **Red:** File 31 Dec operation/1 Jan issue, restart and drain through the real client with
+- [ ] **Red:** Service complete; final-balance payment accepted 31 Dec 23:55; first F1 commits
+      1 Jan 00:05. Restart and drain through the real client with
       synthetic AEAT HTTP replies. Assert outbound date, targeted consulta period and reconciliation
       period use the retained operation month/year, while IDFactura/QR still use issue date. Include
       anulación lookup of the original operation period and F2/no-field positive controls. Run
@@ -260,7 +300,8 @@ New server `meal-completion.documents.test.ts`. Update EN/ES `guide/.../table-se
 affected help and current prose claims; driver owns backlog/research status. No new Record final
 bill action, payment prerequisite or date control is introduced.
 
-- [ ] **Red:** Add end-27/issue-28 thermal 58/80 mm, A4, email/PDF data and till cases: both dates,
+- [ ] **Red:** Add final-balance-payment-accepted-27/first-F1-committed-28 thermal 58/80 mm,
+      A4, email/PDF data and till cases: both dates,
       same saved identity, no extra operation row on same-day F1 and no new F2 row. Reprint after
       clock/zone/service changes must reproduce original dates. Receipt/Invoice/Email/None and
       Full invoice selection after F2 must never capture another meal end, issue or charge.
@@ -276,16 +317,22 @@ src/till-app-bill-payments.test.ts --reporter=dot`.
       assert native controls offer no date choice. Use `wa-wt demo <registered-worktree-name>` for
       UI work and measure browser headroom first. Inspect rendered PDF/thermal raster artifacts;
       paper/inbox delivery needs separate physical evidence, not a queue-status claim. Update shared
-      EN/ES guide anchors and explain final request versus an early bill signal and separate Finish.
+      EN/ES guide anchors and explain the four accepted bill-close events, Bill requested as a
+      signal that never captures completion, and separate Finish.
 - [ ] Add browser/server regression cases in `till-app-bill-payments.test.ts` and
       `meal-completion.issuance.test.ts`: complete service with no bill-request signal, and an early
       signal followed by completed service, both accept final payment directly and capture before
-      provider work. Repeat acceptance without resumed service and assert the exact first snapshot;
+      provider work. Add fully served Bill requested 27 Oct 23:50 followed by payment acceptance
+      and F1 commit 28 Oct 00:05: completion stays null at Bill requested, operation/issue are
+      28 Oct and no differing date is printed. Pair with payment accepted 27 Oct 23:55, provider
+      charge 28 Oct 00:05 and F1 commit 00:10: operation stays 27 Oct and both dates display.
+      Repeat acceptance without resumed service and assert the exact first snapshot;
       an incomplete-service/prepay control keeps S3 behavior. Assert no new date field, required action
       or extra payment submission. Observe the wrong/missing snapshot assertion fail, then implement
       and rerun green. UI only changes if these behavioral assertions expose an actual gap.
 - [ ] In an independently installed disposable candidate, remove one new protection at a time:
-      early-service qualification, resumption invalidation, in-flight hold, accepted-context copy,
+      exclusion of Bill requested from capture (including fully served), service qualification,
+      resumption invalidation, in-flight hold, accepted-context copy,
       recovery use of the copy, row round-trip and operation-period selection. Run the corresponding
       new named case from Tasks 1–4; require wrong value/write/provider count to fail its assertion.
       A compile error or an unrelated refusal is not proof. Restore and rerun green; retain logs.
@@ -303,6 +350,7 @@ src/till-app-bill-payments.test.ts --reporter=dot`.
       bypass or protected-test edit. One complete fiscal PR, no partial publication. **Owner lands**.
 
 Self-review: Tasks 1–3 cover capture, every caller, transforms and recovery; Task 4 owns the
-blocked fiscal representation and month boundary; Task 5 covers surfaces, omission controls
-and release. H2 and released path ownership remain explicit gates; the unrecorded physical-end limit stays visible,
+granted fiscal representation and month boundary; Task 5 covers surfaces, omission controls
+and release. Build waits only for released A696/A739 integration and the actual fiscal-branch slot;
+later H2 expansion still stops. The unrecorded physical-end limit stays visible,
 not unchecked implementation tasks disguised as completion.

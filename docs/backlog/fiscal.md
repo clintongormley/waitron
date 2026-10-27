@@ -23,14 +23,27 @@ fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 se
 ## A444. A full invoice for a meal past midnight should carry the day the meal ends
 
 A231's provisional rule uses the day the bill was opened. On 27 October the owner approved
-the meal-end date with no staff date choice or confirmation. The
+the meal-end date with no staff date choice or confirmation, then clarified about 12:00 CET:
+**when the bill closes**, at the earliest qualifying whole/final balance payment acceptance,
+first completed-meal F1 issuance commit, accepted settling edit or accepted unpaid departure.
+Bill requested never captures, even when fully served; its signal/replay behavior remains. The
 [implementation design](../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md) and
-[plan](../superpowers/plans/2026-10-27-a444-meal-completion-date.md) capture the earliest qualifying
-existing final-service action automatically and retain it through payment recovery. Build waits
-for the precise protected filing-field exception and released A696/A739 paths. No mandatory extra
-Bill requested action is introduced. The unrecorded physical-end limit is explicit; the restaurant
+[plan](../superpowers/plans/2026-10-27-a444-meal-completion-date.md) retain the accepted close instant/day
+through provider waits, lost answers and restart, separately from actual issue day. Fully served
+Bill requested 27 Oct 23:50, payment accepted and F1 committed 28 Oct 00:05 means operation/issue
+28 Oct with no differing date printed; payment accepted 27 Oct 23:55 before a 28 Oct charge wait
+keeps operation 27 Oct. The owner granted the exact H2 scope recorded in the design/plan: trusted
+completion day through core/fiscal input, AltaInput.FechaOperacion, new nullable registro field
+and migration, both row mappings and saved-day consultation periods including cancellation's
+original period. The grant excludes hash/chain/allocation/numbering, library alta builders,
+registerSif/restoreFiscal, shipped migrations, historical facts and protected tests; later expansion
+still stops. Implementation remains open, waiting only for released A696/A739 integration and
+the actual fiscal-branch slot. This docs revision authorizes no build or fiscal landing. No mandatory
+extra Bill requested action is introduced. The unrecorded physical-end limit is explicit; the restaurant
 analogy remains [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) for the adviser.
-Earlier issued dates stay saved; the eventual fiscal PR is for the owner to land.
+Service-complete qualification, resumption invalidation, S3/A447 advance payments, F2/F3 and
+counter limits remain as designed. Earlier issued dates stay saved; the eventual fiscal PR is for
+the owner to land.
 
 ## Structured B2B invoices before the applicable 2027 or 2028 date
 

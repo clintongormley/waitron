@@ -2,14 +2,16 @@
 
 An invoice issued after midnight must retain the day the meal ended. Keep that operation date
 separate from the actual issue date, and print both when they differ. Staff never enter, choose
-or confirm a date. The owner approved that rule on 27 October, about 07:45 CET. It supersedes
+or confirm a date. The owner approved that rule on 27 October, about 07:45 CET, and clarified
+about 12:00 CET that **when the bill closes** is the meal-end moment. It supersedes
 the confirmation proposal in the [earlier research](../../compliance/research/2026-10-27-a948-operation-date-and-b2b.md),
 not its legal qualifications. S4 remains with the adviser; advance payments remain S3/A447.
 
 This document selects an engineering capture rule below. It does **not** claim that Waitron
-already records an unambiguous meal end. Build is **BLOCKED on exact H2 permission** for the
-filed operation date, plus release of overlapping A696/A739 paths. Documentation publication
-does not authorize a receipt-only partial implementation or a fiscal landing.
+already records an unambiguous meal end. The owner **GRANTED the exact H2 scope below** about
+12:00 CET. Build still waits for released A696/A739 integration and the actual fiscal-branch
+slot. This documentation revision authorizes no build or fiscal landing; a receipt-only partial
+implementation remains excluded.
 
 ## What the source actually records
 
@@ -42,15 +44,17 @@ Other core callers found by `rg -n 'recordSale\(' apps packages --glob '!*.test.
 hits are test hosts/fixtures, backend implementations, and till API methods calling server
 routes. Recheck each caller after integration; do not invent meal completion for synthetic sales.
 
-## Capture automatically at an existing final-service action
+## Capture automatically when the bill closes
 
-**Engineering choice within the owner's named capture latitude:** retain the earliest accepted
-qualifying final-service intent: an existing positive Bill requested command, a command committing
-first completed-meal F1 issuance, whole/final balance payment acceptance, a settling edit, or
-accepted unpaid departure. Selecting invoice identity or a delivery format alone is not issuance
-intent. A Bill requested action is optional; there is no new Record final bill action or mandatory
-extra step before Pay. The accepted action declares completion for automatic dating; it is not a
-sensor of when diners physically finished eating.
+**Owner answer, 27 October about 12:00 CET:** retain the earliest qualifying bill-close event:
+whole/final balance payment accepted, first completed-meal F1 issuance committed, a settling
+edit accepted, or unpaid departure accepted. Payment acceptance here is the durable server
+acceptance of the whole/final payment command before provider work, not the later provider
+charge outcome. First F1 issuance captures in its committing transaction. Selecting invoice
+identity or a delivery format alone is not issuance. **Bill requested never captures completion,
+even when fully served**; preserve its positive signal and replay behavior. There is no new
+Record final bill action or mandatory extra step before Pay. The accepted close event declares
+completion for automatic dating; it is not a sensor of when diners physically finished eating.
 
 Qualify service from persisted facts, independently of whether a snapshot already exists. Add
 `mealServiceState(tx, billId): Promise<"complete" | "continuing">` in the server helper. Resolve
@@ -64,20 +68,22 @@ opening an empty bill does not capture anything. These existing primitives do no
 a universal meal-end predicate; the new helper composes them and needs the tests in Task 1.
 
 For complete service, preserve an existing valid completion; otherwise capture automatically in
-the accepting command's transaction, before any reader/provider work. A qualifying final payment
-or issuance command therefore works without a prior Bill requested signal. A repeated final
+the accepting close command's transaction, before any reader/provider work. A qualifying final payment
+or committed issuance therefore works without a prior Bill requested signal. A repeated close
 command with a new id still retains the earliest snapshot unless service actually resumed. Replay
-returns its recorded result and never captures another reading. An early bill request keeps its
+returns its recorded result and never captures another reading. Every bill request keeps its
 current signal behavior but captures nothing; serving the last dish alone also captures nothing.
 
 Continuing-service/advance payments retain the existing S3/A447 path; missing completion is never
 the test for classifying them. Capture at unpaid departure only after the existing unresolved-service
 refusal/cancellation decisions have completed. Recovery is a continuation of accepted intent, not
 a fresh final-service command. A missing/corrupt snapshot on an accepted completed-meal payment
-is a data fault; retain moved money and do not invent an end or charge again.
+is a data fault; retain moved money and do not invent an end or charge again. Retain the accepted
+close instant and date through provider waits, lost answers and restart; actual invoice issue
+day remains a separate fact.
 
 If the physical meal ended before midnight but no qualifying action was recorded until after
-midnight, only the later accepted event is observable. This automatic rule dates that event and
+midnight, only the later accepted close event is observable. This automatic rule dates that event and
 never reconstructs yesterday or asks staff to choose it. That observation limit remains explicit;
 it does not introduce a second approval gate or a missing-date refusal before ordinary payment.
 
@@ -167,16 +173,16 @@ The installed `@waitron/verifactu@0.2.1` already exposes `AltaInput.FechaOperaci
 reading UNVERIFIED. Convert the stored day to an input instant that formats back to that day
 under the **issue** offset; do not send UTC midnight blindly. Do not modify the library builder.
 
-**Exact H2 exception required before build:** permission to (1) change the operation-date
+**Exact H2 scope GRANTED by the owner, 27 October about 12:00 CET:** (1) change the trusted completion-day
 selection/pass-through in `packages/core/src/record-sale.ts` and the contract in
 `packages/fiscal/src/backend.ts`; (2) populate `AltaInput.FechaOperacion` in
 `packages/fiscal-verifactu/src/backend.ts`; (3) add nullable `fechaOperacion` to
 `src/schema/registros.ts`, its new migration, and both mappings in `src/registro-row.ts`;
 (4) consume that retained day in `src/drain.ts` and `src/reconcile.ts` period selection,
 including finding an anulación's original operation period. These paths persist/build/read a
-protected alta record, which RUNNER H2 expressly forbids without exception. Field availability
-in the library is not permission. No changes to `computeHuella`, chain code, allocation,
-numbering, `registerSif`, `restoreFiscal`, shipped migrations or protected tests are requested.
+protected alta record within this granted exception. No permission is granted for
+`computeHuella`, chain code, allocation/numbering, library alta builders, `registerSif`,
+`restoreFiscal`, shipped migrations, historical facts or protected tests.
 If the scoped exception cannot achieve the wire round-trip, stop with the precise additional
 dependency; do not widen it.
 
@@ -190,14 +196,16 @@ Times below are venue-local, `Europe/Madrid`, after the October DST change (+01:
 
 | Recorded events                                                                                     | Required result                                                                                                                                               |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Open 27 Oct 23:30; final Bill requested accepted 28 Oct 00:40; issue 00:41                          | Operation 28 Oct; issue 28 Oct; no extra operation row.                                                                                                       |
-| Final request accepted 27 Oct 23:50; reader begins 23:55; capture 28 Oct 00:05; issue/recover 00:10 | Operation 27 Oct; issue 28 Oct; thermal/A4/till show both. Captured money time stays 00:05.                                                                   |
-| Same accepted request; answer lost; process restarts 29 Oct                                         | Recover the same operation day, payment and sale identity once. Issue on 29 Oct only if not already issued; an issued replay retains its original issue date. |
-| Request 27 Oct 23:50; withdraw/add dessert before payment; new final request 28 Oct 00:15           | Old snapshot cleared; operation 28 Oct. Last dish being marked served alone records no end.                                                                   |
-| Meal ends/accepted final request 27 Oct; unpaid F1 issues that night; collection 30 Oct             | Both original invoice dates remain 27 Oct; collection creates no new invoice/date.                                                                            |
-| Physical meal ends 27 Oct 23:50 with no saved final action; first qualifying final action is 28 Oct | Capture 28 Oct, the observable accepted event; do not claim to reconstruct the unrecorded 27 Oct end or offer a date choice.                                  |
-| Early EUR10 on EUR30 while service continues                                                        | S3 partial/advance path; no whole-meal completion. Final delivery choice cannot supply it.                                                                    |
-| End 31 Dec; issue 1 Jan                                                                             | Retain 31 Dec for wire and receipt; consultation/reconciliation select the operation year/month for the alta, while identity/QR keep issue date.              |
+| Open 27 Oct 23:30; fully served; whole payment accepted 28 Oct 00:40; F1 commits 00:41 | Operation 28 Oct; issue 28 Oct; no extra operation row. |
+| Fully served; Bill requested 27 Oct 23:50; whole/final payment accepted and F1 committed 28 Oct 00:05 | Bill requested saves no completion. Operation 28 Oct; issue 28 Oct; no differing date printed. |
+| Fully served; Bill requested 27 Oct 23:50; whole/final payment accepted 23:55; reader begins then; provider charge 28 Oct 00:05; F1 commits 00:10 | Capture at payment acceptance on 27 Oct. Operation 27 Oct; issue 28 Oct; thermal/A4/till show both. Actual money time stays 00:05. |
+| Whole/final payment accepted 27 Oct 23:55 as above; answer lost; process restarts 29 Oct | Recover the same accepted instant/day, payment and sale identity once. Issue on 29 Oct only if not already issued; an issued replay retains its original issue date. |
+| Whole/final payment accepted 27 Oct 23:50; known noncharge; withdraw Bill requested/add dessert; service completes; new final-balance payment accepted 28 Oct 00:15 | Existing invalidation policy clears the old snapshot; capture at the new payment acceptance, operation 28 Oct. Last dish marked served alone records no end. |
+| Service complete; unpaid departure accepted and unpaid F1 committed 27 Oct 23:50; collection 30 Oct | Capture at accepted unpaid departure; both original invoice dates remain 27 Oct; collection creates no new invoice/date. |
+| Physical meal ends 27 Oct 23:50 with no accepted close event; first completed-meal F1 commits 28 Oct 00:10 | Capture at first F1 commit on 28 Oct; do not reconstruct the unrecorded 27 Oct physical end or offer a date choice. |
+| Service complete; price reduction accepted 27 Oct 23:59:59 settles the balance; first F1 commits 28 Oct 00:00:01 | Capture at the settling edit on 27 Oct; operation 27 Oct, issue 28 Oct. No invented tender or last payer. |
+| Early EUR10 part-payment accepted on EUR30 while service continues | S3 partial/advance path; no qualifying bill-close event or whole-meal completion. Final delivery choice cannot supply it. |
+| Service complete; final-balance payment accepted 31 Dec 23:55; first F1 commits 1 Jan 00:05 | Retain 31 Dec for wire and receipt; consultation/reconciliation select the operation year/month for the alta, while identity/QR keep issue date. |
 
 ## Integration and release
 
@@ -209,6 +217,8 @@ dependency. A739 retained `3e45abdc6` is likewise a reference, not a base to cop
 F/A739 payment work has precedence. The driver must reorient reservations and obtain released
 paths and the single fiscal-branch slot before implementation; do not edit either worktree.
 
-Use the [inline TDD runbook](../plans/2026-10-27-a444-meal-completion-date.md). Resolve the exact H2
-exception before code; the automatic capture rule needs no redundant overall design approval. One complete fiscal PR, one Claude run-it review during finish, normal hook
+Use the [inline TDD runbook](../plans/2026-10-27-a444-meal-completion-date.md). The exact H2 scope
+is granted; later expansion still stops for its precise dependency. Build waits only for released
+A696/A739 integration and the actual fiscal-branch slot; this docs revision authorizes no build
+or fiscal landing. One complete fiscal PR, one Claude run-it review during finish, normal hook
 and current-head CI; the owner lands. Driver owns backlog/research status, not this delegation.

@@ -1,10 +1,15 @@
 # A948: the meal's operation date and business-invoice delivery
 
-> **27 October, owner answer about 07:45 CET:** the meal-end date is approved, with **no staff
-> date choice or confirmation**. This supersedes that part of the proposal below; the earlier
-> research body remains historical. Follow the [implementation design](../../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md)
-> and [plan](../../superpowers/plans/2026-10-27-a444-meal-completion-date.md), whose filing-field
-> permission and A696/A739 integration gates remain open. S4 remains with the adviser.
+> **27 October, owner answers about 07:45 and 12:00 CET:** the meal-end date is approved, with
+> **no staff date choice or confirmation**. The later answer defines meal end as **when the bill
+> closes**: earliest qualifying whole/final balance payment acceptance, first completed-meal F1
+> issuance commit, accepted settling edit or accepted unpaid departure. Bill requested never
+> captures, even when fully served. Follow the [implementation design](../../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md)
+> and [plan](../../superpowers/plans/2026-10-27-a444-meal-completion-date.md) for the accepted instant/day
+> retained through recovery and the exact H2 scope now granted. Build waits only for released
+> A696/A739 integration and the actual fiscal-branch slot; this docs revision authorizes no build
+> or fiscal landing. The owner lands the eventual fiscal PR. This supersedes the capture/confirmation
+> proposal below; the research body and source evidence remain historical. S3/A447 and S4 remain open.
 
 Researched on 27 October 2026. A948's switch has landed; this note addresses its two separate
 follow-ups. The operation-date rule below is a proposal for the owner, not an approved change
