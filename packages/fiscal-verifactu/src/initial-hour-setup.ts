@@ -136,8 +136,7 @@ function isNamelessEvidence(evidence: unknown): boolean {
     evidence.currentEntryState === "consumed-for-event"
   );
 }
-/** The chooser's wait bound, `WAIT_BOUND_MS` (`hour-selection.ts:65`): a name it picks is at most
- * this far ahead of its last write. */
+/** The chooser's wait bound, `WAIT_BOUND_MS` (`hour-selection.ts:65`). */
 const START_AGAIN_WRITE_MARGIN_MS = 150_000;
 export function hourStartAgainFloor(
   retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
