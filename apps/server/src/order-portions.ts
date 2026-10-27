@@ -48,6 +48,10 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
     request += 1;
     const extras = extrasOf.get(row.id!) ?? [];
     const count = portionable[i] === true ? row.quantity / 1000 : 1;
+    if (!Number.isInteger(count))
+      throw new Error(
+        `expandPortionRows: line ${row.id}'s quantity ${row.quantity} is not a whole number of portions`,
+      );
     const cohort = randomUUID();
     for (let ordinal = 1; ordinal <= count; ordinal++) {
       const id = ordinal === 1 ? row.id! : randomUUID();

@@ -341,6 +341,27 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     expect(filed(projected).total).toBe("9.50");
   });
 
+  it("A803 monetary comparison: a portion discounted to the price an undiscounted one sells at", () => {
+    const bill = burgers();
+    const [first, second] = [bill.lines[0]!, bill.lines[1]!];
+    bill.lines[0] = { ...first, locked: { ...first.locked, grossUnitPrice: "9.00" } };
+    bill.lines[1] = {
+      identity: { ...second.identity, listUnitGross: decimal("9.50") },
+      locked: { ...second.locked, grossUnitPrice: "9.00" },
+    };
+    const projected = projectPortionSale(bill.lines, bill.bindings);
+    expect(projected.map((line) => line.identity.listUnitGross)).toEqual([null, "9.50"]);
+  });
+
+  it("A803 monetary comparison: a list price equal to the price groups with none, as both file none", () => {
+    const bill = burgers();
+    const second = bill.lines[1]!;
+    bill.lines[1] = { ...second, identity: { ...second.identity, listUnitGross: decimal("9.50") } };
+    const projected = projectPortionSale(bill.lines, bill.bindings);
+    expect(rowsOf(projected)).toEqual([["Burger", "2.000", null]]);
+    expect(filed(projected)).toEqual(filed(grouped([{ name: "Burger", price: "9.50", count: 2 }])));
+  });
+
   it("A803 monetary comparison: portions recorded under different classifications", () => {
     const bill = burgers();
     const other = bill.lines[1]!;

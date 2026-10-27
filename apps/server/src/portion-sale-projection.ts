@@ -1,5 +1,5 @@
 import type { LockedLine } from "@waitron/catalogue";
-import { addDecimal, decimal } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import type { OrderLineIdentity, StoredOrderLine } from "./working-order.js";
 
 /** Which portion a working dish line holds, as `working_line_portions` and `order_portions` say. */
@@ -30,10 +30,12 @@ function canonical(value: unknown): string {
 
 /** Every field of the stored line and its identity except its id, how many, and which dish it is under. */
 function rowKey(line: StoredOrderLine): string {
-  const { quantity: _quantity, parentLineNo: _parent, ...rest } = line.locked;
-  const { id: _id, ...identity } = line.identity;
+  const rest = line.locked;
+  const listed = line.identity.listUnitGross;
   return canonical({
     ...rest,
+    quantity: null,
+    parentLineNo: null,
     priceQuantity: rest.priceQuantity ?? null,
     unitName: rest.unitName ?? null,
     unitPrecision: rest.unitPrecision ?? null,
@@ -42,7 +44,15 @@ function rowKey(line: StoredOrderLine): string {
     variantDescriptions: rest.variantDescriptions ?? null,
     variantKitchenName: rest.variantKitchenName ?? null,
     kitchenName: rest.kitchenName ?? null,
-    identity,
+    identity: {
+      ...line.identity,
+      id: null,
+      // A list price equal to the price is filed as none (`withReceiptListPrices`), so it groups as none.
+      listUnitGross:
+        listed !== null && compareDecimal(listed, decimal(rest.grossUnitPrice)) !== 0
+          ? listed
+          : null,
+    },
   });
 }
 

@@ -193,6 +193,13 @@ describe("A803 portions: splitting a priced round", () => {
       "water",
     ]);
     expect(out.requestOfRow).toEqual([0, 0, 0, 0, 1]);
+    expect(out.lineContexts).toEqual([
+      context(burgers),
+      context(cheese),
+      { ...context(burgers), workingOrderLineId: out.rows[2]!.id },
+      { ...context(cheese), workingOrderLineId: out.rows[3]!.id },
+      context(water),
+    ]);
   });
 
   it("A803 portions: names, variant, options, note, course and station are copied to every portion, and each gets its own context with soldInEach kept", () => {
@@ -216,6 +223,13 @@ describe("A803 portions: splitting a priced round", () => {
     }
     expect(out.lineContexts).toEqual(
       out.rows.map((row) => ({ ...context(plates, true), workingOrderLineId: row.id })),
+    );
+  });
+
+  it("A803 portions: a whole-portion dish of a part quantity is refused as a bug", () => {
+    const half = dish("half", { quantity: 2500, lineTotal: 1250 });
+    expect(() => expandPortionRows([half], [context(half)], [true], 1)).toThrow(
+      "expandPortionRows: line half's quantity 2500 is not a whole number of portions",
     );
   });
 
