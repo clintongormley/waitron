@@ -1015,6 +1015,38 @@ it("with the database present and no password, a damaged kept picks file asks fo
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
+it("until Task 10b, with the database present and the setup password, a damaged kept picks file is refused setup.attempt_invalid, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const recovered = await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: current.inspectionId,
+      revision: current.revision!,
+      ownerGeneration: current.ownerGeneration!,
+      owner: {
+        attemptId: recovered.state.attemptId,
+        revision: recovered.state.revision,
+        ownerGeneration: recovered.state.ownerGeneration,
+        capability: recovered.capability,
+      },
+      register: startRequest.register,
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
 it.each([
   [
     "lacks the unreadable records",

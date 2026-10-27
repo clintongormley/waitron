@@ -1032,8 +1032,9 @@ declare module "@waitron/shared" {
     "setup.reset_unavailable": Record<string, never>;
     /**
      * Start again with the database present cannot go ahead without the setup password: the kept
-     * recovery-key record or the kept series picks file cannot be read. `seriesPicksUnreadable` is
-     * present, and true, only when the picks file is the one that cannot be read.
+     * recovery-key record cannot be read, the kept series picks file cannot be read, or it would
+     * discard a stopped recovery. `seriesPicksUnreadable` is present, and true, when the picks file
+     * cannot be read.
      */
     "setup.start_again_password_required": { seriesPicksUnreadable?: true };
     /**
