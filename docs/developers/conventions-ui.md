@@ -1226,11 +1226,14 @@ After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
 recorded Keep from disk. After a Move, the answer names the set-aside folder, above the list of
 found files, in place of the files-found title, action and Retry button (`startAgainDraw`), and the
-process restarts once the answer is written, as Retry does. A Move refused
+process restarts once the answer is written, as Retry does. Until it has restarted, the process
+keeps serving that answer on `GET /`, and every later `POST /recovery-api/start-again` answers 409
+with the same answer without choosing again, so a stale form cannot record a choice over the moved
+files. A Move refused
 `setup.start_again_move_unfinished` answers 409 with that code's recovery page and no list or form,
 does not restart, and the process keeps serving that page on `GET /`; every later `POST
 /recovery-api/start-again` in that process answers 409 with the same page without choosing again,
-so a stale form cannot record a second choice over the unfinished Move. After a Keep and after
+so a stale form cannot record a second choice over the unfinished Move. After a Keep, a Move and
 `setup.start_again_move_unfinished`, `/recovery-api/status` still reports
 `setup.start_again_files_found` until the next start. The choice is logged
 `recovery.start_again_choice` (the choice, the attempt id and the number of found units) only after
@@ -1238,8 +1241,8 @@ it has taken effect. A failure the page answers with `notFinished` ("Start again
 finish …"), and `setup.start_again_move_unfinished`, are logged `recovery.start_again_choice_failed`
 with Waitron's error code (null when the error is not a Waitron error) and, when there is one, a
 `reason`: the Waitron error's own reason, or else the system error code and the path the error
-names, written and left out as above. The move-unfinished page is drawn before that line is
-logged, so a logger that throws still leaves `GET /` on it.
+names, written and left out as above. The move-unfinished page, and the moved answer, are drawn
+before their line is logged, so a logger that throws still leaves `GET /` on them.
 
 The one sentence on this page that says something is removed is the Move choice's `moveDetail`
 ("… and the rest of the interrupted setup is removed."), the owner's approved exception of

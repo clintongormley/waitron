@@ -1593,6 +1593,50 @@ describe("recoveryApp's Start again choice", () => {
     }
   });
 
+  it("after Move, GET / in each language draws the moved answer: no files-found title or action, no form, no Retry", async () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const found = OPERATOR_TEXT["setup.start_again_files_found"]![locale];
+      const words = START_AGAIN_PAGE_TEXT[locale];
+      const { app: surface } = app(MOVED);
+      expect((await choose(surface, "move")).status, locale).toBe(200);
+      const after = await surface.request("/", { headers: { "Accept-Language": locale } }, tls());
+      const page = await after.text();
+      expect(page, locale).toContain(escapeHtml(words.moved("state/first-setup-set-aside/s1")));
+      expect(page, locale).not.toContain(escapeHtml(found.title));
+      expect(page, locale).not.toContain(escapeHtml(found.action));
+      expect(page, locale).not.toContain(RETRY_ACTION);
+      expect(page, locale).not.toContain(FORM_ACTION);
+      expect(page, locale).not.toContain('type="password"');
+    }
+  });
+
+  it("a logger that throws on the recorded choice still leaves GET / on the moved answer after a Move", async () => {
+    const { app: surface } = app(MOVED, throwingOnChoice);
+    await choose(surface, "move");
+    const page = await (await surface.request("/", {}, tls())).text();
+    expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(page).not.toContain('type="password"');
+  });
+
+  it("after Move, a later Keep or Move is answered 409 with the moved answer and chooses nothing", async () => {
+    const chooser = vi.fn<NonNullable<StartAgain["choose"]>>(MOVED);
+    const { app: surface, onFinished } = app(chooser);
+    expect((await choose(surface, "move")).status).toBe(200);
+    for (const choice of ["move", "keep"] as const) {
+      const again = await choose(surface, choice);
+      expect(again.status, choice).toBe(409);
+      const page = await again.text();
+      expect(page, choice).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+      expect(page, choice).not.toContain(escapeHtml(KEPT.title));
+      expect(page, choice).not.toContain(escapeHtml(FOUND.title));
+      expect(page, choice).not.toContain(FORM_ACTION);
+      expect(page, choice).not.toContain(RETRY_ACTION);
+    }
+    expect(chooser).toHaveBeenCalledOnce();
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
   it("gives the found-files list items overflow-wrap: anywhere, so a long file name wraps on a phone", async () => {
     const { app: surface } = app();
     const body = await (await surface.request("/", {}, tls())).text();

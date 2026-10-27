@@ -449,6 +449,8 @@ export function mountStartAgainChoice(
   // A recorded Move that did not finish is resumed by the next start, so no second choice may be
   // recorded over it from a stale form.
   let moveUnfinished = false;
+  // A finished Move has changed the files the form listed, so a stale form chooses nothing.
+  let moved: { kind: "moved"; folder: string } | undefined;
 
   app.post("/recovery-api/start-again", async (c) => {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
@@ -459,6 +461,7 @@ export function mountStartAgainChoice(
     const code = "setup.start_again_files_found" as const;
     if (moveUnfinished)
       return page(409, { code: "setup.start_again_move_unfinished", secure: isSecure(c) });
+    if (moved !== undefined) return page(409, { code, secure: isSecure(c), message: moved });
 
     let chosen: Form["choice"];
     let result: Awaited<ReturnType<typeof choose>>;
@@ -508,14 +511,13 @@ export function mountStartAgainChoice(
       logChoice();
       return page(200, { code: "setup.start_again_kept", secure: true });
     }
+    moved = { kind: "moved", folder: movedFolder(result.setAside) };
     const outgoing = outgoingOf(c);
     if (outgoing === undefined) void deps.onFinished();
     else outgoing.once("finish", () => void deps.onFinished());
+    // Drawn first: the draw holds the page on the moved answer, which a throwing logger must not skip.
+    const answer = await page(200, { code, secure: true, message: moved });
     logChoice();
-    return page(200, {
-      code,
-      secure: true,
-      message: { kind: "moved", folder: movedFolder(result.setAside) },
-    });
+    return answer;
   });
 }
