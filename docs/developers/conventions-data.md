@@ -4708,7 +4708,7 @@ every name in the history it can read and no earlier than the start-again note's
 owner, 2026-10-24, A1042; a Start again Move raises the floor, if lower, to the first whole minute
 at least 150 seconds after the moved files' newest modification time, A1098; a Start again past a
 damaged name record raises it, if lower, to the first whole minute more than 150 seconds after the
-newest modification time among the attempt's files other than its databases, A1099); a setup or restore waits 90 to 150 seconds first. Guard for the note:
+newest modification time among the attempt's files and folders other than its databases, A1099); a setup or restore waits 90 to 150 seconds first. Guard for the note:
 `scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
 note, its confirmation and choice records or the set-aside folder as text, so a path built from pieces escapes it, and it never sees code that empties the whole
 state folder without naming the file. The one

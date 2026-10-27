@@ -455,7 +455,7 @@ missing-database path is not one that page expects (`#readMissingAsk`, called fr
 
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
-Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. A1099 lets it go ahead past a damaged record of the attempt's series names (the kept picks file, the public fiscal record or the fiscal documents), after a warning; a damaged setup record or claim marker (A1158), an unreadable present database (A1159), a damaged start-again note (A1160) the database-present case in A1161 and a recovery's damaged copy of the series-name record (A1162) still refuse.
+Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. A1099 lets it go ahead past a damaged record of the attempt's series names (the kept picks file, the public fiscal record or the fiscal documents), after a warning; a damaged setup record or claim marker (A1158), an unreadable present database (A1159), a damaged start-again note (A1160), the database-present case in A1161 and a recovery's damaged copy of the series-name record (A1162) still refuse.
 
 ### `shell.operation_conflict`
 
@@ -729,7 +729,9 @@ whenever a public fiscal record (`state/module-operation-public.json`) or an une
 fiscal-documents file exists, damaged or intact (`firstSetupUnusedAssignment` in
 `apps/server/src/first-setup-unused-assignment.ts` and `noOtherHistory` in
 `apps/server/src/first-setup-resolution.ts`, both from #1752). Beside a stopped recovery, the
-summary refuses a damaged one `setup.attempt_invalid`. So a damaged one there gets no
+summary refuses a damaged public record `setup.attempt_invalid`
+(`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "a stopped recovery's summary
+past a damaged public record still refuses setup.attempt_invalid"). So a damaged one there gets no
 warned way out. Wanted: decide with the owner whether a damaged one can count as "name unknown"
 on this path too.
 

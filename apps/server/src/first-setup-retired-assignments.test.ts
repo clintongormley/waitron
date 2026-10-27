@@ -366,7 +366,6 @@ async function stampTree(path: string, at: Date) {
 }
 /** Two hours after the retired name, so the time floor is later than the name's own floor. */
 const STAMP_AT_MS = instant(1) + 2 * 3_600_000;
-/** The first minute after the newest file time plus the chooser's 150-second wait bound. */
 const TIME_FLOOR_MS = (Math.floor((STAMP_AT_MS + 150_000) / 60_000) + 1) * 60_000;
 async function expectTimeFloorNote(f: Awaited<ReturnType<typeof fixture>>) {
   expect(TIME_FLOOR_MS).toBeGreaterThan(instant(1) + 60_000);

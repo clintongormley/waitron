@@ -44,7 +44,7 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **A later minute is already in use**: the page names the time (and the date, when it is on a later day) from which the series can be made,
+- **A later minute is already in use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
   with no countdown (`first-hour.browser.test.ts`, "a later minute in use names its time and does
   not count down").
 
@@ -125,8 +125,8 @@ damaged and cannot be read.", "This setup's public fiscal record is damaged and 
 "This setup's fiscal documents on this box are damaged and cannot be read." — and, under "Deletes
 this attempt. This box will not use its invoice series names again.", says "New series names can
 start from {date}, {time}." Because the box cannot read every name the attempt used, it takes that
-time from the attempt's own files and folders instead (not the databases): the start of the minute
-after their newest modification time plus 150 seconds. The setup password step itself rewrites some
+time from the attempt's own files and folders instead (not the databases): the first whole minute
+more than 150 seconds after their newest modification time. The setup password step itself rewrites some
 of those files, so the time is usually two and a half to three and a half minutes after you entered
 the password. Start again then keeps the note with that minute and no name, unless a name the box
 can still read is later. With the venue database present, it also writes a confirmation record

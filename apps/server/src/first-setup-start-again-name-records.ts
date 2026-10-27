@@ -17,11 +17,6 @@ async function picksFilePresent(roots: FirstSetupRoots): Promise<boolean> {
   );
 }
 
-/**
- * An unreadable picks file still gives every preparation the seat takes on its own: the hour
- * seat's floor is the latest name it is given (`hourStartAgainFloor`), so each one kept can only
- * raise it.
- */
 export async function readSeriesPicks(
   roots: FirstSetupRoots,
   module: string,
