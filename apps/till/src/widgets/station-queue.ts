@@ -20,8 +20,10 @@ import {
   type CourseSection,
   type KitchenCard,
   type MergedQueueGroup,
+  cardPlaces,
   dishesAt,
   headingStage,
+  isCounterOrder,
   kitchenCards,
   lateCards,
   thousandthsToMake,
@@ -911,7 +913,7 @@ export class TillStationQueue extends LitElement {
       since === null
         ? "held"
         : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
-    const labels = [...new Set(card.orders.map((order) => order.label).filter((label) => !!label))];
+    const labels = cardPlaces(card);
     const row = (item: StationQueueItem) =>
       this.#renderLine(card, card.orderOf.get(item.id)!, item, this.#stateWord(card, item));
     const { sections } = card;
@@ -923,9 +925,11 @@ export class TillStationQueue extends LitElement {
     const stage = headingStage(card);
     const head = html`${card.orders.map(
       (order, index) =>
-        html`${index === 0 ? nothing : " · "}<span class="number"
-            >${orderNumber(order.orderNumber, order.formerNumbers)}</span
-          >`,
+        html`${index === 0 ? nothing : " · "}${
+            isCounterOrder(order)
+              ? html`<span class="counter">${t("station.counter")}</span> `
+              : nothing
+          }<span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>`,
     )}
     ${kitchenAllergyMarker(card.items.some((item) => item.allergy !== null))}
     ${labels.map((label) => html`<span class="label">${label}</span>`)}

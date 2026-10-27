@@ -3421,7 +3421,7 @@ describe("till-station-queue: a card's heading and whole-ticket taps", () => {
     const advance = `${t("station.bump_ticket")} #7`;
     await expect
       .element(page.elementLocator(button))
-      .toHaveAccessibleName(new RegExp(`^#7 Table 7 .*${advance.replace("#", "\\#")}$`));
+      .toHaveAccessibleName(new RegExp(`^Counter #7 Table 7 .*${advance.replace("#", "\\#")}$`));
     const hidden = button.querySelector(".visually-hidden")!;
     expect(hidden.textContent).toBe(advance);
     expect(hidden.getBoundingClientRect().width).toBeLessThanOrEqual(1);
@@ -3662,5 +3662,86 @@ describe("till-station-queue: a card's layout", () => {
       expect(style.borderBottomColor).toBe("rgb(13, 14, 15)");
       expect(style.borderBottomWidth).toBe(card.borderLeftWidth);
     }
+  });
+});
+
+describe("till-station-queue: a card's place", () => {
+  afterEach(cleanupWidgets);
+
+  const party = { id: "party-1", revision: 0 };
+  const flat = (el: Element) => el.textContent!.replace(/\s+/g, " ").trim();
+  const mount = async (groups: StationQueueGroup[]) =>
+    (await mountWidget<TillStationQueue>("till-station-queue", { groups, stationId: "st-1" })).el;
+  const headOf = (el: TillStationQueue) =>
+    el.shadowRoot!.querySelector("[data-card] .ticket-head")!;
+  const placesOf = (el: TillStationQueue) => [...headOf(el).querySelectorAll(".label")].map(flat);
+
+  it("names a table's bill by the table's short name, not its label", async () => {
+    const el = await mount([{ ...groupA, party, label: "Terrace 1", tableShortNames: ["T1"] }]);
+    expect(placesOf(el)).toEqual(["T1"]);
+    expect(flat(headOf(el))).not.toContain("Terrace 1");
+    expect(headOf(el).querySelector(".counter")).toBeNull();
+  });
+
+  it("names a bill at joined tables by their short names in number order", async () => {
+    const el = await mount([{ ...groupA, party, label: null, tableShortNames: ["T5", "T4"] }]);
+    expect(placesOf(el)).toEqual(["T4+T5"]);
+  });
+
+  it("reads Counter before a counter order's number, in each language", async () => {
+    const counter = { ...groupA, label: null };
+    const el = await mount([counter]);
+    expect(flat(headOf(el)).startsWith("Counter #5")).toBe(true);
+    expect(flat(headOf(el).querySelector(".number")!)).toBe("#5");
+    cleanupWidgets();
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanish = await mount([counter]);
+      const word = flat(headOf(spanish).querySelector(".counter")!);
+      expect(word).toBe(t("station.counter"));
+      expect(word).not.toBe("Counter");
+      expect(flat(headOf(spanish)).startsWith(`${word} #5`)).toBe(true);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it("keeps a counter order's label after its number", async () => {
+    const el = await mount([{ ...groupA, label: "Ana" }]);
+    expect(flat(headOf(el)).startsWith("Counter #5 Ana")).toBe(true);
+  });
+
+  it("names a counter order delivered to a table by the table, without Counter", async () => {
+    const el = await mount([{ ...groupA, label: "Garden 4", tableShortNames: ["G4"] }]);
+    expect(headOf(el).querySelector(".counter")).toBeNull();
+    expect(flat(headOf(el)).startsWith("#5 G4")).toBe(true);
+    expect(placesOf(el)).toEqual(["G4"]);
+  });
+
+  it("names a place two bills of one group share once", async () => {
+    const group = {
+      id: "g-1",
+      position: 1,
+      displayNumber: 1,
+      numberPartyId: "party-1",
+      state: "fired" as const,
+    };
+    const items = (prefix: string) =>
+      groupA.items.map((item) => ({ ...item, id: `${prefix}-${item.id}`, group }));
+    const el = await mount([
+      { ...groupA, party, label: null, tableShortNames: ["T4"], items: items("a") },
+      {
+        ...groupA,
+        orderId: "wo-9",
+        orderNumber: 9,
+        party,
+        label: null,
+        tableShortNames: ["T4"],
+        items: items("b"),
+      },
+    ]);
+    expect(el.shadowRoot!.querySelectorAll("[data-card]")).toHaveLength(1);
+    expect(placesOf(el)).toEqual(["T4"]);
   });
 });
