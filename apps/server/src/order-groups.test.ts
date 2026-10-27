@@ -4104,7 +4104,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     const jobs = await printed(v);
     expect(jobs).toHaveLength(jobsBefore + 1);
     const reprint = ticketLines(jobs.at(-1)!);
-    expect(reprint[0]).toBe("*** REPRINT ***");
+    expect(reprint[0]).toMatch(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/);
     const at = (text: string) => reprint.findIndex((row) => row.includes(text));
     expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
       "GROUP 1",

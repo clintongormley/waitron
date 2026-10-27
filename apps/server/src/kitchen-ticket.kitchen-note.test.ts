@@ -25,7 +25,7 @@ describe.each([
         {},
         { mark: "HOLD" as const },
         { mark: "FIRE" as const },
-        { reprint: true },
+        { reprintedAt: new Date(2026, 7, 17, 15, 20) },
       ]) {
         for (const body of [
           { locale: "en-GB", scope: "station" as const, stationName: "Grill", items: [item] },

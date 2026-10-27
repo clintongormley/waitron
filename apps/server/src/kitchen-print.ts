@@ -535,6 +535,7 @@ async function planKitchenTickets(
   firedItems: FiredItem[],
   {
     reprint,
+    reprintedAt,
     mark,
     fire,
     from,
@@ -542,6 +543,7 @@ async function planKitchenTickets(
     known,
   }: {
     reprint: boolean;
+    reprintedAt?: Date;
     mark?: "HOLD";
     fire?: { heldPaper: ReadonlySet<string> };
     from?: string;
@@ -649,7 +651,7 @@ async function planKitchenTickets(
   const head = {
     locale: cfg.locale,
     kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
-    reprint,
+    reprintedAt,
     from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
     party: partyName === null ? undefined : { name: partyName, locale: cfg.locale },
     tableLabel: order.tableLabel ?? "",
@@ -1778,13 +1780,16 @@ export async function reprintOrderTickets(
     stations: await readStations(tx, stationIds),
   };
   const papers = joinedPapers(firedStations, heldStations, known);
+  const reprintedAt = new Date();
   const jobs = await planKitchenTickets(tx, cfg, orderId, fired.items, {
     reprint: true,
+    reprintedAt,
     papers,
     known,
   });
   const holdJobs = await planKitchenTickets(tx, cfg, orderId, held.items, {
     reprint: true,
+    reprintedAt,
     mark: held.mark,
     known,
     papers: new Map(

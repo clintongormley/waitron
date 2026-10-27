@@ -401,7 +401,7 @@ describe("joinKitchenTickets", () => {
     formatKitchenTicket(
       {
         locale: "en-GB",
-        reprint: true,
+        reprintedAt: new Date(2026, 7, 17, 15, 20),
         mark,
         scope: "station",
         stationName: "Grill",
@@ -421,13 +421,13 @@ describe("joinKitchenTickets", () => {
     expect(commands.filter((name) => name === "GS V")).toHaveLength(1);
     expect([...joined.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
     expect(printedLines(joined)).toEqual([
-      "*** REPRINT ***",
+      "*** REPRINT 15:20 ***",
       "Grill",
       "Mesa 4",
       "A-17",
       "14:30",
       "1 x Steak",
-      "*** REPRINT ***",
+      "*** REPRINT 15:20 ***",
       "*** HOLD ***",
       "Grill",
       "Mesa 4",
@@ -952,14 +952,19 @@ describe("the reprint mark and a party's group numbers", () => {
       items,
     }) as const;
 
-  // Fails if a reprint prints as a fresh fire, or the mark moves off the first line.
-  it("opens a reprint with *** REPRINT *** and prints the rest as the ticket would", () => {
+  // Fails if a reprint prints as a fresh fire, the mark moves off the first line, or the
+  // reprint time replaces the send time.
+  it("opens a reprint with its reprint time and keeps the send time", () => {
     const items = [{ qty: 2, name: "Steak" }];
     const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80));
     const again = printedLines(
-      formatKitchenTicket({ ...station(items), reprint: true }, KITCHEN_80),
+      formatKitchenTicket(
+        { ...station(items), reprintedAt: new Date(2026, 7, 17, 15, 20) },
+        KITCHEN_80,
+      ),
     );
-    expect(again).toEqual(["*** REPRINT ***", ...plain]);
+    expect(plain).toContain("14:30");
+    expect(again).toEqual(["*** REPRINT 15:20 ***", ...plain]);
   });
 
   // Fails if a group's fire ticket stops naming its group under the header.
@@ -1551,7 +1556,7 @@ describe("a kitchen ticket for a named party", () => {
           {
             locale: "en-GB",
             scope: "stations",
-            reprint: true,
+            reprintedAt: new Date(2026, 7, 17, 13, 40),
             mark: "HOLD",
             tableLabel: "Mesa 4",
             orderNumber: "5",
@@ -1566,7 +1571,7 @@ describe("a kitchen ticket for a named party", () => {
         ),
       ),
     ).toEqual([
-      "*** REPRINT ***",
+      "*** REPRINT 13:40 ***",
       "*** HOLD ***",
       "Cocina · Parrilla",
       "Mesa 4",

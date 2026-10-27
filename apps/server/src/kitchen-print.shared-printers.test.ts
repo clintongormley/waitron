@@ -424,6 +424,8 @@ describe("a printer shared by several stations, on the rest of the order", () =>
   });
 });
 
+const REPRINTED = /^\*\*\* REPRINT \d\d:\d\d \*\*\*$/;
+
 describe("a reprint on a printer shared by several stations", () => {
   it("prints the order once on the shared printer, linked to each of its stations", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -453,7 +455,10 @@ describe("a reprint on a printer shared by several stations", () => {
 
     expect(reprints).toHaveLength(4);
     const shared = onPrinter(reprints, p);
-    expect(shared.printed.slice(0, 2)).toEqual(["*** REPRINT ***", "Grill · Pastry"]);
+    expect(shared.printed.slice(0, 2)).toEqual([
+      expect.stringMatching(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/),
+      "Grill · Pastry",
+    ]);
     expect(shared.printed.slice(5)).toEqual([
       "Grill",
       "1.000 x Steak",
@@ -498,9 +503,12 @@ describe("a reprint on a printer shared by several stations", () => {
       const { venue, p, reprints } = result;
 
       const shared = onPrinter(reprints, p);
-      expect(shared.printed.filter((text) => text === "*** REPRINT ***")).toHaveLength(2);
+      expect(shared.printed.filter((text) => REPRINTED.test(text))).toHaveLength(2);
       expect(shared.printed.filter((text) => text === "*** HOLD ***")).toHaveLength(1);
-      const heldAt = shared.printed.lastIndexOf("*** REPRINT ***");
+      const heldAt =
+        shared.printed.length -
+        1 -
+        [...shared.printed].reverse().findIndex((text) => REPRINTED.test(text));
       const firedPart = shared.printed.slice(0, heldAt);
       const heldPart = shared.printed.slice(heldAt);
       const names = { steak: "Grill", tart: "Pastry" } as const;

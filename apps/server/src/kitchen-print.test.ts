@@ -1997,7 +1997,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
 
     const reprinted = (await jobsAt(kitchen.printerId!)).slice(1);
     expect(reprinted).toHaveLength(1);
-    expect(reprinted[0]![0]).toBe("*** REPRINT ***");
+    expect(reprinted[0]![0]).toMatch(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/);
     expect(reprinted[0]![1]).toBe("*** HOLD ***");
     expect(reprinted[0]).toContain("1.000 x BURG");
     expect(await jobsAt(bar.printerId!)).toEqual([]);
@@ -2468,7 +2468,12 @@ describe("the party's name on a kitchen ticket", () => {
     const { orderNumber } = await billRow(v, ana.tabId);
     const tickets = await ticketsSince(printer, before);
     expect(tickets.map((lines) => lines.slice(0, 4))).toEqual([
-      ["*** REPRINT ***", "Cocina", "Mesa 72", `Pedido ${orderNumber} · Luis`],
+      [
+        expect.stringMatching(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/),
+        "Cocina",
+        "Mesa 72",
+        `Pedido ${orderNumber} · Luis`,
+      ],
     ]);
   });
 

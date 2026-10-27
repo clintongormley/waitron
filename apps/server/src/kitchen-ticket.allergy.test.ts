@@ -152,9 +152,11 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
     };
     const payloads = [
       formatKitchenTicket(multi, layout),
-      ...[{ reprint: true }, { mark: "HOLD" as const }, { mark: "FIRE" as const }].map((flags) =>
-        formatKitchenTicket({ ...ticket(), ...flags }, layout),
-      ),
+      ...[
+        { reprintedAt: new Date(2026, 7, 17, 15, 20) },
+        { mark: "HOLD" as const },
+        { mark: "FIRE" as const },
+      ].map((flags) => formatKitchenTicket({ ...ticket(), ...flags }, layout)),
       formatMovedSlip(
         {
           stationName: "Grill",
