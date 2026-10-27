@@ -5,7 +5,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { userEvent } from "vitest/browser";
 import type { WtDialog } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { KitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
+import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
 import { TillStationScreen } from "./till-station-screen.js";
 import type {
   DeviceIdentity,
@@ -186,7 +186,7 @@ async function tapColumn(el: TillStationScreen, key: string, queue = queueWidget
 }
 
 const columnsWindow = (el: TillStationScreen) =>
-  el.shadowRoot!.querySelector<KitchenColumnsDialog>("till-kitchen-columns-dialog");
+  el.shadowRoot!.querySelector<TillKitchenColumnsDialog>("till-kitchen-columns-dialog");
 
 const windowPart = (el: TillStationScreen, selector: string) =>
   columnsWindow(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;

@@ -5470,7 +5470,8 @@ capitals between `**` above each such run; correction and MOVED slips print none
 
 ### The kitchen screen's cards
 
-A kitchen screen draws three columns, Waiting, Preparing and Ready, and one card per station and
+A kitchen screen draws the columns Waiting, Preparing and Ready that its layout shows, in the
+layout's order, and one card per station and
 group across the group's bills; dishes with no group (a counter order, a bill with no party, or
 dishes moved in) make one card per station and bill (`kitchenCards`,
 `apps/till/src/state/kitchen-cards.ts`). A card sits in the column of its least advanced dish, a
@@ -5497,7 +5498,8 @@ tap moves the card's fired dishes at the least advanced such stage, never a dish
 (`#onAdvanceDishes`, `apps/till/src/screens/till-station-screen.ts`). Each board opens with one
 header row, drawn by `till-station-queue` whether or not it has cards (`.board-head`, a wrapping
 flex row with a `--wt-space-3` gap): a `lead` slot the screen fills (on a kitchen display the
-station's name and today's control; on the till's Station screen today's control, the station's
+station's name and today's control, or only today's control for a station drawn while unavailable,
+whose notice line above the board names it; on the till's Station screen today's control, the station's
 name being on its picker; nothing on the merged board), the counts line, and a secondary
 **Columns** `wt-button` pushed to the row's end. After the row, a `status` slot takes the screen's
 printer-down lines, then come the notices and the board. The counts line,

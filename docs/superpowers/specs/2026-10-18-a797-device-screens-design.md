@@ -395,6 +395,8 @@ Nothing about the layout is a setting except what the owner made one in Q42.
 2026-10-26, slice 6: the Ready warning time is set in the station editor and Add station as a fourth
 field after Waiting, Overdue and Forgotten, and is in no order with them; see the build plan's slice
 6, D3 and D6.
+2026-10-27, slice 9b: on a kitchen screen Columns is at the end of each board's header row, not in
+the corner; see the build plan's slice 9b, D1.
 
 **How the profile's and the device's "Other stations' dishes" combine** (recommended, Q51 (d)): the
 profile sets the default for its passes; a device may choose Show or Hide for itself, or "Profile

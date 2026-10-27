@@ -151,8 +151,9 @@ para reducir el movimiento se queda quieta. Una tarjeta cuyos platos están todo
 borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida la
 preparación](kitchen-service.md#request-cooking).
 
-Una fila encima de las columnas muestra la estación y si está abierta hoy, cuántos platos quedan
-por hacer y cuántas tarjetas van con retraso, y **Columnas** al final. Toca **Columnas** para
+Una fila encima de las columnas muestra cuántos platos quedan por hacer y cuántas tarjetas van con
+retraso, y **Columnas** al final; encima de las columnas de una sola estación muestra también si la
+estación está abierta hoy y, en una pantalla de cocina, el nombre de la estación. Toca **Columnas** para
 ordenar las columnas: las flechas suben o bajan una columna en la lista, que es el orden en
 que la pantalla las muestra, y **Mostrar** la oculta o la muestra. Cada cambio se ve al
 momento y se guarda en este dispositivo; **Hecho** cierra la ventana. Las tarjetas de una columna

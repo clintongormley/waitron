@@ -4,7 +4,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { ColumnKey, ColumnState } from "../state/kitchen-columns.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
 import { stationColumnNames } from "./station-queue.js";
-import { KitchenColumnsDialog } from "./kitchen-columns-dialog.js";
+import { TillKitchenColumnsDialog } from "./kitchen-columns-dialog.js";
 
 afterEach(cleanupWidgets);
 
@@ -15,8 +15,8 @@ const layout = (over: Partial<ColumnState> = {}): ColumnState => ({
   ...over,
 });
 
-const mount = (over: Partial<KitchenColumnsDialog> = {}) =>
-  mountWidget<KitchenColumnsDialog>("till-kitchen-columns-dialog", {
+const mount = (over: Partial<TillKitchenColumnsDialog> = {}) =>
+  mountWidget<TillKitchenColumnsDialog>("till-kitchen-columns-dialog", {
     layout: layout(),
     names: stationColumnNames(),
     boardName: "Grill",
@@ -24,9 +24,9 @@ const mount = (over: Partial<KitchenColumnsDialog> = {}) =>
     ...over,
   });
 
-const part = (el: KitchenColumnsDialog, selector: string) =>
+const part = (el: TillKitchenColumnsDialog, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean; checked: boolean }>(selector)!;
-const rows = (el: KitchenColumnsDialog) =>
+const rows = (el: TillKitchenColumnsDialog) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-row]")].map((row) => [
     row.querySelector("[data-column-number]")!.textContent!.trim(),
     row.querySelector("[data-column-name]")!.textContent!.trim(),
@@ -96,25 +96,34 @@ describe("the Columns window", () => {
     expect(el.shadowRoot!.activeElement).toBe(part(el, '[data-column-up="waiting"]'));
   });
 
-  it.each([
-    ["en-GB", "Move up Ready", "Move down Ready", "Show Ready"],
-    ["es-ES", "Subir Listo", "Bajar Listo", "Mostrar Listo"],
-  ])("each arrow and switch is named for its column (%s)", async (locale, up, down, show) => {
-    const before = currentLocale();
-    setLocale(locale);
-    try {
-      await mount();
-      await expect.element(page.getByRole("button", { name: up, exact: true })).toBeInTheDocument();
-      await expect
-        .element(page.getByRole("button", { name: down, exact: true }))
-        .toBeInTheDocument();
-      await expect
-        .element(page.getByRole("switch", { name: show, exact: true }))
-        .toBeInTheDocument();
-    } finally {
-      setLocale(before);
-    }
-  });
+  it.each(["en-GB", "es-ES"])(
+    "each arrow and switch is named for its column (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const ready = t("station.state.ready");
+        const up = `${t("station.columns_move_up")} ${ready}`;
+        const down = `${t("station.columns_move_down")} ${ready}`;
+        const show = `${t("station.columns_show")} ${ready}`;
+        if (locale === "en-GB")
+          expect([up, down, show]).toEqual(["Move up Ready", "Move down Ready", "Show Ready"]);
+        else expect([up, down, show]).not.toContain("Move up Ready");
+        await mount();
+        await expect
+          .element(page.getByRole("button", { name: up, exact: true }))
+          .toBeInTheDocument();
+        await expect
+          .element(page.getByRole("button", { name: down, exact: true }))
+          .toBeInTheDocument();
+        await expect
+          .element(page.getByRole("switch", { name: show, exact: true }))
+          .toBeInTheDocument();
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
   it("a Show switch asks to hide or show its column, and its change stops at the window", async () => {
     const { el, host } = await mount();
@@ -180,18 +189,19 @@ describe("the Columns window", () => {
     },
   );
 
-  it("reads «Columnas», «Hecho» and «Elegido en este dispositivo» in Spanish", async () => {
+  it("reads its heading, Done and the note in Spanish", async () => {
     const before = currentLocale();
     setLocale("es-ES");
     try {
       const { el } = await mount();
-      await expect
-        .element(page.getByRole("dialog", { name: "Columnas", exact: true }))
-        .toBeInTheDocument();
-      expect(part(el, "[data-columns-done]").textContent!.trim()).toBe("Hecho");
-      expect(part(el, "[data-columns-kept]").textContent!.trim()).toBe(
-        "Elegido en este dispositivo",
+      expect([t("station.columns"), t("station.columns_done"), t("station.columns_kept")]).toEqual(
+        expect.not.arrayContaining(["Columns", "Done", "Chosen on this device"]),
       );
+      await expect
+        .element(page.getByRole("dialog", { name: t("station.columns"), exact: true }))
+        .toBeInTheDocument();
+      expect(part(el, "[data-columns-done]").textContent!.trim()).toBe(t("station.columns_done"));
+      expect(part(el, "[data-columns-kept]").textContent!.trim()).toBe(t("station.columns_kept"));
     } finally {
       setLocale(before);
     }

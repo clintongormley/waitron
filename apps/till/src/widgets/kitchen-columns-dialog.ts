@@ -23,7 +23,7 @@ type Direction = "up" | "down";
  * `column-move` or `column-show` and the screen applies it at once, so nothing waits for Done.
  */
 @customElement("till-kitchen-columns-dialog")
-export class KitchenColumnsDialog extends LitElement {
+export class TillKitchenColumnsDialog extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -180,6 +180,6 @@ export class KitchenColumnsDialog extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "till-kitchen-columns-dialog": KitchenColumnsDialog;
+    "till-kitchen-columns-dialog": TillKitchenColumnsDialog;
   }
 }

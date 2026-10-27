@@ -132,8 +132,9 @@ waits, by the station's late flags, and a forgotten card's band pulses; it holds
 set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and waits under
 **Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
 
-A row above the columns shows the station and whether it is open today, how many dishes are still
-to make and how many cards are late, and **Columns** at its end. Tap **Columns** to arrange the
+A row above the columns shows how many dishes are still to make and how many cards are late, and
+**Columns** at its end; above a single station's columns it also shows whether the station is open
+today, and on a kitchen screen the station's name. Tap **Columns** to arrange the
 columns: the arrows move a column up or down the list, which is the order the screen shows them in,
 and **Show** hides or shows it. Each change shows at once and stays on this device; **Done** closes
 the window. A hidden column's cards still count in the row. With every column hidden, the row and
