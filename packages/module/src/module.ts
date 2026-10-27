@@ -629,18 +629,20 @@ export interface KitchenNoteChange {
   before: string | null;
   after: string | null;
 }
+export interface StationNoticeDish {
+  lineName: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  quantity: Decimal;
+  note: string | null;
+  wasStarted: boolean;
+}
 
 export interface StationNotice {
   orderNoteChange?: KitchenNoteChange;
-  /** On a kitchen-note change, the dishes it affects at this station, identical ones merged. */
-  dishes?: {
-    lineName: string;
-    unitName: Record<string, string> | null;
-    soldInEach: boolean;
-    quantity: Decimal;
-    note: string | null;
-    wasStarted: boolean;
-  }[];
+  /** On a kitchen-note change, the dishes it affects at this station, merged where the slip
+   *  merges them. */
+  dishes?: StationNoticeDish[];
   allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;

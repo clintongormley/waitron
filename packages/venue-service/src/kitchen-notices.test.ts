@@ -1751,6 +1751,51 @@ describe("A807 one notice per kitchen-note change", () => {
     expect(notice!.quantity).toEqual(thousandthsToDecimal(3000));
   });
 
+  it("keeps measured portions and fractional quantities apart, as the printed slip does", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 5, null);
+    const [fish] = await db
+      .insert(workingOrderLines)
+      .values({
+        workingOrderId: order.orderId,
+        lineNo: 4,
+        name: "Hake",
+        descriptions: { en: "Hake fillet" },
+        unitName: { en: "kg" },
+        quantity: 700,
+        unitPriceGross: 4400,
+        vatClass: "reduced",
+        lineTotal: 3080,
+      })
+      .returning({ id: workingOrderLines.id });
+    const half = thousandthsToDecimal(500);
+    const portion = thousandthsToDecimal(350);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          at(v.grill, fish!.id, portion),
+          at(v.grill, fish!.id, portion),
+          at(v.grill, order.burgerLineId, half),
+          at(v.grill, order.burgerLineId, half),
+        ],
+        "changed",
+        change,
+      ),
+    );
+
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+
+    expect(notice!.dishes!.map(({ lineName, quantity }) => [lineName, quantity])).toEqual([
+      ["Hake", portion],
+      ["Hake", portion],
+      ["BRGR", half],
+      ["BRGR", half],
+    ]);
+  });
+
   it("keeps a note change's notice whole at the fifty limit", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 1, null);

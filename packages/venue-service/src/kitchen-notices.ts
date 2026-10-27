@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange, StationNoticeDish } from "@waitron/module";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { businessDayStart, readLocationClock } from "@waitron/reporting";
 import {
@@ -21,19 +21,11 @@ import "./errors.js";
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
 export type KitchenNoticeDirection = (typeof KITCHEN_NOTICE_DIRECTIONS)[number];
 
-export interface KitchenNoticeDish {
-  lineName: string;
-  unitName: Record<string, string> | null;
-  soldInEach: boolean;
-  quantity: Decimal;
-  note: string | null;
-  wasStarted: boolean;
-}
-
 export interface KitchenNotice {
   orderNoteChange?: KitchenNoteChange;
-  /** On a kitchen-note change, the dishes it affects at this station, identical ones merged. */
-  dishes?: KitchenNoticeDish[];
+  /** On a kitchen-note change, the dishes it affects at this station, merged where the slip
+   *  merges them. */
+  dishes?: StationNoticeDish[];
   allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;
@@ -229,8 +221,8 @@ export async function listStationNotices(
 }
 
 /**
- * `listStationNotices` for several stations in one statement, the clock read once. Every station
- * asked for has an entry.
+ * `listStationNotices` for several stations in one statement, the clock read once, a kitchen-note
+ * change's notice kept whole. Every station asked for has an entry.
  */
 export async function listStationsNotices(
   tx: Transaction,
@@ -319,7 +311,7 @@ export async function listStationsNotices(
   } of rows) {
     /* eslint-enable @typescript-eslint/no-unused-vars */
     const quantity = thousandthsToDecimal(row.quantity);
-    const dish: KitchenNoticeDish = {
+    const dish: StationNoticeDish = {
       lineName: row.lineName,
       unitName: row.unitName,
       soldInEach: row.soldInEach,
@@ -330,14 +322,18 @@ export async function listStationsNotices(
     const key = `${row.stationId}|${foldKey}`;
     const notice = notices.get(key);
     if (notice !== undefined) {
-      const same = notice.dishes!.find(
-        (other) =>
-          other.lineName === dish.lineName &&
-          other.soldInEach === dish.soldInEach &&
-          other.note === dish.note &&
-          other.wasStarted === dish.wasStarted &&
-          sameNames(other.unitName, dish.unitName),
-      );
+      // Merges only what the slip merges (`arrangeTicketItems`), so screen and paper agree.
+      const same = !countable(dish)
+        ? undefined
+        : notice.dishes!.find(
+            (other) =>
+              countable(other) &&
+              other.lineName === dish.lineName &&
+              other.soldInEach === dish.soldInEach &&
+              other.note === dish.note &&
+              other.wasStarted === dish.wasStarted &&
+              sameNames(other.unitName, dish.unitName),
+          );
       if (same === undefined) notice.dishes!.push(dish);
       else
         same.quantity = thousandthsToDecimal(
@@ -358,6 +354,12 @@ export async function listStationsNotices(
     if (notice.dishes !== undefined) Object.assign(notice, notice.dishes[0]);
   }
   return byStation;
+}
+
+function countable(dish: StationNoticeDish): boolean {
+  return (
+    (dish.unitName === null || dish.soldInEach) && decimalToThousandths(dish.quantity) % 1000 === 0
+  );
 }
 
 function sameNames(a: Record<string, string> | null, b: Record<string, string> | null): boolean {
