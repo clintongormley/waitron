@@ -17,6 +17,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const NONE = openDraft(LUCIA);
 const CREAM = setHand(NONE, "light", "bg", "#f8f1e1");

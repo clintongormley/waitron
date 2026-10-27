@@ -1,6 +1,7 @@
 import { hexToRgb } from "./colour.js";
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type Memo, type ModeResult, settleMode, withMemo } from "./derive.js";
+import { normaliseText, type ThemeText } from "./text.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
 import {
   type Corners,
@@ -30,6 +31,7 @@ export interface ThemeChoices {
   readonly handSet: Readonly<Record<Mode, Readonly<Partial<Record<ThemeColour, string>>>>>;
   readonly logo: ThemeLogo | null;
   readonly textScale: TextScale;
+  readonly text: ThemeText;
 }
 
 export const WAITRON_CHOICES: ThemeChoices = {
@@ -40,6 +42,7 @@ export const WAITRON_CHOICES: ThemeChoices = {
   handSet: { light: {}, dark: {} },
   logo: null,
   textScale: 100,
+  text: {},
 };
 
 export type WarningField = "brandColor" | `handSet.${Mode}.${ThemeColour}`;
@@ -86,11 +89,12 @@ export function normaliseChoices(choices: ThemeChoices): ThemeChoices {
     light: normaliseHand(choices.handSet.light),
     dark: normaliseHand(choices.handSet.dark),
   };
+  const text = normaliseText(choices.text);
   const { brandColor } = choices;
-  if (brandColor === null) return { ...choices, brandFix: {}, handSet };
+  if (brandColor === null) return { ...choices, brandFix: {}, handSet, text };
   const brandFix = { ...choices.brandFix };
   for (const mode of MODES) if (handSet[mode].primary !== undefined) delete brandFix[mode];
-  return { ...choices, brandColor: lowerHex(brandColor), brandFix, handSet };
+  return { ...choices, brandColor: lowerHex(brandColor), brandFix, handSet, text };
 }
 
 export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices): DerivedTheme {

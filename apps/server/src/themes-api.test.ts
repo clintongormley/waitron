@@ -49,6 +49,7 @@ const LEMON: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
 const LEMON_WARNING = {

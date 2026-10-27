@@ -2787,6 +2787,7 @@ describe("custom themes in a configuration copy", () => {
     logo: null,
     handSet: { light: {}, dark: {} },
     textScale: 100,
+    text: {},
   };
   const darkGreen = { ...lemon, brandColor: "#1e5b3a", background: "tinted" };
 

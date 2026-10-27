@@ -1,5 +1,6 @@
 import { MODES, type Mode } from "./defaults.js";
 import { BACKGROUNDS, normaliseChoices, type ThemeChoices, type ThemeLogo } from "./theme.js";
+import { isTextSize, TEXT_SIZE_KEYS, TEXT_WEIGHT_KEYS, TEXT_WEIGHTS, TYPEFACES } from "./text.js";
 import { CORNER_CHOICES, isTextScale, THEME_COLOURS } from "./tokens.js";
 
 export const THEME_DOCUMENT_KEYS = [
@@ -10,6 +11,7 @@ export const THEME_DOCUMENT_KEYS = [
   "handSet",
   "logo",
   "textScale",
+  "text",
 ] as const satisfies readonly (keyof ThemeChoices)[];
 
 export type ThemeRefusalReason =
@@ -118,6 +120,35 @@ function checkLogo(value: unknown): Refusal | null {
   return null;
 }
 
+function checkParts(
+  value: unknown,
+  holder: string,
+  keys: readonly string[],
+  allowed: (part: unknown) => boolean,
+): Refusal | null {
+  if (value === undefined) return null;
+  if (!isObject(value)) return refuse(holder, "bad_value");
+  const unknown = unknownKey(value, keys, holder);
+  if (unknown) return unknown;
+  const bad = keys.find((key) => value[key] !== undefined && !allowed(value[key]));
+  return bad === undefined ? null : refuse(`${holder}.${bad}`, "bad_value");
+}
+
+function checkText(value: unknown): Refusal | null {
+  if (value === undefined) return null;
+  if (!isObject(value)) return refuse("text", "bad_value");
+  return (
+    unknownKey(value, ["family", "size", "weight"], "text") ??
+    (value.family !== undefined && !isOneOf(TYPEFACES, value.family)
+      ? refuse("text.family", "bad_value")
+      : null) ??
+    checkParts(value.size, "text.size", TEXT_SIZE_KEYS, isTextSize) ??
+    checkParts(value.weight, "text.weight", TEXT_WEIGHT_KEYS, (weight) =>
+      isOneOf(TEXT_WEIGHTS, weight),
+    )
+  );
+}
+
 /** Checks a theme document sent or stored, answering its first refusal in a fixed order. */
 export function readThemeDocument(input: unknown): ThemeDocumentResult {
   if (!isObject(input)) return refuse("theme", "not_object");
@@ -145,7 +176,8 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
     checkLogo(logo) ??
     (input.textScale !== undefined && !isTextScale(input.textScale)
       ? refuse("textScale", "bad_value")
-      : null);
+      : null) ??
+    checkText(input.text);
   if (refusal) return refusal;
   const own = logo as ThemeLogo | null;
   const answered: ThemeLogo | null =
@@ -160,6 +192,7 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
       ...input,
       logo: answered,
       textScale: input.textScale ?? 100,
+      text: input.text ?? {},
     } as unknown as ThemeChoices),
   };
 }

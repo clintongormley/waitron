@@ -17,6 +17,7 @@ const LEMON: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 
 function app(): Hono {

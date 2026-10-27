@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readThemeDocument, THEME_DOCUMENT_KEYS } from "./document-check.js";
 import { BACKGROUNDS, WAITRON_CHOICES } from "./theme.js";
+import { TEXT_SIZE_KEYS, TEXT_WEIGHT_KEYS, TEXT_WEIGHTS, TYPEFACES } from "./text.js";
 import { CORNER_CHOICES, TEXT_SCALES } from "./tokens.js";
 
 const L = "a".repeat(64) + ".webp";
@@ -27,6 +28,7 @@ describe("readThemeDocument", () => {
       "handSet",
       "logo",
       "textScale",
+      "text",
     ]);
     expect(TEXT_SCALES).toEqual([100, 105, 110, 115, 120, 125, 130]);
     expect(BACKGROUNDS).toEqual(["neutral", "tinted"]);
@@ -93,6 +95,75 @@ describe("readThemeDocument", () => {
     },
   );
 
+  it("accepts every allowed text choice", () => {
+    const sent = [
+      ...TYPEFACES.map((family) => ({ family })),
+      ...[8, 40].map((size) => ({
+        size: Object.fromEntries(TEXT_SIZE_KEYS.map((key) => [key, size])),
+      })),
+      ...TEXT_WEIGHTS.map((weight) => ({
+        weight: Object.fromEntries(TEXT_WEIGHT_KEYS.map((key) => [key, weight])),
+      })),
+      { family: "serif", size: { sm: 9, xl: 30 }, weight: { bold: 800 } },
+    ];
+    for (const text of sent) {
+      const result = readThemeDocument({ ...WAITRON_CHOICES, text });
+      expect(result).toEqual({ ok: true, choices: { ...WAITRON_CHOICES, text } });
+    }
+  });
+
+  it("reads a document without text as nothing set by hand", () => {
+    const { text: _, ...noText } = WAITRON_CHOICES;
+    void _;
+    expect(readThemeDocument(noText)).toEqual({ ok: true, choices: WAITRON_CHOICES });
+    expect(readThemeDocument({ ...WAITRON_CHOICES, text: undefined })).toEqual({
+      ok: true,
+      choices: WAITRON_CHOICES,
+    });
+    expect(readThemeDocument({ ...WAITRON_CHOICES, text: { size: {}, weight: {} } })).toEqual({
+      ok: true,
+      choices: WAITRON_CHOICES,
+    });
+  });
+
+  it.each<[unknown, string, string]>([
+    [null, "text", "bad_value"],
+    [[], "text", "bad_value"],
+    ["x", "text", "bad_value"],
+    [7, "text", "bad_value"],
+    [{ colour: 1 }, "text", "unknown_key"],
+    [{ family: "serif", colour: 1 }, "text", "unknown_key"],
+    [{ family: "comic" }, "text.family", "bad_value"],
+    [{ family: null }, "text.family", "bad_value"],
+    [{ family: "Serif" }, "text.family", "bad_value"],
+    [{ size: [] }, "text.size", "bad_value"],
+    [{ size: null }, "text.size", "bad_value"],
+    [{ size: 12 }, "text.size", "bad_value"],
+    [{ size: { xxl: 20 } }, "text.size", "unknown_key"],
+    [{ size: { sm: 9, xxl: 20 } }, "text.size", "unknown_key"],
+    [{ size: { sm: 7 } }, "text.size.sm", "bad_value"],
+    [{ size: { md: 41 } }, "text.size.md", "bad_value"],
+    [{ size: { lg: 12.5 } }, "text.size.lg", "bad_value"],
+    [{ size: { xl: "12" } }, "text.size.xl", "bad_value"],
+    [{ size: { sm: null } }, "text.size.sm", "bad_value"],
+    [{ size: { sm: 9, md: 41 } }, "text.size.md", "bad_value"],
+    [{ weight: 600 }, "text.weight", "bad_value"],
+    [{ weight: null }, "text.weight", "bad_value"],
+    [{ weight: [] }, "text.weight", "bad_value"],
+    [{ weight: { heavy: 800 } }, "text.weight", "unknown_key"],
+    [{ weight: { bold: 650 } }, "text.weight.bold", "bad_value"],
+    [{ weight: { normal: 300 } }, "text.weight.normal", "bad_value"],
+    [{ weight: { bold: 900 } }, "text.weight.bold", "bad_value"],
+    [{ weight: { medium: "500" } }, "text.weight.medium", "bad_value"],
+    [{ weight: { normal: 400, bold: "600" } }, "text.weight.bold", "bad_value"],
+    [{ family: "comic", size: { sm: 7 } }, "text.family", "bad_value"],
+    [{ size: { sm: 7 }, weight: 600 }, "text.size.sm", "bad_value"],
+    [{ size: 12, weight: { heavy: 800 } }, "text.size", "bad_value"],
+    [{ weight: { heavy: 800, bold: 650 } }, "text.weight", "unknown_key"],
+  ])("refuses %j as {field}/{reason}", (text, field, reason) => {
+    expect(readThemeDocument({ ...WAITRON_CHOICES, text })).toEqual({ ok: false, field, reason });
+  });
+
   it("accepts every background and corner choice", () => {
     for (const background of BACKGROUNDS) {
       for (const corners of CORNER_CHOICES) {
@@ -113,6 +184,7 @@ describe("readThemeDocument", () => {
       handSet: { light: { bg: "#f8f1e1", text: "#101010" }, dark: { surface: "#202020" } },
       logo: null,
       textScale: 100,
+      text: {},
     };
     expect(readThemeDocument(sent)).toEqual({ ok: true, choices: sent });
   });
@@ -150,7 +222,6 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, notAThemeKey: 110 }, "theme", "unknown_key"],
     [{ ...WAITRON_CHOICES, textScale: 1 }, "textScale", "bad_value"],
     [{ ...WAITRON_CHOICES, textScale: 112 }, "textScale", "bad_value"],
-    [{ ...WAITRON_CHOICES, text: {} }, "theme", "unknown_key"],
     [{ ...WAITRON_CHOICES, printedLogo: null }, "theme", "unknown_key"],
     [withoutBrand, "brandColor", "missing"],
     [{ ...WAITRON_CHOICES, brandColor: "#abc" }, "brandColor", "bad_value"],
@@ -236,6 +307,11 @@ describe("readThemeDocument", () => {
   });
 
   it("answers the first refusal in its fixed order", () => {
+    expect(readThemeDocument({ ...WAITRON_CHOICES, textScale: 112, text: null })).toEqual({
+      ok: false,
+      field: "textScale",
+      reason: "bad_value",
+    });
     expect(readThemeDocument({ ...WAITRON_CHOICES, logo: 7, textScale: 112 })).toEqual({
       ok: false,
       field: "logo",

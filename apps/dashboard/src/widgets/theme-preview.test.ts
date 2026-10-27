@@ -33,6 +33,7 @@ const LUCIA_DARK_FIX: ThemeChoices = {
   logo: null,
   handSet: { light: {}, dark: {} },
   textScale: 100,
+  text: {},
 };
 const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
 const LEMON_LIGHT_FIX: ThemeChoices = { ...LEMON, brandFix: { light: true } };

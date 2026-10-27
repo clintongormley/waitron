@@ -32,6 +32,7 @@ const LUCIA: ThemeChoices = {
   logo: null,
   handSet: { light: { bg: "#f8f1e1" }, dark: {} },
   textScale: 100,
+  text: {},
 };
 
 describe("the Look card's draft", () => {
@@ -164,6 +165,7 @@ describe("the Look card's draft", () => {
       brandFix: { dark: true, light: true },
       brandColor: "#1e5b3a",
       textScale: 100,
+      text: {},
     });
     expect(sameDraft(a, b)).toBe(true);
     expect(sameDraft(b, a)).toBe(true);
