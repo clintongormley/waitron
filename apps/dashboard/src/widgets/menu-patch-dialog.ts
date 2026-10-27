@@ -370,6 +370,24 @@ export class MenuPatchDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("open") || changed.has("menuId")) this.#follow();
+    this.#takeScope();
+  }
+
+  /** Taken only while on the page: disposing the scope redraws the dialog, and a scope taken while
+   * detached is not the page's to ask about. */
+  #takeScope(): void {
+    if (this.#scope !== undefined || this.#watching === null || !this.isConnected) return;
+    const { coordinator, scope } = draftScopeFor<Edit[]>(this, {
+      id: this,
+      current: () => this.#current(),
+      snapshot: (value) => structuredClone(value),
+      equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+      restore: () => this.#discard(),
+    });
+    // The baseline is always no changes, also for edits made before the dialog was put back.
+    scope.commit([]);
+    this.#scope = scope;
+    this.#leave = coordinator;
   }
 
   #follow(): void {
@@ -396,20 +414,14 @@ export class MenuPatchDialog extends LitElement {
     this.#draft = null;
     this.#pressed = false;
     this.#typed = new Map();
+    this.#releaseScope();
+    if (wanted !== null) void this.#load(wanted);
+  }
+
+  #releaseScope(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
-    if (wanted === null) return;
-    const { coordinator, scope } = draftScopeFor<Edit[]>(this, {
-      id: this,
-      current: () => this.#current(),
-      snapshot: (value) => structuredClone(value),
-      equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-      restore: () => this.#discard(),
-    });
-    this.#scope = scope;
-    this.#leave = coordinator;
-    void this.#load(wanted);
   }
 
   /** Each edited field — staged, or holding text its own check refuses — in a fixed order, so two
@@ -505,7 +517,7 @@ export class MenuPatchDialog extends LitElement {
     this.#typeFixedNames(document);
     this.dropped += this.#forgetSettled(document);
     this.#retireRefusal();
-    this.#scope!.changed();
+    this.#scope?.changed();
     this.requestUpdate();
   }
 
@@ -538,6 +550,13 @@ export class MenuPatchDialog extends LitElement {
     super.connectedCallback();
     // The query controller released the watch when the dialog left the page; the draft stays.
     if (this.#watching !== null) void this.#load(this.#watching);
+    // Lit runs no update on reconnect, and the scope is taken in one.
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#releaseScope();
+    super.disconnectedCallback();
   }
 
   /** After a rebase, a field neither staged nor failing its check shows the newer live value again.
@@ -651,7 +670,7 @@ export class MenuPatchDialog extends LitElement {
       else this.#applyLive(held.answer);
       return;
     }
-    this.#scope!.commit(submitted);
+    this.#scope?.commit(submitted);
     this.dispatchEvent(
       new CustomEvent("wt-menu-patched", { detail: outcome.result, bubbles: true, composed: true }),
     );

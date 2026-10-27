@@ -268,3 +268,32 @@ it("a refused patch keeps the draft protected", async () => {
   expect((await question(app)).open).toBe(true);
   expect(dialog.open).toBe(true);
 });
+
+it("leaves nothing to ask about while taken off the page, and asks again about an earlier edit once put back", async () => {
+  const { app, dialog } = await mount();
+  await stagePrice(dialog, "4");
+  const parent = dialog.parentNode!;
+  dialog.remove();
+  await dialog.updateComplete;
+  expect(unload()).toBe(false);
+  parent.appendChild(dialog);
+  await dialog.updateComplete;
+  expect(unload()).toBe(true);
+  await press(dialog, "close");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+});
+
+it("asks about an edit made after it is put back on the page", async () => {
+  const { app, dialog } = await mount();
+  const parent = dialog.parentNode!;
+  dialog.remove();
+  await dialog.updateComplete;
+  parent.appendChild(dialog);
+  await dialog.updateComplete;
+  await stagePrice(dialog, "4");
+  expect(unload()).toBe(true);
+  await press(dialog, "close");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+});

@@ -2720,8 +2720,8 @@ and the staffing grid's block editor in the A761 entry):
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
   edit and new person forms, the variant and purchase forms, the bookings form, the
-  product editor and the department dialogs, Settings and zone settings
-  do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
+  product editor and the department dialogs, Settings and zone settings and the Patch live menu
+  window do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
   scope last committed — the opened value, then each saved value and, in the till's party name, Guests and Split a table
@@ -2734,7 +2734,8 @@ and the staffing grid's block editor in the A761 entry):
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase and bookings forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
-  dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case. The recipe editor
+  dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
+  live menu window, whose committed value is always no changes. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, Guests, Split a table, invoice recipient,
   extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
