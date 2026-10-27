@@ -52,6 +52,7 @@ useVenueDb({
 });
 
 let serial = 0;
+const savedShortNames = new Map<string, string>();
 
 /** A fresh table named `label`, with `shortName` saved as its short name unless it is null. */
 async function table(label: string, shortName: string | null): Promise<string> {
@@ -60,17 +61,15 @@ async function table(label: string, shortName: string | null): Promise<string> {
   await inTx(v, (tx) =>
     tx.update(diningTables).set(shortNameColumns(short)).where(eq(diningTables.id, id)),
   );
+  if (short !== null) savedShortNames.set(id, short);
   return id;
 }
 
-async function shortOf(tableId: string): Promise<string> {
-  const [row] = await inTx(v, (tx) =>
-    tx
-      .select({ label: diningTables.label, shortName: diningTables.shortName })
-      .from(diningTables)
-      .where(eq(diningTables.id, tableId)),
-  );
-  return row!.shortName ?? row!.label;
+/** The short name {@link table} saved, so a case never expects the label in its place. */
+function shortOf(tableId: string): string {
+  const short = savedShortNames.get(tableId);
+  expect(short, `table ${tableId} has a saved short name`).toBeDefined();
+  return short!;
 }
 
 async function queued(billId: string): Promise<StationQueueGroup> {
@@ -115,7 +114,7 @@ describe("the station read names each bill's tables by their short names", () =>
     const tableId = await table("Terrace", "T");
     const { billId } = await seatedWithBurger(tableId);
 
-    expect((await queued(billId)).tableShortNames).toEqual([await shortOf(tableId)]);
+    expect((await queued(billId)).tableShortNames).toEqual([shortOf(tableId)]);
   });
 
   it("a table with no short name is named by its label", async () => {
@@ -138,10 +137,7 @@ describe("the station read names each bill's tables by their short names", () =>
     await join(v, partyId, second);
     const { tabId } = await orderForParty(v, partyId, ["Burger"]);
 
-    expect((await queued(tabId)).tableShortNames).toEqual([
-      await shortOf(first),
-      await shortOf(second),
-    ]);
+    expect((await queued(tabId)).tableShortNames).toEqual([shortOf(first), shortOf(second)]);
   });
 
   it("a bill whose party was merged into another, and holds no table, names the other's tables", async () => {
@@ -164,7 +160,7 @@ describe("the station read names each bill's tables by their short names", () =>
         .where(eq(parties.id, merged.partyId));
     });
 
-    expect((await queued(merged.billId)).tableShortNames).toEqual([await shortOf(into)]);
+    expect((await queued(merged.billId)).tableShortNames).toEqual([shortOf(into)]);
   });
 
   it("a counter order names no table", async () => {
@@ -183,7 +179,7 @@ describe("the station read names each bill's tables by their short names", () =>
         .where(eq(workingOrders.id, billId)),
     );
 
-    expect((await queued(billId)).tableShortNames).toEqual([await shortOf(tableId)]);
+    expect((await queued(billId)).tableShortNames).toEqual([shortOf(tableId)]);
   });
 });
 
@@ -240,7 +236,7 @@ describe("the till's station route carries the short names", () => {
     const { items } = (await answer.json()) as { items: StationQueueGroup[] };
 
     expect(items.find((group) => group.orderId === billId)?.tableShortNames).toEqual([
-      await shortOf(tableId),
+      shortOf(tableId),
     ]);
   });
 });
