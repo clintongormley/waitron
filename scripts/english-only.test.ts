@@ -18,6 +18,7 @@ import {
   PACKAGES_ROOT,
   SELF,
   SPANISH_WORDS,
+  STARTER_CONTENT_FILE,
   findSpanish,
   readSource,
   sourceFilesIn,
@@ -212,6 +213,37 @@ describe("configuration", () => {
     expect(findSpanish("const nombreLector = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
       "nombre",
     ]);
+  });
+
+  it("excludes a package's top-level starter-content translations by exact path, and nothing wider", () => {
+    expect(STARTER_CONTENT_FILE).toBe("starter-content.ts");
+    const fixture = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
+    try {
+      const source = join(fixture, "src");
+      mkdirSync(join(source, "dashboard"), { recursive: true });
+      const content = 'export const x = { es: "Mesa" };\n';
+      const kept = [
+        join(source, "dashboard", "starter-content.ts"),
+        join(source, "starter-content.test.ts"),
+        join(source, "my-starter-content.ts"),
+        join(source, "other.ts"),
+      ];
+      for (const file of [join(source, "starter-content.ts"), ...kept]) {
+        writeFileSync(file, content);
+      }
+      expect(sourceFilesIn(relative(PACKAGES_ROOT, fixture))).toEqual([...kept].sort());
+      expect(findSpanish(content, FORBIDDEN).map((v) => v.word)).toEqual(["mesa"]);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it("drops adjustments' starter-content translations from the scan while keeping its other files", () => {
+    const starter = join(PACKAGES_ROOT, "adjustments", "src", "starter-content.ts");
+    expect(existsSync(starter)).toBe(true);
+    const files = sourceFilesIn("adjustments");
+    expect(files).not.toContain(starter);
+    expect(files).toContain(join(PACKAGES_ROOT, "adjustments", "src", "provisioning.ts"));
   });
 
   it("cannot reach this suite, so it needs no exemption", () => {
