@@ -58,8 +58,6 @@ Arán" are Spanish data labels shown untranslated in English.
 
 ## The Business day start dialog repeats the server's conflict-counting rule
 
-Left open by A506-3, #1591.
-
 The Business day start dialog works out its conflict count by repeating the server's rule for
 counting a conflict once whatever its season (`#conflictLines`,
 `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
@@ -68,8 +66,6 @@ it left off its list instead, which adds a field to the shared preview type.
 
 ## The special-day-then-season rule is written out in several places
 
-Left open by A506-4, #1597.
-
 With named days gone (A506-5), the rule "special day, then season" is still written out in
 `day-resolver.ts` (twice, for departments and for zones) and `business-day-schedule.ts`; special-day paint is
 read by separately written queries in `special-days.ts` and `business-day-schedule.ts`;
@@ -77,8 +73,6 @@ read by separately written queries in `special-days.ts` and `business-day-schedu
 the browser-safe repeat rules. Each could collapse to one place.
 
 ## A department or zone delete's preview never counts a special day's painted hours
-
-Left open by A506-5, #1603.
 
 A department or zone delete's preview never counts a special day's painted hours, yet the delete
 removes them: `readServiceDeleteSettings` (`packages/venue-service/src/service-delete-settings.ts`) counts
@@ -91,8 +85,6 @@ all.
 
 ## The readiness line for a repeating holiday date names the official holiday
 
-Left open by A506-5, #1603.
-
 The readiness line for a repeating holiday date with no match names the stored official holiday
 name ("Natividad del Señor"), not the special day's own ("Christmas Day"), and says "no public
 holiday of that name" when the cause is that the year's whole list has not shipped yet.
@@ -102,16 +94,12 @@ name, though its read carries the special day's own `name`; a fix covers both.
 
 ## A date another manager removed stays in the special-day draft
 
-Left open by A506-9, #1651.
-
 A date another manager removed stays in the draft when this draft changed its paint or its Closed
 tick (`merge`, `special-day-painter.ts`). If only the Closed tick changed, Save puts the date back
 with no paint, though it had paint before the removal. The painter shows the date before Save, so
 nothing is lost unseen. Found by reading, not run; decide whether that date should be dropped too.
 
 ## Painting stops short of an off-quarter-hour changeover
-
-Left open by A506-8, #1634.
 
 On a venue whose business day changes over off the quarter hour, painting starts at the first
 quarter hour after the changeover and ends at the last one before it (a 05:50 changeover paints
@@ -120,8 +108,6 @@ server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal
 was read in the code, not run.
 
 ## A season painter save writes each edited week whole
-
-Left open by A506-8, #1634.
 
 A save writes each edited week whole, all seven days. If another manager's save of the same week
 is stored after the read this painter's copy of the week came from and before this save is stored,
@@ -132,8 +118,6 @@ against the server.
 
 ## Two date helpers read years 0 to 99 as 1900 to 1999
 
-Left open by A506-6, #1609.
-
 `isLocalDate` (`packages/venue-service/src/hours-rules.ts`) and `addMonths`
 (`packages/venue-service/src/dashboard/calendar-grid.ts`) still build dates with `Date.UTC`, which
 reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unreachable from the screens,
@@ -141,8 +125,6 @@ which start at year 100; changing `isLocalDate` would change which dates the ser
 outside (menu publication dates, imports), so it needs a decision.
 
 ## A server write that changes a department's hours leaves its zones' closures outside them
-
-Left open by A723 (#1849).
 
 A write that changes only a department's hours is not refused and does not cut the zone closures
 already stored: the menu-week route (`replaceMenuWeek`), deleting a period (`period-delete.ts`),
@@ -157,8 +139,6 @@ writes is the plan's reading of the code, not run here.)
 
 ## The zone-closure hours check runs at the routes, not inside the writers
 
-Left open by A723 (#1849).
-
 The check that a zone closure lies inside its department's hours runs in the season-week,
 closed-week and special-day routes and in the configuration import (`configuration-transfer.ts`),
 not inside the writers. The season-week and closed-week routes pass `assertSeasonClosuresInHours`
@@ -170,8 +150,6 @@ pass or call the check itself. (A723 plan, Decision 1.)
 
 ## Unticking a special date's "Closed all day" brings back its zone paint unchecked
 
-Left open by A723 (#1849).
-
 The server does not check zone closures on a date ticked closed all day
 (`assertDatedClosuresInHours` skips it), because the day's resolver ignores zone paint there. Zone
 paint stored on that date counts again once the tick is removed, and the save that removes the
@@ -180,8 +158,6 @@ from what is saved. So a stored closure outside the department's hours that date
 (A723 plan, Decision 4.)
 
 ## A change to a department's season week can leave a special date's zone closure outside its new hours
-
-Left open by A723 (#1849).
 
 A special date's department hours come from the season week its date falls in, with the day's own
 paint laid over them. A change to that week (a season-painter save, the menu-week route) or to
@@ -192,15 +168,11 @@ save sends.
 
 ## A yearly special day's zone paint is checked against its stored date only
 
-Left open by A723 (#1849).
-
 `assertDatedClosuresInHours` checks each stored date against its department's hours on that date.
 A special day that repeats every year falls in later years on other weekdays, and perhaps in other
 seasons, where the department's hours can differ; its zone closures are not checked there.
 
 ## A special day whose dates have different changeovers is cut on the first date's changeover
-
-Left open by A723 (#1849).
 
 The special-day editor draws every date from the first date's changeover (`cutover`,
 `special-day-painter.ts`) and cuts every date's zone Closed paint on it, while the server checks
@@ -210,8 +182,6 @@ business day's start, `cutoverForBusinessDay`), the two can disagree: the server
 editor shows its reason. Read in the code, not run.
 
 ## The season-week and closed-week routes do not lower-case a zone or season id, as the special-day route does
-
-Found during A723 (#1849).
 
 The season-week route (`PUT …/seasons/:seasonId/weeks`) and the closed-week route
 (`PUT …/zones/:zoneId/closed-week`) take a zone or season id as sent (`requireUuidParam`,
@@ -223,8 +193,6 @@ and then an upper-case season id, sent to each of the two routes was answered 40
 
 ## A cut-away zone stroke hides another day's refusal marker until the next Save
 
-Left open by A723 (#1849).
-
 In both opening-hours painters, a change to a zone's day whose Closed paint is cut away entirely
 replaces the whole refusal beside Save with "A zone can only close while its department is open."
 (the `paint-outside` handlers in `season-painter.ts` and `special-day-painter.ts`), so the marker
@@ -232,8 +200,6 @@ a refused Save put on another day's heading disappears too. The next Save marks 
 message wins.
 
 ## A season closure on a special date is not cut or checked against that date's shorter hours
-
-Found during A723 (#1849).
 
 On a special date, a zone's closures from its season week still apply, with the date's zone paint
 laid over them (`layerZonePaint` in `resolveZoneClosedDays`, `day-resolver.ts`). When the
@@ -244,8 +210,6 @@ paint the request sends (`assertDatedClosuresInHours`, `zone-closure-hours.ts`).
 closure can lie outside that date's department hours. Found by reading the code, not run.
 
 ## A purple season looks like a special day
-
-Left open by A762, #1850.
 
 A purple season's line (`--wt-color-station-purple-dot`) against the special-day purple
 (`--wt-color-palette-purple`) is 1.26:1 in light and 1.63:1 in dark (hand-computed over the token
@@ -412,7 +376,6 @@ Seen on the demo venue
 on 2026-10-18 by A783's look: each row's month select, and the required star on "Starts on", fall
 past the right edge (`seasons-window-{light,dark}-390[-es].png` in
 `~/waitron-campaign-b/a783-shots/`; `packages/venue-service/src/dashboard/seasons-window.ts`).
-Left open by A783.
 
 ## At phone width the Seasons window cuts longer colour names
 
@@ -424,7 +387,7 @@ row should stack on a phone. Left open by A721.
 
 ## A season reads two shades of its colour
 
-**A season reads two shades of its colour**: the Seasons window's colour chooser paints the solid
+The Seasons window's colour chooser paints the solid
 palette colour (Winter `rgb(47, 85, 212)`), while the season chips, the Year's days and a viewer's
 swatches paint the paler station tint (`rgb(220, 230, 251)`); a period shows one solid colour
 everywhere. It follows from A721's Decision 10 (seasons take the station tints) meeting the shared
