@@ -55,6 +55,8 @@ import {
 } from "./service-day-context.js";
 import "./errors.js";
 
+export const OPEN_PERIOD_NAME = "Open";
+
 export async function placeOpenPeriod(
   tx: Transaction,
   cfg: VenueScope,
@@ -70,7 +72,7 @@ export async function placeOpenPeriod(
   if (existing !== undefined) return;
   const clockRevision = await readBusinessDayScheduleRevision(tx, cfg);
   const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
-    name: "Open",
+    name: OPEN_PERIOD_NAME,
     menuId,
     staffMenuIds: [],
   });

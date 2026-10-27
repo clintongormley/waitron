@@ -1,10 +1,13 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
-import { kitchenCourses, locations, type Transaction } from "@waitron/db";
+import { kitchenCourses, type Transaction } from "@waitron/db";
+import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { serviceSteps, type ServiceStepStart } from "./schema/service-steps.js";
+import { STARTER_STEP_NAMES } from "./starter-content.js";
+import { readStarterStaffLanguage } from "./starter-language.js";
 
 export interface ServiceStep {
   id: string;
@@ -107,27 +110,24 @@ export async function saveServiceSteps(
   }
 }
 
-const STARTER_STEPS = [
-  { start: "seated", minutes: 0, en: "Set up", es: "Montar mesa" },
-  { start: "after_previous", minutes: 2, en: "Take order", es: "Tomar nota" },
-  { start: "all_served", minutes: 10, en: "Anything else?", es: "¿Algo más?" },
+export const STARTER_STEPS = [
+  { name: "Set up", start: "seated", minutes: 0 },
+  { name: "Take order", start: "after_previous", minutes: 2 },
+  { name: "Anything else?", start: "all_served", minutes: 10 },
 ] as const;
 
 export async function addStarterServiceSteps(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
+  staffLanguage?: StarterStaffLanguage,
 ): Promise<void> {
-  const [location] = await tx
-    .select({ invoiceLocales: locations.invoiceLocales })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
-  const language = location?.invoiceLocales[0]?.split("-")[0]?.toLowerCase() === "en" ? "en" : "es";
+  const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
   for (const [position, step] of STARTER_STEPS.entries())
     await tx.insert(serviceSteps).values({
       departmentId,
       position,
-      name: step[language],
+      name: starterName(STARTER_STEP_NAMES, step.name, language),
       start: step.start,
       courseId: null,
       minutes: step.minutes,

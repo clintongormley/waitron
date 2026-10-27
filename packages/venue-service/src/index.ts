@@ -118,6 +118,7 @@ export {
   type DayPlan,
 } from "./day-resolver.js";
 export { readSeasons } from "./seasons.js";
+export { STARTER_SEASON_NAMES } from "./starter-content.js";
 export type { Season } from "./season-rules.js";
 export { readDepartmentSeasonWeeks } from "./season-weeks.js";
 export { readCalendarMonthPlan } from "./opening-hours-calendar.js";

@@ -13,6 +13,8 @@ import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
 
+export const COUNTER_ZONE_NAME = "Counter";
+
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
@@ -102,7 +104,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         // update but the `returning`, which a plain `do nothing` would leave empty on a re-run.
         const zone = await tx
           .insert(floorZones)
-          .values({ locationId: node.locationId, name: "Counter", displayOrder: 0, active: true })
+          .values({
+            locationId: node.locationId,
+            name: COUNTER_ZONE_NAME,
+            displayOrder: 0,
+            active: true,
+          })
           .onConflictDoUpdate({
             target: [floorZones.locationId, floorZones.name],
             targetWhere: sql`${floorZones.active} = 1`,
