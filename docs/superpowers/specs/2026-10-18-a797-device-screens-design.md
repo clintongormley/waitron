@@ -333,6 +333,9 @@ A757's fast speed.
   stays for a screen showing several stations.
 - **Tap a column's heading to collapse it** (Q42 (e)): a collapsed column keeps its heading and
   count ("Ready · 3"); one tap reopens it. Every column; remembered on the device.
+  _2026-10-27, slice 9: the heading shows the column's count of cards open and collapsed; collapsed
+  columns are kept per station on the device, the merged board apart; a collapsed column holding a
+  late card has no mark of its own yet; see the build plan's slice 9, D5, D9, D14._
 - **Column order is not changed on the live screen** (the owner withdrew long-press dragging, so
   nobody reorders by mistake mid-service): it is set in corner → Columns (§3.6, picture 07).
 

@@ -236,7 +236,9 @@ collapse ("Ready · 3"). **Risks:** whichever lane builds it first, the other us
 **Goal:** corner → Columns («Columnas»): Move up / Move down («Subir», «Bajar») and a Show switch
 («Mostrar») per column. A new dialog with staged input takes a draft scope and a
 `*.unsaved.test.ts` (CLAUDE.md §3). The one-row header of picture 03 (the station's name, its
-Open/Closed chip and the header line) comes with the corner's Columns (slice 8, D9).
+Open/Closed chip and the header line) comes with the corner's Columns (slice 8, D9). It wires
+`moveColumn` and `setColumnVisible` from slice 9's `apps/till/src/state/kitchen-columns.ts` and
+draws `hidden`, which slice 9 stores but does not draw (slice 9, D7).
 **Dependencies:** slice 9. **Migration:** no.
 
 ### Slice 9c — Overview and the narrow tabs (LIGHT)

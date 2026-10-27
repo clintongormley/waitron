@@ -1049,9 +1049,12 @@ may predate that branch:
   landed in #2113, from the plan's slice 7. Slice 8 (the kitchen screen's group cards: one card per
   group in Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no
   Tickets view) landed in #2123, from the plan's slice 8. Slice 8b (short names on the cards, and
-  "Counter #12" for a counter order at no table) landed in #2126, from the plan's slice 8b; next,
-  slice 9, taking turns with lane G's
-  A773-2 on the station screen (design §7). Build slices (design §8), in the owner's
+  "Counter #12" for a counter order at no table) landed in #2126, from the plan's slice 8b. Slice 9
+  (a kitchen screen's columns collapse by a tap on their heading, which shows the column's count,
+  and are remembered on the device; the one Columns store A773-2 reuses,
+  `apps/till/src/state/kitchen-columns.ts`) is in review, from the plan's slice 9; next, slices 9b
+  (the corner's Columns) and 9c (Overview and the narrow tabs), taking turns with lane G's A773-2
+  on the station screen (design §7). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
