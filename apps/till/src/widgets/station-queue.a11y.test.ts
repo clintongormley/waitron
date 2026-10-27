@@ -418,6 +418,23 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("a board with a collapsed column has no violations", async () => {
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups,
+        stationId: "st-1",
+        columns: { order: ["waiting", "preparing", "ready"], hidden: [], collapsed: ["ready"] },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    const ready = el.shadowRoot!.querySelector('[data-column-toggle="ready"]');
+    expect(ready?.getAttribute("aria-expanded")).toBe("false");
+    await expectNoA11yViolations(host);
+  });
+
   it("the board with orders whose dishes were sent under other numbers has no violations", async () => {
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
