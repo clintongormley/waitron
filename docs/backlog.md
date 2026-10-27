@@ -6168,9 +6168,10 @@ revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
 [build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
 details deleted at deactivation), S2a1 (the server route for a person's own data download),
 S2a2 (its README, the Profile page's Download button and the Users guide section), S1a (the
-dashboard setting for the privacy notice page and privacy email, which nothing else shows yet) and
-S1a2 (the configuration export carries the privacy contact, and a production box can be set up from
-an export again) are built.
+dashboard setting for the privacy notice page and privacy email), S1a2 (the configuration export
+carries the privacy contact, and a production box can be set up from an export again) and S1b (the
+staff emails, the sign-in page, Account settings and both downloads read the saved privacy page, and
+the environment setting is gone) are built.
 The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---

@@ -677,7 +677,8 @@ Missing-clock emails (`apps/server/src/attendance-email.ts:30-39`) touch the rig
    (`apps/server/src/trading-config.ts:33-41`). So neither the box's `.env` nor setup can set it,
    and invitations go out without it (`apps/server/src/account-email.ts:132`). Fixed by S1.
    _2026-10-26: S1a stores the setting; S1a2 carries it in the configuration export; S1b makes the readers use it
-   ([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md))._
+   ([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md)); S1b built 2026-10-27, the
+   invoice email follows in S1b2._
 3. **Records with no end.** Ended sessions are never deleted; a passkey challenge that is not used
    "lapse[s] by its TTL" and stays (`packages/identity/src/passkey.ts:70-79`); incidents are never
    deleted; freeze reports go only when a start is short of disk or someone presses Free on the

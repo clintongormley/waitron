@@ -202,31 +202,11 @@ by the answers):
     holds Maria's name and address.
   - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
     they are switched on.
-- **S1b** — every place that shows the privacy-notice link reads the setting S1a stores
-  (`tenants.privacy_notice_url`, `tenants.privacy_email`, saved from the **Privacy** card on
-  **Venue settings → Venue details**; the
-  [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)), and the
-  `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. Until S1b, nothing but the Privacy card
-  shows the stored values (the configuration export also reads them, to carry them); the emails,
-  the sign-in page, the profile page and the downloads still take the environment setting. The
-  readers, as of 2026-10-26:
-  - `apps/server/src/boot.ts:2019`, into `mountManagementApi`, which passes the link to the
-    invitation and reset emails (`apps/server/src/management-api.ts:194`) and answers it on
-    `GET /management-api/google/config` (`management-api.ts:788-790`), a route that needs no
-    sign-in. The sign-in page and the profile page both read the link from that route.
-  - `boot.ts:2144`, into the invoice customer's download
-    (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`).
-  - `boot.ts:2184`, into `mountMeApi`, which passes it to the own personal-data download
-    (`apps/server/src/me-api.ts:130`, then `personal-data-export-api.ts` and the README in
-    `personal-data-readme.ts`) and to the email-address check email (`me-api.ts:182`).
-  - `apps/server/src/invoice-email.ts` carries no privacy text today, so S1b adds the invoice
-    notice there rather than moving a link.
-  - The dashboard's live read `getGoogleConfig` depends on `google_config` alone
-    (`apps/dashboard/src/api/live-queries.ts`); S1b adds `tenants` to it.
-  - `apps/server/README.md:492` documents the environment setting; S1b removes it with the setting.
-  - The guide (`apps/server/src/guide/<language>/data-protection.md`): S1b rewrites the
-    `privacy-settings` section's last sentence, "Nothing else on the box shows them yet." ("Nada
-    más en el equipo los muestra todavía."), and names the setting in `staff-notice` and `full-notice`.
+- **S1b2** — the invoice email carries the invoice customers' privacy notice, with the privacy email
+  and page from the Privacy card. Planned as Part 2 of the
+  [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md); waits for the
+  owner's ruling on whether a change to an invoice email's body lands without them. Until it lands,
+  nothing but the Privacy card shows the privacy email.
 - **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
   confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
   `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
@@ -264,8 +244,7 @@ by the answers):
     `scripts/personal-log-params.test.ts` (its header lists what text reading misses); merge its
     three similar allow-list checks; reuse the existing fake mail server in
     `apps/server/src/recovery-page-personal-data.test.ts` and drop its two attendance cases that
-    repeat an existing test; merge `boot.ts`'s two identical `sendAccountEmail` wrappers (older
-    than S10).
+    repeat an existing test.
   - **Owner choices on the partial mask** are listed under the S10 plan's decision 14 and in lane
     B's questions file; one worth a look: the ending after an email's last dot is kept whole, so a
     mistyped `jordi@puig.ferrer` logs as `j***i@p***g.ferrer`.
@@ -341,6 +320,18 @@ by the answers):
     both values unset.
   - **D. Setup does not show the two values**; the Privacy card shows them after setup.
     Alternative: a line on the review screen saying they will be copied.
+- **A980 S1b, 2026-10-27:** the staff emails, the sign-in page, Account settings and both
+  downloads read the privacy page saved on the Privacy card, built with the two Part 1 defaults of
+  the [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open
+  decisions for the owner", each open for the owner to reverse:
+  - **A. Only the Privacy card shows the privacy email for now.** Bar Ejemplo saves
+    `privacidad@barejemplo.es`; Ana's invitation, the sign-in page, Account settings and Jordi's
+    download show `https://barejemplo.es/privacidad` and not the email. S1b2 is to show it to
+    invoice customers. Alternative: the README's last line names it, "Contact Bar Ejemplo S.L. at
+    privacidad@barejemplo.es to ask."
+  - **B. A server that still has the retired `WAITRON_PRIVACY_NOTICE_URL` set ignores it
+    silently.** Nothing warns, and the readers show the card's value, or nothing while the card is
+    empty. Alternative: a start-up warning naming the retired variable.
 - **A980 S10, 2026-10-26:** what the log masks and what it leaves, each built with the default
   and open for the owner to reverse (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
   owner note 5). Masked in every line the server's logger writes, on `docker logs` as
