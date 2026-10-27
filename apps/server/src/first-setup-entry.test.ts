@@ -625,12 +625,12 @@ it("a move record with every unit still in place is resumed and setup is served"
   expect(await readFile(join(f.folders.venue, "venue.db"), "utf8")).toBe("found database");
 });
 
-it("a move record whose resume rename fails is refused setup.start_again_incomplete with no survey", async () => {
+it("a move record whose resume rename fails is refused setup.start_again_move_unfinished with no survey", async () => {
   const f = await moveRecordedNothingMoved();
   await chmod(f.folders.venue, 0o500);
   try {
     const entry = await resolveFirstSetupEntry(f.roots, {});
-    expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+    expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
     if (entry.kind !== "refused") throw new Error("expected a refused start");
     expect(entry.error.reason).toMatch(/^set-aside failed: EACCES venue\/venue\.db$/);
     expect(entry.survey).toBeUndefined();
@@ -642,7 +642,7 @@ it("a move record whose resume rename fails is refused setup.start_again_incompl
   }
 });
 
-it("a move whose resume fails with an error that is not a refusal is refused setup.start_again_incomplete, and nothing reads the half-moved folder", async () => {
+it("a move whose resume fails with an error that is not a refusal is refused setup.start_again_move_unfinished, and nothing reads the half-moved folder", async () => {
   const f = await moveRecordedNothingMoved();
   const stem = dirname(f.folders.state);
   const before = await boxTree(f);
@@ -655,7 +655,7 @@ it("a move whose resume fails with an error that is not a refusal is refused set
     await chmod(stem, 0o700);
   }
   if (entry.kind === "resolution") await entry.dispose();
-  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe(
     `set-aside failed: EACCES state/${relative(await fs.realpath(f.stateDir), await fs.realpath(stem))}/state`,
@@ -685,13 +685,13 @@ it.each([
     const venue = await fs.realpath(f.venueDir);
     vi.mocked(resumeStartAgainSetAside).mockRejectedValueOnce(error(venue));
     const entry = await resolveFirstSetupEntry(f.roots, {});
-    expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+    expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
     if (entry.kind !== "refused") throw new Error("expected a refused start");
     expect(entry.error.reason).toBe(reason);
   },
 );
 
-it("a move to resume while another connection holds the venue lock is refused setup.start_again_incomplete, and nothing moves", async () => {
+it("a move to resume while another connection holds the venue lock is refused setup.start_again_move_unfinished, and nothing moves", async () => {
   const f = await moveRecordedNothingMoved();
   const before = await boxTree(f);
   const holder = await holdVenueElsewhere(f.venueDir);
@@ -702,10 +702,47 @@ it("a move to resume while another connection holds the venue lock is refused se
     await holder.stop();
   }
   if (entry.kind === "resolution") await entry.dispose();
-  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe("set-aside failed: provisioning.database_in_use");
   expect(await boxTree(f)).toEqual(before);
+});
+
+it("a failed resume of a recorded Move is refused setup.start_again_move_unfinished, and the next start finishes the Move once the cause is gone", async () => {
+  const f = await moveRecordedNothingMoved();
+  await chmod(f.folders.venue, 0o500);
+  let entry: Awaited<ReturnType<typeof resolveFirstSetupEntry>>;
+  try {
+    entry = await resolveFirstSetupEntry(f.roots, {});
+  } finally {
+    await chmod(f.folders.venue, 0o700);
+  }
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.error).toMatchObject({
+    code: "setup.start_again_move_unfinished",
+    reason: "set-aside failed: EACCES venue/venue.db",
+  });
+  expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
+  const again = await resolveFirstSetupEntry(f.roots, {});
+  expect(again.kind).toBe("normal");
+  await gone(join(f.venueDir, "venue.db"));
+  expect(await readFile(join(f.folders.venue, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a resume that fails where no Move is recorded is still refused setup.start_again_incomplete", async () => {
+  const f = await markedDeletion();
+  vi.mocked(resumeStartAgainSetAside).mockRejectedValueOnce(
+    Object.assign(new Error("io"), { code: "EIO" }),
+  );
+  const entry = await resolveFirstSetupEntry(f, {});
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.error).toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: EIO",
+  });
+  expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
 });
 
 it("the same venue.db beside the existing synthetic record is still refused setup.start_again_incomplete", async () => {

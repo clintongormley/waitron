@@ -507,6 +507,18 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
     },
   },
+  "setup.start_again_move_unfinished": {
+    "en-GB": {
+      title: "Start again was moving files aside and has not finished.",
+      action:
+        "Some of the files may already be in the set-aside folder; none has been deleted. Press Retry a normal boot to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",
+      action:
+        "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
+    },
+  },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
   [HOLDER_STALLED]: holderStalledText(undefined),
 };

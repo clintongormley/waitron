@@ -1168,6 +1168,19 @@ describe("a start refused before it began", () => {
           "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
       },
     },
+    {
+      code: "setup.start_again_move_unfinished",
+      "en-GB": {
+        title: "Start again was moving files aside and has not finished.",
+        action:
+          "Some of the files may already be in the set-aside folder; none has been deleted. Press Retry a normal boot to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",
+        action:
+          "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
+      },
+    },
   ] as const;
 
   async function refusedPage(code: string, acceptLanguage: string): Promise<string> {
@@ -1235,7 +1248,7 @@ describe("a start refused before it began", () => {
     const checked = { "en-GB": NEVER_DELETE_EN, "es-ES": NEVER_DELETE_ES } as const;
     for (const lang of ["en-GB", "es-ES"] as const) {
       const entries = strings(START_AGAIN_PAGE_TEXT[lang]);
-      expect(entries.length, lang).toBe(27);
+      expect(entries.length, lang).toBe(28);
       for (const [key, value] of entries) {
         expect(typeof value, `${lang} ${key}`).toBe("string");
         if (key === "moveDetail") continue;
@@ -1249,6 +1262,22 @@ describe("a start refused before it began", () => {
     expect(START_AGAIN_PAGE_TEXT["es-ES"].moveDetail).toBe(
       "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo. Sus nombres de serie de facturas no se vuelven a usar.",
     );
+  });
+
+  it("the unfinished Move names the Retry button the page draws, never tells the person to reinstall, and says reinstalling loses the moved files", async () => {
+    const text = OPERATOR_TEXT["setup.start_again_move_unfinished"]!;
+    for (const [lang, retry, moved] of [
+      ["en-GB", "Retry a normal boot", "the files moved aside"],
+      ["es-ES", "«Reintentar un arranque normal»", "los archivos apartados"],
+    ] as const) {
+      const button = retry.replace(/[«»]/g, "");
+      expect(await refusedPage("setup.start_again_move_unfinished", lang)).toContain(
+        `<button type="submit">${escapeHtml(button)}</button>`,
+      );
+      expect(text[lang].action, lang).toContain(retry);
+      expect(text[lang].action, lang).toContain(moved);
+      expect(text[lang].action, lang).not.toMatch(/(^|[.!?;]\s+)(Reinstall|Reinstala)\b/);
+    }
   });
 
   it("the unfinished Start again line never tells the person to reinstall, and says what reinstalling loses", () => {

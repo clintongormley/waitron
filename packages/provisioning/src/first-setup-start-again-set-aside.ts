@@ -406,6 +406,17 @@ const recordedFor = (unit: StartAgainUnit, piece: string): Seen[] =>
     .map((entry) => ({ ...entry }))
     .sort(byPath);
 
+/** The latest Move record for the marker on the box, or null when there is no marker or no Move. Takes canonical roots. */
+export async function recordedStartAgainMove(
+  roots: Roots,
+): Promise<(StartAgainChoiceRecord & { setAside: Destinations }) | null> {
+  const marker = await readStartAgainMarker(roots.venueDir);
+  if (marker === null) return null;
+  const records = await readStartAgainChoices(roots.stateDir, marker);
+  const record = records.filter((each) => each.choice === "move").at(-1);
+  return record?.setAside ? { ...record, setAside: record.setAside } : null;
+}
+
 /**
  * D4 "After a cut", at every start before the finisher: with a marker and a Move record for it
  * (the latest), finishes that Move piece by piece into the folders the record names. A piece at
@@ -418,13 +429,7 @@ export async function resumeStartAgainSetAside(
   io: SetAsideIo = defaultIo,
 ): Promise<"none" | "resumed" | "stopped"> {
   const canonical = await canonicalFirstSetupRoots(roots);
-  const latestMove = async () => {
-    const marker = await readStartAgainMarker(canonical.venueDir);
-    if (marker === null) return null;
-    const records = await readStartAgainChoices(canonical.stateDir, marker);
-    const record = records.filter((each) => each.choice === "move").at(-1);
-    return record?.setAside ? { ...record, setAside: record.setAside } : null;
-  };
+  const latestMove = () => recordedStartAgainMove(canonical);
   if ((await latestMove()) === null) return "none";
   const hold = await lockVenueDatabase(canonical.venueDir);
   try {

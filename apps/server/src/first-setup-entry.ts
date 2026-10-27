@@ -15,6 +15,7 @@ import {
   emptyAbandonedBackupRecovery,
   finishStartAgainDeletion,
   isEmptiedTombstone,
+  recordedStartAgainMove,
   resumeStartAgainSetAside,
   type StartAgainSurvey,
 } from "@waitron/provisioning";
@@ -94,6 +95,7 @@ const START_REFUSALS = [
   "setup.start_again_incomplete",
   "setup.start_again_files_found",
   "setup.start_again_kept",
+  "setup.start_again_move_unfinished",
 ] as const;
 
 type StartRefused = {
@@ -134,6 +136,20 @@ async function refusedAtStart(
     await resumeStartAgainSetAside(canonical);
   } catch (error) {
     // Falling through would let A731's entry open venue.db over a half-moved folder.
+    if ((await recordedStartAgainMove(canonical).catch(() => null)) !== null) {
+      const reason =
+        error instanceof AppError &&
+        error.code === "setup.start_again_incomplete" &&
+        error.reason !== undefined
+          ? error.reason
+          : setAsideFailure(canonical, error);
+      return {
+        kind: "refused",
+        code: "setup.start_again_move_unfinished",
+        roots: canonical,
+        error: new AppError("setup.start_again_move_unfinished", {}, { reason }),
+      };
+    }
     return (
       refused(error) ?? {
         kind: "refused",

@@ -226,6 +226,7 @@ export {
 export {
   moveStartAgainUnits,
   prepareSetAside,
+  recordedStartAgainMove,
   resumeStartAgainSetAside,
   setAsideDestinations,
   setAsideFolderPaths,
