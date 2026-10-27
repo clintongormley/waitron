@@ -303,12 +303,15 @@
       <text x="32" y="7774" font-size="12" font-weight="400" fill="#f2b24c">Do not automatically send another.</text>
     </g>
     <g data-design-section="reader-paper-proposal">
-      <text x="16" y="6900" font-size="12" font-weight="600" fill="#78a9ff">NEXT · Reader-paper display · Proposed</text>
+      <text x="16" y="6900" font-size="12" font-weight="600" fill="#78a9ff">Reader · Native target starts OFF</text>
       <text x="16" y="6922" font-size="12" fill="#a1a7b3">EUR10 card on EUR30 · EUR20 left</text>
       <rect x="16" y="6944" width="358" height="88" rx="8" fill="#191c22" stroke="#333945" />
-      <text x="32" y="6966" font-size="12" font-weight="600" fill="#eceef2">Known own-paper reader</text>
-      <text x="32" y="6988" font-size="14" fill="#eceef2">Reader supplies its slip</text>
-      <text x="32" y="7010" font-size="12" fill="#a1a7b3">No Waitron checkbox or extra slip.</text>
+      <text x="32" y="6966" font-size="12" font-weight="600" fill="#eceef2">Own-paper · Native control unavailable</text>
+      <g role="checkbox" aria-checked="false" aria-disabled="true" aria-label="Unticked; disabled; native control unverified">
+        <rect x="32" y="6972" width="20" height="20" rx="4" fill="#262a33" stroke="#7a8291" />
+        <text x="62" y="6988" font-size="12" fill="#a1a7b3">Print on reader</text>
+      </g>
+      <text x="32" y="7010" font-size="12" fill="#a1a7b3">Target · Disabled · No extra Waitron slip</text>
       <rect x="16" y="7044" width="358" height="88" rx="8" fill="#191c22" stroke="#333945" />
       <text x="32" y="7066" font-size="12" font-weight="600" fill="#eceef2">Known no-paper reader · Before Card</text>
       <rect x="32" y="7078" width="20" height="20" rx="4" fill="#191c22" stroke="#7a8291" />
@@ -319,9 +322,9 @@
       <text x="32" y="7188" font-size="14" fill="#a1a7b3">Waitron slip unavailable</text>
       <text x="32" y="7210" font-size="12" fill="#a1a7b3">Never guess that it has no paper.</text>
       <text x="16" y="7254" font-size="12" fill="#a1a7b3">Cash: EUR10 of EUR30, EUR20 left; no slip.</text>
-      <text x="16" y="7276" font-size="12" fill="#a1a7b3">Native paper unchanged; display proposed.</text>
-      <text x="16" y="7298" font-size="12" fill="#a1a7b3">Later: pending/no fallback, full agreement.</text>
-      <text x="16" y="7320" font-size="12" fill="#a1a7b3">Both unapproved. No rebuild before agreement.</text>
+      <text x="16" y="7276" font-size="12" fill="#a1a7b3">Target: prove adapter and reader control.</text>
+      <text x="16" y="7298" font-size="12" fill="#a1a7b3">Pending: no timer/zone fallback. Unapproved.</text>
+      <text x="16" y="7320" font-size="12" fill="#a1a7b3">Fallback + full approval: still unapproved.</text>
     </g>
   </g>
 </svg>

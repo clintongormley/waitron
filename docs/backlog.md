@@ -2079,17 +2079,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — Park · Pay and one payment window; owner-flow revision, 2026-10-22 ~11:55.** No
-  cash slips: EUR10 cash on EUR30 leaves EUR20, no slip. Only card has Print card slip. Before card,
-  optionally request its slip; after a part, show what remains and ask the next tender; after
-  final payment or a settling edit, offer Receipt / Full invoice / None with separate Print/Email.
-  Reader-paper checkbox display is next, preserving the answered no-duplicate policy and native
-  paper independence. No-answer/no-timer/no-zone-fallback policy and full revision agreement
-  remain separately open. Full invoice after an F2 needs A556's separate fiscal integration;
-  public F1 stays gated. Preserve A790/A796 settings and A582's help-mode badges in the build.
-  No rebuild before agreement; product integration and acceptance remain open.
-  [Current revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md),
-  [four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
+- **A739 — Park · Pay and one payment window.** The 26 October reader-slip answer requires
+  an initially unticked native-reader checkbox. The [27 October amendment](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+  leaves native control qualification and its temporary unavailable-control policy, unanswered
+  document-choice recovery and complete revision approval open. No cash slips; keep the four
+  payment journeys, separate Print/Email, A790/A796 settings, A582 help badges and the separate
+  A556/F1/F3 fiscal gates. No rebuild before agreement.
+  [Four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
   [historical detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window).
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`

@@ -303,12 +303,15 @@
       <text x="32" y="7774" font-size="12" font-weight="400" fill="#8a5300">No volver a enviar automáticamente.</text>
     </g>
     <g data-design-section="reader-paper-proposal">
-      <text x="16" y="6900" font-size="12" font-weight="600" fill="#1a5fd0">SIGUIENTE · Papel del lector · Propuesta</text>
+      <text x="16" y="6900" font-size="12" font-weight="600" fill="#1a5fd0">Lector · Casilla nativa objetivo: sin marcar</text>
       <text x="16" y="6922" font-size="12" fill="#5c626e">EUR10 tarjeta de EUR30 · Quedan EUR20</text>
       <rect x="16" y="6944" width="358" height="88" rx="8" fill="#ffffff" stroke="#d6d9e0" />
-      <text x="32" y="6966" font-size="12" font-weight="600" fill="#16181d">Lector con papel propio confirmado</text>
-      <text x="32" y="6988" font-size="14" fill="#16181d">El lector da su resguardo</text>
-      <text x="32" y="7010" font-size="12" fill="#5c626e">Sin casilla ni resguardo extra de Waitron.</text>
+      <text x="32" y="6966" font-size="12" font-weight="600" fill="#16181d">Papel propio · Control no disponible</text>
+      <g role="checkbox" aria-checked="false" aria-disabled="true" aria-label="Sin marcar; desactivada; control sin verificar">
+        <rect x="32" y="6972" width="20" height="20" rx="4" fill="#f0f1f4" stroke="#7d8390" />
+        <text x="62" y="6988" font-size="12" fill="#5c626e">Imprimir en el lector</text>
+      </g>
+      <text x="32" y="7010" font-size="12" fill="#5c626e">Objetivo · Inactiva · Sin duplicado Waitron</text>
       <rect x="16" y="7044" width="358" height="88" rx="8" fill="#ffffff" stroke="#d6d9e0" />
       <text x="32" y="7066" font-size="12" font-weight="600" fill="#16181d">Sin papel confirmado · Antes de Tarjeta</text>
       <rect x="32" y="7078" width="20" height="20" rx="4" fill="#ffffff" stroke="#7d8390" />
@@ -319,9 +322,9 @@
       <text x="32" y="7188" font-size="14" fill="#5c626e">Resguardo Waitron no disponible</text>
       <text x="32" y="7210" font-size="12" fill="#5c626e">Nunca suponer que no tiene papel.</text>
       <text x="16" y="7254" font-size="12" fill="#5c626e">Efectivo EUR10 de EUR30: EUR20; sin resguardo.</text>
-      <text x="16" y="7276" font-size="12" fill="#5c626e">El papel del lector no cambia; interfaz propuesta.</text>
-      <text x="16" y="7298" font-size="12" fill="#5c626e">Después: sin respuesta y acuerdo completo.</text>
-      <text x="16" y="7320" font-size="12" fill="#5c626e">Sin aprobar. No reconstruir antes del acuerdo.</text>
+      <text x="16" y="7276" font-size="12" fill="#5c626e">Objetivo: falta probar adaptador y lector.</text>
+      <text x="16" y="7298" font-size="12" fill="#5c626e">Pendiente sin plazo ni zona: sin aprobar.</text>
+      <text x="16" y="7320" font-size="12" fill="#5c626e">Alternativa y revisión: sin aprobar.</text>
     </g>
   </g>
 </svg>

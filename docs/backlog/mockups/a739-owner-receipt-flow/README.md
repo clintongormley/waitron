@@ -1,6 +1,6 @@
 # A739: owner-directed payment and receipt flow
 
-**Native SVG design artwork, 2026-10-22.** Read the
+**Native SVG design artwork, amended 2026-10-27.** Read the
 [current revision](../../../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 with these boards. The owner's ~11:55 **no cash slips** answer supersedes cash-yes and the
 cash-checkbox proposal. EUR10 cash on EUR30 leaves EUR20 and prints no slip. Only card has
@@ -23,19 +23,25 @@ Every board contains all four scenarios, with three screen snapshots per scenari
 The Full invoice selection and its delivery are a **target preview with the A556 fiscal
 dependency**, not working public F1/F3. The source register in the revision distinguishes
 existing core writer code from missing public orchestration. No prepayment identity entry is
-promised. Details are illustrative, not verified customer or tax data. Card is shown checked
-in the counter journey on a known no-paper reader; an unchecked initial value is a builder
-proposal. The lower panel proposes the reader-paper display, preserving the already-answered
-no-duplicate policy: known own-paper shows **Reader supplies its slip**, with no effective
-Waitron checkbox; known no-paper keeps the pre-card checkbox; unknown capability explains
-that Waitron slip printing is unavailable. The app neither controls nor suppresses native paper.
+promised. Details are illustrative, not verified customer or tax data. The four main journeys
+are unchanged. The checked card box in the counter journey illustrates a request on a known
+no-paper reader, not its initial value.
 
-The revision's **one next question** asks whether that display fits the new checkbox requirement,
-with a **yes** recommendation. For EUR10 card on EUR30, own-paper means no extra Waitron slip;
-known no-paper lets you tick the checkbox before Card to request a non-fiscal slip showing
-EUR10 received and EUR20 left once payment succeeds.
-The pending-choice/no-timer/no-zone-fallback policy and complete revision agreement are later,
-separately unapproved topics, not bundled into this question.
+The lower panel folds in the owner's 2026-10-26 ~07:00 answer: for a reader supplying its own slip,
+the native checkbox starts **off**; ticking requests its slip. An effective control requires proved
+adapter and hardware behaviour. The real SumUp/Stripe adapter probes did not forward the
+requested print choice; physical paper remains unverified. The panel therefore shows the native
+checkbox **unticked and disabled**, as a target awaiting proof. It promises no suppression of paper.
+Known no-paper readers retain the initially off Waitron checkbox; unknown capability stays
+unavailable. No extra Waitron slip is proposed for own-paper or unknown readers.
+
+That capability fallback is a **new, unapproved owner subquestion**, not a reinterpretation of the
+YES. The amendment recommends explained unavailable native control and qualification before enabling
+it; alternatives hold all A739 or name another change. **Durable Document choice pending with no
+deadline or zone fallback** and **complete revision approval** remain separate unapproved questions.
+The pending-choice alternatives require an answer before leaving or apply zone policy after five
+minutes. The amendment's Marta/Daniel example describes future recovery through a closed bill,
+without another charge or issuance. The boards do not claim that durable recovery exists today.
 
 | Language | Theme | Width | Native artwork           | Same-name PNG target     |
 | -------- | ----- | ----- | ------------------------ | ------------------------ |
@@ -48,10 +54,10 @@ separately unapproved topics, not bundled into this question.
 | Spanish  | Light | 1280  | [SVG](es-light-1280.svg) | [PNG](es-light-1280.png) |
 | Spanish  | Dark  | 1280  | [SVG](es-dark-1280.svg)  | [PNG](es-dark-1280.png)  |
 
-**PNG previews await parent regeneration and visual QA after this ~11:55 SVG revision.** The
-existing PNGs have not been regenerated for this SVG revision; use the SVGs for this decision.
-The table retains their same-name render targets. Phone artwork is
-a long board of consecutive screens at 390 px; desktop uses three columns at 1280 px.
+**PNG previews were regenerated from all eight amended SVGs and inspected in real Chromium,
+2026-10-27.** The changed reader panels were checked in both languages/themes at 390 and
+1280 px. The four main journey drawings remain byte-for-byte unchanged. Phone artwork is a long
+board of consecutive screens; desktop uses three columns. These are static design views.
 
 Artwork uses native text, rectangles and paths, without embedded images, scripts or external
 assets. Snapshot literals match `packages/ui-core/src/tokens/colors.css`, reached through

@@ -1,68 +1,118 @@
-# 2026-10-22 ~11:55 precedence: no cash slips; card only
+# 2026-10-27 precedence: reader checkbox answer and remaining decisions
 
-**Current A739 revision, design only.** The owner's **NO cash slips** answer supersedes
-the earlier cash-yes answer and the proposed pre-Cash checkbox. Cash never gets a payment
-slip. Only card has **Print card slip**, chosen before the transaction; a requested eligible
-Waitron slip is admitted immediately after confirmed successful payment. On a EUR30 bill,
-EUR10 cash leaves EUR20 to pay and prints no slip. The final document choice still follows settlement.
+**Design amendment only; no rebuild before complete revision agreement.** Owner, 2026-10-26 ~07:00:
+“A739 yes, but the checkbox should default to not printing on the reader”. For a reader supplying
+its own slip, the target is an initially **unticked** checkbox: ticking requests the reader's own
+slip. This answers the former reader-display question; it does not approve the capability fallback
+below. An effective native checkbox requires proved adapter **and hardware** control of both
+choices. Fallback A below proposes showing it unticked and disabled, with an unavailable-control
+explanation until qualification. Do not claim that an unticked disabled box suppresses the reader's
+paper.
 
-The ~09:05 flow is unchanged: after each part, show the remaining amount and ask the next
-tender. Immediately after final settlement, or an edit clearing the amount owed, show
-**Receipt / Full invoice / None** in that active session. The edit owns a fresh decision.
-Receipt and Full invoice reveal a folded default-printer row with **Print**, and an email
-field with separate **Email**; Full invoice also reveals customer details. None reveals no
-fields and cancels no accepted slip or delivery. Keep all four journeys, amount modes,
-cash/change, payment recovery, practice-reader work and separate table closure.
+Known no-paper readers retain Waitron **Print card slip**, initially off. Unknown capability is
+unavailable, never guessed to mean no paper. Neither own-paper nor unknown readers get an extra
+Waitron slip. Manual card remains excluded; practice readers have no native paper. These are the
+amended target boundaries, subject to the fallback decision below, not a claim of built controls.
 
-Full invoice after an issued F2 still requires a new F3 replacement under **A556**, with
-A948/A555 and asesor Q17/Q5(d). F3 records a full invoice linked to the simplified receipt;
-it never edits the original, takes another payment or delays the original issuance. Public
-F1/F3 remains gated pending that separate fiscal work. The drawings are target previews.
-Original/copy designation still comes from server delivery history across Print and Email,
-with existing failed/unknown recovery boundaries; a retry is not automatically a copy.
-Printing, emailing, None, slip retry and replacement delivery open no drawer. Payment keeps
-its independent profile and permission checks and separately audited drawer action.
+The 2026-10-22 ~11:55 **no cash slips** answer and all four main journeys stay unchanged: EUR10 cash
+on EUR30 leaves EUR20 and prints no slip. After each part, show what remains and ask the next
+tender. After confirmed final settlement and issuance, or a successful settling edit, show **Receipt
+/ Full invoice / None** in that active session. The edit owns a fresh choice. Receipt and Full
+invoice reveal a folded default-printer row with **Print**, and an email field with separate
+**Email**; Full invoice also reveals customer details. None reveals no fields and leaves accepted
+slips and deliveries in place. Keep amount modes, cash/change, payment recovery, practice-reader
+work and separate table closure.
 
-## One next question: the reader-owned paper display
+Full invoice after issued F2 still needs a new F3 replacement under **A556**, with A948/A555 and
+asesor Q17/Q5(d). It never edits the original, takes another payment or delays original issuance.
+Public F1/F3 stays gated pending that separate fiscal work. Original/copy designation still follows
+server delivery history across Print and Email and existing failed/unknown recovery boundaries; a
+retry is not automatically a copy. Documents, None and slip retry open no drawer. Payment keeps its
+independent profile/permission checks and separately audited drawer action. A790/A796 keep their
+answered scopes. This amendment adds no landing gate or build plan.
 
-The no-duplicate policy is already answered. The earlier answers retain own-paper exclusion; P3 records the source checks for that exclusion
-and unknown-capability unavailability. Neither specifies how the new
-pre-card checkbox presents those cases. This asks only about that display.
+## What was run, and what remains unverified
 
-**Does this treatment fit your card-checkbox requirement: show “Reader supplies its slip”
-with no effective Waitron Print card slip checkbox for a known own-paper reader, keep the
-checkbox for a known no-paper reader, and explain that Waitron slip printing is unavailable
-when the reader's paper capability is unknown? Recommendation: yes.**
+Runs on base `6ee2f4ff12cdbfccbf991a220e293dfcbbd8c8d2`, in the isolated documentation worktree,
+2026-10-27. The disposable probe ran in that checkout, was retained in the local campaign receipts,
+and was then removed from the checkout. It contacted no provider and performed no network or
+hardware writes. The capability assertions expected different outgoing arguments for a synthetic
+extra `printReceipt` input set to `false` and `true`; both failed with identical arguments. Both
+amount-change controls (EUR10 to EUR11) passed. The current adapters did not forward that proposed
+input. This is not evidence of impossibility in vendor APIs or physical printer output.
 
-For a EUR10 card contribution on a EUR30 bill, a known own-paper reader supplies its slip
-and Waitron adds none. On a known no-paper reader, you may tick Print card slip before Card;
-confirmed success requests the non-fiscal EUR10 slip showing EUR20 left. Unknown capability
-is never guessed to mean no paper. This proposal neither controls nor suppresses the reader's
-native paper and promises no new reader print control. Manual card remains excluded.
+| Current path                       | Observed boundary                                                                                                                                                                                                                  | Qualification still outstanding                                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| SumUp `sumupClient.createCheckout` | Real client, captured fetch JSON identical for both print values: `{"total_amount":{"currency":"EUR","minor_unit":2,"value":1000},"description":"local probe"}`. Existing `sumup-client.test.ts` / `provider.test.ts`: 102 passed. | Physical Solo/cradle paper and control of both choices unverified. |
+| Stripe `stripeClient`              | Real wrapper, captured SDK `createPaymentIntent` / `processPaymentIntent` arguments identical for both print values. Existing `stripe-client.test.ts`: 17 passed.                                                                  | Physical reader paper and control of both choices unverified.      |
 
-Keep the recorded contribution and historical balance on any later slip copy, even when the
-bill changes. A requested but unavailable Waitron printer warns and leaves the money received;
-it never silently switches printer. The illustrated eligible card branch retains the folded
-Equipment Receipt printer and separate slip-role checks. Its unchecked initial value remains
-a builder proposal, not an owner answer.
+The inspected registry names SumUp and Stripe (`packages/composition/src/card-providers.ts:13`). The
+Stripe on-device collect binding is a stub
+(`packages/payments-stripe/src/stripe-device-client.ts:15`), not a supported native-paper path to
+promise here. The owner's request to run each supported reader remains open for physical
+qualification. The recorded adapter runs do not complete it.
 
-Later topics, not questions for this stage: **durable Document choice pending with recovery,
-no timer and no zone fallback** remains unapproved; **complete revision agreement and its
-remaining builder calls** remains separate and unapproved. No product rebuild before that
-agreement. A790/A796 retain their answered scopes. This amendment adds no landing gate.
+Source trace: issuance calls `enqueueSaleReceipt` (`apps/server/src/bill-payments.ts:804`); that
+function resolves the zone's `receiptPrintMode` and can queue an original for auto mode
+(`apps/server/src/receipt-print.ts:255–283`). The focused existing case “uses the zone's automatic
+receipt policy when the department setting is on request” passed (1 passed, 157 skipped):
+`pnpm --filter @waitron/server exec vitest run src/receipt-print.test.ts -t "uses the zone's automatic receipt policy"`.
+That test checks its named automatic path, not the proposed pending-choice recovery. Do not read the
+proposal below as today's durable pending-choice state.
 
-The [eight current SVG boards](../../backlog/mockups/a739-owner-receipt-flow/README.md)
-reflect this cash answer and proposed reader display. Authority: lane F `questions.md:2918–2920`, heading “OWNER ANSWER — A739 cash slip:
-NO cash slips (2026-10-22 ~11:55)”. This is owner provenance, not runtime evidence.
+## New owner subquestion: unavailable native control
 
-**Historical body below, preserved unchanged.** Its “Slip boundaries: one next owner question”
-cash-trigger question, cash eligibility claims and cash-dependent work row are superseded by
-this addendum. Its source register remains tied to its original M/P SHAs and source reads;
-“this checkout's HEAD” describes that original inspection, not this revision. No new runtime
-proof is claimed. The original product SHA `3e45abdc69c0305100304d4501ca96812ba87a0b`
-and all earlier changed-test inventories remain preserved.
+**While native control is unproved, which boundary should A739 use?** This asks about a newly
+exposed capability gap, not whether the owner's YES or unticked default still stands.
 
+- **A, recommended:** explain that native print control is unavailable, with the target checkbox
+  unticked and disabled. Add no Waitron slip for own-paper or unknown readers; retain the initially
+  off Waitron checkbox for known no-paper readers. Qualify each supported adapter and physical
+  reader before enabling native control. This avoids promising control the runs did not demonstrate.
+- **B:** hold all A739 until native control is confirmed for the supported readers. This delays the
+  other agreed payment-flow changes too.
+- **C:** name a different change to the boundary.
 
+**No fallback is approved.** The
+[eight SVG boards](../../backlog/mockups/a739-owner-receipt-flow/README.md) show A as a target
+proposal, with native control disabled, not an effective new feature.
+
+## Separate owner question: an unanswered document choice
+
+**After settlement/issuance or a settling edit, should Document choice stay pending without a
+deadline or automatic zone delivery (A, recommended), must you answer before leaving (B), or should
+the zone policy take over after five minutes (C)?** None of these options is approved.
+
+- **A, recommended:** retain the pending choice durably until explicit **Receipt / Full invoice /
+  None**. Closing, finishing the table or starting a new counter bill may proceed. Authorized staff
+  can recover the choice through the bill/sale, including a closed bill, without charging or issuing
+  again. Staff decide whether to print the final document instead of a timer choosing for them.
+- **B:** require an explicit document decision before leaving. This adds friction and can hold a
+  shared device while the operator waits for an answer.
+- **C:** after five minutes apply the zone policy. This can print paper the guest did not request
+  and needs a timed worker; it is not the recommendation.
+
+Example for A: Marta receives the last EUR10 of a EUR30 bill on a handheld. Settlement and issuance
+succeed, then the link drops before she answers. Twenty minutes later Daniel opens the closed bill
+in Orders: **EUR30 paid · Document choice pending**. With authority to answer, he chooses a document
+without another charge or issuance. Separately, reducing a EUR30 bill to EUR10 with EUR10 already
+paid creates the edit's own pending decision, not the earlier payer's choice. Money and issuance
+recovery remain separate; an unknown payment outcome is never treated as settled. This durable
+recovery is proposed future behaviour, not an inspected implementation.
+
+## Separate owner question: complete revision agreement
+
+**Do you approve the complete amended A739 revision and its remaining builder calls, with your
+explicit answers to the capability and pending-choice questions incorporated, before rebuilding?**
+Complete approval remains open, separate from both policy answers. The no-cash decision, four
+journeys and separate A556/F1/F3 fiscal gates remain as stated above.
+
+**Historical body below, preserved unchanged.** Conflicting cash, reader-display and
+unchecked-native-default builder-call wording below is superseded by this addendum. Its source
+register stays tied to its original M/P SHAs and source reads; “this checkout's HEAD” means that
+original inspection. The original product SHA `3e45abdc69c0305100304d4501ca96812ba87a0b` and
+changed-test inventories remain preserved. The remaining questions are presented separately for
+owner decisions; no implementation is approved by this amendment.
 
 ---
 

@@ -2278,23 +2278,25 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
-**2026-10-22 ~11:55 precedence, following the ~09:05 flow.** The [current revision](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
-and [eight four-case boards](mockups/a739-owner-receipt-flow/README.md) take precedence over
-all conflicting historical text below. **No cash slips**, superseding cash-yes and the proposed
-cash checkbox: EUR10 cash on EUR30 leaves EUR20, no slip. Before card: Print card slip checkbox;
-on confirmed success: request the eligible slip once. After each part: remaining amount and
-next tender. After final payment or an edit clearing due: Receipt / Full invoice / None on
-that device, with details for Full invoice and folded default-printer + Print and email + Email
-for both. Timing A is answered; no post-payment slip row or final Print/Email/None in Pay.
-The settling edit owns a new choice. The proposed unchecked checkbox default is a builder call.
-The single next question is the reader-paper display: recommend “Reader supplies its slip”
-with no effective Waitron checkbox for known own-paper readers, the checkbox for known no-paper
-readers, and explained unavailability for unknown capability. No duplicates remains answered;
-the app does not control native paper. No-answer/no-timer/no-zone-fallback policy and complete
-revision agreement remain separately unapproved. G5's eligible card slips, A790/A796 settings
-and table closure retain their scopes. Full invoice after issued F2 depends on A556's fiscal
-integration under A948/Q17/Q5(d), not a late F1 mutation or a second charge. Keep public F1 gated. No rebuild
-until owner agreement; no new landing gate. All earlier body bytes below remain historical.
+**2026-10-27 precedence.** The [current amendment](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
+and [eight four-case boards](mockups/a739-owner-receipt-flow/README.md) supersede conflicting history
+below. The owner's 2026-10-26 ~07:00 YES requires an initially unticked native-reader checkbox;
+ticking requests the reader's own slip. Effective native control needs proved adapter and hardware
+behaviour. The SumUp/Stripe boundary probes did not forward print intent; physical paper is
+unverified. The target checkbox stays disabled with an explanation. The new capability fallback
+question recommends that boundary, no Waitron duplicate for own-paper/unknown readers, and an
+initially off Waitron checkbox for known no-paper readers. The fallback is not owner-approved.
+
+No cash slips; all four journeys, amount modes, recovery and separate table closure stay. After a
+part, show the remaining amount and next tender; after settlement/issuance or a settling edit,
+show Receipt / Full invoice / None with separate Print and Email. The edit owns its new choice.
+Durable Document choice pending, recoverable by authorized staff through even a closed bill/sale,
+with no timer or zone delivery, is a separate unapproved proposal. Alternatives are an answer
+required before leaving or a five-minute zone fallback; no option is approved. Money/issuance
+recovery stays separate. Complete revision approval is another open question. Keep G5's eligible
+card slips and manual-card exclusion, A790/A796 settings and separate A556/A948/Q17/Q5(d) fiscal
+work; public F1/F3 stays gated. No rebuild before agreement; no new landing gate or build plan.
+All earlier body bytes below remain historical.
 
 2026-10-22 proposed revision, awaiting owner decision: [timing A after settlement versus timing B
 on Finish, with six-case static mockups](../superpowers/specs/2026-10-22-a739-receipt-timing-revision.md).
