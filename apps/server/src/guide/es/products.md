@@ -298,8 +298,11 @@ el propio producto; consulta
 cambiar la unidad, la disponibilidad, el curso ni la categoría, el orden de los elementos, los
 colores ni qué elementos y secciones tiene la carta.
 
-Cada elemento que cambias se marca con un punto, y un elemento con un campo que corregir, con
-**!**. **Revisar 1 corrección**, o **Revisar** seguido del número de correcciones, muestra cada una
+Cada elemento que cambias se marca con un punto. Un valor que la corrección no admite se señala al
+elegir **Revisar**: su campo dice qué corregir, su elemento se marca con **!** y **Revisar** no
+está disponible hasta que lo corrijas. Si se rechaza **Publicar la corrección** por un valor, la
+ventana vuelve al campo de ese valor y explica allí el motivo; tu cambio se conserva en la ventana.
+**Revisar 1 corrección**, o **Revisar** seguido del número de correcciones, muestra cada una
 como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **Publicar la corrección**. Esto es lo que hace publicar una corrección:
 
 - Se publica al momento como una versión nueva de esta carta, con el número siguiente. Las líneas

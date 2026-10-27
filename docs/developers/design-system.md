@@ -5083,7 +5083,11 @@ A section's customer-facing name in a language that every included folder showin
 disabled, with "The included folder sets this name." under it in `--wt-color-text-muted` at
 `--wt-font-size-sm`. That line is hidden from a screen reader, which reads the same words as the
 field's description.
-The footer holds Close and "Review N changes". The review step lists each change as "<item>:
+The footer holds Close and "Review N changes", N counting each edited field, including one whose
+value fails its check. Following Forms, a field's own error, the tree's "!" and the bottom sentence
+appear only once Review has been pressed; that press opens the first item holding an error and
+focuses its field. A refusal placed under a field keeps its change staged and Review enabled, and
+its sentence goes when that field changes or the patch is sent again. The review step lists each change as "<item>:
 <field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
 "Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live
 version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to

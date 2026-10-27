@@ -234,3 +234,37 @@ it("asks nothing once the patch is live", async () => {
   expect(left).toBe(true);
   expect((await question(app)).open).toBe(false);
 });
+
+it("a value whose error is not shown yet keeps the draft protected", async () => {
+  const { app, dialog } = await mount();
+  const price = await stagePrice(dialog, "3.555");
+  expect(price.error).toBe("");
+  expect(dialog.changes).toEqual([]);
+  expect(unload()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+});
+
+it("a refused patch keeps the draft protected", async () => {
+  const { app, dialog } = await mount();
+  app.api.patchLiveMenu.mockRejectedValue({
+    code: "menu_patch.invalid",
+    params: { change: 0, field: "price" },
+  });
+  await stagePrice(dialog, "4");
+  await press(dialog, "review");
+  await press(dialog, "put-live");
+  await expect
+    .poll(
+      () =>
+        dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+          'wt-price-input[name="price"]',
+        )?.error,
+    )
+    .toBe("Check this value.");
+  expect(unload()).toBe(true);
+  await press(dialog, "close");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+});

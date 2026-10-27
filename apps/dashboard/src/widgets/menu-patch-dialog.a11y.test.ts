@@ -99,6 +99,7 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     if (state === "field error") {
       await pick(el, "Salad");
       await type(el, "wt-input", "name", "");
+      await press(el, "review");
       expect(bottom(el)).toBe("Correct the fields marked on Salad to continue.");
     }
     if (state === "review" || state === "refused") {
