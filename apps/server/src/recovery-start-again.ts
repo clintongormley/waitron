@@ -299,7 +299,7 @@ function invalid(field: string): never {
   throw new AppError("setup.request_invalid", { field });
 }
 
-function isSecure(c: Context): boolean {
+export function isSecure(c: Context): boolean {
   const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
   return socket instanceof TLSSocket && socket.encrypted;
 }
@@ -420,6 +420,7 @@ export function mountStartAgainChoice(
   deps: StartAgainDeps,
   render: StartAgainRender,
   log?: Logger,
+  onKept?: () => void,
 ): void {
   const choose = deps.choose ?? chooseStartAgainLeftovers;
   const now = deps.now ?? (() => new Date());
@@ -433,6 +434,7 @@ export function mountStartAgainChoice(
     const code = "setup.start_again_files_found" as const;
 
     let chosen: Form["choice"];
+    let result: Awaited<ReturnType<typeof choose>>;
     try {
       if (!isSecure(c)) throw new Refusal(403, { kind: "insecure" }, false);
       if (!fromThisPage(c)) throw new Refusal(403, { kind: "otherPage" });
@@ -441,27 +443,12 @@ export function mountStartAgainChoice(
       if (form.password === undefined) invalid("password");
       if (form.choice === undefined) invalid("choice");
       if (form.listed === undefined) invalid("listed");
-      const result = await choose({
+      result = await choose({
         roots: deps.roots,
         password: form.password,
         choice: form.choice,
         listed: form.listed,
         now,
-      });
-      log?.("info", "recovery.start_again_choice", {
-        choice: result.choice,
-        attemptId: deps.survey.attemptId,
-        units: deps.survey.units.length,
-      });
-      if (result.choice === "keep")
-        return await page(200, { code: "setup.start_again_kept", secure: true });
-      const outgoing = outgoingOf(c);
-      if (outgoing === undefined) void deps.onFinished();
-      else outgoing.once("finish", () => void deps.onFinished());
-      return await page(200, {
-        code,
-        secure: true,
-        message: { kind: "moved", folder: movedFolder(result.setAside) },
       });
     } catch (error) {
       const refusal = error instanceof Refusal ? error : await refusalFor(error, deps, log);
@@ -474,5 +461,23 @@ export function mountStartAgainChoice(
         ...(chosen === undefined ? {} : { chosen }),
       });
     }
+    // Outside the catch: the choice is recorded, so a failure to draw must not say nothing changed.
+    log?.("info", "recovery.start_again_choice", {
+      choice: result.choice,
+      attemptId: deps.survey.attemptId,
+      units: deps.survey.units.length,
+    });
+    if (result.choice === "keep") {
+      onKept?.();
+      return page(200, { code: "setup.start_again_kept", secure: true });
+    }
+    const outgoing = outgoingOf(c);
+    if (outgoing === undefined) void deps.onFinished();
+    else outgoing.once("finish", () => void deps.onFinished());
+    return page(200, {
+      code,
+      secure: true,
+      message: { kind: "moved", folder: movedFolder(result.setAside) },
+    });
   });
 }

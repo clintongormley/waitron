@@ -12,6 +12,12 @@ import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 import { redactSecrets } from "./redact-secrets.js";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
+import {
+  isSecure,
+  mountStartAgainChoice,
+  renderStartAgainSection,
+  type StartAgainView,
+} from "./recovery-start-again.js";
 
 const MAX_LOG_LINES = 200;
 
@@ -605,8 +611,9 @@ function renderPage(
   log: LogView,
   locale: SupportedLocale,
   freeBytes: FreeSpaceReading,
+  state: RecoveryState = deps.state,
+  section = "",
 ): string {
-  const { state } = deps;
   const page = PAGE_TEXT[locale];
   const text = operatorText(state)[locale];
   const refused = state.refused === true;
@@ -645,7 +652,7 @@ function renderPage(
 <h1>${escapeHtml(heading)}</h1>
 <p>${escapeHtml(text.title)}</p>
 <p>${escapeHtml(text.action)}</p>
-<form method="post" action="/recovery-api/retry">
+${section}<form method="post" action="/recovery-api/retry">
 <button type="submit">${escapeHtml(page.retry)}</button>
 </form>
 <h2>${escapeHtml(page.forInstaller)}</h2>
@@ -665,15 +672,40 @@ ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
  */
 export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();
+  const { startAgain } = deps;
+  // Kept in-process only: the next start reads the recorded Keep from disk and refuses with it.
+  let kept = false;
+
+  const draw = async (view: Omit<StartAgainView, "code">) => {
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+    if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes);
+    if (kept) {
+      const state: RecoveryState = { ...deps.state, lastErrorCode: "setup.start_again_kept" };
+      return renderPage(deps, log, view.locale, freeBytes, state);
+    }
+    const section = renderStartAgainSection({
+      survey: startAgain.survey,
+      locale: view.locale,
+      secure: view.secure,
+      now: (startAgain.now ?? (() => new Date()))(),
+      ...(view.message === undefined ? {} : { message: view.message }),
+      ...(view.chosen === undefined ? {} : { chosen: view.chosen }),
+    });
+    return renderPage(deps, log, view.locale, freeBytes, deps.state, section);
+  };
 
   app.get("/", async (c) => {
-    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
     // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
-    return c.html(renderPage(deps, log, locale, freeBytes));
+    return c.html(await draw({ locale, secure: isSecure(c) }));
   });
+
+  if (startAgain !== undefined)
+    mountStartAgainChoice(app, startAgain, draw, deps.log, () => {
+      kept = true;
+    });
 
   // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {

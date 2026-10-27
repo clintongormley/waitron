@@ -1,7 +1,9 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { TLSSocket } from "node:tls";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { VENUE_HOLDER_KINDS } from "@waitron/db";
@@ -9,8 +11,20 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { createLogger } from "./logger.js";
-import { FRESH, afterFailure, refusedWhileRunning, type RecoveryState } from "./recovery-state.js";
-import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
+import {
+  FRESH,
+  afterFailure,
+  refusedAtStart,
+  refusedWhileRunning,
+  type RecoveryState,
+} from "./recovery-state.js";
+import {
+  GENERIC_TEXT,
+  OPERATOR_TEXT,
+  escapeHtml,
+  recoveryApp,
+  type RecoveryDeps,
+} from "./recovery-surface.js";
 import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 
 const state = afterFailure(
@@ -1286,5 +1300,147 @@ describe("a start refused before it began", () => {
     expect(text["en-GB"].action).toContain("lost");
     expect(text["es-ES"].action).not.toMatch(/(^|[.!?]\s+)Reinstala\b/);
     expect(text["es-ES"].action).toContain("pierde");
+  });
+});
+
+describe("recoveryApp's Start again choice", () => {
+  const sockets: TLSSocket[] = [];
+  afterEach(() => {
+    for (const socket of sockets.splice(0)) socket.destroy();
+  });
+  const tls = () => {
+    const socket = new TLSSocket(new Socket());
+    sockets.push(socket);
+    return { incoming: { socket } };
+  };
+  type StartAgain = NonNullable<RecoveryDeps["startAgain"]>;
+  const SURVEY: StartAgain["survey"] = {
+    kind: "choice",
+    attemptId: "attempt",
+    frozenDigest: "frozen",
+    markerSha256: "marker",
+    units: [
+      {
+        root: "venue",
+        path: "venue.db",
+        why: "not-created",
+        pieces: ["venue.db"],
+        entries: [{ path: "venue.db", type: "file", ino: "1", size: "10", mtimeNs: "1" }],
+      },
+    ],
+    digest: "d".repeat(64),
+    noteFloorMs: null,
+  };
+  const FOUND = OPERATOR_TEXT["setup.start_again_files_found"]!["en-GB"];
+  const KEPT = OPERATOR_TEXT["setup.start_again_kept"]!["en-GB"];
+  const WORDS = START_AGAIN_PAGE_TEXT["en-GB"];
+  const FORM_ACTION = 'action="/recovery-api/start-again"';
+  const RETRY_ACTION = 'action="/recovery-api/retry"';
+
+  function app(choose?: StartAgain["choose"]) {
+    const onFinished = vi.fn(() => Promise.resolve());
+    const startAgain: StartAgain = {
+      roots: { stateDir: "/box/state", venueDir: "/box/venue" },
+      survey: SURVEY,
+      onFinished,
+      choose: choose ?? (() => Promise.resolve({ choice: "keep" as const })),
+      now: () => new Date("2026-10-27T10:00:00.000Z"),
+    };
+    return {
+      onFinished,
+      app: recoveryApp({
+        state: refusedAtStart(FRESH, "setup.start_again_files_found", new Date()),
+        refusedAtStart: true,
+        logDir: "/nonexistent",
+        onRetry: vi.fn(),
+        startAgain,
+      }),
+    };
+  }
+  const choose = (target: ReturnType<typeof app>["app"], choice: "keep" | "move") =>
+    target.request(
+      "/recovery-api/start-again",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ password: "pw", choice, listed: SURVEY.digest }).toString(),
+      },
+      tls(),
+    );
+
+  it("recoveryApp with startAgain draws the section between the action and Retry, and mounts the route", async () => {
+    const { app: surface } = app();
+    const body = await (await surface.request("/", {}, tls())).text();
+    const action = body.indexOf(escapeHtml(FOUND.action));
+    const found = body.indexOf(escapeHtml(WORDS.filesFound));
+    const form = body.indexOf(FORM_ACTION);
+    const retry = body.indexOf(RETRY_ACTION);
+    expect(action).toBeGreaterThan(-1);
+    expect(found).toBeGreaterThan(action);
+    expect(form).toBeGreaterThan(found);
+    expect(retry).toBeGreaterThan(form);
+    expect(body).toContain("<li>venue/venue.db</li>");
+
+    const plain = await (await surface.request("/")).text();
+    expect(plain).toContain(escapeHtml(WORDS.insecureForm));
+    expect(plain).not.toContain(FORM_ACTION);
+    expect(plain).not.toContain('type="password"');
+
+    const refused = app(() => Promise.reject(new AppError("setup.owner_required", {})));
+    const answer = await choose(refused.app, "keep");
+    expect(answer.status).toBe(403);
+    const page = await answer.text();
+    expect(page).toContain(escapeHtml(FOUND.title));
+    expect(page).toContain(escapeHtml(WORDS.wrongPassword));
+    expect(page.indexOf(FORM_ACTION)).toBeLessThan(page.indexOf(RETRY_ACTION));
+  });
+
+  it("recoveryApp without startAgain answers the route 404 and draws no section", async () => {
+    const surface = recoveryApp({
+      state: refusedAtStart(FRESH, "setup.start_again_files_found", new Date()),
+      refusedAtStart: true,
+      logDir: "/nonexistent",
+      onRetry: vi.fn(),
+    });
+    expect((await choose(surface, "keep")).status).toBe(404);
+    const body = await (await surface.request("/", {}, tls())).text();
+    expect(body).not.toContain(escapeHtml(WORDS.filesFound));
+    expect(body).not.toContain(FORM_ACTION);
+  });
+
+  it("after Keep, GET / shows the kept page and no form", async () => {
+    const { app: surface, onFinished } = app();
+    const answer = await choose(surface, "keep");
+    expect(answer.status).toBe(200);
+    for (const page of [
+      await answer.text(),
+      await (await surface.request("/", {}, tls())).text(),
+    ]) {
+      expect(page).toContain(escapeHtml(KEPT.title));
+      expect(page).toContain(escapeHtml(KEPT.action));
+      expect(page).not.toContain(escapeHtml(FOUND.title));
+      expect(page).not.toContain(escapeHtml(WORDS.filesFound));
+      expect(page).not.toContain(FORM_ACTION);
+      expect(page).not.toContain('type="password"');
+    }
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("after Move, the answer names the folder and draws no form", async () => {
+    const { app: surface, onFinished } = app(() =>
+      Promise.resolve({
+        choice: "move" as const,
+        setAside: {
+          state: "first-setup-set-aside/s1/state",
+          venue: "first-setup-set-aside/s1/venue",
+        },
+      }),
+    );
+    const answer = await choose(surface, "move");
+    expect(answer.status).toBe(200);
+    const page = await answer.text();
+    expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(onFinished).toHaveBeenCalledOnce();
   });
 });

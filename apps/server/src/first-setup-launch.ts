@@ -127,6 +127,17 @@ export async function startServerOrFirstSetupResolution(
             requestRestart();
           },
           log,
+          ...(admission.survey === undefined
+            ? {}
+            : {
+                startAgain: {
+                  roots: admission.roots,
+                  survey: admission.survey,
+                  onFinished: async () => {
+                    requestRestart();
+                  },
+                },
+              }),
         }),
         options,
       );

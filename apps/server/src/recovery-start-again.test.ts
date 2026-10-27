@@ -772,4 +772,90 @@ describe("mountStartAgainChoice", () => {
     expect(logged).not.toContain(START_AGAIN_ADMIN.displayName);
     expect(logged).not.toContain(START_AGAIN_ADMIN.email);
   });
+
+  it("a POST with no body is refused 400 and choose is never called", async () => {
+    const { app, choose, render } = mounted();
+    const response = await app.request(
+      "/recovery-api/start-again",
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+      tls(),
+    );
+    expect(response.status).toBe(400);
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: { kind: "notSaved" }, secure: true }),
+    );
+    expect(choose).not.toHaveBeenCalled();
+  });
+
+  it("a page that fails to draw after a recorded Move is not answered as unfinished, and still restarts once", async () => {
+    const outgoing = new EventEmitter();
+    const onFinished = vi.fn(() => Promise.resolve());
+    const render = vi.fn((view: StartAgainView) => {
+      if (view.message?.kind === "moved") throw new Error("render failed");
+      return `<main>${view.message?.kind ?? view.code}</main>`;
+    });
+    const app = new Hono();
+    mountStartAgainChoice(
+      app,
+      {
+        roots: ROOTS,
+        survey: ROUTE_SURVEY,
+        onFinished,
+        choose: () =>
+          Promise.resolve({
+            choice: "move" as const,
+            setAside: {
+              state: "first-setup-set-aside/s1/state",
+              venue: "first-setup-set-aside/s1/venue",
+            },
+          }),
+        now: () => NOW,
+      },
+      render,
+      vi.fn(),
+    );
+    const response = await post(app, { ...FORM, choice: "move" }, { env: tls({ outgoing }) });
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("notFinished");
+    expect(render).toHaveBeenCalledOnce();
+    outgoing.emit("finish");
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("Keep calls onKept once; a Move or a refusal does not", async () => {
+    const onKept = vi.fn();
+    const mount = (choose: NonNullable<StartAgainDeps["choose"]>) => {
+      const app = new Hono();
+      mountStartAgainChoice(
+        app,
+        { roots: ROOTS, survey: ROUTE_SURVEY, onFinished: () => Promise.resolve(), choose },
+        () => "<main></main>",
+        vi.fn(),
+        onKept,
+      );
+      return app;
+    };
+    await post(
+      mount(() =>
+        Promise.resolve({
+          choice: "move" as const,
+          setAside: {
+            state: "first-setup-set-aside/s1/state",
+            venue: "first-setup-set-aside/s1/venue",
+          },
+        }),
+      ),
+      { ...FORM, choice: "move" },
+    );
+    await post(
+      mount(() => Promise.reject(new AppError("setup.owner_required", {}))),
+      FORM,
+    );
+    expect(onKept).not.toHaveBeenCalled();
+    await post(
+      mount(() => Promise.resolve({ choice: "keep" as const })),
+      FORM,
+    );
+    expect(onKept).toHaveBeenCalledOnce();
+  });
 });

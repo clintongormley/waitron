@@ -18,6 +18,11 @@ import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { serveRecovery } from "./recovery-listener.js";
+import {
+  START_AGAIN_ADMIN_PASSWORD,
+  startAgainAttempt,
+} from "@waitron/provisioning/testing/start-again-attempt";
+import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
 import { escapeHtml, OPERATOR_TEXT } from "./recovery-surface.js";
@@ -627,3 +632,78 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
     fields: { errorCode: "setup.start_again_incomplete", reason: "unlisted file: venue/venue.db" },
   });
 });
+
+/** A real interrupted attempt with a venue.db written after its marker, and healthy TLS. */
+async function foundFilesBox() {
+  const base = await mkdtemp(join(tmpdir(), "found-files-start-"));
+  dirs.push(base);
+  const attempt = await startAgainAttempt(base);
+  const { stateDir, venueDir } = attempt.roots;
+  await mkdir(join(stateDir, "tls"), { recursive: true });
+  for (const [name, value] of Object.entries({
+    "ca.crt": material.caCertPem,
+    "ca.key": material.caKeyPem,
+    "server.crt": material.serverCertPem,
+    "server.key": material.serverKeyPem,
+  }))
+    await writeFile(join(stateDir, "tls", name), value);
+  await writeFile(join(venueDir, "venue.db"), "found database");
+  return { stateDir, venueDir };
+}
+
+function postFormOverHttps(port: number, path: string, form: Record<string, string>) {
+  const body = new URLSearchParams(form).toString();
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        hostname: "127.0.0.1",
+        servername: "waitron.local",
+        port,
+        path,
+        method: "POST",
+        ca: material.caCertPem,
+        headers: {
+          "Accept-Language": "en-GB",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Length": Buffer.byteLength(body),
+        },
+        timeout: 5000,
+      },
+      (res) => {
+        let text = "";
+        res.on("data", (chunk: Buffer) => {
+          text += chunk.toString();
+        });
+        res.on("end", () => resolve({ status: res.statusCode!, body: text }));
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("HTTPS test deadline")));
+    req.end(body);
+  });
+}
+
+it.each(MODES)(
+  "the %s entry passes the survey and its Retry restart as onFinished",
+  async (mode) => {
+    const f = await foundFilesBox();
+    const started = await startIn(mode, f);
+    const page = (await overHttps(started.port, "/", "en-GB")).body;
+    expect(page).toContain("<li>venue/venue.db</li>");
+    const listed = /name="listed" value="([0-9a-f]{64})"/.exec(page)?.[1];
+    expect(listed).toBeDefined();
+    expect(started.restart).not.toHaveBeenCalled();
+    const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "move",
+      listed: listed!,
+    });
+    expect(answer.status).toBe(200);
+    const [movedLead] = START_AGAIN_PAGE_TEXT["en-GB"].moved("\0").split("\0");
+    expect(answer.body).toContain(`${escapeHtml(movedLead!)}state/first-setup-set-aside/`);
+    await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
+    if (mode === "supervised") expect(started.restart).toHaveBeenCalledWith(0);
+    await gone(join(f.venueDir, "venue.db"));
+    expect(started.startServer).not.toHaveBeenCalled();
+  },
+);
