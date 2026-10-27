@@ -1,4 +1,5 @@
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
+import { countryNameFor, receiptCountryNameFor } from "./registry.js";
 import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
 import { describe, expect, it } from "vitest";
 import {
@@ -357,3 +358,20 @@ it.each(["15", "27", "32", "36", ...GALICIA_DEMO_TEXT.provinceAliases])(
     });
   },
 );
+
+describe("recipient country names", () => {
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])("names ES in receipt language %s", (locale) => {
+    expect(receiptCountryNameFor("ES", locale)).toBe(getCountryPack("ES")!.countryNames![locale]);
+  });
+  it.each(["en-GB", "unknown", "es"])("keeps Spain receipts Spanish for %s", (locale) => {
+    expect(receiptCountryNameFor("ES", locale)).toBe(getCountryPack("ES")!.countryNames!["es-ES"]);
+  });
+  it("names countries in the screen language and falls back to English", () => {
+    expect(countryNameFor("ES", "en-GB")).toBe("Spain");
+    expect(countryNameFor("ES", "unknown")).toBe("Spain");
+  });
+  it.each(["GB", "XX"])("keeps the country code for an unlabelled country %s", (code) => {
+    expect(countryNameFor(code, "en-GB")).toBe(code);
+    expect(receiptCountryNameFor(code, "es-ES")).toBe(code);
+  });
+});

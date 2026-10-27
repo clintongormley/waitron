@@ -17,21 +17,6 @@ export interface InvoiceRecipient {
   countryCode: string;
 }
 
-function completeSpanishPostalAddress(address: string): boolean {
-  const parts = address.split(",").map((part) => part.trim());
-  const streetParts = parts.slice(0, -3);
-  const postalLocality = parts.at(-3);
-  const province = parts.at(-2);
-  const country = parts.at(-1);
-  return (
-    parts.length >= 4 &&
-    streetParts.every((part) => part !== "") &&
-    /^\d{5}\s+\S/u.test(postalLocality ?? "") &&
-    province !== "" &&
-    country === "España"
-  );
-}
-
 export function checkedInvoiceRecipient(
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
   recipient: unknown,
@@ -60,7 +45,7 @@ export function checkedInvoiceRecipient(
   if (
     !("address" in recipient) ||
     typeof recipient.address !== "string" ||
-    !completeSpanishPostalAddress(recipient.address)
+    !getCountryPack("ES")!.postalAddress!.isComplete(recipient.address)
   ) {
     throw new AppError("invoice.recipient_invalid", { field: "address" });
   }

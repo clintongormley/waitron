@@ -592,7 +592,7 @@ describe("walk-up invoice preparation", () => {
   const recipient = {
     taxId: "b12345674",
     legalName: "  Cliente SL  ",
-    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    address: "2 Main Street, 28013 Madrid, Madrid",
     countryCode: "es",
   };
 
@@ -619,7 +619,7 @@ describe("walk-up invoice preparation", () => {
         invoiceType: "F1",
         recipientTaxId: "B12345674",
         recipientLegalName: "Cliente SL",
-        recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        recipientAddress: "2 Main Street, 28013 Madrid, Madrid",
         recipientCountryCode: "ES",
       });
       expect(await saleCount(id)).toBe(0);
@@ -1466,7 +1466,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
             recipient: {
               taxId: "B12345674",
               legalName: "Cliente SL",
-              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              address: "2 Main Street, 28013 Madrid, Madrid",
               countryCode: "ES",
             },
             recipientNameMaxLength: backend.recipientNameMaxLength,

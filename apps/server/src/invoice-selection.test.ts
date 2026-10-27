@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -5,7 +6,7 @@ import { invoiceSeries, locations, nodes, withTransaction, workingOrders } from 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, nodeId, seriesId } from "@waitron/shared";
-import { selectOrderInvoice } from "./invoice-selection.js";
+import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -15,7 +16,7 @@ const policy = { recipientNameMaxLength: 120 };
 const recipient = {
   taxId: "B12345674",
   legalName: "Cliente SL",
-  address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+  address: "2 Main Street, 28013 Madrid, Madrid",
   countryCode: "ES",
 };
 
@@ -156,7 +157,7 @@ describe("stored bill invoice selection", () => {
         sale: {
           seriesId: order.fullSeriesId,
           counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
-          recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          recipientAddress: "2 Main Street, 28013 Madrid, Madrid",
         },
       });
       const counters = await suite.db
@@ -284,4 +285,33 @@ describe("stored bill invoice selection", () => {
       );
     },
   );
+});
+
+describe("country-free recipient validation", () => {
+  it("accepts country-free input and keeps the country code separate", () => {
+    expect(
+      checkedInvoiceRecipient(policy, {
+        taxId: " b12345674 ",
+        legalName: " Customer Ltd ",
+        address: " Main Street, 2, 28013 Madrid, Madrid ",
+        countryCode: "es",
+      }),
+    ).toEqual({
+      taxId: "B12345674",
+      legalName: "Customer Ltd",
+      address: "Main Street, 2, 28013 Madrid, Madrid",
+      countryCode: "ES",
+    });
+  });
+
+  it("refuses a country name embedded in new input", () => {
+    expect(() =>
+      checkedInvoiceRecipient(policy, {
+        ...recipient,
+        address: `2 Main Street, 28013 Madrid, Madrid, ${getCountryPack("ES")!.countryNames!["es-ES"]}`,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "invoice.recipient_invalid", params: { field: "address" } }),
+    );
+  });
 });

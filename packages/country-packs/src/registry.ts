@@ -167,3 +167,22 @@ export function receiptLabelsFor(locale: string): ReceiptLabels {
   }
   return FALLBACK_RECEIPT_LABELS;
 }
+
+export function countryNameFor(countryCode: string, locale: string): string {
+  const pack = getCountryPack(countryCode);
+  return (
+    pack?.countryNames?.[locale] ??
+    pack?.countryNames?.["en-GB"] ??
+    (pack === undefined ? undefined : pack.countryNames?.[pack.defaultLocale]) ??
+    countryCode
+  );
+}
+
+export function receiptCountryNameFor(countryCode: string, locale: string): string {
+  const pack = getCountryPack(countryCode);
+  if (pack === undefined) return countryCode;
+  const receiptLocale = pack.invoiceLocales.includes(locale) ? locale : pack.defaultLocale;
+  return (
+    pack.countryNames?.[receiptLocale] ?? pack.countryNames?.[pack.defaultLocale] ?? countryCode
+  );
+}

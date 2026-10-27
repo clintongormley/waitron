@@ -9,14 +9,14 @@ import {
   saveActionState,
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import { getCountryPack } from "@waitron/country-packs";
+import { countryNameFor, getCountryPack } from "@waitron/country-packs";
 import { isValidEmail } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { trackDialog } from "./track-dialog.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { InvoiceDeliveryChoice, InvoiceDeliveryOptions } from "../api/client.js";
 
 export interface InvoiceRecipientDetail {
@@ -249,7 +249,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
       taxId: this.#taxIdResult().valid ? "" : t("invoice.tax_id_invalid"),
       legalName: this.legalName.trim() === "" ? t("invoice.name_required") : "",
       streetAddress: this.streetAddress.trim() === "" ? t("invoice.street_address_required") : "",
-      postalCode: /^\d{5}$/.test(this.postalCode.trim()) ? "" : t("invoice.postal_code_invalid"),
+      postalCode: getCountryPack("ES")!.postalCode!.validate(this.postalCode).valid
+        ? ""
+        : t("invoice.postal_code_invalid"),
       locality: this.locality.trim() === "" ? t("invoice.locality_required") : "",
       province: this.province.trim() === "" ? t("invoice.province_required") : "",
       email: this.medium !== "email" || isValidEmail(this.email) ? "" : t("invoice.email_invalid"),
@@ -276,7 +278,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           recipient: {
             taxId: taxId.normalized,
             legalName: this.legalName.trim(),
-            address: `${this.streetAddress.trim()}, ${this.postalCode.trim()} ${this.locality.trim()}, ${this.province.trim()}, España`,
+            address: `${this.streetAddress.trim()}, ${this.postalCode.trim()} ${this.locality.trim()}, ${this.province.trim()}`,
             countryCode: "ES",
           },
           ...(delivery === undefined ? {} : { delivery }),
@@ -474,7 +476,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           name="countryCode"
           disabled
           .label=${t("invoice.country")}
-          .value=${t("invoice.country_spain")}
+          .value=${countryNameFor("ES", currentLocale())}
         ></wt-input>
         ${this.#renderDelivery()}
         <wt-form-actions .error=${bottomMessages.join(" ")}>
