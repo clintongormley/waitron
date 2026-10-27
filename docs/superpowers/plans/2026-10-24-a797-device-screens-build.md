@@ -6,8 +6,9 @@
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
 List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
 The handheld's bar**, **slice 6 — Ready warning time, data**, **slice 7 — The Ready bar's
-warning**, **slice 8 — Kitchen group cards**, **slice 8b — Short names on kitchen cards** and
-**slice 9 — The Columns controller and collapse** in full tasks; each other slice is expanded into
+warning**, **slice 8 — Kitchen group cards**, **slice 8b — Short names on kitchen cards**,
+**slice 9 — The Columns controller and collapse** and **slice 9b — The corner Columns panel** in
+full tasks; each other slice is expanded into
 tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
@@ -239,7 +240,8 @@ collapse ("Ready · 3"). **Risks:** whichever lane builds it first, the other us
 Open/Closed chip and the header line) comes with the corner's Columns (slice 8, D9). It wires
 `moveColumn` and `setColumnVisible` from slice 9's `apps/till/src/state/kitchen-columns.ts` and
 draws `hidden`, which slice 9 stores but does not draw (slice 9, D7).
-**Dependencies:** slice 9. **Migration:** no.
+**Dependencies:** slice 9. **Migration:** no. _Expanded into tasks below (2026-10-27)._ _Its
+window applies each tap at once, so it takes no draft scope (its D2)._
 
 ### Slice 9c — Overview and the narrow tabs (LIGHT)
 
@@ -7672,6 +7674,558 @@ It writes its report to `/Users/clintongormley/waitron-campaign-c/a797-9-look-re
   the two cannot collide because the screen kind is in every key (D15).
 - After merge: delete the branch local and remote and check the remote one is gone; the backlog's
   "landed in #N" commit; update the ledger; then slice 9b or 9c, in turn with lane G.
+
+---
+
+## Slice 9b — The corner Columns panel (one PR, branch `feat/a797-9b-columns-panel`)
+
+**Built inline.** This item runs under the inline-coding trial: the lead session writes every build
+task's code itself, test first; no implementer is dispatched, and where Global constraints say "each
+implementer runs", the lead runs it.
+
+**What it changes.** On a kitchen screen (a kitchen display, or the till's Station screen) **each
+board gets one header row**: the station's name, its Open/Closed-for-today control, the line "6
+dishes to make · 1 late", and at the row's end a **Columns** button («Columnas»). Columns opens a
+window titled "Columns" with the board's name under it, one row per column in the board's order:
+its number, its name, ↑ (named "Move up Ready", «Subir Listo») and ↓ ("Move down Ready", «Bajar
+Listo»), and a **Show** switch («Mostrar»). Each tap changes the board behind the window at once
+and is kept on the device, in slice 9's store; **Done** closes the window. A column whose Show is
+off is not drawn on the board; the last column still shown cannot be switched off, and its row says
+why (design §3.3, §3.6's Device row, picture 07, worked example 4: "The head chef set the column
+order once, in corner → Columns"). Overview (9c), Held (A773-2) and the pass's Other stations'
+dishes (A773-2) are not built here.
+
+**Review path: LIGHT.** No server read, route, schema or shared type changes: the layout stays in
+the device's browser (design §5: "Columns … are kept in the device's browser … Nothing on the
+server"). The changed files are under `apps/till/src/`, the guides and the docs. `till-app.ts` is
+not touched: both screen mounts already pass `.deviceId` and `.serverOrigin`
+(`apps/till/src/till-app.ts:18578-18579`, `:18782-18783`, read). None of the risk triggers
+applies. **Migration: none.** No venue reset.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-27 against `main` at
+`ea91470e9` (this worktree's base); **(read)** means read in the code at that commit. The probe
+ran in a throwaway worktree (`git worktree add --detach /tmp/a797-9b-probe.ahFs/wt ea91470e9`),
+removed afterwards; its diff and logs are in `/Users/clintongormley/waitron-campaign-c/a797-9b-probe/`
+(`probe.diff`, `control.diff`, `base1.txt`, `tsc1.txt`, `run1.txt`, `run2-control.txt`,
+`run3-others.txt`). None of the probe code is in this branch.
+
+### The turn with lane G's A773-2 (ran)
+
+`gh pr list --state open` at 08:27 → two open pull requests, #2131 (A1098, the recovery page) and
+#2130 (A918 slice 2, setup's staff language); there were none at 08:13 when this slice was briefed.
+`gh pr diff <n> --name-only | grep -E 'station-queue|till-station-screen|till-app\.ts|kitchen-service|kitchen-columns|i18n/strings|design-system|backlog'`
+→ #2130: `docs/backlog.md`, `docs/backlog/architecture.md`, `docs/backlog/english-only-audit.md`;
+#2131: `docs/backlog.md`, `docs/backlog/setup.md`, `docs/developers/design-system.md`. Neither
+touches code; both touch docs Task 4 edits, so whichever lands second may meet a small conflict in
+`docs/backlog.md` or `design-system.md`. `grep -n A773-2 ~/waitron-campaign-g/queue.md` →
+nothing (exit 1). `git ls-remote origin | grep -i a773` → only old `refs/pull/*` heads, no branch.
+`git grep -ln kitchen-columns -- 'apps/*.ts'` outside tests → `station-queue.ts` and
+`till-station-screen.ts` only. So slice 9b takes the turn on `station-queue.ts` and
+`till-station-screen.ts`, and leaves `till-expo-screen.ts` alone. The closing step posts one line
+for lane G. **Check again** (`gh pr list --state open`, and the same `grep`) before the first
+commit and before `/finish-branch`.
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `git grep -n "<till-station-queue\|<till-station-screen\|<till-station-today" -- 'apps/*.ts'`
+(ran: two queue tags and two today tags in the screen, two screen mounts in the app, nothing else
+outside tests), `git grep -ln kitchen-columns -- 'apps/*.ts'` (ran) and `git grep -rln draftScopeFor
+apps/till/src` (ran), each line read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `apps/till/src/widgets/station-queue.ts:775-777` `render` | notices, then `#queue` | the header row first, then notices, then the queue (D1) |
+| same file `:779-785` `#queue` | with no groups, only "No orders" (`.empty`); otherwise `#header` then `#board` | `#header` moves into the header row, which is drawn with no groups too (D1) |
+| same file `:762-773` `#header` | "5 dishes to make · 1 late" over every card, on the widget's `TickingClock` | unchanged; drawn inside the header row; still counts every card, hidden and collapsed columns included (D3) |
+| same file `:71-75` `DRAWN`, `:956-997` `#board` | draws each key of `columns.order` it can draw | also skips a key in `columns.hidden` (D3); `DRAWN` also feeds a new export, `stationColumnNames()` (D4) |
+| same file `:663` `columns`, `:949-954` `#toggleColumn` | the layout the screen hands down; a heading tap only asks (`toggle-column`) | unchanged; the precedent for the new `open-columns` (D8) |
+| `apps/till/src/state/kitchen-columns.ts:112-143` `moveColumn`, `setColumnVisible` | built and tested by slice 9, no caller | their first callers (D2, D8) |
+| same file `:17-21` `STATION_COLUMNS` | Waiting, Preparing, Ready, nothing hidden or collapsed | read; a new test pins that every key it registers is one the board draws (D4) |
+| `apps/till/src/screens/till-station-screen.ts:337-362` `#columnsFor`, `#onToggleColumn` | reads each board's layout once; a heading tap toggles, keeps, saves | the keep-and-save step becomes one helper the toggle, a move and a show share (D8) |
+| same file `:898-913` `#renderDevice` | one station: `#today(only)` then `#queue`, **no station name drawn** | the name and today's control go into that board's header row (D1) |
+| same file `:984-1000` `#deviceSection` | stacked: `h2.station-name`, today's control, the queue; a station still drawn while unavailable: its notice line, today's control, the queue | the name and today's control go into the board's header row; the unavailable notice stays above it (D1) |
+| same file `:916-953` `#mergedBody` | one `section[data-station-controls]` per available station (name and today's control), then one merged queue | unchanged above; the merged board's header row holds the counts and Columns only (D1) |
+| same file `:1089-1112` `#body` (the till) | the station picker, today's control, the queue | today's control goes into the board's header row (D1) |
+| same file `:1114-1134` `#queue` | mounts `<till-station-queue>` with `.columns` and `@toggle-column` | gains the header row's slotted content, the board's name and `@open-columns` (D1, D7) |
+| same file `:852-868` `#renderMoveDialog`, `:871-874` `render`, `:307-319` `willUpdate` | the screen draws its own Move dialog, and closes it when `api`, `deviceMode` or `deviceId` changes | the Columns window is drawn the same way and closed by the same reset (D9) |
+| `apps/till/src/widgets/station-today.ts:222-281` | a status sentence ("Open", "Closed for today → Pass") and a button; needs a manager PIN on a kitchen display | unchanged; slotted into the header row (D1) |
+| `apps/till/src/widgets/till-shell.ts:1121-1123`, `:398` `.language-corner` | on a kitchen display, theme and language in a row of their own above the screen | unchanged (D1) |
+| `apps/till/src/widgets/equipment-dialog.ts:319-321`, `:539-541` | each equipment choice sent as `equipment-change` when made; one Close; no draft scope (not in the `draftScopeFor` list) | the precedent the window follows (D2) |
+| `apps/till/src/widgets/device-zones-dialog.ts` (slice 4) | a staged choice with Cancel and Save, a draft scope and `device-zones-dialog.unsaved.test.ts`, because the server can refuse its save | the precedent the window does not follow, and why (D2) |
+| `packages/ui/src/components/wt-switch.ts:113-122`, `:143-170` | the switch primitive: `label` drawn after the control, `accessible-name`, `disabled`, `description` read to assistive technology | the Show switch (D3, D5, D10) |
+| `apps/dashboard/src/screens/device-profiles-screen.ts:1806-1823` | a profile's printers: a switch per printer, then Move up and Move down named "Move up <printer>", disabled at the ends | the precedent for the arrows' names and ends (D6) |
+| `apps/till/src/i18n/strings.ts` en `:679-681`, es `:2433-2435` `station.state.*`; en `:947`, `:1307`, `:1662` / es `:2690`, `:3043`, `:3394` "Done" «Hecho»; en `:799` / es `:2545` "Chosen on this device" | the column names; Done; the equipment note | read; reused words (D5) |
+
+### Plan decisions for slice 9b
+
+- **D1. One header row per board, drawn by the queue widget, with the screen's parts slotted in.**
+  `till-station-queue` draws `<div class="board-head" data-board-head>` first, before the notices
+  and the board: a `<slot name="lead">`, then today's counts line (`#header`, unchanged), then a
+  `wt-button` **Columns** (`data-columns-open`, secondary) at the row's end
+  (`margin-inline-start: auto`); a flex row that wraps (`--wt-space-3` gap), so at 390 px the parts
+  fall onto a second line rather than overflow. The row is drawn with no groups too, so an empty
+  board still offers Columns; the counts line is absent while both counts are nothing, as today
+  (`:766`). The screen slots into `lead`: on a kitchen display, the station's
+  `<h2 class="station-name">` and its `till-station-today`, for one station (**the name is new
+  there**: today a one-station display draws no name, `:909`; picture 03 names it, "Grill") and for
+  each stacked station; for a station drawn while unavailable, its today's control (its notice line
+  above the board already names it, `:995-996`); on the till's Station screen, today's control (the
+  picked station's name is on its picker tab, `:1089-1100`). **The merged board's row** holds the
+  counts and Columns only; the per-station name-and-control sections above it stay as they are
+  (`:925-934`), because one row cannot hold several stations' controls. **Why slotted, not moved
+  out** (the brief's leaning moved the counts line into a screen-drawn row): the line's late count
+  is aged on the widget's own `TickingClock` (`:667`, `:765`), so a screen-drawn line would need a
+  second clock re-rendering the whole screen every tick, and the line's existing checks (the
+  "dishes-to-make line" describe, `station-queue.test.ts:3242`) would all move suites; slotting
+  keeps the line, its clock and its tests where they are and changes only where the screen's
+  existing parts sit. **The shell's corner stays where it is** (`till-shell.ts:1121-1123`): picture
+  03's one row (name, chip, counts, then "?", theme, language and Columns) cannot be built for a
+  stacked display, which has several boards and one corner, without the shell learning about
+  stations or each board drawing its own theme and language choosers. So on a kitchen display the
+  corner (theme, language) is a row above the boards and Columns sits at each board's own row:
+  **owner FYI**. **Today's control is unchanged**: it is today's status sentence and button
+  (`station-today.ts:225-237`), not picture 03's green chip; restyling it is not this slice's.
+- **D2. Each tap applies and is kept at once; Done only closes; no draft scope.** Picture 07 has one
+  button, Done, and no Cancel. The window holds no staged input: a move or a show is applied to the
+  board and saved to `localStorage` when tapped, as slice 9's heading tap is (`#onToggleColumn`,
+  `:352-362`). That is the house contract for a control that saves as it is used: "Read-only and
+  automatically saved forms need no draft scope" (`docs/developers/design-system.md:3123`) and
+  "immediately saved controls … remain exempt" (`:3143-3144`); the till's nearest such precedent is
+  the equipment dialog, which sends each choice as it is made and has one Close and no draft scope
+  (`equipment-dialog.ts:319-321`, `:539-541`; absent from `git grep -rln draftScopeFor
+  apps/till/src`, ran); a theme pick likewise "applies at once and never asks about unsaved work"
+  (`design-system.md:5344`). The slice 4 precedent, Zones on this device, stages its choice behind
+  Save with a draft scope because its save goes to the server and can be refused under a field
+  (`device-zones-dialog.ts`, `save-device-zones`); a browser write cannot be refused that way (a
+  refused store is swallowed and the layout kept in memory, slice 9 D4). **So the window takes no
+  draft scope and has no `*.unsaved.test.ts`**; the slice 9b outline's "a new dialog with staged
+  input takes a draft scope" applies only to staged input. **Done**, **Escape** and the browser's
+  close each close the window and change nothing, because nothing is waiting; the board already
+  shows every change. **No ×** is drawn: `wt-dialog` draws none, and no till `wt-dialog` adds one
+  (Done and Escape close it, as the equipment dialog's Close does): **owner FYI** against picture 07.
+- **D3. A hidden column is not drawn; the last shown column cannot be hidden.** `#board` skips a key
+  in `columns.hidden`, and draws no section, heading or card for it. The header line still counts
+  its cards (it counts every card on the queue, `:763-772`), so a late card in a hidden Waiting
+  still reads "· 1 late": **owner FYI**, beside slice 9 D14's open question about collapsed
+  columns. The window disables the Show switch of a column that is the only one of its listed rows
+  still shown, so the board never goes blank by a tap (A773-2: "Columns remain reachable"). The
+  reason is told twice: as a visible muted line under that row's name, and as the switch's
+  `description`, which `wt-switch` reads to assistive technology (`wt-switch.ts:121-122`, `:155`);
+  a disabled switch takes no keyboard focus, so the visible line is how a sighted keyboard user
+  finds it. **The screen does not check this again**: the window is the only sender of a hide, and a
+  second check would be code no product path reaches (Global constraints: unreached code is
+  deleted). **A layout with every column hidden** can come only from a hand-edited store (slice 9
+  D3 keeps a stored `hidden` as long as its keys are registered): the board draws no column, the
+  header row and its Columns still show, and the window has no switch disabled, so a tap brings a
+  column back. A hidden column keeps its collapsed mark; shown again, it comes back collapsed.
+- **D4. The window lists the columns this board can draw, in the layout's order.** The widget
+  exports `stationColumnNames(): Map<ColumnKey, string>`, built from `DRAWN` (`:71-75`) with each
+  state's `station.state.*` word, so it holds Waiting, Preparing and Ready today. The screen hands
+  the window the board's layout and these names; the window lists `layout.order` filtered to the
+  keys the names hold. A later key (9c's `overview`, A773-2's `held`) appears in the window, in its
+  stored place, the day its slice adds it to `STATION_COLUMNS` and `DRAWN` with its name, with no
+  change to the window. **A move swaps a column with its neighbour in `order`** (`moveColumn`,
+  `kitchen-columns.ts:112-124`), so a registered key the board cannot draw would make a move look
+  like nothing happened; a new test pins that every key `STATION_COLUMNS` registers is a key
+  `stationColumnNames()` names (Task 1), so a slice that registers a key without drawing it fails
+  there.
+- **D5. Words: four settled, two reused, one new.** Settled (design §10 (g)): **Columns**
+  «Columnas» (the button and the window's heading), **Move up** «Subir», **Move down** «Bajar»,
+  **Show** «Mostrar». Reused, each as a new key holding words the till already shows: **Done**
+  «Hecho» (`floor.step_done`, `make_now.dismiss`, `cancel_credit.done_action`, en `:947`, `:1307`,
+  `:1662`, es `:2690`, `:3043`, `:3394`; not `find_page.done`'s «Listo», es `:2371`, which on a
+  kitchen screen would read as the Ready column), and the note under the list, **Chosen on this
+  device** «Elegido en este dispositivo» (`equipment.chosen_here`, en `:799`, es `:2545`), in place
+  of picture 07's "Kept on this screen", which is a new phrase for the same fact. **New:** the
+  disabled switch's reason, **"One column always shows"** «Siempre se muestra una columna»
+  (**owner FYI**). **Left out:** picture 07's section label "Order and show": the station window
+  has one section, so the label names nothing the heading does not (A773-2's pass window, with its
+  Other stations' dishes section, may want it); **owner FYI**. The board's name in the window is a
+  station name, not a word (D7). Keys, all under `station.`: `columns`, `columns_move_up`,
+  `columns_move_down`, `columns_show`, `columns_done`, `columns_kept`, `columns_last_shown`, en and
+  es in `apps/till/src/i18n/strings.ts` only.
+- **D6. The arrows and the switch are named for their column; the focus stays on the moved row.**
+  Each ↑ and ↓ is an icon-only `wt-button` (`aria-label` forwarded to its inner button,
+  `design-system.md:2226-2233`) with `aria-label` "Move up Ready" / "Move down Ready" («Subir
+  Listo», «Bajar Listo»): the action then the column, as the dashboard's printer list names its
+  "Move up <printer>" (`device-profiles-screen.ts:1811`) and slice 4's zones dialog its "Show
+  <zone>" (`device-zones-dialog.ts`); its arrow is a decorative `wt-icon` (`column-up`,
+  `column-down`, registered by the window's module), so no drawn text can fail label-in-name. The
+  switch: `label` "Show", `accessible-name` "Show Ready" («Mostrar Listo»), which begins with the
+  drawn word. ↑ is disabled on the first row and ↓ on the last (picture 07). **After a move** the
+  focus goes to the moved row's same arrow, or, when that arrow is now disabled (the row reached an
+  end), to the row's other arrow: the window records the key and direction on the tap and moves
+  the focus in `updated()` once the screen hands back the new layout, rather than trusting the
+  focus to survive Lit re-ordering the rows (not measured; Task 2's case 5 is the check either
+  way). The rows are an
+  `<ol>`; the drawn number is `aria-hidden`, the list giving the position.
+- **D7. The window names its board.** `wt-dialog`'s `heading` is "Columns" and its `description`
+  (drawn under the heading and read as the dialog's description) the board's name: the station's
+  name for one station, a stacked station or the till's picked station; for the merged board, the
+  drawn stations' names joined by `Intl.ListFormat(currentLocale(), { type: "conjunction" })`
+  ("Cocina and Barra", «Cocina y Barra»), as the late-send window joins its periods
+  (`apps/till/src/widgets/late-send-dialog.ts:55`).
+- **D8. The window is a pure view; the screen applies and keeps.** `till-kitchen-columns-dialog`
+  (`apps/till/src/widgets/kitchen-columns-dialog.ts`) takes `layout: ColumnState`,
+  `names: ReadonlyMap<ColumnKey, string>`, `boardName: string`, `open: boolean` and
+  `opener: HTMLElement | null`, and sends `column-move` `{ key, direction }`, `column-show`
+  `{ key, visible }` and `close` (each `bubbles: true, composed: true`; an app-owned component
+  names its events plainly, CLAUDE.md §3), changing nothing itself; it stops each `wt-switch`'s
+  `wt-change` before sending `column-show`. The queue widget's Columns sends `open-columns` (no
+  detail). The screen binds `@open-columns` on each `<till-station-queue>` tag with that board's
+  station id (none for the merged board) and name, as it binds `@toggle-column` (slice 9 D11);
+  stops it; records `{ stationId, boardName, opener }`, the opener being the event's
+  `composedPath()[0]` so `wt-dialog` hands the focus back to Columns on close
+  (`design-system.md:841`, `opener`); and draws the window from `render()` beside the Move dialog.
+  On `column-move` and `column-show` it stops the event, applies `moveColumn` or
+  `setColumnVisible` to `#columnsFor(stationId)`, and keeps and saves the result through the one
+  helper slice 9's toggle now also uses; the board and the window redraw from the same layout.
+  `.layout` is re-read from `#columnsFor` on every render, so the window and its board can never
+  disagree. The window reads the screen's language through `LocaleChangeController`, as the zones
+  dialog does.
+- **D9. While the window is open.** A 15-second refresh changes neither the window nor the layout
+  (the layout is never re-read, slice 9 D11). A change of `api`, `deviceMode` or `deviceId` closes
+  it, in the same `willUpdate` branch that drops the Move dialog (`:307-319`), because the scope it
+  edits is gone. The window is modal (`wt-dialog` opens with `showModal()`,
+  `wt-dialog.ts:287`, read), so the page behind it takes no taps: the merge toggle and the till's
+  station picker cannot be pressed while it is open.
+- **D10. Departures from picture 07, each an owner FYI:** no × (D2); the switch's word "Show" is
+  drawn after the switch, where `wt-switch` puts its label (`wt-switch.ts:161`), not before it; no
+  "Order and show" label and "Chosen on this device" for "Kept on this screen" (D5). Overview's
+  second line ("Counts each dish to make") is slice 9c's.
+
+### Changed test checks (from the probe; the lead confirms each)
+
+**Probe (ran):** D1 and D3 crudely (`probe.diff`): the widget draws the header row (a
+`slot name="lead"`, the counts line, a plain `<button data-columns-open>Columns</button>`) before
+the notices and draws it with no groups; the board skips a hidden key; the screen slots a one-station
+display's and each stacked station's `h2.station-name` and `till-station-today`, and the till's
+`till-station-today`, into the lead slot. Free memory 82 % (ran `memory_pressure`). In
+`apps/till`, `pnpm typecheck` → exit 0 (`tsc1.txt`). `pnpm exec vitest run src/widgets/station-queue
+src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout`: before,
+`Test Files 10 passed (10)`, `Tests 601 passed (601)` (`base1.txt`); with the probe,
+`Test Files 1 failed | 9 passed (10)`, `Tests 4 failed | 597 passed (601)` (`run1.txt`).
+**Control (ran):** the probe plus `STATION_COLUMNS.hidden: ["ready"]` (`control.diff`) →
+`Tests 37 failed | 564 passed (601)` (`run2-control.txt`), so these suites see a hidden column; with
+nothing hidden by default, the skip itself changes no check. **The other suites that mount the
+station screen or the app around it (ran, with the probe):** `pnpm exec vitest run
+src/screens/till-expo-screen src/screens/device-screens.phone-margin src/widgets/pressed-pickers.a11y
+src/screens/till-counter-screen src/till-app-boot-and-counter src/till-app-parties
+src/till-app-setup-refresh src/till-app.test.ts` → `Test Files 20 passed (20)`,
+`Tests 2497 passed (2497)` (`run3-others.txt`). The probe drew a plain `<button>` where the build
+draws a `wt-button`; `git grep -n 'querySelector("wt-button")'` over the station suites (ran) finds
+only a query inside a card's row (`station-queue.kitchen-note.test.ts:131`), which the header row
+does not reach.
+
+**The four checks that change** (all in `apps/till/src/screens/till-station-screen.test.ts`, all
+in Task 3):
+
+1. `:1364` "one station renders as it does today: no section and no station heading" asserts no
+   `h2`. D1 names a one-station display's station in its header row (picture 03). New check: no
+   `[data-device-station]` section, and exactly one `h2.station-name`, slotted `lead` into the
+   queue widget, reading the station's name. Renamed "one station renders without a section, its
+   name in its board's header row".
+2. `:4212` "shows the selected station status above its queue" asserts today's control precedes
+   the queue widget in document order (`DOCUMENT_POSITION_FOLLOWING`). D1 slots it into the
+   widget, so the widget now contains it. New check: the control's parent is the queue widget and
+   its `slot` is `"lead"` (the header row is drawn above the board, which Task 1's order case pins).
+3. and 4. `:4381-4393` "renders device status above its queue (cold boot answer: false|true)",
+   the same assertion on a kitchen display, the same change.
+
+**Fixture-only:** none expected. Any other failure, in any suite a task names, is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **The header row** on a one-station display, two stacked stations, a station drawn while
+   unavailable, the merged board, the till's Station screen, and an empty board: who holds a name,
+   who holds today's control, and Columns on every one (D1; Tasks 1, 3).
+2. **A move and a show apply at once** to that board only, and survive the screen opening again;
+   the merged board's layout stays apart from each station's (D2, D8; Task 3).
+3. **The last shown column:** its switch disabled, the reason visible and read; and a hand-edited
+   all-hidden layout still leaves Columns and lets a column back (D3; Tasks 1, 2).
+4. **Focus:** after ↓ on the first row the focus stays on that row's ↓; at the last row, on its ↑;
+   after Done or Escape, back on Columns (D6, D8; Tasks 2, 3).
+5. **A hidden column holding a late card:** the header line still says "1 late" (D3; Tasks 1, 5).
+6. **Refresh and reset while open:** a 15-second refresh keeps the window and the layout; a device
+   change closes it (D9; Task 3).
+7. **Names:** "Move up Ready", "Show Ready", and the Spanish «Subir Listo», «Mostrar Listo»; the
+   merged board's window names both stations (D6, D7; Tasks 2, 3).
+8. **Dark theme, Spanish, 1280, 1024 and 390 px:** the header row's wrap, the window's rows (Task 5).
+
+---
+
+**Task order and why.** The widget's header row and hidden columns first (Task 1), so the window's
+column names exist; the window (Task 2), a pure view tested alone; the screen joins them (Task 3);
+the docs (Task 4); the LOOK (Task 5). Each leaves the tree green and is a test-first unit well under
+60 tool calls.
+
+### Task 1: Each board has one header row with Columns, and a hidden column is not drawn
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (D1: the header row, drawn first and with no
+  groups, its `lead` slot, `#header` inside it, the Columns `wt-button` sending `open-columns`; D3:
+  `#board` skips `columns.hidden`; D4: export `stationColumnNames()`; styles with `--wt-*` tokens
+  only), `apps/till/src/i18n/strings.ts` (`station.columns` "Columns" / «Columnas»)
+- Test: `apps/till/src/widgets/station-queue.test.ts` (a new `describe("the board's header row and
+  hidden columns")`, with "the board's columns" describe's builders, `:3749-3800`),
+  `apps/till/src/widgets/station-queue.a11y.test.ts` (inside the both-theme describe, `:402`)
+
+- [ ] **Step 1: Failing tests** (each name contains "the board's header row", which Step 2's
+  filter reads):
+  1. "the board's header row comes first: the lead slot, the counts line, then Columns" — with a
+     notice and one late card: `[data-board-head]`'s children in order are `slot[name="lead"]`,
+     `[data-kitchen-counts]`, `[data-columns-open]`; and `[data-board-head]` comes before
+     `.notices` and `.kanban` in the shadow root.
+  2. "the board's header row: an empty board still offers Columns and no counts" — `groups: []`:
+     `[data-columns-open]` present, no `[data-kitchen-counts]`, `.empty` reads `t("station.empty")`.
+  3. "the board's header row: Columns asks to open the window and changes nothing itself" —
+     `userEvent.click` → one `open-columns`, `bubbles` and `composed`; `columns` unchanged.
+  4. "the board's header row: a hidden column is not drawn, and the line still counts its late
+     card" — `hidden: ["waiting"]`, a late card in Waiting: no `[data-column="queued"]`, two
+     sections, the card's `[data-card]` absent; `[data-kitchen-counts]` ends "· 1 late".
+  5. "the board's header row: every column hidden draws no column and keeps Columns" — all three
+     hidden: no `[data-column]`, `[data-columns-open]` present.
+  6. "the board's header row: the station registers only columns the board draws" —
+     `STATION_COLUMNS.order.every((key) => stationColumnNames().has(key))`, and the names read
+     `t("station.state.queued")`, `…preparing`, `…ready` for `waiting`, `preparing`, `ready` (D4).
+  7. "the board's header row: Columns reads «Columnas» in Spanish" — `setLocale("es-ES")`, restored
+     in `finally` (CLAUDE.md §4), as `:163-181` does.
+  8. a11y: "the board's header row with a hidden column has no violations" (`reducedMotion: true`,
+     a fixed `now`), once per theme.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts -t "the board's header row"`
+  (memory first: `memory_pressure | grep free`).
+- [ ] **Step 3: Implement** D1 (the widget's half), D3, D4. No `rem` or `em` added.
+- [ ] **Step 4: Run; expect PASS** (8 cases, the a11y one twice: `Tests 9 passed`), then the probe's
+  command `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout`
+  → `Tests 610 passed (610)` (601, `base1.txt`, plus 9). The screen is not changed yet, so the four
+  checks above still pass here; a failure is a STOP. Then, from the root,
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
+- [ ] **Step 5:** `pnpm --filter @waitron/till typecheck`; `pnpm exec eslint` on the changed files;
+  `pnpm format:check`; ledger; `git commit -s -m "A797-9b: each kitchen board has one header row with Columns, and a hidden column is not drawn"`
+
+### Task 2: The Columns window
+
+**Files:**
+- Create: `apps/till/src/widgets/kitchen-columns-dialog.ts` (D2–D8: a `wt-dialog` carrying
+  `trackDialog()`, heading "Columns", `description` the board's name; an `<ol>` of rows, each the
+  `aria-hidden` number, the name and, for the last shown, the muted reason line, ↑ and ↓ icon-only
+  `wt-button`s, the `wt-switch`; under the list the muted "Chosen on this device"; in the footer a
+  `wt-form-actions` holding one primary Done, which calls `closeAfter("saved")`; `wt-close` sends
+  `close`; icons `column-up`, `column-down` registered by the module; `LocaleChangeController`;
+  rows laid out with `--wt-*` tokens, the name column `minmax(0, 1fr)` so a long Spanish name wraps)
+- Modify: `apps/till/src/i18n/strings.ts` (`station.columns_move_up` "Move up" «Subir»,
+  `station.columns_move_down` "Move down" «Bajar», `station.columns_show` "Show" «Mostrar»,
+  `station.columns_done` "Done" «Hecho», `station.columns_kept` "Chosen on this device" «Elegido en
+  este dispositivo», `station.columns_last_shown` "One column always shows" «Siempre se muestra una
+  columna»)
+- Test: `apps/till/src/widgets/kitchen-columns-dialog.test.ts`,
+  `apps/till/src/widgets/kitchen-columns-dialog.a11y.test.ts` (as `device-zones-dialog.a11y.test.ts`
+  is built, with its locale restore)
+
+- [ ] **Step 1: Failing tests** (mounted with `open: true`, `boardName: "Grill"`, the names of
+  Waiting, Preparing and Ready, and a layout unless a case says otherwise):
+  1. "lists the columns it has names for, in the layout's order, numbered" — layout order
+     `["ready", "overview", "waiting", "preparing"]` with no name for `overview` → three rows,
+     numbers 1–3, names Ready, Waiting, Preparing.
+  2. "is headed Columns, names its board, and says the choice stays on this device" — the
+     dialog's accessible name "Columns", its description "Grill"; "Chosen on this device" drawn.
+  3. "the first row cannot move up and the last cannot move down" — those two arrows disabled,
+     the other four enabled.
+  4. "an arrow asks to move its column and changes nothing itself" — ↓ on Ready → one
+     `column-move` `{ key: "ready", direction: "down" }`; the rows' order unchanged until a new
+     `layout` is set.
+  5. "after a move the focus stays on the moved row's arrow, or its other arrow at an end" — focus
+     and press Enter on the first row's ↓; set the moved layout and await `updateComplete`: the
+     focused element is that column's ↓; press again, set the layout putting it last: the focus is
+     on its ↑ (D6).
+  6. `it.each` en / es: "each arrow and switch is named for its column (%s)" —
+     `toHaveAccessibleName` "Move up Ready", "Move down Ready", "Show Ready"; «Subir Listo»,
+     «Bajar Listo», «Mostrar Listo» (two tests).
+  7. "a Show switch asks to hide or show its column, and its change stops at the window" —
+     clicking Ready's switch → one `column-show` `{ key: "ready", visible: false }`; a listener
+     above the window sees no `wt-change`; with `hidden: ["ready"]` the switch is unchecked and a
+     click sends `visible: true`.
+  8. "the last shown column's switch cannot be turned off, and says why" — `hidden: ["waiting",
+     "preparing"]`: Ready's switch disabled, its row shows "One column always shows", the switch's
+     input has that accessible description; the other two enabled; and with all three hidden, no
+     switch is disabled and no reason shows.
+  9. `it.each` Done / Escape: "%s closes the window and sends close once" (two tests).
+  10. a11y: "the Columns window, with a disabled switch, has no violations", once per theme.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/kitchen-columns-dialog`.
+- [ ] **Step 3: Implement** D2–D8's window half. The window draws no native form field (CLAUDE.md
+  §3): its arrows are `wt-button`s and its switch a `wt-switch`.
+- [ ] **Step 4: Run; expect PASS**, `Tests 13 passed (13)` (cases 1–5, 7, 8 once, 6 and 9 twice,
+  10 twice); then `pnpm --filter @waitron/till exec vitest run src/i18n` and, from the root,
+  `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint the changed files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-9b: the Columns window moves a column up or down and shows or hides it, kept as you tap"`
+
+### Task 3: The station screen opens each board's window and keeps its changes
+
+**Files:**
+- Modify: `apps/till/src/screens/till-station-screen.ts` (D1's slotting in `#renderDevice` `:909`,
+  `#deviceSection` `:992-996` and `#body` `:1094-1102`; `#queue` gains the slotted content, the
+  board's name and `@open-columns`; `#mergedBody`'s tag gets `@open-columns` with the joined names
+  (D7); a `@state()` for the open window, drawn from `render()` beside the Move dialog; the
+  `column-move`, `column-show` and `close` handlers; one keep-and-save helper shared with
+  `#onToggleColumn`; the `willUpdate` reset closes the window, D9)
+- Test: `apps/till/src/screens/till-station-screen.test.ts` (a new `describe("the Columns
+  window")` beside "the device's kitchen columns", `:5105`, using its `mountOperator`,
+  `clearStoredColumns` and `BOX`; the stacked and merged cases use the merged-view describe's
+  `twoStations` (`:1635`) and `mountDevice` (`:1320`), so put them inside that describe (`:1624`),
+  and the refresh case inside the 15-second refresh describe (`:2615`); every name starts "the
+  Columns window:"; the four changed checks above)
+
+- [ ] **Step 1: Failing tests:**
+  1. "the Columns window: one station's board names it and holds today's control in its header
+     row" — device mode, one station: `h2.station-name` and `till-station-today` are children of
+     the queue widget with `slot="lead"`.
+  2. "the Columns window: each stacked board's header row holds its station; the merged board's
+     holds none" — two stations stacked, then merged: the merged queue widget has no `lead`
+     children, and both `[data-station-controls]` sections remain.
+  3. `it.each` over one station, the second stacked station, the merged board and the till's
+     picked station: "the Columns window: Columns opens the window named for its board (%s)" →
+     the window's description "Cocina", "Barra", "Cocina and Barra", the picked station's name
+     (four tests).
+  4. "the Columns window: a move reorders that board at once and is kept on the device" — move
+     Ready up: the widget's `columns.order` is `["waiting", "ready", "preparing"]` while the window
+     is open; the stored value under D2's key (slice 9) holds that order; a new screen with the same
+     scope draws it.
+  5. "the Columns window: hiding a column hides it on that board only, and showing it brings it
+     back" — two stations stacked: hide Ready on st-1 → st-1's widget `columns.hidden` is
+     `["ready"]`, st-2's empty; merged, the merged board's own layout is untouched; show it again.
+  6. "the Columns window: its events stop at the screen" — a listener above the screen sees no
+     `open-columns`, `column-move`, `column-show` or `close`.
+  7. "the Columns window: with no origin or device it still reorders, for this screen only" — no
+     `waitron.kitchenColumns.` key in `localStorage` afterwards.
+  8. "the Columns window: Done puts the focus back on Columns" — the deep active element after
+     Done is the widget's Columns button (or the inner button of it).
+  9. "the Columns window: a device change closes it" — set a new `deviceId`: no
+     `till-kitchen-columns-dialog` drawn.
+  10. "the Columns window: a refresh keeps the window open and the moves made" — under the refresh
+      describe's fake timers: move, advance 15 s, flush: the window open, the order kept.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-station-screen.test.ts -t "the Columns window"`.
+- [ ] **Step 3: Implement** D1's screen half, D7–D9; then edit the four changed checks as listed
+  under "Changed test checks", and nothing else.
+- [ ] **Step 4: Run; expect PASS** (13 tests), then the probe's command → `Tests 623 passed (623)`
+  (610 after Task 1, plus 13); then the probe's other suites, `pnpm --filter @waitron/till exec vitest run src/screens/till-expo-screen src/screens/device-screens.phone-margin src/widgets/pressed-pickers.a11y src/screens/till-counter-screen src/till-app-boot-and-counter src/till-app-parties src/till-app-setup-refresh src/till-app.test.ts`
+  → `Tests 2497 passed (2497)` (`run3-others.txt`), and `src/widgets/kitchen-columns-dialog` →
+  13. Read each `Tests` count; a failure is a STOP.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger, with the four changed
+  checks' names and reasons; `git commit -s -m "A797-9b: a kitchen screen's Columns opens its board's window and keeps each change on the device"`
+
+### Task 4: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/kitchen-service.md` (`## Work the kitchen screen
+  {#kitchen-screen}`, `:120-138`), `apps/server/src/guide/es/kitchen-service.md` (the same section,
+  `:137-159`), `docs/developers/design-system.md` (`### The kitchen screen's cards`, `:5471-5517`),
+  `docs/backlog.md` (the A797 entry, `:120-145`), `docs/backlog/till.md` (A797's entry,
+  `:1034-1068`), `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.3, after the
+  "Column order is not changed on the live screen" bullet, `:339-340`)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+- [ ] **Step 1: Guides.** English: replace "The line above the columns says how many dishes are
+  still to make and how many cards are late." with the header row: the station's name, whether it
+  is open today, how many dishes are still to make and how many cards are late, and **Columns**;
+  then: tap **Columns** to move a column up or down with the arrows or turn its **Show** off; each
+  change shows at once and stays on this device, for this station; one column always shows. Spanish
+  the same («Columnas», «Subir», «Bajar», «Mostrar»; read the `es` block's `station.*` words
+  before writing); Spanish only in the Spanish file.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`
+  and `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md**, in "The kitchen screen's cards": the "line above the columns"
+  sentence becomes the header row (D1: drawn by `till-station-queue` with a `lead` slot the screen
+  fills, the counts line, Columns at its end; the merged board's row holds no station); replace
+  "A layout's `hidden` list is stored but not yet drawn." with: a hidden column is not drawn and its
+  cards still count in the header line; Columns opens `till-kitchen-columns-dialog`
+  (`apps/till/src/widgets/kitchen-columns-dialog.ts`): one row per column the board draws, ↑ and ↓
+  named "Move up <column>", a Show switch, the last shown switch disabled with its reason; each
+  change applied and saved at once (`moveColumn`, `setColumnVisible`), so it takes no draft scope
+  and has no `*.unsaved.test.ts`; Done and Escape only close.
+- [ ] **Step 4: Backlog.** Both A797 entries: slice 9b (each kitchen board's header row with
+  Columns; the Columns window to order and hide columns, kept on the device) in review; next, slice
+  9c. After the merge, a docs-only commit on `main` says "landed in #N". Open no new entry unless
+  the LOOK finds something this slice does not fix (its number from
+  `~/waitron-campaign-shared/next-item-number`: read it, use it, write the next back).
+- [ ] **Step 5: Design file**, after §3.3's "Column order is not changed on the live screen"
+  bullet: "_2026-10-27, slice 9b: each board has its own header row, with Columns at its end; the
+  corner keeps theme and language above the boards; a move or a Show tap applies at once and Done
+  only closes; the last shown column cannot be hidden; see the build plan's slice 9b, D1–D3._"
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-9b — guides, design system and backlog for the kitchen screen's Columns"`
+
+### Task 5 (visual): LOOK at the header row and the Columns window
+
+Dispatched as one foreground subagent (`run_in_background: false`), not an implementer (it changes
+no code), as slice 9's LOOK was run (its scripts: `/Users/clintongormley/waitron-campaign-c/a797-9-scripts/`).
+It writes its report to `/Users/clintongormley/waitron-campaign-c/a797-9b-look-report.md`.
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-9b-columns-panel`; `wa-wt ls` for
+  the URLs. Enrol one browser context as a kitchen display showing the demo's kitchen station
+  screen, and one till context signed in, as slice 9's LOOK did. Make food so every column holds a
+  card, one of them late (slice 8's LOOK Step 2: lower the station's Waiting, Overdue and
+  Forgotten after to 1, 2 and 3 minutes, noting the values first and putting them back after).
+- [ ] **Step 2: Look** with the workspace's Playwright Chromium (the script in
+  `/Users/clintongormley/waitron-campaign-c/a797-9b-scripts/`, never in the worktree, its process id
+  recorded), at **1280 px** and **1024 px** on the kitchen display and **390 px** on the till's
+  Station screen, **light and dark**, **English and Spanish**:
+  - the header row: the name, today's control, the counts line and Columns on one row at 1280 and
+    1024; how it wraps at 390;
+  - the window open: the rows, the disabled ↑ and ↓ at the ends, the switches, the note, Done;
+    «Columnas», «Subir», «Bajar», «Mostrar», «Hecho»;
+  - Ready moved first: the board behind the window changes at once; **reload the page**: kept;
+  - Waiting and Preparing hidden: Ready's switch disabled with "One column always shows" under its
+    name; the board draws Ready only;
+  - Waiting hidden while it holds the late card: the header line still says "1 late" (D3);
+  - keyboard: Tab to Columns, Enter opens, Tab through the arrows, Enter moves and the focus stays
+    on the moved row (D6), Escape closes and the focus is back on Columns;
+  - a two-station display stacked, then merged (if the demo allows one): each board's own row and
+    window, the merged window naming both stations;
+  - set the 1280 px light English pictures beside picture 03
+    (`docs/backlog/mockups/a797-device-screens/03-kitchen-screen.png`) and the window beside picture
+    07 (`07-columns-settings.png`), and describe each difference in the report: the corner on its own
+    row, today's control not a chip, no ×, "Show" after the switch, no "Order and show", "Chosen
+    on this device", no Overview or Held are expected (D1, D2, D5, D10; later slices); anything else
+    is a finding.
+- [ ] **Step 3: Save** each picture as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-9b-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, and describe what was seen in the report, the
+  ledger and the PR body. Put back every demo setting changed, and leave the device's columns as
+  the demo had them (Waiting, Preparing, Ready, all shown).
+- [ ] **Step 4: Stop** what you started: the script's process by its recorded id, then
+  `wa-wt down waitron-feat-a797-9b-columns-panel`.
+
+### Closing slice 9b
+
+- Focused runs per task as above; CI runs the till's package suites and coverage (and the
+  server's for the guides). Read the `changes` job's outputs and the till's coverage or merge job
+  on the current head before calling the PR green. Code this slice leaves unreached is deleted,
+  never excluded (Global constraints).
+- `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read and one
+  Codex run-it review.
+- PR body. First line: no venue reset. Then: **What a cook sees** (each board's header row with
+  Columns; the window's arrows and Show switches, applied at once and kept on the device; the last
+  column cannot be hidden); **Decisions** D1–D10 in one line each; **Changed test checks** (the
+  four above, with the probe's receipt); **New words** (one); **LOOK**.
+- **Owner FYIs** (one line each in the PR and lane C's questions file): D1 (on a kitchen display
+  the corner's theme and language stay in a row above the boards, and each board has its own
+  header row with Columns, so picture 03's single row is two; a one-station display now shows its
+  station's name; today's control is still a sentence and a button, not a chip); D2 (each tap
+  applies and is kept at once; Done only closes; no ×); D3 (the last shown column cannot be
+  hidden; a hidden column's late card still counts in "1 late" and has no other mark, beside slice
+  9 D14's question); D5 (the one new phrase, "One column always shows" «Siempre se muestra una
+  columna»; "Chosen on this device" in place of "Kept on this screen"; no "Order and show"); D10
+  ("Show" drawn after the switch).
+- **Owner questions:** none. D3's late card in a hidden column joins slice 9 D14's open question
+  rather than asking a second one.
+- In lane C's questions file, one line for lane G: slice 9b holds `station-queue.ts` and
+  `till-station-screen.ts` until it lands; `apps/till/src/widgets/kitchen-columns-dialog.ts` takes a
+  layout and a map of column names and sends `column-move`, `column-show` and `close`, so A773-2's
+  pass can list its own columns in it; Other stations' dishes would be a second section the pass
+  adds; a key added to `STATION_COLUMNS` must also be drawn and named (D4's test).
+- After merge: delete the branch local and remote and check the remote one is gone; the backlog's
+  "landed in #N" commit; update the ledger; then slice 9c, in turn with lane G.
 
 ---
 
