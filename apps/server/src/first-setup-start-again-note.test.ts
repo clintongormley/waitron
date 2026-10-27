@@ -1047,6 +1047,84 @@ it("until Task 10b, with the database present and the setup password, a damaged 
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
+async function presentDamagedPicks(options: { seat?: boolean } = {}) {
+  const base = await abandonedAttempt();
+  const { f } = base;
+  await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const recovered = await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  await stampAfterName(f);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const owner = {
+    attemptId: recovered.state.attemptId,
+    revision: recovered.state.revision,
+    ownerGeneration: recovered.state.ownerGeneration,
+    capability: recovered.capability,
+  };
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const modules =
+    options.seat === false
+      ? f.host.modules!.map((module) =>
+          module.name !== f.module
+            ? module
+            : {
+                ...module,
+                provisioning: {
+                  ...module.provisioning,
+                  initialSetup: {
+                    ...module.provisioning!.initialSetup!,
+                    startAgainFloor: undefined,
+                  },
+                },
+              },
+        )
+      : f.host.modules;
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules } });
+  const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
+  const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
+  return { ...base, actions, owner, ids, timeFloorMs };
+}
+
+it("with the database present and the setup password, a damaged kept picks file gets a summary naming it, and Start again still refuses until Task 10b", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  expect(await answered.json()).toEqual({
+    reached: "named",
+    lastName: name,
+    unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+  });
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({ ...ids, owner, register: startRequest.register }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+});
+
+it("with the database present, a damaged kept picks file still needs the recovered owner before the summary answers", async () => {
+  const { f, actions, ids } = await presentDamagedPicks();
+  const response = await postSummary(routes(f, actions), ids, ownerHeaders(f.ownerAttempt));
+  expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+});
+
+it("with the database present, a damaged kept picks file of a frozen module with no start-again seat leaves the summary refused", async () => {
+  const { f, actions, owner, ids } = await presentDamagedPicks({ seat: false });
+  const response = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+
 it.each([
   [
     "lacks the unreadable records",

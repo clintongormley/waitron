@@ -403,7 +403,16 @@ export function createFirstSetupResolutionActions(
           const recovery = found?.kind === "stopped" ? found.shown : undefined;
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
-          if (inspection.database !== "missing" && recovery === undefined) unavailable();
+          const presentPicksOnly = inspection.database !== "missing" && recovery === undefined;
+          if (presentPicksOnly) {
+            const attempt = await host.store.readForRepair().catch(() => null);
+            if (
+              attempt === null ||
+              host.modules === undefined ||
+              !(await seriesPicksUnreadable(roots, host.modules, frozenModuleNames(attempt.state)))
+            )
+              unavailable();
+          }
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
           if (
@@ -424,6 +433,7 @@ export function createFirstSetupResolutionActions(
             found?.kind === "stopped" ? found.floor : null,
             inspection.database === "missing",
           );
+          if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
           return summaryOf(retained.state, gathered, recovery);
         }),
       );
