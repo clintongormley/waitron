@@ -1057,7 +1057,7 @@ may predate that branch:
   them, kept on the device; every column may be hidden and Columns stays) landed in #2135, from the
   plan's slice 9b. Slice 9c (Overview, the first kitchen column, counting each dish to make with
   the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
-  card's tab, and its collapsed column, carry a red bar) is delivered from the plan's slice 9c; it
+  card's tab, and its collapsed column, carry a red bar) landed in #2144, from the plan's slice 9c; it
   builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
   A773-2's pass reuses. What is left of A797: slices 10–11 once A803's slice 3 lands, and 12b after
   A773-2 (slice 12 is A773-2's own). Build slices (design §8), in the owner's

@@ -141,7 +141,7 @@ come after the list above:
   shows them, kept on the device) landed in #2135, from the build plan's slice 9b. Slice 9c
   (Overview, the first kitchen column, counting each dish to make with the held after a +; below
   the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its
-  collapsed column, carry a red bar) is delivered from the build plan's slice 9c. What is left of
+  collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of
   A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2, which builds the pass's
   part: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
@@ -2761,7 +2761,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, slice 8b (short names on kitchen cards) in #2126, slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) in #2129, and slice 9b (the Columns window) in #2135. Slice 9c (Overview, the first kitchen column, counting each dish to make with the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its collapsed column, carry a red bar) is delivered from the build plan's slice 9c. What is left of A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2:
+  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, slice 8b (short names on kitchen cards) in #2126, slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) in #2129, and slice 9b (the Columns window) in #2135. Slice 9c (Overview, the first kitchen column, counting each dish to make with the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
