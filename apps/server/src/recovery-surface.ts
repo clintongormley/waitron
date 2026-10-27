@@ -530,7 +530,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "Start again was moving files aside and has not finished.",
       action:
-        "Some of the files may already be in the set-aside folder; none has been deleted. Press Retry a normal boot to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside.",
+        "Some of the files may already be in the set-aside folder; none has been deleted. Press “Retry a normal boot” to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside.",
     },
     "es-ES": {
       title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",

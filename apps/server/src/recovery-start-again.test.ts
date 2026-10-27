@@ -249,6 +249,20 @@ describe("renderStartAgainSection", () => {
     expect(radios[1]).toContain("checked");
   });
 
+  it("names the page's Retry button in full and quoted in every English message that sends you to it", () => {
+    const text = START_AGAIN_PAGE_TEXT["en-GB"];
+    for (const [kind, message] of Object.entries({
+      filesChanged: text.filesChanged,
+      notOffered: text.notOffered,
+      diskFull: text.diskFull,
+      notFinished: text.notFinished,
+      moveUnfinished: OPERATOR_TEXT["setup.start_again_move_unfinished"]?.["en-GB"].action,
+    })) {
+      expect(message, kind).toContain("Press “Retry a normal boot”");
+      expect(message, kind).not.toMatch(/Press Retry\b/);
+    }
+  });
+
   it("shows each message in both languages in its place", () => {
     const fieldOf = (html: string, id: string) =>
       html.match(new RegExp(`<p id="${id}">([^<]*)</p>`))?.[1];

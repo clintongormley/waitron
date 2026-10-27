@@ -85,19 +85,19 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     throttled: (n) =>
       `Too many wrong passwords. Try again in ${n === 1 ? "1 minute" : `${n} minutes`}. Nothing was changed.`,
     filesChanged:
-      "The files on the box have changed since this page was opened. Nothing was changed. Press Retry to see them as they are now.",
+      "The files on the box have changed since this page was opened. Nothing was changed. Press “Retry a normal boot” to see them as they are now.",
     notOffered:
-      "This choice is no longer offered. Nothing was changed. Press Retry to see the current page.",
+      "This choice is no longer offered. Nothing was changed. Press “Retry a normal boot” to see the current page.",
     insecure: "Open this page over the box's secure connection to choose. Nothing was changed.",
     otherPage: "This choice must be sent from this page. Nothing was changed.",
     busy: "Another Waitron program is using the box's files. Nothing was changed. Wait a moment, then press Continue again.",
     diskFull:
-      "The box's disk is full, so the choice could not be saved. Nothing was moved. Press Retry: as it starts, the box frees space by clearing its own temporary copies, old logs and crash reports. Then choose again. If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
+      "The box's disk is full, so the choice could not be saved. Nothing was moved. Press “Retry a normal boot”: as it starts, the box frees space by clearing its own temporary copies, old logs and crash reports. Then choose again. If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
     moveUnavailable:
       "These files cannot be moved aside on this box: the system treats the folder they are in and the box's folder for moved files as separate disks, and Start again never copies files. Nothing was changed. Keep everything and stop is still available.",
     notSaved: "The box could not save the choice. Nothing was moved. Press Continue to try again.",
     notFinished:
-      "Start again could not finish. The files it found are unchanged. Press Retry: the box carries on as it starts.",
+      "Start again could not finish. The files it found are unchanged. Press “Retry a normal boot”: the box carries on as it starts.",
     moved: (folder) =>
       `Start again has finished. The files are in ${folder}. Waitron is restarting into a new first setup; reload this page in a minute.`,
   },

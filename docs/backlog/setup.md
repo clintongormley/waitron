@@ -591,6 +591,18 @@ draw after a recorded Move is not answered as unfinished, and still restarts onc
 app sets no error handler. Wanted: both routes log a failed restart and keep serving the page, and
 the draw failure answers a page that says the choice was recorded.
 
+## A1153: the recovery page's Retry restarts nothing if the browser disconnects before the answer arrives
+
+Left open by A1098 (owner, 2026-10-27: file it, give it the Move's fix). `POST
+/recovery-api/retry` asks for its restart only on the answer's `'finish'` event
+(`apps/server/src/recovery-surface.ts`, unchanged since 2026-09-09 per `git blame`). A browser that
+drops the connection first closes the response without `'finish'`, so the box would stay on the page
+without restarting. The Move had the same shape and was fixed in #2131 by `afterResponse` in
+`apps/server/src/recovery-start-again.ts`: restart once on whichever comes first of the answer
+finishing, the connection closing, or a connection already over. For the Retry this was read, not
+run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
+once-only restart, with a test that closes the connection before the answer is written.
+
 ## A1130: a renewal from the open recovery page extends the backup-recovery session's 15 minutes
 
 Left open by A1042 (#2101). The box's backup-recovery session (from A731) ends after 15 minutes

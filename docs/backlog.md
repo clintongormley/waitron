@@ -523,6 +523,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   after a recorded choice answers a bare 500.** Both recovery-page routes. Left open by A1098.
   [Detail](backlog/setup.md#a1149-a-failed-restart-after-retry-or-a-move-exits-the-process-and-a-page-that-fails-to-draw-after-a-recorded-choice-answers-a-bare-500)
 
+- **A1153: the recovery page's Retry restarts nothing if the browser disconnects before the answer
+  arrives.** Give it the once-only restart the Move got in #2131. Read, not run. Left open by A1098.
+  [Detail](backlog/setup.md#a1153-the-recovery-pages-retry-restarts-nothing-if-the-browser-disconnects-before-the-answer-arrives)
+
 - **A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery
   waits.** `/setup-api/provision` is outside the recovery's write fence. Read, not run. Left open by
   A1042.
