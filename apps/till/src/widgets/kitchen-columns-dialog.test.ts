@@ -108,7 +108,12 @@ describe("the Columns window", () => {
         const show = `${t("station.columns_show")} ${ready}`;
         if (locale === "en-GB")
           expect([up, down, show]).toEqual(["Move up Ready", "Move down Ready", "Show Ready"]);
-        else expect([up, down, show]).not.toContain("Move up Ready");
+        else {
+          expect(t("station.columns_move_up")).not.toBe("Move up");
+          expect(t("station.columns_move_down")).not.toBe("Move down");
+          expect(t("station.columns_show")).not.toBe("Show");
+          expect(ready).not.toBe("Ready");
+        }
         await mount();
         await expect
           .element(page.getByRole("button", { name: up, exact: true }))
@@ -194,9 +199,9 @@ describe("the Columns window", () => {
     setLocale("es-ES");
     try {
       const { el } = await mount();
-      expect([t("station.columns"), t("station.columns_done"), t("station.columns_kept")]).toEqual(
-        expect.not.arrayContaining(["Columns", "Done", "Chosen on this device"]),
-      );
+      expect(t("station.columns")).not.toBe("Columns");
+      expect(t("station.columns_done")).not.toBe("Done");
+      expect(t("station.columns_kept")).not.toBe("Chosen on this device");
       await expect
         .element(page.getByRole("dialog", { name: t("station.columns"), exact: true }))
         .toBeInTheDocument();

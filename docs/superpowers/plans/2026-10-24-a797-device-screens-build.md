@@ -7685,7 +7685,8 @@ implementer runs", the lead runs it.
 
 **What it changes.** On a kitchen screen (a kitchen display, or the till's Station screen) **each
 board gets one header row**: the station's name, its Open/Closed-for-today control, the line "6
-dishes to make · 1 late", and at the row's end a **Columns** button («Columnas»). Columns opens a
+dishes to make · 1 late", and at the row's end a **Columns** button («Columnas») (which of the
+station's parts each board's row holds, and where: D1). Columns opens a
 window titled "Columns" with the board's name under it, one row per column in the board's order:
 its number, its name, ↑ (named "Move up Ready", «Subir Listo») and ↓ ("Move down Ready", «Bajar
 Listo»), and a **Show** switch («Mostrar»). Each tap changes the board behind the window at once

@@ -134,7 +134,8 @@ set to reduce motion. A card whose dishes are all held is dashed, shows no minut
 
 A row above the columns shows how many dishes are still to make and how many cards are late, and
 **Columns** at its end; above a single station's columns it also shows whether the station is open
-today, and on a kitchen screen the station's name. Tap **Columns** to arrange the
+today, and on a kitchen screen that nobody signs in on, the station's name (unless the station is
+no longer available: then the line above its columns names it). Tap **Columns** to arrange the
 columns: the arrows move a column up or down the list, which is the order the screen shows them in,
 and **Show** hides or shows it. Each change shows at once and stays on this device; **Done** closes
 the window. A hidden column's cards still count in the row. With every column hidden, the row and

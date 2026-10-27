@@ -482,6 +482,8 @@ named.
    taps the dish, and the card moves to Ready only when the entrecot is ready too. The runners take
    food from the pass, so he has collapsed Ready to its heading, "Ready · 3"; it stays collapsed
    after a restart. The head chef set the column order once, in corner → Columns.
+   _2026-10-27, slice 9b: Columns is at the end of each board's header row; see the build plan's
+   slice 9b, D1._
 5. **Marta, the pass.** Held shows T7's desserts, held. T4's mains arrive under To fire, labelled
    Next course, "waiting 0 min". She checks the starters have gone out and taps Fire; the card moves
    to **In progress** with each dish's state; in the same group "Vino tinto · Ready · Bar" is dimmed,
