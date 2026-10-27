@@ -20,7 +20,7 @@ import {
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import type { SeedLocale } from "./menu.js";
+import type { SeedLocale } from "./locale.js";
 import { demoLanguagesFor, type DemoDataSet, type SeedCatalogue } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
@@ -42,7 +42,11 @@ type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
   upstairsBar: string;
 };
 
-async function resolveStationIds(tx: Transaction, locationId: string): Promise<StationIds> {
+async function resolveStationIds(
+  tx: Transaction,
+  locationId: string,
+  names: DemoDataSet["stations"],
+): Promise<StationIds> {
   const { rows: defaults } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${locationId} and is_default = 1 and active = 1
@@ -52,7 +56,7 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
     throw new Error(`seedCatalogues: no default station found for location ${locationId}`);
   }
   await tx.execute(sql`
-    update kitchen_stations set name = 'Kitchen', colour = 'orange'
+    update kitchen_stations set name = ${names.kitchen}, colour = 'orange'
     where id = ${kitchen}`);
   // Seed scripts have no management session, so insert directly — through the table definition,
   // because the insert BUILDER generates `kitchen_stations.id` and `created_at`.
@@ -60,9 +64,9 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
     .insert(kitchenStations)
     .values(
       [
-        { name: "Downstairs bar", colour: "blue" as const },
-        { name: "Upstairs bar", colour: "indigo" as const },
-        { name: "Deli counter", colour: "green" as const },
+        { name: names.downstairsBar, colour: "blue" as const },
+        { name: names.upstairsBar, colour: "indigo" as const },
+        { name: names.deli, colour: "green" as const },
       ].map(({ name, colour }) => ({
         locationId,
         name,
@@ -88,7 +92,7 @@ export async function seedCatalogues(
   tx: Transaction,
   { locationId, locale, dataSet }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
-  const stationIds = await resolveStationIds(tx, locationId);
+  const stationIds = await resolveStationIds(tx, locationId, dataSet.stations);
   const { rows: geography } = await tx.execute<{ province: string | null; country: string }>(sql`
     select l.province, t.country from locations l
     cross join tenants t
@@ -171,7 +175,10 @@ export async function seedCatalogues(
           description:
             product.description === undefined ? undefined : translated(product.description),
           kitchenName: product.kitchenName,
-          dietaryDeclarations: product.dietaryDeclarations,
+          dietaryDeclarations:
+            product.dietaryDeclarations === undefined
+              ? undefined
+              : [...product.dietaryDeclarations],
           ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
@@ -234,13 +241,18 @@ export async function seedCatalogues(
       kind: "section",
       sectionId: drinksRoot,
     });
-  const beerId = productsByImage.get("cana-cerveza.png");
-  if (beerId === undefined) throw new Error("demo-seed: beer product was not created");
-  await updateMenuItem(tx, drinksId, menuItemsByProduct.get(beerId)!, { grossPrice: "3.00" });
-
-  const negroniId = productsByImage.get("negroni.png");
-  if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
-  await addProductToMenu(tx, { menuId: diaId, productId: negroniId, grossPrice: "9.00" });
+  for (const override of dataSet.menuPriceOverrides) {
+    const productId = productsByImage.get(override.productImage);
+    if (productId === undefined)
+      throw new Error(`demo-seed: override product was not created: ${override.productImage}`);
+    if (override.menu === "drinks") {
+      await updateMenuItem(tx, drinksId, menuItemsByProduct.get(productId)!, {
+        grossPrice: override.grossPrice,
+      });
+    } else {
+      await addProductToMenu(tx, { menuId: diaId, productId, grossPrice: override.grossPrice });
+    }
+  }
 
   await assignCatalogueToLocation(tx, locationId, casaId);
   await addCatalogueToLocation(tx, locationId, diaId);

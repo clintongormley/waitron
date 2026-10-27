@@ -1,145 +1,110 @@
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
-import type { CountryDemoIdentity } from "@waitron/country";
+import type { PersonRoleValue } from "@waitron/identity";
+import type { AdjustmentReasonInput } from "@waitron/adjustments";
+import type {
+  CountryDemoIdentity,
+  CountryDemoData,
+  CountryDemoProduct,
+  CountryDemoCategory,
+  CountryDemoCatalogue,
+  CountryDemoReason,
+  CountryDemoPerson,
+  CountryDemoProductOptionLists,
+  CountryDemoProductExtraLists,
+} from "@waitron/country";
+import {
+  DEMO_DATA_SETS as COUNTRY_DEMO_DATA_SETS,
+  DEFAULT_DEMO_DATA_SET_ID,
+} from "@waitron/country-packs/demo";
 import {
   getCountryPack,
   resolveInstalledStartingContentLanguages,
   type StartingContentLanguages,
   type VenueGeography,
 } from "@waitron/country-packs";
-import type { SeedLocale } from "./menu.js";
-import type { SeedTable, SeedZone } from "./floor.js";
-import type { SeedPerson } from "./staff.js";
+import { decimal } from "@waitron/shared";
+import { onGrid, type SeedRawTable, type SeedTable, type SeedZone } from "./floor.js";
 import type { SeedReason } from "./seed-adjustments.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
-
-// In a module of its own: `seed-adjustments.ts` uses it, and `data-sets/casa-delgado-es.ts`, which
-// this file imports, imports `seed-adjustments.ts`.
+import type { SeedLocale } from "./locale.js";
 export { inLanguages } from "./in-languages.js";
-
-/** The language staff-facing plain names are written in; the staff apps exist in these two. */
+export type { DemoText } from "@waitron/country";
 export type StaffLanguage = SeedLocale;
 export type StaffText = Readonly<Record<StaffLanguage, string>>;
-
-/** A customer-facing text in every language `L` of its data set. English and Spanish are always
- * among them, because the writers take staff names out of these maps by the seed's language, and
- * with no `noUncheckedIndexedAccess` a missing one would still compile. */
-export type DemoText<L extends string> = Readonly<Record<L | SeedLocale, string>>;
-
-/** Where `staffName` is given it DELIBERATELY differs from the customer-facing name, so a screen
- * showing the wrong one of the three names is visible; omitted, `seedCatalogues` falls back to the
- * seeded locale's customer-facing name. */
-export interface SeedProduct<L extends string = string> {
-  customerName: DemoText<L>;
-  staffName?: string;
-  description?: DemoText<L>;
-  kitchenName?: string;
-  dietaryDeclarations?: DietaryLabel[];
-  unit?: {
-    staffName: string;
-    staffAbbreviation: string;
-    name: DemoText<L>;
-    precision: number;
-    abbreviation: DemoText<L>;
-  };
-  variants?: {
-    customerName: DemoText<L>;
-    staffName?: string;
-    kitchenName?: string;
-    /** The variant's own price, or null to sell at its parent's. */
-    unitPrice: string | null;
-    available: boolean;
-  }[];
-  pricingUnit: PricingUnit;
-  /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. A two-place decimal string;
-   * `createProduct` converts it to a count of whole cents at the row. */
-  unitPrice: string;
-  vatClass: VatClass;
-  /** The committed PNG basename under `media/`. */
-  image: string;
-}
-
-export interface SeedCategory<L extends string = string> {
-  /** The section's customer-facing name. */
-  name: DemoText<L>;
-  /** The reporting category's name, when it cannot be the English section name: categories with
-   * one parent must not share a name, while two menus may each have a section called the same. */
-  categoryName?: string;
-  color: string;
-  station: "kitchen" | "bar" | "deli" | null;
-  products: SeedProduct<L>[];
-}
-
-export interface SeedCatalogue<L extends string = string> {
-  /** The menu's staff name. */
-  name: StaffText;
-  customerName: DemoText<L>;
-  categories: SeedCategory<L>[];
-}
-
-// Staff `name`, `customerName` and `kitchenName` are DIFFERENT text on every list and label, so a
-// surface reading the wrong one of the three shows the wrong words (CLAUDE.md §3).
-
-export interface SeedOptionLabel<L extends string = string> {
-  name: string;
-  customerName: DemoText<L>;
-  kitchenName: string;
-  /** Preselected when the list is asked; at most one label of a list carries it. */
-  preselected?: boolean;
-}
-
-export interface SeedOptionList<L extends string = string> {
-  name: string;
-  customerName: DemoText<L>;
-  kitchenName: string;
-  labels: SeedOptionLabel<L>[];
-}
-
-export interface SeedProductOptionLists<L extends string = string> {
-  productImage: string;
-  lists: SeedOptionList<L>[];
-}
-
-export interface SeedProductExtraLists<L extends string = string> {
-  productImage: string;
-  lists: {
-    name: string;
-    customerName: DemoText<L>;
-    kitchenName: string;
-    minPicks: number;
-    maxPicks: number;
-    items: { productImage: string; price: string; portion: string; maxQuantity: number }[];
-  }[];
-}
-
-/** What a demo seed writes from one data set; a pack names one by `id`. */
-export interface DemoDataSet<L extends string = string> {
-  readonly id: string;
-  /** Every language this set has text in. */
-  readonly contentLanguages: readonly L[];
+export type SeedProduct<L extends string = string> = Omit<
+  CountryDemoProduct<L>,
+  "dietaryDeclarations" | "pricingUnit" | "vatClass"
+> & {
+  readonly dietaryDeclarations?: readonly DietaryLabel[];
+  readonly pricingUnit: PricingUnit;
+  readonly vatClass: VatClass;
+};
+export type SeedCategory<L extends string = string> = Omit<
+  CountryDemoCategory<L>,
+  "station" | "products"
+> & {
+  readonly station: "kitchen" | "bar" | "deli" | null;
+  readonly products: readonly SeedProduct<L>[];
+};
+export type SeedCatalogue<L extends string = string> = Omit<
+  CountryDemoCatalogue<L>,
+  "categories"
+> & { readonly categories: readonly SeedCategory<L>[] };
+export type SeedProductOptionLists<L extends string = string> = CountryDemoProductOptionLists<L>;
+export type SeedProductExtraLists<L extends string = string> = CountryDemoProductExtraLists<L>;
+export type SeedPerson = Omit<CountryDemoPerson, "role"> & { readonly role: PersonRoleValue };
+type RawReason<L extends string = string> = Omit<
+  CountryDemoReason<L>,
+  "kind" | "actions" | "applyRoles" | "approverRoles"
+> & {
+  readonly kind: AdjustmentReasonInput["kind"];
+  readonly actions: readonly AdjustmentReasonInput["actions"][number][];
+  readonly applyRoles: readonly AdjustmentReasonInput["applyRoles"][number][];
+  readonly approverRoles: readonly AdjustmentReasonInput["approverRoles"][number][];
+};
+export type StrictCountryDemoData<L extends string = string> = Omit<
+  CountryDemoData<L>,
+  "menus" | "floor" | "staff" | "adjustmentReasons"
+> & {
   readonly menus: {
     readonly restaurant: SeedCatalogue<L>;
     readonly deli: SeedCatalogue<L>;
     readonly lunch: SeedCatalogue<L>;
     readonly drinksName: StaffText;
-    readonly drinksCustomerName: DemoText<L>;
+    readonly drinksCustomerName: CountryDemoData<L>["menus"]["drinksCustomerName"];
   };
-  readonly productOptionLists: readonly SeedProductOptionLists<L>[];
-  readonly productExtraLists: readonly SeedProductExtraLists<L>[];
-  readonly floor: {
+  readonly floor: Omit<CountryDemoData<L>["floor"], "zones" | "tables"> & {
     readonly zones: readonly SeedZone[];
-    readonly tables: readonly SeedTable[];
-    readonly departmentNames: { readonly restaurant: StaffText; readonly deli: StaffText };
-    readonly upstairsBarZone: StaffText;
-    readonly deliCounterZone: StaffText;
+    readonly tables: readonly SeedRawTable[];
   };
   readonly staff: readonly SeedPerson[];
-  readonly adjustmentReasons: readonly SeedReason<L>[];
-}
-
-export const DEMO_DATA_SETS: Readonly<Record<string, DemoDataSet>> = {
-  [CASA_DELGADO_ES.id]: CASA_DELGADO_ES,
+  readonly adjustmentReasons: readonly RawReason<L>[];
 };
-
+export type DemoDataSet<L extends string = string> = Omit<
+  StrictCountryDemoData<L>,
+  "floor" | "adjustmentReasons"
+> & {
+  readonly floor: Omit<StrictCountryDemoData<L>["floor"], "tables"> & {
+    readonly tables: readonly SeedTable[];
+  };
+  readonly adjustmentReasons: readonly SeedReason<L>[];
+};
+const strictRegistry: Readonly<Record<string, StrictCountryDemoData>> = COUNTRY_DEMO_DATA_SETS;
+function adapt(set: StrictCountryDemoData): DemoDataSet {
+  return {
+    ...set,
+    floor: { ...set.floor, tables: set.floor.tables.map(onGrid) },
+    adjustmentReasons: set.adjustmentReasons.map((reason) => ({
+      ...reason,
+      maxAmount: reason.maxAmount === null ? null : decimal(reason.maxAmount),
+      actions: [...reason.actions],
+      applyRoles: [...reason.applyRoles],
+      approverRoles: [...reason.approverRoles],
+    })),
+  };
+}
+export const DEMO_DATA_SETS: Readonly<Record<string, DemoDataSet>> = Object.fromEntries(
+  Object.entries(strictRegistry).map(([id, set]) => [id, adapt(set)]),
+);
 /** Throws for an id no data set has; `data-set.test.ts` holds that every pack's id resolves. */
 export function demoDataSet(id: string): DemoDataSet {
   if (!Object.hasOwn(DEMO_DATA_SETS, id)) throw new Error(`demoDataSet: no demo data set "${id}"`);
@@ -153,10 +118,8 @@ export function demoContentLanguages(geography: VenueGeography): DemoLanguages {
   return resolveInstalledStartingContentLanguages(geography);
 }
 
-const FALLBACK_DEMO_DATA_SET_ID = "casa-delgado-es";
-
 export function demoDataSetFor(identity: CountryDemoIdentity): DemoDataSet {
-  return demoDataSet(identity.dataSet ?? FALLBACK_DEMO_DATA_SET_ID);
+  return demoDataSet(identity.dataSet ?? DEFAULT_DEMO_DATA_SET_ID);
 }
 
 /** A fallback demo defaults to English, by the owner's decision for a country with no demo data of

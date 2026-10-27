@@ -24,6 +24,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./demo/testing": "./src/demo-testing.ts"
+    "./demo/testing": "./src/demo-testing.ts",
+    "./demo": "./src/demo.ts"
   }
 }

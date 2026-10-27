@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createOptionList, writeProductModifiers } from "@waitron/catalogue";
 import type { ProductModifierRef } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
-import type { SeedLocale } from "./menu.js";
+import type { SeedLocale } from "./locale.js";
 import type { DemoDataSet } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 

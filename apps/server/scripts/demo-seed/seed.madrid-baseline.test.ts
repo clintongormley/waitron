@@ -12,7 +12,7 @@ import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing
 import { getCountryPack } from "@waitron/country-packs";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { seedDemoRestaurant } from "./seed.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 afterEach(() => vi.useRealTimers());

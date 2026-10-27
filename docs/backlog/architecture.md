@@ -460,8 +460,10 @@ until A977).
   supply English and Spanish plain names, then add Catalonia with the Balearic
   Islands, Valencia and Galicia in separate changes. The first cut has an
   independently captured Madrid database baseline for English and Spanish, with
-  row, relationship, credential and media checks; the data move itself remains
-  open. All five build cuts remain open. Regional restaurant defaults follow the
+  row, relationship, credential and media checks. Its data and unchanged picture
+  bytes now live behind the country pack's secondary demo export; shared server
+  writers adapt its structural records to domain types.
+  The remaining cuts supply plain names, Catalonia/Balearic data, Valencia and Galicia. Regional restaurant defaults follow the
   province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.

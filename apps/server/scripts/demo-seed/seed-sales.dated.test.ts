@@ -12,7 +12,7 @@ import { planVenue } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { localCalendarDate } from "@waitron/catalogue";
 import { ALL_MODULES } from "../../src/modules.js";
-import { SEED_INVOICE_LOCALE } from "./menu.js";
+import { SEED_INVOICE_LOCALE } from "./locale.js";
 import { seedSales } from "./seed-sales.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;

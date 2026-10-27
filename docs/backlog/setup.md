@@ -203,8 +203,8 @@ covers only the label's centring.
 ## The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN
 
 Every customer-facing text
-in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
-`data-sets/casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
+in `casa-delgado-es` (`packages/country-es/src/demo/menu.ts`, `reasons.ts`,
+`casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
 wrote them until Task 4 (W109-4), which now does in the areas that use them. The PR carries the side-by-side table. A speaker of each should
 read it; the drafter was least sure of the Galician "Charcutaría", "Lombo embuchado", "Ventrecha de
 bonito", "Luras á romana", "Polbo á feira", "Café só", "Tortilla de patacas" and the doneness

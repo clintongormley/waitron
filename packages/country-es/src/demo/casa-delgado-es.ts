@@ -1,20 +1,34 @@
-import type { DemoDataSet } from "../data-set.js";
+import type { CountryDemoData } from "@waitron/country";
 import {
   CASA_DELGADO,
   DELI_TAKEAWAY,
   MENU_DEL_DIA,
   PRODUCT_OPTION_LISTS,
   PRODUCT_EXTRA_LISTS,
-} from "../menu.js";
-import { DEMO_TABLES, DEMO_ZONES } from "../floor.js";
-import { DEMO_STAFF } from "../staff.js";
-import { DEMO_ADJUSTMENT_REASONS } from "../seed-adjustments.js";
+} from "./menu.js";
+import { DEMO_TABLES, DEMO_ZONES } from "./floor.js";
+import { DEMO_STAFF } from "./staff.js";
+import { DEMO_ADJUSTMENT_REASONS } from "./reasons.js";
 
 export const CASA_DELGADO_LANGUAGES = ["es", "en", "ca", "ca-ES-valencia", "gl"] as const;
 export type CasaDelgadoLanguage = (typeof CASA_DELGADO_LANGUAGES)[number];
 
-export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
+export const CASA_DELGADO_ES = {
   id: "casa-delgado-es",
+  mediaDataSet: "casa-delgado-es",
+  stations: {
+    kitchen: "Kitchen",
+    downstairsBar: "Downstairs bar",
+    upstairsBar: "Upstairs bar",
+    deli: "Deli counter",
+  },
+  printerName: "Demo printer",
+  specialDayName: "Christmas Day",
+  menuPeriodName: "Open",
+  menuPriceOverrides: [
+    { menu: "drinks", productImage: "cana-cerveza.png", grossPrice: "3.00" },
+    { menu: "lunch", productImage: "negroni.png", grossPrice: "9.00" },
+  ],
   contentLanguages: CASA_DELGADO_LANGUAGES,
   menus: {
     restaurant: CASA_DELGADO,
@@ -32,6 +46,7 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
   productOptionLists: PRODUCT_OPTION_LISTS,
   productExtraLists: PRODUCT_EXTRA_LISTS,
   floor: {
+    setName: { en: "Standard", es: "Estándar" },
     zones: DEMO_ZONES,
     tables: DEMO_TABLES,
     departmentNames: {
@@ -43,4 +58,4 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
   },
   staff: DEMO_STAFF,
   adjustmentReasons: DEMO_ADJUSTMENT_REASONS,
-};
+} as const satisfies CountryDemoData<CasaDelgadoLanguage>;

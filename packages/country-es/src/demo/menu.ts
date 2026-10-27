@@ -1,28 +1,12 @@
-// Demo menu content for the Casa Delgado seed: plausibility, not fiscal or culinary accuracy, is
-// the bar. Each `image` basename is unique across the catalogues, because `seedCatalogues` maps
-// image to product id. The VAT classes are mixed on purpose, so one basket's per-rate breakdown is
-// non-trivial.
-
 import type {
-  SeedCatalogue,
-  SeedCategory,
-  SeedProductOptionLists,
-  SeedProductExtraLists,
-} from "./data-set.js";
-import type { CasaDelgadoLanguage } from "./data-sets/casa-delgado-es.js";
+  CountryDemoCatalogue,
+  CountryDemoCategory,
+  CountryDemoProductOptionLists,
+  CountryDemoProductExtraLists,
+} from "@waitron/country";
+import type { CasaDelgadoLanguage } from "./casa-delgado-es.js";
 
-type Catalogue = SeedCatalogue<CasaDelgadoLanguage>;
-
-export type SeedLocale = "en" | "es";
-
-export const SEED_INVOICE_LOCALE: Record<SeedLocale, string> = {
-  en: "en-GB",
-  es: "es-ES",
-};
-
-// This list's staff names are Spanish because a staff name is one plain string, never translated
-// at read time.
-export const PRODUCT_OPTION_LISTS: SeedProductOptionLists<CasaDelgadoLanguage>[] = [
+export const PRODUCT_OPTION_LISTS = [
   {
     productImage: "solomillo.png",
     lists: [
@@ -75,9 +59,9 @@ export const PRODUCT_OPTION_LISTS: SeedProductOptionLists<CasaDelgadoLanguage>[]
       },
     ],
   },
-];
+] as const satisfies readonly CountryDemoProductOptionLists<CasaDelgadoLanguage>[];
 
-export const PRODUCT_EXTRA_LISTS: SeedProductExtraLists<CasaDelgadoLanguage>[] = [
+export const PRODUCT_EXTRA_LISTS = [
   {
     productImage: "pollo-asado.png",
     lists: [
@@ -101,9 +85,9 @@ export const PRODUCT_EXTRA_LISTS: SeedProductExtraLists<CasaDelgadoLanguage>[] =
       },
     ],
   },
-];
+] as const satisfies readonly CountryDemoProductExtraLists<CasaDelgadoLanguage>[];
 
-const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
+const COMBINED_CASA_DELGADO_CATEGORIES = [
   {
     name: {
       en: "Charcuterie",
@@ -807,9 +791,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
       },
     ],
   },
-];
+] as const satisfies readonly CountryDemoCategory<CasaDelgadoLanguage>[];
 
-export const CASA_DELGADO: Catalogue = {
+export const CASA_DELGADO = {
   name: { en: "Casa Delgado", es: "Casa Delgado" },
   customerName: {
     en: "Our menu",
@@ -819,9 +803,9 @@ export const CASA_DELGADO: Catalogue = {
     gl: "A nosa carta",
   },
   categories: COMBINED_CASA_DELGADO_CATEGORIES.slice(3),
-};
+} as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
 
-export const DELI_TAKEAWAY: Catalogue = {
+export const DELI_TAKEAWAY = {
   name: { en: "Deli takeaway", es: "Charcutería para llevar" },
   customerName: {
     en: "Cured meats and cheese to take away",
@@ -834,9 +818,9 @@ export const DELI_TAKEAWAY: Catalogue = {
     ...category,
     station: "deli",
   })),
-};
+} as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
 
-export const MENU_DEL_DIA: Catalogue = {
+export const MENU_DEL_DIA = {
   name: { en: "Menú del Día", es: "Menú del Día" },
   customerName: {
     en: "Lunch menu",
@@ -965,4 +949,4 @@ export const MENU_DEL_DIA: Catalogue = {
       ],
     },
   ],
-};
+} as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;

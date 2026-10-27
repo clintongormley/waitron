@@ -25,9 +25,9 @@ import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
 import * as salesSeed from "./seed-sales.js";
-import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
+import { CASA_DELGADO_ES } from "./testing/data.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";

@@ -1,6 +1,6 @@
 // Demo floor-plan content for the Casa Delgado seed: plausibility rather than accuracy is the bar.
 
-import type { SeedLocale } from "./menu.js";
+import type { SeedLocale } from "./locale.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 
 /** `key` joins a {@link SeedTable} to its zone; it has no DB counterpart (the real
@@ -24,7 +24,7 @@ export interface SeedTable {
   fixed: boolean;
 }
 
-type PermilleTable = Omit<SeedTable, "placement" | "fixed">;
+export type SeedRawTable = Omit<SeedTable, "placement" | "fixed">;
 
 const GRID_WIDTH = 120;
 const GRID_HEIGHT = 80;
@@ -38,7 +38,7 @@ function sizeFor(capacity: number): { width: number; height: number } {
 
 /** `posX`/`posY` is the table's centre in thousandths of the canvas; a placement's `x`/`y` is its
  *  top-left corner. The bar seats are stools fixed to the floor. */
-function onGrid(table: PermilleTable): SeedTable {
+export function onGrid(table: SeedRawTable): SeedTable {
   const fixed = table.zoneKey === "bar";
   const { width, height } = fixed ? { width: 2, height: 2 } : sizeFor(table.capacity);
   const corner = (permille: number, span: number, size: number): number =>
@@ -56,134 +56,3 @@ function onGrid(table: PermilleTable): SeedTable {
     },
   };
 }
-
-export const DEMO_ZONES: SeedZone[] = [
-  { key: "dining", name: { en: "Dining room", es: "Comedor" }, displayOrder: 0 },
-  { key: "terrace", name: { en: "Terrace", es: "Terraza" }, displayOrder: 1 },
-  { key: "bar", name: { en: "Downstairs bar", es: "Bar de abajo" }, displayOrder: 2 },
-];
-
-const PERMILLE_TABLES: PermilleTable[] = [
-  {
-    label: "1",
-    zoneKey: "dining",
-    capacity: 2,
-    posX: 120,
-    posY: 100,
-    shape: "round",
-    rotation: 0,
-  },
-  {
-    label: "2",
-    zoneKey: "dining",
-    capacity: 2,
-    posX: 280,
-    posY: 100,
-    shape: "round",
-    rotation: 0,
-  },
-  {
-    label: "3",
-    zoneKey: "dining",
-    capacity: 4,
-    posX: 120,
-    posY: 220,
-    shape: "square",
-    rotation: 0,
-  },
-  {
-    label: "4",
-    zoneKey: "dining",
-    capacity: 4,
-    posX: 280,
-    posY: 220,
-    shape: "square",
-    rotation: 0,
-  },
-  {
-    label: "5",
-    zoneKey: "dining",
-    capacity: 4,
-    posX: 120,
-    posY: 350,
-    shape: "square",
-    rotation: 45,
-  },
-  {
-    label: "6",
-    zoneKey: "dining",
-    capacity: 4,
-    posX: 280,
-    posY: 340,
-    shape: "square",
-    rotation: 0,
-  },
-  {
-    label: "7",
-    zoneKey: "dining",
-    capacity: 6,
-    posX: 120,
-    posY: 490,
-    shape: "rect",
-    rotation: 90,
-  },
-  {
-    label: "8",
-    zoneKey: "dining",
-    capacity: 8,
-    posX: 280,
-    posY: 490,
-    shape: "rect",
-    rotation: 90,
-  },
-  {
-    label: "T1",
-    zoneKey: "terrace",
-    capacity: 2,
-    posX: 650,
-    posY: 120,
-    shape: "round",
-    rotation: 0,
-  },
-  {
-    label: "T2",
-    zoneKey: "terrace",
-    capacity: 2,
-    posX: 800,
-    posY: 120,
-    shape: "round",
-    rotation: 0,
-  },
-  {
-    label: "T3",
-    zoneKey: "terrace",
-    capacity: 4,
-    posX: 650,
-    posY: 280,
-    shape: "square",
-    rotation: 0,
-  },
-  {
-    label: "T4",
-    zoneKey: "terrace",
-    capacity: 4,
-    posX: 800,
-    posY: 280,
-    shape: "square",
-    rotation: 0,
-  },
-  {
-    label: "T5",
-    zoneKey: "terrace",
-    capacity: 6,
-    posX: 725,
-    posY: 440,
-    shape: "rect",
-    rotation: 90,
-  },
-  { label: "B1", zoneKey: "bar", capacity: 2, posX: 150, posY: 750, shape: "rect", rotation: 0 },
-  { label: "B2", zoneKey: "bar", capacity: 2, posX: 450, posY: 750, shape: "rect", rotation: 0 },
-  { label: "B3", zoneKey: "bar", capacity: 2, posX: 750, posY: 750, shape: "rect", rotation: 0 },
-];
-
-export const DEMO_TABLES: SeedTable[] = PERMILLE_TABLES.map(onGrid);

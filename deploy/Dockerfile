@@ -219,7 +219,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/dist/drizzle/ /app/dr
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
-COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/media/ /app/demo-media/
+COPY --from=build --chown=waitron:waitron /src/packages/country-es/demo-media/ /app/demo-media/
 COPY --from=build --chown=waitron:waitron /sharp-runtime/node_modules/ /app/node_modules/
 COPY --from=build --chown=waitron:waitron /src/apps/server/dist/node_modules/@waitron/ /app/node_modules/@waitron/
 COPY --from=build --chown=waitron:waitron /src/deploy/third-party/ /app/third-party/
