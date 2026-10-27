@@ -120,6 +120,7 @@ allow.
 ## Work the kitchen screen {#kitchen-screen}
 
 The kitchen screen shows a card for each group of dishes a table sent, and one for each counter
+order. A card names its table by the table's short name, or reads **Counter #12** for a counter
 order. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
 **Ready**, with the card that has waited longest first. Tap a dish to move it on one step, or tap
 the card's heading to move the card on: only the dishes holding it back move, so a dish already

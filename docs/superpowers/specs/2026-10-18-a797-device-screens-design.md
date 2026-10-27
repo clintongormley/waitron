@@ -326,6 +326,9 @@ A757's fast speed.
   further on; a whole-ticket station's dish tap moves that card's dishes at its stage; the card ages
   from its own fired dishes and keeps whole minutes; the header line sits above the columns until
   slice 9b's header row; see the build plan's slice 8, D4, D6, D8, D9._
+  _2026-10-27, slice 8b: a counter order delivered to a table names the table ("#12 T4"), not
+  "Counter #12"; a bill's label is not shown beside its table's short name; see the build plan's
+  slice 8b, D2, D3._
 - **The Tickets view goes**, with its Board/Tickets switch: the card is the ticket. Merged/Stacked
   stays for a screen showing several stations.
 - **Tap a column's heading to collapse it** (Q42 (e)): a collapsed column keeps its heading and
