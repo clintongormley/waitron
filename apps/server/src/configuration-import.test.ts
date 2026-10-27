@@ -836,14 +836,14 @@ describe("routing cells in a staged import", () => {
 
   it("refuses a deleted department before its routing cell, and writes nothing", async () => {
     const { bundle, versions } = await exported();
-    const comedor = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
-    expect(comedor.active).toBe(1);
+    const diningRoom = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
+    expect(diningRoom.active).toBe(1);
     const switchedOff: ConfigurationBundle = {
       ...bundle,
       tables: {
         ...bundle.tables,
         departments: bundle.tables.departments!.map((row) =>
-          row === comedor ? { ...row, active: 0 } : row,
+          row === diningRoom ? { ...row, active: 0 } : row,
         ),
       },
     };
@@ -879,15 +879,15 @@ describe("routing cells in a staged import", () => {
 
   it("refuses a deleted department without routing cells, and deleted zones too, and writes nothing", async () => {
     const { bundle, versions } = await exported();
-    const comedor = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
-    expect(comedor.active).toBe(1);
-    const terraza = bundle.tables.floor_zones!.find((row) => row.name === "Terraza")!;
+    const diningRoom = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
+    expect(diningRoom.active).toBe(1);
+    const terrace = bundle.tables.floor_zones!.find((row) => row.name === "Terraza")!;
     const withoutCell: ConfigurationBundle = {
       ...bundle,
       tables: {
         ...bundle.tables,
         departments: bundle.tables.departments!.map((row) =>
-          row === comedor ? { ...row, active: 0 } : row,
+          row === diningRoom ? { ...row, active: 0 } : row,
         ),
         routing_cells: bundle.tables.routing_cells!.filter((row) => row.zone_id === null),
       },
@@ -922,18 +922,18 @@ describe("routing cells in a staged import", () => {
     );
     expect(tenants.rows[0]!.count).toBe(0);
 
-    const comedorZones = new Set(
+    const diningRoomZones = new Set(
       withoutCell.tables
-        .zone_service_policies!.filter((row) => row.department_id === comedor.id)
+        .zone_service_policies!.filter((row) => row.department_id === diningRoom.id)
         .map((row) => row.zone_id),
     );
-    expect(comedorZones.has(terraza.id)).toBe(true);
+    expect(diningRoomZones.has(terrace.id)).toBe(true);
     const zonesOff: ConfigurationBundle = {
       ...withoutCell,
       tables: {
         ...withoutCell.tables,
         floor_zones: withoutCell.tables.floor_zones!.map((row) =>
-          comedorZones.has(row.id) ? { ...row, active: 0 } : row,
+          diningRoomZones.has(row.id) ? { ...row, active: 0 } : row,
         ),
       },
     };
