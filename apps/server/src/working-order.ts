@@ -1274,7 +1274,8 @@ type StoredLineRow = {
 /**
  * Read a persisted order's STORED lines, snapshotted at add time, so every path that files a
  * persisted order files the same locked composition and a later catalogue price or VAT change never
- * moves the filed total.
+ * moves the filed total. Bound portions come back grouped into the row their round was priced as
+ * (`projectPortionSale`); an order holding no bound line is returned line for line, ungrouped.
  *
  * Refuses a LINELESS order with `sale.empty_basket`: an empty tab is a reachable state, and this is
  * the last check before its pay or place reaches a fiscal write or a card charge.
@@ -1293,7 +1294,8 @@ export async function readLockedLines(
   return groupedByPortion(rows, toStoredLines(rows));
 }
 
-/** {@link readLockedLines} before portions are grouped, with whether each line may be paid now. */
+/** {@link readLockedLines}'s rows, `grouped`, and each working line ungrouped with whether it may be
+ * paid now, `lines`. */
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
@@ -1404,9 +1406,10 @@ export interface OrderLineIdentity {
   classification: SaleLineClassification | null;
   /** The unit price before a comp or a discount changed it, or null. */
   listUnitGross: Decimal | null;
-  /** On a row grouped from bound portions: every working line it stands for, `id` first. */
+  /** Set on every row of an order holding a bound portion: every working line the row stands for,
+   * `id` first. Absent on every row of an order holding none. */
   lineIds?: string[];
-  /** On a row grouped from bound portions, dish or extra: the portions it stands for. */
+  /** Beside `lineIds`: the portions the row stands for, a dish's or its extra's; empty on an unbound line. */
   portionIds?: string[];
 }
 
@@ -1479,13 +1482,13 @@ export async function readStoredOrder(
 
 /**
  * A persisted order's gross lines to issue an invoice from: each line's stored gross unit price and
- * stored VAT class, which `issueMoment` rates on the day the invoice is issued. Returns each line's
- * working-order identity for `issuancePass`, and refuses a lineless order (see
- * {@link readLockedLines}).
+ * stored VAT class, which `issueMoment` rates on the day the invoice is issued, with bound portions
+ * grouped as {@link readLockedLines} groups them. Returns each row's working-order identity for
+ * `issuancePass`, and refuses a lineless order.
  *
  * A line never sent whose product cannot be sold now is refused `product.unavailable`:
  * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
- * availability. `refuseUnsentUnavailable: false` is for a payment the card network has already
+ * availability. Each working line is judged on its own, before grouping. `refuseUnsentUnavailable: false` is for a payment the card network has already
  * captured, which is filed as it stands.
  */
 export async function priceStoredOrderForIssuance(

@@ -9,6 +9,7 @@ import {
   saleLinePortions,
   saleLines,
   sales,
+  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -489,6 +490,62 @@ describe("A803 portions: filing a bill of portions", () => {
       ["Cheese (customer)", "2", []],
     ]);
     expect(portions).toHaveLength(1);
+  });
+
+  it("A803 portions: an off-sale portion not yet sent refuses the issuance, though the first of its row was sent", async () => {
+    const { billId, portions } = await seed(sweets("2"));
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ sentAt: new Date().toISOString() })
+        .where(eq(workingOrderLines.id, portions[0]!.lineId)),
+    );
+    await inTx(venue, (tx) =>
+      tx.update(products).set({ available: false }).where(eq(products.id, ids.sweet)),
+    );
+    try {
+      await expect(
+        issueOrderInvoice(venue, venue.cfg, billId, venue.operatorId),
+      ).rejects.toMatchObject({ code: "product.unavailable" });
+    } finally {
+      await inTx(venue, (tx) =>
+        tx.update(products).set({ available: true }).where(eq(products.id, ids.sweet)),
+      );
+    }
+  });
+
+  it("A803 portions: an order with no bound line keeps its stored row order, an extra after another dish included", async () => {
+    const billId = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `O-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      });
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+      const priced = await priceTabRound(
+        tx,
+        venue.cfg,
+        tabId,
+        [...burgersWithCheese("1"), ...croquetas("1")],
+        "checked",
+      );
+      // The cheese numbered after the croqueta, as an extra added to a sent dish is.
+      const [burger, cheese, croqueta] = priced.rows;
+      await insertTabRound(tx, venue.cfg, priced, [
+        burger!,
+        { ...croqueta!, lineNo: cheese!.lineNo },
+        { ...cheese!, lineNo: croqueta!.lineNo },
+      ]);
+      return tabId;
+    });
+
+    const stored = await inTx(venue, (tx) => readStoredOrder(tx, billId));
+
+    expect(stored.gross.lines.map((line) => [line.name, line.parentLineNo ?? null])).toEqual([
+      ["Burger", null],
+      ["Croqueta", null],
+      ["Cheese", 1],
+    ]);
+    expect(stored.identities.every((identity) => identity.lineIds === undefined)).toBe(true);
   });
 
   it("A803 portions: a refused issuance leaves no sale and no link row", async () => {
