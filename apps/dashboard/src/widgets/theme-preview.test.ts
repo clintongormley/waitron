@@ -421,6 +421,21 @@ it("each panel draws its text at the theme's sizes", async () => {
   }
 });
 
+it("each panel draws its ordinary text at the draft's Normal weight", async () => {
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme({ ...LUCIA_DARK_FIX, text: { weight: { normal: 800 } } }),
+    name: "Bar Lucía",
+  });
+  for (const mode of ["light", "dark"] as const) {
+    const box = panel(el, mode);
+    expect([
+      mode,
+      getComputedStyle(box.querySelector(".field-value")!).fontWeight,
+      getComputedStyle(box.querySelector(".nav-item:not(.selected)")!).fontWeight,
+    ]).toEqual([mode, "800", "800"]);
+  }
+});
+
 it("a mounted preview's till button and bill line follow a change of text size", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),

@@ -72,6 +72,7 @@ export class ThemePreview extends LitElement {
         border-radius: var(--wt-radius-lg);
         font-family: var(--wt-font-family);
         font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-normal);
       }
       .strip {
         display: flex;

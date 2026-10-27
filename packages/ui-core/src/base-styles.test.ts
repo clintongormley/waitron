@@ -95,3 +95,55 @@ test("a component's own weight wins even when its styles come before baseStyles"
     root.remove();
   }
 });
+
+class PlainProbe extends LitElement {
+  static override styles = baseStyles;
+  override render() {
+    return html`<span>plain</span>`;
+  }
+}
+customElements.define("base-styles-plain-probe", PlainProbe);
+
+class BoldHostProbe extends LitElement {
+  static override styles = baseStyles;
+  override render() {
+    return html`<strong><base-styles-plain-probe></base-styles-plain-probe></strong>`;
+  }
+}
+customElements.define("base-styles-bold-host-probe", BoldHostProbe);
+
+/** A page root that draws ordinary text at the Normal weight, as each app's `index.html` does. */
+function pageRoot(normal: string, bold: string): HTMLElement {
+  const root = document.createElement("div");
+  root.style.setProperty("--wt-font-weight-normal", normal);
+  root.style.setProperty("--wt-font-weight-bold", bold);
+  root.style.fontWeight = "var(--wt-font-weight-normal)";
+  document.body.append(root);
+  return root;
+}
+
+test("ordinary text in a component draws the page root's Normal weight", async () => {
+  const root = pageRoot("800", "600");
+  const probe = document.createElement("base-styles-plain-probe") as PlainProbe;
+  root.append(probe);
+  try {
+    await probe.updateComplete;
+    expect(getComputedStyle(probe.shadowRoot!.querySelector("span")!).fontWeight).toBe("800");
+  } finally {
+    root.remove();
+  }
+});
+
+test("a component with no weight of its own, drawn inside bold text, stays bold", async () => {
+  const root = pageRoot("400", "800");
+  const outer = document.createElement("base-styles-bold-host-probe") as BoldHostProbe;
+  root.append(outer);
+  try {
+    await outer.updateComplete;
+    const inner = outer.shadowRoot!.querySelector<PlainProbe>("base-styles-plain-probe")!;
+    await inner.updateComplete;
+    expect(getComputedStyle(inner.shadowRoot!.querySelector("span")!).fontWeight).toBe("800");
+  } finally {
+    root.remove();
+  }
+});
