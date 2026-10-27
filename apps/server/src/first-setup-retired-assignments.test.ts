@@ -684,6 +684,47 @@ it.each([
     await expectTimeFloorNote(f);
   },
 );
+it.each([
+  ["an entry that is not an object", null],
+  [
+    "an entry with an extra key",
+    {
+      attemptId: "kept-attempt",
+      revision: 1,
+      ownerGeneration: 1,
+      module: MODULE,
+      current: null,
+      extra: true,
+    },
+  ],
+])(
+  "a readable public hour beside %s in the public record still goes into the note, and bounds the name the chooser picks",
+  async (_which, bad) => {
+    const f = await fixture(42, request.taxId, "production", false, 1, {
+      legacy: {
+        version: 1,
+        modules: {},
+        history: [
+          {
+            attemptId: "kept-attempt",
+            revision: 1,
+            ownerGeneration: 1,
+            module: MODULE,
+            current: retainedHour(42, "W1", 120_000),
+          },
+          bad,
+        ],
+      },
+      stampAtMs: STAMP_AT_MS,
+    });
+    const pickedMs = instant(42) + 120_000;
+    expect(pickedMs).toBeGreaterThan(TIME_FLOOR_MS);
+    expect(f.shown).toMatchObject({
+      unreadable: { records: ["public-record"], floorMs: pickedMs + 60_000 },
+    });
+    await expectNoteBounds(f, "0CR2T", true);
+  },
+);
 it.each(["reuse", "later"])(
   "ordinary hour preparation retains earlier abandoned events for %s",
   async (which) => {

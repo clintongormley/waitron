@@ -13,11 +13,11 @@ vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
   return {
     ...actual,
-    readModulePreparationHistory: (
-      ...args: Parameters<typeof actual.readModulePreparationHistory>
+    readWellFormedModulePreparations: (
+      ...args: Parameters<typeof actual.readWellFormedModulePreparations>
     ) =>
       reader.fail === null
-        ? actual.readModulePreparationHistory(...args)
+        ? actual.readWellFormedModulePreparations(...args)
         : Promise.reject(reader.fail),
   };
 });
@@ -146,4 +146,40 @@ it("a damaged picks file counts only for a module with a Start again floor seat"
 it("an intact picks file is not unreadable for any module", async () => {
   await picks({ version: 1, entries: [] });
   expect(await seriesPicksUnreadable(roots, [fiscal, seatless], ["no-seat", MODULE])).toBe(false);
+});
+it.each([
+  [
+    "a row the hour seat refuses",
+    { binding: binding(MODULE), value: { version: 1, entries: [{}] } },
+  ],
+  ["a revision whose binding is malformed", { binding: { module: MODULE }, value: {} }],
+])(
+  "a readable chosen-name row beside %s is kept, and the picks file is still unreadable",
+  async (_which, bad) => {
+    const row = chosenName("2026-10-16T15:00:00.000Z");
+    await writePicks(
+      JSON.stringify({ version: 1, revisions: [{ binding: binding(MODULE), value: row }, bad] }),
+    );
+    expect(await readSeriesPicks(roots, MODULE, seat)).toEqual({
+      preparations: [row],
+      unreadable: true,
+    });
+    expect(await seriesPicksUnreadable(roots, [fiscal], [MODULE])).toBe(true);
+  },
+);
+it("a malformed revision of another module still makes this module's picks unreadable, keeping its rows", async () => {
+  const row = chosenName("2026-10-16T15:00:00.000Z");
+  await writePicks(
+    JSON.stringify({
+      version: 1,
+      revisions: [
+        { binding: binding(MODULE), value: row },
+        { binding: { ...binding("other-module"), eventId: "" }, value: {} },
+      ],
+    }),
+  );
+  expect(await readSeriesPicks(roots, MODULE, seat)).toEqual({
+    preparations: [row],
+    unreadable: true,
+  });
 });

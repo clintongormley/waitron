@@ -4,7 +4,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
 import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
-import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
+import {
+  createFirstFiscalEvidence,
+  readFirstFiscalEvidenceSnapshot,
+  readWellFormedFirstFiscalEvidence,
+} from "./first-fiscal-evidence.js";
 
 const fixtures: Awaited<ReturnType<typeof firstFiscalFixture>>[] = [];
 async function fixture() {
@@ -370,4 +374,54 @@ it("participates in an already held complete callback without queueing itself", 
     await f.evidence.confirm(f.ownerAttempt, MODULE, f.current, token, hold);
     expect(await f.evidence.read(f.context.binding)).toEqual({ trust: f.key, current: f.current });
   });
+});
+
+const PUBLIC_RECORD = "state/module-operation-public.json";
+const snapshot = (value: unknown) => [
+  {
+    name: PUBLIC_RECORD,
+    bytes: Buffer.from(typeof value === "string" ? value : JSON.stringify(value)),
+  },
+];
+const entry = (module: string, current: unknown) => ({
+  attemptId: "attempt-1",
+  revision: 1,
+  ownerGeneration: 1,
+  module,
+  current,
+});
+it("the well-formed read of a public record the strict read refuses keeps this module's well-formed entries", () => {
+  const originals = snapshot({
+    version: 1,
+    modules: { "Not A Name": {} },
+    extra: true,
+    history: [
+      entry("fiscal-verifactu", { n: 1 }),
+      null,
+      { ...entry("fiscal-verifactu", { n: 2 }), extra: true },
+      { ...entry("fiscal-verifactu", { n: 3 }), revision: 1.5 },
+      { ...entry("fiscal-verifactu", { n: 4 }), ownerGeneration: "1" },
+      { ...entry("fiscal-verifactu", { n: 5 }), attemptId: 1 },
+      { ...entry("fiscal-verifactu", { n: 6 }), module: 1 },
+      entry("other-module", { n: 7 }),
+      entry("fiscal-verifactu", { n: 8 }),
+    ],
+  });
+  expect(() => readFirstFiscalEvidenceSnapshot("fiscal-verifactu", originals)).toThrow();
+  expect(readWellFormedFirstFiscalEvidence("fiscal-verifactu", originals)).toEqual([
+    { n: 1 },
+    { n: 8 },
+  ]);
+});
+it.each([
+  ["no public record", []],
+  ["text that is not JSON", snapshot("{damaged")],
+  ["a top-level list", snapshot([])],
+  ["a history that is not a list", snapshot({ version: 1, modules: {}, history: {} })],
+  [
+    "a record over the size limit",
+    snapshot({ version: 1, modules: {}, history: [entry("fiscal-verifactu", "x".repeat(70_000))] }),
+  ],
+])("the well-formed read of %s is empty", (_which, originals) => {
+  expect(readWellFormedFirstFiscalEvidence("fiscal-verifactu", originals)).toEqual([]);
 });

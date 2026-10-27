@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,6 +29,7 @@ import {
   finishStartAgainDeletion,
   raiseStartAgainNote,
   readModulePreparationHistory,
+  readWellFormedModulePreparations,
   readStartAgainMarker,
   readStartAgainNote,
   startAgainMarkerFor,
@@ -44,6 +45,7 @@ import {
   EPOCH_MS,
   MINUTE_MS,
   decodeMinuteIdentity,
+  encodeMinuteIdentity,
 } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { publicHourSelectionHistory } from "@waitron/fiscal-verifactu/src/hour-selection.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
@@ -72,7 +74,11 @@ import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
-  return { ...actual, raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote) };
+  return {
+    ...actual,
+    raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote),
+    readWellFormedModulePreparations: vi.fn(actual.readWellFormedModulePreparations),
+  };
 });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -1236,6 +1242,164 @@ it("with the database present and the setup password, a damaged kept picks file 
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
+type Fixture = Awaited<ReturnType<typeof abandonedAttempt>>["f"];
+const pickBinding = (f: Fixture, eventId: string) => ({
+  module: f.module,
+  action: "select-hour",
+  eventId,
+  sourceId: "later-source",
+  targetNodeId: "later-node",
+});
+/** A chosen-name revision the hour module reads on its own, naming the minute at `atMs`. */
+function pickRevision(f: Fixture, atMs: number) {
+  const binding = pickBinding(f, "later-event");
+  const value = {
+    version: 1,
+    entries: [
+      {
+        kind: "intent",
+        binding,
+        operatorId: "owner-1",
+        scope: { taxpayerNif: request.taxId, environment: "production" },
+        bases: [
+          { code: "A", purpose: "standard" },
+          { code: "FF", purpose: "full" },
+          { code: "R", purpose: "rectificative" },
+        ],
+        contextKey: "country/zone/module-version/owner-generation-1",
+        softwareId: "W1",
+        references: [],
+        identity: encodeMinuteIdentity(atMs),
+        issuedAt: new Date(atMs).toISOString(),
+      },
+    ],
+  };
+  expect(publicHourSelectionHistory([value]).records).toHaveLength(1);
+  return { binding, value };
+}
+const PICK_DAMAGE = {
+  none: () => [],
+  "a revision the hour module cannot use": (f: Fixture) => [
+    { binding: pickBinding(f, "unusable-event"), value: { version: 1, entries: [{}] } },
+  ],
+  "a revision whose binding is malformed": (f: Fixture) => [
+    { binding: { module: f.module }, value: {} },
+  ],
+};
+type PickDamage = keyof typeof PICK_DAMAGE;
+/**
+ * An abandoned attempt whose kept picks file also holds a readable pick `pickAfterNameMs` after
+ * the attempt's own name, beside `damage`, stamped as `stampAfterName` does.
+ */
+async function attemptWithLaterPick(
+  database: "missing" | "present",
+  damage: PickDamage,
+  pickAfterNameMs: number,
+) {
+  const base =
+    database === "missing"
+      ? await damagedPicksAttempt({ picks: false, recoveryRecord: false })
+      : await presentDamagedPicks({ damaged: false });
+  const { f } = base;
+  const pickMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + pickAfterNameMs;
+  const file = JSON.parse(await readFile(picksFile(f), "utf8")) as { revisions: unknown[] };
+  file.revisions.push(pickRevision(f, pickMs), ...PICK_DAMAGE[damage](f));
+  await writeFile(picksFile(f), JSON.stringify(file));
+  await stampAfterName(f);
+  const damaged = damage !== "none";
+  const shown =
+    database === "missing" || damaged
+      ? await base.actions.startAgainSummary({ ...base.ids, owner: base.owner })
+      : undefined;
+  await base.actions.startAgainFirstSetup({
+    ...base.ids,
+    owner: base.owner,
+    register: base.startRequest.register,
+    ...(database === "missing"
+      ? { confirmMissingDatabase: { nothingFiledOrSold: true as const, shown: shown! } }
+      : damaged
+        ? { confirmUnreadable: { shown: shown! } }
+        : {}),
+  });
+  return { ...base, pickMs, pickName: encodeMinuteIdentity(pickMs), shown };
+}
+
+it.each(
+  (["missing", "present"] as const).flatMap((database) =>
+    (Object.keys(PICK_DAMAGE) as PickDamage[]).map((damage) => ({ database, damage })),
+  ),
+)(
+  "with the database $database, a readable pick later than the file times beside $damage keeps its name in the note, and the next setup never chooses it",
+  async ({ database, damage }) => {
+    const later = await attemptWithLaterPick(
+      database,
+      damage,
+      PICKS_AFTER_NAME_MS + 60 * MINUTE_MS,
+    );
+    const { f, clock, pickMs, pickName, shown } = later;
+    expect(pickMs).toBeGreaterThan(later.timeFloorMs);
+    expect(await readStartAgainNote(f.stateDir)).toEqual({
+      version: 1,
+      floorMs: pickMs + MINUTE_MS,
+      lastName: pickName,
+      module: "fiscal-verifactu",
+    });
+    if (shown !== undefined)
+      expect(shown).toEqual({
+        reached: "named",
+        lastName: pickName,
+        ...(damage !== "none" && {
+          unreadable: { records: ["series-picks"], floorMs: pickMs + MINUTE_MS },
+        }),
+      });
+    const next = createFirstSetupModuleHost({
+      stateDir: f.stateDir,
+      venueDir: f.venueDir,
+      modules: f.modules,
+      environment: {},
+      database: () => suite.db,
+    });
+    const claim = await next.owner.claimFirstSetup(
+      { environment: "production", request: { ...request } },
+      randomBytes(32).toString("base64url"),
+    );
+    vi.setSystemTime(pickMs - 2 * MINUTE_MS);
+    await expect(
+      selectPastWaits(clock, () =>
+        compareAndSelect(next, { ...claim.state, capability: claim.capability }),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: pickMs + MINUTE_MS },
+    });
+  },
+);
+
+it.each(["missing", "present"] as const)(
+  "with the database %s, a readable pick earlier than the file times beside a revision the hour module cannot use leaves the time floor in the note, and the summary names the pick",
+  async (database) => {
+    const later = await attemptWithLaterPick(
+      database,
+      "a revision the hour module cannot use",
+      30 * MINUTE_MS,
+    );
+    const { f, pickMs, pickName, timeFloorMs, shown } = later;
+    expect(pickMs + MINUTE_MS).toBeLessThan(timeFloorMs);
+    expect(decodeMinuteIdentity(pickName)).toBeGreaterThan(decodeMinuteIdentity(later.name));
+    expect(await readStartAgainNote(f.stateDir)).toEqual({
+      version: 1,
+      floorMs: timeFloorMs,
+      lastName: null,
+      module: "fiscal-verifactu",
+    });
+    expect(shown).toEqual({
+      reached: "named",
+      lastName: pickName,
+      unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+    });
+  },
+);
+
 async function expectPresentNothingWritten(
   f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
   before: Awaited<ReturnType<typeof folderTrees>>,
@@ -1490,6 +1654,15 @@ it("with the database present, a summary whose attempt read throws is refused se
 it("with the database present, picks the first read finds damaged but the gather reads as intact leave the summary refused setup.not_ready", async () => {
   const { f, owner, ids } = await presentDamagedPicks({ damaged: false });
   let picksReads = 0;
+  const reader = vi.mocked(readWellFormedModulePreparations);
+  const read = reader.getMockImplementation()!;
+  reader.mockImplementation(async (...args) => {
+    picksReads += 1;
+    return read(...args);
+  });
+  onTestFinished(() => {
+    reader.mockImplementation(read);
+  });
   const modules = f.host.modules!.map((module) => {
     const initialSetup = module.provisioning?.initialSetup;
     if (module.name !== f.module || initialSetup?.startAgainFloor === undefined) return module;
@@ -1501,11 +1674,12 @@ it("with the database present, picks the first read finds damaged but the gather
         initialSetup: {
           ...initialSetup,
           startAgainFloor: (input: Parameters<typeof floor>[0]) => {
-            if (input.attempts.length === 0 && input.publicEvidence.length === 0) {
-              picksReads += 1;
-              if (picksReads === 1)
-                throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
-            }
+            if (
+              input.attempts.length === 0 &&
+              input.publicEvidence.length === 0 &&
+              picksReads === 1
+            )
+              throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
             return floor(input);
           },
         },

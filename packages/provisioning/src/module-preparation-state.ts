@@ -50,16 +50,16 @@ function parse(value: unknown): File {
     !Array.isArray(value.revisions)
   )
     return invalid();
-  for (const revision of value.revisions) {
-    if (
-      !record(revision) ||
-      Object.keys(revision).length !== 2 ||
-      !validBinding(revision.binding) ||
-      !Object.hasOwn(revision, "value")
-    )
-      return invalid();
-  }
+  for (const revision of value.revisions) if (!wellFormedRevision(revision)) return invalid();
   return value as unknown as File;
+}
+function wellFormedRevision(revision: unknown): revision is Revision {
+  return (
+    record(revision) &&
+    Object.keys(revision).length === 2 &&
+    validBinding(revision.binding) &&
+    Object.hasOwn(revision, "value")
+  );
 }
 function snapshot(value: unknown): unknown {
   try {
@@ -80,6 +80,29 @@ export async function readModulePreparationHistory(
   return file.revisions
     .filter((row) => row.binding.module === module)
     .map((row) => structuredClone(row.value));
+}
+/**
+ * The module's well-formed revisions, kept even where the strict read refuses the whole ledger,
+ * for a reader that must keep every name it can still read. `malformed` says some part would be
+ * refused; a refused revision's module cannot be trusted, so it counts against every module.
+ */
+export async function readWellFormedModulePreparations(
+  options: { stateDir: string; venueDir: string },
+  module: string,
+): Promise<{ history: readonly unknown[]; malformed: boolean }> {
+  const value = await readDurableHostJson(
+    join(options.stateDir, "module-preparation-state.json"),
+    LIMIT,
+  );
+  if (value === null) return { history: [], malformed: false };
+  if (!record(value) || !Array.isArray(value.revisions)) return invalid();
+  const revisions = value.revisions as unknown[];
+  const kept = revisions.filter(wellFormedRevision);
+  return {
+    history: kept.filter((row) => row.binding.module === module).map((row) => row.value),
+    malformed:
+      kept.length !== revisions.length || Object.keys(value).length !== 2 || value.version !== 1,
+  };
 }
 export function createModulePreparationState(options: Options) {
   return {

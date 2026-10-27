@@ -33,7 +33,10 @@ import {
   type InitialSetupContribution,
   type WaitronModule,
 } from "@waitron/module";
-import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
+import {
+  readFirstFiscalEvidenceSnapshot,
+  readWellFormedFirstFiscalEvidence,
+} from "./first-fiscal-evidence.js";
 import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
@@ -125,7 +128,7 @@ async function gatherStartAgainFloor(
   for (const module of names) {
     const seat = initialSetupFor(modules, module)?.startAgainFloor;
     if (seat === undefined) continue;
-    let publicEvidence: unknown[] = [];
+    let publicEvidence: unknown[];
     try {
       publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
     } catch (error) {
@@ -134,6 +137,7 @@ async function gatherStartAgainFloor(
         originals.find((entry) => entry.name === PUBLIC_RECORD)?.bytes != null,
         "public-record",
       );
+      publicEvidence = readWellFormedFirstFiscalEvidence(module, originals);
     }
     const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
     let recovery: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;

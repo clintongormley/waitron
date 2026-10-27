@@ -68,35 +68,57 @@ function parsePublicEvidenceFile(value: unknown): PublicEvidenceFile {
     )
       refuse();
   }
-  for (const entry of value.history) {
-    if (
-      !exact(entry, ["attemptId", "revision", "ownerGeneration", "module", "current"]) ||
-      typeof entry.attemptId !== "string" ||
-      typeof entry.module !== "string" ||
-      !Number.isSafeInteger(entry.revision) ||
-      !Number.isSafeInteger(entry.ownerGeneration)
-    )
-      refuse();
-  }
+  for (const entry of value.history) if (!wellFormedHistoryEntry(entry)) refuse();
   return value as unknown as PublicEvidenceFile;
+}
+function wellFormedHistoryEntry(entry: unknown): entry is PublicEvidenceFile["history"][number] {
+  return (
+    exact(entry, ["attemptId", "revision", "ownerGeneration", "module", "current"]) &&
+    typeof entry.attemptId === "string" &&
+    typeof entry.module === "string" &&
+    Number.isSafeInteger(entry.revision) &&
+    Number.isSafeInteger(entry.ownerGeneration)
+  );
+}
+const PUBLIC_RECORD_LIMIT = 64 * 1024;
+function publicRecordBytes(originals: readonly { name: string; bytes: Uint8Array | null }[]) {
+  return originals.find((entry) => entry.name === "state/module-operation-public.json")?.bytes;
 }
 
 export function readFirstFiscalEvidenceSnapshot(
   module: string,
   originals: readonly { name: string; bytes: Uint8Array | null }[],
 ): unknown[] {
-  const bytes = originals.find(
-    (entry) => entry.name === "state/module-operation-public.json",
-  )?.bytes;
+  const bytes = publicRecordBytes(originals);
   if (bytes == null) return [];
   try {
-    if (bytes.length > 64 * 1024) throw new AppError("setup.attempt_invalid", {});
+    if (bytes.length > PUBLIC_RECORD_LIMIT) throw new AppError("setup.attempt_invalid", {});
     return parsePublicEvidenceFile(JSON.parse(Buffer.from(bytes).toString("utf8")))
       .history.filter((entry) => entry.module === module)
       .map((entry) => entry.current);
   } catch {
     throw new AppError("setup.attempt_invalid", {});
   }
+}
+
+/** This module's well-formed entries from a public record the strict read refuses. */
+export function readWellFormedFirstFiscalEvidence(
+  module: string,
+  originals: readonly { name: string; bytes: Uint8Array | null }[],
+): unknown[] {
+  const bytes = publicRecordBytes(originals);
+  if (bytes == null || bytes.length > PUBLIC_RECORD_LIMIT) return [];
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(bytes).toString("utf8"));
+  } catch {
+    return [];
+  }
+  if (!record(value) || !Array.isArray(value.history)) return [];
+  return (value.history as unknown[])
+    .filter(wellFormedHistoryEntry)
+    .filter((entry) => entry.module === module)
+    .map((entry) => entry.current);
 }
 
 export function createFirstFiscalEvidence(options: EvidenceOptions) {
