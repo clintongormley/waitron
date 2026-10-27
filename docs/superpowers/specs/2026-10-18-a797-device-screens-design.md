@@ -633,7 +633,7 @@ Each string that goes is removed in English and Spanish in the same slice.
   289–291) whichever lane builds it.
   _2026-10-27, slice 9: a column missing from a stored layout comes back at its default place,
   with its default hidden and collapsed state, where A773-2's plan (line 101) appends it at the
-  end; see the build plan's slice 9, D3._ A773-2's plan also makes three choices its author made, not
+  end and keeps any hidden or collapsed mark the stored layout had for it; see the build plan's slice 9, D3._ A773-2's plan also makes three choices its author made, not
   the owner, which this design proposes as defaults the owner can change: the profile sets the
   other-station dishes default and a device may override it (Q51 (d)); Held is shown on the pass by
   default; Overview comes first when shown (plan lines 17, 99, 101).

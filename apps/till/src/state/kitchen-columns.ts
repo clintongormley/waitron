@@ -105,7 +105,7 @@ export function saveColumnState(
   try {
     storage.setItem(key, JSON.stringify({ version: VERSION, order, hidden, collapsed }));
   } catch {
-    // A full or refused store saves nothing; the caller still holds the state it passed in.
+    // A full or refused store saves nothing.
   }
 }
 

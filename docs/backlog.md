@@ -1642,7 +1642,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
   Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
-  now collapse Ready to a strip that draws no cards (slice 9, in review)? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
+  collapse Ready to a strip that draws no cards (slice 9)? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
 
 - **The till's own Station and Pass screens, left with nothing to show, say nothing** — a kitchen
   display shows a sentence saying what to do, but a till or handheld whose choice a profile
