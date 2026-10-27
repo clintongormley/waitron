@@ -10030,6 +10030,38 @@ describe("patching the live menu", () => {
     expect(patchButton(failed)).toBeNull();
   });
 
+  function patchHelp(el: MenusScreen): HTMLElement | null {
+    return q(el, '[data-test="patch-live-menu-help"]');
+  }
+
+  it.each([
+    ["en", "/help/en/products#patch-live-menu"],
+    ["es", "/help/es/products#patch-live-menu"],
+  ])(
+    "explains the patch in a help-mode tooltip beside its button, linking to the guide in %s",
+    async (locale, href) => {
+      setLocale(locale);
+      const el = await mountLunch(currentLunch());
+      await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+      const tooltip = patchHelp(el)!;
+      expect(tooltip.tagName).toBe("WT-HELP-TOOLTIP");
+      expect(tooltip.previousElementSibling).toBe(patchButton(el));
+      expect(tooltip.getAttribute("mode")).toBe("help-mode");
+      expect(tooltip.getAttribute("aria-label")).toBe(t("menus.patch_live_help_label"));
+      expect(text(tooltip)).toBe(t("menus.patch_live_help"));
+      expect(tooltip.getAttribute("guide-href")).toBe(href);
+      expect(tooltip.getAttribute("guide-label")).toBe(t("menus.patch_live_help_guide"));
+    },
+  );
+
+  it("shows no patch tooltip where there is no patch button", async () => {
+    const el = await mountLunch(
+      api({ getMenuStatus: vi.fn().mockResolvedValue({ state: "unpublished", clashes: 0 }) }),
+    );
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
+    expect(patchHelp(el)).toBeNull();
+  });
+
   it("opens the patch dialog for the open menu, and again after it closes", async () => {
     const client = currentLunch();
     const el = await mountLunch(client);

@@ -4,6 +4,7 @@ export const GUIDE_LINKS = {
   "products.selling-unit": { page: "products", section: "selling-unit" },
   "products.course": { page: "products", section: "course" },
   "products.variants": { page: "products", section: "variants" },
+  "products.patch-live-menu": { page: "products", section: "patch-live-menu" },
   "staff.own-data": { page: "staff", section: "own-data" },
   "box-status.free-space": { page: "box-status", section: "free-space" },
   "box-status.retry-now": { page: "box-status", section: "retry-now" },

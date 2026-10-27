@@ -2821,6 +2821,10 @@ export const en = {
   "menus.status_loading": "Checking…",
   "menus.status_error": "Could not be checked",
   "menus.patch_live": "Patch live menu…",
+  "menus.patch_live_help_label": "What a patch changes",
+  "menus.patch_live_help":
+    "A patch corrects wording, prices, pictures or VAT classes in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
+  "menus.patch_live_help_guide": "More about patching the live menu",
   "menus.changes": "Changes",
   "menus.changes_link": "Unpublished changes",
   "menu_status.unpublished": "Unpublished",
@@ -6336,6 +6340,10 @@ export const es: Record<StringKey, string> = {
   "menus.status_loading": "Comprobando…",
   "menus.status_error": "No se pudo comprobar",
   "menus.patch_live": "Corregir la carta publicada…",
+  "menus.patch_live_help_label": "Qué cambia una corrección",
+  "menus.patch_live_help":
+    "Una corrección cambia textos, precios, imágenes o clases de IVA en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
+  "menus.patch_live_help_guide": "Más sobre corregir la carta publicada",
   "menus.changes": "Cambios",
   "menus.changes_link": "Cambios sin publicar",
   "menu_status.unpublished": "Sin publicar",

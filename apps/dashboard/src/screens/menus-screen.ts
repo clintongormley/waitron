@@ -24,6 +24,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -82,6 +83,7 @@ import {
 } from "@waitron/catalogue/src/device-home.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { fill, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
@@ -3300,13 +3302,20 @@ export class MenusScreen extends LitElement {
     return html`<span class="live" data-test="menu-status">(${words})</span>${
         live
           ? html`<wt-button
-              variant="secondary"
-              data-test="patch-live-menu"
-              @click=${() => {
-                this.patching = true;
-              }}
-              >${t("menus.patch_live")}</wt-button
-            >`
+                variant="secondary"
+                data-test="patch-live-menu"
+                @click=${() => {
+                  this.patching = true;
+                }}
+                >${t("menus.patch_live")}</wt-button
+              ><wt-help-tooltip
+                mode="help-mode"
+                data-test="patch-live-menu-help"
+                aria-label=${t("menus.patch_live_help_label")}
+                guide-href=${guideHref("products.patch-live-menu")}
+                guide-label=${t("menus.patch_live_help_guide")}
+                >${t("menus.patch_live_help")}</wt-help-tooltip
+              >`
           : nothing
       }`;
   }
