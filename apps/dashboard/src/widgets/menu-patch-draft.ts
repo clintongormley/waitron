@@ -1,6 +1,7 @@
 import { decimal, hasCode, isAppError, toScale, type ContentLanguages } from "@waitron/shared";
 import type {
   DocumentMember,
+  FrozenOffer,
   FrozenOfferedModifier,
   MenuDocument,
 } from "@waitron/catalogue/src/menu-document-types.js";
@@ -52,11 +53,22 @@ function memberNodes(document: MenuDocument, members: readonly DocumentMember[])
   });
 }
 
-/** One node per list however many dishes offer it. A dish's copy of an extras list may hold only
- * some of its items, so the node holds every item any copy holds. */
+function* offersInMenuOrder(
+  document: MenuDocument,
+  members: readonly DocumentMember[],
+): Generator<FrozenOffer> {
+  for (const member of members)
+    if (member.kind === "section") yield* offersInMenuOrder(document, member.members);
+    else if (document.offers[member.menuItemId] !== undefined)
+      yield document.offers[member.menuItemId]!;
+}
+
+/** One node per list however many dishes offer it, in the order the menu first shows one. A dish's
+ * copy of an extras list may hold only some of its items, so the node holds every item any copy
+ * holds. */
 function listNodes(document: MenuDocument): PatchTreeNode[] {
   const lists = new Map<string, { node: PatchTreeNode; seen: Set<string> }>();
-  for (const offer of Object.values(document.offers))
+  for (const offer of offersInMenuOrder(document, document.root.members))
     for (const list of offer.offeredModifiers as FrozenOfferedModifier[]) {
       const key = `${list.kind}:${list.id}`;
       let entry = lists.get(key);
@@ -131,6 +143,8 @@ function sameTranslations(
 /** The changes staged in the patch dialog, each against the live version it was read from. */
 export class MenuPatchDraft {
   private readonly staged = new Map<string, MenuPatchChange>();
+  /** How many staged changes each target has, by `targetKey`. */
+  private readonly perTarget = new Map<string, number>();
 
   constructor(
     private document: MenuDocument,
@@ -149,19 +163,42 @@ export class MenuPatchDraft {
     const live = patchFieldValue(this.document, change.target, change.field, this.languages);
     if (TRANSLATED.has(change.field)) {
       const current = live as Record<string, string> | null;
-      return sameTranslations(
-        mergeOptionalTranslations(current, value as Record<string, string> | null, this.languages),
-        current,
-      );
+      let merged: Record<string, string> | null;
+      try {
+        merged = mergeOptionalTranslations(
+          current,
+          value as Record<string, string> | null,
+          this.languages,
+        );
+      } catch {
+        return false;
+      }
+      return sameTranslations(merged, current);
     }
     if (change.field === "price") return toScale(decimal(value as string), 2) === live;
     return value === live;
   }
 
+  private stage(change: MenuPatchChange): void {
+    const target = targetKey(change.target);
+    const key = `${target}/${change.field}`;
+    if (!this.staged.has(key)) this.perTarget.set(target, (this.perTarget.get(target) ?? 0) + 1);
+    this.staged.set(key, change);
+  }
+
+  private unstage(key: string): void {
+    const change = this.staged.get(key);
+    if (change === undefined) return;
+    this.staged.delete(key);
+    const target = targetKey(change.target);
+    const left = this.perTarget.get(target)! - 1;
+    if (left === 0) this.perTarget.delete(target);
+    else this.perTarget.set(target, left);
+  }
+
   set(change: MenuPatchChange): void {
-    const key = `${targetKey(change.target)}/${change.field}`;
-    if (this.isLive(change)) this.staged.delete(key);
-    else this.staged.set(key, change);
+    if (this.isLive(change)) this.unstage(`${targetKey(change.target)}/${change.field}`);
+    else this.stage(change);
   }
 
   changes(): MenuPatchChange[] {
@@ -169,15 +206,14 @@ export class MenuPatchDraft {
   }
 
   changed(target: MenuPatchTarget): boolean {
-    const key = targetKey(target);
-    return this.changes().some((change) => targetKey(change.target) === key);
+    return this.perTarget.has(targetKey(target));
   }
 
   /** Moves the draft onto a newer live version. A change that version already holds goes without
    * being counted; one `applyMenuPatch` refuses on it is dropped and counted. */
   rebase(document: MenuDocument): { dropped: number } {
     this.document = document;
-    for (const [key, change] of this.staged) if (this.isLive(change)) this.staged.delete(key);
+    for (const [key, change] of this.staged) if (this.isLive(change)) this.unstage(key);
     let dropped = 0;
     for (;;) {
       const entries = [...this.staged];
@@ -192,7 +228,7 @@ export class MenuPatchDraft {
         if (!isAppError(error) || !hasCode(error, "menu_patch.invalid")) throw error;
         // Each refusal names the first change it could not apply, so dropping it and retrying
         // finds every refused change.
-        this.staged.delete(entries[error.params.change]![0]);
+        this.unstage(entries[error.params.change]![0]);
         dropped += 1;
       }
     }

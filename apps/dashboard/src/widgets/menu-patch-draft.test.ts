@@ -169,6 +169,20 @@ describe("patchTree", () => {
     expect(shape(patchTree(document, "Extras and options"))).toEqual(["Water"]);
   });
 
+  it("lists the extras and options in the order the menu shows the dishes offering them", () => {
+    const document = menuDocument(
+      [documentProduct("20", "p-soup"), documentProduct("3", "p-salad")],
+      { "p-soup": "Soup", "p-salad": "Salad" },
+    );
+    document.offers["20"]!.offeredModifiers = [extras("l-z", "Toppings", [])];
+    document.offers["3"]!.offeredModifiers = [extras("l-a", "Dressings", [])];
+    expect(shape(patchTree(document, "Extras and options"))).toEqual([
+      "Soup",
+      "Salad",
+      ["Extras and options", ["Toppings", "Dressings"]],
+    ]);
+  });
+
   it("leaves out a dish the document holds no offer for", () => {
     const document = menuDocument([documentProduct("mi-water", "p-water")], { "p-water": "Water" });
     document.root.members.push(documentProduct("mi-ghost", "p-ghost"));
@@ -201,6 +215,24 @@ describe("MenuPatchDraft", () => {
       { target: soup, field: "price", value: "3.75" },
       { target: soup, field: "name", value: "Broth" },
     ]);
+  });
+
+  it("marks a dish changed until its last changed field is set back", () => {
+    const draft = new MenuPatchDraft(lunch(), languages);
+    draft.set({ target: soup, field: "price", value: "3.50" });
+    draft.set({ target: soup, field: "name", value: "Broth" });
+    draft.set({ target: soup, field: "price", value: "3.00" });
+    expect(draft.changed(soup)).toBe(true);
+    draft.set({ target: soup, field: "name", value: "Soup" });
+    expect(draft.changed(soup)).toBe(false);
+  });
+
+  it("unmarks a dish whose one field was changed twice and then set back", () => {
+    const draft = new MenuPatchDraft(lunch(), languages);
+    draft.set({ target: soup, field: "price", value: "3.50" });
+    draft.set({ target: soup, field: "price", value: "3.75" });
+    draft.set({ target: soup, field: "price", value: "3.00" });
+    expect(draft.changed(soup)).toBe(false);
   });
 
   it("does not mark a variant's dish changed, nor the dish's variant", () => {
@@ -260,6 +292,19 @@ describe("MenuPatchDraft", () => {
     expect(draft.changed(bowl)).toBe(true);
   });
 
+  it("keeps wording that changes a switched-off language, which the patch refuses", () => {
+    const document = lunch();
+    document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
+    const draft = new MenuPatchDraft(document, languages);
+    const change = {
+      target: soup,
+      field: "customerName",
+      value: { en: "Soup", es: "Sopa", fr: "Bouillon" },
+    };
+    draft.set(change);
+    expect(draft.changes()).toEqual([change]);
+  });
+
   it("keeps a value the patch would refuse, so the form can say what is wrong", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
     draft.set({ target: soup, field: "name", value: "  " });
@@ -297,6 +342,22 @@ describe("MenuPatchDraft", () => {
     const next = lunch();
     next.offers["mi-soup"]!.variants = [];
     expect(draft.rebase(next)).toEqual({ dropped: 2 });
+    expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
+  });
+
+  it("on rebase drops and counts wording a newer version's switched-off language refuses", () => {
+    const document = lunch();
+    document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Soupe" };
+    const draft = new MenuPatchDraft(document, languages);
+    draft.set({
+      target: soup,
+      field: "customerName",
+      value: { en: "Soup", es: "Caldo", fr: "Soupe" },
+    });
+    draft.set({ target: salad, field: "price", value: "5.00" });
+    const next = lunch();
+    next.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Potage" };
+    expect(draft.rebase(next)).toEqual({ dropped: 1 });
     expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
   });
 
