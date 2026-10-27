@@ -5671,8 +5671,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot/counter and parties suites,
   shared equipment helper exports, payment widgets, server till-API tests, catalogue and service-operation
-  fixtures, shared station fixtures and file names. Keep fixture text with A976 and the owner-held core-comment PR
-  separate. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
+  fixtures, shared station fixtures and file names. Keep fixture text with A976. The separate
+  `packages/core/src/record-substitution.ts` comment cleanup awaits the owner to land it.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
   `venue-screen.ts` lookup needs qualification with a country-pack code such as `constructor`;
