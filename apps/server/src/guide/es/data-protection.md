@@ -68,10 +68,17 @@ anota qué persona del personal cobró una venta, autorizó una anulación, pidi
 devolución, y abrió el cajón de efectivo o autorizó su apertura. Puedes ejercer tus derechos de
 acceso, rectificación, supresión, limitación, oposición y portabilidad escribiendo a _correo de
 privacidad del local_, y reclamar ante la AEPD. Más información: _dirección de la página de
-privacidad del personal_.
+privacidad_.
 
 La última línea remite a tu aviso completo, que va en tu propia página web. Consulta
 [El aviso completo en tu página web](data-protection.md#full-notice).
+
+Waitron muestra tu página de privacidad, la que indicas en la tarjeta **Privacidad** (consulta
+[Tu página y tu correo de privacidad en Waitron](data-protection.md#privacy-settings)), en los
+correos que envía al personal para crear una cuenta, restablecer una contraseña o confirmar un
+correo nuevo, en la página de inicio de sesión, en **Configuración de la cuenta** y en el
+`README.txt` de una descarga de datos. Waitron guarda una sola página, así que usa la de tu aviso
+completo, que cubre por igual al personal y a los clientes.
 
 ## Un aviso de privacidad para los clientes con factura {#invoice-notice}
 
@@ -122,9 +129,11 @@ _dirección de la página de privacidad_.
 ## El aviso completo en tu página web {#full-notice}
 
 El aviso completo es al que remite cada aviso breve. Ponlo en tu propia página web y usa la
-dirección de esa página en los avisos breves. Cubre cada grupo de personas de las que tienes datos:
-el personal, los clientes con factura y los clientes que reservan. Para cada grupo, la ley pide que
-el aviso diga:
+dirección de esa página en los avisos breves. Indica la misma dirección en la tarjeta **Privacidad**,
+para que Waitron enlace a ella (consulta
+[Tu página y tu correo de privacidad en Waitron](data-protection.md#privacy-settings)). Cubre cada
+grupo de personas de las que tienes datos: el personal, los clientes con factura y los clientes que
+reservan. Para cada grupo, la ley pide que el aviso diga:
 
 - quién eres y cómo contactar contigo; si tienes representante, quién es y cómo contactar con él;
 - cómo contactar con tu delegado de protección de datos, si tienes uno;
@@ -170,8 +179,13 @@ busca la tarjeta **Privacidad**. Elige **Editar**, rellena uno o los dos y elige
 Para quitar uno, vacía su campo y elige **Guardar**. Un encargado o un administrador puede
 cambiarlos, y un supervisor puede verlos. Una exportación de la configuración los incluye, así que
 un equipo nuevo preparado a partir de ella los muestra. Si lo preparas con **NIF nuevo**, revísalos
-aquí: siguen siendo los del negocio anterior hasta que los cambies. Nada más en el equipo los
-muestra todavía.
+aquí: siguen siendo los del negocio anterior hasta que los cambies.
+
+Waitron muestra la página en los correos que envía al personal, en la página de inicio de sesión, en
+**Configuración de la cuenta** y en el `README.txt` de una descarga de datos. Un cambio aparece en el
+siguiente correo o la siguiente descarga; una página ya abierta lo muestra al volver a cargarla,
+salvo **Configuración de la cuenta**, que lo sigue al momento. Por ahora, solo la tarjeta
+**Privacidad** muestra el correo de privacidad.
 
 ## Tu registro de actividades de tratamiento {#record}
 
