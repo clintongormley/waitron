@@ -4113,7 +4113,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   screens / dark screens}" with a chip and either its Main buttons colour set by hand followed by
   ", set by hand" or the shade of its taken fix — A841 slice 6, D14; a kind of screen cannot hold
   both), Background, Corners, Text size ("100% (standard)", or the step, such as "115%") and
-  Colours set by hand. Below them comes one warning line for each warning the server
+  Colours set by hand and Text set by hand. Below them comes one warning line for each warning the server
   sends with the theme, then the note about each screen's own Theme setting.
 - **Edit opens the editor in place**, in the same card. It is offered to a person holding
   `layout.configure`, whichever theme is in use.
@@ -4152,14 +4152,14 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   with `marks` and `continuous`, so the draft and the preview follow it while it is dragged. Its
   value is drawn as a percentage and spoken as "{n} percent", its hint is "100% is Waitron's
   standard size. Larger text wraps long names onto more lines.", and a muted line under it names
-  the four sizes the step gives. A `theme.invalid` naming `textScale` shows under the slider, with
+  the four sizes drawn. A `theme.invalid` naming `textScale` shows under the slider, with
   the form's one message at the bottom; a change of size clears it. Each preview panel ends with a
   till product button and a bill line, the product named in the venue's default content language
   when the dashboard has strings for it, else in the screen's.
 - **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
   before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
   it is disabled only while a request is being sent, or after a save attempt while the brand colour's
-  code or a code in Advanced fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
+  code or a code or text size in Advanced fails its check. It opens the name dialog with "{name} (copy)", the switch on exactly when the
   edited theme is in use, and leaves the edited theme as it was saved.
 - **The editor lays out by the card's width, never the window's** (container queries): the choices
   and the preview sit side by side when the form is at least 900px wide, and the preview's two

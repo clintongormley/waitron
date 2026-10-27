@@ -6700,7 +6700,7 @@ export const es: Record<StringKey, string> = {
   "appearance.hand_item": "{name} ({mode})",
   "appearance.advanced": "Avanzado: fijar colores y texto a mano",
   "appearance.advanced_intro":
-    "Un color que fijes aquí se queda como lo has fijado cuando cambias el color de marca, el fondo o las esquinas. Un tamaño de texto que fijes aquí crece y se reduce con el tamaño del texto. Waitron sigue comprobando que ambos se lean bien.",
+    "Un color que fijes aquí se queda como lo has fijado cuando cambias el color de marca, el fondo o las esquinas. Un tamaño de texto que fijes aquí crece y se reduce con el control Tamaño del texto. Waitron sigue comprobando que ambos se lean bien.",
   "appearance.advanced_none":
     "Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.",
   "appearance.advanced_set": "{n} fijados a mano: {names}",

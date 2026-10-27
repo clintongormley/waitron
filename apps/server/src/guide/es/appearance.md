@@ -88,7 +88,7 @@ las dos versiones quedan una al lado de la otra; si no, la versión clara queda 
 
 Nada más en la página, ni ninguna otra pantalla, cambia hasta que guardas. **Usar el aspecto de
 Waitron** quita el logotipo y devuelve todas las elecciones a las de Waitron: el color de marca de
-Waitron, Neutro, esquinas Estándar, tamaño del texto 100 % y ningún color fijado a mano. No guarda
+Waitron, Neutro, esquinas Estándar, tamaño del texto 100 % y nada fijado a mano. No guarda
 nada por sí solo, y aparece desactivado mientras no hay logotipo y las elecciones ya son el aspecto
 de Waitron. **Cancelar** cierra el editor sin guardar. Si has cambiado algo, Cancelar, salir de la
 página y abrir otro tema desde la tarjeta Temas te lo preguntan antes.

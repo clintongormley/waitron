@@ -2981,7 +2981,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
-  its own button colour. Until slice 11b its heading and opening line leave out text, and until slice
+  its own button colour. Until slice
   12 it is one flat list. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
   library image and an optional one for dark screens — checked on save and on import; the image
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
@@ -3019,7 +3019,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   checked on save and import; the dashboard, the tills and the setup screens draw them, while the equipment label and
   the recovery sheet keep Waitron's type, Google's sign-in button keeps Google's, and the server's
   own pages, such as the help guide, take no theme; a size drawn under 12 px is counted as hard
-  to read, and every bold, heading and table header draws the theme's Bold weight — headings on the
+  to read, and every bold, heading and table header that sets no weight of its own draws the theme's Bold weight — headings on the
   dashboard, the tills and the setup screens now draw 600, not the browser's 700.
   Next: 11b, 12 and 14 (14 with A1096's last part, below).
 
@@ -3200,9 +3200,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   no screen waits for a file, registering each font for the whole page (a page-level `@font-face`
   or `document.fonts.add`) so the theme editor's preview can draw it — an `@font-face` inside a
   component's shadow stylesheet does nothing in Chromium 156 (A841 design, section 5a) — and re-running A841's 130% layout cases and hyphenation check in the
-  uploaded face. It plugs into A841's seam: the typeface list, `typefaceStack()` and `@font-face`
-  ahead of `/api/theme`'s blocks (A841 design, section 5a). Plugs into `TYPEFACES` and
-  `typefaceStack()` in `packages/ui-core/src/theme/text.ts` (slice 11).
+  uploaded face. It plugs into A841's seam: the typeface list (`TYPEFACES` in
+  `packages/ui-core/src/theme/text.ts`), `typefaceStack()`, the dashboard's
+  `appearance.typeface.<value>` words in English and Spanish, and `@font-face` ahead of
+  `/api/theme`'s blocks (A841 design, section 5a).
 
 - **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
   `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file

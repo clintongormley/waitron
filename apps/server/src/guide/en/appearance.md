@@ -82,7 +82,7 @@ dark one.
 
 Nothing else on the page, and no other screen, changes until you save. **Use Waitron's look**
 removes the logo and sets every choice back to Waitron's: Waitron's brand colour, Neutral, Standard
-corners, text size 100%, and no colours set by hand. It saves nothing by itself, and it is greyed
+corners, text size 100%, and nothing set by hand. It saves nothing by itself, and it is greyed
 out while there is no logo and the choices already are Waitron's look. **Cancel** closes the editor
 without saving. If you have changed something, Cancel, leaving the page, and opening another theme
 from the Themes card ask you first.
