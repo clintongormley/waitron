@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import { locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { ADJUSTMENTS_PROVISIONING, listAdjustmentReasons } from "@waitron/adjustments";
+import {
+  ADJUSTMENTS_PROVISIONING,
+  listAdjustmentReasons,
+  STARTER_REASON_NAMES as expected,
+} from "@waitron/adjustments";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
@@ -99,8 +103,8 @@ describe("seedAdjustmentReasons", () => {
       expect({ ...kept, name: provisioned.name, names: provisioned.names }).toEqual(provisioned);
     }
     const onTheHouse = after.find((reason) => reason.names.en === "On the house")!;
-    expect(onTheHouse.names).toEqual({ en: "On the house" });
-    expect(onTheHouse.name).toBe("On the house");
+    expect(onTheHouse.names).toEqual({ en: "On the house", es: expected["On the house"].es });
+    expect(onTheHouse.name).toBe(expected["On the house"].es);
   });
 
   it("seeds the owner's nine example reasons, in order, named in the seed's language", async () => {

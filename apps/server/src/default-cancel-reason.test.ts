@@ -13,6 +13,7 @@ import {
   updateAdjustmentReason,
   type AdjustmentReason,
   type AdjustmentReasonInput,
+  STARTER_REASON_NAMES as expected,
 } from "@waitron/adjustments";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { lineIdOf, rowsOf } from "./testing/adjustment-venue.js";
@@ -48,7 +49,7 @@ describe("a newly set-up venue's till", () => {
       maxAmount: null,
       applyRoles: [],
       approverRoles: [],
-      startsFinishTable: name === "Not served",
+      startsFinishTable: name === expected["Not served"].es,
     });
     const compReason = (
       name: string,
@@ -69,15 +70,21 @@ describe("a newly set-up venue's till", () => {
       startsFinishTable: false,
     });
     expect(listed.json).toEqual([
-      voidReason("Entry error"),
-      voidReason("Item not available"),
-      voidReason("Customer changed mind"),
-      voidReason("Not served"),
-      voidReason("Other", true),
-      compReason("Complaint", supervisorUp, supervisorUp),
-      compReason("On the house", managerUp, managerUp),
-      compReason("Staff meal", every, managerUp, ["discount_percent", "discount_amount"], 5000),
-      compReason("Discount", managerUp, managerUp),
+      voidReason(expected["Entry error"].es),
+      voidReason(expected["Item not available"].es),
+      voidReason(expected["Customer changed mind"].es),
+      voidReason(expected["Not served"].es),
+      voidReason(expected.Other.es, true),
+      compReason(expected.Complaint.es, supervisorUp, supervisorUp),
+      compReason(expected["On the house"].es, managerUp, managerUp),
+      compReason(
+        expected["Staff meal"].es,
+        every,
+        managerUp,
+        ["discount_percent", "discount_amount"],
+        5000,
+      ),
+      compReason(expected.Discount.es, managerUp, managerUp),
     ]);
     const reasonId = (listed.json as unknown as { id: string }[])[0]!.id;
 
@@ -130,7 +137,7 @@ describe("the reason Finish table starts on", () => {
     noteRequired: reason.noteRequired,
   });
   const notServed = async () =>
-    (await inTx(venue, listAdjustmentReasons)).find((reason) => reason.name === "Not served")!;
+    (await inTx(venue, listAdjustmentReasons)).find((reason) => reason.names.en === "Not served")!;
   const voidInput = (name: string, en: string): AdjustmentReasonInput => ({
     name,
     names: { en },
@@ -148,7 +155,7 @@ describe("the reason Finish table starts on", () => {
       .json as unknown as Listed[];
     expect(
       listed.filter((reason) => reason.startsFinishTable).map((reason) => reason.name),
-    ).toEqual(["Not served"]);
+    ).toEqual([expected["Not served"].es]);
     expect(listed.every((reason) => typeof reason.startsFinishTable === "boolean")).toBe(true);
   });
 
