@@ -5,9 +5,9 @@ compliance”.
 
 ## A664 — archive or delete a venue's old data once it no longer has to be kept
 
-- **A664 — archive or delete a venue's old data once it no longer has to be kept (owner,
+- **Owner,
   2026-10-14; revised proposal adopted for specialist review 2026-10-17;
-  relevant adviser agreement, implementation and verification remain open).** Read the
+  relevant adviser agreement, implementation and verification remain open.** Read the
   [revised design](../superpowers/specs/2026-10-16-a664-data-retention-design.md),
   [unchanged primary-source register](../compliance/research/2026-10-16-a664-retention.md),
   [historical inventory with dated current delta](../superpowers/specs/2026-10-16-a664-retention-table-inventory.md)
@@ -50,9 +50,7 @@ compliance”.
 
 ## cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/` carries neither its licence text nor a source offer for it
 
-- **cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/`
-  carries neither its licence text nor a source offer for it** — found by A775 (#1760, 2026-10-16).
-  sharp's libvips package lists cairo under the MPL (1.1 since 1.3.4, 2.0 in 1.3.3); that list is
+- sharp's libvips package lists cairo under the MPL (1.1 since 1.3.4, 2.0 in 1.3.3); that list is
   the package's `README.md`, copied into the image as `/app/third-party/libvips/NOTICES.md`
   (`deploy/Dockerfile`). cairo's own `COPYING` offers LGPL 2.1 or MPL 1.1. `deploy/third-party/` covers
   only the LGPL-3.0 libraries: it holds neither the MPL 1.1 nor the LGPL 2.1 text (the Debian base
