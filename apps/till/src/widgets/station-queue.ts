@@ -247,6 +247,14 @@ export class TillStationQueue extends LitElement {
         writing-mode: vertical-rl;
       }
 
+      .collapsed .column-toggle[data-late] {
+        box-shadow: inset 0 var(--wt-space-1) 0 var(--wt-color-danger);
+      }
+
+      .column-tab[data-late] {
+        box-shadow: 0 var(--wt-space-1) 0 var(--wt-color-danger);
+      }
+
       .column:not(.collapsed) .column-count {
         margin-inline-start: auto;
       }
@@ -1123,6 +1131,7 @@ export class TillStationQueue extends LitElement {
       this.chosenTab !== undefined && shown.includes(this.chosenTab) ? this.chosenTab : shown[0]!;
     const rows = overviewRows(overviewDishes(cards));
     const inColumn = (state: TicketState) => cards.filter((card) => card.column === state);
+    const now = this.#clockNow();
     const chosenState = DRAWN[chosen];
     return html`<div
         class="column-tabs"
@@ -1135,14 +1144,20 @@ export class TillStationQueue extends LitElement {
           const title =
             state === undefined ? t("station.overview") : t(`station.state.${state}` as const);
           const count = state === undefined ? rowsToMake(rows) : inColumn(state).length;
+          const late = state === undefined ? 0 : lateCards(inColumn(state), now);
           return html`<button
             type="button"
             class="option column-tab"
             data-column-tab=${key}
+            ?data-late=${late > 0}
             aria-pressed=${key === chosen ? "true" : "false"}
             @click=${() => (this.chosenTab = key)}
           >
-            ${title}<span aria-hidden="true"> ·</span> ${count}
+            ${title}<span aria-hidden="true"> ·</span>
+            <span aria-hidden=${late > 0 ? "true" : nothing}>${count}</span>${this.#lateWords(
+              count,
+              late,
+            )}
           </button>`;
         })}
       </div>
@@ -1172,11 +1187,18 @@ export class TillStationQueue extends LitElement {
           </section>`;
         }
         const inColumn = cards.filter((card) => card.column === state);
+        const late = collapsed ? lateCards(inColumn, this.#clockNow()) : 0;
         return html`<section
           class="column column-${state} ${collapsed ? "collapsed" : ""}"
           data-column=${state}
         >
-          ${this.#heading(key, t(`station.state.${state}` as const), inColumn.length, collapsed)}
+          ${this.#heading(
+            key,
+            t(`station.state.${state}` as const),
+            inColumn.length,
+            collapsed,
+            late,
+          )}
           ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
         </section>`;
       })}
@@ -1184,11 +1206,18 @@ export class TillStationQueue extends LitElement {
   }
 
   /** One button template for both states, so a redraw keeps the focused element. */
-  #heading(key: ColumnKey, title: string, count: number, collapsed: boolean): TemplateResult {
+  #heading(
+    key: ColumnKey,
+    title: string,
+    count: number,
+    collapsed: boolean,
+    late = 0,
+  ): TemplateResult {
     return html`<h2 class="column-heading">
       <button
         class="column-toggle"
         data-column-toggle=${key}
+        ?data-late=${late > 0}
         aria-expanded=${collapsed ? "false" : "true"}
         @click=${() => this.#toggleColumn(key)}
       >
@@ -1199,10 +1228,20 @@ export class TillStationQueue extends LitElement {
         ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
           class="column-count"
           data-column-count
+          aria-hidden=${late > 0 ? "true" : nothing}
           >${count}</span
-        >${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
+        >${this.#lateWords(count, late)}${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
       </button>
     </h2>`;
+  }
+
+  /** The count's words while late: "1, 1 late" in one hidden span, as the drawn count is hidden
+   * then; a hidden span after the drawn count puts a space before its comma in Chromium's name. */
+  #lateWords(count: number, late: number): TemplateResult | typeof nothing {
+    if (late === 0) return nothing;
+    return html`<span class="visually-hidden"
+      >${count}, ${t("station.late").replace("{n}", String(late))}</span
+    >`;
   }
 
   #overview(rows: readonly OverviewRow[]): TemplateResult {

@@ -4565,3 +4565,142 @@ describe("the board's header row and hidden columns", () => {
     }
   });
 });
+
+describe("the late bar", () => {
+  const layout = (collapsed: ColumnKey[] = [], hidden: ColumnKey[] = []) => ({
+    order: ["overview", "waiting", "preparing", "ready"] as ColumnKey[],
+    hidden,
+    collapsed,
+  });
+  // At 10:20: a fresh card Waiting, an overdue card Preparing.
+  const lateBoard = () => [
+    ageBill(1, [ageDish("fresh-dish", 18)]),
+    ageBill(3, [ageDish("late-dish", 8, { state: "preparing" })]),
+  ];
+  const mountBoard = (columns = layout(), groups = lateBoard(), reducedMotion?: boolean) =>
+    mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns,
+      ...(reducedMotion === undefined ? {} : { reducedMotion }),
+    });
+  const shadow = (el: TillStationQueue) => el.shadowRoot!;
+  const tab = (el: TillStationQueue, key: string) =>
+    shadow(el).querySelector<HTMLButtonElement>(`[data-column-tab="${key}"]`)!;
+  const strip = (el: TillStationQueue, key: string) =>
+    shadow(el).querySelector<HTMLButtonElement>(`[data-column-toggle="${key}"]`)!;
+  const marked = (el: TillStationQueue) =>
+    [...shadow(el).querySelectorAll<HTMLElement>("[data-late]")].map(
+      (node) => node.dataset.columnTab ?? node.dataset.columnToggle,
+    );
+  /** The danger token resolved to the `rgb()` form a computed `box-shadow` carries. */
+  const danger = (el: TillStationQueue) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-danger)";
+    shadow(el).append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    expect(colour).toMatch(/^rgb/);
+    return colour;
+  };
+
+  it("the late bar: a tab whose column holds a late card carries it and says so", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
+    expect(marked(el)).toEqual(["preparing"]);
+    await expect
+      .element(page.getByRole("button", { name: "Preparing 1, 1 late", exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Waiting 1", exact: true }))
+      .toBeInTheDocument();
+    const shadowValue = getComputedStyle(tab(el, "preparing")).boxShadow;
+    expect(shadowValue).toContain(danger(el));
+    expect(shadowValue).not.toContain("inset");
+    expect(getComputedStyle(tab(el, "waiting")).boxShadow).not.toContain(danger(el));
+  });
+
+  it("the late bar: the chosen tab keeps its bar", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    tab(el, "preparing").click();
+    await el.updateComplete;
+    expect(tab(el, "preparing").getAttribute("aria-pressed")).toBe("true");
+    expect(tab(el, "preparing").hasAttribute("data-late")).toBe(true);
+    expect(getComputedStyle(tab(el, "preparing")).boxShadow).toContain(danger(el));
+  });
+
+  it("the late bar: Overview's tab and a held card's column never carry it", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(layout(), [
+      ageBill(5, [ageDish("held-dish", 0, { firedAt: null })]),
+    ]);
+    expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
+    expect(marked(el)).toEqual([]);
+  });
+
+  it("the late bar: a collapsed column holding a late card carries the bar on its strip", async () => {
+    await pageAt(1280, 800);
+    const { el } = await mountBoard(layout(["preparing"]));
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    expect(marked(el)).toEqual(["preparing"]);
+    await expect
+      .element(page.getByRole("button", { name: "Preparing 1, 1 late", exact: true }))
+      .toBeInTheDocument();
+    const shadowValue = getComputedStyle(strip(el, "preparing")).boxShadow;
+    expect(shadowValue).toContain(danger(el));
+    expect(shadowValue).toContain("inset");
+    el.columns = layout();
+    await el.updateComplete;
+    expect(marked(el)).toEqual([]);
+    expect(getComputedStyle(strip(el, "preparing")).boxShadow).not.toContain(danger(el));
+  });
+
+  it("the late bar: a hidden column's late card marks nothing but the header line", async () => {
+    for (const width of [390, 1280]) {
+      await pageAt(width, 844);
+      const { el } = await mountBoard(layout(["preparing"], ["preparing"]));
+      expect(marked(el)).toEqual([]);
+      expect(shadow(el).querySelector("[data-kitchen-counts]")!.textContent!.trim()).toMatch(
+        /· 1 late$/,
+      );
+      cleanupWidgets();
+    }
+  });
+
+  it.each([undefined, true, false])(
+    "the late bar: the bar holds still (reduced motion %s)",
+    async (reducedMotion) => {
+      await pageAt(390, 844);
+      const narrow = await mountBoard(layout(), lateBoard(), reducedMotion);
+      expect(tab(narrow.el, "preparing").hasAttribute("data-late")).toBe(true);
+      expect(tab(narrow.el, "preparing").getAnimations()).toEqual([]);
+      cleanupWidgets();
+      await pageAt(1280, 800);
+      const wide = await mountBoard(layout(["preparing"]), lateBoard(), reducedMotion);
+      expect(strip(wide.el, "preparing").hasAttribute("data-late")).toBe(true);
+      expect(strip(wide.el, "preparing").getAnimations()).toEqual([]);
+    },
+  );
+
+  it("the late bar: a late tab reads in Spanish", async () => {
+    await pageAt(390, 844);
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountBoard();
+      const state = t("station.state.preparing");
+      const late = t("station.late").replace("{n}", "1");
+      expect(state).not.toBe("Preparing");
+      expect(late).not.toBe("1 late");
+      expect(tab(el, "preparing").hasAttribute("data-late")).toBe(true);
+      await expect
+        .element(page.getByRole("button", { name: `${state} 1, ${late}`, exact: true }))
+        .toBeInTheDocument();
+    } finally {
+      setLocale(before);
+    }
+  });
+});

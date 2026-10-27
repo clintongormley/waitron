@@ -479,6 +479,30 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     }
   });
 
+  it("the late bar: a late tab and a late strip have no violations", async () => {
+    const props = (collapsed: ("waiting" | "preparing")[]) =>
+      ({
+        groups,
+        stationId: "st-1",
+        columns: { order: ["overview", "waiting", "preparing", "ready"], hidden: [], collapsed },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      }) satisfies Partial<TillStationQueue>;
+    await page.viewport(390, 844);
+    const narrow = await mountWidget<TillStationQueue>("till-station-queue", props([]), theme);
+    expect(narrow.el.shadowRoot!.querySelector("[data-column-tab][data-late]")).not.toBeNull();
+    await expectNoA11yViolations(narrow.host);
+    cleanupWidgets();
+    await page.viewport(1280, 900);
+    const wide = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      props(["waiting", "preparing"]),
+      theme,
+    );
+    expect(wide.el.shadowRoot!.querySelector("[data-column-toggle][data-late]")).not.toBeNull();
+    await expectNoA11yViolations(wide.host);
+  });
+
   it("a board with a collapsed column has no violations", async () => {
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
