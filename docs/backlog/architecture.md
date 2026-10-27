@@ -450,7 +450,9 @@ until A977).
   test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices
   (`spain.ts:199–235`, already `{ en, es }`). A holiday carrying an English name beside the official
   one may need a schema change — ask before adding one.
-- **A972 — point 6: demo data per country pack and region. DESIGN FIRST, then ask the owner.**
+- **A972 — point 6: demo data per country pack and region.** Designed 2026-10-27 in
+  [the A972 design](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md);
+  the build waits for the owner's answers to its Q1–Q4.
   Spain's pack already names its demo (`demo.dataSet`, `packages/country-es/src/spain.ts`); the data
   set itself (`apps/server/scripts/demo-seed/data-sets/casa-delgado-es.ts` and the menu, floor and
   staff it draws from) moves into `country-es`, and the seeding code stays shared. Today's demo
