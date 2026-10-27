@@ -449,6 +449,29 @@ it("the note is raised to the record's floor, keeping its last name and module; 
   expect((await readStartAgainNote(folders.roots.stateDir))!.floorMs).toBe(60_000);
 });
 
+it("a found file dated before 1970 is recorded and moved, and the note's floor stays where it was", async () => {
+  const attempt = await startAgainAttempt(await scratch(), {
+    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
+  });
+  const { roots } = attempt;
+  const found = join(roots.stateDir, "trading.env");
+  await writeFile(found, "X=1\n");
+  const old = new Date("1960-01-01T00:00:00.000Z");
+  await fs.utimes(found, old, old);
+  const recorded = (await lstat(found, { bigint: true })).mtimeNs;
+  expect(recorded).toBeLessThan(0n);
+
+  const record = await prepared(roots, attempt.administratorId);
+  expect(record.listed.units.flatMap((unit) => unit.entries.map((each) => each.mtimeNs))).toEqual([
+    recorded.toString(),
+  ]);
+  await moveStartAgainUnits(roots, record);
+
+  const moved = join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env");
+  expect((await lstat(moved, { bigint: true })).mtimeNs).toBe(recorded);
+  expect((await readStartAgainNote(roots.stateDir))!.floorMs).toBe(60_000);
+});
+
 it("venue.lock, venue.holder.json and recovery.lock are never moved or unlinked", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;

@@ -366,6 +366,19 @@ it("on a box with no note, the note floor is null even when a found file is date
   expect(survey.noteFloorMs).toBeNull();
 });
 
+it("the note floor is never below zero, whatever the newest file's time before 1970", () => {
+  const unitAt = (mtimeNs: string) => ({
+    root: "state" as const,
+    path: "trading.env",
+    why: "not-created" as const,
+    pieces: ["trading.env"],
+    entries: [{ path: "trading.env", type: "file" as const, ino: "1", size: "4", mtimeNs }],
+  });
+  expect(startAgainSetAsideFloorMs([unitAt("-315619200000000000")])).toBe(0);
+  expect(startAgainSetAsideFloorMs([unitAt("-150000000000")])).toBe(0);
+  expect(startAgainSetAsideFloorMs([unitAt("-149999999999")])).toBe(60_000);
+});
+
 it("the note floor is null when no unit holds a file", async () => {
   const { roots } = await startAgainAttempt(await scratch());
   await mkdir(join(roots.stateDir, "first-setup-workspaces", "empty"), { recursive: true });

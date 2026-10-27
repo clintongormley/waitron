@@ -93,6 +93,8 @@ export function startAgainSetAsideFloorMs(units: readonly StartAgainUnit[]): num
         newest = BigInt(entry.mtimeNs);
   if (newest === null) return null;
   const floor = newest + BigInt(START_AGAIN_FLOOR_MARGIN_MS) * 1_000_000n;
+  // A choice record refuses a negative floor.
+  if (floor <= 0n) return 0;
   const minutes = (floor + MINUTE_NS - 1n) / MINUTE_NS;
   return Number(minutes * 60_000n);
 }

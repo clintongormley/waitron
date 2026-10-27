@@ -36,6 +36,8 @@ export interface StartAgainChoiceRecord {
 const CHOICE_LIMIT = 8 * 1024 * 1024;
 const HASH = /^[a-f0-9]{64}$/;
 const DIGITS = /^\d+$/;
+/** A file time before 1970 is negative. */
+const SIGNED_DIGITS = /^-?\d+$/;
 const NAME = /^(\d+)-([0-9a-f-]{36})\.json$/i;
 
 class Damaged extends Error {}
@@ -57,8 +59,8 @@ const relative = (value: unknown): value is string =>
   typeof value === "string" && value.split("/").every(segment);
 const setAsidePath = (value: unknown) =>
   relative(value) && value.startsWith(`${START_AGAIN_SET_ASIDE_DIR}/`);
-const digitsOrNull = (value: unknown) =>
-  value === null || (typeof value === "string" && DIGITS.test(value));
+const matchesOrNull = (value: unknown, pattern: RegExp) =>
+  value === null || (typeof value === "string" && pattern.test(value));
 const incomplete = (reason: string) => new AppError("setup.start_again_incomplete", {}, { reason });
 
 function entry(value: unknown): StartAgainEntry {
@@ -68,8 +70,8 @@ function entry(value: unknown): StartAgainEntry {
     (value.type !== "file" && value.type !== "folder") ||
     typeof value.ino !== "string" ||
     !DIGITS.test(value.ino) ||
-    !digitsOrNull(value.size) ||
-    !digitsOrNull(value.mtimeNs)
+    !matchesOrNull(value.size, DIGITS) ||
+    !matchesOrNull(value.mtimeNs, SIGNED_DIGITS)
   )
     return damaged();
   return {

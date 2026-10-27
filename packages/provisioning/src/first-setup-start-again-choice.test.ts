@@ -253,6 +253,9 @@ it("a unit or an entry that does not hold its shape is not written", async () =>
     { ...unit, entries: [{ ...entry, ino: "-1" }] },
     { ...unit, entries: [{ ...entry, size: "4.5" }] },
     { ...unit, entries: [{ ...entry, mtimeNs: 1 }] },
+    { ...unit, entries: [{ ...entry, size: "-4" }] },
+    { ...unit, entries: [{ ...entry, mtimeNs: "-" }] },
+    { ...unit, entries: [{ ...entry, mtimeNs: "1-2" }] },
   ];
   for (const bad of units)
     await expect(
