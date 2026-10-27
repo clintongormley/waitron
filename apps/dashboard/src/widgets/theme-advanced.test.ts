@@ -90,6 +90,9 @@ const sections = (el: ThemeAdvanced) => [
   ),
 ];
 
+const sectionAt = (el: ThemeAdvanced, id: string) =>
+  q<HTMLElementTagNameMap["wt-disclosure"]>(el, `[data-test=section-${id}]`);
+
 async function open(el: ThemeAdvanced): Promise<void> {
   await openDisclosure(disclosure(el));
   await el.updateComplete;
@@ -299,6 +302,7 @@ describe("errors and focus", () => {
     const el = await mount(CREAM);
     await el.reveal("dark", "primary");
     expect(disclosure(el).open).toBe(true);
+    expect(sectionAt(el, "buttons").open).toBe(true);
     let focused: Element | null = document.activeElement;
     while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
     expect(focused).toBe(
@@ -306,6 +310,97 @@ describe("errors and focus", () => {
         "input[name='handSet.dark.primary']",
       ),
     );
+  });
+});
+
+describe("what opens a section", () => {
+  const opened = (el: ThemeAdvanced) => sections(el).map((d) => d.open);
+  const erring = (el: ThemeAdvanced) => sections(el).map((d) => d.hasAttribute("has-error"));
+  const settled = async (el: ThemeAdvanced) => {
+    await el.updateComplete;
+    await disclosure(el).updateComplete;
+    for (const d of sections(el)) await d.updateComplete;
+  };
+  const focusedInner = () => {
+    let focused: Element | null = document.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    return focused;
+  };
+  const innerInput = (el: ThemeAdvanced, mode: string, key: string) =>
+    codeField(el, mode, key).shadowRoot!.querySelector(`input[name='handSet.${mode}.${key}']`);
+
+  it("an error opens its own section only, which stays open once the error clears", async () => {
+    const el = await mount(CREAM);
+    el.errors = { "handSet.dark.field-line": "x" };
+    await settled(el);
+    expect(disclosure(el).open).toBe(true);
+    expect(opened(el)).toEqual([false, false, false, true, false]);
+    expect(erring(el)).toEqual([false, false, false, true, false]);
+    el.errors = {};
+    await settled(el);
+    expect(sectionAt(el, "fields").open).toBe(true);
+    expect(erring(el)).toEqual([false, false, false, false, false]);
+  });
+
+  it("a text error opens the Text section only", async () => {
+    const el = await mount(openDraft(LUCIA), {
+      textErrors: { "text.size.sm": t("appearance.bad_text_px") },
+    });
+    await settled(el);
+    expect(opened(el)).toEqual([false, false, false, false, true]);
+    expect(erring(el)).toEqual([false, false, false, false, true]);
+  });
+
+  it("errors in two sections open both", async () => {
+    const el = await mount(CREAM, {
+      errors: { "handSet.light.surface": "x" },
+      textErrors: { "text.size.sm": t("appearance.bad_text_px") },
+    });
+    await settled(el);
+    expect(opened(el)).toEqual([true, false, false, false, true]);
+  });
+
+  it("an error key with no message opens no section", async () => {
+    const el = await mount(CREAM, { errors: { "handSet.light.bg": undefined } });
+    await settled(el);
+    expect(opened(el)).toEqual([false, false, false, false, false]);
+    expect(erring(el)).toEqual([false, false, false, false, false]);
+  });
+
+  it("reveal opens Buttons alone for the dark Main buttons and focuses its code", async () => {
+    const el = await mount(CREAM);
+    await el.reveal("dark", "primary");
+    expect(disclosure(el).open).toBe(true);
+    expect(opened(el)).toEqual([false, false, true, false, false]);
+    expect(focusedInner()).toBe(innerInput(el, "dark", "primary"));
+  });
+
+  it("reveal leaves a section already open as it was", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    await openDisclosure(sectionAt(el, "surfaces"));
+    await el.reveal("dark", "primary");
+    expect(opened(el)).toEqual([true, false, true, false, false]);
+  });
+
+  it("reveal opens the section holding the value, not always Buttons", async () => {
+    const el = await mount(CREAM);
+    await el.reveal("light", "focus");
+    expect(opened(el)).toEqual([false, false, false, true, false]);
+    expect(focusedInner()).toBe(innerInput(el, "light", "focus"));
+  });
+
+  it("reveal opens the section before Advanced, so Advanced animates once to its full height", async () => {
+    await commands.emulateReducedMotion(null);
+    const el = await mount(CREAM);
+    await el.reveal("dark", "primary");
+    const buttons = sectionAt(el, "buttons").shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(buttons.classList.contains("animating")).toBe(false);
+    expect(buttons.style.height).toBe("");
+    await nextFrame();
+    const body = disclosure(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(body.classList.contains("animating")).toBe(true);
+    expect(parseFloat(body.style.height)).toBeGreaterThanOrEqual(body.scrollHeight - 1);
   });
 });
 
@@ -346,6 +441,35 @@ describe("layout", () => {
       t("theme.dark"),
     ]);
     for (const label of modeLabels(row)) expect(box(label).height).toBeGreaterThan(0);
+  });
+
+  it("stacks the five sections at phone width, each row stacked, nothing scrolling sideways", async () => {
+    await page.viewport(390, 900);
+    const el = await mount(CREAM);
+    await open(el);
+    for (const d of sections(el)) await openDisclosure(d);
+    await el.updateComplete;
+    await nextFrame();
+    const boxes = sections(el).map(box);
+    for (const [i, at] of boxes.entries()) {
+      expect(Math.abs(at.left - boxes[0]!.left), `section ${i}`).toBeLessThanOrEqual(1);
+      if (i > 0) expect(at.top, `section ${i}`).toBeGreaterThanOrEqual(boxes[i - 1]!.bottom);
+    }
+    for (const key of ["bg", "focus"] as const) {
+      const row = q(el, `[data-test=hand-row-${key}]`);
+      const name = row.querySelector<HTMLElement>(".name")!;
+      const [light, dark] = [...row.querySelectorAll<HTMLElement>(".value")];
+      expect(Math.abs(box(light!).left - box(name).left), key).toBeLessThanOrEqual(1);
+      expect(box(dark!).top, key).toBeGreaterThanOrEqual(box(light!).bottom);
+      for (const label of modeLabels(row)) expect(box(label).height, key).toBeGreaterThan(0);
+    }
+    expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+    const typeface = q(el, "dashboard-theme-text").shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="text-row-family"]',
+    )!;
+    expect(box(typeface.querySelector(".value")!).top).toBeGreaterThanOrEqual(
+      box(typeface.querySelector(".name")!).bottom,
+    );
   });
 
   it("sets Light and Dark side by side when wide", async () => {

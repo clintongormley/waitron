@@ -15,7 +15,12 @@ import {
 } from "@waitron/ui-core/theme";
 import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { COLOUR_SECTIONS, sectionHasError, type AdvancedSectionId } from "./advanced-sections.js";
+import {
+  COLOUR_SECTIONS,
+  sectionHasError,
+  sectionOfColour,
+  type AdvancedSectionId,
+} from "./advanced-sections.js";
 import { colourValueField, colourValueStyles } from "./color-field.js";
 import { fixLineStyles } from "./fix-line-styles.js";
 import {
@@ -189,14 +194,22 @@ export class ThemeAdvanced extends LitElement {
     this.#waitingPick = undefined;
   }
 
-  /** Opens the section and moves focus to that value's code field. */
+  /**
+   * Opens the section holding `key`, then Advanced, and moves focus to that value's code field. The
+   * section opens first, while Advanced's body is hidden, so it opens at once and Advanced animates
+   * once to its full height; the other way round, Advanced would animate to the height of closed
+   * sections while the section grew inside it.
+   */
   async reveal(mode: Mode, key: ThemeColour): Promise<void> {
-    const disclosure =
-      this.renderRoot.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-        "[data-test=advanced]",
-      )!;
-    disclosure.open = true;
-    await disclosure.updateComplete;
+    type Disclosure = HTMLElementTagNameMap["wt-disclosure"];
+    const section = this.renderRoot.querySelector<Disclosure>(
+      `[data-test=section-${sectionOfColour(key)}]`,
+    )!;
+    section.open = true;
+    await section.updateComplete;
+    const advanced = this.renderRoot.querySelector<Disclosure>("[data-test=advanced]")!;
+    advanced.open = true;
+    await advanced.updateComplete;
     this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
   }
 
