@@ -418,6 +418,33 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("a board with Overview has no violations", async () => {
+    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Mesa 7" };
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [
+          ...groups,
+          {
+            ...held,
+            items: held.items.map((item) => ({ ...item, id: `${item.id}-held`, firedAt: null })),
+          },
+        ],
+        stationId: "st-1",
+        columns: {
+          order: ["overview", "waiting", "preparing", "ready"],
+          hidden: [],
+          collapsed: [],
+        },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-overview-held]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("a board with a collapsed column has no violations", async () => {
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

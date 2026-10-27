@@ -26,8 +26,10 @@ import {
   isCounterOrder,
   kitchenCards,
   lateCards,
+  overviewDishes,
   thousandthsToMake,
 } from "../state/kitchen-cards.js";
+import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
 import type {
   KitchenNotice,
@@ -76,14 +78,18 @@ const DRAWN: Partial<Record<ColumnKey, TicketState>> = {
 
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 
-/** The columns this board can draw, each with its name, in the order the kitchen states go. */
+/** The columns this board can draw, each with its name: Overview, then the kitchen states in order. */
 export function stationColumnNames(): Map<ColumnKey, string> {
-  return new Map(
-    Object.entries(DRAWN).map(([key, state]) => [
-      key as ColumnKey,
-      t(`station.state.${state}` as const),
-    ]),
-  );
+  return new Map([
+    ["overview", t("station.overview")],
+    ...Object.entries(DRAWN).map(
+      ([key, state]) => [key as ColumnKey, t(`station.state.${state}` as const)] as const,
+    ),
+  ]);
+}
+
+function dishCount(thousandths: number): string {
+  return trimQuantity(thousandthsToDecimal(thousandths));
 }
 
 function afterPeriodWords(period: string): string {
@@ -141,8 +147,45 @@ export class TillStationQueue extends LitElement {
         min-width: 0;
       }
 
+      .column-overview {
+        flex-grow: 0;
+      }
+
       .column.collapsed {
         flex: 0 0 var(--wt-tap-min);
+      }
+
+      .overview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        list-style: none;
+      }
+
+      .overview-row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-2);
+      }
+
+      .overview-name {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .overview-making {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .overview-held {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .column-heading {
@@ -987,45 +1030,76 @@ export class TillStationQueue extends LitElement {
   }
 
   #board(cards: readonly KitchenCard[]): TemplateResult {
-    const drawn = this.columns.order.flatMap((key) => {
-      const state = DRAWN[key];
-      return state === undefined || this.columns.hidden.includes(key) ? [] : [{ key, state }];
-    });
+    const shown = this.columns.order.filter(
+      (key) =>
+        (key === "overview" || DRAWN[key] !== undefined) && !this.columns.hidden.includes(key),
+    );
     return html`<div class="kanban">
-      ${drawn.map(({ key, state }) => {
-        const inColumn = cards.filter((card) => card.column === state);
+      ${shown.map((key) => {
         const collapsed = this.columns.collapsed.includes(key);
-        // One button template for both states, so a redraw keeps the focused element.
+        const state = DRAWN[key];
+        if (state === undefined) {
+          const rows = overviewRows(overviewDishes(cards));
+          return html`<section
+            class="column column-overview ${collapsed ? "collapsed" : ""}"
+            data-column="overview"
+          >
+            ${this.#heading(key, t("station.overview"), rowsToMake(rows), collapsed)}
+            ${collapsed ? nothing : this.#overview(rows)}
+          </section>`;
+        }
+        const inColumn = cards.filter((card) => card.column === state);
         return html`<section
           class="column column-${state} ${collapsed ? "collapsed" : ""}"
           data-column=${state}
         >
-          <h2 class="column-heading">
-            <button
-              class="column-toggle"
-              data-column-toggle=${key}
-              aria-expanded=${collapsed ? "false" : "true"}
-              @click=${() => this.#toggleColumn(key)}
-            >
-              ${collapsed ? html`<wt-icon name="column-closed" aria-hidden="true"></wt-icon>` : nothing}<span
-                class="column-title"
-                >${t(`station.state.${state}` as const)}</span
-              >
-              ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
-                class="column-count"
-                data-column-count
-                >${inColumn.length}</span
-              >${
-                collapsed
-                  ? nothing
-                  : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`
-              }
-            </button>
-          </h2>
+          ${this.#heading(key, t(`station.state.${state}` as const), inColumn.length, collapsed)}
           ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
         </section>`;
       })}
     </div>`;
+  }
+
+  /** One button template for both states, so a redraw keeps the focused element. */
+  #heading(key: ColumnKey, title: string, count: number, collapsed: boolean): TemplateResult {
+    return html`<h2 class="column-heading">
+      <button
+        class="column-toggle"
+        data-column-toggle=${key}
+        aria-expanded=${collapsed ? "false" : "true"}
+        @click=${() => this.#toggleColumn(key)}
+      >
+        ${collapsed ? html`<wt-icon name="column-closed" aria-hidden="true"></wt-icon>` : nothing}<span
+          class="column-title"
+          >${title}</span
+        >
+        ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
+          class="column-count"
+          data-column-count
+          >${count}</span
+        >${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
+      </button>
+    </h2>`;
+  }
+
+  #overview(rows: readonly OverviewRow[]): TemplateResult {
+    return html`<ul class="overview" data-overview>
+      ${rows.map(
+        (row) =>
+          html`<li class="overview-row" data-overview-row>
+            <span class="overview-name">${row.name}</span
+            ><span class="overview-making" data-overview-making>${dishCount(row.making)}</span>${
+              row.held > 0
+                ? html`<span class="overview-held" data-overview-held aria-hidden="true"
+                      >+${dishCount(row.held)}</span
+                    ><span class="visually-hidden"
+                      >, ${t("station.overview_held").replace("{n}", dishCount(row.held))}</span
+                    >`
+                : nothing
+            }
+          </li>`,
+      )}
+    </ul>`;
   }
 
   /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */

@@ -1,12 +1,13 @@
 import { commands, page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue, stationColumnNames } from "./station-queue.js";
-import { STATION_COLUMNS } from "../state/kitchen-columns.js";
+import { type ColumnKey, STATION_COLUMNS } from "../state/kitchen-columns.js";
+import { OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
 
 // The shipped DB defaults.
@@ -3825,7 +3826,7 @@ describe("the board's columns", () => {
         collapsed: [],
       },
     });
-    expect(drawn(el)).toEqual(["queued", "preparing", "ready"]);
+    expect(drawn(el)).toEqual(["overview", "queued", "preparing", "ready"]);
   });
 
   it("each heading names its column and counts its cards", async () => {
@@ -3936,6 +3937,187 @@ describe("the board's columns", () => {
     const [card] = cardsIn(column(el, "queued"));
     const word = card!.querySelector('[data-item="cooking"] .line-state');
     expect(flat(word!)).toBe(t("station.state.preparing"));
+  });
+});
+
+describe("the Overview column", () => {
+  beforeEach(async () => {
+    await page.viewport(1280, 900);
+  });
+  afterEach(resetPage);
+
+  const withOverview = {
+    order: ["overview", "waiting", "preparing", "ready"],
+    hidden: [],
+    collapsed: [],
+  } as const;
+  const layout = (extra: { hidden?: ColumnKey[]; collapsed?: ColumnKey[] } = {}) => ({
+    order: [...withOverview.order],
+    hidden: extra.hidden ?? [],
+    collapsed: extra.collapsed ?? [],
+  });
+  const named = (name: string, minute: number, extra: Partial<StationQueueItem> = {}) =>
+    ageDish(`${name}-${minute}-${extra.quantity ?? "1"}`, minute, { name, ...extra });
+  const held = (name: string, extra: Partial<StationQueueItem> = {}) =>
+    named(name, 0, { firedAt: null, ...extra });
+  // Picture 03's scene (plan slice 9c): T2 the oldest, a Ready card, T5, T9, then T4 and T7 held.
+  const scene = () => [
+    ageBill(2, [
+      named("Sirloin", 0, { state: "preparing" }),
+      named("Burger", 0, { state: "preparing" }),
+    ]),
+    ageBill(11, [named("Croquettes", 8, { quantity: "2.000", state: "ready" })]),
+    ageBill(5, [named("Spicy potatoes", 12, { quantity: "2.000" })]),
+    ageBill(9, [named("Pork shoulder", 17), named("Spicy potatoes", 17)]),
+    ageBill(4, [held("Pork shoulder", { quantity: "2.000" }), held("Spicy potatoes")]),
+    ageBill(7, [held("Rib steak")]),
+  ];
+  const sceneRows = [
+    "Sirloin 1",
+    "Burger 1",
+    "Spicy potatoes 3 +1",
+    "Pork shoulder 1 +2",
+    "Rib steak 0 +1",
+  ];
+
+  const overview = (el: TillStationQueue) =>
+    el.shadowRoot!.querySelector<HTMLElement>('[data-column="overview"]')!;
+  const overviewRows = (el: TillStationQueue) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-overview-row]"),
+  ];
+  // What is drawn, leaving out the words only assistive technology hears.
+  const drawnText = (row: HTMLElement) =>
+    [
+      ...row.querySelectorAll<HTMLElement>(
+        ".overview-name, [data-overview-making], [data-overview-held]",
+      ),
+    ]
+      .map((part) => part.textContent!.trim())
+      .join(" ");
+  const mountBoard = (groups: StationQueueGroup[], columns = layout(), extra = {}) =>
+    mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns,
+      ...extra,
+    });
+
+  it("Overview lists each dish to make with how many, and the held after a +", async () => {
+    const { el } = await mountBoard(scene());
+    expect(overviewRows(el).map(drawnText)).toEqual(sceneRows);
+  });
+
+  it("Overview's heading counts the dishes with something to make", async () => {
+    const { el } = await mountBoard(scene());
+    expect(overview(el).querySelector("[data-column-count]")!.textContent!.trim()).toBe("4");
+    expect(overview(el).querySelector(".column-title")!.textContent!.trim()).toBe(
+      t("station.overview"),
+    );
+  });
+
+  it("a row tells assistive technology how many are held", async () => {
+    const { el } = await mountBoard(scene());
+    const pork = overviewRows(el)[3]!;
+    expect(pork.querySelector("[data-overview-held]")!.getAttribute("aria-hidden")).toBe("true");
+    expect(pork.querySelector(".visually-hidden")!.textContent).toBe(", 2 held");
+    expect(pork.textContent!.replace(/\s+/g, " ")).toContain(", 2 held");
+  });
+
+  it("Overview collapses by its heading like any column", async () => {
+    const { el } = await mountBoard(scene());
+    const keys: unknown[] = [];
+    el.addEventListener("toggle-column", (event) => keys.push((event as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-toggle="overview"]')!.click();
+    expect(keys).toEqual([{ key: "overview" }]);
+    cleanupWidgets();
+    const { el: folded } = await mountBoard(scene(), layout({ collapsed: ["overview"] }));
+    expect(overviewRows(folded)).toHaveLength(0);
+    await expect
+      .element(
+        page.elementLocator(
+          folded.shadowRoot!.querySelector<HTMLElement>('[data-column-toggle="overview"]')!,
+        ),
+      )
+      .toHaveAccessibleName(`${t("station.overview")} 4`);
+  });
+
+  it("Overview keeps its basis and does not grow, and a long name wraps inside it", async () => {
+    const { el } = await mountBoard([
+      ...scene(),
+      ageBill(12, [named("Grilled octopus with paprika and potatoes", 15)]),
+    ]);
+    const remPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const width = overview(el).getBoundingClientRect().width;
+    expect(width).toBe(OVERVIEW_COLUMN_REMS * remPx);
+    expect(width).toBeLessThan(
+      el.shadowRoot!.querySelector('[data-column="queued"]')!.getBoundingClientRect().width,
+    );
+    const row = overviewRows(el).find((each) =>
+      each.textContent!.includes("Grilled octopus with paprika and potatoes"),
+    )!;
+    const box = el.shadowRoot!.querySelector("[data-overview]")!.getBoundingClientRect();
+    const rects = textRects(row.querySelector(".overview-name")!);
+    expect(rects.length).toBeGreaterThan(1);
+    for (const rect of rects) {
+      expect(rect.left).toBeGreaterThanOrEqual(box.left);
+      expect(rect.right).toBeLessThanOrEqual(box.right);
+    }
+  });
+
+  it("with nothing to make or held, Overview shows 0 and no rows", async () => {
+    const { el } = await mountBoard([ageBill(11, [named("Croquettes", 8, { state: "ready" })])]);
+    expect(overview(el).querySelector("[data-column-count]")!.textContent!.trim()).toBe("0");
+    expect(overviewRows(el)).toHaveLength(0);
+  });
+
+  it("a hidden column's dishes still count in Overview", async () => {
+    const { el } = await mountBoard(scene(), layout({ hidden: ["waiting"] }));
+    expect(el.shadowRoot!.querySelector('[data-column="queued"]')).toBeNull();
+    expect(overviewRows(el).map(drawnText)).toEqual(sceneRows);
+  });
+
+  it("a merged board counts one dish at two stations in one row", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        ageBill(1, [named("Sirloin", 10)], { stationId: "st-1" }),
+        ageBill(2, [named("Sirloin", 12)], { stationId: "st-2" }),
+      ],
+      stationNames: new Map([
+        ["st-1", "Grill"],
+        ["st-2", "Plancha"],
+      ]),
+      now: AGE_NOW,
+      columns: layout(),
+    });
+    expect(overviewRows(el).map(drawnText)).toEqual(["Sirloin 2"]);
+  });
+
+  it("quantities: 1.5 stays exact, and a dish whose unit shows counts one", async () => {
+    const { el } = await mountBoard([
+      ageBill(1, [
+        named("Spicy potatoes", 10, { quantity: "1.500" }),
+        named("Octopus", 10, { quantity: "0.350", unitName: { "en-GB": "kg" } }),
+      ]),
+    ]);
+    expect(overviewRows(el).map(drawnText)).toEqual(["Spicy potatoes 1.5", "Octopus 1"]);
+  });
+
+  it("Overview reads in Spanish", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountBoard(scene());
+      expect(t("station.overview")).not.toBe("Overview");
+      expect(overview(el).querySelector(".column-title")!.textContent!.trim()).toBe(
+        t("station.overview"),
+      );
+      expect(overviewRows(el)[3]!.querySelector(".visually-hidden")!.textContent).toBe(
+        `, ${t("station.overview_held").replace("{n}", "2")}`,
+      );
+    } finally {
+      setLocale(before);
+    }
   });
 });
 
@@ -4065,6 +4247,7 @@ describe("the board's header row and hidden columns", () => {
     const names = stationColumnNames();
     expect(STATION_COLUMNS.order.every((key) => names.has(key))).toBe(true);
     expect([...names]).toEqual([
+      ["overview", t("station.overview")],
       ["waiting", t("station.state.queued")],
       ["preparing", t("station.state.preparing")],
       ["ready", t("station.state.ready")],

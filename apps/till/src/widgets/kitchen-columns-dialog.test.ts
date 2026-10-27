@@ -41,7 +41,7 @@ function heard<T>(el: Element, name: string): T[] {
 describe("the Columns window", () => {
   it("lists the columns it has names for, in the layout's order, numbered", async () => {
     const { el } = await mount({
-      layout: layout({ order: ["ready", "overview", "waiting", "preparing"] }),
+      layout: layout({ order: ["ready", "held", "waiting", "preparing"] }),
     });
     expect(rows(el)).toEqual([
       ["1", t("station.state.ready")],
