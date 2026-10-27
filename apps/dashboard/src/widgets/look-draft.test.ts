@@ -3,9 +3,11 @@ import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import {
   anyHandSet,
+  anyTextSet,
   codeInvalid,
   handTouched,
   invalidHandCodes,
+  invalidTextCodes,
   isWaitronLook,
   openDraft,
   pickBrand,
@@ -16,9 +18,15 @@ import {
   setCorners,
   setHand,
   setTextScale,
+  setTextSize,
+  setTypeface,
+  setWeight,
+  textTouched,
+  typeTextSize,
   typeCode,
   typeHandCode,
   useWorkedOut,
+  useWorkedOutText,
   waitronLook,
   withDarkLogo,
   withLightLogo,
@@ -41,6 +49,7 @@ describe("the Look card's draft", () => {
       choices: LUCIA,
       code: "#1e5b3a",
       handCodes: { light: {}, dark: {} },
+      textCodes: {},
     });
   });
 
@@ -50,6 +59,7 @@ describe("the Look card's draft", () => {
       choices: WAITRON_CHOICES,
       code: "",
       handCodes: { light: {}, dark: {} },
+      textCodes: {},
     });
     expect(isWaitronLook(draft)).toBe(true);
   });
@@ -121,6 +131,7 @@ describe("the Look card's draft", () => {
       choices: WAITRON_CHOICES,
       code: "",
       handCodes: { light: {}, dark: {} },
+      textCodes: {},
     });
     expect(draft.choices.handSet).toEqual({ light: {}, dark: {} });
     expect(isWaitronLook(draft)).toBe(true);
@@ -364,5 +375,132 @@ describe("the Look card draft's text size", () => {
     expect(sameDraft(openDraft({ ...WAITRON_CHOICES, text: { size: {} } }), waitronLook())).toBe(
       true,
     );
+  });
+});
+
+describe("the Look card draft's text set by hand", () => {
+  it("typing a size from 8 to 40 sets it by hand and keeps the text as typed", () => {
+    const draft = typeTextSize(waitronLook(), "sm", " 10 ");
+    expect(draft.choices.text).toEqual({ size: { sm: 10 } });
+    expect(draft.textCodes).toEqual({ sm: " 10 " });
+    expect(invalidTextCodes(draft)).toEqual([]);
+    expect(typeTextSize(waitronLook(), "xl", "8").choices.text).toEqual({ size: { xl: 8 } });
+    expect(typeTextSize(waitronLook(), "xl", "40").choices.text).toEqual({ size: { xl: 40 } });
+  });
+
+  it("typing anything else keeps the choice and the text, and names the size invalid", () => {
+    const opened = openDraft({ ...WAITRON_CHOICES, text: { size: { sm: 10 } } });
+    for (const typed of ["7", "41", "12.5", "", "ten", "1e1"]) {
+      const draft = typeTextSize(opened, "sm", typed);
+      expect(draft.choices.text, typed).toEqual({ size: { sm: 10 } });
+      expect(draft.textCodes, typed).toEqual({ sm: typed });
+      expect(invalidTextCodes(draft), typed).toEqual(["text.size.sm"]);
+    }
+  });
+
+  it("lists invalid typed sizes in size order", () => {
+    const draft = typeTextSize(typeTextSize(waitronLook(), "xl", "x"), "sm", "y");
+    expect(invalidTextCodes(draft)).toEqual(["text.size.sm", "text.size.xl"]);
+  });
+
+  it("a change back makes the draft the opened one again", () => {
+    const opened = openDraft(WAITRON_CHOICES);
+    const typed = typeTextSize(typeTextSize(opened, "md", "16"), "md", "14");
+    // 14 is Waitron's own Normal text, but typed it is set by hand.
+    expect(typed.choices.text).toEqual({ size: { md: 14 } });
+    expect(sameDraft(opened, typed)).toBe(false);
+    expect(sameDraft(opened, useWorkedOutText(typed, "text.size.md"))).toBe(true);
+    const sixteen = openDraft({ ...WAITRON_CHOICES, text: { size: { md: 16 } } });
+    expect(sameDraft(sixteen, typeTextSize(typeTextSize(sixteen, "md", "18"), "md", "16"))).toBe(
+      true,
+    );
+  });
+
+  it("compares invalid typed sizes by their trimmed text", () => {
+    const opened = openDraft(WAITRON_CHOICES);
+    const bad = typeTextSize(opened, "lg", "x");
+    expect(sameDraft(opened, bad)).toBe(false);
+    expect(sameDraft(bad, typeTextSize(opened, "lg", " x "))).toBe(true);
+    expect(sameDraft(bad, typeTextSize(opened, "lg", "y"))).toBe(false);
+  });
+
+  it("Use worked-out drops the key and its text", () => {
+    const set = setWeight(
+      setTypeface(typeTextSize(typeTextSize(waitronLook(), "sm", "10"), "lg", "x"), "serif"),
+      "bold",
+      800,
+    );
+    const size = useWorkedOutText(set, "text.size.sm");
+    expect(size.choices.text).toEqual({ family: "serif", weight: { bold: 800 } });
+    expect(size.textCodes).toEqual({ lg: "x" });
+    const typed = useWorkedOutText(size, "text.size.lg");
+    expect(typed.textCodes).toEqual({});
+    const family = useWorkedOutText(typed, "text.family");
+    expect(family.choices.text).toEqual({ weight: { bold: 800 } });
+    const weight = useWorkedOutText(family, "text.weight.bold");
+    expect(weight.choices.text).toEqual({});
+    expect(isWaitronLook(weight)).toBe(true);
+  });
+
+  it("picking a weight or the typeface sets it by hand, even Waitron's own", () => {
+    const opened = waitronLook();
+    const bold = setWeight(opened, "bold", 600);
+    expect(bold.choices.text).toEqual({ weight: { bold: 600 } });
+    expect(sameDraft(opened, bold)).toBe(false);
+    const own = setTypeface(opened, "system");
+    expect(own.choices.text).toEqual({ family: "system" });
+    expect(sameDraft(opened, own)).toBe(false);
+  });
+
+  it("a fix sets the size by hand and drops its typed text", () => {
+    const typed = typeTextSize(waitronLook(), "sm", "10");
+    const fixed = setTextSize(typed, "sm", 12);
+    expect(fixed.choices.text).toEqual({ size: { sm: 12 } });
+    expect(fixed.textCodes).toEqual({});
+  });
+
+  it("knows a text row touched by hand, by value or by typed text alone", () => {
+    const opened = waitronLook();
+    expect(textTouched(opened, "text.size.sm")).toBe(false);
+    expect(anyTextSet(opened)).toBe(false);
+    const typed = typeTextSize(opened, "sm", "x");
+    expect(textTouched(typed, "text.size.sm")).toBe(true);
+    expect(textTouched(typed, "text.size.md")).toBe(false);
+    expect(anyTextSet(typed)).toBe(true);
+    const serif = setTypeface(opened, "serif");
+    expect(textTouched(serif, "text.family")).toBe(true);
+    expect(anyTextSet(serif)).toBe(true);
+    const medium = setWeight(opened, "medium", 700);
+    expect(textTouched(medium, "text.weight.medium")).toBe(true);
+    expect(textTouched(medium, "text.weight.bold")).toBe(false);
+    expect(anyTextSet(medium)).toBe(true);
+  });
+
+  it("counts text as set by hand for Reset all, which clears colours and text", () => {
+    const set = setHand(
+      setTypeface(typeTextSize(waitronLook(), "lg", "x"), "serif"),
+      "light",
+      "bg",
+      "#ffffff",
+    );
+    expect(anyHandSet(setTypeface(waitronLook(), "serif"))).toBe(true);
+    expect(anyHandSet(typeTextSize(waitronLook(), "lg", "x"))).toBe(true);
+    const reset = resetAllHand(set);
+    expect(reset.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(reset.choices.text).toEqual({});
+    expect(reset.textCodes).toEqual({});
+    expect(anyHandSet(reset)).toBe(false);
+  });
+
+  it("Use Waitron's look clears text", () => {
+    expect(waitronLook().choices.text).toEqual({});
+    expect(waitronLook().textCodes).toEqual({});
+    expect(isWaitronLook(setTypeface(waitronLook(), "serif"))).toBe(false);
+  });
+
+  it("keeps the typed sizes through other changes", () => {
+    const typed = typeTextSize(waitronLook(), "sm", "x");
+    expect(setTextScale(typed, 120).textCodes).toEqual({ sm: "x" });
+    expect(pickBrand(typed, "#b12525").textCodes).toEqual({ sm: "x" });
   });
 });

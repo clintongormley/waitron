@@ -28,6 +28,12 @@ import {
   previewProductName,
   saveDialogLine,
   savedWarningLine,
+  TEXT_ROWS,
+  textAtStep,
+  textFieldName,
+  textFixLabel,
+  textLargerLine,
+  textNames,
   textRowName,
   textScaleLabel,
   textScaleSpoken,
@@ -692,5 +698,68 @@ describe("the preview's sample name", () => {
       text: es["appearance.preview_product"],
       lang: "es-ES",
     });
+  });
+});
+
+describe("the Text rows' words", () => {
+  it("lists the eight rows in order and names each", () => {
+    expect(TEXT_ROWS.map(textFieldName)).toEqual([
+      "Typeface",
+      "Small text",
+      "Normal text",
+      "Large text",
+      "Largest text",
+      "Normal weight",
+      "Medium weight",
+      "Bold weight",
+    ]);
+    setLocale("es-ES");
+    expect(textFieldName("text.size.md")).toBe(es["appearance.text.size.md"]);
+  });
+
+  it("names the text set by hand in the rows' order", () => {
+    expect(textNames(WAITRON_CHOICES)).toEqual([]);
+    const set: ThemeChoices = {
+      ...WAITRON_CHOICES,
+      text: { weight: { bold: 800 }, size: { xl: 30, sm: 10 }, family: "serif" },
+    };
+    expect(textNames(set)).toEqual(["Typeface", "Small text", "Largest text", "Bold weight"]);
+  });
+
+  it("Advanced's closed line names colours, then text", () => {
+    const both: ThemeChoices = { ...CREAM, text: { size: { md: 16 } } };
+    expect(advancedSummary(both, [])).toBe("2 set by hand: Page (light), Normal text");
+    const text: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { md: 16 } } };
+    expect(advancedSummary(text, [])).toBe("1 set by hand: Normal text");
+  });
+
+  it("says what a size draws at a step other than 100%", () => {
+    expect(textAtStep(115, 16)).toBe("at 115%: 16\u00a0px");
+    setLocale("es-ES");
+    expect(textAtStep(115, 16)).toBe(
+      esFill("appearance.text_at_step", { step: "115\u00a0%", size: "16" }),
+    );
+    expect(textAtStep(115, 16)).toBe("al 115\u00a0%: 16\u00a0px");
+  });
+
+  it("words a size fix by what it stores and, away from 100%, what it draws", () => {
+    expect(textFixLabel(12, 100, 12)).toBe("Use 12\u00a0px");
+    expect(textFixLabel(9, 130, 12)).toBe("Use 9\u00a0px (12\u00a0px at 130%)");
+    expect(textFixLabel(22, 130, 29)).toBe("Use 22\u00a0px (29\u00a0px at 130%)");
+    setLocale("es-ES");
+    expect(textFixLabel(12, 100, 12)).toBe(esFill("appearance.text_fix", { size: "12" }));
+    expect(textFixLabel(9, 130, 12)).toBe(
+      esFill("appearance.text_fix_at", { size: "9", drawn: "12", step: "130\u00a0%" }),
+    );
+  });
+
+  it("words the larger-than-checked note", () => {
+    expect(textLargerLine("xl", 33)).toBe(
+      "Largest text: 33\u00a0px is larger than Waitron checks the tills at; long names may wrap more or be cut off.",
+    );
+    setLocale("es-ES");
+    expect(textLargerLine("xl", 33)).toBe(
+      esFill("appearance.text_larger", { name: es["appearance.text.size.xl"], size: "33" }),
+    );
   });
 });
