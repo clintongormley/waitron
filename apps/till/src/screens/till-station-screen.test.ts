@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtDialog } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, resetPage } from "../widgets/test-helpers.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
 import { TillStationScreen } from "./till-station-screen.js";
 import type {
@@ -207,6 +207,10 @@ async function pressInWindow(el: TillStationScreen, selector: string) {
 const leadChildren = (queue: TillStationQueue) =>
   [...queue.children].filter((child) => child.getAttribute("slot") === "lead");
 
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(cleanupWidgets);
 
 describe("till-station-screen", () => {

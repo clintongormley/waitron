@@ -1,13 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import type { DeviceStationScreen, StationQueue, TillApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, resetPage } from "../widgets/test-helpers.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
 import { TillStationScreen } from "./till-station-screen.js";
 import { allergyBlock, allergyNotice, allergyQueue } from "../../test/kitchen-allergy-fixtures.js";
 
 const locale = currentLocale();
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(() => {
   cleanupWidgets();
   vi.useRealTimers();

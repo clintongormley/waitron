@@ -23,6 +23,7 @@ import {
   expectNoA11yViolations,
   draftServer,
   mountWidget,
+  resetPage,
   servedMenus,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -22681,6 +22682,11 @@ describe("closed floor zone counter refusals", () => {
 });
 
 describe("till-app: a box update while a kitchen display's dish move still waits for the server", () => {
+  beforeEach(async () => {
+    await page.viewport(1280, 900);
+  });
+  afterEach(resetPage);
+
   const today = { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const };
 
   /** An enrolled kitchen display with one queued dish, whose Move has been sent to Barra. */

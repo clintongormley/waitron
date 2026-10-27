@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { TillStationQueue } from "./station-queue.js";
@@ -50,6 +50,10 @@ const notice = {
   createdAt: new Date().toISOString(),
 } satisfies KitchenNotice;
 const previousLocale = currentLocale();
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(() => {
   cleanupWidgets();
   setLocale(previousLocale);

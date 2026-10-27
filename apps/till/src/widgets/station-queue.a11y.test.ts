@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import type { StationThresholds } from "@waitron/shared";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget, resetPage } from "./test-helpers.js";
 import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
@@ -397,6 +398,10 @@ const partyGroups: StationQueueGroup[] = [
   },
 ];
 
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", (theme) => {

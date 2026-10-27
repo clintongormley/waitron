@@ -119,6 +119,10 @@ const withElsewhere: StationQueueGroup = {
   ],
 };
 
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
 afterEach(cleanupWidgets);
 
 describe("till-station-queue", () => {
@@ -3941,11 +3945,6 @@ describe("the board's columns", () => {
 });
 
 describe("the Overview column", () => {
-  beforeEach(async () => {
-    await page.viewport(1280, 900);
-  });
-  afterEach(resetPage);
-
   const withOverview = {
     order: ["overview", "waiting", "preparing", "ready"],
     hidden: [],
