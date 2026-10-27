@@ -68,8 +68,8 @@ más abajo, y después las cuatro elecciones del tema:
   · muy grande 22 px» al 100 %.
 
 Debajo del color de marca, **Elegir otro color para las pantallas oscuras** da a los botones
-principales de la versión oscura un color propio: abre Avanzado y pone el cursor en la casilla del
-código de **Botones principales** en las pantallas oscuras. Una vez fijado ese color, el enlace deja
+principales de la versión oscura un color propio: abre Avanzado y su sección **Botones** y pone el
+cursor en la casilla del código de **Botones principales** en las pantallas oscuras. Una vez fijado ese color, el enlace deja
 paso a una línea como «Botones en pantallas oscuras: #5fa77a, fijado a mano», y **Usar el color de
 marca**, a su lado, quita ese color, de modo que las pantallas oscuras vuelven a calcular sus
 botones a partir del color de marca.
@@ -225,16 +225,25 @@ Texto (versión clara)». Mientras haya colores o tamaños de texto fijados a ma
 cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». Pulsa el título para
 abrirla.
 
-Dentro, una fila por cada color del tema da su valor en las pantallas claras y en las oscuras, bajo
-los títulos **Pantallas claras** y **Pantallas oscuras** en una tarjeta ancha, o con la etiqueta
+Dentro, Avanzado tiene cinco secciones, en este orden: **Página y superficies**, **Colores del texto
+y enlaces**, **Botones**, **Campos y foco** y **Texto**. Cada una está cerrada cuando abres
+Avanzado, y cada una tiene su propia línea cerrada que dice qué tiene fijado a mano, por ejemplo «1
+fijado a mano: Página (versión clara)» o «Ninguno fijado a mano», que termina en «· 1 se lee mal»
+mientras uno de sus valores se lee mal. Pulsa el título de una sección para abrirla. Una sección se
+queda abierta o cerrada como la dejes, aunque cierres y vuelvas a abrir Avanzado, hasta que se
+cierra el editor; la próxima vez que se abre el editor, todas las secciones empiezan cerradas.
+
+En las cuatro secciones de colores, una fila por cada color de la sección da su valor en las
+pantallas claras y en las oscuras, bajo los títulos **Pantallas claras** y **Pantallas oscuras**
+arriba de la sección en una tarjeta ancha, o con la etiqueta
 **Claro** u **Oscuro** en cada valor en una estrecha, cada uno con un selector de color y una casilla para un código de color. Junto al código de
 cada valor, o debajo en una pantalla estrecha, un color calculado dice **Calculado**; Botones principales dice **Color de marca**, o
 **Corregido** si se eligió un tono legible para ese tipo de pantalla. Cambiar cualquiera de los dos
 valores, con el selector o escribiendo un código, fija ese valor a mano y deja el del otro tipo de
 pantalla como estaba. Un valor fijado a mano lleva la marca **Fijado a mano**, con **Usar el color
 calculado** debajo para volver al valor que calcula Waitron. **Volver a calcularlos todos**, al
-final de la sección, devuelve todos los valores a calculados, también los del texto; aparece
-desactivado mientras no hay nada fijado a mano. Después de los colores, bajo **Texto**, vienen las
+final de Avanzado, después de las secciones, devuelve todos los valores a calculados, también los
+del texto; aparece desactivado mientras no hay nada fijado a mano. La sección **Texto** tiene las
 filas del tipo de letra, los tamaños de texto y los grosores, que explica «Fija el texto a mano»,
 más abajo.
 
@@ -247,12 +256,12 @@ Fijar a mano **Botones principales** sustituye el color de marca en ese tipo de 
 se descarta el tono legible que se hubiera elegido allí.
 
 Un código debe ser `#` seguido de seis dígitos o letras de la a a la f. Si no lo es, Guardar te lo
-indica debajo de esa casilla y no guarda nada, y Avanzado se abre para mostrarlo y no se puede cerrar
-hasta que corriges el código.
+indica debajo de esa casilla y no guarda nada, y Avanzado y la sección que tiene ese color se abren
+para mostrarlo y no se pueden cerrar hasta que corriges el código.
 
 ## Fija el texto a mano {#text-by-hand}
 
-Bajo **Texto**, después de los colores, Avanzado tiene ocho filas: **Tipo de letra**, **Texto
+En la sección **Texto** de Avanzado hay ocho filas: **Tipo de letra**, **Texto
 pequeño**, **Texto normal**, **Texto grande**, **Texto muy grande**, **Grosor normal**, **Grosor
 medio** y **Grosor de negrita**. Cada una muestra el valor propio de Waitron, con la marca
 **Calculado**, hasta que lo cambias:
@@ -277,7 +286,8 @@ Un tamaño dibujado por debajo de 12 px avisa bajo su fila, por ejemplo «Texto 
 menor que 12 px; un texto tan pequeño suele leerse mal.», con un botón que fija el tamaño más
 pequeño que dibuja 12 px: **Usar 12 px** al 100 %, o **Usar 9 px (12 px al 130 %)** con el control
 al 130 %. Cuenta como algo que se lee mal, igual que un color: lo cuentan la línea cerrada de
-Avanzado, **Corregir todos**, el diálogo **Difícil de leer** y la tarjeta Temas.
+Avanzado, la línea cerrada de la sección Texto, **Corregir todos**, el diálogo **Difícil de leer** y
+la tarjeta Temas.
 
 Un tamaño dibujado por encima del tamaño con el que Waitron comprueba las cajas, que es el de
 Waitron al 130 % (16, 18, 23 y 29 px), recibe en cambio una nota: «Texto muy grande: 33 px es mayor
@@ -286,7 +296,7 @@ cortarse.», con un botón que fija el tamaño más grande dentro de ese límite
 px (29 px al 130 %)**. La nota no es un aviso: nada la cuenta y puedes guardar el tamaño tal cual.
 
 Un tamaño que no es un número entero del 8 al 40 no se usa. Guardar indica «Introduce un número
-entero del 8 al 40.» debajo, no guarda nada y abre Avanzado para mostrarlo.
+entero del 8 al 40.» debajo, no guarda nada y abre Avanzado y su sección Texto para mostrarlo.
 
 El tipo de letra y los grosores llegan a todas las pantallas que pinta el tema, y una palabra en
 negrita, un título o una cabecera de tabla siguen el **Grosor de negrita** salvo que su pantalla les
