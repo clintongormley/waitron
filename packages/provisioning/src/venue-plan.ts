@@ -82,7 +82,6 @@ export type VenueAction =
       province: string;
       timeZone: string;
       dayCutover: string;
-      /** The default kitchen station's name, written with the location. */
       stationName: string;
     }
   | {
