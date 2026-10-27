@@ -92,15 +92,19 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  * A module's dashboard panel keeps its own `{ en, es }` copy in `src/dashboard/strings.ts`, and
  * those `es` values are translation, not vocabulary.
  *
- * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so the guard still scans every
- * other file in these packages, a `dashboard/*.ts` widget that is NOT the catalogue included.
+ * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so a `dashboard/*.ts` widget
+ * that is NOT the catalogue is still scanned.
  */
 export const I18N_CATALOGUES = ["dashboard/strings.ts"] as const;
 
 /**
- * There is deliberately no exception list: an exception list with a single entry is the shape that
- * grows. If a future column appears to need an exception, rename the column.
+ * A package's starter-content translations: the words its seed writes into a new venue in
+ * languages other than English (owner, 2026-10-20, A918). Excluded by exact path at the top of
+ * `src/`, so a file of that name anywhere else is still scanned.
  */
+export const STARTER_CONTENT_FILE = "starter-content.ts";
+
+/** There is deliberately no list of forgiven words: if a column's name needs one, rename the column. */
 
 /**
  * The guard's BASE list: generic Spanish a generic package might reach for, owned by no module.
@@ -226,12 +230,11 @@ export function sourceFilesIn(packageName: string): string[] {
   const root = join(PACKAGES_ROOT, packageName, "src");
   if (!existsSync(root)) return [];
   const productionOnly = PRODUCTION_ONLY.has(packageName);
-  // SELF and I18N_CATALOGUES match by `endsWith`: SELF names whole basenames that are unique
-  // tree-wide, and I18N_CATALOGUES is a deliberate path SUFFIX.
   return readdirSync(root, { recursive: true, encoding: "utf8" })
     .filter((entry) => entry.endsWith(".ts"))
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .filter((entry) => !I18N_CATALOGUES.some((suffix) => entry.endsWith(suffix)))
+    .filter((entry) => entry !== STARTER_CONTENT_FILE)
     .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
     .filter((entry) => statSync(entry).isFile())

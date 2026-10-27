@@ -418,7 +418,7 @@ until A977).
   translation file each module ships. The kitchen station «Cocina»
   (`packages/provisioning/src/venue-apply.ts:308`), the service steps
   (`packages/venue-service/src/service-steps.ts:110–138`, A900), the device profiles
-  (`packages/layouts/src/device-profile.ts:131–152`) and A758-1's reasons. Trap: the demo seed finds
+  (`packages/layouts/src/device-profile.ts:131–152`). Trap: the demo seed finds
   the default station by its Spanish name (`apps/server/scripts/demo-seed/seed-catalogue.ts:46–56`);
   find it by `is_default`, as `dev-setup.ts` does.
 - **A963 — points 3(4) and 4.** Move the full-invoice address rule (`apps/server/src/invoice-selection.ts:20–46`:
@@ -504,7 +504,7 @@ until A977).
   Waitron fixture's wording change does not update those files.
 - **A977 — point 8, after A918 and A963–A975 land.** Widen `scripts/english-only.test.ts` to every
   text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
-  `fiscal-verifactu`, translation files), add an accented-letter check, and keep a list of test
+  `fiscal-verifactu`, translation files, a package's `src/starter-content.ts`), add an accented-letter check, and keep a list of test
   folders still to clean that may only get shorter. Fix the wrong comment at
   `packages/reporting/src/dr303-layout.ts:14–16` and its generator
   (`reference/generate-dr303-layout.py:184–186, 274–275`), which say the guard scans `reporting`.

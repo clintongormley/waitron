@@ -1,5 +1,7 @@
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
+import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -8,6 +10,9 @@ import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
 import { adjustmentSettings } from "./schema/settings.js";
+import { STARTER_REASON_NAMES } from "./starter-content.js";
+
+const expected: StarterTranslations<StarterContentLanguage> = STARTER_REASON_NAMES;
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
 let db: Database;
@@ -15,11 +20,20 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function provisionedNode(invoiceLocales: string[]) {
+async function provisionedNode({
+  country,
+  province,
+  invoiceLocales,
+}: {
+  country: string;
+  province: string | null;
+  invoiceLocales: string[];
+}) {
   await seedTenant(db);
+  await db.update(tenants).set({ country }).where(eq(tenants.id, 1));
   const [location] = await db
     .insert(locations)
-    .values({ name: "Venue", invoiceLocales, operationDescription: "Hospitality" })
+    .values({ name: "Venue", province, invoiceLocales, operationDescription: "Hospitality" })
     .returning({ id: locations.id });
   const locationId = brandLocationId(location!.id);
   return { locationId, nodeId: await seedNode(db, locationId) };
@@ -30,8 +44,12 @@ function reasons() {
 }
 
 describe("ADJUSTMENTS_PROVISIONING", () => {
-  it("gives a new venue the nine starter reasons, in order, named in English only even where the venue's language is Spanish", async () => {
-    const node = await provisionedNode(["es-ES", "en-GB"]);
+  it("gives a new venue the nine starter reasons, in order, named in the staff language with a name in each content language", async () => {
+    const node = await provisionedNode({
+      country: "ES",
+      province: null,
+      invoiceLocales: ["es-ES", "en-GB"],
+    });
 
     const report = await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
@@ -72,7 +90,7 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
         "On the house",
         "Staff meal",
         "Discount",
-      ].map((name) => [name, { en: name }]),
+      ].map((english) => [expected[english].es, { en: english, es: expected[english].es }]),
     );
     const all = ["comp", "discount_percent", "discount_amount"];
     expect(seeded.map((reason) => reason.actions)).toEqual([
@@ -90,14 +108,18 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
     expect(await db.select().from(adjustmentSettings)).toEqual([]);
   });
 
-  it("names it in English only where the venue's first invoice language is English", async () => {
-    const node = await provisionedNode(["en-GB", "es-ES"]);
+  it("gives it an English plain name, with a name in each content language, where the venue's first invoice language is English", async () => {
+    const node = await provisionedNode({
+      country: "ES",
+      province: null,
+      invoiceLocales: ["en-GB", "es-ES"],
+    });
 
     await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
     const seeded = await reasons();
     expect(seeded.map((reason) => reason.names)).toEqual(
-      seeded.map((reason) => ({ en: reason.name })),
+      seeded.map((reason) => ({ en: reason.name, es: expected[reason.name].es })),
     );
     expect(seeded.map((reason) => reason.name)).toEqual([
       "Entry error",
@@ -112,8 +134,56 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
     ]);
   });
 
+  it.each([
+    ["ES", "Valencia", "es-ES", ["ca-ES-valencia", "es"], "es"],
+    ["ES", "Barcelona", "ca-ES", ["ca", "es"], "es"],
+    ["ES", "Madrid", "en-GB", ["es"], "en"],
+    ["GB", "London", "en-GB", [], "en"],
+  ] as const)(
+    "names the reasons of a venue in %s, %s, with %s receipts, in its content and staff languages",
+    async (country, province, receipt, languages, staffLanguage) => {
+      const node = await provisionedNode({ country, province, invoiceLocales: [receipt] });
+
+      await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
+
+      const seeded = await reasons();
+      expect(seeded.map((reason) => reason.names.en)).toEqual(Object.keys(STARTER_REASON_NAMES));
+      expect(seeded.map((reason) => reason.names)).toEqual(
+        seeded.map((reason) => {
+          const english = reason.names.en;
+          const names: Record<string, string> = { en: english };
+          for (const language of languages) names[language] = expected[english][language];
+          return names;
+        }),
+      );
+      expect(seeded.map((reason) => reason.name)).toEqual(
+        seeded.map((reason) =>
+          staffLanguage === "en" ? reason.names.en : expected[reason.names.en].es,
+        ),
+      );
+    },
+  );
+
+  it("names every starter in the file, and nothing else", async () => {
+    const node = await provisionedNode({
+      country: "ES",
+      province: "Valencia",
+      invoiceLocales: ["es-ES"],
+    });
+
+    await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
+
+    expect((await reasons()).map((reason) => reason.names.en)).toEqual(
+      Object.keys(STARTER_REASON_NAMES),
+    );
+  });
+
   it("adds nothing on a second run", async () => {
-    const node = await provisionedNode(["es-ES"]);
+    const node = await provisionedNode({
+      country: "ES",
+      province: null,
+      invoiceLocales: ["es-ES"],
+    });
     await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
     await expect(
@@ -124,7 +194,11 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
   });
 
   it("adds nothing to a venue that already has a reason", async () => {
-    const node = await provisionedNode(["es-ES"]);
+    const node = await provisionedNode({
+      country: "ES",
+      province: null,
+      invoiceLocales: ["es-ES"],
+    });
     await withTransaction(db, async (tx) => {
       await createAdjustmentReason(tx, {
         name: "Complaint",

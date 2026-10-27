@@ -18,6 +18,7 @@
     "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
+    "@waitron/country-packs": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/identity": "workspace:*",

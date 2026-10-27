@@ -1972,13 +1972,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A918. Starter content in the venue's languages at setup (left open by A758-1).**
   Starter content a module writes into a new venue is English, translated when the box is set up
-  (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
-  on every venue. The owner chose (2026-10-20): each module ships a translation file of its starter
+  (owner, 2026-10-19). The owner chose (2026-10-20): each module ships a translation file of its starter
   names, setup writes every language the venue uses from it, and the English-only check is to allow
   those files. It
   covers reasons, the kitchen station «Cocina», device profiles, service steps, seasons and units, and
   is A913's point 1 ([audit](backlog/english-only-audit.md), Bucket D; [A913's
   items](backlog/architecture.md#a913s-fix-items-general-code-english-only)).
+  Slice 1 (`feat/a918-starter-content-translations`) lands the mechanism and the reasons. Left, each
+  in [the plan](superpowers/plans/2026-10-27-a918-starter-content-translations.md): slice 2, the
+  kitchen station and device profiles; slice 3, venue-service's steps, seasons, counter zone and
+  period; slice 4, the catalogue's units and first menu. Slices 3 and 4 wait for the owner's answer
+  to the plan's FYI A.
 
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
@@ -5692,7 +5696,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A977. Widen the English-only guard to every text file, after A918 and A963–A975.** Accented
-  letters too; a shrinking-only list of test folders still to clean. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  letters too; a shrinking-only list of test folders still to clean. Exempt homes include a
+  package's `src/starter-content.ts` (A918). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
