@@ -132,6 +132,12 @@ assertion, and measure the resulting files on a slow CI runner. Refresh the dura
 measuring; moving this whole file to another shard cannot bring its own time below four minutes.
 The A731 repair suites are split separately; this existing fiscal-hour suite is outside that item.
 
+208 s median
+and 255 s worst over six runs in A938, since no packing goes below one file: on #1930's run
+39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
+split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
+[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
@@ -223,7 +229,7 @@ again on the next sighting rather than re-running to green.
 
 ## A sixth: a CI shard exited 1 with every test passing (PR #414)
 
-- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
+- **The exit-1 path closed by the
   Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Under vitest 3.2.7 one
   worker's `onTaskUpdate` reporting call timed out on birpc's 60-second default. On 4.1.11 an answer
   that never came would leave the shard waiting until the job's 10-minute `timeout-minutes`
@@ -285,16 +291,14 @@ PostgreSQL-number title are retired with A182 part 2.
 
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
 
-**`--no-verify`: the docs say "Claude never", the hook says "agents never" — OWNER'S CALL (found
-2026-10-03 by #1139's review).** `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
+`CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
 never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agents never". Codex
 sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
 decides whether the rule covers every agent, then the two docs follow.
 
 ## The shard layout was measured against an engine that is gone
 
-**The shard layout was measured against an engine that is gone — OPEN (found 2026-09-23, task F1's
-review wave).** The shard counts and their sizing arguments were all measured against PGlite.
+The shard counts and their sizing arguments were all measured against PGlite.
 `packages/db`'s ten mutation shards have since been timed on SQLite: 5m00s to 11m41s on run
 38206876422 and 2.9 to 12.2 minutes on run 38241392066 (shard 10 the longest both times), and
 `mutation.yml`'s comment above `mutation-db` says ten may now be more than the work needs. The count
@@ -311,8 +315,7 @@ decisions across and re-baseline, or change the sentence to say what it is.
 
 ## The PGlite throughput bench fails while seeding
 
-**The PGlite throughput bench fails while seeding — OPEN (found 2026-10-18, A861's Codex review of
-Dependabot #1856).** `seed` in `bench/pglite-throughput/src/bench.ts` runs
+`seed` in `bench/pglite-throughput/src/bench.ts` runs
 `insert into bench_chains (till_id, sequence, last_hash) values ($2, 0, '')` with two values
 (`"tenant-1"` and the till id). PGlite answers `42P18: could not determine data type of parameter
 $1`. Codex got the same error on pglite 0.5.9 and 0.5.10, so the pglite bump did not cause it. The
@@ -322,7 +325,6 @@ re-baselines the bench.
 
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
-**Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
 It is test-only plumbing
 the Vitest config loads — the same class as `src/test-helpers.ts` and `src/a11y-helpers.ts`, which
 `packages/ui/stryker.config.json` excludes from `mutate`. Adding a third exclusion is the consistent
@@ -334,8 +336,6 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
 
 ## A pull request that changes only front-end code gets no SPA bundle built anywhere in CI
 
-**Left behind by the vite 8 upgrade (#450, 2026-09-19).**
-
   `bundle-smoke` builds esbuild bundles only. The only thing that runs `vite build` is
   `deploy/Dockerfile`, which the `image` job runs — on a pull request only when an image input has
   changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on every main push; it never
@@ -344,7 +344,7 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
 
 ## P7's leftovers (#533)
 
-- **P7's leftovers (#533):** `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
+- `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
   because it checks for an absence and the remaining files clear its floor of eight.
   `module-graph-honesty`, `schema-constraints` and `packages/db/src/classification.test.ts` still
   read a set's SQL their own way — the top of the `drizzle` folder only, and `module-graph-honesty`
@@ -354,10 +354,7 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
 
 ## The dev launcher looks for `trading.env` only in the state folder `apps/server/.env` names
 
-Left open by #1320 (W109-6) and #1322 (W109-4), content languages per region:
-
-And seen
-during #1320's look (2026-10-07, not checked against `main`): after the onboarding wizard
+Seen during #1320's look (2026-10-07, not checked against `main`): after the onboarding wizard
 provisions, the stack started by `wa-wt onboarding <worktree>` restarted into setup mode, because
 the dev launcher (`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state
 folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links. #1322's
@@ -365,7 +362,7 @@ look (2026-10-07, a Barcelona demo) met the same restart.
 
 ## Cross-app links in the split Vite dev stack
 
-**Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
+The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
 request for `/manage/devices` on 5190 returned the till HTML, while the same path on 5191 returned
 the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
@@ -637,8 +634,7 @@ root (standing rule: a flaky test is fixed, never re-run to green).
 "a press after one edit sends the edit and the field as it was read"
 (`apps/dashboard/src/screens/printers-screen.save-state.test.ts`) failed once in eight runs of the
 printers-screen files on 2026-10-10, then passed alone and in the seven later runs; its error was
-not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root
-(standing rule: a flaky test is fixed, never re-run to green).
+not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root.
 
 ## A till late-send PIN test failed once, twice in two days (A1126)
 
@@ -792,15 +788,6 @@ selection count and the screenshot before retrying.
 [Reproduction](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 
-## `apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard
-
-208 s median
-and 255 s worst over six runs in A938, since no packing goes below one file: on #1930's run
-39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
-split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
-[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-
-
 ## Other server test files still hash fixed PINs and passwords on every test
 
 A801 moved the
@@ -848,9 +835,7 @@ traced.
   `.husky/pre-push` beside the same loop; it is not there (#602).
   [Detail](#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
 - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
-  measured false (#562, #585). Four identity schema files and six in
-  `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is
-  a code change, for whoever next changes that package's code.
+  measured false (#562, #585).
   [Detail](#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
 - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and
   `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
@@ -865,7 +850,7 @@ traced.
 
 ## `packages/db`'s static mutants are not in its mutation score
 
-OPEN, left by A539.
+Left open by A539.
 `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
 runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
 `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
@@ -874,8 +859,8 @@ would cost has not been timed. Owner's call.
 
 ## `mutation.yml` repeats one shard-and-merge job pair three times
 
-OPEN (left by A841 slice 1,
-#1927, 2026-10-21). `mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
+Left open by A841 slice 1, #1927.
+`mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
 shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
 also repeat the list of sharded packages. Do it on its own branch.
 [Detail](#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
@@ -893,8 +878,7 @@ S3-compatible server).
 - Every `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`,
   which carries its own measurement, still says the pin is needed without having measured it; the
   same one-worker-against-several coverage comparison would settle each.
-- P7's leftovers (#533): `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
-  because it checks for an absence and the remaining files clear its floor of eight.
+- P7's leftovers (#533).
   [Detail](#p7s-leftovers-533)
 - A few suites still build engine-shaped refusals by hand rather than through `refusalError`
   (`packages/db/src/testing/refusals.ts`, P10, #527), among them
