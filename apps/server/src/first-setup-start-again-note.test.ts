@@ -1245,6 +1245,76 @@ it.each([
   },
 );
 
+it("with the database present, the same file times on an intact picks file leave the summary refused and Start again password-free, and the note keeps the name", async () => {
+  const { f, name, floorMs, actions, startRequest } = await abandonedAttempt();
+  await stampAfterName(f);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  expect(current.inspectionId).toBe(startRequest.inspectionId);
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  await expect(actions.startAgainSummary({ ...ids, owner: f.ownerAttempt })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await actions.startAgainFirstSetup({ ...startRequest, ...ids });
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs,
+    lastName: name,
+    module: "fiscal-verifactu",
+  });
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  await expectStartAgainDeleted(f);
+});
+
+it("with the database present, a venue.db-shm time moved between the summary and Start again leaves the floor as shown, and Start again goes ahead", async () => {
+  const { f, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shm = join(f.venueDir, "venue.db-shm");
+  if ((await lstat(shm).catch(() => null)) === null) await writeFile(shm, "");
+  const later = new Date((await lstat(shm)).mtimeMs + 60 * MINUTE_MS);
+  await utimes(shm, later, later);
+  await actions.startAgainFirstSetup({
+    ...ids,
+    owner,
+    register: startRequest.register,
+    confirmUnreadable: { shown },
+  });
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: shown.unreadable!.floorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  expect(shown.unreadable?.floorMs).toBe(timeFloorMs);
+  await expectStartAgainDeleted(f);
+});
+
+it("with the database present, a listed file's time moved later between the summary and Start again, bytes unchanged, is refused setup.attempt_conflict, and nothing is written", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown.unreadable?.floorMs).toBe(timeFloorMs);
+  const key = join(f.stateDir, "first-setup-node-key.json");
+  const bytes = await readFile(key);
+  const later = new Date(EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS + 3 * 60 * MINUTE_MS);
+  await utimes(key, later, later);
+  expect(await readFile(key)).toEqual(bytes);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  expect(current.inspectionId).toBe(ids.inspectionId);
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: startRequest.register,
+      confirmUnreadable: { shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectPresentNothingWritten(f, before);
+});
+
 it("with the database present and an intact picks file, confirmUnreadable is refused setup.attempt_conflict, and nothing is written", async () => {
   const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks({
     damaged: false,
