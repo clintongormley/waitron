@@ -24,7 +24,13 @@ import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
-import { STARTER_PERIOD_NAMES, STARTER_ZONE_NAMES } from "./starter-content.js";
+import { STARTER_STEPS } from "./service-steps.js";
+import {
+  STARTER_PERIOD_NAMES,
+  STARTER_SEASON_NAMES,
+  STARTER_STEP_NAMES,
+  STARTER_ZONE_NAMES,
+} from "./starter-content.js";
 import { departments } from "./schema/service.js";
 import {
   deviceProfileKitchenScreenStations,
@@ -118,6 +124,18 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       select p.name from menu_periods p join departments d on d.id = p.department_id
       where d.location_id = ${locationId}`);
     expect(periods.rows).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
+    const steps = await db.execute<{ name: string }>(sql`
+      select s.name from service_steps s join departments d on d.id = s.department_id
+      where d.location_id = ${locationId} order by s.position`);
+    expect(steps.rows).toEqual(
+      STARTER_STEPS.map((step) => ({ name: STARTER_STEP_NAMES[step.name].es })),
+    );
+    const seasons = await db.transaction((tx) => readSeasons(tx, { locationId }));
+    expect(seasons.map(({ name }) => name)).toEqual(
+      (["Spring", "Summer", "Autumn", "Winter"] as const).map(
+        (season) => STARTER_SEASON_NAMES[season].es,
+      ),
+    );
   });
 
   describe("the starter service steps", () => {
