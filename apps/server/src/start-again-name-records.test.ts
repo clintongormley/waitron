@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "@waitron/composition";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { readSeriesPicks, seriesPicksUnreadable } from "./start-again-name-records.js";
 
 const reader = vi.hoisted(() => ({ fail: null as Error | null }));
@@ -81,12 +82,47 @@ it("a valid picks file gives its rows", async () => {
     unreadable: false,
   });
 });
-it("an error from the reader that is not a domain refusal is rethrown, even with the file present", async () => {
+const chosenName = (issuedAt: string, identity = encodeMinuteIdentity(Date.parse(issuedAt))) => ({
+  version: 1,
+  entries: [
+    {
+      kind: "intent",
+      binding: binding(MODULE),
+      operatorId: "owner-1",
+      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+      bases: [
+        { code: "A", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+      contextKey: "country/zone/module-version/owner-generation-1",
+      softwareId: "W1",
+      references: [],
+      identity,
+      issuedAt,
+    },
+  ],
+});
+it("a picks file holding a real chosen-name row gives that row and is not unreadable", async () => {
+  const row = chosenName("2026-10-16T11:40:00.000Z");
+  await picks(row);
+  expect(await readSeriesPicks(roots, MODULE, seat)).toEqual({
+    preparations: [row],
+    unreadable: false,
+  });
+  expect(await seriesPicksUnreadable(roots, [fiscal], [MODULE])).toBe(false);
+  await picks(chosenName("2026-10-16T11:41:00.000Z", row.entries[0]!.identity));
+  expect(await readSeriesPicks(roots, MODULE, seat)).toEqual({
+    preparations: [],
+    unreadable: true,
+  });
+});
+it("a fault from the reader that is not a domain refusal is rethrown, even with the file present", async () => {
   await picks({ version: 1, entries: [] });
-  const denied = Object.assign(new Error("permission denied"), { code: "EACCES" });
-  reader.fail = denied;
-  await expect(readSeriesPicks(roots, MODULE, seat)).rejects.toBe(denied);
-  await expect(seriesPicksUnreadable(roots, [fiscal], [MODULE])).rejects.toBe(denied);
+  const fault = new Error("reader fault");
+  reader.fail = fault;
+  await expect(readSeriesPicks(roots, MODULE, seat)).rejects.toBe(fault);
+  await expect(seriesPicksUnreadable(roots, [fiscal], [MODULE])).rejects.toBe(fault);
 });
 it("a domain refusal from the reader with no picks file present is rethrown, not counted", async () => {
   const refused = new AppError("setup.attempt_invalid", {});
