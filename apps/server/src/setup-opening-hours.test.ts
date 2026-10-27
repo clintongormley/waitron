@@ -54,6 +54,12 @@ describe("setup's saved first opening hours", () => {
 
   it("reports a Spanish venue's seeded weekday hours under its staff language's period name", async () => {
     const { cfg, department } = await seed(true, "es-ES");
+    expect(
+      await suite.db
+        .select({ name: menuPeriods.name })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, department.id)),
+    ).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
     expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
   });
 

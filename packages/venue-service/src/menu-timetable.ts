@@ -61,7 +61,7 @@ import "./errors.js";
 export const OPEN_PERIOD_NAME = "Open";
 
 /** No column marks the starter period, so a lookup matches its name in every staff language. */
-export const STARTER_OPEN_PERIOD_NAMES: string[] = [
+export const STARTER_OPEN_PERIOD_NAMES: readonly string[] = [
   OPEN_PERIOD_NAME,
   ...Object.values(STARTER_PERIOD_NAMES[OPEN_PERIOD_NAME]),
 ];

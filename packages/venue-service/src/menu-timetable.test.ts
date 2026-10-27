@@ -27,13 +27,14 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
+  placeOpenPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
   resolveDefaultMenu,
@@ -69,6 +70,7 @@ import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";
+import { STARTER_PERIOD_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -3053,5 +3055,19 @@ describe("a service period occurrence", () => {
       orderable: true,
       endedPeriodName: null,
     });
+  });
+});
+
+describe("placeOpenPeriod", () => {
+  it("names the period in the venue's staff language when no language is passed", async () => {
+    await seedTenant(db);
+    const v = await venue({ timetable: false });
+    await scoped((tx) => placeOpenPeriod(tx, v.cfg, v.restaurant, v.menus.Almuerzo));
+    expect(
+      await db
+        .select({ name: menuPeriods.name })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, v.restaurant)),
+    ).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
   });
 });
