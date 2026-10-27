@@ -137,6 +137,7 @@ import {
 import {
   allocateOrderNumber,
   appendOrderAmendment,
+  billPartyTables,
   billPaymentRefunds,
   billPayments,
   devices,
@@ -7387,6 +7388,10 @@ export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
   label: string | null;
+  /** The short names, else labels, of the tables the bill is at: its party's, as
+   *  {@link billPartyTables} chooses them, or a counter order's delivery table, or the name kept
+   *  once that delivery table was let go; absent when none. */
+  tableShortNames?: string[];
   queuedAt: string;
   /** The station queue offers Collect on a `settled` order alone; a placed counter order is handed
    * over from the counter's waiting list. */
@@ -7607,6 +7612,79 @@ export async function listStationQueue(
   return (await listStationQueues(tx, [stationId])).get(stationId)!;
 }
 
+/** {@link StationQueueGroup.tableShortNames} for each bill that is at a table, or whose delivery
+ *  table was let go, keyed by bill. */
+async function readBillTableShortNames(
+  tx: Transaction,
+  bills: readonly {
+    orderId: string;
+    partyId: string | null;
+    deliveryTableId: string | null;
+    deliveryTableLabel: string | null;
+  }[],
+): Promise<Map<string, string[]>> {
+  const byParty = await billPartyTables(tx, [
+    ...new Set(bills.flatMap((bill) => bill.partyId ?? [])),
+  ]);
+  const tableIdsOf = new Map<string, string[]>();
+  const names = new Map<string, string[]>();
+  for (const bill of bills) {
+    if (bill.partyId !== null) {
+      const ids = byParty.get(bill.partyId)!.map((table) => table.id);
+      if (ids.length > 0) tableIdsOf.set(bill.orderId, ids);
+    } else if (bill.deliveryTableId !== null) {
+      tableIdsOf.set(bill.orderId, [bill.deliveryTableId]);
+    } else if (bill.deliveryTableLabel !== null) {
+      // Its delivery table was let go (`releaseDeliveries`), keeping the table's name.
+      names.set(bill.orderId, [bill.deliveryTableLabel]);
+    }
+  }
+  const tableIds = [...new Set([...tableIdsOf.values()].flat())];
+  const shortNames = new Map(
+    tableIds.length === 0
+      ? []
+      : (
+          await tx
+            .select({
+              id: diningTables.id,
+              label: diningTables.label,
+              shortName: diningTables.shortName,
+            })
+            .from(diningTables)
+            .where(inArray(diningTables.id, tableIds))
+        ).map((table) => [table.id, table.shortName ?? table.label]),
+  );
+  for (const [orderId, ids] of tableIdsOf)
+    names.set(
+      orderId,
+      ids.map((id) => shortNames.get(id)!),
+    );
+  return names;
+}
+
+/** The ticket items {@link listStationQueues} lists, at `stationIds`. */
+function onStationQueues(stationIds: readonly string[]): SQL | undefined {
+  return and(
+    inArray(ticketItems.stationId, [...stationIds]),
+    eq(ticketItems.madeHere, false),
+    ne(workingOrders.status, "abandoned"),
+    isNull(workingOrders.collectedAt),
+  );
+}
+
+/** Whether {@link listStationQueue} lists anything at `stationId`, without reading it. */
+export async function stationHasWork(tx: Transaction, stationId: string): Promise<boolean> {
+  const [item] = await tx
+    .select({ id: ticketItems.id })
+    .from(ticketItems)
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
+    .where(onStationQueues([stationId]))
+    .limit(1);
+  return item !== undefined;
+}
+
 /** Each of `stationIds`' {@link listStationQueue}, read together. */
 export async function listStationQueues(
   tx: Transaction,
@@ -7641,6 +7719,8 @@ export async function listStationQueues(
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
       status: workingOrders.status,
+      deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       ...queueGroupColumns,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
@@ -7656,14 +7736,7 @@ export async function listStationQueues(
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(
-      and(
-        inArray(ticketItems.stationId, [...stationIds]),
-        eq(ticketItems.madeHere, false),
-        ne(workingOrders.status, "abandoned"),
-        isNull(workingOrders.collectedAt),
-      ),
-    )
+    .where(onStationQueues(stationIds))
     // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
@@ -7714,6 +7787,7 @@ export async function listStationQueues(
     new Date(nowMs),
   );
   const former = await readFormerNumbers(tx, orderIds);
+  const tableShortNames = await readBillTableShortNames(tx, rows);
   // Each Map keeps insertion order, so groups come out oldest-first.
   const groupsAt = new Map(stationIds.map((id) => [id, new Map<string, StationQueueGroup>()]));
   for (const row of rows) {
@@ -7731,6 +7805,7 @@ export async function listStationQueues(
         kitchenNote: kitchenNotes.get(row.orderId)!.note,
         orderNumber: row.orderNumber,
         label: row.label,
+        ...optional("tableShortNames", tableShortNames.get(row.orderId)),
         queuedAt: row.queuedAt,
         status: row.status,
         ...optional("party", queueParty(row)),

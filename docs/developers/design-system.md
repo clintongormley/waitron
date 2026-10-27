@@ -5477,8 +5477,11 @@ dishes moved in) make one card per station and bill (`kitchenCards`,
 held dish counting as Waiting; within a column the card whose oldest fired dish was queued first
 comes first, a card with no fired dish after every timed one, then the read's order of each card's
 first bill, then the group's position with the no-group card first (`kitchen-cards.ts`). Its
-heading holds each bill's number with any former numbers, the allergy marker, its bills' labels once
-each, the group's name, the course when every dish shares one, "Held, not released" when the group
+heading holds each bill's number with any former numbers, "Counter" before the number of a bill
+with no party and no table (`isCounterOrder`), the allergy marker, each distinct place of its bills
+(a bill's tables by their short names, in number order joined with "+", else the name a let-go
+delivery table kept, else its label;
+`cardPlaces`, `kitchen-cards.ts`; the station read's `tableShortNames`), the group's name, the course when every dish shares one, "Held, not released" when the group
 is held or no dish on the card is fired, and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
 the heading can move something), each bill's kitchen note and printing problem, the dishes (course
 sub-heads only when the card has more than one course), and each bill's "Also on this order",

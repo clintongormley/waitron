@@ -4,8 +4,10 @@ import type { QueueGroup, StationQueueItem } from "../api/client.js";
 import {
   type KitchenCard,
   type MergedQueueGroup,
+  cardPlaces,
   dishesAt,
   headingStage,
+  isCounterOrder,
   kitchenCards,
   lateCards,
   thousandthsToMake,
@@ -296,5 +298,54 @@ describe("lateCards", () => {
     ]);
 
     expect(lateCards(cards, now)).toBe(1);
+  });
+});
+
+describe("a card's places", () => {
+  const party = { id: "party-1", revision: 0 };
+  const one = (overrides: Partial<MergedQueueGroup>): KitchenCard =>
+    kitchenCards([bill("o1", [dish("a", "20:00")], overrides)])[0]!;
+
+  it("names a bill at a table by the table's short name, never its label", () => {
+    expect(cardPlaces(one({ party, label: "Terrace 1", tableShortNames: ["T1"] }))).toEqual(["T1"]);
+  });
+
+  it("names a bill at several tables by their short names in number order, joined with +", () => {
+    expect(cardPlaces(one({ party, label: null, tableShortNames: ["T10", "T4", "T5"] }))).toEqual([
+      "T4+T5+T10",
+    ]);
+    expect(cardPlaces(one({ party, label: null, tableShortNames: ["B2", "T4"] }))).toEqual([
+      "B2+T4",
+    ]);
+  });
+
+  it("names a bill at no table by its label, or not at all", () => {
+    expect(cardPlaces(one({ label: "Ana" }))).toEqual(["Ana"]);
+    expect(cardPlaces(one({ label: null }))).toEqual([]);
+    expect(cardPlaces(one({ label: "" }))).toEqual([]);
+  });
+
+  it("names a place shared by a card's bills once", () => {
+    const shared = { id: "g1", position: 1, displayNumber: 1, numberPartyId: "party-1" };
+    const [card] = kitchenCards([
+      bill("o1", [dish("a", "20:00", { group: { ...shared, state: "fired" } })], {
+        party,
+        tableShortNames: ["T4"],
+      }),
+      bill("o2", [dish("b", "20:00", { group: { ...shared, state: "fired" } })], {
+        party,
+        orderNumber: 13,
+        tableShortNames: ["T4"],
+      }),
+    ]);
+    expect(card!.orders).toHaveLength(2);
+    expect(cardPlaces(card!)).toEqual(["T4"]);
+  });
+
+  it("calls a bill a counter order only with no party and no table", () => {
+    expect(isCounterOrder(bill("o1", []))).toBe(true);
+    expect(isCounterOrder(bill("o1", [], { label: "Ana" }))).toBe(true);
+    expect(isCounterOrder(bill("o1", [], { tableShortNames: ["T4"] }))).toBe(false);
+    expect(isCounterOrder(bill("o1", [], { party }))).toBe(false);
   });
 });

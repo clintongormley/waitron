@@ -137,16 +137,17 @@ sea cual sea el ajuste de las estaciones.
 ## Trabaja con la pantalla de cocina {#kitchen-screen}
 
 La pantalla de cocina muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
-cada pedido de mostrador. Una tarjeta está en la columna de su plato menos avanzado, **Esperando**,
-**Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Toca un plato para
-avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan los platos
-que la retienen, así que un plato que ya va más adelante se queda donde está. La franja de la parte
-superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos de demora
-de la estación, y la franja de una tarjeta olvidada late; en un dispositivo configurado para reducir
-el movimiento se queda quieta. La línea encima de las columnas dice cuántos platos quedan por hacer
-y cuántas tarjetas van con retraso. Una tarjeta cuyos platos están todos en espera tiene el borde
-discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero
-[pida la preparación](kitchen-service.md#request-cooking).
+cada pedido de mostrador. Una tarjeta nombra su mesa por su nombre corto; un pedido de mostrador sin
+mesa dice **Mostrador #12**. Una tarjeta está en la columna de su plato menos avanzado,
+**Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Toca un
+plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan
+los platos que la retienen, así que un plato que ya va más adelante se queda donde está. La franja
+de la parte superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos
+de demora de la estación, y la franja de una tarjeta olvidada late; en un dispositivo configurado
+para reducir el movimiento se queda quieta. La línea encima de las columnas dice cuántos platos
+quedan por hacer y cuántas tarjetas van con retraso. Una tarjeta cuyos platos están todos en espera
+tiene el borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida
+la preparación](kitchen-service.md#request-cooking).
 
 Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impresión. En un
 terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
