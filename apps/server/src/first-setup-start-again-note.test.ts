@@ -1430,6 +1430,62 @@ it("with the database missing, confirmUnreadable beside the confirmation is refu
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
+it("with the database present, a summary whose attempt read throws is refused setup.not_ready, not the read's own error", async () => {
+  const { f, actions, owner, ids } = await presentDamagedPicks();
+  const { store, resolution } = f.host;
+  const read = store.readForRepair.bind(store);
+  const inspect = resolution.inspectFirstSetupResolution.bind(resolution);
+  let armed = false;
+  let faults = 0;
+  vi.spyOn(resolution, "inspectFirstSetupResolution").mockImplementation(async () => {
+    const inspection = await inspect();
+    armed = true;
+    return inspection;
+  });
+  vi.spyOn(store, "readForRepair").mockImplementation(async () => {
+    if (!armed) return read();
+    armed = false;
+    faults += 1;
+    throw new Error("read fault");
+  });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(faults).toBe(1);
+});
+
+it("with the database present, picks the first read finds damaged but the gather reads as intact leave the summary refused setup.not_ready", async () => {
+  const { f, owner, ids } = await presentDamagedPicks({ damaged: false });
+  let picksReads = 0;
+  const modules = f.host.modules!.map((module) => {
+    const initialSetup = module.provisioning?.initialSetup;
+    if (module.name !== f.module || initialSetup?.startAgainFloor === undefined) return module;
+    const floor = initialSetup.startAgainFloor;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...initialSetup,
+          startAgainFloor: (input: Parameters<typeof floor>[0]) => {
+            if (input.attempts.length === 0 && input.publicEvidence.length === 0) {
+              picksReads += 1;
+              if (picksReads === 1)
+                throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
+            }
+            return floor(input);
+          },
+        },
+      },
+    };
+  });
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules } });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(picksReads).toBe(2);
+});
+
 it("with the database present, a damaged kept picks file still needs the recovered owner before the summary answers", async () => {
   const { f, actions, ids } = await presentDamagedPicks();
   const response = await postSummary(routes(f, actions), ids, ownerHeaders(f.ownerAttempt));
