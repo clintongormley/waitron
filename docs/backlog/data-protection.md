@@ -1,7 +1,7 @@
 # Data protection and legal compliance — detail
 
 The open entries are listed in [the backlog](../backlog.md), under “Data protection and legal
-compliance”. This file holds their full text.
+compliance”.
 
 ## A664 — archive or delete a venue's old data once it no longer has to be kept
 
@@ -38,9 +38,8 @@ compliance”. This file holds their full text.
   supersedes the initial short live-allergy expiry premise and separates fiscal, labour and privacy
   decisions. You will send Q48; no enquiry was sent by this campaign. **All product code, including
   reporting, waits for relevant G1–G3 design agreement; G4/G5 remain in force.** The existing
-  finished print-job month choice remains subject to audit/replay dependencies. A664 stays open
-  for adviser agreement, build and verification; the wider privacy programme remains open under
-  “The advisor gap”.
+  finished print-job month choice remains subject to audit/replay dependencies. The wider privacy
+  programme remains open under “The advisor gap”.
 
 ## libvips is LGPL-3.0-or-later
 
@@ -69,7 +68,6 @@ and its [build plan](../superpowers/plans/2026-10-24-a980-data-protection-build.
 answered all ten questions on 2026-10-22 (design §8). The open slices, by the design's numbers (S5, S7 and S8 were dropped
 by the answers):
 
-- **S2** — the remaining download work is listed below.
 - **A manager's own copy of what they decided about others** — the absences and swaps they
   decided, the rotas they published and the attendance answers they authorised: the design's "who
   did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
@@ -150,9 +148,9 @@ by the answers):
   on the Profile row, not the shared rule (not measured). Place it so it never covers the label.
 - **Mount the own download from `boot.ts`** — the route is mounted through `mountMeApi`, which
   gets module names and rebuilds the modules with `modulesNamed` (`apps/server/src/modules.ts`),
-  and is not given boot's `now`, because #1990 was editing `boot.ts` while the route was built.
-  `mountMeApi` now also builds the working-time part from `modulesNamed`
-  (`apps/server/src/me-api.ts`). #1990 has since landed, so the next step is for `boot.ts` to pass
+  and is not given boot's `now`.
+  `mountMeApi` also builds the working-time part from `modulesNamed`
+  (`apps/server/src/me-api.ts`). The next step is for `boot.ts` to pass
   its module list (`setsToMigrate`) and `now`, as it does for the attendance export, and to delete
   `modulesNamed` and `MeApiDeps.now`.
   The admin's download of another person (S2c) is mounted by the same function,
@@ -164,10 +162,7 @@ by the answers):
   kept while the bill's choice is a full invoice, whether or not one was issued from it; and the
   printer bytes of a printed full invoice (`print_jobs.payload`). Switching a bill back to a
   simplified invoice clears the staged customer (`setOrderInvoiceChoice`,
-  `apps/server/src/working-order.ts`). While full invoices are off, a bill is the only place an
-  invoice customer's tax number can be (S3 decision 21): `setOrderInvoiceChoice` stages a
-  full-invoice choice with a customer without asking whether full invoices are on, and paying such
-  a bill is refused (`refuseUnavailableFullInvoice`, the same file). The README says the
+  `apps/server/src/working-order.ts`). The README says the
   box keeps such details and to ask the venue for them. Waits for the owner's answer below.
 - **A supplier found by tax number is not in the invoice customer's download.** A purchase invoice
   from a supplier who is a sole trader carries that person's name and tax number
@@ -193,19 +188,15 @@ by the answers):
     there. Example: the admin downloads Jordi's ZIP; the next day a manager opens bill F/2 on
     **Orders** and sees no PDF download.
   - **Details kept outside issued sales** (decision 19): not in the download (the point above).
-    Example, once full invoices are on: staff type Jordi's details on a bill and issue his full
+    Example: staff type Jordi's details on a bill and issue his full
     invoice; his download holds the invoice, not the bill's own copy of his name, tax number and
     address, and the README tells him the venue keeps such details.
   - **An invoice with someone else's name on the customer's number** (decision 20): every invoice
     carrying the number is in the download, and the dialog shows each row's name first. Example:
     staff typed Jordi's NIF, 12345678Z, on an invoice for Maria Puig at her address; Jordi's ZIP
     holds Maria's name and address.
-  - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
-    they are switched on.
-- **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
-  confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
-  `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
-  unchanged and no email sent). The route checks the invitation cooldown before it resets anything
+- **Reset login resets nothing within a minute of an earlier invitation.** The route checks the
+  invitation cooldown before it resets anything
   (`apps/server/src/management-api.ts`, the `reset-login` route: `acceptInvitation(personId)` returns
   early with `invitationSent: false`), and the cooldown is 60 seconds per person
   (`apps/server/src/account-rate-limit.ts`). So a press within a minute of an invitation, a reset or
