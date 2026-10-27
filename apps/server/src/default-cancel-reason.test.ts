@@ -150,7 +150,7 @@ describe("the reason Finish table starts on", () => {
     noteRequired: false,
   });
 
-  it("marks the Void reason named Not served as Finish table's start", async () => {
+  it("marks the Void reason whose English name is Not served as Finish table's start", async () => {
     const listed = (await send(venue.app, venue.cookie, "GET", "/api/adjustment-reasons"))
       .json as unknown as Listed[];
     expect(

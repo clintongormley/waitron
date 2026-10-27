@@ -104,6 +104,8 @@ export const I18N_CATALOGUES = ["dashboard/strings.ts"] as const;
  */
 export const STARTER_CONTENT_FILE = "starter-content.ts";
 
+/** There is deliberately no list of forgiven words: if a column's name needs one, rename the column. */
+
 /**
  * The guard's BASE list: generic Spanish a generic package might reach for, owned by no module.
  * Every domain term lives on its module's `vocabulary` seat instead (`FISCAL_VOCABULARY` in

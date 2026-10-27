@@ -2,6 +2,7 @@ import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES } from "@waitron/shared";
 import {
   resolveInstalledCountryLocale,
   resolveInstalledStartingContentLanguages,
+  type VenueGeography,
 } from "./registry.js";
 
 /** Every language other than English that a new venue can start with in an installed pack's area. */
@@ -19,11 +20,9 @@ export interface StarterLanguages {
   readonly staffLanguage: StarterStaffLanguage;
 }
 
-export function resolveInstalledStarterLanguages(input: {
-  readonly country?: string | null;
-  readonly area?: string | null;
-  readonly receiptLocale?: string | null;
-}): StarterLanguages {
+export function resolveInstalledStarterLanguages(
+  input: VenueGeography & { readonly receiptLocale?: string | null },
+): StarterLanguages {
   const { country, area, receiptLocale } = input;
   const locale = resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
     override: receiptLocale,
