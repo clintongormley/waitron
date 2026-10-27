@@ -130,8 +130,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same condition by construction"
 
-- `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
-  condition by construction", the claim #637 removed from `health.ts` (a duty can go stale between
+- #637 removed that claim from `health.ts` (a duty can go stale between
   passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
   line 404) as naming one that answers 200 — read, not run. Test titles:
   `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus non-hashed where the rule
@@ -146,8 +145,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course definition; `fireCourse` calls `requireCourse`
 
-- `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
-  live-course definition; `fireCourse` calls `requireCourse`. `packages/provisioning/src/venue-apply.ts`
+- `packages/provisioning/src/venue-apply.ts`
   names a `till.configure` gate for `createDeviceProfile`; the gate is `layout.configure`
   (`packages/layouts/src/device-profile-store.ts`). `docs/developers/conventions-data.md` names a
   `print-api.printer-wiring.test.ts` case "refuses another tenant's manager…" that #378 removed.
@@ -168,14 +166,13 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns now
 
-- `apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns
-  now. The same family: the remaining "not a 500" titles across the `apps/server` route suites,
+- The same family: the remaining "not a 500" titles across the `apps/server` route suites,
   which name no engine and were left unprobed by C127 (#1036, #1042), after which no comment or
   test title names a PostgreSQL SQLSTATE as today's behaviour.
 
 ## Pointers outside `docs/` that #597 made stale
 
-- Pointers outside `docs/` that #597 made stale: `apps/server/README.md:82`
+- `apps/server/README.md:82`
   says `packages/migrations/src/apply.ts` carries the lock races, which now live only in #489;
   `packages/db/src/immutability.sql.md:18` cites `apply.ts:105` for the trigger install, which is
   now the `installAppendOnlyTriggers` call at line 74; and `.github/workflows/ci.yml:401` says
@@ -229,9 +226,8 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no digit bound
 
-- `decimalToCents` refuses an amount over the bound
-  (#583), but `centsToDecimal` itself has no digit bound, so a count past 99999999999999 cents
-  that reaches it by another route is still turned into an amount without refusal. Comments
+- A count past 99999999999999 cents
+  that reaches `centsToDecimal` by another route is still turned into an amount without refusal. Comments
   saying drizzle wraps a failed query remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps
 every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
   `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
@@ -327,8 +323,7 @@ run to install the new trigger. Owner question Q5 of A483.
 
 **Correctness:**
 
-1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
-   location.** Scope these alongside the other by-id verbs when multi-location lands. All
+1. Scope these alongside the other by-id verbs when multi-location lands. All
    four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
    reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
@@ -413,7 +408,7 @@ API fits.
 
 ## Location-scope the by-id verb family together
 
-**Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
+Scope (`getHeldOrder`/`getPlacedCounterOrder`/
 `updateHeldOrder`/`abandonHeldOrder`/`openTab`) when multi-location lands — alongside `handOver`,
 `cancelPlacedOrder`, `readLockedLines`, `priceStoredOrder` and `priceStoredOrderForIssuance` in
 `apps/server/src/working-order.ts`.
