@@ -25,6 +25,15 @@ import "../widgets/station-today.js";
 import "../widgets/station-choice-dialog.js";
 import { TABLE_REQUEST_LIMIT_MS, limited, resendUnanswered } from "../state/draft-sync.js";
 import type { MergedQueueGroup } from "../widgets/station-queue.js";
+import {
+  type ColumnKey,
+  type ColumnScope,
+  type ColumnState,
+  STATION_COLUMNS,
+  readColumnState,
+  saveColumnState,
+  toggleColumnCollapsed,
+} from "../state/kitchen-columns.js";
 import type {
   BillEditExpected,
   DeviceStationScreen,
@@ -65,6 +74,10 @@ interface DishMove {
   generation: number;
   expectedEdit: BillEditExpected | null;
 }
+
+/** Without a scope a layout is held for the screen only, apart for each station. */
+const layoutKey = (scope: ColumnScope | null, stationId: string | undefined): string =>
+  scope === null ? `memory|${stationId ?? ""}` : JSON.stringify(scope);
 
 const worked = (station: DeviceStation): station is WorkedStation =>
   station.available || station.switchedOff;
@@ -204,6 +217,8 @@ export class TillStationScreen extends LitElement {
   @property({ attribute: false }) initialDeviceStation?: DeviceStationScreen;
   /** Keys the remembered stacked-or-merged choice, so each kitchen display keeps its own. */
   @property({ attribute: false }) deviceId?: string;
+  /** Names the venue in the device's stored column layouts; without it they last as long as the screen. */
+  @property({ attribute: false }) serverOrigin?: string;
   /** Mounted inside a card host, which supplies the header; the out-of-date banner stays. */
   @property({ type: Boolean }) embedded = false;
   @property({ type: Boolean }) canMoveStation = false;
@@ -300,6 +315,49 @@ export class TillStationScreen extends LitElement {
       this.#moveOpening = false;
       this.moving = null;
     }
+  }
+
+  /** Each board's layout, read from storage once and never again on a refresh. */
+  #columns = new Map<string, ColumnState>();
+
+  /** The getter itself throws where the browser refuses storage altogether. */
+  #deviceStorage(): Storage | null {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  }
+
+  #columnScope(stationId: string | undefined): ColumnScope | null {
+    if (!this.deviceId || !this.serverOrigin) return null;
+    return { venueId: this.serverOrigin, deviceId: this.deviceId, screen: "station", stationId };
+  }
+
+  #columnsFor(stationId?: string): ColumnState {
+    const scope = this.#columnScope(stationId);
+    const key = layoutKey(scope, stationId);
+    let layout = this.#columns.get(key);
+    if (layout === undefined) {
+      const storage = scope === null ? null : this.#deviceStorage();
+      layout =
+        scope !== null && storage !== null
+          ? readColumnState(storage, scope, STATION_COLUMNS)
+          : STATION_COLUMNS;
+      this.#columns.set(key, layout);
+    }
+    return layout;
+  }
+
+  #onToggleColumn(event: Event, stationId?: string): void {
+    event.stopPropagation();
+    const { key: column } = (event as CustomEvent<{ key: ColumnKey }>).detail;
+    const scope = this.#columnScope(stationId);
+    const layout = toggleColumnCollapsed(this.#columnsFor(stationId), column);
+    this.#columns.set(layoutKey(scope, stationId), layout);
+    const storage = scope === null ? null : this.#deviceStorage();
+    if (scope !== null && storage !== null) saveColumnState(storage, scope, layout);
+    this.requestUpdate();
   }
 
   /** The read is wrapped because localStorage can throw in a private window. */
@@ -888,6 +946,8 @@ export class TillStationScreen extends LitElement {
         .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
         .advanceOnly=${true}
         .canMove=${this.#canMove()}
+        .columns=${this.#columnsFor()}
+        @toggle-column=${(event: Event) => this.#onToggleColumn(event)}
       ></till-station-queue>`;
   }
 
@@ -1068,6 +1128,8 @@ export class TillStationScreen extends LitElement {
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}
         .canMove=${this.#canMove()}
+        .columns=${this.#columnsFor(station.id)}
+        @toggle-column=${(event: Event) => this.#onToggleColumn(event, station.id)}
       ></till-station-queue>`;
   }
 

@@ -152,6 +152,36 @@ async function flush(el: TillStationScreen): Promise<void> {
 const queueWidget = (el: TillStationScreen) =>
   el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue");
 
+const COLUMNS_PREFIX = "waitron.kitchenColumns.";
+const BOX = "https://box.local";
+
+const columnsKey = (stationId: string) =>
+  `${COLUMNS_PREFIX}v1.${JSON.stringify([BOX, "dev-1", "station", stationId])}`;
+
+const storedColumnKeys = (): string[] => {
+  const keys: string[] = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(COLUMNS_PREFIX)) keys.push(key);
+  }
+  return keys;
+};
+
+const clearStoredColumns = () => {
+  for (const key of storedColumnKeys()) localStorage.removeItem(key);
+};
+
+const columnToggle = (queue: TillStationQueue, key: string) =>
+  queue.shadowRoot!.querySelector<HTMLElement>(`[data-column-toggle="${key}"]`)!;
+
+const isCollapsed = (queue: TillStationQueue, key: string) =>
+  columnToggle(queue, key).getAttribute("aria-expanded") === "false";
+
+async function tapColumn(el: TillStationScreen, key: string, queue = queueWidget(el)!) {
+  columnToggle(queue, key).click();
+  await flush(el);
+}
+
 afterEach(cleanupWidgets);
 
 describe("till-station-screen", () => {
@@ -1849,6 +1879,43 @@ describe("till-station-screen device mode with several stations (A366 decision 7
         setLocale("en-GB");
       }
     });
+
+    describe("the device's kitchen columns", () => {
+      afterEach(clearStoredColumns);
+
+      it("the device's kitchen columns: a kitchen display keeps each stacked station's columns, and the merged board's apart", async () => {
+        const api = {
+          getDeviceStationScreen: vi.fn().mockResolvedValue(twoStations),
+        } as unknown as TillApi;
+        const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+          api,
+          deviceMode: true,
+          deviceId: "dev-1",
+          serverOrigin: BOX,
+        });
+        await flush(el);
+        const queueOf = (id: string) =>
+          sectionQueue(
+            el.shadowRoot!.querySelector<HTMLElement>(`[data-device-station="${id}"]`)!,
+          )!;
+
+        await tapColumn(el, "ready", queueOf("st-1"));
+        expect(isCollapsed(queueOf("st-1"), "ready")).toBe(true);
+        expect(isCollapsed(queueOf("st-2"), "ready")).toBe(false);
+
+        await merge(el);
+        expect(isCollapsed(queueWidget(el)!, "ready")).toBe(false);
+        await tapColumn(el, "waiting");
+        expect(isCollapsed(queueWidget(el)!, "waiting")).toBe(true);
+
+        await merge(el);
+        await flush(el);
+        expect(isCollapsed(queueOf("st-1"), "ready")).toBe(true);
+        expect(isCollapsed(queueOf("st-2"), "ready")).toBe(false);
+        expect(isCollapsed(queueOf("st-1"), "waiting")).toBe(false);
+        expect(isCollapsed(queueOf("st-2"), "waiting")).toBe(false);
+      });
+    });
   });
 });
 
@@ -2604,6 +2671,41 @@ describe("till-station-screen 15-second refresh", () => {
     vi.advanceTimersByTime(15_000);
     await flush(el);
     expect(api.getStationQueue).toHaveBeenCalledTimes(3);
+  });
+
+  describe("the device's kitchen columns", () => {
+    afterEach(() => {
+      clearStoredColumns();
+      vi.restoreAllMocks();
+    });
+
+    it("the device's kitchen columns: a refresh keeps the collapse and does not read the store again", async () => {
+      const getItem = vi.spyOn(Storage.prototype, "getItem");
+      const columnReads = () =>
+        getItem.mock.calls.filter(([key]) => key.startsWith(COLUMNS_PREFIX)).length;
+      const api = stubApi({
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ printersDown: [], items: kitchenQueue, notices: [] })
+          .mockResolvedValue(later),
+      });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceId: "dev-1",
+        serverOrigin: BOX,
+      });
+      await flush(el);
+      await tapColumn(el, "ready");
+      const readsBefore = columnReads();
+      expect(readsBefore).toBeGreaterThan(0);
+
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+      expect(queueWidget(el)!.groups).toEqual(barQueue);
+      expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
+      expect(columnReads()).toBe(readsBefore);
+    });
   });
 
   it("a read that never answers does not stop the next tick's read, and its late answer is dropped", async () => {
@@ -4996,6 +5098,115 @@ describe("moving the dishes a card names", () => {
     move(el, "st-1");
     await flush(el);
     expect(api.advanceTicketItem).toHaveBeenCalledTimes(3);
+    expect(escaped).not.toHaveBeenCalled();
+  });
+});
+
+describe("the device's kitchen columns", () => {
+  afterEach(() => {
+    clearStoredColumns();
+    vi.restoreAllMocks();
+  });
+
+  async function mountOperator(props: Record<string, unknown> = {}) {
+    const api = stubApi();
+    const mounted = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceId: "dev-1",
+      serverOrigin: BOX,
+      ...props,
+    });
+    await flush(mounted.el);
+    return mounted;
+  }
+
+  it("the device's kitchen columns: a collapsed column stays collapsed when the screen opens again", async () => {
+    const first = await mountOperator();
+    await tapColumn(first.el, "ready");
+    expect(isCollapsed(queueWidget(first.el)!, "ready")).toBe(true);
+    expect(storedColumnKeys()).toEqual([columnsKey("st-1")]);
+    expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!)).toEqual({
+      version: 1,
+      order: ["waiting", "preparing", "ready"],
+      hidden: [],
+      collapsed: ["ready"],
+    });
+    cleanupWidgets();
+
+    const again = await mountOperator();
+    expect(isCollapsed(queueWidget(again.el)!, "ready")).toBe(true);
+    expect(isCollapsed(queueWidget(again.el)!, "waiting")).toBe(false);
+  });
+
+  it("the device's kitchen columns: each station picked on the till keeps its own columns", async () => {
+    const { el } = await mountOperator();
+    await tapColumn(el, "ready");
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    expect(isCollapsed(queueWidget(el)!, "ready")).toBe(false);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-1"]')!.click();
+    await flush(el);
+    expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
+  });
+
+  it.each([
+    ["no origin", { serverOrigin: undefined }],
+    ["an empty origin", { serverOrigin: "" }],
+    ["no device", { deviceId: undefined }],
+  ])(
+    "the device's kitchen columns: with %s it collapses for this screen only and stores nothing",
+    async (_label, props) => {
+      const { el } = await mountOperator(props);
+      await tapColumn(el, "ready");
+      expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
+      await tapColumn(el, "ready");
+      expect(isCollapsed(queueWidget(el)!, "ready")).toBe(false);
+      expect(storedColumnKeys()).toEqual([]);
+    },
+  );
+
+  it("the device's kitchen columns: a store that refuses still collapses", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    try {
+      const { el } = await mountOperator();
+      await tapColumn(el, "ready");
+      expect(setItem).toHaveBeenCalled();
+      expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(storedColumnKeys()).toEqual([]);
+  });
+
+  it("the device's kitchen columns: a browser that refuses storage altogether still collapses", async () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage")!;
+    let refused = 0;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        refused++;
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    try {
+      const { el } = await mountOperator();
+      await tapColumn(el, "ready");
+      expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
+      expect(refused).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", original);
+    }
+  });
+
+  it("the device's kitchen columns: the column tap stops at the screen", async () => {
+    const { el, host } = await mountOperator();
+    const escaped = vi.fn();
+    host.addEventListener("toggle-column", escaped);
+    await tapColumn(el, "ready");
+    expect(isCollapsed(queueWidget(el)!, "ready")).toBe(true);
     expect(escaped).not.toHaveBeenCalled();
   });
 });
