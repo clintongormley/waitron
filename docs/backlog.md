@@ -1156,10 +1156,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-- **A1151. Patch live menu: change wording, price, picture or VAT class in a menu's live version
-  without touching the products** (owner, 2026-10-27). Design approved and plan reviewed:
-  `docs/superpowers/specs/2026-10-27-patch-live-menu-design.md`,
-  `docs/superpowers/plans/2026-10-27-patch-live-menu.md`. Queued for a lane.
+- **The menu patch window's open points (left open by A1151).** Its **Reload** re-reads the live
+  menu but not the venue's content languages; its "no longer fit" count is a running total since
+  the window opened, and a change the live version already holds is removed without being counted;
+  a review found (not run) that a field typed equal to the live value can be rewritten in the live
+  value's spelling ("3" → "3.00") whenever the live read is delivered again. `apps/dashboard/src/widgets/menu-patch-dialog.ts` is
+  about 950 lines: split it before adding to it.
 
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
@@ -1168,8 +1170,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   until the menu is published again, and nothing says which is which. The owner chose one source,
   the live product, the way availability already works. The design covers every reader of a
   version's `allergens`, `dietaryDeclarations` and `diet`, the publish warnings and change list
-  that compare them, and the guide's wording. The menu patch editor (branch
-  `feat/patch-live-menu`) leaves allergens out because of this decision.
+  that compare them, and the guide's wording. The menu patch window (A1151)
+  leaves allergens out because of this decision.
 
 ### Service periods, opening hours and departments
 
