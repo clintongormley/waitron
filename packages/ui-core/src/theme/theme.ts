@@ -1,14 +1,13 @@
 import { hexToRgb } from "./colour.js";
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type Memo, type ModeResult, settleMode, withMemo } from "./derive.js";
-import { normaliseText, type ThemeText } from "./text.js";
+import { normaliseText, textTokens, type ThemeText } from "./text.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
 import {
   type Corners,
   type TextScale,
   type ThemeColour,
   THEME_COLOURS,
-  fontSizes,
   handTokens,
 } from "./tokens.js";
 
@@ -103,10 +102,10 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
     const [light, dark] = MODES.map((mode) =>
       settleMode(memo, defaults, normalised, mode, handTokens(normalised.handSet[mode])),
     ) as [ModeResult, ModeResult];
-    const sizes = fontSizes(normalised.textScale, defaults);
+    const text = textTokens(normalised.textScale, normalised.text, defaults);
     return {
-      light: { ...light.tokens, ...sizes },
-      dark: { ...dark.tokens, ...sizes },
+      light: { ...light.tokens, ...text },
+      dark: { ...dark.tokens, ...text },
       warnings: [
         ...warningsFor(memo, defaults, normalised, "light", light),
         ...warningsFor(memo, defaults, normalised, "dark", dark),

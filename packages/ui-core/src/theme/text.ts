@@ -1,3 +1,6 @@
+import type { WaitronDefaults } from "./defaults.js";
+import { fontSizes, type TextScale } from "./tokens.js";
+
 export const TYPEFACES = ["system", "serif"] as const;
 
 export type Typeface = (typeof TYPEFACES)[number];
@@ -52,4 +55,43 @@ export function normaliseText(text: ThemeText): ThemeText {
 
 export function sameText(a: ThemeText, b: ThemeText): boolean {
   return JSON.stringify(normaliseText(a)) === JSON.stringify(normaliseText(b));
+}
+
+/** The one place a typeface choice becomes a CSS font stack. */
+export function typefaceStack(family: Typeface, defaults: WaitronDefaults): string {
+  switch (family) {
+    case "system":
+      return defaults.structure["--wt-font-family"]!;
+    case "serif":
+      return 'ui-serif, Georgia, "Times New Roman", serif';
+    default: {
+      const unknown: never = family;
+      throw new RangeError(`not a typeface: ${String(unknown)}`);
+    }
+  }
+}
+
+/** A size at 100% times `textScale`, rounded half up to whole pixels. */
+export const drawnSize = (px: number, textScale: TextScale): number =>
+  Math.floor((px * textScale + 50) / 100);
+
+const WHOLE_HUNDRED = /^[1-9]00$/;
+
+/** The four sizes, the typeface and the three weights, keyed by full token name. */
+export function textTokens(
+  textScale: TextScale,
+  text: ThemeText,
+  defaults: WaitronDefaults,
+): Record<string, string> {
+  const weights = TEXT_WEIGHT_KEYS.map((key) => {
+    const name = `--wt-font-weight-${key}`;
+    const fallback = defaults.structure[name] ?? "";
+    if (!WHOLE_HUNDRED.test(fallback)) throw new RangeError(`not a whole-hundred weight: ${name}`);
+    return [name, String(text.weight?.[key] ?? fallback)];
+  });
+  return {
+    ...fontSizes(textScale, defaults, text.size),
+    "--wt-font-family": typefaceStack(text.family ?? "system", defaults),
+    ...Object.fromEntries(weights),
+  };
 }

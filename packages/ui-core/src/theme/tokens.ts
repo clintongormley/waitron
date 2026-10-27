@@ -1,4 +1,5 @@
 import type { WaitronDefaults } from "./defaults.js";
+import { drawnSize, type ThemeText } from "./text.js";
 
 export const THEME_COLOURS = [
   "bg",
@@ -57,10 +58,18 @@ export const THEME_FONT_SIZES = [
   "--wt-font-size-xl",
 ] as const;
 
+export const THEME_TEXT_TOKENS = [
+  "--wt-font-family",
+  "--wt-font-weight-normal",
+  "--wt-font-weight-medium",
+  "--wt-font-weight-bold",
+] as const;
+
 export const THEME_TOKENS: readonly string[] = [
   ...THEME_COLOUR_TOKENS,
   ...THEME_RADII,
   ...THEME_FONT_SIZES,
+  ...THEME_TEXT_TOKENS,
 ];
 
 export const BRAND_FAMILY: readonly ThemeColour[] = [
@@ -94,13 +103,21 @@ export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record
   );
 }
 
-/** The four sizes in `defaults` times `textScale`, rounded half up to whole pixels. */
-export function fontSizes(textScale: TextScale, defaults: WaitronDefaults): Record<string, string> {
+/**
+ * The four sizes — each hand-set size, else the one in `defaults` — times `textScale`, rounded half
+ * up to whole pixels.
+ */
+export function fontSizes(
+  textScale: TextScale,
+  defaults: WaitronDefaults,
+  size?: ThemeText["size"],
+): Record<string, string> {
   return Object.fromEntries(
     THEME_FONT_SIZES.map((name) => {
       const match = /^(\d+)px$/.exec(defaults.structure[name] ?? "");
       if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
-      return [name, `${Math.floor((Number(match[1]) * textScale + 50) / 100)}px`];
+      const key = name.slice("--wt-font-size-".length) as keyof NonNullable<ThemeText["size"]>;
+      return [name, `${drawnSize(size?.[key] ?? Number(match[1]), textScale)}px`];
     }),
   );
 }

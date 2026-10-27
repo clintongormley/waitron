@@ -91,6 +91,21 @@ describe("venueThemeAnswer", () => {
     expect(larger.hash).not.toBe(standard.hash);
   });
 
+  it("the theme in use in Serif with Bold 800 serves them, and its hash moves", () => {
+    const plain = venueThemeAnswer({ inUse: { id: ID, choices: LEMON }, logo: null });
+    const hand = venueThemeAnswer({
+      inUse: { id: ID, choices: { ...LEMON, text: { family: "serif", weight: { bold: 800 } } } },
+      logo: null,
+    });
+    expect(
+      hand.css.split('--wt-font-family: ui-serif, Georgia, "Times New Roman", serif;\n'),
+    ).toHaveLength(4);
+    expect(hand.css.split("--wt-font-weight-bold: 800;\n")).toHaveLength(4);
+    expect(plain.css).not.toContain("ui-serif");
+    expect(plain.css.split("--wt-font-weight-bold: 600;\n")).toHaveLength(4);
+    expect(hand.hash).not.toBe(plain.hash);
+  });
+
   it("answers the logo's addresses and hashes them", () => {
     const answer = venueThemeAnswer({ inUse: { id: ID, choices: LEMON }, logo: LOGO });
     expect(answer.logo).toEqual(LOGO);
