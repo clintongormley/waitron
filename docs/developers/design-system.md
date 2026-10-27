@@ -5071,7 +5071,11 @@ beside it.
 The button opens the patch dialog (`apps/dashboard/src/widgets/menu-patch-dialog.ts`), a wide
 `wt-modal` headed "Patch version N of <menu>". Its edit step puts a search box above a tree of the
 live version's items on the leading side, and the picked item's form on the other side; the two
-stack where there is no room for both. Until an item is picked, the form's place reads "Pick an
+stack where there is no room for both. The tree scrolls inside its own box, at most twelve
+`--wt-tap-min` rows tall, with `--wt-space-1` of room around its rows for their focus ring, so an
+item picked low in it stays in view beside its form. Picking an item also scrolls the dialog to
+the form where that is needed, as it is when the two stack on a short screen; focus stays on the
+item picked. Until an item is picked, the form's place reads "Pick an
 item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
 item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
 A section's customer-facing name in a language that every included folder showing it fixes is drawn

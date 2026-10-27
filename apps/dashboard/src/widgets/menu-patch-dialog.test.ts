@@ -273,6 +273,83 @@ it("finds a name whatever its accents", async () => {
   expect(treeLabels(el)).toEqual(["Starters", "Sopa de calabacín"]);
 });
 
+/** Lunch with forty more dishes among the Starters, so the tree is taller than the dialog. */
+function longLunch(): MenuDocument {
+  const document = lunch();
+  const starters = document.root.members[0] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  const more = menuDocument(
+    [
+      documentSection(
+        "sec-more",
+        "More",
+        Array.from({ length: 40 }, (_, index) => documentProduct(`mi-${index}`, `p-${index}`)),
+      ),
+    ],
+    Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`p-${index}`, `Dish ${index}`])),
+  );
+  starters.members.push(...(more.root.members[0] as typeof starters).members);
+  Object.assign(document.offers, more.offers);
+  return document;
+}
+
+for (const [width, height] of [
+  [1280, 900],
+  [390, 844],
+  [375, 667],
+] as const)
+  it(`brings the form of an item picked low in a long tree into view at ${width}×${height}`, async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, height);
+    try {
+      const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, longLunch())) }));
+      const body = modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const drinks = node(el, "Drinks");
+      const inView = (element: Element) => {
+        const shown = body.getBoundingClientRect();
+        const box = element.getBoundingClientRect();
+        return box.top >= shown.top && box.bottom <= shown.bottom;
+      };
+      expect(drinks.getBoundingClientRect().top).toBeGreaterThan(
+        body.getBoundingClientRect().bottom,
+      );
+      drinks.scrollIntoView({ block: "nearest" });
+      expect(inView(drinks)).toBe(true);
+      drinks.focus();
+      drinks.click();
+      await vi.waitFor(() => {
+        const heading = form(el).querySelector("h3")!;
+        expect(heading.textContent!.trim()).toBe("Drinks");
+        expect(inView(heading)).toBe(true);
+      });
+      // Side by side, the item picked stays in view beside its form.
+      if (width > 400) expect(inView(drinks)).toBe(true);
+      // The tree button keeps focus, so the person can carry on through the tree.
+      expect(el.shadowRoot!.activeElement).toBe(drinks);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
+it("leaves room in the scrolling tree for a row's focus ring", async () => {
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, longLunch())) }));
+  const tree = el.shadowRoot!.querySelector<HTMLElement>('[data-test="tree"]')!;
+  const drinks = node(el, "Drinks");
+  drinks.scrollIntoView({ block: "nearest" });
+  drinks.focus();
+  const ring = parseFloat(getComputedStyle(drinks).outlineWidth);
+  const reach = ring + parseFloat(getComputedStyle(drinks).outlineOffset);
+  expect(ring).toBeGreaterThan(0);
+  const box = tree.getBoundingClientRect();
+  const row = drinks.getBoundingClientRect();
+  expect(row.top - reach).toBeGreaterThanOrEqual(box.top);
+  expect(row.bottom + reach).toBeLessThanOrEqual(box.top + tree.clientHeight);
+  expect(row.left - reach).toBeGreaterThanOrEqual(box.left);
+  expect(row.right + reach).toBeLessThanOrEqual(box.left + tree.clientWidth);
+});
+
 it("asks for an item to be picked before showing any form", async () => {
   const el = await mount();
   expect(form(el)).toBeNull();

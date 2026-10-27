@@ -186,6 +186,18 @@ export class MenuPatchDialog extends LitElement {
       nav > ul {
         padding-inline-start: 0;
       }
+      /* The tree scrolls in its own box, so a pick low in it leaves the form beside it in view. A
+         dish's form can be taller than the dialog, so the form is not the part held in place. */
+      nav {
+        max-block-size: calc(var(--wt-tap-min) * 12);
+        overflow: auto;
+        scrollbar-gutter: stable;
+        /* Room for a row's focus ring, which the scrolling box would otherwise clip, also when a
+           row is scrolled to its edge. */
+        padding: var(--wt-space-1);
+        scroll-padding: var(--wt-space-1);
+        margin-inline: calc(-1 * var(--wt-space-1));
+      }
       .group {
         display: block;
         padding: var(--wt-space-2);
@@ -727,8 +739,11 @@ export class MenuPatchDialog extends LitElement {
     this.requestUpdate();
   }
 
-  #pick(target: MenuPatchTarget): void {
+  /** Where the form is stacked under the tree, it is scrolled to; focus stays on what was pressed. */
+  async #pick(target: MenuPatchTarget): Promise<void> {
     this.picked = targetKey(target);
+    await this.updateComplete;
+    this.renderRoot.querySelector('[data-test="form"]')?.scrollIntoView({ block: "nearest" });
   }
 
   get #taxes() {
@@ -953,7 +968,7 @@ export class MenuPatchDialog extends LitElement {
       type="button"
       class="node"
       aria-current=${current ? "true" : nothing}
-      @click=${() => this.#pick(target)}
+      @click=${() => void this.#pick(target)}
     >
       <span data-test="label">${label}</span>
       ${
@@ -997,7 +1012,7 @@ export class MenuPatchDialog extends LitElement {
                         class="link"
                         data-test="variant-link"
                         @click=${() =>
-                          this.#pick({
+                          void this.#pick({
                             kind: "variant",
                             menuItemId: offer!.id,
                             variantId: variant.id,
