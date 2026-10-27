@@ -6,8 +6,9 @@ import {
   colourKey,
   type ThemeChoices,
   type ThemeWarning,
+  textWarnings,
 } from "@waitron/ui-core/theme";
-import { deriveTheme } from "@waitron/ui-core/theme/waitron";
+import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { en, es, type StringKey } from "../i18n/strings.js";
 import { fill, setLocale } from "../i18n/t.js";
@@ -26,6 +27,7 @@ import {
   previewProductName,
   saveDialogLine,
   savedWarningLine,
+  textRowName,
   textScaleLabel,
   textScaleSpoken,
   textSizesLine,
@@ -145,6 +147,69 @@ describe("theme words", () => {
     expect(fixAllText(2)).toBe(esFill("appearance.fix_all_count", { n: "2" }));
   });
 
+  it("the Fix all line counts colours and sizes apart", () => {
+    expect(fixAllText(2, 0)).toBe("2 colours are hard to read.");
+    expect(fixAllText(0, 2)).toBe("2 text sizes are hard to read.");
+    expect(fixAllText(1, 1)).toBe("1 colour and 1 text size are hard to read.");
+    expect(fixAllText(2, 1)).toBe("2 colours and 1 text size are hard to read.");
+    expect(fixAllText(1, 2)).toBe("1 colour and 2 text sizes are hard to read.");
+    setLocale("es-ES");
+    expect(fixAllText(0, 2)).toBe(esFill("appearance.fix_all_text_count", { n: "2" }));
+    expect(fixAllText(1, 1)).toBe(
+      esFill("appearance.fix_all_mixed", {
+        colours: es["appearance.colour_count_one"],
+        sizes: es["appearance.text_size_count_one"],
+      }),
+    );
+    expect(fixAllText(2, 3)).toBe(
+      esFill("appearance.fix_all_mixed", {
+        colours: esFill("appearance.colour_count", { count: "2" }),
+        sizes: esFill("appearance.text_size_count", { count: "3" }),
+      }),
+    );
+  });
+
+  it("names each text row in both languages", () => {
+    expect(textRowName("family")).toBe("Typeface");
+    expect(textRowName("size.sm")).toBe("Small text");
+    expect(textRowName("size.xl")).toBe("Largest text");
+    expect(textRowName("weight.bold")).toBe("Bold weight");
+    setLocale("es-ES");
+    expect(textRowName("weight.medium")).toBe(es["appearance.text.weight.medium"]);
+  });
+
+  it("a text warning reads the same in the dialog and on the saved card", () => {
+    const at100: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { sm: 10 } } };
+    const [small] = textWarnings(at100, WAITRON_DEFAULTS);
+    const line =
+      "Small text: 10\u00a0px is smaller than 12\u00a0px; text that small is often hard to read.";
+    expect(saveDialogLine(small!, at100)).toBe(line);
+    expect(savedWarningLine(small!, at100)).toBe(line);
+    const at130: ThemeChoices = { ...WAITRON_CHOICES, textScale: 130, text: { size: { sm: 8 } } };
+    const [drawn] = textWarnings(at130, WAITRON_DEFAULTS);
+    expect(saveDialogLine(drawn!, at130)).toBe(line);
+    expect(savedWarningLine(drawn!, at130)).toBe(line);
+    const large: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { lg: 9 } } };
+    const [lg] = textWarnings(large, WAITRON_DEFAULTS);
+    expect(savedWarningLine(lg!, large)).toBe(
+      "Large text: 9\u00a0px is smaller than 12\u00a0px; text that small is often hard to read.",
+    );
+    setLocale("es-ES");
+    const esLine = esFill("appearance.text_too_small", {
+      name: es["appearance.text.size.sm"],
+      size: "10",
+    });
+    expect(saveDialogLine(small!, at100)).toBe(esLine);
+    expect(savedWarningLine(drawn!, at130)).toBe(esLine);
+  });
+
+  it("Advanced's count includes text warnings", () => {
+    const small: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { sm: 10 } } };
+    const warnings = [...deriveTheme(small).warnings, ...textWarnings(small, WAITRON_DEFAULTS)];
+    expect(warnings).toHaveLength(1);
+    expect(advancedSummary(small, warnings).endsWith(" · 1 hard to read")).toBe(true);
+  });
+
   it("words the save dialog's line for a brand warning", () => {
     const lemon = warningOn(LEMON, "brandColor");
     expect(saveDialogLine(lemon, LEMON)).toBe(
@@ -225,20 +290,20 @@ describe("theme words", () => {
 
   it("words the saved card's warnings", () => {
     const lemon = warningOn(LEMON, "brandColor");
-    expect(savedWarningLine(lemon)).toBe(
+    expect(savedWarningLine(lemon, LEMON)).toBe(
       "Buttons in the brand colour are hard to see on light screens.",
     );
-    expect(savedWarningLine({ ...lemon, mode: "dark" })).toBe(
+    expect(savedWarningLine({ ...lemon, mode: "dark" }, LEMON)).toBe(
       "Buttons in the brand colour are hard to see on dark screens.",
     );
     const sunken = warningOn(TWO_FIXES, "handSet.light.surface-sunken");
-    expect(savedWarningLine(sunken)).toBe("Sunken areas (light) is hard to read.");
-    expect(savedWarningLine({ ...NO_SHADE, field: "handSet.dark.bg", mode: "dark" })).toBe(
-      "Page (dark) is hard to read.",
-    );
+    expect(savedWarningLine(sunken, TWO_FIXES)).toBe("Sunken areas (light) is hard to read.");
+    expect(
+      savedWarningLine({ ...NO_SHADE, field: "handSet.dark.bg", mode: "dark" }, WAITRON_CHOICES),
+    ).toBe("Page (dark) is hard to read.");
     setLocale("es-ES");
-    expect(savedWarningLine(lemon)).toBe(es["appearance.saved_brand_light"]);
-    expect(savedWarningLine(sunken)).toBe(
+    expect(savedWarningLine(lemon, LEMON)).toBe(es["appearance.saved_brand_light"]);
+    expect(savedWarningLine(sunken, TWO_FIXES)).toBe(
       esFill("appearance.hard_to_read", {
         name: es["appearance.colour.surface-sunken"],
         mode: ES_LIGHT,

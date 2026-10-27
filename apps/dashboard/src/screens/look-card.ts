@@ -1109,7 +1109,7 @@ export class LookCard extends LitElement {
         ${warnings.map(
           (warning) =>
             html`<p class="warning" data-test="saved-warning">
-              <wt-icon name="warning"></wt-icon><span>${savedWarningLine(warning)}</span>
+              <wt-icon name="warning"></wt-icon><span>${savedWarningLine(warning, choices)}</span>
             </p>`,
         )}
         <p class="note" data-test="look-note">${t("appearance.note")}</p>`,

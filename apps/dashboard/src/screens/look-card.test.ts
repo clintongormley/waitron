@@ -667,6 +667,23 @@ describe("editing the Look card in place", () => {
     expect(row(el, "corners")).toBe("Round");
   });
 
+  it("Use Waitron's look is offered on a theme holding text set by hand, and makes Save actionable", async () => {
+    setLocale("en-GB");
+    const stored = theme("t-small", "Small text", {
+      ...WAITRON_CHOICES,
+      text: { size: { sm: 10 } },
+    });
+    const { el, saveTheme } = await mountEditing(inUse(stored));
+    expect(button(el, "use-waitron").disabled).toBe(false);
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    expect(button(el, "save").disabled).toBe(false);
+    expect(button(el, "save").variant).toBe("primary");
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1].text).toEqual({});
+  });
+
   it("lays the editor out by the card's own width, so a 700px card squashes no preview panel", async () => {
     const { innerWidth: width, innerHeight: height } = window;
     await page.viewport(1024, 800);

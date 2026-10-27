@@ -9,10 +9,16 @@ import {
   type ThemeChoices,
   type ThemeColour,
   type TextScale,
+  type TextSizeKey,
+  type TextWarning,
+  type TextWeightKey,
   type ThemeWarning,
   colourKey,
+  drawnTextSize,
   groupAgainst,
+  isTextWarning,
 } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { currentContentLanguages } from "@waitron/ui";
 import { catalogues, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -43,8 +49,27 @@ export function brandFixedText(mode: Mode, colour: string): string {
   return fill(`appearance.brand_fixed_${mode}`, { colour });
 }
 
-export function fixAllText(count: number): string {
-  return fill("appearance.fix_all_count", { n: String(count) });
+export function fixAllText(colours: number, sizes = 0): string {
+  if (sizes === 0) return fill("appearance.fix_all_count", { n: String(colours) });
+  if (colours === 0) return fill("appearance.fix_all_text_count", { n: String(sizes) });
+  return fill("appearance.fix_all_mixed", {
+    colours: countOf("appearance.colour_count", colours),
+    sizes: countOf("appearance.text_size_count", sizes),
+  });
+}
+
+export function textRowName(
+  field: "family" | `size.${TextSizeKey}` | `weight.${TextWeightKey}`,
+): string {
+  return t(`appearance.text.${field}`);
+}
+
+export function textWarningLine(warning: TextWarning, choices: ThemeChoices): string {
+  const key = warning.field.split(".")[2] as TextSizeKey;
+  return fill("appearance.text_too_small", {
+    name: textRowName(`size.${key}`),
+    size: String(drawnTextSize(choices, key, WAITRON_DEFAULTS)),
+  });
 }
 
 function handSetColour(warning: ThemeWarning): ThemeColour {
@@ -182,7 +207,10 @@ export function handNames(choices: ThemeChoices): string[] {
   );
 }
 
-export function advancedSummary(choices: ThemeChoices, warnings: readonly ThemeWarning[]): string {
+export function advancedSummary(
+  choices: ThemeChoices,
+  warnings: readonly (ThemeWarning | TextWarning)[],
+): string {
   const names = handNames(choices);
   const set =
     names.length === 0
@@ -210,7 +238,8 @@ function hardToRead(warning: ThemeWarning): string {
   });
 }
 
-export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): string {
+export function saveDialogLine(warning: ThemeWarning | TextWarning, choices: ThemeChoices): string {
+  if (isTextWarning(warning)) return textWarningLine(warning, choices);
   if (warning.field === "brandColor") return t(`appearance.dialog_brand_${warning.mode}`);
   const name = themeColourName(handSetColour(warning));
   const mode = t(`appearance.mode.${warning.mode}`);
@@ -229,7 +258,11 @@ export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): st
   return fill("appearance.dialog_blocked", { name, mode, blockers: blockerText(warning, choices) });
 }
 
-export function savedWarningLine(warning: ThemeWarning): string {
+export function savedWarningLine(
+  warning: ThemeWarning | TextWarning,
+  choices: ThemeChoices,
+): string {
+  if (isTextWarning(warning)) return textWarningLine(warning, choices);
   if (warning.field === "brandColor") return t(`appearance.saved_brand_${warning.mode}`);
   return hardToRead(warning);
 }
