@@ -484,8 +484,8 @@ Waitron shows the restaurant's privacy notice page in the emails it sends staff 
 account, reset a password or confirm a new email address, on the dashboard's sign-in page and the
 pages an email's link opens to set up an account or reset a password, in **Account settings** and
 in the `README.txt` of a data download. It is set on the **Privacy** card in **Venue settings →
-Venue details**; there is no environment setting for it. Its privacy email and page also appear
-in the email that sends a full invoice.
+Venue details**; there is no environment setting for it. The Privacy card's email and page also
+appear in the email that sends a full invoice.
 
 ### Optional Google login
 

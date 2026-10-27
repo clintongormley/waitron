@@ -88,9 +88,9 @@ name and tax number. Your rights and more
 information: _your privacy email address_, _the address of your privacy page_.
 
 When Waitron emails a full invoice, the email carries this notice, with your venue's legal name
-and the privacy email and page from the **Privacy** card; the part about the Tax Agency only for an
-invoice the box sends a record of, and in Spanish unless the invoice is in English. With neither
-set, the email carries no notice. The email reaches the customer after staff have taken the
+and the privacy email and page from the **Privacy** card. The notice is in Spanish unless the
+invoice is in English, and has the part about the Tax Agency only for an invoice the box sends a
+record of. With neither set, the email carries no notice. The email reaches the customer after staff have taken the
 details, so show the notice where they take them too, for example on a sign beside the till.
 
 If you also want it on paper, you can type a short version into the receipt's **Footer message**. In
@@ -181,8 +181,8 @@ Waitron shows the page in the emails it sends staff to set up an account, reset 
 confirm a new email address, on the dashboard's sign-in page and the pages an email's link opens to
 set up an account or reset a password, in **Account settings** and in the `README.txt` of a data
 download. A change shows in the next email or download; a page already open shows it once reloaded,
-except **Account settings**, which follows it at once. Waitron also shows both in the email that
-sends a full invoice.
+except **Account settings**, which follows it at once. The email that sends a full invoice also shows
+whichever of the two are set.
 
 ## Your record of processing {#record}
 

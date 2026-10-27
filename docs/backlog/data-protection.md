@@ -345,8 +345,12 @@ by the answers):
     starts "Factura F1/23 — DUPLICADO" and carries the same notice. Alternative: the original only.
   - **F. If the notice's facts cannot be read, the invoice email is not sent.** The read of the
     Privacy card's values fails for Jordi's invoice; the attempt is recorded with an unknown
-    outcome, as when the invoice itself cannot be read. Alternative: send the invoice without the
-    notice.
+    outcome, as when the invoice itself cannot be read. Nothing retries it by itself. Orders shows
+    the attempt as "Uncertain" and "May not have been delivered.", and an alert says "Full invoice
+    {invoice} may not have reached its customer. Check before sending it again." Staff allowed to
+    export are offered "Send the email again" on the order in Orders while no original has reached
+    the customer. So staff are told the invoice may not have reached Jordi even though nothing was
+    sent. Alternative: send the invoice without the notice.
 
   Landing: the pull request waits for the owner, who has not yet ruled whether a change to an
   invoice email's body lands without them (questions.md, 2026-10-27).
