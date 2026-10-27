@@ -145,11 +145,13 @@ describe("kitchen instructions on station work", () => {
       setLocale(locale);
       await page.viewport(390, 900);
       const dish = { unitName: null, soldInEach: true, note: null, wasStarted: false };
+      // The server copies the first dish onto the notice's own fields.
       const many = {
         ...notice,
+        wasStarted: true,
         orderNoteChange: { before: "Old train", after: "New train" },
         dishes: [
-          { ...dish, lineName: "Burger", quantity: "1.000", note: "No onions" },
+          { ...dish, lineName: "Burger", quantity: "1.000", note: "No onions", wasStarted: true },
           { ...dish, lineName: "Croquetas", quantity: "2.000", wasStarted: true },
           { ...dish, lineName: "Flan", quantity: "1.000" },
         ],
@@ -171,13 +173,15 @@ describe("kitchen instructions on station work", () => {
       ]);
       expect(rows[0]!.querySelectorAll(".notice-line")).toHaveLength(3);
       expect(dishes[0]!.textContent).toContain("No onions");
+      const notes = [...rows[0]!.querySelectorAll(".notice-note")].map((n) => n.textContent);
+      expect(notes.filter((text) => text === "No onions")).toHaveLength(1);
       const started = locale === "en-GB" ? "Started" : es["station.notice.started"];
       expect(dishes.map((row) => row.querySelector(".notice-started")?.textContent)).toEqual([
-        undefined,
+        started,
         started,
         undefined,
       ]);
-      expect(rows[0]!.querySelectorAll(".notice-started")).toHaveLength(1);
+      expect(rows[0]!.querySelectorAll(".notice-started")).toHaveLength(2);
       const button = rows[0]!.querySelector("wt-button")!;
       for (const name of ["1× Burger", "2× Croquetas", "1× Flan"])
         expect(button.getAttribute("aria-label")).toContain(name);
