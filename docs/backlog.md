@@ -138,9 +138,12 @@ come after the list above:
   on their heading, which shows the column's count, and are remembered on the device; the one
   Columns store A773-2 reuses) landed in #2129, from the build plan's slice 9. Slice 9b (each
   kitchen board's header row with Columns, whose window moves columns up or down and hides or
-  shows them, kept on the device) landed in #2135, from the build plan's slice 9b; next, slice 9c
-  (Overview and the narrow tabs), taking turns with lane G's A773-2 on the station screen. A773-2 builds the pass's part, and the phone's
-  order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  shows them, kept on the device) landed in #2135, from the build plan's slice 9b. Slice 9c
+  (Overview, the first kitchen column, counting each dish to make with the held after a +; below
+  the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its
+  collapsed column, carry a red bar) is delivered from the build plan's slice 9c. What is left of
+  A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2, which builds the pass's
+  part: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
@@ -2138,6 +2141,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   board's header row. A key added to `STATION_COLUMNS` must also be drawn and named by
   `stationColumnNames`, or "the station registers only columns the board draws" in
   `apps/till/src/widgets/station-queue.test.ts` fails.
+  What A797 leaves for the pass (slice 9c): Overview on the pass calls `overviewRows` from
+  `apps/till/src/state/kitchen-overview.ts` with its own `OverviewDish`es and builds no second
+  aggregator (A797 plan, slice 9c D1). Its `OverviewFact` needs `unitName` and `soldInEach`, or a
+  dish sold by weight counts by its weight rather than as one. Once station dishes carry a
+  requested phase, `overviewDishes` counts them as held. With Held as a fifth column a kitchen
+  board needs 1148 px at standard text (`columnsFit`), a kitchen display's viewport about 1228 px,
+  so a 1024 px display draws tabs unless a column is hidden or collapsed. The kitchen's tabs keep
+  the layout's order and hidden columns but not collapse, which the pass's narrow list keeps (slice 9c D9).
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
@@ -2751,7 +2762,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, slice 8b (short names on kitchen cards) in #2126, and slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) in #2129:
+  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, slice 8b (short names on kitchen cards) in #2126, slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) in #2129, and slice 9b (the Columns window) in #2135. Slice 9c (Overview, the first kitchen column, counting each dish to make with the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its collapsed column, carry a red bar) is delivered from the build plan's slice 9c. What is left of A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate

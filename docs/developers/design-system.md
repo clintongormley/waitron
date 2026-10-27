@@ -5500,7 +5500,7 @@ capitals between `**` above each such run; correction and MOVED slips print none
 
 ### The kitchen screen's cards
 
-A kitchen screen draws the columns Waiting, Preparing and Ready that its layout shows, in the
+A kitchen screen draws the columns Overview, Waiting, Preparing and Ready that its layout shows, in the
 layout's order, and one card per station and
 group across the group's bills; dishes with no group (a counter order, a bill with no party, or
 dishes moved in) make one card per station and bill (`kitchenCards`,
@@ -5550,7 +5550,7 @@ column's name, its count of cards (held cards included, 0 shown) and a decorativ
 `--wt-color-surface` with a 1 px `--wt-color-border` and `--wt-radius-md`; a tap sends
 `toggle-column`, and the screen applies `toggleColumnCollapsed` and saves (`#onToggleColumn`). A
 collapsed column draws no cards and is a strip `--wt-tap-min` wide, its heading written top to
-bottom with the chevron first ("› Ready · 3"; `#board`, `station-queue.ts`). The drawn order does
+bottom with the chevron first ("› Ready · 3"; `#heading`, `station-queue.ts`). The drawn order does
 not decide a dish's state word: `#stateWord` compares the kitchen-state order (`COLUMNS`,
 `station-queue.ts`). A column in the layout's `hidden` list is not drawn, and its cards still count
 in the header row's counts line; every column may be hidden, and the header row and Columns stay.
@@ -5563,6 +5563,46 @@ view: each tap sends `column-move` or `column-show`, and the screen applies `mov
 `setColumnVisible` and saves at once (`#keepColumns`, `till-station-screen.ts`), so it holds no
 staged input, takes no draft scope and has no `*.unsaved.test.ts`; Done and Escape only close it.
 The screen closes it when its board is no longer drawn or the device changes.
+
+Overview is the first column by default (`STATION_COLUMNS`, `kitchen-columns.ts`), and a stored
+layout without it reads with it first, shown and open (`sanitise`). Its rows come from
+`overviewRows` (`apps/till/src/state/kitchen-overview.ts`) over `overviewDishes`
+(`kitchen-cards.ts`): one row per kitchen name across every card of the board, hidden and collapsed
+columns included. A fired dish not Ready counts as making, a dish not fired as held and a Ready dish
+not at all, each by `dishThousandths`, which `thousandthsToMake` also uses, so the making counts add
+up to the counts line. Rows with something to make come first, then rows that are only held, each
+group in the order a name first appears in the cards' order; its heading's count is `rowsToMake`,
+the rows with something to make. Its body (`#overview`, `station-queue.ts`) is one `ul` on
+`--wt-color-surface` with a 1 px `--wt-color-border` and `--wt-radius-md`, one row per dish: the
+name, wrapped rather than cut, then the making count in bold, then, while any is held, "+2" in
+`--wt-font-size-sm` and `--wt-color-text-muted`, hidden from screen readers and read as ", 2 held"
+(`station.overview_held`). The column keeps `.column`'s basis and does not grow
+(`.column-overview`).
+
+A board with cards draws tabs instead of columns when `columnsFit`
+(`apps/till/src/state/kitchen-board-fit.ts`) says its shown columns do not fit: an open card column
+needs 16.5 times the board's text size, an open Overview its `11rem` basis, a collapsed column
+`--wt-tap-min`, and each gap `--wt-space-3`. The widget measures its host in `willUpdate` before
+every drawing (its width and text size, the root's text size, and the two tokens), so the first
+drawing is already tabs or columns. A `ResizeObserver` asks for a drawing when the width changes; it
+watches a zero-height `.width-probe` line at the top of the widget, not the host, because the
+switch to tabs changes the host's height, which a watch on the host would report again in the same
+frame. The tabs (`#tabs`, `station-queue.ts`) are a `role="group"` row named "Columns" of the
+till's pressed pickers (`segmentedOptionStyles`) with `aria-pressed`, one per shown column in the
+layout's order, each "Waiting · 2" with the "·" hidden from screen readers, Overview's count being
+its rows to make. The first tab is chosen until a tap; the choice is kept while the widget is
+mounted and falls back to the first shown tab when its column is hidden. A heading tap that opens a
+collapsed column, and so stops the columns fitting, chooses that column's tab. A collapsed column
+keeps its tab and shows its cards when chosen, and the stored layout does not change. Under the
+tabs, one `section.tab-panel` carrying the column's `data-column` holds the chosen column's cards or
+Overview's list, with no heading.
+
+A tab whose column holds a late card (`lateCards`, so only Waiting and Preparing) carries
+`data-late` and a `--wt-space-1` `--wt-color-danger` bar under it, outside its fill; a collapsed
+column holding one carries the same bar inset across the top of its heading. An open column draws
+none. While a column is late, its drawn count is hidden from screen readers and one visually hidden
+span reads the count and the late words, "1, 1 late" (`#lateWords`, `station-queue.ts`): a hidden
+span after the drawn count put a space before the comma in Chromium's accessible name.
 
 ### The till's late-send mark and window
 

@@ -8514,6 +8514,9 @@ From `git grep -ln "kitchen-columns\|kitchen-cards" -- 'apps/*.ts'` outside test
   the **width** changes, so the switch's own change of height never feeds back. Disconnected, it stops observing. The
   precedent is the order screen's measured width (`DRAFT_SIDE_BY_SIDE_MIN_WIDTH`,
   `till-table-order-screen.ts:161`, `:1467-1503`, read).
+  _2026-10-27, as built (Task 6a): the observer watches a zero-height `.width-probe` line at the top
+  of the widget, not the host, because a watch on the host raised a ResizeObserver loop error when
+  the switch changed the host's height._
 - **D9. The tabs.** A `<div class="column-tabs" data-column-tabs role="group"
   aria-label=${t("station.columns")}>` row (a group, not a `nav`: a stacked screen draws one row per
   board, and two `nav` landmarks of one name break axe's `landmark-unique` rule, the plan review's
@@ -8565,6 +8568,10 @@ From `git grep -ln "kitchen-columns\|kitchen-cards" -- 'apps/*.ts'` outside test
   nothing beyond the header line (slice 9b D3). **A departure from the owner's D14 answer**
   ("carries the same red bar"), an **owner FYI**: the colour and thickness are the same, but the
   bar sits under a tab and inside the top of a collapsed strip.
+  _2026-10-27, as built (Task 8): while a column is late its drawn count is hidden from screen
+  readers and one visually hidden span reads the count and the late words ("1, 1 late"), because
+  with a hidden ", 1 late" after the drawn count Chromium put a space before the comma in the
+  name._
 - **D11. Tests start at a phone's width, so the station suites take a wide frame.** Every till
   browser test starts at 414 × 896 (`DEFAULT_FRAME`, `test-helpers.ts:108`, read); under D7 a board
   there draws tabs, which opens on Overview and draws no card. The probe with tabs at 414 failed
