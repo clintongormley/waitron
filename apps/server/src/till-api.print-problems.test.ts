@@ -88,7 +88,7 @@ async function tableWithFailedTicket() {
 }
 
 describe("GET /api/parties/:id/print-problems", () => {
-  it("answers like an unknown route now that the groups read carries the problems", async () => {
+  it("answers as an unknown route does", async () => {
     const table = await tableWithFailedTicket();
 
     const missing = await send(
