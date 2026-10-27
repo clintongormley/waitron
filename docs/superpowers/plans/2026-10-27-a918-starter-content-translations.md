@@ -956,9 +956,11 @@ Root guards before `/finish-branch`: the plan's list (below), and
 
 Written 2026-10-27 when the slice was picked up, from main `dd73ef87a` (slice 2 landed in #2130).
 **Review path: FULL.** Risk trigger: a cross-package contract. `@waitron/venue-service` gains
-exports (`STARTER_STEP_NAMES`, `STARTER_SEASON_NAMES`, `STARTER_ZONE_NAMES`,
-`STARTER_PERIOD_NAMES`, `STARTER_OPEN_PERIOD_NAMES`) that `apps/server`'s setup check and demo
-seed match against, and `@waitron/provisioning` gains a test-only dependency on it. No fiscal
+exports (`STARTER_SEASON_NAMES`, `STARTER_ZONE_NAMES`, `STARTER_PERIOD_NAMES`,
+`STARTER_OPEN_PERIOD_NAMES`) that `apps/server`'s setup check, demo seed and tests read, and
+`@waitron/provisioning` gains a test-only dependency on it. One fresh-context review of this task
+list ran first (`~/waitron-campaign-b/a918-3-plan-review.md`: 0 Critical, 3 Important, 10 Minor,
+all taken; see "Review rulings (slice 3)"). No fiscal
 invariant, tenant isolation, migration, grant, permission or concurrency change.
 
 **The owner's answer to FYI A (2026-10-27, relayed):** "A918 A: 2. One-name starter rows (seasons,
@@ -987,7 +989,7 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
    So an imported venue keeps the exporting venue's words, whichever language they are in; pinned
    today for seasons by `apps/server/src/configuration-transfer.test.ts:7831` (the target's seasons
    equal the source's). Only `readSetupOpeningHours` reads the result afterwards, through the
-   "Open" match (Task 4).
+   "Open" match (Task 4b).
 2. **Every writer.** `git grep -n "ensureDefaultSeasons\|addStarterServiceSteps\|placeOpenPeriod\|DEFAULT_SEASONS\|STARTER_STEPS"`
    and the starter-word greps (`'"(Open|Counter|Spring|Summer|Autumn|Winter|Set up|Take order|Anything else\?)"'`
    over `apps packages scripts`, outside tests) give:
@@ -1028,6 +1030,11 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
      one helper in each file that finds a season by name (the sites in Task 2 and Task 3) and
      left **20** failures, each an assertion that spells a default season's name; they are the
      rows of "Changed test checks". The service-steps failure is the `["fr"]` row (below).
+     Counting failures misses two kinds of change, which the review found (I1, I2): a later
+     assertion in a test that already failed (a test stops at its first failure;
+     `opening-hours-calendar.test.ts:255`, `:507-510`), and a test that SENDS a default season's
+     name and still passes with a changed meaning (`season-routes.test.ts:346`, `:518`, `:548`).
+     Both are in the table now, and Task 3 step 1 greps for the second kind.
    - `@waitron/provisioning`: 8 failed; 7 of them (`cli-owned-entry` 5, `cli-same-hour-entry` 1,
      `first-setup-command-import` 1) fail identically with the prototype stashed, so they predate
      this slice (their stderr carries a `<claude-code-hint …>` line from this machine's session). The
@@ -1053,7 +1060,7 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
    `seed-catalogue.ts`'s fix it fails at `:787` (`expected [ { kind: 'menu', …(4) }, …(1) ] to
    deeply equal []`, a content gap from the unreused menu); **without `seed-floor.ts`'s fix it
    passes** (`Tests 1 passed | 19 skipped (20)`), so no existing test catches the second "Open"
-   period that lookup's miss creates. Task 4 adds that check.
+   period that lookup's miss creates. Task 4b adds that check.
 6. **Guides and docs.** `git grep` of the starter words, English and Spanish, over
    `apps/server/src/guide/`: only the steps' names, as examples
    (`guide/en/table-service.md:124-125`, `guide/es/table-service.md:128-130`). The steps a real
@@ -1088,7 +1095,7 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
      the bacon from both menus, in period-name order (`packages/venue-service/src/operations.ts:895`),
      and `find` takes the first, now the starter period's unrepublished menu (`'public'`).
    These change the fixture's choice, not what the test checks: each names the test's own period or
-   menu instead of taking the first row (Task 4 step 6). Production ordering by name is unchanged.
+   menu instead of taking the first row (Task 4b step 5). Production ordering by name is unchanged.
    Measured in the prototype: with those three changes (`eq(menuPeriods.name, "Always")` in the two
    selects, `offer.menuId === tables.menuId` in the `find`), the three files print
    `Tests 67 passed (67)`.
@@ -1111,11 +1118,16 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
    language too when the tenant row is missing. The two differ only in a database with no tenant
    row, which setup never leaves a seed with (`ensure-tenant` is the plan's first action,
    `packages/provisioning/src/venue-plan.ts:164`); the left join keeps today's step rule for the
-   test venues that have none (item 4), and `starter-language.test.ts` pins it.
-3. **Each writer reads the language only when it writes**: `addStarterServiceSteps` on each call,
-   `ensureDefaultSeasons` only past its "has seasons" return, the seed's zone only when it inserts
-   one, `placeOpenPeriod` only past its "has a period" return. That covers a department added later
-   and a venue whose seasons are created by its first week write.
+   test venues that have none (item 4), and `starter-language.test.ts` pins it. Slice 1 is not
+   changed and no backlog entry is added for the difference: in production both joins answer the
+   same.
+3. **Each writer reads the language only when it writes, and a caller writing several reads it
+   once**: `addStarterServiceSteps` on each call, `ensureDefaultSeasons` only past its "has
+   seasons" return, `placeOpenPeriod` only past its "has a period" return. That covers a department
+   added later and a venue whose seasons are created by its first week write. The three take an
+   optional `staffLanguage` that skips the read (review M3): `createDepartment` reads once and passes
+   it to the steps and the period; the seed reads once and passes it to the steps, the seasons, its
+   zone and the period. Callers that pass nothing (week writes, the demo's deli) keep the read.
 4. **The English names stay in code**: `STARTER_STEPS` keeps only the English (`name`), and is
    exported from `service-steps.ts` for the key test; `DEFAULT_SEASONS` is unchanged;
    `COUNTER_ZONE_NAME = "Counter"` (`provisioning.ts`) and `OPEN_PERIOD_NAME = "Open"`
@@ -1129,10 +1141,12 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
    test helper, `packages/venue-service/src/testing/starter-seasons.ts` (`src/testing/**` is outside
    coverage, `packages/venue-service/vitest.config.ts:56`): `starterSeasonName(english, staffLanguage)`
    and its reverse, `englishSeasonName(stored, staffLanguage)` (a season not in the file keeps its
-   name). Every call states its staff language (`"es"` for those files' `es-ES` venues). The
-   assertions that spell a default season's name read it from the file instead. The alternative, an
-   `en-GB` receipt on each file's venue, is a one-line change per file, but those suites would stop
-   running on a Spanish venue; not chosen (for the driver to overrule).
+   name). `englishSeasonName` is strict (review M2): with `staffLanguage` other than `"en"` it
+   throws when `stored` is one of `DEFAULT_SEASONS`' English names, so every suite using it fails
+   if the writer falls back to English. Every call states its staff language (`"es"` for those
+   files' `es-ES` venues). The assertions that spell a default season's name read it through
+   `starterSeasonName` instead. The alternative, an `en-GB` receipt on each file's venue, was
+   rejected by the driver: those suites would stop running on a Spanish venue.
 
 ## What changes, and for whom
 
@@ -1149,13 +1163,21 @@ with `TESTCONTAINERS_RYUK_DISABLED=true`.
 - **The command-line tool `waitron-provision`**, which checks no receipt language (slice 2's note):
   with `en-US`, `en` or `EN-GB` receipts in Spain the steps become Spanish where today they are
   English (the staff language takes the receipt language only when it is exactly `es-ES` or
-  `en-GB`), as slice 2 found and pinned for the profiles. Task 1 pins the `en-US` case as decided
+  `en-GB`), as slice 2 found and pinned for the profiles, and its seasons, counter zone and starter
+  period, English today, become Spanish (review M5). Task 1 pins the `en-US` case as decided
   behaviour, and the pull request says so.
 - **A Spanish demo** (`seedDemoRestaurant` with `locale: "es"`): its restaurant keeps the
   provisioned «Abierto» period (the fixed lookup updates it in place), while the deli's period is the
   demo's own English "Open" (`seed-floor.ts:188`): mixed words, but the demo's own content is A972's,
   so slice 3 changes only the lookups.
 - **A venue imported from an export** keeps the exporting venue's words (Task 0 item 1).
+- **Lists ordered by name** read differently in a new Spanish venue: «Abierto» sorts before a
+  period such as "Always" where "Open" sorted after it (`operations.ts:895`, `menu-timetable.ts:173`),
+  and the counter zone «Mostrador» ties at `displayOrder` 0 by name (`kitchen-screens.ts:116`,
+  `floor-plan-sets.ts:262`). A consequence of the owner's decision; one line in the pull request.
+- **CI**: `@waitron/provisioning`'s new test-only dependency on `@waitron/venue-service` (Task 4a)
+  makes CI run provisioning's tests on every venue-service change; the pull request says so (cost
+  accepted by the driver, review M9).
 
 ## Global constraints (slice 3)
 
@@ -1166,7 +1188,7 @@ from that file. `service-steps.test.ts` spells «Montar mesa», «Tomar nota», 
 change, then switched to read the file (Task 1 step 5). No migration, no error code, no receipt,
 invoice, filed-record or report change. New test files: `packages/venue-service/src/starter-content.test.ts`
 and `starter-language.test.ts`, in venue-service; **no new server test file**. A manifest change
-needs the lockfile (Task 4: `pnpm install`). Every implementer runs `pnpm format:check` before each
+needs the lockfile (Task 4a: `pnpm install`). Every implementer runs `pnpm format:check` before each
 commit. Tasks 2 and 3 share a red window: Task 2's writer change fails Task 3's files until Task 3
 lands, so Task 2 runs only its own files and says so in its handover.
 
@@ -1175,9 +1197,12 @@ lands, so Task 2 runs only its own files and says so in its handover.
 The owner's decision changes what a Spanish venue's default seasons, counter zone and starter
 period are called, and the staff-language rule changes one steps case. These are the only existing
 assertions that may change; each is named in its task's commit and the pull request lists them.
-Any other existing assertion that has to change is a STOP: say why in the handover. "Lookup" rows
-change a helper that finds a default season by its English name; they change no assertion.
-Line numbers are on `dd73ef87a`.
+Any other existing assertion that has to change is a STOP: say why in the handover. The prototype
+counted the first failure in each test; a later assertion in a test already listed, failing for
+the same reason (a default season's Spanish name in the received value), is expected and is not a
+STOP; name it in the commit (review I2). "Lookup" rows change a helper that finds a default season
+by its English name, and "fixture" rows change which of the test's own rows a fixture picks; they
+change no assertion. Line numbers are on `dd73ef87a`.
 
 | Where | Now | Becomes | Task |
 | --- | --- | --- | --- |
@@ -1187,21 +1212,26 @@ Line numbers are on `dd73ef87a`.
 | `packages/venue-service/src/menu-timetable.test.ts:1286-1291`, `:1389` | `name: "Spring"`… | `name: starterSeasonName("Spring", "es")`… | 2 |
 | `packages/venue-service/src/menu-timetable-routes.test.ts:881` (`hours.clock_change_conflict`'s params) | `seasonName: "Autumn"` | `starterSeasonName("Autumn", "es")` | 2 |
 | Lookups: `opening-hours-calendar.test.ts:90-92`, `:307-309`, `period-delete.test.ts:84`, `period-delete-routes.test.ts:98`, `season-routes.test.ts:98-100` | by English name | through the helper, as above | 3 |
-| `packages/venue-service/src/opening-hours-calendar.test.ts:144`, `:249`, `:378`, `:503` (four `toEqual`s; the tenant is `ES`, Sevilla, `:48-61`) | default seasons' names spelled | `starterSeasonName(…, "es")` | 3 |
+| `packages/venue-service/src/opening-hours-calendar.test.ts:144`, `:249`, `:255`, `:378`, `:503`, `:507-510` (six assertions; the tenant is `ES`, Sevilla, `:48-61`) | default seasons' names spelled | `starterSeasonName(…, "es")` | 3 |
 | `packages/venue-service/src/period-delete.test.ts:173`, `:192`, `:538`, `:607` | `name: "Summer"`…, and `"Summer 3 Dinner 20:00-23:00"`-style lines | the file's names, the lines built with `starterSeasonName` | 3 |
 | `packages/venue-service/src/period-delete-routes.test.ts:260`, `:292`, `:391`, `:413` | as above, in route answers | as above | 3 |
 | `packages/venue-service/src/season-routes.test.ts:154`, `:217`, `:376`, `:390` | default names spelled | `starterSeasonName(…, "es")` | 3 |
 | `packages/venue-service/src/season-routes.test.ts:420-430` ("answers season.invalid with 400…") | renames Summer to `"Winter"`, a clash with the default Winter | renames it to `starterSeasonName("Winter", "es")`, still a clash; today's `"Winter"` no longer clashes and answers 200 (measured) | 3 |
+| `packages/venue-service/src/season-routes.test.ts:346`, `:352`, `:358` ("PUT /seasons renames and moves a season", review I1) | renames Summer to `" Verano "` and expects `"Verano"`; after the slice Summer is already «Verano», so it renames nothing and still passes (measured by the review, E2) | an English name the file does not hold: `" High summer "` sent, `"High summer"` expected; the title stays true and the Spanish literal leaves the test | 3 |
+| `packages/venue-service/src/season-routes.test.ts:518` ("refuses a call with no clock revision, a rename included") | the "rename" is `name: "Verano"` | `name: "High summer"`, still a rename | 3 |
+| `packages/venue-service/src/season-routes.test.ts:548` ("refuses a stale clock revision on a move…") | sends `name: "Summer"`, today a move alone; after the slice a move plus a rename | `name: starterSeasonName("Summer", "es")`, a move alone again | 3 |
 | `apps/server/src/till-api.seasons.test.ts:68-74` (lookup; its venue is a Spanish signed-in till) | `season.name === name` | `season.name === starterName(STARTER_SEASON_NAMES, name, "es")` (both from their packages; no venue-service test helper outside the package) | 3 |
-| `apps/server/src/configuration-transfer.test.ts:7739`, `:7754`, `:7791`, `:7826-7829`, `:7834` (the seasons transfer; a Madrid `es-ES` venue, `:370-385`) | `'Winter'` in SQL, `eq(seasons.name, "Autumn")`, `ids.get("Winter")`, expected `"Spring"`, `"Summer"`, `"Winter"` | each read from `STARTER_SEASON_NAMES` (the SQL one as a bound value); `"Harvest"` and the round-trip assertions unchanged | 3 |
-| `apps/server/src/till-api.zone-closed.test.ts:48-51` (fixture) | the department's first period, unordered | the period named "Always", the helper's own (`zone-menus.ts:36`); its five tests' assertions unchanged | 4 |
-| `apps/server/src/testing-zone-offers.test.ts:175-182` (fixture) | `savedPeriod`, the first row, unordered | the row named "Always"; the assertion at `:190-201` unchanged | 4 |
-| `apps/server/src/till-api.sell-published.test.ts:976-978` | `offers.find((offer) => offer.productId === bacon.productId)` | the same `find` held to the test's own menu, `offer.menuId === tables.menuId` (an offer carries its `menuId`, `packages/catalogue/src/menu-types.ts:25`); the expected value unchanged | 4 |
-| `packages/provisioning/src/venue-apply.test.ts:382`, `:388` (`starting_zone`) | `"Counter"` | `STARTER_ZONE_NAMES.Counter.es` (the `es-ES` venue `B10101010`); `@waitron/provisioning` gains a `devDependencies` entry for `@waitron/venue-service` (its closure does not reach provisioning: checked with a node walk over every workspace `package.json`, dependencies and devDependencies) | 4 |
+| `apps/server/src/configuration-transfer.test.ts:7739`, `:7754`, `:7786`, `:7802`, `:7826-7829`, `:7834` (the seasons transfer; a Madrid `es-ES` venue, `:370-385`) | `'Winter'` in SQL, `eq(seasons.name, "Autumn")`, `ids.get("Winter")`, expected `"Spring"`, `"Summer"`, `"Winter"` | each read from `STARTER_SEASON_NAMES` (the SQL one as a bound value); `"Harvest"` and the round-trip assertions unchanged | 3 |
+| `apps/server/src/till-api.zone-closed.test.ts:48-51` (fixture data, not an assertion: «Abierto» sorts before "Always") | the department's first period, unordered | the period named "Always", the helper's own (`zone-menus.ts:36`); its five tests' assertions unchanged | 4b |
+| `apps/server/src/testing-zone-offers.test.ts:175-182` (fixture data, not an assertion: the same reason) | `savedPeriod`, the first row, unordered | the row named "Always"; the assertion at `:190-201` unchanged | 4b |
+| `apps/server/src/till-api.sell-published.test.ts:976-978` (fixture data, not an assertion: the offers list in period-name order, and «Abierto» now comes first) | `offers.find((offer) => offer.productId === bacon.productId)` | the same `find` held to the test's own menu, `offer.menuId === tables.menuId` (an offer carries its `menuId`, `packages/catalogue/src/menu-types.ts:25`); the expected value unchanged | 4b |
+| `packages/provisioning/src/venue-apply.test.ts:382`, `:388` (`starting_zone`) | `"Counter"` | `STARTER_ZONE_NAMES.Counter.es` (the `es-ES` venue `B10101010`); `@waitron/provisioning` gains a `devDependencies` entry for `@waitron/venue-service` (its closure does not reach provisioning: checked with a node walk over every workspace `package.json`, dependencies and devDependencies; the review's E5 repeated it), so the test spells nothing; CI then runs provisioning's tests on venue-service changes (M9, accepted) | 4a |
 
 Predicted **unchanged**, each run unedited in its task: `packages/venue-service/src/provisioning.test.ts`
-(its venues have `en-GB` receipts, `:52`, `:115`; its "a new Counter id while retaining a deleted
-Counter" case, `:546-563`, too), `operations.test.ts:276-286` (`en-GB`, `:386`),
+(its venues have `en-GB` receipts, `:52`, `:115`, and its "a new Counter id while retaining a
+deleted Counter" case, `:546-563`, too; its one `es-ES` venue with a tenant, "names the default
+department after the venue", `:89-107`, asserts only the department's name, and Tasks 4a and 4b
+extend it rather than adding a venue), `operations.test.ts:276-286` (`en-GB`, `:386`),
 `seasons.test.ts:69-110` (`en-GB`, `:60`),
 `service-steps.test.ts`'s `["en"]` row (no country, `en` → `en`), `apps/server/src/setup-opening-hours.test.ts`
 (`en-GB`, `:30`), `apps/server/scripts/demo-seed/seed.test.ts` and `seed-floor.test.ts` (the English
@@ -1244,12 +1274,15 @@ only), `index.ts`.
      `resolveInstalledStarterLanguages`, `type StarterStaffLanguage` from `@waitron/country-packs`
      (already a dependency, `packages/venue-service/package.json`).
    - `service-steps.ts`: `export const STARTER_STEPS` holds `{ name, start, minutes }` with the
-     English name; `addStarterServiceSteps` writes
-     `starterName(STARTER_STEP_NAMES, step.name, await readStarterStaffLanguage(tx, cfg))` (read once,
-     before the loop) and drops its own `locations` select and the `:125` rule.
+     English name; `addStarterServiceSteps` gains an optional `staffLanguage` (decision 3) and
+     writes `starterName(STARTER_STEP_NAMES, step.name, language)`, where `language` is the one
+     passed or else `await readStarterStaffLanguage(tx, cfg)` (read once, before the loop); it drops
+     its own `locations` select and the `:125` rule.
    - `provisioning.ts`: `export const COUNTER_ZONE_NAME = "Counter"` used at `:105`;
      `menu-timetable.ts`: `export const OPEN_PERIOD_NAME = "Open"` used at `:73`. No behaviour change.
-   - `index.ts`: export the four objects and `readStarterStaffLanguage`.
+   - `index.ts`: export `STARTER_SEASON_NAMES` only (the server tests read it, Task 3). Nothing
+     outside the package reads `STARTER_STEP_NAMES` or `readStarterStaffLanguage`, so neither is
+     exported (review M10); Tasks 4a and 4b export the zone's and the period's.
 3. Re-run step 1's command: all pass; read the `Tests` line. Then the unedited
    `src/provisioning.test.ts` and `src/operations.test.ts` (the seed and `createDepartment`), and
    `pnpm --filter @waitron/server exec vitest run src/service-step-signals.test.ts src/till-api.service-steps.test.ts scripts/demo-seed/seed-floor.test.ts`
@@ -1264,8 +1297,8 @@ only), `index.ts`.
 
 ## Task 2: the seasons, and the season tests that only need their lookup
 
-Files: `packages/venue-service/src/seasons.ts`, `seasons.test.ts`, `src/testing/starter-seasons.ts`
-(new), `season-weeks.test.ts`, `day-resolver.test.ts`, `zone-closed-times.test.ts`,
+Files: `packages/venue-service/src/seasons.ts`, `seasons.test.ts`, `starter-content.test.ts`,
+`src/testing/starter-seasons.ts` (new), `season-weeks.test.ts`, `day-resolver.test.ts`, `zone-closed-times.test.ts`,
 `menu-timetable.test.ts`, `menu-timetable-routes.test.ts`.
 
 1. Tests first, in `seasons.test.ts`'s `ensureDefaultSeasons` block (`:69`): an `it.each` over three
@@ -1278,9 +1311,18 @@ Files: `packages/venue-service/src/seasons.ts`, `seasons.test.ts`, `src/testing/
    cases (`:70-110`, `en-GB`, no tenant) stay unedited.
    Run `pnpm --filter @waitron/venue-service exec vitest run --project node src/seasons.test.ts`;
    expected: the two `es` rows and the `saveSeasons` case fail, receiving `Spring`…
-2. Code: `ensureDefaultSeasons`, after its early return, reads `readStarterStaffLanguage(tx, cfg)` and
-   names each `DEFAULT_SEASONS` entry `starterName(STARTER_SEASON_NAMES, season.name, language)`.
-   Write `src/testing/starter-seasons.ts` (decision 6).
+   Also in `starter-content.test.ts` (review M1): for each staff language, the four season names
+   `starterName` gives are distinct, non-empty and equal to their trimmed form. `seasons.name` is
+   unique per venue (`schema/seasons.ts:40`) and the seed runs inside setup's one transaction, so a
+   duplicate or empty word would undo the whole venue; `saveSeasons`' two-pass rename relies on no
+   stored name starting with a space. This case passes on a correct file; its control is a
+   duplicated word (below).
+2. Code: `ensureDefaultSeasons` gains an optional `staffLanguage` (decision 3) and, after its early
+   return, uses it or reads `readStarterStaffLanguage(tx, cfg)`, naming each `DEFAULT_SEASONS`
+   entry `starterName(STARTER_SEASON_NAMES, season.name, language)`. The comment at
+   `seasons.ts:150-153` names `ensureDefaultSeasons`' `DEFAULT_SEASONS` as a source of stored
+   names: change it to name the starter file, or cut it to the invariant alone (review M1). Write
+   `src/testing/starter-seasons.ts` (decision 6, with the strict `englishSeasonName`).
 3. Re-run `seasons.test.ts`: all pass. Then run the five other files of this task and read the
    failures: they should be the prototype's (Task 0 item 4: 24, 10, 1, 3 and 1). Make their rows of
    "Changed test checks" (the Task 2 rows), importing the helper from `./testing/starter-seasons.js`,
@@ -1288,8 +1330,10 @@ Files: `packages/venue-service/src/seasons.ts`, `seasons.test.ts`, `src/testing/
    name is a STOP.
 4. Controls, each run and reverted:
    - In `ensureDefaultSeasons`, name the seasons with `"en"`: the two `es` rows fail with
-     `Spring`…; `season-weeks.test.ts` still passes (its lookups go both ways), so the new rows are
-     what pin the words.
+     `Spring`…, and `season-weeks.test.ts` fails too, `englishSeasonName` refusing an English
+     default name (decision 6).
+   - In `starter-content.ts`, give Autumn the same `es` word as Summer: the distinct-names case
+     fails.
    - In `englishSeasonName`, return `stored` unchanged: `season-weeks.test.ts` fails as in the
      prototype (`expected { Primavera: … } to deeply equal { Spring: … }`).
 5. `pnpm --filter @waitron/venue-service typecheck`. The handover names Task 3's files as red until
@@ -1301,8 +1345,12 @@ Files: `packages/venue-service/src/opening-hours-calendar.test.ts`, `period-dele
 `period-delete-routes.test.ts`, `season-routes.test.ts`, `apps/server/src/till-api.seasons.test.ts`,
 `apps/server/src/configuration-transfer.test.ts`. Test edits only; no production code.
 
-1. Run the four venue-service files: the failures should be the prototype's (8, 23, 13 and 11). Make
-   their Task 3 rows of "Changed test checks": the lookups first, then the spelled names. A
+1. Before editing, grep for requests that SEND a default season's name (review I1):
+   `git grep -n -E 'name: " ?(Spring|Summer|Autumn|Winter|Primavera|Verano|Otoño|Invierno)' -- 'packages/venue-service/src/*.test.ts' 'apps/server/src/*.test.ts'`.
+   Every hit in a request made on an `es` venue is a row of "Changed test checks" (today:
+   `season-routes.test.ts:346`, `:518`, `:548`) or is a STOP. Then run the four venue-service files:
+   the failures should be the prototype's (8, 23, 13 and 11). Make their Task 3 rows of "Changed
+   test checks": the lookups first, then the spelled names, then the three sent names. A
    `"Summer 3 Dinner 20:00-23:00"`-style expected line is built with a template from
    `starterSeasonName("Summer", "es")`. Re-run each until it passes; read the `Tests` line. A failure
    whose message shows no default season's Spanish name is a STOP.
@@ -1317,67 +1365,97 @@ Files: `packages/venue-service/src/opening-hours-calendar.test.ts`, `period-dele
 4. Then `pnpm --filter @waitron/venue-service exec vitest run --project node` whole: every file
    passes.
 
-## Task 4: the counter zone and the period, and the three "Open" lookups
+## Task 4a: the counter zone
 
-Files: `packages/venue-service/src/provisioning.ts`, `provisioning.test.ts`, `menu-timetable.ts`,
-`operations.test.ts`, `starter-content.test.ts`, `index.ts`, `apps/server/src/setup-opening-hours.ts`,
-`setup-opening-hours.test.ts`, `apps/server/scripts/demo-seed/seed-floor.ts`, `seed-catalogue.ts`,
-`seed.test.ts`, `packages/provisioning/src/venue-apply.test.ts`, `packages/provisioning/package.json`,
+Files: `packages/venue-service/src/provisioning.ts`, `provisioning.test.ts`, `index.ts`,
+`packages/provisioning/src/venue-apply.test.ts`, `packages/provisioning/package.json`,
 `pnpm-lock.yaml`.
 
+1. Test first, in `provisioning.test.ts`: extend "names the default department after the venue"
+   (`:89-107`, an `es-ES` venue with a tenant, review M7) to also expect the counter-default zone's
+   name `STARTER_ZONE_NAMES.Counter.es`; the `en-GB` cases (`:42-88`, `:113-…`) stay unedited, still
+   "Counter" (where they check it) and English steps. Run
+   `pnpm --filter @waitron/venue-service exec vitest run --project node src/provisioning.test.ts`:
+   expected the extended case to fail, receiving `Counter`.
+2. Code: the seed reads `readStarterStaffLanguage(tx, node)` **once**, at the top of its run, and
+   passes it to `addStarterServiceSteps` and `ensureDefaultSeasons` (their optional parameter, Tasks
+   1 and 2; review M3); the zone insert names
+   `starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage)`. Export
+   `STARTER_ZONE_NAMES` from `index.ts`. Re-run: all pass.
+3. Control: name the zone with `"en"` instead of the read language: the extended case fails with
+   `Counter`. Restore.
+4. `packages/provisioning/package.json` gains `"@waitron/venue-service": "workspace:*"` under
+   `devDependencies` (kept by the driver's ruling on M9; the pull request says it makes CI run
+   provisioning's tests on every venue-service change, a cost accepted so that the test reads the
+   zone's word from the file and spells nothing). `pnpm install` at the root;
+   `git diff --stat pnpm-lock.yaml` shows the lockfile changed. Make `venue-apply.test.ts`'s row;
+   run `pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts` (all pass) and,
+   at the root, `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/changed-scope.test.mjs`.
+5. Typecheck `@waitron/venue-service` and `@waitron/provisioning`.
+
+## Task 4b: the period, and the three "Open" lookups
+
+Files: `packages/venue-service/src/menu-timetable.ts`, `operations.ts`, `provisioning.ts`,
+`provisioning.test.ts`, `operations.test.ts`, `starter-content.test.ts`, `index.ts`,
+`apps/server/src/setup-opening-hours.ts`, `setup-opening-hours.test.ts`,
+`apps/server/scripts/demo-seed/seed-floor.ts`, `seed-catalogue.ts`, `seed.test.ts`,
+`apps/server/src/till-api.zone-closed.test.ts`, `testing-zone-offers.test.ts`,
+`till-api.sell-published.test.ts`.
+
 1. Tests first.
-   - `provisioning.test.ts`: a case seeding an `es-ES` venue with a tenant and a catalogue, then
-     expecting the counter-default zone's name `STARTER_ZONE_NAMES.Counter.es` and the default
-     department's one period `STARTER_PERIOD_NAMES.Open.es`; the existing `en-GB` cases
-     (`:42-88`, `:113-…`) stay unedited, still "Open" and English steps.
+   - `provisioning.test.ts`: the case Task 4a extended (`:89-107`) gains a catalogue and also
+     expects the default department's one period `STARTER_PERIOD_NAMES.Open.es`.
    - `operations.test.ts`, "new department service periods" (`:275`): an `es-ES` twin of its
      first case (`:276-286`, an `en-GB` venue, `:386`, left unedited): `createDepartment` gives the
      new department one period named `STARTER_PERIOD_NAMES.Open.es`.
    - `starter-content.test.ts`: `STARTER_OPEN_PERIOD_NAMES` equals
      `["Open", STARTER_PERIOD_NAMES.Open.es]`.
-   - `apps/server/src/setup-opening-hours.test.ts`: `seed()` gains an optional receipt language; a
-     new case with `["es-ES"]` expects `{ departmentId }`, and "has no first-Open summary for an
-     authored period" (`:77-81`) gains an `es-ES` twin (renamed to "Lunch": still `undefined`).
+   - `apps/server/src/setup-opening-hours.test.ts`: `seed()` gains an optional receipt language. A
+     new case with `["es-ES"]` expects `{ departmentId }`. "Has no first-Open summary for an
+     authored period" (`:77-81`) gains an `es-ES` twin (renamed to "Lunch": still `undefined`); it
+     is never red, a control against a match that accepts any name. And decision 5's cost, pinned
+     as decided behaviour (review M4): an `en-GB` venue whose period is renamed to
+     `STARTER_PERIOD_NAMES.Open.es`, hours unchanged, expects `{ departmentId }`; the pull request
+     names it.
    - `apps/server/scripts/demo-seed/seed.test.ts`, the Spanish-demo `it.each` (`:747-790`): add
      "the restaurant department holds one period": a `select count(*)` of `menu_periods` for the
      counter-default zone's department (the demo's `restaurantId`, `seed-floor.ts:171`), expected
      1, placed right after `seedDemoRestaurant` and before the `read` (`:777`), so it runs first.
      It is the check Task 0 item 5 found missing.
    Run `pnpm --filter @waitron/venue-service exec vitest run --project node src/provisioning.test.ts src/operations.test.ts src/starter-content.test.ts`:
-   expected the new cases to fail (`Counter`, `Open`; no `STARTER_OPEN_PERIOD_NAMES`). The new
-   server cases pass today (every venue's period is "Open"); they are run red in step 3.
-2. Code, writers first: the seed's zone insert names `starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, await readStarterStaffLanguage(tx, node))`;
-   `placeOpenPeriod`, past its early return, names the period
-   `starterName(STARTER_PERIOD_NAMES, OPEN_PERIOD_NAME, …)`; `STARTER_OPEN_PERIOD_NAMES` (decision
-   5) exported from `index.ts`. Re-run step 1's command: all pass.
+   expected the new cases to fail (`Open`; no `STARTER_OPEN_PERIOD_NAMES`). The new server cases
+   pass today (every venue's period is "Open"); they are run red in step 3.
+2. Code, writers first: `placeOpenPeriod` gains the optional `staffLanguage` (review M3) and, past
+   its early return, names the period `starterName(STARTER_PERIOD_NAMES, OPEN_PERIOD_NAME, …)`,
+   reading the language only when none was passed; `createDepartment` reads it once and passes it
+   to `addStarterServiceSteps` and `placeOpenPeriod`; the seed passes its one read to
+   `placeOpenPeriod` too. `STARTER_OPEN_PERIOD_NAMES` (decision 5) and `STARTER_PERIOD_NAMES` are
+   exported from `index.ts`. Re-run step 1's command: all pass.
 3. Run, before touching the lookups:
    `pnpm --filter @waitron/server exec vitest run src/setup-opening-hours.test.ts scripts/demo-seed/seed.test.ts`.
    Expected: the new `es-ES` setup case fails (`undefined`), and the five Spanish-demo cases fail,
-   each first at the new one-period check (received 2).
+   each first at the new one-period check (received 2). The `en-GB`-renamed case also fails
+   (`undefined`): the lookup does not yet accept «Abierto».
 4. The lookups: `setup-opening-hours.ts:27` becomes
-   `if (!STARTER_OPEN_PERIOD_NAMES.includes(period.name)) return undefined;`; `seed-floor.ts:174`
+   `if (!STARTER_OPEN_PERIOD_NAMES.includes(period.name)) return undefined;` (the set's type is
+   `string[]`, so this compiles: the review's E4); `seed-floor.ts:174`
    `inArray(menuPeriods.name, [...STARTER_OPEN_PERIOD_NAMES])`; `seed-catalogue.ts:108`
    `d.name in (${sql.join(STARTER_OPEN_PERIOD_NAMES.map((name) => sql`${name}`), sql`, `)})`. Re-run
    step 3's command: all pass. Controls, each run and reverted: put back `seed-floor.ts:174`'s
    `eq(…, "Open")`: the Spanish-demo cases fail at the one-period check (2); put back
    `seed-catalogue.ts:108`: they fail at the content-gap check (`:787`, measured in Task 0 item 5),
-   and the setup case is unaffected; put back `setup-opening-hours.ts:27`: only the new `es-ES`
-   setup case fails.
-5. `packages/provisioning/package.json` gains `"@waitron/venue-service": "workspace:*"` under
-   `devDependencies`; `pnpm install` at the root; `git diff --stat pnpm-lock.yaml` shows the
-   lockfile changed. Make `venue-apply.test.ts`'s row; run
-   `pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts` (all pass) and, at
-   the root, `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/changed-scope.test.mjs`.
-6. The three fixtures of Task 0 item 8: run
+   and the setup cases are unaffected; put back `setup-opening-hours.ts:27`: the `es-ES` setup case
+   and the `en-GB`-renamed case fail.
+5. The three fixtures of Task 0 item 8: run
    `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts src/testing-zone-offers.test.ts src/till-api.sell-published.test.ts`
    (expected `Tests 7 failed | 60 passed (67)`, as measured), make their three rows of "Changed
-   test checks", and re-run: all pass. A failure there that the starter period's name does not
-   explain is a STOP.
-7. Unedited: `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/first-fiscal-setup.e2e.test.ts scripts/demo-seed/seed-floor.test.ts scripts/demo-seed/seed-catalogue.test.ts scripts/dev-setup.test.ts`.
-   Typecheck `@waitron/venue-service`, `@waitron/provisioning`, `@waitron/server`.
-8. `pnpm --filter @waitron/venue-service test:coverage` (node and browser projects; check
-   `memory_pressure | grep free` first): the package at or above 98/98/98/95, the two new files
-   covered.
+   test checks", and re-run: all pass (measured in the prototype: `Tests 67 passed (67)`). A
+   failure there that the starter period's name does not explain is a STOP.
+6. Unedited: `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/first-fiscal-setup.e2e.test.ts scripts/demo-seed/seed-floor.test.ts scripts/demo-seed/seed-catalogue.test.ts scripts/dev-setup.test.ts`.
+   Typecheck `@waitron/venue-service` and `@waitron/server`.
+7. Coverage of the new files only, node project (review M6; CI's merge job judges the package):
+   `pnpm --filter @waitron/venue-service exec vitest run --project node --coverage --coverage.include=src/starter-content.ts --coverage.include=src/starter-language.ts`;
+   read the per-file table: both files at 100% lines and branches.
 
 ## Task 5: the docs, the backlog and the English-only check
 
@@ -1401,7 +1479,10 @@ Files: `docs/developers/conventions-data.md`, `docs/developers/design-system.md`
    one dated sentence: since A918 slice 3 they come from `packages/venue-service/src/starter-content.ts`
    in the staff language. This goes in this pull request, not a push to `main` after the merge.
 4. Dated notes, not rewrites: `docs/backlog/architecture.md:417-425`'s A918 bullet (the steps,
-   seasons, zone and period moved), and `docs/backlog/english-only-audit.md`, a dated line at the
+   seasons, zone and period moved); `docs/backlog/service-periods.md:490`, a decision record under
+   "Decisions and deliberate limits" ("a new venue's are Spring green, Summer amber, Autumn orange
+   and Winter blue"), gains a dated pointer that the names are now written in the staff language
+   (review M8); and `docs/backlog/english-only-audit.md`, a dated line at the
    top beside slice 2's (`:3`) naming the steps row (`:133`) and the first finding's steps
    (`:31-33`) as the earlier tree.
 5. The English-only check of the diff, outside the plans folder:
@@ -1424,11 +1505,35 @@ prints nothing.
 - **Languages**: a `ca-ES` or `gl-ES` venue gets `es` words, an `en-GB` one English, a no-country
   `fr` one English; never a Catalan word in a one-name row.
 - **Every writer**: the steps on `createDepartment`, the seasons through a first week write, the
-  period on a department added later.
+  period on a department added later; one staff-language read per `createDepartment` and per seed.
+- **Tests whose meaning changes without failing**: the sent-name grep (Task 3 step 1).
 - **The "Open" set**: setup's check and both demo lookups find «Abierto»; the Spanish demo ends with
   one restaurant period.
 - **No Spanish outside the starter file and the dated docs** (Task 5 step 5).
 - **Codex run-it seat**: two reviews, the second told to set this plan aside.
+
+
+## Review rulings (slice 3)
+
+The fresh review (`~/waitron-campaign-b/a918-3-plan-review.md`, on `472904b3e`): 0 Critical, 3
+Important, 10 Minor. The driver took all of them, with the specifics below.
+
+| Finding | Ruling |
+| --- | --- |
+| **I1**: three `season-routes.test.ts` cases send a default season's name and change meaning without failing | Taken: three rows (`:346`/`:352`/`:358` and `:518` become "High summer"; `:548` reads the file's word through `starterSeasonName`); Task 3 step 1 greps for sent names; slice 4's paragraph carries the same grep |
+| **I2**: `opening-hours-calendar.test.ts` has six assertions, not four; the STOP rule would halt Task 3 | Taken: the row lists `:255` and `:507-510`; the "Changed test checks" preamble says a later assertion in a listed test failing for the same reason is expected, not a STOP |
+| **I3**: Task 4 too large for one medium implementer | Taken: split into 4a (the counter zone, the provisioning devDependency, `venue-apply.test.ts`) and 4b (the period, the three "Open" lookups, the demo check, the three server fixtures) |
+| **M1**: a duplicated or untrimmed season word would stop setup; a comment goes stale | Taken: Task 2's distinct, non-empty, trimmed case with its control; the `seasons.ts:150-153` comment |
+| **M2**: the reverse helper accepts both languages | Taken in part, by the driver's ruling: the shared helper stays (both functions); `englishSeasonName` throws on an English default name when the staff language is not `en`; Task 2's control updated |
+| **M3**: the staff language read twice per department, up to four times per seed | Taken: decision 3's optional `staffLanguage`; `createDepartment` and the seed read once (Tasks 1, 2, 4a, 4b) |
+| **M4**: decision 5's cost not pinned | Taken: Task 4b's `en-GB` venue renamed to the file's word, expecting `{ departmentId }`, named in the pull request |
+| **M5**: the command-line bullet understated | Taken: seasons, zone and period turn Spanish there too |
+| **M6**: whole-package coverage run too heavy | Taken: Task 4b step 7 measures the two new files, node project only |
+| **M7**: citation errors | Taken: `:7786`, `:7802`; the `es-ES` venue at `provisioning.test.ts:89-107` is named, and Tasks 4a and 4b extend it |
+| **M8**: `docs/backlog/service-periods.md:490` needs a dated pointer | Taken: Task 5 step 4 |
+| **M9**: the devDependency widens CI selection | Kept by the driver's ruling: the dependency stays so the test reads the zone's word and spells nothing; the pull request names the CI cost |
+| **M10**: exports with no consumer | Taken: `index.ts` exports only `STARTER_SEASON_NAMES`, `STARTER_ZONE_NAMES`, `STARTER_PERIOD_NAMES` and `STARTER_OPEN_PERIOD_NAMES` |
+| Planner's points | The shared season helper: yes. The optional tenant join: yes, with the slice-1 difference noted in decision 2 and no change to slice 1. The three server fixture edits: accepted as fixture data, not assertions, listed with that reason |
 
 ---
 
@@ -1519,7 +1624,10 @@ languages only). The root section's `sections.names` is a language map
 established where a root section's customer name is shown, so slice 4's Task 0 finds out, and if a
 screen or receipt shows it the slice fills it by decision 4 (review M10b), otherwise it stays `{}`
 and the slice says why. Its Task 0 also checks whether a configuration import replaces or merges
-`units`, `catalogues` and `sections` (review M10c). Whichever of slices 2-4 lands last
+`units`, `catalogues` and `sections` (review M10c). Its Task 0 also greps for tests that SEND a
+starter's name in a request (a unit's or the first menu's English or Spanish name), not only for
+tests that fail: slice 3's review found three that pass with a changed meaning (slice 3's review
+rulings, I1). Whichever of slices 2-4 lands last
 finishes `conventions-data.md`'s sentence (nothing left "still written from code") and drops the
 words after the colon in the root `CLAUDE.md` line; under FYI A's alternative 1 or 3 slices 3 and 4
 may change shape, and the last to land still does this. The slice adds a backlog entry for `EACH_UNIT`'s non-English words
