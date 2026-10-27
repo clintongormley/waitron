@@ -60,12 +60,22 @@ trigger of its own; the design fixes the path for every slice.
   (`packages/ui-core/src/interactive.ts:52-66`).
 - **`wt-disclosure`:** `has-error` forces `open` (`wt-disclosure.ts:211-219`) and makes the header
   inert (`:259-266`); a cleared error leaves it open (`:212-213`); the body is `hidden` and `inert`
-  while closed (`:306-315`); the summary shows only while closed (`:302`); the header click is
-  stopped at its own button (`:259-262`), so a click on an inner section's header does not toggle
-  the outer one. Nesting one `wt-disclosure` inside another is new as far as the planner read:
-  `git grep -n "<wt-disclosure" -- apps packages` lists 20 non-test lines, and the product editor's
-  (`product-editor.ts:1117-1835`) are siblings; the others were not each opened, so "new" is an
-  assumption the reviewer may check.
+  while closed (`:306-315`); the summary shows only while closed (`:302`). A click on an inner
+  section's header does not toggle the outer one because each disclosure listens on its own header
+  button (`:299`), which an inner click's path never passes through (the `stopPropagation` at
+  `:261` is not what prevents it, and is skipped while `has-error`). An inner section's `wt-toggle`
+  bubbles out of `dashboard-theme-advanced`; nothing on the Look card listens for it (`git grep -n
+  "wt-toggle" -- apps/dashboard/src` lists only box-status, printers and product-editor sites).
+  **Opening animates:** opening measures the body's `scrollHeight` once, in `updated`
+  (`:221-246`), and animates to that fixed height with `overflow: hidden`; a disclosure opened
+  while an ancestor's body is `hidden` measures 0 and opens at once. Nesting one `wt-disclosure`
+  inside another is new: of the 20 non-test sites `git grep -n "<wt-disclosure" -- apps
+  packages` lists, the plan reviewer opened the product editor's seven (siblings; Selling's body
+  holds `renderOrdering`, no fold), printers' three (siblings), device profiles', the setup first
+  hour's, `extra-list-form.ts:747` and the hosts of that form (`catalogue-screen.ts:874`,
+  `modifiers-screen.ts:655`, neither inside a fold), and `exportGuidesView`'s one caller
+  (`certificate-dialog.ts:320`, no fold); box status, prep stations and the `packages/ui` demo
+  hold one fold each or siblings. None sits inside another.
 - **Wording:** `advancedSummary` (`apps/dashboard/src/widgets/theme-words.ts:239-251`) names every
   hand-set colour (`handNames`, `:228-237`: light first, `THEME_COLOURS` order, "Page (light)") then
   every hand-set text row (`textNames`, `:75-77`), and counts every warning except the brand one
@@ -77,6 +87,9 @@ trigger of its own; the design fixes the path for every slice.
   `:6617`), read only by the `h3` above (`git grep -n text_group` lists those two and
   `theme-advanced.ts:382`, plus `theme-advanced.test.ts:659`). Advanced's keys are at
   `strings.ts:3216-3224` (English) and `:6701-6710` (Spanish).
+- **Column heads** show only from a 600 px container: each `.table` is its own
+  `container-type: inline-size` (`theme-advanced.ts:66-69`, `@container (min-width: 600px)` at
+  `:147`), so a `.table` per section keeps that rule with no style change.
 - **Phone width:** the Text rows already put the value under the name below a 600 px section
   (`apps/dashboard/src/widgets/theme-text.ts:74-80,152-167`; case "at phone width each row puts the
   value under its name", `theme-text.test.ts:362`).
@@ -269,7 +282,9 @@ rows' stepper with − and + where pictures 28-30 draw a plain box (slice 11 D12
   ```
 - Produces (`theme-words.ts`):
   `export function sectionSummary(id: AdvancedSectionId, choices: ThemeChoices, warnings: readonly ThemeWarning[]): string;`
-  and `export function sectionHeading(id: AdvancedSectionId): string;` (`t("appearance.section." + id)`).
+  and `export function sectionHeading(id: AdvancedSectionId): string;`
+  (`` t(`appearance.section.${id}`) ``: a template literal, because `t` takes only a `StringKey`,
+  `apps/dashboard/src/i18n/t.ts:9`, and `"…" + id` is a plain `string` the typecheck refuses).
 
 - [ ] **Step 1: Write the failing cases.** In `advanced-sections.test.ts`:
   - The four sections' keys, flattened, hold each of the 22 `THEME_COLOURS` exactly once
@@ -279,10 +294,12 @@ rows' stepper with − and + where pictures 28-30 draw a plain box (slice 11 D12
   - `ADVANCED_SECTIONS` is `["surfaces", "text-colours", "buttons", "fields", "text"]`; each
     section's keys in the order above; `sectionOfColour("primary-text")` is `"text-colours"`,
     `("focus")` `"fields"`, `("stepper-button")` `"buttons"`, `("bg")` `"surfaces"`.
-  - `inSection`: a warning `{ field: "handSet.light.text", … }` is in `text-colours` only; a text
-    warning (`field: "text.size.sm"`, `mode: null`) in `text` only; a brand warning (`field:
-    "brandColor"`) in none of the five.
+  - `inSection`: a warning `{ field: "handSet.light.text", … }` is in `text-colours` only;
+    `handSet.dark.primary` in `buttons` only; `handSet.light.primary-text` in `text-colours` only
+    (a key the flat list placed among the buttons); a text warning (`field: "text.size.sm"`,
+    `mode: null`) in `text` only; a brand warning (`field: "brandColor"`) in none of the five.
   - `sectionHasError`: `{ "handSet.dark.field-line": "x" }` → true for `fields` only;
+    `{ "handSet.dark.stepper-button": "x" }` → true for `buttons` only;
     `{ "handSet.light.bg": undefined }` → false everywhere; `textErrors { "text.family": "x" }` →
     true for `text` only.
 
@@ -299,10 +316,17 @@ rows' stepper with − and + where pictures 28-30 draw a plain box (slice 11 D12
   - Light Focus ring and light Field background set: `fields` → `"2 set by hand: Field background
     (light), Focus ring (light)"` (the section's order, not `THEME_COLOURS`', which puts `focus`
     first: R2).
+  - Light Focus ring and dark Field background set: `fields` → `"2 set by hand: Focus ring (light),
+    Field background (dark)"` (light before dark wins over row order; the case above cannot tell
+    the two rules apart, this one can).
   - Dark Main buttons `#5fa77a` on Bar Lucía: `buttons` → `"1 set by hand: Main buttons (dark)"`.
   - The hover `#787878`: `buttons` ends `" · 1 hard to read"`.
   - Text: Bar Lucía with `text.size.md` 16 → `"1 set by hand: Normal text"`; with `sm` 10 →
-    `"1 set by hand: Small text · 1 hard to read"`.
+    `"1 set by hand: Small text · 1 hard to read"`; with `xl` 33 at 100% (drawn above the 29 px
+    limit, so a larger-than-checked note and no warning; first assert `derived.warnings` is empty
+    and `textNotes(choices, WAITRON_DEFAULTS)` holds one, as `theme-text.ts:321` reads it, the
+    control) → `"1 set by hand: Largest text"`, no count (design section 5a: the note "does not
+    count as hard to read").
   - Review Focus 5: Café Limón's lemon with light `text` set to a grey that warns (the file's
     "two fixes" Text value, `#6a6a6a`, over Café Limón's choices; the case first asserts the
     derived warnings hold one `brandColor` warning and one `handSet.light.text` warning, the control
@@ -368,8 +392,12 @@ suite stays green before and after; Task 3a then builds the sections under them.
   export async function openFoldsAround(node: Element): Promise<void>;
   ```
   `openFoldsAround` walks up from `node` through `parentElement`, and at a shadow root's top
-  through `(getRootNode() as ShadowRoot).host`, collecting each `wt-disclosure`, then opens them
-  from the outermost in; `openDisclosure` ends with `expect(disclosure.open).toBe(true)`.
+  through `(getRootNode() as ShadowRoot).host`, collecting each `wt-disclosure` met as a
+  `parentElement` (one that holds the node in its body), then opens them from the outermost in;
+  a `wt-disclosure` met as a shadow root's host is skipped, because the node is in that
+  disclosure's own header, not its body (without the skip, a helper about to click a section's
+  header would open it first and the click would close it). `openDisclosure` ends with
+  `expect(disclosure.open).toBe(true)`.
 
 - [ ] **Step 1: Add the two helpers.**
 - [ ] **Step 2: Rewire the helpers by one rule:** a helper that clicks, types into, presses or
@@ -382,6 +410,9 @@ suite stays green before and after; Task 3a then builds the sections under them.
   Run: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/theme-advanced.test.ts src/widgets/theme-advanced.a11y.test.ts src/screens/look-card.advanced.test.ts src/screens/look-card.unsaved.test.ts src/screens/look-card.a11y.test.ts`
   Expected: PASS, with the same `Tests` count as the same command on the task's starting commit
   (record both counts in the commit message). A count that differs means a case was lost.
+  Record each run's `Duration` line too: Task 3a re-reads it, because a click on a row inside a
+  section that is still animating open (900 ms) waits for Playwright's hit test, and nested folds
+  add one such wait per fold (CLAUDE.md §2, about 4 minutes per CI job).
 - [ ] **Step 4:** `pnpm --filter @waitron/dashboard typecheck`, `pnpm format:check`; commit —
   `git commit -s -m "Open the folds around what Advanced's tests touch (A841 slice 12)"`.
 
@@ -445,7 +476,13 @@ suite stays green before and after; Task 3a then builds the sections under them.
 
 - [ ] **Step 4: Run the suite to see it pass,** then the guards that read this file:
   `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
-  Expected: PASS. Then `pnpm --filter @waitron/dashboard typecheck` and `pnpm format:check`.
+  Expected: PASS. Then Task 2's Step 3 command over the five suites, which this change is the
+  first to put under nested folds. Expected: PASS with Task 2's `Tests` count plus this task's new
+  cases. A case that now fails because it touches a row in a closed section missed Task 2's rule:
+  give it `openFoldsAround`, with no assertion change; it is not a `look-card.ts` defect. Compare
+  each suite's `Duration` with Task 2's; a suite more than about a quarter slower is reported in
+  the commit message with both durations. Then `pnpm --filter @waitron/dashboard typecheck` and
+  `pnpm format:check`.
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Fold Advanced into five sections with their own closed lines (A841 slice 12)"`.
 
@@ -459,9 +496,14 @@ suite stays green before and after; Task 3a then builds the sections under them.
 
 **Interfaces:**
 - Consumes: Task 3a's sections; Task 1's `sectionOfColour`.
-- Produces: `reveal(mode: Mode, key: ThemeColour): Promise<void>` — opens Advanced, then
-  `section-{sectionOfColour(key)}`, awaits both renders, focuses that value's code field; the other
-  sections are left as they were (R10).
+- Produces: `reveal(mode: Mode, key: ThemeColour): Promise<void>` — opens
+  `section-{sectionOfColour(key)}` FIRST and awaits its render, then Advanced and awaits its
+  render, then focuses that value's code field; the other sections are left as they were (R10).
+  The order matters (`wt-disclosure.ts:221-246`, read, not run): a section opened while Advanced's
+  body is still `hidden` measures 0 and opens at once, so Advanced then animates once to its full
+  height with the section open. Opened the other way, Advanced animates to the height of five
+  closed sections with `overflow: hidden` while the section grows inside it, then jumps when its
+  transition ends, with focus already moved into a clipped box.
 
 - [ ] **Step 1: Write the failing cases:**
   - `errors = { "handSet.dark.field-line": "x" }` → Advanced and `section-fields` open with
@@ -477,6 +519,14 @@ suite stays green before and after; Task 3a then builds the sections under them.
     opened first by its header, `reveal("dark", "primary")` leaves it open (R10).
   - `reveal("light", "focus")` opens `section-fields` (the generalisation; a control that `reveal`
     does not always open Buttons).
+  - The order (motion NOT reduced; Chromium's default): `reveal("dark", "primary")` on a closed
+    Advanced → right after it resolves, `section-buttons`' shadow `.body` has no `animating` class
+    and an empty `style.height` (it opened at once), and after one animation frame Advanced's
+    shadow `.body` `style.height`, parsed, is at least its `scrollHeight` − 1 (its one animation
+    targets the height with Buttons open). Control, run once and not committed: swap the two opens
+    in `reveal` and the first reading fails; say so in the commit message. If the swapped order
+    passes too, stop and report it rather than weakening the case — the reasoning above was read
+    from the code, not run.
   - Phone width, with reduced motion emulated (Global Constraints): at 390 px, Advanced and every
     section opened, the five sections share a left edge within 1 px and each starts at or below
     the previous one's bottom (they stack), the existing "stacks name, Light and Dark at phone width" readings hold
@@ -527,6 +577,10 @@ suite stays green before and after; Task 3a then builds the sections under them.
     same. Read the folds after `await el.updateComplete` and the section's own `updateComplete`.
   - A newer read of the theme in use (a `list` with different stored choices, nothing changed in
     the editor, as slice 6's `#adopt` case does) leaves Page and surfaces open.
+  - Save with a warning then Back: on "two fixes" with Text colours and links opened, Save opens
+    the Hard to read dialog; Back closes it (wait for its `hard-to-read-back` event and the card's
+    render, `look-card.ts:935-937`, CLAUDE.md §4) →
+    Text colours and links still open, the other sections closed, nothing sent.
   - Cancel, then Edit → Advanced and every section closed. Bold weight set to 700 (a weight never
     warns) and Save, then Edit → closed.
     `edit({ id: christmas.id })` with Page and surfaces open → Christmas's sections closed, with
@@ -579,10 +633,25 @@ suite stays green before and after; Task 3a then builds the sections under them.
     " · 1 hard to read" in two summaries); "the Text section open with a text warning" (Small text
     10).
 - [ ] **Step 3: Axe states for the card,** `look-card.a11y.test.ts` (`states`, `:228-311`, run in
-  both themes and both languages by the existing `it.each`): each existing Advanced state opens the
-  sections its asserted element sits in (Task 2's `openFoldsAround`) and asserts `checkVisibility()`;
-  add "Advanced open, every section closed" and "Pick a different colour for dark screens pressed"
-  (Advanced and Buttons open, focus on the code field). Do not use the sage or "blocked" fixtures:
+  both themes and both languages by the existing `it.each`). Most Advanced states return
+  `"dashboard-theme-advanced"` as the element axe scans (`look-card.a11y.test.ts:235-275`), so
+  opening the folds around THAT element opens no section, and its `checkVisibility()` is true with
+  every section closed: axe would then check five closed lines and nothing inside. So each state
+  names the inner elements it is about, opens their folds with `openFoldsAround`, and asserts
+  `checkVisibility()` on each of those inner elements:
+  - "Advanced open, nothing set by hand": every section opened (a `hand-row-*` of each colour
+    section and `dashboard-theme-text` visible);
+  - "Advanced open with a text size warning": the Text section, `[data-test="text-warning-size.sm"]`
+    inside `dashboard-theme-text`'s shadow root visible;
+  - "Advanced open with two warnings": Page and surfaces and Text colours and links,
+    `hand-warning-light-text` and `hand-warning-light-surface-sunken` visible;
+  - "a fixed-from line": Text colours and links, `hand-fixed-light-text` visible;
+  - "a hand code's error": opened by `has-error`, `wt-input[name="handSet.light.bg"]` visible with
+    no section opened by a click;
+  - "the dark own colour line": unchanged (its element is on the card, outside Advanced).
+  Add "Advanced open, every section closed" (the five closed lines are what it checks) and "Pick a
+  different colour for dark screens pressed" (Advanced and Buttons open, the dark Main buttons
+  code field visible and focused). Do not use the sage or "blocked" fixtures:
   their preview draws text under 4.5:1 on purpose (slice 6 Task 7).
 - [ ] **Step 4: Run them.**
   Run: `pnpm --filter @waitron/dashboard exec vitest run src/screens/look-card.unsaved.test.ts src/screens/look-card.a11y.test.ts src/widgets/theme-advanced.a11y.test.ts`
@@ -618,7 +687,11 @@ suite stays green before and after; Task 3a then builds the sections under them.
     that is not a colour opens Advanced and the section holding it. Keep every other sentence that
     is still true.
   - `{#text-by-hand}`: "In Advanced's **Text** section" in place of "Under **Text**, after the
-    colours"; an invalid size "opens Advanced and its Text section to show it".
+    colours"; an invalid size "opens Advanced and its Text section to show it"; the sentence that
+    lists where a too-small size counts as hard to read (en `:254`, "Advanced's closed line, **Fix
+    all**, …"; es `:279-280`) also names the Text section's closed line.
+  - `{#advanced}`'s kept-colours example ends "Advanced shows it." (en `:220`, es `:244`): still
+    true; keep it.
   - Every sentence checked against the code as built (CLAUDE.md §1), section names as the strings
     give them in each language.
 - [ ] **Step 2: Run the guide checks:**
