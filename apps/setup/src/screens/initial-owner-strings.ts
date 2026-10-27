@@ -39,6 +39,12 @@ export const initialOwnerStrings = {
     damagedRecordPassword:
       "To start again, enter the administrator password you chose during setup.",
     startAgainHelp: "Deletes this attempt. This box will not use its invoice series names again.",
+    seriesPicksDamaged:
+      "This box's record of the invoice series names it chose is damaged and cannot be read.",
+    publicRecordDamaged: "This setup's public fiscal record is damaged and cannot be read.",
+    fiscalDocumentsDamaged:
+      "This setup's fiscal documents on this box are damaged and cannot be read.",
+    namesFrom: "New series names can start from {date}, {time}.",
     retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
     restarting: "The old attempt is deleted. Reconnect to continue.",
@@ -104,6 +110,13 @@ export const initialOwnerStrings = {
       "Para empezar de nuevo, introduce la contraseña de administrador que elegiste al configurar.",
     startAgainHelp:
       "Borra este intento. Este equipo no volverá a usar sus nombres de serie de facturas.",
+    seriesPicksDamaged:
+      "El registro de los nombres de serie de facturas que eligió este equipo está dañado y no se puede leer.",
+    publicRecordDamaged:
+      "El registro fiscal público de esta configuración está dañado y no se puede leer.",
+    fiscalDocumentsDamaged:
+      "Los documentos fiscales de esta configuración en este equipo están dañados y no se pueden leer.",
+    namesFrom: "Los nuevos nombres de serie podrán empezar el {date} a las {time}.",
     retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",
     cancel: "Cancelar",
     restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
@@ -124,3 +137,10 @@ export const initialOwnerStrings = {
     fix: "Corrige el campo señalado.",
   },
 } as const;
+
+export function namesFromText(locale: string, floorMs: number, timeZone?: string): string {
+  const at = new Date(floorMs);
+  return initialOwnerStrings[locale.startsWith("es") ? "es" : "en"].namesFrom
+    .replace("{date}", at.toLocaleDateString(locale, { dateStyle: "medium", timeZone }))
+    .replace("{time}", at.toLocaleTimeString(locale, { timeStyle: "short", timeZone }));
+}

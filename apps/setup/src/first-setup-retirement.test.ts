@@ -6,6 +6,7 @@ import type {
   StartAgainSummary,
 } from "./api/first-setup-types.js";
 import { FirstSetupSession, FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
+import { namesFromText } from "./screens/initial-owner-strings.js";
 import { initial } from "../test/first-setup-browser.js";
 
 const sessions: FirstSetupSession[] = [];
@@ -167,6 +168,79 @@ it("refuses a summary that turned damaged between display and confirmation, and 
   });
   expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
 });
+const unreadable = {
+  ...shown,
+  unreadable: { records: ["series-picks", "fiscal-documents"], floorMs: 1_792_158_360_000 },
+} as const satisfies StartAgainSummary;
+it("reads a summary naming damaged name records and sends it back unchanged", async () => {
+  const { session, requests } = await fixture({ summary: unreadable });
+  await expect(session.missingDatabaseSummary()).resolves.toEqual(unreadable);
+  await expect(session.retireMissingDatabase(unreadable)).resolves.toEqual({ restarting: true });
+  expect(requests.at(-1)!.body).toMatchObject({
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown: unreadable },
+  });
+});
+it("refuses a summary whose names floor moved between display and confirmation, and sends nothing", async () => {
+  const { session, requests } = await fixture({
+    summary: {
+      ...unreadable,
+      unreadable: { ...unreadable.unreadable, floorMs: 1_792_158_420_000 },
+    },
+  });
+  await expect(session.retireMissingDatabase(unreadable)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
+it("refuses a summary whose damaged name records changed between display and confirmation, and sends nothing", async () => {
+  const { session, requests } = await fixture({
+    summary: { ...unreadable, unreadable: { ...unreadable.unreadable, records: ["series-picks"] } },
+  });
+  await expect(session.retireMissingDatabase(unreadable)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
+it.each([
+  null,
+  "series-picks",
+  {},
+  { records: ["series-picks"] },
+  { floorMs: 1 },
+  { records: [], floorMs: 1 },
+  { records: "series-picks", floorMs: 1 },
+  { records: ["series-picks"], floorMs: 1, extra: true },
+  { records: ["unknown"], floorMs: 1 },
+  { records: ["fiscal-documents", "series-picks"], floorMs: 1 },
+  { records: ["series-picks", "series-picks"], floorMs: 1 },
+  { records: ["series-picks"], floorMs: 1.5 },
+  { records: ["series-picks"], floorMs: "1" },
+  { records: ["series-picks"], floorMs: Number.MAX_SAFE_INTEGER + 2 },
+])("refuses a summary with unreadable name records %j, and sends nothing", async (value) => {
+  const { session, requests } = await fixture({
+    intercept: (path) =>
+      path.endsWith("/summary") ? Response.json({ ...shown, unreadable: value }) : undefined,
+  });
+  await expect(session.missingDatabaseSummary()).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  await expect(session.retireMissingDatabase(shown)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
+it("words the names floor in the page's language, in the given time zone", () => {
+  const floorMs = Date.parse("2026-10-16T13:45:00Z");
+  expect(namesFromText("en-GB", floorMs, "Europe/Madrid")).toBe(
+    "New series names can start from 16 Oct 2026, 15:45.",
+  );
+  expect(namesFromText("es-ES", floorMs, "Europe/Madrid")).toBe(
+    "Los nuevos nombres de serie podrán empezar el 16 oct 2026 a las 15:45.",
+  );
+  expect(namesFromText("en-GB", floorMs, "UTC")).toBe(
+    "New series names can start from 16 Oct 2026, 13:45.",
+  );
+});
 it.each(["complete"] as const)("refuses %s work before inspection", async (status) => {
   const { session, requests } = await fixture({ status });
   await expect(session.retireMissingDatabase(shown)).rejects.toMatchObject({
@@ -288,4 +362,89 @@ it("after a sent Start again with the database present, the stopped recovery's s
     code: "setup.owner_required",
   });
   expect(requests).toHaveLength(sent);
+});
+
+it("damagedRecordSummary reads a summary naming damaged name records with the database present", async () => {
+  const { session, requests } = await fixture({ inspection: presentDatabase, summary: unreadable });
+  await expect(session.damagedRecordSummary()).resolves.toEqual(unreadable);
+  expect(requests.map((r) => r.path)).toEqual([
+    "/setup-api/first-setup/resolution/recover",
+    "/setup-api/first-setup/resolution",
+    "/setup-api/first-setup/resolution/start-again/summary",
+  ]);
+});
+it.each([
+  { name: "nothing damaged", summary: shown },
+  {
+    name: "only the recovery-key record",
+    summary: { ...shown, recoveryRecordDamaged: true as const },
+  },
+])(
+  "damagedRecordSummary refuses a summary naming no damaged name record: $name",
+  async ({ summary }) => {
+    const { session, requests } = await fixture({ inspection: presentDatabase, summary });
+    const refused = await session.damagedRecordSummary().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(refused).toBeInstanceOf(Error);
+    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+  },
+);
+it("damagedRecordSummary sends nothing when the inspection changed", async () => {
+  const { session, requests } = await fixture({
+    inspection: { ...presentDatabase, revision: 3 },
+    summary: unreadable,
+  });
+  await expect(session.damagedRecordSummary()).rejects.toBeInstanceOf(Error);
+  expect(requests.some((r) => r.path.endsWith("/summary"))).toBe(false);
+});
+it.each([
+  {
+    name: "damaged names",
+    summary: unreadable,
+    sent: { confirmUnreadable: { shown: unreadable } },
+  },
+  {
+    name: "damaged names and recovery-key record",
+    summary: { ...unreadable, recoveryRecordDamaged: true as const },
+    sent: {
+      recoveryRecordDamagedShown: true,
+      confirmUnreadable: { shown: { ...unreadable, recoveryRecordDamaged: true } },
+    },
+  },
+])(
+  "retireDamagedRecord sends back the summary it was given, for $name",
+  async ({ summary, sent }) => {
+    const { session, requests } = await fixture({ inspection: presentDatabase });
+    await expect(session.retireDamagedRecord(summary)).resolves.toEqual({ restarting: true });
+    expect(requests.at(-1)!.path).toBe("/setup-api/first-setup/resolution/start-again");
+    expect(requests.at(-1)!.body).toEqual({
+      inspectionId: "b".repeat(64),
+      revision: 2,
+      ownerGeneration: 2,
+      ...sent,
+    });
+  },
+);
+it("retireDamagedRecord sends a stopped recovery's summary with damaged names only as the discard confirmation", async () => {
+  const stopped = {
+    ...unreadable,
+    recovery: {
+      startedAt: "2026-10-16T13:00:00.000Z",
+      lastActiveAt: "2026-10-16T13:10:00.000Z",
+      lastActiveSource: "memory",
+      lastName: null,
+      failed: false,
+      cloud: false,
+    },
+  } as const satisfies StartAgainSummary;
+  const { session, requests } = await fixture({ inspection: presentDatabase });
+  await expect(session.retireDamagedRecord(stopped)).resolves.toEqual({ restarting: true });
+  expect(requests.at(-1)!.body).toEqual({
+    inspectionId: "b".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    confirmRecoveryDiscard: { shown: stopped },
+  });
 });
