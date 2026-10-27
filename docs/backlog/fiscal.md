@@ -109,8 +109,7 @@ Found during A693's test-only fix (2026-10-15). In an installed disposable copy,
 `time_zone` fixed to `Europe/Madrid`. At `2026-10-14T23:30:00Z`, the stored
 `fecha_expedicion_factura` was `2026-10-14` under process `TZ=UTC` or
 `TZ=America/New_York`, and `2026-10-15` under `TZ=Europe/Madrid` or `TZ=Asia/Tokyo`.
-At noon UTC all four stored `2026-10-14`. The eight cases passed; a temporary probe
-wrote the invoice date, offset and configured venue zone beside each case.
+At noon UTC all four stored `2026-10-14`.
 
 `apps/server/src/till-backend.ts`'s `systemClock` takes the offset from the process's
 `getTimezoneOffset()`; `git blame -L 14,25` attributes it to `d49e2e986` (2026-08-05).
@@ -125,8 +124,7 @@ process-zone observation to held orders, unpaid invoices, table payments, reader
 public unpaid departure and cancellation credits, core F1/F3 and R5, and emergency series.
 An annulment retains the original invoice date. Next-day Tokyo outbox sends retain the stored
 fiscal payloads and rows; real AEAT acceptance, lost-response/restart and restore are not measured.
-The 28-case disposable audit and 20 protected checks passed; the proposed venue-date expectation
-separately failed all eight UTC cases while eight Madrid controls passed. No product fix is built.
+No product fix is built.
 
 **Decision update, 2026-10-15:** the owner chose the saved venue zone, including DST, for every
 new invoice date and record offset, ordinary receipt and till, independently of the process zone.
@@ -140,8 +138,8 @@ admit no sale, payment or invoice while it is bad. Keep manager login and zone c
 reachable with `venue.configure`, only for a missing/invalid zone. Valid-to-valid settings locks
 remain. The [startup redesign](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
 proposes repair-only authenticated serving followed by restart, and identifies A166's country-pack
-dependency. Fresh-context requirements review found nothing important left. Full-design approval,
-the implementation plan and separate FULL fiscal build are next. No build is approved or implemented.
+dependency. Full-design approval, the implementation plan and separate FULL fiscal build are next. No build is
+approved or implemented.
 The dropped post-capture state, resume action
 and reporting consequence remain only in the historical guided proposal and decision below.
 A444's operation/service-date decision stays separate. The audit also found a
@@ -374,7 +372,7 @@ A679's first final installed review replaced
 The 548 hour cases still passed. Add a meaningful refusal case for a sample completed after
 its box observation, with the corresponding valid-order positive. Preserve the current
 clock policy. This is a test gap, not a reproduced product defect or a claim that an actual
-host supplies that ordering. The review's other clock faults failed their intended checks.
+host supplies that ordering.
 
 ## Pin committed hour preparation's action boundary
 
@@ -384,7 +382,7 @@ cases still passed. Test the internal accepted/refused action boundary without c
 
 Public promotion retry is a separate path: the existing real-mirror HTTPS case in
 `hour-promotion.test.ts` promotes once, restarts, retries with later time and checks the same
-rows, counters and hour journal. The driver reran that case after review and it passed;
+rows, counters and hour journal.
 `promoteMirrorToPrimary` returns already-primary before invoking its preparation runner.
 Do not change that public outcome to make the internal check execute.
 
@@ -429,8 +427,8 @@ Cloud's operator correction subsequently landed as [Cloud #132](https://github.c
 at `a7a29f4a73e5115a8f2e9c381eab97710dad4645`; the scheduled joint result still gates completion.
 
 **2026-10-15 implementation boundary:** C3 supplies the signed consumed-receipt verifier,
-configured manual recovery preparation, public receipt retention and explicit report APIs. Both
-FULL reviews were triaged; the report journal publishes complete files, checks the encoded proof
+configured manual recovery preparation, public receipt retention and explicit report APIs. The
+report journal publishes complete files, checks the encoded proof
 before binding a new operation and checks the expected receipt in live and cached replies.
 The operator-contract correction is Cloud #132. Source and acceptance checks are documented in
 [the adapter guide](../developers/cloud-fiscal-allocation.md). Production custody/signing/continuity
@@ -439,9 +437,8 @@ record the earlier branch state rather than current open implementation work.
 
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
 regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
-The owner approved the exact archive changes; the original archive/target suites pass 36 cases.
-Both FULL Claude reviews are complete. Their migration-preservation gap gains an exact SIF-row
-comparison, and wrong-administrator preparation is qualified at the authority boundary. Their
+The owner approved the exact archive changes. The reviews' migration-preservation gap gains an exact
+SIF-row comparison, and wrong-administrator preparation is qualified at the authority boundary. Their
 restore wording finding is corrected in the developer topic and the exact root bullet, under
 the owner's A+ approval. The mixed-source command test refuses before either restore runs. Hook/current-head CI
 still qualify the publication candidate. Earlier dated Task 4 notes describe earlier checkpoints.
@@ -496,8 +493,7 @@ chain, series, audit result or counter. The signing command requires current-reg
 reservation confirmations. That receipt cannot replace a takeover consumption receipt.
 An internal operation now retains the signed proof and complete bases in `fiscal_reservations`.
 Its database-backed tests compare all active fiscal rows, retry the same join, refuse retained
-event/allocation/identity reuse and check rollback and update/delete refusals. A caller-mutation
-case failed before the operation took a detached proof snapshot. The root append-only list and
+event/allocation/identity reuse and check rollback and update/delete refusals. The root append-only list and
 fiscal schema-ownership list gained exactly the two entries approved by the owner at 20:55.
 The internal takeover operation now rechecks the retained join signatures and binds a different
 consumption event to the same source, target, block and complete allocation. Its tests retain the
