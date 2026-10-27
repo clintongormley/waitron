@@ -5077,7 +5077,8 @@ stack where there is no room for both. The tree scrolls inside its own box, at m
 `--wt-tap-min` rows tall, with `--wt-space-1` of room around its rows for their focus ring, so an
 item picked low in it stays in view beside its form. Picking an item also scrolls the dialog to
 the form where that is needed, as it is when the two stack on a short screen; focus stays on the
-item picked. Until an item is picked, the form's place reads "Pick an
+item picked. A variant link on a dish's form goes with that form, so following one moves focus to
+the variant form's heading. Until an item is picked, the form's place reads "Pick an
 item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
 item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
 A section's customer-facing name in a language that every included folder showing it fixes is drawn
