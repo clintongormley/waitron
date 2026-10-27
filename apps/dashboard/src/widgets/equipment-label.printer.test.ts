@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtButton, WtCombobox } from "@waitron/ui";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
-import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
+import { SERIF_BOLD_SHEET, TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -129,6 +129,30 @@ it("the label prints Waitron's type under a theme at 130%", async () => {
   } finally {
     document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
       (sheet) => sheet !== TEXT_130_SHEET,
+    );
+  }
+});
+it("the label prints Waitron's typeface and Bold under a theme in Serif with Bold 800", async () => {
+  const qr =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, SERIF_BOLD_SHEET];
+  try {
+    const printed = vi.fn<(view: Window) => void>();
+    printEquipmentLabel({ qr, name: "Portable", code: "CODE" }, printed);
+    await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
+    const view = printed.mock.calls[0]![0];
+    expect(getComputedStyle(view.frameElement!).getPropertyValue("--wt-font-weight-bold")).toBe(
+      "800",
+    );
+    const root = view.document.documentElement.style;
+    expect(root.getPropertyValue("--wt-font-family")).toBe(
+      WAITRON_DEFAULTS.structure["--wt-font-family"],
+    );
+    expect(root.getPropertyValue("--wt-font-weight-bold")).toBe("600");
+    view.dispatchEvent(new Event("afterprint"));
+  } finally {
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+      (sheet) => sheet !== SERIF_BOLD_SHEET,
     );
   }
 });

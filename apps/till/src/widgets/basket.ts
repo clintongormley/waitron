@@ -314,7 +314,7 @@ export class TillBasket extends LitElement {
       }
 
       .line-extras-label {
-        font-weight: 600;
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .qty {

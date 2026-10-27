@@ -6,7 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { DashboardApi } from "../api/client.js";
 import { NavigationGuard } from "@waitron/ui";
-import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
+import { SERIF_BOLD_SHEET, TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { LoginScreen } from "./login-screen.js";
 
 // Keep the real WebAuthn library; stub only the hardware boundary so an earlier
@@ -3402,6 +3402,31 @@ describe("login-screen: the sign-in card", () => {
     } finally {
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
         (sheet) => sheet !== TEXT_130_SHEET,
+      );
+    }
+  });
+
+  it("the Google button keeps Google's type under a theme in Serif with Medium and Bold at 800", async () => {
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, SERIF_BOLD_SHEET];
+    try {
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api: stubApi(),
+      });
+      await openGoogle(el);
+      await flush(el);
+      const google = el.shadowRoot!.querySelector<HTMLElement>(
+        "wt-button[data-test=google-login]",
+      )!;
+      const style = getComputedStyle(google.shadowRoot!.querySelector("button")!);
+      expect(style.fontFamily).toMatch(/^"Google Sans", /);
+      expect(style.fontWeight).toBe("500");
+      expect(style.fontSize).toBe("14px");
+      expect(getComputedStyle(el.shadowRoot!.querySelector(".screen")!).fontFamily).toMatch(
+        /^ui-serif/,
+      );
+    } finally {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (sheet) => sheet !== SERIF_BOLD_SHEET,
       );
     }
   });
