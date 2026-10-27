@@ -305,6 +305,22 @@ tests pin it (`apps/server/src/order-groups.test.ts:526`,
 `2 x`. A custom unit's quantity is a neighbour: [A custom-unit extra still shows a dot in
 Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation).
 
+## `POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller
+
+- **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
+  since A797 slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
+  plan's slice 8, D8). Retiring it is a change of its own, on the FULL review path because it is a
+  till route, and not part of A773-2, whose Task 2 keeps "real station-item/ticket preparation
+  routes for actual-released work" (its plan, Task 2's Interfaces).
+
+## A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question)
+
+- **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).** A card whose
+  dishes are all Ready keeps its minutes and band, so after a quiet hour it reads "277 min" and
+  pulses as forgotten, while the header line's "late" leaves it out (A797 slice 8, D9). Before slice
+  8 the Ready column's dishes carried the age border too. Should a Ready card stop ageing, age from
+  when it became Ready, or wait for slice 9's collapsed Ready column? Seen in A797 slice 8's LOOK.
+
 ## Decisions and deliberate limits
 
 ### A switched-off course uses Fire now (owner, 2026-10-17; C80)

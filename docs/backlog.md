@@ -1594,9 +1594,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
   since A797 slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
-  plan's slice 8, D8). Retiring it is a change of its own, on the FULL review path because it is a
-  till route, and not part of A773-2, whose Task 2 keeps "real station-item/ticket preparation
-  routes for actual-released work" (its plan, Task 2's Interfaces).
+  plan's slice 8, D8). [Detail](backlog/kitchen.md#post-apiordersidstationssidadvance-appsserversrctill-apits-has-no-till-caller)
 
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
@@ -1641,11 +1639,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a held dish shows its own Done, and cards grow tall; Spanish shows "1 atrasados", a plural
   after one; and at 390 px the cards are of uneven widths. Left open by A366 slice 5 Part A.
 
-- **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).** A card whose
-  dishes are all Ready keeps its minutes and band, so after a quiet hour it reads "277 min" and
-  pulses as forgotten, while the header line's "late" leaves it out (A797 slice 8, D9). Before slice
-  8 the Ready column's dishes carried the age border too. Should a Ready card stop ageing, age from
-  when it became Ready, or wait for slice 9's collapsed Ready column? Seen in A797 slice 8's LOOK.
+- **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
+  Should a Ready card stop ageing, age from when it became Ready, or wait for slice 9's collapsed
+  Ready column? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
 
 - **The till's own Station and Pass screens, left with nothing to show, say nothing** — a kitchen
   display shows a sentence saying what to do, but a till or handheld whose choice a profile
