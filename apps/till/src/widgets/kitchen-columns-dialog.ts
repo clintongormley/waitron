@@ -40,8 +40,8 @@ export class KitchenColumnsDialog extends LitElement {
       }
 
       .row {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+        display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
         padding: var(--wt-space-2) 0;
@@ -54,8 +54,16 @@ export class KitchenColumnsDialog extends LitElement {
       }
 
       .name {
+        flex: 1 1 auto;
         font-weight: var(--wt-font-weight-bold);
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+      }
+
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-inline-start: auto;
       }
 
       .kept {
@@ -129,29 +137,31 @@ export class KitchenColumnsDialog extends LitElement {
           return html`<li class="row" data-column-row=${key}>
             <span class="number" data-column-number aria-hidden="true">${index + 1}</span>
             <span class="name" data-column-name>${name}</span>
-            <wt-button
-              variant="secondary"
-              data-column-up=${key}
-              aria-label=${`${t("station.columns_move_up")} ${name}`}
-              ?disabled=${index === 0}
-              @click=${() => this.#move(key, "up")}
-              ><wt-icon name="column-up" aria-hidden="true"></wt-icon
-            ></wt-button>
-            <wt-button
-              variant="secondary"
-              data-column-down=${key}
-              aria-label=${`${t("station.columns_move_down")} ${name}`}
-              ?disabled=${index === keys.length - 1}
-              @click=${() => this.#move(key, "down")}
-              ><wt-icon name="column-down" aria-hidden="true"></wt-icon
-            ></wt-button>
-            <wt-switch
-              data-column-show=${key}
-              label=${t("station.columns_show")}
-              accessible-name=${`${t("station.columns_show")} ${name}`}
-              .checked=${live(!this.layout.hidden.includes(key))}
-              @wt-change=${(event: Event) => this.#show(event, key)}
-            ></wt-switch>
+            <span class="controls">
+              <wt-button
+                variant="secondary"
+                data-column-up=${key}
+                aria-label=${`${t("station.columns_move_up")} ${name}`}
+                ?disabled=${index === 0}
+                @click=${() => this.#move(key, "up")}
+                ><wt-icon name="column-up" aria-hidden="true"></wt-icon
+              ></wt-button>
+              <wt-button
+                variant="secondary"
+                data-column-down=${key}
+                aria-label=${`${t("station.columns_move_down")} ${name}`}
+                ?disabled=${index === keys.length - 1}
+                @click=${() => this.#move(key, "down")}
+                ><wt-icon name="column-down" aria-hidden="true"></wt-icon
+              ></wt-button>
+              <wt-switch
+                data-column-show=${key}
+                label=${t("station.columns_show")}
+                accessible-name=${`${t("station.columns_show")} ${name}`}
+                .checked=${live(!this.layout.hidden.includes(key))}
+                @wt-change=${(event: Event) => this.#show(event, key)}
+              ></wt-switch>
+            </span>
           </li>`;
         })}
       </ol>

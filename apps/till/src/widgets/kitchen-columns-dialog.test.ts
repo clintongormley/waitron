@@ -2,7 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { ColumnKey, ColumnState } from "../state/kitchen-columns.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
 import { stationColumnNames } from "./station-queue.js";
 import { KitchenColumnsDialog } from "./kitchen-columns-dialog.js";
 
@@ -158,6 +158,27 @@ describe("the Columns window", () => {
     await vi.waitFor(() => expect(closes).toHaveLength(1));
     expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false);
   });
+
+  it.each(["en-GB", "es-ES"])(
+    "at 390 px each column's name is drawn whole on one line, its row inside the window (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        await pageAt(390, 844);
+        const { el } = await mount();
+        for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-row]")) {
+          const name = row.querySelector("[data-column-name]")!;
+          const lineTops = new Set(textRects(name).map((line) => Math.round(line.top)));
+          expect(lineTops.size, name.textContent!).toBe(1);
+          expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+        }
+      } finally {
+        setLocale(before);
+        await resetPage();
+      }
+    },
+  );
 
   it("reads «Columnas», «Hecho» and «Elegido en este dispositivo» in Spanish", async () => {
     const before = currentLocale();
