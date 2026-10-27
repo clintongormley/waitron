@@ -23,6 +23,7 @@ import {
   OPERATOR_TEXT,
   escapeHtml,
   recoveryApp,
+  startAgainDraw,
   type RecoveryDeps,
 } from "./recovery-surface.js";
 import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
@@ -1337,7 +1338,7 @@ describe("recoveryApp's Start again choice", () => {
   const FORM_ACTION = 'action="/recovery-api/start-again"';
   const RETRY_ACTION = 'action="/recovery-api/retry"';
 
-  function app(choose?: StartAgain["choose"]) {
+  function startAgainOf(choose?: StartAgain["choose"]) {
     const onFinished = vi.fn(() => Promise.resolve());
     const startAgain: StartAgain = {
       roots: { stateDir: "/box/state", venueDir: "/box/venue" },
@@ -1346,17 +1347,31 @@ describe("recoveryApp's Start again choice", () => {
       choose: choose ?? (() => Promise.resolve({ choice: "keep" as const })),
       now: () => new Date("2026-10-27T10:00:00.000Z"),
     };
-    return {
-      onFinished,
-      app: recoveryApp({
-        state: refusedAtStart(FRESH, "setup.start_again_files_found", new Date()),
-        refusedAtStart: true,
-        logDir: "/nonexistent",
-        onRetry: vi.fn(),
-        startAgain,
-      }),
-    };
+    return { onFinished, startAgain };
   }
+  const filesFoundDeps = (startAgain: StartAgain, log?: RecoveryDeps["log"]): RecoveryDeps => ({
+    state: refusedAtStart(FRESH, "setup.start_again_files_found", new Date()),
+    refusedAtStart: true,
+    logDir: "/nonexistent",
+    onRetry: vi.fn(),
+    startAgain,
+    ...(log === undefined ? {} : { log }),
+  });
+  function app(choose?: StartAgain["choose"], log?: RecoveryDeps["log"]) {
+    const { onFinished, startAgain } = startAgainOf(choose);
+    return { onFinished, app: recoveryApp(filesFoundDeps(startAgain, log)) };
+  }
+  const MOVED = () =>
+    Promise.resolve({
+      choice: "move" as const,
+      setAside: {
+        state: "first-setup-set-aside/s1/state",
+        venue: "first-setup-set-aside/s1/venue",
+      },
+    });
+  const throwingOnChoice: RecoveryDeps["log"] = (_level, event) => {
+    if (event === "recovery.start_again_choice") throw new Error("log sink failed");
+  };
   const choose = (target: ReturnType<typeof app>["app"], choice: "keep" | "move") =>
     target.request(
       "/recovery-api/start-again",
@@ -1442,5 +1457,30 @@ describe("recoveryApp's Start again choice", () => {
     expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
     expect(page).not.toContain(FORM_ACTION);
     expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("a logger that throws on the recorded choice still restarts after a Move", async () => {
+    const { app: surface, onFinished } = app(MOVED, throwingOnChoice);
+    await choose(surface, "move");
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("a logger that throws on the recorded choice still leaves GET / on the kept page after a Keep", async () => {
+    const { app: surface } = app(undefined, throwingOnChoice);
+    await choose(surface, "keep");
+    const page = await (await surface.request("/", {}, tls())).text();
+    expect(page).toContain(escapeHtml(KEPT.title));
+    expect(page).not.toContain(FORM_ACTION);
+  });
+
+  it("a draw asked for the kept code draws the kept page even when nothing set the latch", async () => {
+    const { startAgain } = startAgainOf();
+    const draw = startAgainDraw(filesFoundDeps(startAgain), () => false);
+    const page = await draw({ code: "setup.start_again_kept", locale: "en-GB", secure: true });
+    expect(page).toContain(escapeHtml(KEPT.title));
+    expect(page).not.toContain(escapeHtml(FOUND.title));
+    expect(page).not.toContain(escapeHtml(WORDS.filesFound));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(page).not.toContain('type="password"');
   });
 });

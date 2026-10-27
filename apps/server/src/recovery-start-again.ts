@@ -462,18 +462,22 @@ export function mountStartAgainChoice(
       });
     }
     // Outside the catch: the choice is recorded, so a failure to draw must not say nothing changed.
-    log?.("info", "recovery.start_again_choice", {
-      choice: result.choice,
-      attemptId: deps.survey.attemptId,
-      units: deps.survey.units.length,
-    });
+    // Logged only after the choice has taken effect, so a throwing logger cannot undo it.
+    const logChoice = () =>
+      log?.("info", "recovery.start_again_choice", {
+        choice: result.choice,
+        attemptId: deps.survey.attemptId,
+        units: deps.survey.units.length,
+      });
     if (result.choice === "keep") {
       onKept?.();
+      logChoice();
       return page(200, { code: "setup.start_again_kept", secure: true });
     }
     const outgoing = outgoingOf(c);
     if (outgoing === undefined) void deps.onFinished();
     else outgoing.once("finish", () => void deps.onFinished());
+    logChoice();
     return page(200, {
       code,
       secure: true,

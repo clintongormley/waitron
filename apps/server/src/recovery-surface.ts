@@ -665,21 +665,16 @@ ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 `;
 }
 
-/**
- * Served instead of trading once boot has failed past the retry threshold, or on the first start
- * after the running server stopped itself (`refused`). The one action is retry: there is no
- * degraded-but-trading mode.
- */
-export function recoveryApp(deps: RecoveryDeps): Hono {
-  const app = new Hono();
+/** The recovery page, drawn as the kept page once `isKept()` answers true or the view's code is the kept one. */
+export function startAgainDraw(
+  deps: RecoveryDeps,
+  isKept: () => boolean,
+): (view: Omit<StartAgainView, "code"> & { code?: StartAgainView["code"] }) => Promise<string> {
   const { startAgain } = deps;
-  // Kept in-process only: the next start reads the recorded Keep from disk and refuses with it.
-  let kept = false;
-
-  const draw = async (view: Omit<StartAgainView, "code">) => {
+  return async (view) => {
     const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
     if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes);
-    if (kept) {
+    if (isKept() || view.code === "setup.start_again_kept") {
       const state: RecoveryState = { ...deps.state, lastErrorCode: "setup.start_again_kept" };
       return renderPage(deps, log, view.locale, freeBytes, state);
     }
@@ -693,6 +688,19 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     });
     return renderPage(deps, log, view.locale, freeBytes, deps.state, section);
   };
+}
+
+/**
+ * Served instead of trading once boot has failed past the retry threshold, or on the first start
+ * after the running server stopped itself (`refused`). The one action is retry: there is no
+ * degraded-but-trading mode.
+ */
+export function recoveryApp(deps: RecoveryDeps): Hono {
+  const app = new Hono();
+  const { startAgain } = deps;
+  // Kept in-process only: the next start reads the recorded Keep from disk and refuses with it.
+  let kept = false;
+  const draw = startAgainDraw(deps, () => kept);
 
   app.get("/", async (c) => {
     // No venue locale: that is read from the venue database, which the recovery path never opens.
