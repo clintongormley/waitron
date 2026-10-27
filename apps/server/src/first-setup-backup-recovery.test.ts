@@ -165,6 +165,33 @@ it("expires repair proof after fifteen minutes, and a new host never inherits an
   expect(await f.workspace.read()).toEqual([]);
 });
 
+async function preparedRecovery() {
+  const f = await fixture(true);
+  const service = recovery(f.options);
+  const session = await service.open(f.request, { onBox: false });
+  await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
+  return { service, session };
+}
+
+it("the open page's renewals keep a recovery running past fifteen minutes", async () => {
+  const { service, session } = await preparedRecovery();
+  for (let elapsed = 0; elapsed < 16 * 60_000; elapsed += 30_000) {
+    clock.advance(30_000);
+    service.renew(session.sessionId);
+  }
+  expect(await service.liveness()).toMatchObject({ state: "running" });
+  await service.close(session.sessionId);
+});
+
+it("without renewals a recovery stops after fifteen minutes and a late renewal is refused", async () => {
+  const { service, session } = await preparedRecovery();
+  clock.advance(15 * 60_000 + 1);
+  expect(() => service.renew(session.sessionId)).toThrow(
+    expect.objectContaining({ code: "setup.owner_required" }),
+  );
+  expect(await service.liveness()).toMatchObject({ state: "stopped" });
+});
+
 it("a slower old open cannot replace a more recent authenticated choice", async () => {
   const f = await fixture();
   const opened = barrier(),

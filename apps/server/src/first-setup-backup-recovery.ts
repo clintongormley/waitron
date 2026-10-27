@@ -1495,6 +1495,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       if (entry === undefined || entry.session.sessionId !== sessionId || !live(entry))
         ownerRequired();
       refresh(entry);
+      touch(entry);
     },
     cloudRenew(holder: string): void {
       const wait = cloudWait();

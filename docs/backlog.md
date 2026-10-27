@@ -549,11 +549,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   measured on a box. Left open by A1042.
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
-- **A1130: a renewal from the open recovery page extends the backup-recovery session's 15
-  minutes.** Today a recovery stops after 15 minutes without a step even with its page open, so
-  another browser may discard it. Owner, 2026-10-26: B. Update the guides' lines in the same change.
-  [Detail](backlog/setup.md#a1130-a-renewal-from-the-open-recovery-page-extends-the-backup-recovery-sessions-15-minutes)
-
 - **A1131: Start again stays enabled beside a stopped recovery when the setup database holds
   records, and when a recovery record cannot be read with the database missing.** Explain what is
   on the box and what could be lost, then let the person choose. Owner, 2026-10-26.
