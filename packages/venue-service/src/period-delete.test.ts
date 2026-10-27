@@ -37,7 +37,7 @@ import {
 } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
-import { starterSeasonName } from "./testing/starter-seasons.js";
+import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -82,7 +82,7 @@ async function venue() {
     .returning({ id: kitchenStations.id });
   return scoped(async (tx) => {
     const seasons = await ensureDefaultSeasons(tx, cfg);
-    const season = (name: string) =>
+    const season = (name: StarterSeason) =>
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
@@ -99,7 +99,7 @@ async function venue() {
     const deliLunch = await period(deli, "Deli lunch");
     const week = (fill: MenuSlot[]) =>
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: weekday === 3 ? fill : [] }));
-    for (const name of ["Summer", "Autumn"])
+    for (const name of ["Summer", "Autumn"] as const)
       await replaceMenuWeek(
         tx,
         cfg,

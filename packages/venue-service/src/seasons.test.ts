@@ -166,6 +166,16 @@ describe("ensureDefaultSeasons", () => {
     },
   );
 
+  it("names the default seasons in a passed staff language over the venue's own", async () => {
+    const locationId = await staffVenue(false, null, "es-ES");
+    const written = await withTransaction(db, (tx) =>
+      ensureDefaultSeasons(tx, { locationId }, "en"),
+    );
+    expect(written.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }))).toEqual(
+      starterSeasons("en"),
+    );
+  });
+
   it("gives a venue whose seasons are all written by a later call the staff language", async () => {
     const locationId = await staffVenue(false, null, "es-ES");
     const saved = await withTransaction(db, (tx) =>

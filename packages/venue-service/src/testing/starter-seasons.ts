@@ -2,8 +2,12 @@ import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import { DEFAULT_SEASONS } from "../season-rules.js";
 import { STARTER_SEASON_NAMES } from "../starter-content.js";
 
-/** The stored name of the default season called `english`, in a venue with this staff language. */
-export function starterSeasonName(english: string, staffLanguage: StarterStaffLanguage): string {
+export type StarterSeason = keyof typeof STARTER_SEASON_NAMES;
+
+export function starterSeasonName(
+  english: StarterSeason,
+  staffLanguage: StarterStaffLanguage,
+): string {
   return starterName(STARTER_SEASON_NAMES, english, staffLanguage);
 }
 
@@ -15,7 +19,7 @@ export function englishSeasonName(stored: string, staffLanguage: StarterStaffLan
   if (DEFAULT_SEASONS.some((season) => season.name === stored))
     throw new Error(`season "${stored}" is stored in English in a ${staffLanguage} venue`);
   const english = DEFAULT_SEASONS.find(
-    (season) => starterSeasonName(season.name, staffLanguage) === stored,
+    (season) => starterSeasonName(season.name as StarterSeason, staffLanguage) === stored,
   );
   return english?.name ?? stored;
 }

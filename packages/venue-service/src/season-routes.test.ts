@@ -392,7 +392,7 @@ describe("the season routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(await stored(r));
     expect((await stored(r)).map(({ name }) => name)).toEqual(
-      ["Spring", "Summer", "Winter"].map((name) => starterSeasonName(name, "es")),
+      (["Spring", "Summer", "Winter"] as const).map((name) => starterSeasonName(name, "es")),
     );
   });
 

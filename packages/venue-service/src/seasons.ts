@@ -163,9 +163,10 @@ export async function saveSeasons(
       .where(and(eq(seasons.locationId, cfg.locationId), inArray(seasons.id, [...deleted])));
   // Two passes, so a swap of two names or two starts never meets a unique index mid-way. No
   // temporary name is trimmed and no temporary start passes `parseSeasonStart`; every writer stores
-  // only values that are: this function, `ensureDefaultSeasons` (its starts from `DEFAULT_SEASONS`,
-  // its names from `starter-content.ts`, whose test holds them trimmed), and the import, whose
-  // `validateSeasonWeeks` refuses anything else.
+  // only values that are: this function, `ensureDefaultSeasons` (its starts and English names from
+  // `DEFAULT_SEASONS`, other staff languages' names from `starter-content.ts`, whose test holds every
+  // staff language's names trimmed), and the import, whose `validateSeasonWeeks` refuses anything
+  // else.
   const moving = changed.filter((entry) => {
     const own = stored.get(entry.id!)!;
     return own.name !== entry.name || own.startsOn !== entry.startsOn;

@@ -68,7 +68,7 @@ import {
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
-import { starterSeasonName } from "./testing/starter-seasons.js";
+import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -1271,7 +1271,7 @@ describe("the opening-hours model's seasons", () => {
       );
       return { dinner, all: await readSeasons(tx, v.cfg) };
     });
-    const id = (name: string) =>
+    const id = (name: StarterSeason) =>
       seasons.all.find((season) => season.name === starterSeasonName(name, "es"))!.id;
     const empty = <K extends string>(key: K) =>
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, [key]: [] }));
