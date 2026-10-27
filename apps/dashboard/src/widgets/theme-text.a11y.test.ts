@@ -28,6 +28,23 @@ const states: Record<
     draft: ALL_SET,
     check: (el) => expect(q(el, '[data-test="text-worked-out-size.sm"]')).not.toBeNull(),
   },
+  "a size warning": {
+    draft: openDraft({ ...WAITRON_CHOICES, text: { size: { sm: 10 } } }),
+    check: (el) => expect(q(el, '[data-test="text-warning-size.sm"]')).not.toBeNull(),
+  },
+  "the larger-than-checked note": {
+    draft: openDraft({ ...WAITRON_CHOICES, textScale: 130, text: { size: { xl: 25 } } }),
+    check: (el) => expect(q(el, '[data-test="text-note-size.xl"]')).not.toBeNull(),
+  },
+  busy: {
+    draft: ALL_SET,
+    extra: () => ({ busy: true }),
+    check: (el) =>
+      expect(
+        q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="text-worked-out-size.sm"]')!
+          .disabled,
+      ).toBe(true),
+  },
   "an error": {
     draft: { ...WORKED_OUT, textCodes: { sm: "x" } },
     extra: () => ({ errors: { "text.size.sm": t("appearance.bad_text_px") } }),

@@ -3,13 +3,17 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import {
   TEXT_SIZE_KEYS,
   TEXT_WEIGHTS,
   TEXT_WEIGHT_KEYS,
   TYPEFACES,
+  drawnSize,
   drawnTextSize,
+  isTextWarning,
+  textNotes,
   type DerivedTheme,
   type TextSizeKey,
   type TextWeight,
@@ -20,7 +24,14 @@ import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { textTouched, type LookDraft, type TextField } from "./look-draft.js";
-import { textAtStep, textFieldName } from "./theme-words.js";
+import { fixLineStyles } from "./fix-line-styles.js";
+import {
+  textAtStep,
+  textFieldName,
+  textFixLabel,
+  textLargerLine,
+  textWarningLine,
+} from "./theme-words.js";
 
 export type TextAction =
   | { kind: "family"; family: Typeface }
@@ -50,6 +61,7 @@ function asWeight(value: string): TextWeight | undefined {
 export class ThemeTextRows extends LitElement {
   static override styles = [
     baseStyles,
+    fixLineStyles,
     css`
       :host {
         display: block;
@@ -123,6 +135,13 @@ export class ThemeTextRows extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .notes > .warning,
+      .note {
+        margin: 0;
+      }
+      .note {
+        color: var(--wt-color-text-muted);
       }
       @container (min-width: 600px) {
         .row {
@@ -258,8 +277,47 @@ export class ThemeTextRows extends LitElement {
         ></wt-number-stepper
         ><span aria-hidden="true">${t("appearance.px")}</span></span
       >`,
-      step,
+      html`${step}${this.#sizeCheck(key)}`,
     );
+  }
+
+  #fixButton(key: TextSizeKey, px: number): TemplateResult {
+    const scale = this.draft.choices.textScale;
+    const label = textFixLabel(px, scale, drawnSize(px, scale));
+    return html`<p class="fixed">
+      <wt-button
+        data-test="text-fix-size.${key}"
+        size="sm"
+        aria-label=${fill("appearance.hand_action", {
+          action: label,
+          value: textFieldName(`text.size.${key}`),
+        })}
+        ?disabled=${this.busy}
+        @click=${() => this.#send({ kind: "fix", key, px })}
+        >${label}</wt-button
+      >
+    </p>`;
+  }
+
+  /** A size warns or gets the note, never both. */
+  #sizeCheck(key: TextSizeKey): TemplateResult | typeof nothing {
+    const { choices } = this.draft;
+    const warning = this.derived.warnings
+      .filter(isTextWarning)
+      .find((w) => w.field === `text.size.${key}`);
+    if (warning !== undefined) {
+      return html`<p class="warning">
+          <wt-icon name="warning"></wt-icon
+          ><span data-test="text-warning-size.${key}">${textWarningLine(warning, choices)}</span>
+        </p>
+        ${this.#fixButton(key, warning.fix)}`;
+    }
+    const note = textNotes(choices, WAITRON_DEFAULTS).find((n) => n.key === key);
+    if (note === undefined) return nothing;
+    return html`<p class="note">
+        <span data-test="text-note-size.${key}">${textLargerLine(key, note.drawn)}</span>
+      </p>
+      ${this.#fixButton(key, note.fix)}`;
   }
 
   #weight(key: TextWeightKey): TemplateResult {

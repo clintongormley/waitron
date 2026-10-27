@@ -289,3 +289,93 @@ describe("the Text rows' layout", () => {
     expect(box(value).top).toBeLessThan(box(name).bottom);
   });
 });
+
+describe("under a size row", () => {
+  const warning = (el: ThemeTextRows, key: string) =>
+    q(el, `[data-test="text-warning-size.${key}"]`);
+  const note = (el: ThemeTextRows, key: string) => q(el, `[data-test="text-note-size.${key}"]`);
+  const fix = (el: ThemeTextRows, key: string) =>
+    q<HTMLElementTagNameMap["wt-button"]>(el, `[data-test="text-fix-size.${key}"]`);
+
+  it("Small text set by hand to 10 at 100% warns, with its fix", async () => {
+    const el = await mount(draftOf({ size: { sm: 10 } }));
+    const line = warning(el, "sm")!;
+    expect(line.textContent!.trim()).toBe(
+      "Small text: 10 px is smaller than 12 px; text that small is often hard to read.",
+    );
+    const paragraph = line.closest("p")!;
+    expect(paragraph.classList.contains("warning")).toBe(true);
+    expect(paragraph.querySelector("wt-icon")!.getAttribute("name")).toBe("warning");
+    const warned = document.createElement("span");
+    warned.style.color = "var(--wt-color-warning)";
+    paragraph.append(warned);
+    expect(getComputedStyle(paragraph).color).toBe(getComputedStyle(warned).color);
+    warned.remove();
+    const button = fix(el, "sm")!;
+    expect(button.textContent!.trim()).toBe("Use 12 px");
+    expect(button.getAttribute("aria-label")).toBe("Use 12 px: Small text");
+    const seen = actions(el);
+    await userEvent.click(button);
+    expect(seen).toEqual([{ kind: "fix", key: "sm", px: 12 }]);
+    expect(note(el, "sm")).toBeNull();
+    for (const key of ["md", "lg", "xl"]) expect(warning(el, key)).toBeNull();
+  });
+
+  it("at 130%, Largest text set by hand to 25 draws 33 px, above 29, and gets a note, not a warning", async () => {
+    const el = await mount(draftOf({ size: { xl: 25 } }, 130));
+    const line = note(el, "xl")!;
+    expect(line.textContent!.trim()).toBe(
+      "Largest text: 33 px is larger than Waitron checks the tills at; long names may wrap more or be cut off.",
+    );
+    const paragraph = line.closest("p")!;
+    expect(paragraph.querySelector("wt-icon")).toBeNull();
+    expect(paragraph.classList.contains("warning")).toBe(false);
+    const muted = document.createElement("span");
+    muted.style.color = "var(--wt-color-text-muted)";
+    paragraph.append(muted);
+    expect(getComputedStyle(paragraph).color).toBe(getComputedStyle(muted).color);
+    muted.remove();
+    expect(warning(el, "xl")).toBeNull();
+    const button = fix(el, "xl")!;
+    expect(button.textContent!.trim()).toBe("Use 22 px (29 px at 130%)");
+    const seen = actions(el);
+    await userEvent.click(button);
+    expect(seen).toEqual([{ kind: "fix", key: "xl", px: 22 }]);
+  });
+
+  it("at 130%, Small text set by hand to 8 draws 10 px and offers 9", async () => {
+    const el = await mount(draftOf({ size: { sm: 8 } }, 130));
+    expect(fix(el, "sm")!.textContent!.trim()).toBe("Use 9 px (12 px at 130%)");
+  });
+
+  it("a Small text fixed to 9 warns again when the step moves", async () => {
+    const el = await mount(draftOf({ size: { sm: 9 } }, 130));
+    expect(warning(el, "sm")).toBeNull();
+    expect(fix(el, "sm")).toBeNull();
+    for (const [step, words] of [
+      [100, "Use 12 px"],
+      [105, "Use 11 px (12 px at 105%)"],
+      [115, "Use 10 px (12 px at 115%)"],
+    ] as const) {
+      const draft = draftOf({ size: { sm: 9 } }, step);
+      el.draft = draft;
+      el.derived = deriveTheme(draft.choices);
+      await el.updateComplete;
+      expect(fix(el, "sm")!.textContent!.trim(), String(step)).toBe(words);
+    }
+  });
+
+  it("Waitron's own sizes at 130% show no warning and no note", async () => {
+    const el = await mount(draftOf({}, 130));
+    for (const key of ["sm", "md", "lg", "xl"]) {
+      expect(warning(el, key)).toBeNull();
+      expect(note(el, key)).toBeNull();
+      expect(fix(el, key)).toBeNull();
+    }
+  });
+
+  it("busy disables a fix", async () => {
+    const el = await mount(draftOf({ size: { sm: 10 } }), { busy: true });
+    expect(fix(el, "sm")!.disabled).toBe(true);
+  });
+});
