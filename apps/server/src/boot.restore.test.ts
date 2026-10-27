@@ -169,7 +169,6 @@ describe("startServer, against a migrated venue directory", () => {
     );
     const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
     try {
-      // Listening, so `close()` below has a listener to shut.
       await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
       const rows = await sharedDb
         .select({ sealed: nodeSealedState.sealed })

@@ -282,8 +282,8 @@ the same day; moved here 2026-10-07.
 
 ## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
 
-`apps/server`'s suites pick ports by binding port 0, reading the number the system chose, and
-releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
+A suite that needs a configured port picks it by binding port 0, reading the number the system
+chose, and releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
 other can return the same number twice on Linux, and did in CI run 36317643554: the boot's HTTPS
 server took port 40141 and its landing listener was then refused `EADDRINUSE` on 40141 in the same
 start. Measured 2026-09-27 in `node:24-slim` (Node v24.21.0, kernel 6.12): 9 repeats in 50,000
@@ -333,7 +333,7 @@ on the configured port throughout boot. Before the fixture change, the same case
 shard 6, at port 46869. The controlled reproduction establishes that an occupied configured port
 can cause that failure; it does not identify the competing process in the historical run.
 The in-process boot siblings use this fixture except cases that assert configured-port,
-advertised-origin, tunnel-target, paired landing-listener or exact listener-release contracts.
+advertised-origin, tunnel-target, paired landing-listener, distinct unused-peer or exact listener-release contracts.
 The process-started fixtures and unused-peer reservations remain separate work in
 [the CI backlog](../backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 

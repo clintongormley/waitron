@@ -1145,7 +1145,6 @@ describe("startServer, against a migrated venue directory", () => {
         return [s, found] as const;
       });
       server = started;
-      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(httpPort());
       expect(reconcileLine.softDisabled).toEqual(["scheduler"]);
       expect(reconcileLine.toMigrate).toEqual([]);
@@ -2228,7 +2227,6 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_ENV: "production",
     });
     try {
-      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(httpPort());
       expect(runTunnelClient).not.toHaveBeenCalled();
     } finally {
@@ -2250,7 +2248,6 @@ describe("startServer, against a migrated venue directory", () => {
       return [started, event] as const;
     });
     try {
-      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(httpPort());
       expect(disabled.event).toBe("backup.disabled");
     } finally {

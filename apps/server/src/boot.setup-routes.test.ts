@@ -386,9 +386,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     };
   }
 
-  /** A setup-mode boot over a venue directory, with the restart intercepted and the minted CA
-   * trusted; `use` runs while it serves. `extraPortCount` more ports are drawn beside the server's own, so none of
-   * them is the server's port. Live provisioning uses the owned hour HTTP journey. */
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -439,7 +436,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     try {
       await beforeStart?.(stateDir);
       await withMockedKill(async (kills) => {
-        const server = await startServer(
+        const start = extraPortCount > 0 ? startConfiguredServer : startServer;
+        const server = await start(
           {
             WAITRON_VENUE_DIR: directory,
             WAITRON_HTTP_PORT: String(port),
@@ -452,6 +450,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           {},
           { testClock },
         );
+        if (extraPortCount > 0) await awaitListening(port!);
         const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
         try {
           await use({

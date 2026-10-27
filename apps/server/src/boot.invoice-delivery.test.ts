@@ -54,7 +54,8 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
-const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
+const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
+  ephemeralServerFixture();
 
 vi.mock("./demo-printer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./demo-printer.js")>();
@@ -334,9 +335,9 @@ describe("invoice delivery recovery at trading boot", () => {
     const before = await delivery(ctx.paper.id);
     let server: StartedServer | undefined;
     try {
-      server = await startServer(ctx.env);
+      server = await startConfiguredServer(ctx.env);
       await vi.waitFor(async () => {
-        const response = await fetch(`http://127.0.0.1:${httpPort()}/health`);
+        const response = await fetch(`http://127.0.0.1:${ctx.env.WAITRON_HTTP_PORT}/health`);
         expect(response.status).toBe(503);
       });
       expect(await delivery(ctx.paper.id)).toEqual(before);
@@ -678,7 +679,7 @@ describe("invoice email worker at trading boot", () => {
         originNodeId: ctx.node,
       });
       const before = await delivery(email.id);
-      server = await startServer(ctx.env);
+      server = await startConfiguredServer(ctx.env);
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
       expect(await delivery(email.id)).toEqual(before);
       expect(smtp.messages).toEqual([]);

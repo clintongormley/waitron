@@ -186,7 +186,7 @@ A1152 applies the bind-time port-zero fixture to the matching in-process `boot*.
 siblings. The fixture delegates to real Hono, waits for its real listener, and directs requests
 to that listener's address. `boot.failed-start.test.ts` retains its configured-port teardown
 checks. Explicit configured-port, tunnel-target, advertised-origin and paired landing-listener
-cases in `boot.test.ts` and `boot.setup-routes.test.ts` retain the configured binding. A907's
+cases retain the configured binding, including an unused peer drawn alongside the HTTP port. A907's
 existing clock-listener fixture already selects at bind time. None changes production validation.
 
 C88 (#920) reproduced the release-to-bind gap as one way the pause test's single CI failure
