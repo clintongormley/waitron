@@ -2401,3 +2401,33 @@ it("keeps focus on a tree item when it is picked", async () => {
   await el.updateComplete;
   expect(el.shadowRoot!.activeElement).toBe(node(el, "Lemonade"));
 });
+
+it("lets go of a refusal under a language the venue switches off, keeping its change staged", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa" };
+  const el = await mount(
+    stubApi({
+      getLiveMenu: vi.fn(async () => live(3, document)),
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", {
+          change: 0,
+          field: "customerName",
+          reason: "content.translation_required",
+        });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  await type(el, "wt-input", "customer-name-es", "Sopa del día");
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(field(el, "wt-input", "customer-name-en").error).toBe(
+    codeMessage("content.translation_required"),
+  );
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  await el.updateComplete;
+  expect(el.changes).toHaveLength(1);
+  expect(node(el, "Soup").querySelector('[data-test="needs-correcting"]')).toBeNull();
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "review")!.disabled).toBe(false);
+});
