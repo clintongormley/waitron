@@ -30,6 +30,7 @@ import {
   isTextScale,
   isTextWarning,
   normaliseChoices,
+  sameText,
   type Background,
   type Corners,
   type DerivedTheme,
@@ -50,6 +51,7 @@ import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 import {
   codeInvalid,
   invalidHandCodes,
+  TEXT_FIELDS,
   invalidTextCodes,
   isWaitronLook,
   openDraft,
@@ -97,6 +99,7 @@ import {
   savedWarningLine,
   textScaleLabel,
   textScaleRow,
+  textNames,
   textScaleSpoken,
   textSizesLine,
 } from "../widgets/theme-words.js";
@@ -174,6 +177,20 @@ function sameErrors<K extends string>(
 
 function withoutField(fixes: HandFixes, field: HandField): HandFixes {
   return Object.fromEntries(Object.entries(fixes).filter(([key]) => key !== field));
+}
+
+function isTextField(field: unknown): field is TextField {
+  return (TEXT_FIELDS as readonly unknown[]).includes(field);
+}
+
+interface TextRefusal {
+  readonly field: TextField;
+  readonly message: string;
+}
+
+function textRow(choices: ThemeChoices): string {
+  const names = textNames(choices);
+  return names.length === 0 ? t("appearance.none") : names.join(", ");
 }
 
 function handRow(choices: ThemeChoices): string {
@@ -298,6 +315,7 @@ export class LookCard extends LitElement {
   @state() private refusedHand: HandField | "" = "";
   @state() private refusedLogo: LogoRefusal | null = null;
   @state() private refusedTextScale = "";
+  @state() private refusedText: TextRefusal | null = null;
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
@@ -405,6 +423,7 @@ export class LookCard extends LitElement {
     this.refusedHand = "";
     this.refusedLogo = null;
     this.refusedTextScale = "";
+    this.refusedText = null;
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -480,6 +499,7 @@ export class LookCard extends LitElement {
     this.refusedHand = "";
     this.refusedLogo = null;
     this.refusedTextScale = "";
+    this.refusedText = null;
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -519,6 +539,12 @@ export class LookCard extends LitElement {
     if (hand && after !== before) this.refusedHand = "";
     if (after.choices.logo !== before.choices.logo) this.refusedLogo = null;
     if (after.choices.textScale !== before.choices.textScale) this.refusedTextScale = "";
+    if (
+      !sameText(after.choices.text, before.choices.text) ||
+      after.textCodes !== before.textCodes
+    ) {
+      this.refusedText = null;
+    }
     if (handNames(after.choices).length === 0) this.showKeptNote = false;
     else if (
       after.choices.brandColor !== before.choices.brandColor ||
@@ -637,6 +663,7 @@ export class LookCard extends LitElement {
     if (this.submitted) {
       for (const field of invalidTextCodes(draft)) errors[field] = t("appearance.bad_text_px");
     }
+    if (this.refusedText) errors[this.refusedText.field] = this.refusedText.message;
     if (!sameErrors(errors, this.#textErrors)) this.#textErrors = errors;
     return this.#textErrors;
   }
@@ -784,6 +811,7 @@ export class LookCard extends LitElement {
     this.refusedHand = "";
     this.refusedLogo = null;
     this.refusedTextScale = "";
+    this.refusedText = null;
     this.actionError = "";
     if (
       codeInvalid(draft) ||
@@ -840,6 +868,16 @@ export class LookCard extends LitElement {
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && field === "textScale") {
         this.refusedTextScale = t("appearance.bad_text_size");
+        await this.#focusInvalid();
+      } else if (code === "theme.invalid" && isTextField(field)) {
+        this.refusedText = {
+          field,
+          message: t(
+            field.startsWith("text.size.")
+              ? "appearance.bad_text_px"
+              : "appearance.bad_text_choice",
+          ),
+        };
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && field === "brandColor") {
         this.refusedCode = t("appearance.bad_code");
@@ -1173,6 +1211,11 @@ export class LookCard extends LitElement {
             label: t("appearance.colours_by_hand"),
             value: handRow(choices),
             dataTest: "saved-hand",
+          },
+          {
+            label: t("appearance.text_by_hand"),
+            value: textRow(choices),
+            dataTest: "saved-text",
           },
         ])}
         ${warnings.map(

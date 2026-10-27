@@ -1160,3 +1160,97 @@ describe("text set by hand in Advanced", () => {
     release();
   });
 });
+
+describe("a refused text setting and Advanced's closed line", () => {
+  const textRows = (el: Card) =>
+    advanced(el).shadowRoot!.querySelector(
+      "dashboard-theme-text",
+    ) as HTMLElementTagNameMap["dashboard-theme-text"];
+  const inText = (el: Card, selector: string) => textRows(el).shadowRoot!.querySelector(selector);
+  const sizeBox = (el: Card, key: string) =>
+    inText(
+      el,
+      `wt-number-stepper[name="text.size.${key}"]`,
+    ) as HTMLElementTagNameMap["wt-number-stepper"];
+  const choice = (el: Card, name: string) =>
+    inText(el, `wt-combobox[name="${name}"]`) as HTMLElementTagNameMap["wt-combobox"];
+  async function settleText(el: Card) {
+    await settle(el);
+    await textRows(el).updateComplete;
+  }
+  async function choose(el: Card, name: string, value: string) {
+    if (!disclosure(el).open) await openAdvanced(el);
+    await chooseOption(choice(el, name), value);
+    await settleText(el);
+  }
+  async function refusedOn(
+    el: Card,
+    saveTheme: { mockRejectedValueOnce(v: unknown): unknown },
+    field: string,
+  ) {
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field, reason: "bad_value" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => bottom(el)).not.toBe("");
+    await settleText(el);
+  }
+
+  it("a refusal naming text.size.sm goes under that row, and one naming text.weight.bold under its row", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await closeAdvanced(el);
+    await refusedOn(el, saveTheme, "text.size.sm");
+    expect(sizeBox(el, "sm").error).toBe("Enter a whole number from 8 to 40.");
+    expect(sizeBox(el, "md").error).toBe("");
+    expect(disclosure(el).open).toBe(true);
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "save").disabled).toBe(false);
+
+    await refusedOn(el, saveTheme, "text.weight.bold");
+    expect(choice(el, "text.weight.bold").error).toBe("Pick one of the choices in the list.");
+    expect(sizeBox(el, "sm").error).toBe("");
+    await refusedOn(el, saveTheme, "text.family");
+    expect(choice(el, "text.family").error).toBe("Pick one of the choices in the list.");
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("a refusal naming text goes to the bottom only", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    for (const field of ["text", "text.size", "text.weight"]) {
+      await refusedOn(el, saveTheme, field);
+      expect(await bottom(el), field).toBe(codeMessage("theme.invalid"));
+      expect(inText(el, "[invalid]"), field).toBeNull();
+      expect(sizeBox(el, "sm").error, field).toBe("");
+    }
+  });
+
+  it("a refusal under a row goes when that row changes", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await refusedOn(el, saveTheme, "text.weight.bold");
+    expect(choice(el, "text.weight.bold").error).not.toBe("");
+    await choose(el, "text.weight.bold", "800");
+    expect(choice(el, "text.weight.bold").error).toBe("");
+    expect(await bottom(el)).toBe("");
+  });
+
+  it("a refusal under a row stays while a colour changes", async () => {
+    const { el, saveTheme } = await mountEditing();
+    await choose(el, "text.family", "serif");
+    await refusedOn(el, saveTheme, "text.size.sm");
+    await typeHand(el, "light", "bg", "#f8f1e1");
+    await settleText(el);
+    expect(sizeBox(el, "sm").error).toBe("Enter a whole number from 8 to 40.");
+  });
+
+  it("Advanced's closed line names Normal text and counts its warning", async () => {
+    const normal = await mountChoices({ ...LUCIA, text: { size: { md: 16 } } });
+    expect(disclosure(normal.el).summary).toBe("1 set by hand: Normal text");
+    cleanupWidgets();
+    const small = await mountChoices({ ...LUCIA, text: { size: { sm: 10 } } });
+    expect(disclosure(small.el).summary).toBe("1 set by hand: Small text · 1 hard to read");
+  });
+});
