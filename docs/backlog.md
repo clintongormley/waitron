@@ -2102,9 +2102,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   final choice means None, with no pending recovery; reader setting “Prints its own slip
   automatically” defaults false, with an initially unticked Waitron slip choice otherwise.
   Cash/manual card have no Waitron slip. Keep all four journeys, separate Print/Email and table
-  closure, A790/A796 settings and A582 payment help. Build after E/A948 #2122 lands, preserving
-  F1 in every environment; F2-to-F3 replacement remains A556. Plan publication only; product
-  implementation and runtime acceptance remain; the updated boards accompany this plan.
+  closure, A790/A796 settings and A582 payment help. The saved reader setting and current
+  sale-slip exclusion are built, along with the parked-table payment observation repair (A1141).
+  The payment-window build still needs A790 Cut A and its complete live Cut B, plus G4/path
+  releases. Preserve A948's enabled F1 paths in every environment; F2-to-F3 replacement remains
+  A556. The remaining payment-window implementation and runtime acceptance stay open.
   [Four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
   [historical detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window).
 

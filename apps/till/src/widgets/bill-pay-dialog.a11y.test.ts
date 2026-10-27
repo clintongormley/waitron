@@ -307,8 +307,18 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       way: "contribution",
       cardReader: "stripe_terminal",
       readers: [
-        { id: "r-1", name: "Barra", provider: "stripe_terminal" },
-        { id: "r-2", name: "Terraza", provider: "stripe_terminal" },
+        {
+          printsOwnSlipAutomatically: false,
+          id: "r-1",
+          name: "Barra",
+          provider: "stripe_terminal",
+        },
+        {
+          printsOwnSlipAutomatically: false,
+          id: "r-2",
+          name: "Terraza",
+          provider: "stripe_terminal",
+        },
       ],
       defaultReaderId: "r-1",
     });

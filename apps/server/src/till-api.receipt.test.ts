@@ -2323,6 +2323,32 @@ describe("payment slip persisted capture facts", () => {
       expect(await saleCount(cfg)).toBe(1);
     },
   );
+  it.each([true, false])(
+    "reader automatic slip=%s excludes only its own Waitron payment slip",
+    async (automatic) => {
+      const { cfg, each, operatorId } = await setupVenue();
+      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const cookie = await login(app, cfg, operatorId);
+      const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+      await suite.db.execute(
+        sql`insert into card_readers (id, provider, provider_ref, name, active, prints_own_slip_automatically, created_at) values (${randomUUID()}, 'sumup', ${randomUUID()}, 'Counter', 1, ${automatic ? 1 : 0}, ${new Date().toISOString()})`,
+      );
+      await suite.db.execute(
+        sql`update payments set provider = 'sumup', reader_id = (select id from card_readers where name = 'Counter' limit 1) where working_order_id = ${id}`,
+      );
+      const response = await app.request(`/api/sales/${id}/payment-slip`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(response.status).toBe(200);
+      expect(await printJobsFor(cfg)).toHaveLength(automatic ? 0 : 1);
+      expect(await registroCount(cfg)).toBe(1);
+      expect(await saleCount(cfg)).toBe(1);
+    },
+  );
+
   it("does not print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });

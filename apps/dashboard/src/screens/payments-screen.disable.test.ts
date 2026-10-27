@@ -11,6 +11,7 @@ import type { PaymentsScreen } from "./payments-screen.js";
 import "./payments-screen.js";
 
 const reader: ReaderRow = {
+  printsOwnSlipAutomatically: false,
   id: "counter",
   provider: "acme",
   name: "Counter",

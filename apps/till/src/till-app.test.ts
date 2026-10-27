@@ -2143,7 +2143,12 @@ describe("till-app", () => {
 
     const withSaleTab: FormFactor = "phone-portrait";
     const readers = [
-      { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
+      {
+        printsOwnSlipAutomatically: false,
+        id: "5b1c3a52-0000-4000-8000-000000000001",
+        name: "Barra",
+        provider: "stripe_terminal",
+      },
     ];
 
     async function toFixedCounter(
@@ -2503,7 +2508,12 @@ describe("till-app", () => {
 
     const tillSaleTab: FormFactor = "till";
     const readers = [
-      { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
+      {
+        printsOwnSlipAutomatically: false,
+        id: "5b1c3a52-0000-4000-8000-000000000001",
+        name: "Barra",
+        provider: "stripe_terminal",
+      },
     ];
     const withReader = ["print-receipt", "integrated-card-payment"];
     const payCard = (el: TillApp, tab: string): TillTenderPay =>
@@ -10615,6 +10625,7 @@ describe("till-app", () => {
           cardProvider: "simulator",
           activeReaders: [
             {
+              printsOwnSlipAutomatically: false,
               id: "00000000-0000-4000-8000-000000000247",
               name: "Demo card reader",
               provider: "simulator",
@@ -19829,7 +19840,15 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
           role: "card_terminal",
           selection: "default",
           chosenId: null,
-          resolved: reader === null ? null : { ...reader, available: true, provider: "stripe" },
+          resolved:
+            reader === null
+              ? null
+              : {
+                  ...reader,
+                  available: true,
+                  provider: "stripe",
+                  printsOwnSlipAutomatically: false,
+                },
           chosen: null,
           default: readers[0]!,
           choices: readers,
@@ -19842,7 +19861,10 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     ...till,
     capabilities: [...till.capabilities, "integrated-card-payment"] as CapabilityFlag[],
     cardProvider: reader === null ? ("none" as const) : ("stripe_terminal" as const),
-    activeReaders: reader === null ? [] : [{ ...reader, provider: "stripe_terminal" }],
+    activeReaders:
+      reader === null
+        ? []
+        : [{ ...reader, provider: "stripe_terminal", printsOwnSlipAutomatically: false }],
     defaultReaderId: reader?.id,
   });
   const equipmentDialog = (el: TillApp) =>
@@ -20168,6 +20190,25 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(getDeviceIdentity).toHaveBeenCalledOnce();
   });
 
+  it.each([false, true])(
+    "the pay screen carries the reader automatic-slip setting=%s from equipment",
+    async (automatic) => {
+      const equipment = equipmentOn("held", R2);
+      equipment.roles.find(
+        (role) => role.role === "card_terminal",
+      )!.resolved!.printsOwnSlipAutomatically = automatic;
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue(bootOn(null)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipment),
+      });
+      await toCounter(el);
+      await flush(el);
+      expect(tenderPay(el).activeReaders).toEqual([
+        { ...R2, provider: "stripe_terminal", printsOwnSlipAutomatically: automatic },
+      ]);
+    },
+  );
+
   it("the pay screen takes the reader and its provider from the equipment answer alone", async () => {
     const getTill = vi.fn().mockResolvedValue(bootOn(null));
     const { el } = await mountApp({
@@ -20177,7 +20218,9 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await toCounter(el);
     await flush(el);
 
-    expect(tenderPay(el).activeReaders).toEqual([{ ...R2, provider: "stripe_terminal" }]);
+    expect(tenderPay(el).activeReaders).toEqual([
+      { ...R2, provider: "stripe_terminal", printsOwnSlipAutomatically: false },
+    ]);
     expect(tenderPay(el).defaultReaderId).toBe(R2.id);
     expect(tenderPay(el).cardProvider).toBe("stripe_terminal");
     expect(getTill).toHaveBeenCalledOnce();
@@ -22915,6 +22958,7 @@ describe("A737 Find a bill page", () => {
     counter.store.addProduct(cafe, "2");
     const id = counter.store.id;
     finish({
+      expectedEdit: null,
       kitchenNote: {
         scope: { workingOrderId: "bill-1" },
         note: null,
@@ -24983,4 +25027,66 @@ it("A773 Find a bill retains the debt and approved refusal when unsent dishes bl
   expect(actions.error).toBe("Lucía. Send or remove the unsent dishes before paying.");
   expect(ticket(el)).toBeNull();
   expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+});
+
+describe("retrieved table bills paid at Counter", () => {
+  const expectedEdit = { billId: "wo-1", editorVersion: 7, draftId: null, draftRevision: null };
+  it.each(["cash", "card"] as const)(
+    "keeps the retrieved table edit observation on a %s payment",
+    async (method) => {
+      const recordSale = vi.fn().mockImplementation(async (...args: unknown[]) => {
+        if (JSON.stringify(args[8]) !== JSON.stringify(expectedEdit))
+          throw { code: "management.request_invalid", params: { field: "expectedEdit" } };
+        return saleResult;
+      });
+      const { el } = await mountApp({
+        recordSale,
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          id: "wo-1",
+          orderNumber: 5,
+          label: "Table 4",
+          revision: 3,
+          expectedEdit,
+          kitchenNote: { scope: { partyId: "party-4" }, note: null, revision: 0, ownerRevision: 3 },
+          lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+        }),
+      });
+      const counter = await toCounter(el);
+      emit(counter, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      expect(counter.store.id).toBe("wo-1");
+      emit(counter, "confirm-payment", { method, amount: "3.00" });
+      await flush(el);
+      expect(recordSale).toHaveBeenCalledTimes(1);
+      expect(recordSale.mock.calls[0]![8]).toEqual(expectedEdit);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+  it("keeps the retrieved table edit observation on a connected-reader payment", async () => {
+    const pay = vi.fn().mockImplementation(async (input) => {
+      if (JSON.stringify(input.expectedEdit) !== JSON.stringify(expectedEdit))
+        throw { code: "management.request_invalid", params: { field: "expectedEdit" } };
+      return { outcome: "captured", ticket: saleResult };
+    });
+    const { el } = await mountApp({
+      pay,
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Table 4",
+        revision: 3,
+        expectedEdit,
+        kitchenNote: { scope: { partyId: "party-4" }, note: null, revision: 0, ownerRevision: 3 },
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      }),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    emit(counter, "collect-card", { readerId: "reader-1" });
+    await flush(el);
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(pay.mock.calls[0]![0].expectedEdit).toEqual(expectedEdit);
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+  });
 });

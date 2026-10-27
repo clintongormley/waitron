@@ -114,6 +114,7 @@ const profiles = [
 
 const readers: ReaderRow[] = [
   {
+    printsOwnSlipAutomatically: false,
     id: "r1",
     provider: "acme",
     name: "Front counter",
@@ -123,6 +124,7 @@ const readers: ReaderRow[] = [
     deviceNames: ["Front till"],
   },
   {
+    printsOwnSlipAutomatically: false,
     id: "r2",
     provider: "acme",
     name: "Bar",

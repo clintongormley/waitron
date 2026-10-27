@@ -71,6 +71,13 @@
       "when": 1792407680868,
       "tag": "0009_payment_holds",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793082342407,
+      "tag": "0010_a739_reader_slip_setting",
+      "breakpoints": true
     }
   ]
 }

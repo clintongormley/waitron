@@ -22,6 +22,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -402,6 +403,7 @@ export class PaymentsScreen extends LitElement {
   } | null = null;
   @state() private alsoUnpair = false;
   @state() private editName = "";
+  @state() private editOwnSlip = false;
   @state() private editAttempted = false;
   @state() private dialogError: string | null = null;
   @state() private busy = false;
@@ -576,7 +578,7 @@ export class PaymentsScreen extends LitElement {
   }
 
   #readerLeave?: LeaveCoordinator;
-  #editScope?: DraftScope<string>;
+  #editScope?: DraftScope<{ name: string; printsOwnSlipAutomatically: boolean }>;
   readonly #discoveryScopes = new Map<string, DraftScope<string>>();
   #readerOperation?: object;
   readonly #beforeEditorClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -931,12 +933,17 @@ export class PaymentsScreen extends LitElement {
     this.editor = { reader, mode };
     this.alsoUnpair = false;
     this.editName = reader.name;
+    this.editOwnSlip = reader.printsOwnSlipAutomatically;
     if (mode === "edit") {
       const { coordinator, scope } = draftScopeFor(this, {
         id: {},
-        current: () => this.editName.trim(),
-        snapshot: (value: string) => value,
-        equal: (a, b) => a === b,
+        current: () => ({
+          name: this.editName.trim(),
+          printsOwnSlipAutomatically: this.editOwnSlip,
+        }),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) =>
+          a.name === b.name && a.printsOwnSlipAutomatically === b.printsOwnSlipAutomatically,
         restore: () => {},
       });
       this.#readerLeave = coordinator;
@@ -971,6 +978,7 @@ export class PaymentsScreen extends LitElement {
     const scope = this.#editScope;
     const { reader, mode } = editor;
     const name = this.editName.trim();
+    const input = { name, printsOwnSlipAutomatically: this.editOwnSlip };
     if (mode === "edit" && saveActionState(scope).unchanged) return;
     this.dialogError = null;
     if (mode === "edit") this.editAttempted = true;
@@ -982,7 +990,7 @@ export class PaymentsScreen extends LitElement {
     this.#readerOperation = operation;
     this.busy = true;
     try {
-      if (mode === "edit") await this.api.renameReader(reader.id, name);
+      if (mode === "edit") await this.api.saveReader(reader.id, input);
       else if (
         mode === "disable" &&
         !(
@@ -996,7 +1004,7 @@ export class PaymentsScreen extends LitElement {
         if (this.isConnected && mode !== "edit") await this.#load();
         return;
       }
-      scope?.commit(name);
+      scope?.commit(input);
       if (!scope?.isDirty()) {
         this.renderRoot.querySelector<WtDialog>("[data-test=reader-editor]")?.closeAfter("saved");
         await this.#closeEditor();
@@ -2463,25 +2471,42 @@ export class PaymentsScreen extends LitElement {
       ${
         mode === "edit"
           ? html`<wt-input
-              name="reader-name"
-              required
-              data-test="edit-reader-name"
-              label=${t("payments.reader_col_name")}
-              .value=${this.editName}
-              .error=${invalid ? t("payments.name_required") : ""}
-              ?disabled=${this.busy}
-              @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=save-reader]"))}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                if (
-                  !this.isConnected ||
-                  !(event.currentTarget as HTMLElement).isConnected ||
-                  this.editor !== editor
-                )
-                  return;
-                this.editName = event.detail.value;
-                this.#editScope?.changed();
-              }}
-            ></wt-input>`
+                name="reader-name"
+                required
+                data-test="edit-reader-name"
+                label=${t("payments.reader_col_name")}
+                .value=${this.editName}
+                .error=${invalid ? t("payments.name_required") : ""}
+                ?disabled=${this.busy}
+                @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=save-reader]"))}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  if (
+                    !this.isConnected ||
+                    !(event.currentTarget as HTMLElement).isConnected ||
+                    this.editor !== editor
+                  )
+                    return;
+                  this.editName = event.detail.value;
+                  this.#editScope?.changed();
+                }}
+              ></wt-input>
+              <wt-switch
+                name="prints-own-slip-automatically"
+                data-test="reader-own-slip"
+                label=${t("payments.prints_own_slip_automatically")}
+                .checked=${this.editOwnSlip}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                  if (
+                    !this.isConnected ||
+                    !(event.currentTarget as HTMLElement).isConnected ||
+                    this.editor !== editor
+                  )
+                    return;
+                  this.editOwnSlip = event.detail.checked;
+                  this.#editScope?.changed();
+                }}
+              ></wt-switch>`
           : mode === "disable"
             ? html`<p>${t("payments.disable_confirm")}</p>
                 ${

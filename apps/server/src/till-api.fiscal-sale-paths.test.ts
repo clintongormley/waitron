@@ -1680,7 +1680,12 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     // `cardProvider` names only the provider TYPE, so the reader is named by id.
     expect(body.defaultReaderId).toBe(reader.id);
     expect(body.activeReaders).toEqual([
-      { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
+      {
+        id: reader.id,
+        name: "Front counter",
+        provider: "stripe_terminal",
+        printsOwnSlipAutomatically: false,
+      },
     ]);
   });
 
@@ -2877,7 +2882,12 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     expect(body.cardProvider).toBe("sumup_cloud");
     expect(body.defaultReaderId).toBe(sumup.id);
     expect(body.activeReaders).toEqual([
-      { id: sumup.id, name: "SumUp Solo", provider: "sumup_cloud" },
+      {
+        id: sumup.id,
+        name: "SumUp Solo",
+        provider: "sumup_cloud",
+        printsOwnSlipAutomatically: false,
+      },
     ]);
   });
 

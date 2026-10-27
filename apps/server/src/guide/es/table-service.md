@@ -12,6 +12,17 @@ El cobro de mostrador todavía no puede emitir una factura completa. Mantén el 
 en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
 no emite una factura.
 
+## Evitar justificantes de tarjeta duplicados {#reader-slips}
+
+Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
+panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige
+**Guardar**. Waitron deja los justificantes de ese lector en manos del propio lector. Este ajuste
+describe el lector; no cambia la configuración de su impresora. Empieza desactivado en un lector nuevo.
+
+Desactivar y volver a activar el mismo lector conserva tu elección, igual que volver a añadir
+ese lector conservado. Si lo eliminas y lo añades como uno nuevo, el ajuste empieza desactivado.
+La exportación de configuración incluye la política de pagos, pero no los lectores ni este ajuste.
+
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
 La página de la caja **Este dispositivo todavía no confía en la caja** usa el idioma compatible

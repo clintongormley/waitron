@@ -560,6 +560,7 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
 });
 
 const readerRow = (id: string, name: string) => ({
+  printsOwnSlipAutomatically: false,
   id,
   provider: "test",
   name,

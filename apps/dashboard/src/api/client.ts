@@ -1959,6 +1959,7 @@ export interface PaymentProviderRow {
 }
 
 export interface ReaderRow {
+  printsOwnSlipAutomatically: boolean;
   id: string;
   provider: string;
   name: string;
@@ -1985,6 +1986,7 @@ export interface AvailableReader {
 }
 
 export interface ReaderStatusView {
+  printsOwnSlipAutomatically: boolean;
   online: boolean;
   batteryPercent?: number;
   connection?: string;
@@ -4496,6 +4498,13 @@ export class DashboardApi {
       "POST",
       input,
     );
+  }
+
+  saveReader(
+    id: string,
+    input: { name: string; printsOwnSlipAutomatically: boolean },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/payments/readers/${id}`, "PATCH", input);
   }
 
   renameReader(id: string, name: string): Promise<void> {

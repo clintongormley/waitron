@@ -19,6 +19,7 @@ import {
   appendReaderToProfiles,
   clearUnlistedReaderChoice,
   readProfileReaderList,
+  readReaderEquipment,
   readReaderRole,
   readerHeldBy,
   readerPaymentInProgress,
@@ -723,5 +724,18 @@ describe("selecting a reader another device holds", () => {
       expect(result).toEqual({ ok: false, refusal: "busy" });
     }
     expect(await holders(s.r1)).toEqual({ [s.r1]: s.deviceB });
+  });
+});
+
+describe("reader automatic-slip equipment projection", () => {
+  it("reports false on a newly registered reader", async () => {
+    const s = await seed();
+    await inTx((tx) =>
+      setProfileReaderList(tx, s.profileId, { readerIds: [s.r1], defaultReaderId: s.r1 }),
+    );
+    const equipment = await inTx((tx) =>
+      readReaderEquipment(tx, [{ id: s.deviceA, profileId: s.profileId }], { lists: true }),
+    );
+    expect(equipment.readers.get(s.r1)).toHaveProperty("printsOwnSlipAutomatically", false);
   });
 });

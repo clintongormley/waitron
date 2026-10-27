@@ -2288,6 +2288,12 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
+**Reader-setting cut:** the dashboard saves each reader's automatic-slip setting; equipment and
+setup reads carry it, and the existing sale-slip action excludes readers that print their own.
+A1141's Counter retrieval keeps the table bill's edit observation for payment and stored-line
+saves. The shared payment window, frozen per-attempt slip intent and final document choice remain
+for the next cut, after A790's complete live routing cuts and the G4/path releases.
+
 **2026-10-27 approved update (owner, about 02:01/02:05/02:12 CET).**
 Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and [implementation plan](../superpowers/plans/2026-10-27-a739-approved-payment-flow.md).

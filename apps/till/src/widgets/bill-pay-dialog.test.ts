@@ -948,8 +948,18 @@ describe("till-bill-pay-dialog: a venue that takes no tips", () => {
 
 describe("till-bill-pay-dialog: a card on the reader", () => {
   const readers = [
-    { id: "r-1", name: "Bar reader", provider: "stripe_terminal" as const },
-    { id: "r-2", name: "Terrace reader", provider: "stripe_terminal" as const },
+    {
+      printsOwnSlipAutomatically: false,
+      id: "r-1",
+      name: "Bar reader",
+      provider: "stripe_terminal" as const,
+    },
+    {
+      printsOwnSlipAutomatically: false,
+      id: "r-2",
+      name: "Terrace reader",
+      provider: "stripe_terminal" as const,
+    },
   ];
 
   async function card(over: Partial<TillBillPayDialog>) {
@@ -1005,7 +1015,14 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     const readerId = "00000000-0000-4000-8000-000000000247";
     const el = await card({
       cardReader: "simulator",
-      readers: [{ id: readerId, name: "Demo card reader", provider: "simulator" }],
+      readers: [
+        {
+          printsOwnSlipAutomatically: false,
+          id: readerId,
+          name: "Demo card reader",
+          provider: "simulator",
+        },
+      ],
     });
     const asked = capture<PayRequest>(el, "bill-pay-preview");
 
@@ -1020,7 +1037,14 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     setLocale("es-ES");
     const el = await card({
       cardReader: "simulator",
-      readers: [{ id: "demo", name: "Demo card reader", provider: "simulator" }],
+      readers: [
+        {
+          printsOwnSlipAutomatically: false,
+          id: "demo",
+          name: "Demo card reader",
+          provider: "simulator",
+        },
+      ],
     });
     expect(
       text(root(el).querySelector('input[name="reader"][value="demo"]')?.closest("label") ?? null),

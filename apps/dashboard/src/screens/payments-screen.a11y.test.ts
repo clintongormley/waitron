@@ -53,6 +53,7 @@ const READERS: ReaderRow[] = [
     name: "Front counter",
     active: true,
     canEnable: true,
+    printsOwnSlipAutomatically: false,
     deviceCount: 2,
     deviceNames: ["Bar till", "Terrace till"],
   },
@@ -62,6 +63,7 @@ const READERS: ReaderRow[] = [
     name: "Terrace",
     active: false,
     canEnable: true,
+    printsOwnSlipAutomatically: false,
     deviceCount: 0,
     deviceNames: [],
   },
@@ -125,6 +127,38 @@ async function flush(el: PaymentsScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (theme) => {
+  it.each([
+    { locale: "en", automatic: false },
+    { locale: "en", automatic: true },
+    { locale: "es-ES", automatic: false },
+    { locale: "es-ES", automatic: true },
+  ])("the $locale reader slip setting=$automatic is accessible", async ({ locale, automatic }) => {
+    setLocale(locale);
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      {
+        api: stubApi({
+          listReaders: vi
+            .fn()
+            .mockResolvedValue([{ ...READERS[0]!, printsOwnSlipAutomatically: automatic }]),
+        }),
+        panels: PANELS,
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-r-1]")!
+      .click();
+    await flush(el);
+    const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "[data-test=reader-own-slip]",
+    )!;
+    await toggle.updateComplete;
+    expect(toggle.shadowRoot!.querySelector("input")!.checked).toBe(automatic);
+    await expectNoA11yViolations(host);
+  });
+
   it.each([
     ["en", "providers"],
     ["en", "readers"],

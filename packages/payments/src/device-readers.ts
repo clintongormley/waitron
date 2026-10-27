@@ -164,6 +164,7 @@ export type ReaderInfo = {
   provider: string;
   active: boolean;
   unpairedAt: string | null;
+  printsOwnSlipAutomatically: boolean;
   holderDeviceId: string | null;
 };
 
@@ -247,6 +248,7 @@ async function readReaderStates(
             provider: cardReaders.provider,
             active: cardReaders.active,
             unpairedAt: cardReaders.unpairedAt,
+            printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
             holderDeviceId: cardReaderHolders.deviceId,
           })
           .from(cardReaders)

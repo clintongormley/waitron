@@ -1231,7 +1231,14 @@ describe("till-tender-pay", () => {
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "simulator",
-        activeReaders: [{ id: readerId, name: "Demo card reader", provider: "simulator" }],
+        activeReaders: [
+          {
+            printsOwnSlipAutomatically: false,
+            id: readerId,
+            name: "Demo card reader",
+            provider: "simulator",
+          },
+        ],
       });
       const collected = vi.fn();
       const cancelled = vi.fn();
@@ -1268,7 +1275,14 @@ describe("till-tender-pay", () => {
         const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
           store,
           cardProvider: "simulator",
-          activeReaders: [{ id: "demo", name: "Demo card reader", provider: "simulator" }],
+          activeReaders: [
+            {
+              printsOwnSlipAutomatically: false,
+              id: "demo",
+              name: "Demo card reader",
+              provider: "simulator",
+            },
+          ],
         });
         click(el, ".change-reader");
         await el.updateComplete;
@@ -1295,7 +1309,14 @@ describe("till-tender-pay", () => {
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "simulator",
-        activeReaders: [{ id: readerId, name: "Demo card reader", provider: "simulator" }],
+        activeReaders: [
+          {
+            printsOwnSlipAutomatically: false,
+            id: readerId,
+            name: "Demo card reader",
+            provider: "simulator",
+          },
+        ],
       });
       click(el, ".change-reader");
       await el.updateComplete;
@@ -1335,7 +1356,14 @@ describe("till-tender-pay", () => {
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
         cardProvider: "stripe_terminal",
-        activeReaders: [{ id: "reader-1", name: "Front counter", provider: "stripe_terminal" }],
+        activeReaders: [
+          {
+            printsOwnSlipAutomatically: false,
+            id: "reader-1",
+            name: "Front counter",
+            provider: "stripe_terminal",
+          },
+        ],
       });
 
       expect(el.shadowRoot!.textContent).not.toContain(t("card.instant_simulator"));
@@ -1613,8 +1641,18 @@ describe("till-tender-pay", () => {
 
   describe("payment-time reader picker (Task 17)", () => {
     const readers = [
-      { id: "r1", name: "Front counter", provider: "stripe_terminal" as const },
-      { id: "r2", name: "Bar", provider: "stripe_terminal" as const },
+      {
+        printsOwnSlipAutomatically: false,
+        id: "r1",
+        name: "Front counter",
+        provider: "stripe_terminal" as const,
+      },
+      {
+        printsOwnSlipAutomatically: false,
+        id: "r2",
+        name: "Bar",
+        provider: "stripe_terminal" as const,
+      },
     ];
 
     it("shows the default reader's name on the idle screen", async () => {

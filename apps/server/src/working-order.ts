@@ -6,7 +6,11 @@ import {
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
-import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
+import {
+  readBillEditState,
+  requireOrderBillEditor,
+  type OrderEditAuthority,
+} from "./bill-editing.js";
 import type { AllergyCommand, KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
 import {
   assertPartyAllergyAnswered,
@@ -4803,6 +4807,7 @@ export interface HeldOrderSummary {
 /** A retrieved order with the stored commercial snapshot needed to rebuild its basket. */
 export interface HeldOrder {
   id: string;
+  expectedEdit: OrderEditAuthority["expectedEdit"];
   kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
   label: string | null;
@@ -4970,6 +4975,7 @@ async function readBasketOrder(
         label: workingOrders.label,
         revision: workingOrders.revision,
         receiptLocale: workingOrders.receiptLocale,
+        partyId: workingOrders.partyId,
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), which));
@@ -5094,8 +5100,18 @@ async function readBasketOrder(
       });
 
     const kitchenNote = (await readOrderKitchenNotes(tx, [order.id])).get(order.id)!;
+    const edit = order.partyId === null ? null : await readBillEditState(tx, order.id);
     return {
       id: order.id,
+      expectedEdit:
+        edit === null
+          ? null
+          : {
+              billId: edit.billId,
+              editorVersion: edit.editorVersion,
+              draftId: edit.draftId,
+              draftRevision: edit.draftRevision,
+            },
       orderNumber: order.orderNumber,
       label: order.label,
       revision: order.revision,

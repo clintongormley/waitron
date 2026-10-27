@@ -2379,6 +2379,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
 
   const readers = [
     {
+      printsOwnSlipAutomatically: false,
       id: "r1",
       provider: "acme",
       name: "Mostrador",
@@ -2388,6 +2389,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       deviceNames: [],
     },
     {
+      printsOwnSlipAutomatically: false,
       id: "r2",
       provider: "acme",
       name: "Terraza",

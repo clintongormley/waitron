@@ -16,6 +16,7 @@ const reader: ReaderRow = {
   name: "Counter",
   active: true,
   canEnable: true,
+  printsOwnSlipAutomatically: false,
   deviceCount: 0,
   deviceNames: [],
 };
@@ -69,7 +70,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, discovery = false) {
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: async () => [],
       listHeldPayments: async () => [],
-      renameReader: async () => {},
+      saveReader: async () => {},
       unpairReader: async () => {},
       adoptReader: async () => ({ id: "r3", status: "paired" }),
       ...overrides,
@@ -136,7 +137,7 @@ for (const discovery of [false, true]) {
   it(`${name} failed write keeps the submitted name dirty`, async () => {
     const { app, screen } = await mount(
       {
-        renameReader: async () => {
+        saveReader: async () => {
           throw { code: "connection.failed" };
         },
         adoptReader: async () => {
@@ -170,7 +171,8 @@ for (const discovery of [false, true]) {
           }
           return [reader];
         },
-        renameReader: async (id, value) => {
+        saveReader: async (id, input) => {
+          const value = input.name;
           sent.push([id, value]);
         },
         adoptReader: async (body) => {
@@ -204,7 +206,8 @@ it("newer delivered rename survives a successful captured write", async () => {
   let finish!: () => void;
   const sent: unknown[] = [];
   const { screen } = await mount({
-    renameReader: async (id, name) => {
+    saveReader: async (id, input) => {
+      const name = input.name;
       sent.push([id, name]);
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -360,7 +363,7 @@ for (const discovery of [false, true]) {
       });
     const { app, screen } = await mount(
       {
-        renameReader: wait,
+        saveReader: wait,
         adoptReader: async () => {
           await wait();
           return { id: "r3", status: "paired" };
@@ -396,7 +399,7 @@ for (const refuses of [false, true]) {
   it(`departed rename ${refuses ? "refusal" : "success"} leaves the replacement editor alone`, async () => {
     let finish!: () => void;
     const { screen } = await mount({
-      renameReader: async () => {
+      saveReader: async () => {
         await new Promise<void>((resolve) => {
           finish = resolve;
         });
@@ -492,4 +495,46 @@ it("unpair's submitted command retains its direct dismissal exemption", async ()
     finish();
   }
   await expect.poll(() => q(screen, "[data-test=edit-r1]")).toBeNull();
+});
+
+it("an own-slip toggle protects the reader draft and Discard restores its saved value", async () => {
+  const { app, screen } = await mount();
+  const toggle = () =>
+    q(screen, "[data-test=reader-own-slip]") as HTMLElementTagNameMap["wt-switch"];
+  await toggle().updateComplete;
+  const input = toggle().shadowRoot!.querySelector("input")!;
+  expect(input.checked).toBe(false);
+  await userEvent.click(toggle().shadowRoot!.querySelector("label")!);
+  expect(input.checked).toBe(true);
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=close-reader-editor]")!.click();
+  await choose(app, "keep");
+  expect(toggle().shadowRoot!.querySelector("input")!.checked).toBe(true);
+  q(screen, "[data-test=close-reader-editor]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
+  await open(screen);
+  await toggle().updateComplete;
+  expect(toggle().shadowRoot!.querySelector("input")!.checked).toBe(false);
+  expect(unload()).toBe(false);
+});
+
+it("a reader's saved true setting opens checked and a failed save keeps the changed value", async () => {
+  const { screen } = await mount({
+    listReaders: async () => [{ ...reader, printsOwnSlipAutomatically: true }],
+    saveReader: async () => {
+      throw { code: "connection.failed" };
+    },
+  });
+  const toggle = q(screen, "[data-test=reader-own-slip]") as HTMLElementTagNameMap["wt-switch"];
+  await toggle.updateComplete;
+  const input = toggle.shadowRoot!.querySelector("input")!;
+  expect(input.checked).toBe(true);
+  await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+  q(screen, "[data-test=save-reader]")!.click();
+  await expect
+    .poll(() => dialog(screen, "reader-editor")!.querySelector("wt-form-actions")!.error)
+    .toBe(codeMessage("connection.failed"));
+  expect(input.checked).toBe(false);
+  expect(unload()).toBe(true);
 });
