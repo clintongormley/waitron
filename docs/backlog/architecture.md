@@ -408,7 +408,7 @@ unscoped on purpose so a stray booking under another location cannot block a tab
 owner answered points 2–8 on 2026-10-20 (the campaign's questions file has the words): 2, 4, 7 and 8
 as recommended; 3, 5 and 6 in the owner's own words, recorded in
 [conventions-data.md](../developers/conventions-data.md#general-code-is-english-only). Point 1
-was A918, finished 2026-10-27; its decision is under "Decisions and deliberate limits" below. The items
+was A918; its decision is under "Decisions and deliberate limits" below. The items
 below carry them out, one pull request each unless an item says otherwise. File and line references
 are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every item follows the rule
 for its own diff (grep it for non-English text before pushing — the guard will not see most of it

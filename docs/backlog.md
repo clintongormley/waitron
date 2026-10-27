@@ -5720,7 +5720,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
   ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's answers became the
-  items below and A918 (finished 2026-10-27). A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  items below. A963–A965 come first: they change what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A963. A full invoice's address: Spain's rule moves to Spain's pack, the till stores a country
   code.** `apps/server/src/invoice-selection.ts` refuses an address not ending «España» with a

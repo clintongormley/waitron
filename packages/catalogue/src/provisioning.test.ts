@@ -359,7 +359,7 @@ it.each(STARTER_VENUES)(
       .from(sections)
       .where(eq(sections.ownerMenuId, location!.catalogueId!))
       .orderBy(asc(sections.role));
-    // The home layout is shown nowhere, so it keeps its English name in code (plan, slice 4 decision 5).
+    // The home layout is shown nowhere, so it keeps its English name in code (A918 slice 4, decision 5).
     expect(owned).toEqual([
       { role: "home_layout", internalName: "Home", names: {} },
       { role: "menu_root", internalName: name, names: {} },
