@@ -126,6 +126,16 @@ describe("readThemeDocument", () => {
     });
   });
 
+  it("tidies the text beside a brand colour too", () => {
+    const result = readThemeDocument({
+      ...WAITRON_CHOICES,
+      brandColor: "#1e5b3a",
+      text: { weight: { bold: 700 }, size: {} },
+    });
+    expect(result.ok && result.choices.text).toEqual({ weight: { bold: 700 } });
+    expect(Object.keys(result.ok ? result.choices.text : { failed: 1 })).toEqual(["weight"]);
+  });
+
   it.each<[unknown, string, string]>([
     [null, "text", "bad_value"],
     [[], "text", "bad_value"],
