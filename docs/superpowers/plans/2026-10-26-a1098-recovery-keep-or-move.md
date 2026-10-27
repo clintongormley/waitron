@@ -37,7 +37,7 @@ Each is a point where the code or a house rule does not fit the approved shape a
 
 *Worked example.* Elena opens `https://waitron.local` after the cut. The page shows the list, one password box, two radio choices and Continue. The password box is `<input type="password" name="password" autocomplete="current-password" required>` in `apps/server/src/recovery-start-again.ts`; the guard fails on that line.
 
-- **A (recommended):** add one `ALLOWED` entry, `{ file: "apps/server/src/recovery-start-again.ts", lines: 1, reason: "an HTML string the server builds for the page a box serves when it cannot start, with no script or front-end bundle; the server does not depend on @waitron/ui or @waitron/ui-core" }`, following the print agent's entry (`:55-60`). The form follows design-system.md → Forms where no script is needed: both fields marked required with a visible `*` and the native `required` attribute (the browser blocks an empty submit), errors only after the first press, the field's error under the field and one bottom message above Continue. What it cannot do without a script: keep Continue disabled until the fields are filled.
+- **A (recommended):** add one `ALLOWED` entry, `{ file: "apps/server/src/recovery-start-again.ts", lines: 1, reason: "an HTML string the server builds for the page a box serves when it cannot start; it loads no script or front-end bundle, so no field primitive can run on it" }` (corrected 2026-10-27: the server does depend on @waitron/ui-core, `apps/server/package.json:74`, so the approved reason's last clause was false and was dropped), following the print agent's entry (`:55-60`). The form follows design-system.md → Forms where no script is needed: both fields marked required with a visible `*` and the native `required` attribute (the browser blocks an empty submit), errors only after the first press, the field's error under the field and one bottom message above Continue. What it cannot do without a script: keep Continue disabled until the fields are filled.
 - **B:** no password box on this page; send the person to the setup app for the choice. The setup app is not served while the start is refused, so this needs a second listener mode — a much larger change.
 
 ### Q2. Found items the move cannot handle safely (blocks nothing since 2026-10-26 18:25: lane A builds A, the most cautious option — today's page for these boxes — and the owner may still choose B)
@@ -177,7 +177,7 @@ Everything below was read, not run.
 
 1. canonicalise, `emptyDiscardedRecovery`, `assertNoLegacyFirstSetupWorkspace` (unchanged);
 2. **`assertStartAgainNotKept(roots)`** — with a marker present and a Keep record for that marker (D5), refuse `setup.start_again_kept`. Before the finisher, so a kept box stays on its page even if the found files are later removed ("This page stays until Waitron is reinstalled");
-3. **`resumeStartAgainSetAside(roots)`** — finish a Move a cut interrupted (D4). If a rename fails, it refuses `setup.start_again_incomplete` with reason `set-aside failed: <errno> <root>/<path>`. That refusal is not classified (step 5 reads only the finisher's), so the page shows the explanation, and every later start tries again;
+3. **`resumeStartAgainSetAside(roots)`** — finish a Move a cut interrupted (D4). If a rename fails, it refuses `setup.start_again_incomplete` with reason `set-aside failed: <errno> <root>/<path>`. That refusal is not classified (step 5 reads only the finisher's), so the page shows the explanation, and every later start tries again. **Revision 3 (Task 7 review):** a failed resume of a recorded Move refuses `setup.start_again_move_unfinished` instead, with the same reason; a resume that fails where no Move is recorded keeps `setup.start_again_incomplete`;
 4. `finishStartAgainDeletion` (unchanged);
 5. on the finisher's `setup.start_again_incomplete` only, **`classifyStartAgainRefusal(roots, error)`**: a survey of kind `choice` gives `setup.start_again_files_found` (same log-only `reason`) and the survey; anything else gives the finisher's own error back, unchanged.
 
@@ -185,7 +185,8 @@ Everything below was read, not run.
 | --- | --- | --- |
 | Found units, setup record intact and parseable | `setup.start_again_files_found` (new) | explanation, file list, password, two choices |
 | Keep chosen for this marker | `setup.start_again_kept` (new) | what was chosen, what reinstalling would lose; no form |
-| Setup record gone, changed or unparseable; a blocker; Q2's cases; a resume whose rename failed | `setup.start_again_incomplete` (unchanged) | A1042's explanation and reinstall line (`recovery-surface.ts:472-485`), unchanged |
+| A recorded Move whose resume failed (**revision 3**, Task 7 review) | `setup.start_again_move_unfinished` (new) | some files may already be set aside, Retry finishes the Move, what reinstalling would lose |
+| Setup record gone, changed or unparseable; a blocker; Q2's cases; a resume that failed where no Move is recorded | `setup.start_again_incomplete` (unchanged) | A1042's explanation and reinstall line (`recovery-surface.ts:472-485`), unchanged |
 
 Both new codes join `START_REFUSALS`. Raw `bootServer` is unchanged (it refuses while any marker exists, `boot.ts:886`).
 
@@ -381,6 +382,10 @@ New `OPERATOR_TEXT` rows (title / action):
 | … action | An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them. | Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado. |
 | `setup.start_again_kept` title | Start again did not finish, and everything on this box was kept. | «Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo. |
 | … action | Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included. | No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados. |
+| `setup.start_again_move_unfinished` title (**revision 3**, Task 7 review) | Start again was moving files aside and has not finished. | «Empezar de nuevo» estaba apartando archivos y no ha terminado. |
+| … action (**revision 3**, Task 7 review) | Some of the files may already be in the set-aside folder; none has been deleted. Press Retry a normal boot to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside. | Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados. |
+
+The Spanish «todos siguen en el equipo» ("all of them are still on the box") replaces the draft's «no se ha borrado ninguno»: «borrado» is caught by the page's never-wipe pattern for Spanish actions (`\bborra`, `apps/server/src/recovery-surface.test.ts:183`), and the claim is the same.
 
 `START_AGAIN_PAGE_TEXT` (`apps/server/src/recovery-start-again.ts`). Rows marked **new in revision 2** are new or changed:
 
@@ -389,6 +394,7 @@ New `OPERATOR_TEXT` rows (title / action):
 | `filesFound` | Files found: | Archivos encontrados: |
 | `more(n)` | and {n} more | y {n} más |
 | `password` | Administrator password | Contraseña de administrador |
+| `choiceLegend` (**revision 3**, Task 7 review; the two choices' `<legend>`) | What should the box do? * | ¿Qué debe hacer el equipo? * |
 | `keepTitle` | Keep everything and stop. | Conservarlo todo y parar. |
 | `keepDetail` | Nothing is moved. This page stays until Waitron is reinstalled on this box. | No se mueve nada. Esta página sigue hasta que se reinstale Waitron en este equipo. |
 | `moveTitle` | Move these files aside and finish Start again. | Apartar estos archivos y terminar «Empezar de nuevo». |
