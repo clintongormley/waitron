@@ -160,7 +160,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | PUT  /api/parties/:id/guests                            | party                  | refuses PUT /api/parties/:id/guests                  |
  * | POST /api/parties/:id/move, /join                       | party; body table      | refuses POST /api/parties/:id/<move|join> (party), (table) |
  * | POST /api/parties/:id/split-table                       | party                  | refuses POST /api/parties/:id/split-table            |
- * | GET  /api/parties/:id/bills|groups|current-orders|print-problems|drafts | party  | refuses GET /api/parties/:id/<read>                  |
+ * | GET  /api/parties/:id/bills|groups|current-orders|drafts | party                  | refuses GET /api/parties/:id/<read>                  |
  * | POST /api/parties/:id/groups                            | party                  | refuses POST /api/parties/:id/groups                 |
  * | POST /api/parties/:id/groups/:gid/fire|ready|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
  * | POST /api/parties/:id/served, /unserved                 | party                  | refuses POST /api/parties/:id/<served|unserved>      |
@@ -973,15 +973,13 @@ const ROUTES: readonly Row[] = [
     (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0, expectedEdits: [] }),
     deliTableZone,
   ],
-  ...(["bills", "groups", "current-orders", "print-problems", "drafts"] as const).map(
-    (read): Row => [
-      `GET /api/parties/:id/${read}`,
-      "GET",
-      (x) => `/api/parties/${x.deliParty}/${read}`,
-      undefined,
-      deliTableZone,
-    ],
-  ),
+  ...(["bills", "groups", "current-orders", "drafts"] as const).map((read): Row => [
+    `GET /api/parties/:id/${read}`,
+    "GET",
+    (x) => `/api/parties/${x.deliParty}/${read}`,
+    undefined,
+    deliTableZone,
+  ]),
   [
     "POST /api/parties/:id/groups",
     "POST",

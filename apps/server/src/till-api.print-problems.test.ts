@@ -16,7 +16,7 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// The HTTP layer of `GET /api/parties/:id/print-problems`; what counts as a problem is pinned in
+// The printing problems the groups read answers with; what counts as a problem is pinned in
 // `print-problems.test.ts`.
 let venue: BillVenue;
 let stationId: string;
@@ -88,52 +88,28 @@ async function tableWithFailedTicket() {
 }
 
 describe("GET /api/parties/:id/print-problems", () => {
-  it("answers 200 with the party's printing problems", async () => {
+  it("answers like an unknown route now that the groups read carries the problems", async () => {
     const table = await tableWithFailedTicket();
 
-    const answer = await send(
+    const missing = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/parties/${table.partyId}/no-such-read`,
+    );
+    const retired = await send(
       venue.app,
       venue.cookie,
       "GET",
       `/api/parties/${table.partyId}/print-problems`,
     );
 
-    expect(answer.status).toBe(200);
-    expect(answer.json).toEqual({
-      problems: [
-        {
-          workingOrderId: table.tabId,
-          stationId,
-          stationName: expect.any(String),
-          since: table.since,
-        },
-      ],
+    expect(retired.status).toBe(404);
+    expect({ status: retired.status, json: retired.json }).toEqual({
+      status: missing.status,
+      json: missing.json,
     });
   });
-
-  it("refuses 401 session.required without a session", async () => {
-    const table = await tableWithFailedTicket();
-
-    const answer = await send(venue.app, "", "GET", `/api/parties/${table.partyId}/print-problems`);
-
-    expect(answer.status).toBe(401);
-    expect(answer.json).toMatchObject({ code: "session.required" });
-  });
-
-  it.each([randomUUID(), "not-a-party"])(
-    "refuses 409 party.not_open for an unknown party id: %s",
-    async (partyId) => {
-      const answer = await send(
-        venue.app,
-        venue.cookie,
-        "GET",
-        `/api/parties/${partyId}/print-problems`,
-      );
-
-      expect(answer.status).toBe(409);
-      expect(answer.json).toMatchObject({ code: "party.not_open", params: { partyId } });
-    },
-  );
 });
 
 describe("GET /api/parties/:id/groups printProblems", () => {

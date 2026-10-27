@@ -22,8 +22,8 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// A kitchen ticket ended by a Bluetooth unpairing, read back through the till's printing-problem
-// route; what counts as a problem is pinned in `print-problems.test.ts`.
+// A kitchen ticket ended by a Bluetooth unpairing, read back through the groups read's printing
+// problems; what counts as a problem is pinned in `print-problems.test.ts`.
 const MAC = "5A:4A:45:D4:FB:BB";
 
 let venue: BillVenue;
@@ -156,9 +156,9 @@ describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
       venue.app,
       venue.cookie,
       "GET",
-      `/api/parties/${table.partyId}/print-problems`,
+      `/api/parties/${table.partyId}/groups`,
     );
-    expect(before.json).toEqual({ problems: [] });
+    expect((before.json as { printProblems?: unknown }).printProblems).toEqual([]);
 
     const reported = await printApiCall("POST", "/print-api/agent/jobs", {
       bearer: token,
@@ -177,19 +177,17 @@ describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
       venue.app,
       venue.cookie,
       "GET",
-      `/api/parties/${table.partyId}/print-problems`,
+      `/api/parties/${table.partyId}/groups`,
     );
     expect(answer.status).toBe(200);
-    expect(answer.json).toEqual({
-      problems: [
-        {
-          workingOrderId: table.tabId,
-          stationId,
-          stationName: expect.any(String),
-          since: job!.createdAt,
-        },
-      ],
-    });
+    expect((answer.json as { printProblems?: unknown }).printProblems).toEqual([
+      {
+        workingOrderId: table.tabId,
+        stationId,
+        stationName: expect.any(String),
+        since: job!.createdAt,
+      },
+    ]);
   });
 });
 

@@ -3199,18 +3199,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.get("/api/parties/:id/print-problems", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const partyId = requirePartyParam(c.req.param("id"));
-      const problems = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return listPrintProblems(tx, partyId);
-      });
-      return c.json({ problems });
-    }),
-  );
-
   app.post("/api/parties/:id/groups", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
