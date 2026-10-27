@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import { contrastRatio } from "./colour.js";
 import { MODES, type Mode } from "./defaults.js";
 import {
+  canFixAll,
   deriveThemeFrom,
+  fixAll,
   normaliseChoices,
   WAITRON_CHOICES,
   type DerivedTheme,
@@ -304,6 +306,42 @@ describe("the lemon brand (#f2d300), Neutral", () => {
     expect(fixed.dark[P("primary")]).toBe("#f2d300");
     expectFullList(picked);
     expectFullList(fixed);
+  });
+});
+
+describe("text warnings", () => {
+  const SMALL: ThemeChoices = { ...LEMON, text: { size: { sm: 10, md: 9 } } };
+
+  test("a text warning follows the colour warnings", () => {
+    const { warnings } = deriveTheme(SMALL);
+    expect(warnings.map((warning) => [warning.field, warning.mode, warning.fix])).toEqual([
+      ["brandColor", "light", expect.any(String)],
+      ["text.size.sm", null, 12],
+      ["text.size.md", null, 12],
+    ]);
+    expect(warnings[1]).toEqual({
+      field: "text.size.sm",
+      mode: null,
+      against: [],
+      fix: 12,
+      blockedBy: [],
+    });
+  });
+
+  test("Fix all takes the text fixes too", () => {
+    const fixed = fixAll(WAITRON_DEFAULTS, SMALL);
+    expect(fixed.brandFix.light).toBe(true);
+    expect(fixed.text.size).toEqual({ sm: 12, md: 12 });
+    expect(deriveTheme(fixed).warnings).toEqual([]);
+    expect(canFixAll(WAITRON_DEFAULTS, SMALL)).toBe(true);
+  });
+
+  test("Fix all leaves a text size that does not warn as it was", () => {
+    const fixed = fixAll(WAITRON_DEFAULTS, {
+      ...WAITRON_CHOICES,
+      text: { size: { sm: 10, lg: 30 } },
+    });
+    expect(fixed.text.size).toEqual({ sm: 12, lg: 30 });
   });
 });
 

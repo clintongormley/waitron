@@ -8,6 +8,8 @@ import {
   MODES,
   THEME_COLOURS,
   colourToken,
+  isTextWarning,
+  type ColourWarning,
   type DerivedTheme,
   type Mode,
   type ThemeColour,
@@ -290,7 +292,9 @@ export class ThemeAdvanced extends LitElement {
       name: themeColourName(key),
       screens: t(`appearance.saved_fix_${mode}`),
     });
-    const warning = this.derived.warnings.find((w) => w.field === field);
+    const warning = this.derived.warnings.find(
+      (w): w is ColourWarning => !isTextWarning(w) && w.field === field,
+    );
     const fixed = this.fixed[field];
     return html`${
       warning === undefined

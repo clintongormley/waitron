@@ -4,8 +4,9 @@ import {
   THEME_RULES,
   WAITRON_CHOICES,
   colourKey,
+  isTextWarning,
+  type ColourWarning,
   type ThemeChoices,
-  type ThemeWarning,
   textWarnings,
 } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
@@ -44,13 +45,15 @@ const OUTLASTS: ThemeChoices = {
   handSet: { light: { text: "#aaaaaa", "surface-sunken": "#555555" }, dark: {} },
 };
 
-function warningOn(choices: ThemeChoices, field: ThemeWarning["field"]): ThemeWarning {
-  const found = deriveTheme(choices).warnings.find((warning) => warning.field === field);
+function warningOn(choices: ThemeChoices, field: ColourWarning["field"]): ColourWarning {
+  const found = deriveTheme(choices)
+    .warnings.filter((warning) => !isTextWarning(warning))
+    .find((warning) => warning.field === field);
   if (found === undefined) throw new Error(`no warning on ${field}`);
   return found;
 }
 
-const NO_SHADE: ThemeWarning = {
+const NO_SHADE: ColourWarning = {
   field: "handSet.light.text",
   mode: "light",
   against: ["surface-sunken"],
@@ -58,7 +61,7 @@ const NO_SHADE: ThemeWarning = {
   blockedBy: [],
 };
 
-const TWO_BLOCKERS: ThemeWarning = { ...NO_SHADE, blockedBy: ["bg", "surface-sunken"] };
+const TWO_BLOCKERS: ColourWarning = { ...NO_SHADE, blockedBy: ["bg", "surface-sunken"] };
 const TWO_BLOCKERS_CHOICES: ThemeChoices = {
   ...WAITRON_CHOICES,
   handSet: { light: { text: "#aaaaaa", bg: "#666666", "surface-sunken": "#555555" }, dark: {} },
@@ -205,7 +208,7 @@ describe("theme words", () => {
 
   it("Advanced's count includes text warnings", () => {
     const small: ThemeChoices = { ...WAITRON_CHOICES, text: { size: { sm: 10 } } };
-    const warnings = [...deriveTheme(small).warnings, ...textWarnings(small, WAITRON_DEFAULTS)];
+    const { warnings } = deriveTheme(small);
     expect(warnings).toHaveLength(1);
     expect(advancedSummary(small, warnings).endsWith(" · 1 hard to read")).toBe(true);
   });

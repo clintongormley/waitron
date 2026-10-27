@@ -1,7 +1,14 @@
 import { hexToRgb } from "./colour.js";
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type Memo, type ModeResult, settleMode, withMemo } from "./derive.js";
-import { normaliseText, textTokens, type ThemeText } from "./text.js";
+import {
+  normaliseText,
+  textTokens,
+  textWarnings,
+  type TextWarning,
+  type ThemeText,
+  withTextFixes,
+} from "./text.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
 import {
   type Corners,
@@ -46,7 +53,7 @@ export const WAITRON_CHOICES: ThemeChoices = {
 
 export type WarningField = "brandColor" | `handSet.${Mode}.${ThemeColour}`;
 
-export interface ThemeWarning {
+export interface ColourWarning {
   readonly field: WarningField;
   readonly mode: Mode;
   /** Theme keys without the `--wt-color-` prefix. */
@@ -55,6 +62,8 @@ export interface ThemeWarning {
   /** The hand-set keys that block every shade when `fix` is null; otherwise empty. */
   readonly blockedBy: readonly string[];
 }
+
+export type ThemeWarning = ColourWarning | TextWarning;
 
 export interface DerivedTheme {
   /** Keys exactly `THEME_TOKENS`, in that order. */
@@ -109,6 +118,7 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
       warnings: [
         ...warningsFor(memo, defaults, normalised, "light", light),
         ...warningsFor(memo, defaults, normalised, "dark", dark),
+        ...textWarnings(normalised, defaults),
       ],
       tintStrength:
         normalised.background === "tinted"
@@ -120,7 +130,8 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
 
 /**
  * Takes fixes one at a time, per mode: of the first failing rule naming a warned colour with a fix,
- * the fix of the colour drawn on top if it has one, else of the other; then settles again.
+ * the fix of the colour drawn on top if it has one, else of the other; then settles again. Then
+ * each text size that warns takes its fix.
  */
 export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeChoices {
   return withMemo(defaults, (memo) => fixAllIn(memo, defaults, choices));
@@ -146,20 +157,22 @@ function fixAllIn(memo: Memo, defaults: WaitronDefaults, choices: ThemeChoices):
       );
     }
   }
-  return current;
+  return withTextFixes(current, defaults);
 }
 
 /** Whether Fix and save is offered: Fix all leaves no warning. */
 export function canFixAll(defaults: WaitronDefaults, choices: ThemeChoices): boolean {
   return withMemo(defaults, (memo) => {
     const fixed = fixAllIn(memo, defaults, choices);
-    return MODES.every(
-      (mode) =>
-        !warns(
-          fixed,
-          mode,
-          settleMode(memo, defaults, fixed, mode, handTokens(fixed.handSet[mode])),
-        ),
+    return (
+      MODES.every(
+        (mode) =>
+          !warns(
+            fixed,
+            mode,
+            settleMode(memo, defaults, fixed, mode, handTokens(fixed.handSet[mode])),
+          ),
+      ) && textWarnings(fixed, defaults).length === 0
     );
   });
 }

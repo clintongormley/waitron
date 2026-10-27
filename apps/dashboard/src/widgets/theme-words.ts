@@ -1,5 +1,6 @@
 import {
   type AgainstItem,
+  type ColourWarning,
   type DerivedTheme,
   MODES,
   type Mode,
@@ -72,7 +73,7 @@ export function textWarningLine(warning: TextWarning, choices: ThemeChoices): st
   });
 }
 
-function handSetColour(warning: ThemeWarning): ThemeColour {
+function handSetColour(warning: ColourWarning): ThemeColour {
   return warning.field.split(".")[2] as ThemeColour;
 }
 
@@ -127,7 +128,7 @@ export function againstNames(keys: readonly string[]): string {
 }
 
 /** "on": the warned colour is drawn on the key; "under": the key is drawn on it. */
-function sides(warning: ThemeWarning): { on: string[]; under: string[] } {
+function sides(warning: ColourWarning): { on: string[]; under: string[] } {
   const colour = handSetColour(warning);
   const on: string[] = [];
   const under: string[] = [];
@@ -140,7 +141,7 @@ function sides(warning: ThemeWarning): { on: string[]; under: string[] } {
   return { on, under };
 }
 
-function blockerText(warning: ThemeWarning, choices: ThemeChoices): string {
+function blockerText(warning: ColourWarning, choices: ThemeChoices): string {
   // `blockedBy` names only colours set by hand in the warning's mode.
   const handSet = choices.handSet[warning.mode] as Readonly<Record<string, string>>;
   return warning.blockedBy
@@ -153,7 +154,7 @@ function blockerText(warning: ThemeWarning, choices: ThemeChoices): string {
     .join(` ${t("appearance.and")} `);
 }
 
-export function handWarningLines(warning: ThemeWarning, choices: ThemeChoices): string[] {
+export function handWarningLines(warning: ColourWarning, choices: ThemeChoices): string[] {
   const { on, under } = sides(warning);
   const shown = screens(warning.mode);
   if (warning.fix !== null) {
@@ -207,10 +208,7 @@ export function handNames(choices: ThemeChoices): string[] {
   );
 }
 
-export function advancedSummary(
-  choices: ThemeChoices,
-  warnings: readonly (ThemeWarning | TextWarning)[],
-): string {
+export function advancedSummary(choices: ThemeChoices, warnings: readonly ThemeWarning[]): string {
   const names = handNames(choices);
   const set =
     names.length === 0
@@ -231,14 +229,14 @@ export function keptNote(choices: ThemeChoices): string {
   return fill("appearance.kept_many", { n: String(names.length), names: names.join(", ") });
 }
 
-function hardToRead(warning: ThemeWarning): string {
+function hardToRead(warning: ColourWarning): string {
   return fill("appearance.hard_to_read", {
     name: themeColourName(handSetColour(warning)),
     mode: t(`appearance.mode.${warning.mode}`),
   });
 }
 
-export function saveDialogLine(warning: ThemeWarning | TextWarning, choices: ThemeChoices): string {
+export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): string {
   if (isTextWarning(warning)) return textWarningLine(warning, choices);
   if (warning.field === "brandColor") return t(`appearance.dialog_brand_${warning.mode}`);
   const name = themeColourName(handSetColour(warning));
@@ -258,10 +256,7 @@ export function saveDialogLine(warning: ThemeWarning | TextWarning, choices: The
   return fill("appearance.dialog_blocked", { name, mode, blockers: blockerText(warning, choices) });
 }
 
-export function savedWarningLine(
-  warning: ThemeWarning | TextWarning,
-  choices: ThemeChoices,
-): string {
+export function savedWarningLine(warning: ThemeWarning, choices: ThemeChoices): string {
   if (isTextWarning(warning)) return textWarningLine(warning, choices);
   if (warning.field === "brandColor") return t(`appearance.saved_brand_${warning.mode}`);
   return hardToRead(warning);

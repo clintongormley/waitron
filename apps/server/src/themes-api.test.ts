@@ -234,6 +234,22 @@ describe("the custom theme routes", () => {
     expect(listed.themes[0].choices.text).toEqual(text);
   });
 
+  it("a 10 px Small text is stored and answered with its warning", async () => {
+    const id = await created("Small", LEMON);
+    const theme = { ...LEMON, brandColor: null, text: { size: { sm: 10 } } };
+    const warning = { field: "text.size.sm", mode: null, against: [], fix: 12, blockedBy: [] };
+    const res = await save(managerCookie, id, { theme });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.choices.text).toEqual({ size: { sm: 10 } });
+    expect(body.warnings).toEqual([warning]);
+    for (const cookie of [managerCookie, supervisorCookie]) {
+      const listed = await list(cookie);
+      expect(listed.status).toBe(200);
+      expect((await listed.json()).themes[0].warnings).toEqual([warning]);
+    }
+  });
+
   it("a text size off the list is refused, naming it", async () => {
     const id = await created("Lemon", LEMON);
     const before = await storedRows();

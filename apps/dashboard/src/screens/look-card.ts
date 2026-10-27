@@ -28,12 +28,14 @@ import {
   canFixAll,
   fixAll,
   isTextScale,
+  isTextWarning,
   normaliseChoices,
   type Background,
   type Corners,
   type DerivedTheme,
   type Mode,
   type ThemeChoices,
+  type ColourWarning,
   type ThemeColour,
   type ThemeLogo,
 } from "@waitron/ui-core/theme";
@@ -639,7 +641,9 @@ export class LookCard extends LitElement {
             : fixed,
         ];
       }
-      const warning = derived.warnings.find((w) => w.field === "brandColor" && w.mode === mode);
+      const warning = derived.warnings.find(
+        (w): w is ColourWarning => w.field === "brandColor" && w.mode === mode,
+      );
       if (!warning) return [];
       return [
         html`<p class="warning" data-test="brand-warning-${mode}">
@@ -710,9 +714,10 @@ export class LookCard extends LitElement {
   #fixAllLine(busy: boolean): TemplateResult | typeof nothing {
     const warnings = this.#derived!.warnings;
     if (warnings.filter((warning) => warning.fix !== null).length < 2) return nothing;
+    const sizes = warnings.filter(isTextWarning).length;
     return html`<p class="warning">
       <wt-icon name="warning"></wt-icon
-      ><span data-test="fix-all-line">${fixAllText(warnings.length)}</span>
+      ><span data-test="fix-all-line">${fixAllText(warnings.length - sizes, sizes)}</span>
       <wt-button
         data-test="fix-all"
         size="sm"
