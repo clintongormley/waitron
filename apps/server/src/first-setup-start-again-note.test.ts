@@ -994,7 +994,7 @@ it("with the database missing, a damaged recovery record beside a damaged picks 
   });
 });
 
-it("with the database present, a damaged kept picks file still refuses Start again, and nothing changes", async () => {
+it("with the database present and no password, a damaged kept picks file asks for the password, and nothing changes", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await damagePicks(f);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
@@ -1006,7 +1006,10 @@ it("with the database present, a damaged kept picks file still refuses Start aga
       revision: inspected.revision!,
       ownerGeneration: inspected.ownerGeneration!,
     }),
-  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  ).rejects.toMatchObject({
+    code: "setup.start_again_password_required",
+    params: { seriesPicksUnreadable: true },
+  });
   expect(await folderTrees(f)).toEqual(before);
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
