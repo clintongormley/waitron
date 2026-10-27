@@ -44,6 +44,7 @@
     "@vitest/coverage-v8": "^4.1.12",
     "@waitron/catalogue": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
+    "@waitron/venue-service": "workspace:*",
     "@waitron/verifactu": "^0.2.1",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.0",

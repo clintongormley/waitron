@@ -24,6 +24,7 @@ import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
+import { STARTER_ZONE_NAMES } from "./starter-content.js";
 import { departments } from "./schema/service.js";
 import {
   deviceProfileKitchenScreenStations,
@@ -104,6 +105,10 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const rows = await db.execute<{ name: string; trading_name: string }>(sql`
       select name, trading_name from departments where location_id = ${locationId}`);
     expect(rows.rows).toEqual([{ name: "La Plaza", trading_name: "La Plaza" }]);
+    const zones = await db.execute<{ name: string }>(sql`
+      select z.name from zone_service_policies p join floor_zones z on z.id = p.zone_id
+      where p.location_id = ${locationId} and p.is_counter_default = 1`);
+    expect(zones.rows).toEqual([{ name: STARTER_ZONE_NAMES.Counter.es }]);
   });
 
   describe("the starter service steps", () => {

@@ -11,6 +11,7 @@ import {
   locationBusinessDaySettings,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { STARTER_ZONE_NAMES } from "@waitron/venue-service";
 import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
@@ -379,13 +380,13 @@ describe("applyVenue", () => {
       {
         name: STARTER_PROFILE_NAMES.Counter.es,
         department: "Mostrador",
-        starting_zone: "Counter",
+        starting_zone: STARTER_ZONE_NAMES.Counter.es,
         every_zone: 1,
       },
       {
         name: STARTER_PROFILE_NAMES.Handheld.es,
         department: "Mostrador",
-        starting_zone: "Counter",
+        starting_zone: STARTER_ZONE_NAMES.Counter.es,
         every_zone: 1,
       },
     ]);

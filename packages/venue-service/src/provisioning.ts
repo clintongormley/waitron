@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { starterName } from "@waitron/country-packs";
 import { deviceProfiles, floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { setProfileServiceScope } from "./profile-access.js";
@@ -12,6 +13,8 @@ import {
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
+import { STARTER_ZONE_NAMES } from "./starter-content.js";
+import { readStarterStaffLanguage } from "./starter-language.js";
 
 export const COUNTER_ZONE_NAME = "Counter";
 
@@ -20,6 +23,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
     summary:
       "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
+      const staffLanguage = await readStarterStaffLanguage(tx, node);
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
         .from(locations)
@@ -62,7 +66,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             })
             .returning({ id: departments.id });
           departmentId = inserted!.id;
-          await addStarterServiceSteps(tx, node, departmentId);
+          await addStarterServiceSteps(tx, node, departmentId, staffLanguage);
         }
         await tx
           .update(departments)
@@ -106,7 +110,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           .insert(floorZones)
           .values({
             locationId: node.locationId,
-            name: COUNTER_ZONE_NAME,
+            name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
             displayOrder: 0,
             active: true,
           })
@@ -153,7 +157,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .insert(zoneSalePolicies)
         .values({ zoneId })
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
-      await ensureDefaultSeasons(tx, node);
+      await ensureDefaultSeasons(tx, node, staffLanguage);
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
