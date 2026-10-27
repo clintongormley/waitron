@@ -9,6 +9,7 @@ import {
   assertFirstSetupBackupBootTarget,
   assertNoLegacyFirstSetupWorkspace,
   assertNoStartAgainDeletion,
+  readPrivacyContact,
   readTenantIdentities,
 } from "@waitron/provisioning";
 import {
@@ -212,7 +213,11 @@ import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
-import { AccountEmailFailure, createAccountEmailSender } from "./account-email.js";
+import {
+  AccountEmailFailure,
+  createAccountEmailSender,
+  type AccountEmailSender,
+} from "./account-email.js";
 import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
@@ -1984,6 +1989,24 @@ async function bootServer(
   }
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
+  // Resolved on every send, so a newly configured or rotated SMTP gateway, a changed time zone
+  // or a saved privacy page takes effect at once.
+  const sendAccountEmail: AccountEmailSender = async (message) => {
+    // Queue all three reads before an answered reset can reach shutdown's drain.
+    const [delivery, timeZone, privacy] = await Promise.all([
+      resolveAccountEmail(),
+      readVenueTimeZone(db, { locationId: till.locationId }),
+      withTransaction(db, readPrivacyContact),
+    ]);
+    if (delivery.mode === "unconfigured")
+      throw new AccountEmailFailure("email.unconfigured", undefined, false);
+    const privacyNoticeUrl = privacy?.privacyNoticeUrl ?? null;
+    await createAccountEmailSender({
+      ...delivery.smtp,
+      timeZone,
+      ...(privacyNoticeUrl === null ? {} : { privacyNoticeUrl }),
+    })(message);
+  };
   const backupDeadlines: { archive: string | null; cloud: string | null } = {
     archive: null,
     cloud: null,
@@ -2016,26 +2039,16 @@ async function bootServer(
       origin: config.managementOrigin,
       googleOidc: config.googleOidc,
       venueLocale,
-      privacyNoticeUrl: config.privacyNoticeUrl,
       credentialKeyRing: totpKeyRing,
       tableRemovals,
-      // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
-      sendAccountEmail: async (message) => {
-        // Queue both reads before an answered reset can reach shutdown's drain.
-        const [delivery, timeZone] = await Promise.all([
-          resolveAccountEmail(),
-          readVenueTimeZone(db, { locationId: till.locationId }),
-        ]);
-        if (delivery.mode === "unconfigured")
-          throw new AccountEmailFailure("email.unconfigured", undefined, false);
-        await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
-      },
+      sendAccountEmail,
     },
     log,
   );
   const settleManagementRequests = async (): Promise<void> => {
     await managementApi.settle();
-    // An answered reset's mail-settings read joined the write queue before `settle` resolved.
+    // An answered reset's mail-settings, time-zone and privacy-page reads joined the write queue
+    // before `settle` resolved.
     await withTransaction(db, async () => {});
   };
   undoOnFailure.push(settleManagementRequests);
@@ -2141,7 +2154,6 @@ async function bootServer(
       till,
       nodeId: dataNodeId,
       venueLocale,
-      privacyNoticeUrl: config.privacyNoticeUrl,
       onMirror: () => holders.mode.current === "mirror",
       now,
     },
@@ -2181,16 +2193,7 @@ async function bootServer(
       credentialKeyRing: totpKeyRing,
       accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
       accountActionBaseUrl: `${config.managementOrigin}/`,
-      privacyNoticeUrl: config.privacyNoticeUrl,
-      sendAccountEmail: async (message) => {
-        const [delivery, timeZone] = await Promise.all([
-          resolveAccountEmail(),
-          readVenueTimeZone(db, { locationId: till.locationId }),
-        ]);
-        if (delivery.mode === "unconfigured")
-          throw new AccountEmailFailure("email.unconfigured", undefined, false);
-        await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
-      },
+      sendAccountEmail,
     },
     log,
   );

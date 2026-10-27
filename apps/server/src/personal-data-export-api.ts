@@ -9,6 +9,7 @@ import {
   type PersonalDataPart,
   type WaitronModule,
 } from "@waitron/module";
+import { readPrivacyContact } from "@waitron/provisioning";
 import { civilDateOf } from "@waitron/reporting";
 import { AppError, isUuid, resolveActiveLocale } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -25,7 +26,6 @@ export interface PersonalDataExportDeps {
   /** Parts the server adds itself. */
   serverParts: readonly PersonalDataPart[];
   venueLocale: string;
-  privacyNoticeUrl?: string;
   now?: () => Date;
 }
 export type PersonalDataAuthorize = (
@@ -74,13 +74,14 @@ export async function sendPersonalData(
     const who = await authorize(tx);
     const place = await venuePlace(tx, deps.nodeId);
     const tenant = await readTenant(tx);
+    const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
     const build = await preparePersonalData(tx, parts, {
       personId: who.personId,
       language: who.language,
       at,
       ...place,
     });
-    return { who, place, tenant, build };
+    return { who, place, tenant, privacyNoticeUrl, build };
   });
   // Building outlives the snapshot turn, so authority is checked again before any bytes go.
   const files = await snapshot.build();
@@ -94,7 +95,7 @@ export async function sendPersonalData(
     venue: snapshot.tenant?.legalName ?? null,
     person: snapshot.who.label,
     date: civilDateOf(at, snapshot.place.timeZone),
-    privacyNoticeUrl: deps.privacyNoticeUrl,
+    ...(snapshot.privacyNoticeUrl === null ? {} : { privacyNoticeUrl: snapshot.privacyNoticeUrl }),
     files: files.map((f) => f.name),
   });
   const body = zipArchive([{ name: "README.txt", content: readme }, ...files], at);

@@ -8,6 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonalDataPart } from "@waitron/module";
+import { savePrivacyContact } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
@@ -121,9 +122,12 @@ describe("the README in a person's own personal-data download", () => {
   });
 
   it("ends with the privacy notice's address when one is set, and names none otherwise", async () => {
-    const withNotice = lines(await readme(mounted({ privacyNoticeUrl: PRIVACY })));
+    const app = mounted();
+    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }));
+    const withNotice = lines(await readme(app));
     expect(withNotice.at(-1)!.endsWith(PRIVACY)).toBe(true);
-    const without = lines(await readme(mounted()));
+    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: null }));
+    const without = lines(await readme(app));
     expect(without.some((line) => line.includes("https://"))).toBe(false);
   });
 
@@ -146,7 +150,12 @@ describe("the README in a person's own personal-data download", () => {
   );
 
   it("names the venue generically when there is no tenant row", async () => {
+    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }));
     suite.db.run(sql`delete from tenants`);
-    expect(lines(await readme(mounted()))[0]).toBe("Your data held by the venue");
+    const text = lines(await readme(mounted()));
+    expect(text[0]).toBe("Your data held by the venue");
+    const noticeWords = PERSONAL_DATA_README_WORDS.en.notice.replace("{url}", "");
+    expect(text.some((line) => line.includes(noticeWords))).toBe(false);
+    expect(text.some((line) => line.includes(PRIVACY))).toBe(false);
   });
 });

@@ -62,11 +62,17 @@ the daily working-time record, which the law requires us to keep for four years.
 which member of staff rang up a sale, authorised a void, asked for or authorised a refund, and
 opened the cash drawer or authorised its opening. You can exercise your rights of access,
 rectification, erasure, restriction, objection and portability by writing to _your privacy email
-address_, and you can complain to the AEPD. More information: _the address of your staff privacy
-page_.
+address_, and you can complain to the AEPD. More information: _the address of your privacy page_.
 
 The last line points to your full notice, which goes on your own web page. See
 [The full notice on your web page](data-protection.md#full-notice).
+
+Waitron shows your privacy page, the one you set on the **Privacy** card (see
+[Your privacy page and email in Waitron](data-protection.md#privacy-settings)), in the emails it
+sends staff to set up an account, reset a password or confirm a new email address, on the
+dashboard's sign-in page and the pages an email's link opens to set up an account or reset a
+password, in **Account settings** and in the `README.txt` of a data download. Waitron holds one
+page, so use the page of your full notice, which covers staff and customers alike.
 
 ## A privacy notice for invoice customers {#invoice-notice}
 
@@ -116,8 +122,11 @@ information at _the address of your privacy page_.
 ## The full notice on your web page {#full-notice}
 
 The full notice is the one each short notice points to. Put it on your own web page and use that
-page's address in the short notices. Cover each group of people you hold data about: staff,
-invoice customers and guests who book. For each group, the law asks the notice to say:
+page's address in the short notices. Enter the same address on the **Privacy** card, so that
+Waitron links to it (see
+[Your privacy page and email in Waitron](data-protection.md#privacy-settings)). Cover each group of
+people you hold data about: staff, invoice customers and guests who book. For each group, the law
+asks the notice to say:
 
 - who you are, and how to contact you; if you have a representative, who they are and how to
   contact them;
@@ -163,7 +172,14 @@ card. Choose **Edit**, fill in either or both, and choose **Save**.
 To remove one, empty its field and choose **Save**. A manager or an admin can change them, and a
 supervisor can see them. A configuration export carries them, so a new box set up from one shows
 them. If you set it up with **New tax ID**, check them here: they are still the old business's until
-you change them. Nothing else on the box shows them yet.
+you change them.
+
+Waitron shows the page in the emails it sends staff to set up an account, reset a password or
+confirm a new email address, on the dashboard's sign-in page and the pages an email's link opens to
+set up an account or reset a password, in **Account settings** and in the `README.txt` of a data
+download. A change shows in the next email or download; a page already open shows it once reloaded,
+except **Account settings**, which follows it at once. For now, only the **Privacy** card shows the
+privacy email.
 
 ## Your record of processing {#record}
 

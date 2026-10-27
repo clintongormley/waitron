@@ -66,7 +66,11 @@ S1a did not. 2026-10-26: S1a2 is built ([its plan](2026-10-26-a980-s1a2-export-p
 the export moves to format 9 and carries both values as the required top-level `privacyContact`
 key, the import writes them onto the new box's taxpayer row with Same tax ID and New tax ID alike,
 and the setup app now sends the first-setup claim only the location fields it accepts, so a
-production box can be set up from an export again. Design:
+production box can be set up from an export again. 2026-10-27: S1b is built
+([its plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 1): the staff emails, the sign-in
+page, Account settings and both downloads read the privacy page saved on the Privacy card, and the
+`WAITRON_PRIVACY_NOTICE_URL` environment setting is gone; the invoice email's notice moved to S1b2.
+Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in
@@ -88,8 +92,9 @@ S11 also wait for the labour and privacy specialists (A664's gates G2 and G3).
 
 ## The slices
 
-S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in three (S1a, S1a2, S1b) so that each fits one implementer
-well under about 100 tool calls. Slice numbers are the design's; S5, S7 and S8 were dropped by the
+S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in three (S1a, S1a2, S1b;
+_2026-10-27: four, with S1b2 split from S1b_) so that each fits one implementer well under about
+100 tool calls. Slice numbers are the design's; S5, S7 and S8 were dropped by the
 owner's answers.
 
 | Slice | Scope, in one sentence | Migration (what was read) | Review | Waits for | Buildable now? |
@@ -105,7 +110,8 @@ owner's answers.
 | **S10** | Find out whether any logged error carries a person's name or email (an email-server refusal; the `person.email_taken` and `person.display_name_taken` parameters, `staff.ts:53-66`), and mask it if so. | **No.** Logs are files, not tables. | FULL (personal data on the recovery page, which needs no sign-in) | nothing | Yes |
 | **S1a** | A dashboard setting for the address of the venue's privacy-notice page and its privacy email, stored in the database and saved under `venue.configure`, with its guide text. | **Yes.** Nothing holds a non-secret venue setting of this kind: `tenants` holds country, tax id, legal name and domicile (`packages/db/src/schema/tenants.ts:43-52`); `tenant_receipts` holds the receipt's own text (`packages/db/src/schema/tenant-receipts.ts:18-26`); `tenant_credentials` holds sealed secrets (`packages/credentials/src/schema/tenant-credentials.ts:11-40`); `service_settings` belongs to the venue-service module (`packages/venue-service/src/schema/settings.ts:10-28`). Proposed: two empty-by-default columns on `tenants`, which adds columns without rebuilding the table. A migration-free option exists, two new keys in the receipt's JSON column `tenant_receipts.receipt`, and is rejected: that document is the printed receipt's trim, saved whole by the receipt editor under `layout.configure` (`packages/layouts/src/receipt-store.ts:165-188`) and refusing keys it does not know (`packages/layouts/src/validate.ts:40`), while the venue's identity as controller already lives as columns on `tenants`. | FULL (migration) | lane B's parked pull requests closed, while lane B builds it | **No**, while lane B builds it |
 | **S1a2** | The configuration export carries `privacy_notice_url` and `privacy_email`, its import refuses exactly what the Privacy card's save refuses, and the setup path applies them on the new box (`packages/provisioning/src/configuration-transfer.ts`, `venue-plan.ts`, `venue-apply.ts`, `first-setup-state.ts`, `apps/server/src/setup-api.ts`). Added 2026-10-26 by the owner's answer B to the S1a plan. 2026-10-26: built ([plan](2026-10-26-a980-s1a2-export-privacy-contact.md)); no migration (confirmed); `setup-api.ts`, `venue-plan.ts`, `venue-apply.ts` and `first-setup-state.ts` did not change (decision 3). | **No** migration is expected: the two columns already exist (`packages/db/src/schema/tenants.ts:47-48`) and the bundle changes, not a table; S1a2's own plan is to confirm it. | FULL (cross-package contract: the bundle between `@waitron/provisioning` and the server) | S1a | No, after S1a |
-| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. | **No.** | LIGHT | S1a2 | No, after S1a2 |
+| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. 2026-10-27: built ([plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 1); no migration; FULL review (decision 13). The invoice email moved to S1b2. | **No.** | LIGHT; 2026-10-27: FULL (the S1b plan's decision 13: concurrency, and a route that needs no sign-in now reads the taxpayer row) | S1a2 | No, after S1a2 |
+| **S1b2** | The invoice email carries the invoice customers' privacy notice with the saved email and page ([plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 2). | **No.** | set in Part 2 | S1b, and the owner's ruling on landing invoice-email changes | No, after S1b |
 | **S9** | On request, erase a booking guest's details as the design's §4.3(c) says. | **No.** Append-only triggers are installed at start from `appendOnly()` declarations, not written in migration SQL. Every S9 table is declared with `classify()` (`packages/bookings/src/classification.ts:10`; `packages/venue-service/src/classification.ts:41-45`), and no trigger SQL in the tree, `packages/db/drizzle` included, names `bookings`, `party_allergy`, `ticket_item_allergies` or `kitchen_notices` (the 46 tracked `.sql` files holding `create trigger` and every non-test source file holding it, searched for those names, 2026-10-24; control: 8 of those `.sql` files name `sales`). The required booking name takes a fixed "(erased)" text. | FULL (personal data, health) | the privacy specialist (G3) | **No** |
 | **S11** | Store the date a person is deactivated, and clear a former employee's email a year later, keeping the name. | **Yes.** `persons` has no deactivation date (`packages/identity/src/schema/persons.ts:31-67`). | FULL (migration, personal data) | the labour and privacy specialists (G2, G3), and lane B's parked pull requests closed while lane B builds it | **No** |
 
@@ -201,6 +207,8 @@ link. The sign-in page and the profile page both read the link from one route th
 sign-in, `GET /management-api/google/config` (`apps/server/src/management-api.ts:788-790`), so S1b
 reads `tenants` there.
 
+_2026-10-27: the invoice notice moved to S1b2 ([the S1b plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._
+
 ## Build order
 
 1. **S4** now: it closes a live defect and is small.
@@ -209,7 +217,7 @@ reads `tenants` there.
    `apps/server/src/guide-catalogue.ts`, as S1a and S2a2 may; the later of any two rebases onto
    the earlier. S10 may mask the error parameters in `packages/identity/src/staff.ts` (`:53-66`), a
    file S4 also changes.
-4. **S1a**, then **S1a2**, then **S1b**; while lane B builds them, once its parked pull requests are closed.
+4. **S1a**, then **S1a2**, then **S1b**; while lane B builds them, once its parked pull requests are closed, then **S1b2** once the owner has ruled.
 5. **S9** and **S11** when the specialists have agreed; S11, while lane B builds it, also after
    its parked pull requests.
 

@@ -122,6 +122,7 @@ import {
 } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readPrivacyContact } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
@@ -153,7 +154,6 @@ export interface ManagementApiDeps {
   origin: string;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
-  privacyNoticeUrl?: string;
   /** Outbound delivery for invitation and password-reset links. Omitted in harnesses and when an
    * on-prem installation has not configured SMTP yet. */
   sendAccountEmail?: AccountEmailSender;
@@ -191,7 +191,6 @@ async function deliverAccountAction(
       codeExpiresAt: issued.codeExpiresAt,
       expiresAt: issued.expiresAt,
       locale: issued.locale ?? deps.venueLocale ?? "en-GB",
-      privacyNoticeUrl: deps.privacyNoticeUrl,
     });
     return true;
   } catch {
@@ -786,7 +785,14 @@ export function mountManagementApi(
   };
 
   app.get("/management-api/google/config", (c) =>
-    c.json({ configured: deps.googleOidc !== undefined, privacyNoticeUrl: deps.privacyNoticeUrl }),
+    run(c, log, async () => {
+      const privacy = await withTransaction(deps.db, readPrivacyContact);
+      const privacyNoticeUrl = privacy?.privacyNoticeUrl ?? null;
+      return c.json({
+        configured: deps.googleOidc !== undefined,
+        ...(privacyNoticeUrl === null ? {} : { privacyNoticeUrl }),
+      });
+    }),
   );
 
   app.post("/management-api/google/login", (c) =>

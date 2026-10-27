@@ -4,6 +4,7 @@ import type { Context, Hono } from "hono";
 import { readTenant, type Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
+import { readPrivacyContact } from "@waitron/provisioning";
 import { civilDateOf } from "@waitron/reporting";
 import { AppError, resolveActiveLocale } from "@waitron/shared";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -26,7 +27,6 @@ export interface InvoiceCustomerDataDeps {
   /** The node whose time zone dates the download. */
   nodeId: string;
   venueLocale: string;
-  privacyNoticeUrl?: string;
   now?: () => Date;
   render?: InvoiceCustomerFilesDeps["render"];
   readDocument?: InvoiceCustomerFilesDeps["readDocument"];
@@ -98,8 +98,9 @@ export function mountInvoiceCustomerDataApi(
         const taxId = queriedTaxId(c);
         const place = await venuePlace(tx, deps.nodeId);
         const tenant = await readTenant(tx);
+        const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
         const sales = await findInvoiceCustomerSales(tx, taxId);
-        return { authorizedBy, taxId, place, tenant, sales };
+        return { authorizedBy, taxId, place, tenant, privacyNoticeUrl, sales };
       });
       const newest = first.sales.at(-1);
       if (newest === undefined) throw new AppError("invoice_customer.not_found", {});
@@ -122,7 +123,7 @@ export function mountInvoiceCustomerDataApi(
         venue: first.tenant?.legalName ?? null,
         customer: newest.name,
         date: civilDateOf(at, first.place.timeZone),
-        privacyNoticeUrl: deps.privacyNoticeUrl,
+        ...(first.privacyNoticeUrl === null ? {} : { privacyNoticeUrl: first.privacyNoticeUrl }),
         anyTaxRecord: built.anyTaxRecord,
         anyEmail: built.anyEmail,
       });

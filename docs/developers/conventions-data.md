@@ -2656,26 +2656,36 @@ case is "the managers' email reads its context on a full disk with a change wait
 Since A980 S2a1, the staff personal-data downloads (`GET /management-api/me/personal-data/export`
 and, for an admin, `GET /management-api/staff/:id/personal-data/export`, both in
 `apps/server/src/personal-data-export-api.ts`) read in two `withWriteLock` turns with no drain —
-every other part, and the venue's name for the README, in the first, the caller checked again in the
-second after the files are built — and resolve the session with `touch: false`, so they answer on a
-full disk with a change waiting. Since S2c, the actions part (`apps/server/src/personal-data-actions.ts`)
-reads in `withWriteLock` turns of its own between the two, while the files are built, also with no
-drain. The cases are "a person's own personal-data download answers on a full disk with a change
-waiting", "an admin's personal-data download of another person answers on a full disk with a
-change waiting, and writes nothing" and "an admin's personal-data download of a person with a
-drawer opening looks its sale number up on a full disk", all in
-`apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one `withTransaction`
-per route.
+every other part, and the venue's name and privacy page for the README (the page since A980 S1b),
+in the first, the caller checked again in the second after the files are built — and resolve the
+session with `touch: false`, so they answer on a full disk with a change waiting. Since S2c, the
+actions part (`apps/server/src/personal-data-actions.ts`) reads in `withWriteLock` turns of its own
+between the two, while the files are built, also with no drain. The cases are "a person's own
+personal-data download answers on a full disk with a change waiting", "an admin's personal-data
+download of another person answers on a full disk with a change waiting, and writes nothing" and
+"an admin's personal-data download of a person with a drawer opening looks its sale number up on a
+full disk", all in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to
+one `withTransaction` per route.
 
 Since A980 S3, an admin's invoice-customer search and download
 (`GET /management-api/invoice-customers/personal-data` and its `/export`, in
 `apps/server/src/invoice-customer-data-api.ts`) read in `withWriteLock` turns with no drain — the
-search in one; the download in a first turn, one turn per invoice and a last turn that checks the
-caller again, with a turn of the event loop between them — and resolve the session with `touch:
+search in one; the download in a first turn, which also reads the venue's name and privacy page for
+the README (the page since A980 S1b), one turn per invoice and a last turn that checks the caller
+again, with a turn of the event loop between them — and resolve the session with `touch:
 false`, so they answer on a full disk with a change waiting. The case is "an admin's
 invoice-customer search and download answer on a full disk with a change waiting, and write
 nothing" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one
 `withTransaction` per route.
+
+Since A980 S1b, `GET /management-api/google/config` reads the venue's privacy page through
+`withTransaction`, so on a full disk with a change waiting it should answer 507, through the
+change-log drain measured below (M2 under "What refused them", and M1 under "The dashboard's
+full-disk reads", where a passive read answered 507 that way) and the error boundary's full-disk
+status; this route was read, not run. The sign-in page, and the pages an email's link opens, then
+show no privacy link, and the sign-in page offers no working Google sign-in. This is accepted: the
+page's locales read and password sign-in already go through `withTransaction` there (the S1b plan's
+decision 3).
 
 Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in

@@ -11,7 +11,6 @@ export interface AccountEmail {
   codeExpiresAt?: string;
   expiresAt: string;
   locale: string;
-  privacyNoticeUrl?: string;
 }
 
 export type AccountEmailSender = (message: AccountEmail) => Promise<void>;
@@ -73,7 +72,12 @@ const COPY = {
 } as const;
 
 export function createAccountEmailSender(
-  config: { url: string; from: SmtpConnection["from"]; timeZone: string },
+  config: {
+    url: string;
+    from: SmtpConnection["from"];
+    timeZone: string;
+    privacyNoticeUrl?: string;
+  },
   transport?: SmtpTransport,
   options: { timeoutMs?: number; ca?: string } = {},
 ): AccountEmailSender {
@@ -129,7 +133,7 @@ export function createAccountEmailSender(
       "",
       copy.expires(expiry),
       copy.ignore,
-      ...(message.privacyNoticeUrl === undefined ? [] : [copy.privacy, message.privacyNoticeUrl]),
+      ...(config.privacyNoticeUrl === undefined ? [] : [copy.privacy, config.privacyNoticeUrl]),
     ].join("\n");
     const html = `<p>${escapeHtml(copy.hello(message.displayName))}</p>
 <p><a href="${escapeHtml(message.actionUrl)}">${link}</a></p>
@@ -137,9 +141,9 @@ ${codeCopy === undefined ? "" : `<p>${escapeHtml(codeCopy)}</p>`}
 <p>${escapeHtml(copy.expires(expiry))}</p>
 <p>${escapeHtml(copy.ignore)}</p>
 ${
-  message.privacyNoticeUrl === undefined
+  config.privacyNoticeUrl === undefined
     ? ""
-    : `<p><a href="${escapeHtml(message.privacyNoticeUrl)}">${escapeHtml(copy.privacy)}</a></p>`
+    : `<p><a href="${escapeHtml(config.privacyNoticeUrl)}">${escapeHtml(copy.privacy)}</a></p>`
 }`;
     const outcome = await sendSmtpMessage(
       config,
