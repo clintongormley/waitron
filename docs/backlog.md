@@ -5819,7 +5819,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A974. Finish the remaining English names in general code.** Remaining: boot/counter suites,
+- **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment suites,
   shared equipment helper exports and imports, server till-API and configuration-transfer fixtures,
   catalogue and shared station fixtures, and file names. Keep fixture text with A976.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
