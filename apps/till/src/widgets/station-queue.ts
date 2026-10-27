@@ -7,7 +7,7 @@ import { groupName } from "./group-name.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
@@ -31,7 +31,12 @@ import {
 } from "../state/kitchen-cards.js";
 import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
-import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
+import {
+  type BoardMeasure,
+  CARD_COLUMN_TEXT_WIDTHS,
+  columnsFit,
+} from "../state/kitchen-board-fit.js";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import type {
   KitchenNotice,
@@ -185,6 +190,17 @@ export class TillStationQueue extends LitElement {
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
         list-style: none;
+      }
+
+      /* A tab panel spans the board, so a name would sit across the screen from its count. */
+      .tab-panel .overview {
+        max-width: calc(${unsafeCSS(CARD_COLUMN_TEXT_WIDTHS)} * var(--wt-font-size-md));
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)} {
+        .tab-panel .overview {
+          max-width: none;
+        }
       }
 
       .overview-row {

@@ -5595,7 +5595,9 @@ mounted and falls back to the first shown tab when its column is hidden. A headi
 collapsed column, and so stops the columns fitting, chooses that column's tab. A collapsed column
 keeps its tab and shows its cards when chosen, and the stored layout does not change. Under the
 tabs, one `section.tab-panel` carrying the column's `data-column` holds the chosen column's cards or
-Overview's list, with no heading.
+Overview's list, with no heading. There Overview's list is no wider than a card column (16.5 times
+`--wt-font-size-md`), so a dish's name stays near its count; at phone width (`PHONE_WIDTH`) it fills
+the panel.
 
 A tab whose column holds a late card (`lateCards`, so only Waiting and Preparing) carries
 `data-late` and a `--wt-space-1` `--wt-color-danger` bar under it, outside its fill; a collapsed

@@ -7,7 +7,7 @@ import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./tes
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue, stationColumnNames } from "./station-queue.js";
 import { type ColumnKey, STATION_COLUMNS } from "../state/kitchen-columns.js";
-import { OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
+import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
 
 // The shipped DB defaults.
@@ -4414,6 +4414,32 @@ describe("the board's narrow tabs", () => {
     } finally {
       setLocale(previousLocale);
     }
+  });
+
+  const overviewSpan = (el: TillStationQueue) => {
+    const row = shadow(el).querySelector<HTMLElement>("[data-tab-panel] [data-overview-row]")!;
+    const name = row.querySelector<HTMLElement>(".overview-name")!.getBoundingClientRect();
+    const count = row.querySelector<HTMLElement>("[data-overview-making]")!.getBoundingClientRect();
+    return count.right - name.left;
+  };
+
+  it("the board's narrow tabs: on a tablet, Overview's tab keeps a dish's name within a card column of its count", async () => {
+    await pageAt(975, 768, 130);
+    const { el } = await mountBoard();
+    expect(panels(el).map((panel) => panel.dataset.tabPanel)).toEqual(["overview"]);
+    const cardColumn = CARD_COLUMN_TEXT_WIDTHS * parseFloat(getComputedStyle(el).fontSize);
+    expect(overviewSpan(el)).toBeLessThanOrEqual(cardColumn);
+  });
+
+  it("the board's narrow tabs: at 390 px Overview's tab still fills the panel", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard();
+    const panel = panels(el)[0]!.getBoundingClientRect();
+    const list = shadow(el).querySelector<HTMLElement>("[data-overview]")!.getBoundingClientRect();
+    expect(list.width).toBeCloseTo(panel.width, 0);
+    expect(overviewSpan(el)).toBeGreaterThan(
+      CARD_COLUMN_TEXT_WIDTHS * parseFloat(getComputedStyle(el).fontSize),
+    );
   });
 });
 
