@@ -12,7 +12,8 @@ import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import { provisionBillVenue, registroCount, type BillVenue } from "./testing/bill-venue.js";
@@ -25,6 +26,13 @@ import {
 } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 /** When set, every call to an archive destination waits until it is stopped, or until `release`. */
 const stall = vi.hoisted(() => ({
@@ -168,7 +176,7 @@ async function bootAndTrade(
   ) => Promise<(() => Promise<void>) | void>,
 ): Promise<void> {
   const { env, scratch } = await tradingEnv();
-  const base = `https://127.0.0.1:${env.WAITRON_HTTP_PORT}`;
+
   const { via, close } = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
   await withCapturedStdout(async (lines) => {
     let server: StartedServer | undefined;
@@ -176,6 +184,7 @@ async function bootAndTrade(
       const raw = await backupBase(scratch);
       serverRunning = true;
       server = await startServer(env, raw);
+      const base = `https://127.0.0.1:${httpPort()}`;
       const afterTrading = await whileStarted(lines, { base, via });
       const orderId = randomUUID();
       const sale = await cashSale(base, via, orderId);

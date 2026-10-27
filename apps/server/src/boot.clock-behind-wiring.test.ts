@@ -10,11 +10,16 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { TillApiDeps } from "./till-api.js";
 import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer } = ephemeralServerFixture();
 
 type Stopped = (tx: Transaction, now: Date) => Promise<boolean>;
 

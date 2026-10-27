@@ -171,26 +171,29 @@ only on macOS; the root project's thresholds still pass. Neither is queued. Rece
 
 ## What the landing-port fix (A80, PR #740) left open
 
-`freePorts(n)`
-(`apps/server/src/testing/free-ports.ts`) holds every probe until the last port is drawn, but a
-port is still released before the server binds it, so another test worker drawing or connecting
-in that gap can take it; nothing has measured how often. The normal `WAITRON_HTTP_PORT`
-parser refuses `"0"`.
-`bench/sqlite-failover/src/unreachable-store.ts`'s `reservePort` and the inline copy in
-`apps/server/scripts/cloud-integration-fixture.ts` have the same release-then-use shape and were
-not changed. C88 (#920) reproduced this gap as one way the pause test's single CI failure could
-happen, and `startS3TestServer` now recovers from it; the remaining Waitron boot suites still
-have the gap.
+`freePorts(n)` (`apps/server/src/testing/free-ports.ts`) holds every probe until the last
+port is drawn, then releases them. A different worker can take a released port before its
+intended server binds. The normal `WAITRON_HTTP_PORT` parser refuses `"0"`.
 
-A907 changes only `apps/server/src/boot.till-clock.test.ts`: its test-local wrapper calls the
-real Hono server with port 0 and reads the bound address. Configuration still passes through the
-real parser with a positive port. Each listener case keeps that configured port occupied, so
-restoring the old binding reproduces a collision. Production port validation is unchanged.
-Other boot suites still need an equivalent approach where their port and TLS assertions allow it.
+The remaining work is in process-started server fixtures, including
+`bench/sqlite-failover/src/unreachable-store.ts` and the inline reservation in
+`apps/server/scripts/cloud-integration-fixture.ts`, and tests that must exercise configured ports,
+advertised origins or release of a particular listener. Keep those assertions when choosing how
+to remove their hand-off window. A port drawn to represent an unreachable peer can also be taken
+by another worker after release; changing the HTTP listener does not reserve that peer port.
 
-A sibling scan found two draws in `promote-endpoint-e2e.test.ts`, but its mirror is bound and
-closed before the primary draw. That is not two draws before either bind. The remaining work
-above concerns the release-to-bind interval, including single draws.
+A1152 applies the bind-time port-zero fixture to the matching in-process `boot*.test.ts`
+siblings. The fixture delegates to real Hono, waits for its real listener, and directs requests
+to that listener's address. `boot.failed-start.test.ts` retains its configured-port teardown
+checks. Explicit configured-port, tunnel-target, advertised-origin and paired landing-listener
+cases retain the configured binding, including an unused peer drawn alongside the HTTP port. A907's
+existing clock-listener fixture already selects at bind time. None changes production validation.
+
+C88 (#920) reproduced the release-to-bind gap as one way the pause test's single CI failure
+could happen; `startS3TestServer` now recovers from it. A sibling scan found two draws in
+`promote-endpoint-e2e.test.ts`, but its mirror is bound and closed before the primary draw.
+That is not two draws before either bind. The remaining work concerns the release-to-bind
+interval, including single draws.
 
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 

@@ -8,9 +8,17 @@ import { encodeRecoveryKit } from "@waitron/stream";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const download = vi.hoisted(() => vi.fn());
 vi.mock("./restore-stream.js", async (original) => ({
@@ -108,7 +116,7 @@ it.each(["archive", "bucket"])(
         WAITRON_HTTP_LANDING_PORT: "0",
         WAITRON_ENV: "dev",
       });
-      await awaitListening(port!);
+      await awaitListening(httpPort());
       const client = httpsVia(await readFile(join(stateDir, "tls/ca.crt")));
       closeClient = client.close;
       const form = new FormData();
@@ -132,7 +140,7 @@ it.each(["archive", "bucket"])(
         },
       });
       const response = await fetch(
-        `https://127.0.0.1:${port}/setup-api/${kind === "archive" ? "restore" : "restore-bucket"}`,
+        `https://127.0.0.1:${httpPort()}/setup-api/${kind === "archive" ? "restore" : "restore-bucket"}`,
         {
           ...client.via,
           method: "POST",

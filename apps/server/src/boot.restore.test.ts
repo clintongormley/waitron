@@ -25,7 +25,7 @@ import {
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -52,7 +52,12 @@ import {
   seedTradingVenue,
 } from "./testing/boot-harness.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 // Tampering must reach the live watch; the fixture route queues on the server's own handle.
 vi.mock("./management-api.js", async (original) => {
@@ -164,8 +169,7 @@ describe("startServer, against a migrated venue directory", () => {
     );
     const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
     try {
-      // Listening, so `close()` below has a listener to shut.
-      await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
       const rows = await sharedDb
         .select({ sealed: nodeSealedState.sealed })
         .from(nodeSealedState)
@@ -227,8 +231,8 @@ describe("startServer, against a migrated venue directory", () => {
     );
     const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
     try {
-      await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
-      const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+      await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
+      const response = await fetch(`https://127.0.0.1:${httpPort()}/management-api/alerts`, {
         ...via,
         headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
       });
@@ -285,8 +289,11 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_ADVERTISED_ORIGIN: "https://box.example.test",
     });
     try {
-      await awaitListening(port);
-      const served = await servedCertificate(port, await readFile(join(stateDir, "tls", "ca.crt")));
+      await awaitListening(httpPort());
+      const served = await servedCertificate(
+        httpPort(),
+        await readFile(join(stateDir, "tls", "ca.crt")),
+      );
       expect(served.subjectAltName).toContain("IP Address:10.1.2.3");
       expect(served.subjectAltName).not.toContain("192.168.1.10");
       expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
@@ -550,20 +557,20 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       // Nothing listens on the bucket's port, so reading its pointer fails before any term is signed.
       expect(failed.errorCode).toBe("backup.stream_request_failed");
-      const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      const health = await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
       expect(health.status).toBe(200);
       expect(((await health.json()) as { stream: unknown }).stream).toEqual({
         state: "off",
         reason: "first_start_pending",
         stateSince: expect.any(String),
       });
-      const node = await fetch(`https://127.0.0.1:${port}/api/node`, via);
+      const node = await fetch(`https://127.0.0.1:${httpPort()}/api/node`, via);
       expect(node.status).toBe(200);
       expect(await node.json()).toMatchObject({
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         acceptingSales: true,
       });
-      const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+      const response = await fetch(`https://127.0.0.1:${httpPort()}/management-api/alerts`, {
         ...via,
         headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
       });
@@ -637,8 +644,10 @@ describe("startServer, against a migrated venue directory", () => {
           });
           const https = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
           close = https.close;
-          await (await fetchHealthOk(`https://127.0.0.1:${port}/health`, https.via)).body?.cancel();
-          const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+          await (
+            await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, https.via)
+          ).body?.cancel();
+          const response = await fetch(`https://127.0.0.1:${httpPort()}/management-api/alerts`, {
             ...https.via,
             headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
           });
@@ -697,8 +706,8 @@ describe("startServer — the append-only watch in trading mode", () => {
         {},
         { appendOnlyWatch: { intervalMs: INTERVAL_MS } },
       );
-      await awaitListening(port);
-      base = `http://127.0.0.1:${port}`;
+      await awaitListening(httpPort());
+      base = `http://127.0.0.1:${httpPort()}`;
     } catch (error) {
       // A listener that never bound rejects its close; the original error is the one to report.
       await server?.close().catch(() => {});

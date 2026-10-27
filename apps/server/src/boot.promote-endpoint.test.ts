@@ -27,10 +27,17 @@ import type {
   SignedMembershipDocument,
 } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { freePort } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 // `POST /management-api/promote` is mounted on both deployment modes and its path is exempt from
 // the read-only gate, so a mirror and a fenced node both reach the handler: a mirror's
@@ -286,7 +293,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
   it("a MIRROR serves the endpoint: a credential-less POST reaches the handler (401), not a gated 403 or 404", async () => {
     const seed = await seedMirrorIdentity(mirrorDb);
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
+
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-mirror-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
 
@@ -304,6 +311,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 
@@ -328,9 +336,9 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("serving-primary"));
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
 
     const server = await bootTrading(port);
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 
@@ -351,9 +359,9 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("sell-only"));
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
 
     const server = await bootTrading(port);
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 

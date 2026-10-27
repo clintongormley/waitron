@@ -18,8 +18,15 @@ import { runTunnelClient } from "@waitron/tunnel";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
-import { startServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer } = ephemeralServerFixture();
 
 /**
  * A sell-only local secondary — `node_roles.mode='primary'` with `singleton_role='secondary'` — is

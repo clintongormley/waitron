@@ -24,7 +24,7 @@ import { persons, resolveManagementSession } from "@waitron/identity";
 import { strFromU8, unzipSync } from "fflate";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -33,7 +33,12 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePort } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from `mirror_config`. Four venue
 // directories: `mirror` (read-only, refuses writes); `primary`, the same identity booted as primary —
@@ -184,7 +189,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       // The viewer's cookie arrives on the first RESPONSE; the same request's gate cannot read it.
       const primer = await fetch(`${base}/management-api/catalogues`);
@@ -362,7 +367,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
       expect(bundle.status).toBe(401);
@@ -415,7 +420,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       const read = await fetch(`${base}/management-api/catalogues`, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
@@ -463,7 +468,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_MIRROR_ALLOW_EXPOSED: "true",
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       const primer = await fetch(`${base}/management-api/catalogues`);
       expect(primer.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
@@ -533,7 +538,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       // No pass has run, so readiness may be 503; the route must answer.
       const health = await fetch(`${base}/health`);

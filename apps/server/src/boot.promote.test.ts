@@ -28,7 +28,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -42,6 +42,13 @@ import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 // A booted local secondary (mode='primary', singleton_role='secondary') files nothing; an
 // in-process promote flips singleton_role live, and the running fiscal pass starts draining on its
@@ -235,7 +242,6 @@ describe("historical promote: local secondary → primary, live", () => {
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
 
     const server = await startServer({
       ...KEY_ENV,
@@ -244,6 +250,7 @@ describe("historical promote: local secondary → primary, live", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       // Phase A — a secondary: the loop is live, but its fiscal pass is empty.
       await waitForPass(server.health);
@@ -455,7 +462,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
 
       // The read-only gate has lifted, so a write route mounted on the mirror answers its own
       // refusal; the agent routes boot left unmounted on the mirror stay absent until a restart.
-      const base = `http://127.0.0.1:${port}`;
+      const base = `http://127.0.0.1:${httpPort()}`;
       const write = await fetch(`${base}/management-api/catalogues`, {
         method: "POST",
         body: "{}",

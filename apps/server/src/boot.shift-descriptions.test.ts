@@ -13,11 +13,16 @@ import { departments } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 for (const enabled of [true, false]) {
   describe(`shift descriptions actual boot staffing=${enabled}`, () => {
     const disabled = new Set(["fiscal-none", ...(enabled ? [] : ["staffing"])]);
@@ -101,10 +106,10 @@ for (const enabled of [true, false]) {
           WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
           WAITRON_ENV: "preproduction",
         });
-        await awaitListening(port);
+        await awaitListening(httpPort());
         for (const prefix of ["/api/schedule", "/management-api/me/schedule"]) {
           const response = await fetch(
-            `http://127.0.0.1:${port}${prefix}/shifts?from=2026-01-05&to=2026-01-12`,
+            `http://127.0.0.1:${httpPort()}${prefix}/shifts?from=2026-01-05&to=2026-01-12`,
             {
               headers: {
                 cookie: prefix.startsWith("/api/")

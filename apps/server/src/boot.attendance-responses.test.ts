@@ -30,12 +30,17 @@ import type {
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 for (const enabled of [true, false]) {
   describe(`attendance response real boot workforce=${enabled}`, () => {
     const disabled = new Set([
@@ -143,9 +148,9 @@ for (const enabled of [true, false]) {
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });
-          await awaitListening(port);
+          await awaitListening(httpPort());
           if (mode === "setup") tls = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
-          const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${port}`;
+          const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${httpPort()}`;
           const get = (path: string, cookie: string, passive = false) =>
             fetch(`${origin}${path}`, {
               ...tls?.via,

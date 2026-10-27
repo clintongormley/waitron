@@ -24,13 +24,20 @@ import {
 } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, startConfiguredServer, httpPort } = ephemeralServerFixture();
 
 // A box that returns after being fenced still names itself serving-primary; if it sold, two nodes
 // would file under one NIF. Pinned at boot: a reachable peer holding a higher-term chart that fences
@@ -222,7 +229,7 @@ describe("returned-box membership reconciliation at boot", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       const node = await fetch(`${base}/api/node`);
       expect(node.status).toBe(200);
@@ -296,7 +303,7 @@ describe("returned-box membership reconciliation at boot", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
     try {
-      const node = await fetch(`https://127.0.0.1:${port}/api/node`, {
+      const node = await fetch(`https://127.0.0.1:${httpPort()}/api/node`, {
         dispatcher,
       } as RequestInit);
       expect(node.status).toBe(200);
@@ -358,7 +365,7 @@ describe("returned-box membership reconciliation at boot", () => {
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
         });
-        const node = await fetch(`http://127.0.0.1:${port}/api/node`);
+        const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
         expect(node.status).toBe(200);
         const { acceptingSales } = (await node.json()) as { acceptingSales: unknown };
         return { db, acceptingSales, lines };
@@ -401,7 +408,7 @@ describe("returned-box membership reconciliation at boot", () => {
       originNodeId: PEER_NODE,
     });
 
-    const server = await startServer({
+    const server = await startConfiguredServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: proceedsVenueDir,
       WAITRON_HTTP_PORT: String(port),

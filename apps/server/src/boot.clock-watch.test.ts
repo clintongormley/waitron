@@ -6,11 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startMenuActivation } from "./menu-activation.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer } = ephemeralServerFixture();
 
 const seen = vi.hoisted(() => ({
   stops: [] as { calls: number }[],

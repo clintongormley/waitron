@@ -12,11 +12,16 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 const disabled = new Set(["fiscal-none", "staffing"]);
 const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
 const suite = useVenueDb({
@@ -73,9 +78,9 @@ describe("the personal-data downloads in a real start", () => {
         WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
         WAITRON_ENV: "preproduction",
       });
-      await awaitListening(port);
+      await awaitListening(httpPort());
       const response = await fetch(
-        `http://127.0.0.1:${port}/management-api/me/personal-data/export`,
+        `http://127.0.0.1:${httpPort()}/management-api/me/personal-data/export`,
         { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
       );
       expect(response.status).toBe(200);
@@ -90,7 +95,7 @@ describe("the personal-data downloads in a real start", () => {
         Object.hasOwn(files, "staff-roles.json"),
       ]).toEqual([true, true, false]);
 
-      const url = `http://127.0.0.1:${port}/management-api/staff/${venue.personId}/personal-data/export`;
+      const url = `http://127.0.0.1:${httpPort()}/management-api/staff/${venue.personId}/personal-data/export`;
       const other = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` },
       });
@@ -114,7 +119,7 @@ describe("the personal-data downloads in a real start", () => {
         },
       });
 
-      const invoiceCustomers = `http://127.0.0.1:${port}/management-api/invoice-customers/personal-data`;
+      const invoiceCustomers = `http://127.0.0.1:${httpPort()}/management-api/invoice-customers/personal-data`;
       const search = `${invoiceCustomers}?taxId=12345678Z`;
       const download = `${invoiceCustomers}/export?taxId=12345678Z`;
       const adminCookie = { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` };

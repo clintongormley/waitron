@@ -8,13 +8,21 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { boxEmailMessage, type startBoxEmailDuty } from "./box-alert-email.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { TextEmailSender } from "./text-email.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { readVenueLocale } from "./venue-locale.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const holder = vi.hoisted(() => ({
   deps: undefined as Parameters<typeof startBoxEmailDuty>[0] | undefined,
@@ -107,10 +115,10 @@ describe("the running server's managers' email check", () => {
 
       server = await startServer(env, env);
       await vi.waitFor(async () => {
-        expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
       });
       const boxAlerts = async () => {
-        const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
           headers: { cookie: venue.managerCookie },
         });
         expect(response.status).toBe(200);

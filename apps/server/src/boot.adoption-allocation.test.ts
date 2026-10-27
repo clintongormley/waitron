@@ -16,13 +16,21 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tenantCredentials } from "@waitron/credentials";
 import { managementSessions } from "@waitron/identity";
 import type { ModuleOperationInput, WaitronModule } from "@waitron/module";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
   readPendingAdoption,
   writePendingAdoption,
   type PendingAdoption,
 } from "./finish-adoption.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 vi.mock("./modules.js", async (original) => {
   const real = await original<typeof import("./modules.js")>();
@@ -127,7 +135,7 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
         { level: "error", event: "adoption.establish_failed", code: "module.operation_invalid" },
       ]);
     });
-    const response = await fetch(`http://127.0.0.1:${port}/api/box/status`);
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/api/box/status`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ adoption: "pending" });
     expect(response.headers.get("set-cookie")).toBeNull();

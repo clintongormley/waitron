@@ -19,10 +19,18 @@ import { loadKeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readOperationAuthority } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const observed = vi.hoisted(() => ({
   operator: undefined as unknown,
@@ -157,7 +165,7 @@ it.each(["account", "key"])(
         WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
         WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
       });
-      const response = await fetch(`http://127.0.0.1:${port}/management-api/promote`, {
+      const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/promote`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

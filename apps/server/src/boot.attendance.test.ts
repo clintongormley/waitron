@@ -30,7 +30,7 @@ import {
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -42,7 +42,12 @@ import * as mdns from "./mdns.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 const keyEnv = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -164,14 +169,14 @@ for (const enabled of [true, false]) {
           );
           expect(started.error).toBeNull();
           server = started.server!;
-          await awaitListening(f.port);
+          await awaitListening(httpPort());
           expect(loopSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           expect(mailSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           expect(discoverSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           const deviceCookie = f.venue.cookie
             .split("; ")
             .find((cookie) => cookie.startsWith(`${DEVICE_COOKIE}=`))!;
-          const login = await fetch(`http://127.0.0.1:${f.port}/api/session`, {
+          const login = await fetch(`http://127.0.0.1:${httpPort()}/api/session`, {
             method: "POST",
             headers: { cookie: deviceCookie, "Content-Type": "application/json" },
             body: JSON.stringify({ personId: f.venue.personId, pin: "5555" }),
@@ -220,7 +225,7 @@ for (const enabled of [true, false]) {
               (s) => s.recordKind === "scan",
             )!.generation;
             server = await startServer(f.env);
-            await awaitListening(f.port);
+            await awaitListening(httpPort());
             expect(discoverSpy).toHaveBeenCalledTimes(2);
             const reopened = (await suite.db.select().from(attendanceSourceState)).find(
               (s) => s.recordKind === "scan",
@@ -300,7 +305,7 @@ for (const enabled of [true, false]) {
                 ? { ...f.env, WAITRON_TILL_NODE_ID: undefined, WAITRON_TILL_LOCATION_ID: undefined }
                 : f.env,
             );
-            await awaitListening(f.port);
+            await awaitListening(httpPort());
             expect(loopSpy).not.toHaveBeenCalled();
             expect(mailSpy).not.toHaveBeenCalled();
             expect(discoverSpy).not.toHaveBeenCalled();
@@ -345,7 +350,7 @@ for (const enabled of [true, false]) {
         let closing: Promise<void> | undefined;
         try {
           server = await startServer(f.env);
-          await awaitListening(f.port);
+          await awaitListening(httpPort());
           closing = server.close().then(() => {
             completed = true;
           });

@@ -15,12 +15,17 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { recordSyntheticInvoice } from "./testing/synthetic-invoice.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 vi.mock("./management-api.js", async (original) => {
   const actual = await original<typeof import("./management-api.js")>();
@@ -82,7 +87,7 @@ async function withServer(venue: Venue, use: (base: string) => Promise<void>): P
       WAITRON_ENV: "preproduction",
     };
     server = await startServer(env, env);
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     await vi.waitFor(async () => {
       expect((await fetch(`${base}/health`)).status).toBe(200);
     });

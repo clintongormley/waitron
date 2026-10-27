@@ -8,11 +8,16 @@ import { emptyDrainResult } from "@waitron/fiscal";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 
-const { beforeServerStarts, startServer } = serverFixture();
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const drain = vi.hoisted(() => ({ calls: [] as number[] }));
 
@@ -96,9 +101,9 @@ async function boot(options: {
   };
   server = await startServer(env, env);
   await vi.waitFor(async () => {
-    expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+    expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
   });
-  return { port, venue };
+  return { port: httpPort(), venue };
 }
 
 function press({ port, venue }: Booted): Promise<Response> {
