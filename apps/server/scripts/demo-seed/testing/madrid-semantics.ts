@@ -1,0 +1,346 @@
+import { createHash } from "node:crypto";
+import { verifyPassword, verifyPin } from "@waitron/identity";
+import { sql } from "drizzle-orm";
+import type { Database } from "@waitron/db";
+
+type Cell = null | string | number | Uint8Array;
+export type MadridRow = Record<string, Cell>;
+export interface MadridColumn {
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: Cell;
+  pk: number;
+}
+export interface MadridForeignKey {
+  id: number;
+  seq: number;
+  table: string;
+  from: string;
+  to: string;
+  on_update: string;
+  on_delete: string;
+  match: string;
+}
+export interface MadridTable {
+  columns: MadridColumn[];
+  foreignKeys: MadridForeignKey[];
+  rows: MadridRow[];
+}
+export interface MadridSemantics {
+  tables: Record<string, MadridTable>;
+}
+
+function ident(name: string): string {
+  return '"' + name.replaceAll('"', '""') + '"';
+}
+
+export async function readMadridSemantics(db: Database): Promise<MadridSemantics> {
+  const tables: Record<string, MadridTable> = {};
+  for (const { name } of db.all<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name not glob 'sqlite_*' and name not glob '__drizzle_migrations*' order by name`,
+  )) {
+    const columns = db
+      .all<MadridColumn>(sql.raw(`pragma table_info(${ident(name)})`))
+      .map(({ name, type, notnull, dflt_value, pk }) => ({ name, type, notnull, dflt_value, pk }));
+    const foreignKeys = db.all<MadridForeignKey>(
+      sql.raw(`pragma foreign_key_list(${ident(name)})`),
+    );
+    const rows = db
+      .all<MadridRow>(sql.raw(`select * from ${ident(name)}`))
+      .map((row) =>
+        Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [
+            key,
+            value instanceof Uint8Array
+              ? "sha256:" + createHash("sha256").update(value).digest("hex")
+              : value,
+          ]),
+        ),
+      );
+    tables[name] = { columns, foreignKeys, rows };
+  }
+  return { tables };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function digest(value: unknown): string {
+  return createHash("sha256").update(stable(value)).digest("hex");
+}
+export interface CanonicalMadridTable {
+  columns: MadridColumn[];
+  foreignKeys: MadridForeignKey[];
+  rows: Record<string, Record<string, unknown>>;
+}
+export interface CanonicalMadridSemantics {
+  tables: Record<string, CanonicalMadridTable>;
+}
+
+export async function canonicalMadridSemantics(
+  snapshot: MadridSemantics,
+): Promise<CanonicalMadridSemantics> {
+  const ids = new Map<string, { table: string; row: MadridRow }>();
+  for (const [table, value] of Object.entries(snapshot.tables)) {
+    for (const row of value.rows) {
+      if (typeof row.id === "string" && UUID.test(row.id)) {
+        if (ids.has(row.id)) throw new Error(`duplicate generated identity: ${table}`);
+        ids.set(row.id, { table, row });
+      }
+    }
+    const groups = new Map<number, MadridForeignKey[]>();
+    for (const foreignKey of value.foreignKeys) {
+      const group = groups.get(foreignKey.id) ?? [];
+      group.push(foreignKey);
+      groups.set(foreignKey.id, group);
+    }
+    for (const group of groups.values()) {
+      const target = snapshot.tables[group[0]!.table];
+      if (!target) throw new Error(`unresolved foreign table: ${table}`);
+      for (const row of value.rows) {
+        if (group.some((key) => row[key.from] === null)) continue;
+        if (
+          !target.rows.some((candidate) =>
+            group.every((key) => row[key.from] === candidate[key.to]),
+          )
+        ) {
+          throw new Error(
+            `unresolved foreign relationship: ${table}.${group.map((key) => key.from).join(",")}`,
+          );
+        }
+      }
+    }
+  }
+  const aliases = new Map<string, string>();
+  const visiting = new Set<string>();
+  const alias = (id: Cell): unknown => {
+    if (typeof id !== "string" || !UUID.test(id)) return id;
+    // A product without a stored unit publishes this fixed virtual Each id.
+    if (id === "00000000-0000-0000-0000-000000000001") return id;
+    const cached = aliases.get(id);
+    if (cached) return cached;
+    const entry = ids.get(id);
+    if (!entry) throw new Error(`unresolved reference: ${id}`);
+    if (visiting.has(id)) throw new Error(`cyclic semantic identity: ${entry.table}`);
+    visiting.add(id);
+    const { table, row } = entry;
+    const parts = (...keys: string[]) => keys.map((key) => alias(row[key]!));
+    let key: unknown[];
+    switch (table) {
+      case "catalogues":
+      case "categories":
+      case "departments":
+      case "device_profiles":
+      case "extra_lists":
+      case "kitchen_stations":
+      case "locations":
+      case "nodes":
+      case "option_lists":
+      case "printers":
+      case "seasons":
+      case "special_days":
+        key = parts("name");
+        break;
+      case "persons":
+        key = parts("email");
+        break;
+      case "adjustment_reasons":
+        key = parts("kind", "name");
+        break;
+      case "units":
+        key = parts("seed_key", "staff_name");
+        break;
+      case "media_images":
+        key = parts("filename");
+        break;
+      case "products":
+        key = row.parent_id === null ? parts("image") : parts("parent_id", "variant_order");
+        break;
+      case "sections":
+        key = parts("owner_menu_id", "role", "internal_name");
+        break;
+      case "section_members":
+        key = parts("section_id", "position");
+        break;
+      case "option_labels":
+      case "extra_list_items":
+        key = parts("list_id", "sort");
+        break;
+      case "menu_items":
+        key = parts("menu_id", "product_id");
+        break;
+      case "menu_versions":
+        key = parts("menu_id", "number");
+        break;
+      case "menu_periods":
+        key = parts("department_id", "name");
+        break;
+      case "department_days":
+        key = parts("department_id", "season_id", "weekday", "special_day_date_id");
+        break;
+      case "department_day_ranges":
+        key = parts("day_id", "starts_at", "ends_at");
+        break;
+      case "zone_days":
+        key = parts("zone_id", "season_id", "weekday", "special_day_date_id");
+        break;
+      case "zone_day_ranges":
+        key = parts("day_id", "kind", "starts_at", "ends_at");
+        break;
+      case "special_day_dates":
+        key = parts("special_day_id", "date");
+        break;
+      case "floor_zones":
+        key = parts("location_id", "name");
+        break;
+      case "dining_tables":
+      case "floor_plan_tables":
+        key = parts("zone_id", "label");
+        break;
+      case "floor_plan_sets": {
+        const rows = snapshot.tables.department_floor_plan_sets!.rows.filter(
+          (set) => set.set_id === id,
+        );
+        if (rows.length !== 1) throw new Error("ambiguous floor set owner");
+        key = [alias(rows[0]!.department_id!), rows[0]!.name];
+        break;
+      }
+      case "floor_plans":
+        key = parts("zone_id", "set_id");
+        break;
+      case "floor_plan_placements":
+        key = parts("plan_id", "plan_table_id");
+        break;
+      case "floor_today_zones":
+        key = parts("zone_id", "business_day");
+        break;
+      case "floor_today_tables":
+        key = parts("table_id");
+        break;
+      case "floor_reset_tables":
+        key = parts("zone_id", "table_id");
+        break;
+      case "invoice_series":
+        key = parts("node_id", "code", "purpose");
+        break;
+      case "registro_sif":
+        key = parts("node_id", "numero_instalacion");
+        break;
+      case "management_sessions":
+        key = parts("person_id", "created_at");
+        break;
+      case "device_profile_printers":
+        key = parts("device_profile_id", "role", "position");
+        break;
+      case "product_modifiers":
+        key = parts("product_id", "sort");
+        break;
+      case "routing_cells":
+        key = parts("location_id", "category_id", "product_id", "zone_id");
+        break;
+      case "service_steps":
+        key = parts("department_id", "position");
+        break;
+      default:
+        throw new Error(`unclassified identity: ${table}`);
+    }
+    const resolved = `@${table}:${stable(key)}`;
+    if ([...aliases.values()].includes(resolved))
+      throw new Error(`duplicate semantic identity: ${resolved}`);
+    aliases.set(id, resolved);
+    visiting.delete(id);
+    return resolved;
+  };
+  for (const id of ids.keys()) alias(id);
+  const documents = new Map<string, unknown>();
+  for (const row of snapshot.tables.menu_versions?.rows ?? []) {
+    const document: unknown = JSON.parse(String(row.document));
+    if (digest(document) !== row.content_hash) throw new Error("published document hash mismatch");
+    documents.set(String(row.content_hash), document);
+  }
+  const normalizedHashes = new Map<string, string>();
+  const hashVisiting = new Set<string>();
+  const normalize = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      if (UUID.test(value)) return alias(value);
+      if (documents.has(value)) {
+        const cached = normalizedHashes.get(value);
+        if (cached) return cached;
+        if (hashVisiting.has(value)) throw new Error("cyclic published hashes");
+        hashVisiting.add(value);
+        const hash = digest(normalize(documents.get(value)));
+        hashVisiting.delete(value);
+        normalizedHashes.set(value, hash);
+        return hash;
+      }
+      if (value.startsWith("{") || value.startsWith("[")) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(value);
+        } catch {
+          return value;
+        }
+        return normalize(parsed);
+      }
+      return value;
+    }
+    if (Array.isArray(value)) return value.map(normalize);
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, entry]) => [UUID.test(key) ? String(alias(key)) : key, normalize(entry)]),
+      );
+    }
+    return value;
+  };
+  const tables: CanonicalMadridSemantics["tables"] = {};
+  for (const [table, data] of Object.entries(snapshot.tables)) {
+    const rows: CanonicalMadridTable["rows"] = {};
+    for (const original of data.rows) {
+      const row: Record<string, unknown> = {};
+      for (const [column, value] of Object.entries(original)) row[column] = normalize(value);
+      if (table === "persons") {
+        if (
+          typeof original.pin_hash !== "string" ||
+          !(await verifyPin("5555", original.pin_hash)) ||
+          (await verifyPin("9998", original.pin_hash))
+        )
+          throw new Error("PIN verification mismatch");
+        row.pin_hash = "verified:5555;refused:9998";
+        if (original.password_hash !== null) {
+          if (
+            typeof original.password_hash !== "string" ||
+            !(await verifyPassword("dashPass123", original.password_hash)) ||
+            (await verifyPassword("wrong-password", original.password_hash))
+          )
+            throw new Error("password verification mismatch");
+          row.password_hash = "verified:demo-password;refused:wrong-password";
+        }
+      }
+      if (table === "management_sessions") {
+        if (typeof original.token_hash !== "string" || !/^[a-f0-9]{64}$/.test(original.token_hash))
+          throw new Error("management token hash mismatch");
+        row.token_hash = "generated:sha256";
+      }
+      const key = typeof original.id === "string" ? String(alias(original.id)) : stable(row);
+      if (Object.hasOwn(rows, key)) throw new Error(`duplicate semantic identity: ${table}:${key}`);
+      rows[key] = row;
+    }
+    tables[table] = {
+      columns: data.columns,
+      foreignKeys: data.foreignKeys,
+      rows: Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b))),
+    };
+  }
+  return { tables };
+}

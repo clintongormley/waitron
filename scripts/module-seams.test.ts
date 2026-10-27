@@ -272,6 +272,16 @@ describe("country implementations are named only by the browser-safe country reg
 
   it.each(files.map((file) => [relative(REPO_ROOT, file), file]))("%s", (rel, file) => {
     if (rel === registry) return;
+    if (rel === "packages/country-packs/src/demo-testing.ts") {
+      expect(imports(file, COUNTRY_IMPLEMENTATIONS)).toEqual(["@waitron/country-es"]);
+      const specifiers = [
+        ...blankComments(readFileSync(file, "utf8")).matchAll(
+          /from\s+["'](@waitron\/country-[^"']+)["']/g,
+        ),
+      ].map((match) => match[1]);
+      expect(specifiers).toEqual(["@waitron/country-es/demo/testing"]);
+      return;
+    }
     expect(imports(file, COUNTRY_IMPLEMENTATIONS)).toEqual([]);
   });
 

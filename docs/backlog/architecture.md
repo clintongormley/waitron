@@ -458,9 +458,11 @@ until A977).
   [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md):
   first move Spain's data and pictures into its pack with shared seeding code, then
   supply English and Spanish plain names, then add Catalonia with the Balearic
-  Islands, Valencia and Galicia in separate changes. All five build cuts remain
-  open. Regional restaurant defaults follow the province without overwriting a
-  typed name; regional staff and kitchen names are demo data, separate from the
+  Islands, Valencia and Galicia in separate changes. The first cut has an
+  independently captured Madrid database baseline for English and Spanish, with
+  row, relationship, credential and media checks; the data move itself remains
+  open. All five build cuts remain open. Regional restaurant defaults follow the
+  province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.

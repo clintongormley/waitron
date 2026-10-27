@@ -113,19 +113,19 @@ These are reading receipts at the checkpoint, not runtime qualifications:
   CountryDemoDeveloperPreset>>` and `DEFAULT_DEMO_DEVELOPER_PRESET`. Move today's Madrid geography/address defaults there now; cut 3 adds regional choices. `SeedRawTable` is the strict server
   raw-table type, with existing table-shape and zone-key unions; only its server `onGrid` result carries strict `Placement`.
 
-- [ ] **1. Freeze the old database outcome before moving anything.** In a driver-created `mktemp -d` disposable detached checkout of the recorded original-main SHA, install dependencies. Write the
+- [x] **1. Freeze the old database outcome before moving anything.** In a driver-created `mktemp -d` disposable detached checkout of the recorded original-main SHA, install dependencies. Write the
   comparison harness there against **its own** existing seed imports. Pin `TZ=Europe/Madrid`, Date `2026-10-08T10:00:00.000Z`, Madrid `28013`, `Europe/Madrid`, cutover `05:00`, invoice locale `es-ES`,
   existing provisioner settings and `salesDays: 0`; capture EN and ES staff runs. Never swap old files into the feature worktree.
-- [ ] Capture all application tables before/after provisioning and seeding, with table/column manifests, row counts, added/changed/deleted rows and the complete seeded state of each affected table.
+- [x] Capture all application tables before/after provisioning and seeding, with table/column manifests, row counts, added/changed/deleted rows and the complete seeded state of each affected table.
   Inspect seed call chains and reconcile every write target with the manifest, including seed-added rows in already provisioned tables. This comparison deliberately covers nonsale seed data; the
   unedited fiscal golden separately covers its five sale products, not all menu rows.
-- [ ] Implement new test-only `readMadridSemantics(db: Database): Promise<MadridSemantics>` in `testing/madrid-semantics.ts`; `MadridSemantics` holds table/column inventory and rows keyed by semantic
+- [x] Implement new test-only `readMadridSemantics(db: Database): Promise<MadridSemantics>` in `testing/madrid-semantics.ts`; `MadridSemantics` holds table/column inventory and rows keyed by semantic
   identity. Replace generated ids with deterministic identities: product image/parent+variant, menu and section paths, ordered list/label positions, zone/table labels, person email, reason name and
   parent identities for link rows. Refuse collisions, unresolved references and unclassified changed tables/columns. Keep FK relationships, embedded JSON references, ordering, prices, defaults,
   translations, availability, routing, permissions, layout and media-byte digests; do not simply delete every `*_id` or timestamp column. Verify published-document hashes against original JSON before
   comparing canonicalized JSON/digests, so embedded ids do not create false mismatches. Normalize only named generated timestamps and salted hashes; verify PIN/password success and wrong-secret
   refusal, password presence and roles before replacing hash bytes with semantic results. Preserve authored times and all null/absent distinctions.
-- [ ] Freeze `madrid-before-move.{en,es}.json` and manifest with original SHA/settings/exporter digest before candidate data imports exist. Copy only these data artifacts and the independent harness
+- [x] Freeze `madrid-before-move.{en,es}.json` and manifest with original SHA/settings/exporter digest before candidate data imports exist. Copy only these data artifacts and the independent harness
   into the feature branch, placing the frozen data/manifest in `packages/country-es/test-fixtures/demo/` and the independent harness in server. Read fixtures through the test-only country-packs seam,
   never from candidate menu constants; new non-English expected values remain pack-owned. Run `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts`; initial baseline must pass against the unchanged seed. An optional old
   data archive/digest supplements this DB receipt, never replaces it.
