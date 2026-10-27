@@ -1652,6 +1652,9 @@ export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
   label: string | null;
+  /** The short names, else labels, of the tables the bill is at: its party's, or the table a
+   *  counter order is delivered to; absent when none. */
+  tableShortNames?: string[];
   queuedAt: string;
   /** The order's own status. Abandoned and collected orders are excluded server-side, so a `settled`
    *  order here is a pickup awaiting its counter handover ({@link TillApi.markCollected}). */

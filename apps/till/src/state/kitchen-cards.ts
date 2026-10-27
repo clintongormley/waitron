@@ -1,4 +1,5 @@
 import { BAND_RANK, classifyBand, stringToThousandths } from "@waitron/shared";
+import { mergeLabel } from "@waitron/ui";
 import type {
   QueueGroup,
   StationQueueCourse,
@@ -122,6 +123,20 @@ export function kitchenCards(orders: readonly MergedQueueGroup[]): KitchenCard[]
   // Two untimed cards give Infinity − Infinity, NaN, which `||` reads as a tie.
   sorted.sort((a, b) => age(a) - age(b) || a.readIndex - b.readIndex || position(a) - position(b));
   return sorted.map((draft) => draft.card);
+}
+
+/** A bill of no party at no table. */
+export function isCounterOrder(order: StationQueueGroup): boolean {
+  return order.party === undefined && order.tableShortNames === undefined;
+}
+
+/** Each distinct place its bills are at, in their order: a bill's tables by their short names, as
+ * the Ready bar names a join, else its label. */
+export function cardPlaces(card: KitchenCard): string[] {
+  const places = card.orders.map((order) =>
+    order.tableShortNames === undefined ? order.label : mergeLabel(order.tableShortNames),
+  );
+  return [...new Set(places.filter((place): place is string => !!place))];
 }
 
 /** The state a heading tap moves: its least advanced fired dish not Ready; undefined when none (D8). */
