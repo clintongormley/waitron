@@ -77,30 +77,14 @@ export function formatTenderRefundAcknowledgment(
   language: string,
   printer: EscSetting,
 ): Uint8Array {
-  const base = receiptLabelsFor(language);
-  const english = language.startsWith("en");
-  const labels = english
-    ? {
-        ...base,
-        reference: "Original invoice",
-        customer: "Customer",
-        cash: "Cash",
-        card: "Card",
-        amountColumn: "Payment returned",
-        tip: "Tip returned",
-        refund: "Money returned",
-      }
-    : base;
-  const headings: Record<string, readonly [string, string]> = {
-    es: ["JUSTIFICANTE DE DEVOLUCIÓN", "La factura original no cambia"],
-    ca: ["JUSTIFICANT DE DEVOLUCIÓ", "La factura original no canvia"],
-    gl: ["XUSTIFICANTE DE DEVOLUCIÓN", "A factura orixinal non cambia"],
-    eu: ["ITZULKETAREN FROGAGIRIA", "Jatorrizko faktura ez da aldatzen"],
+  const labels = receiptLabelsFor(language.startsWith("en") ? "en-GB" : language);
+  const headingLocales: Readonly<Record<string, string>> = {
+    es: "es-ES",
+    ca: "ca-ES",
+    gl: "gl-ES",
+    eu: "eu-ES",
   };
-  const heading = headings[language.split("-")[0]!] ?? [
-    "REFUND ACKNOWLEDGMENT",
-    "The original invoice is unchanged",
-  ];
+  const heading = receiptLabelsFor(headingLocales[language.split("-")[0]!] ?? "en-GB");
   const b = esc(printer).init();
   const { columns, widthDots } = b.grid;
   b.printArea(widthDots);
@@ -111,11 +95,11 @@ export function formatTenderRefundAcknowledgment(
     for (const line of labelAmountLines(prepareText(caption), prepareText(value), columns))
       b.line(line);
   };
-  text(heading[0]!);
-  text(heading[1]!);
+  text(heading.refundHeading);
+  text(heading.refundNotice);
   text(`${acknowledgment.issuer.venueName} · ${acknowledgment.issuer.nif}`);
   if (acknowledgment.issuer.domicile !== undefined) text(acknowledgment.issuer.domicile);
-  row(labels.reference, acknowledgment.invoiceNumber);
+  row(labels.refundReference, acknowledgment.invoiceNumber);
   text(acknowledgment.refund.id);
   if (acknowledgment.customerName !== null) row(labels.customer, acknowledgment.customerName);
   text(`${receiptDateTime(acknowledgment.refund.completedAt!, language, 0)} UTC`);
@@ -124,10 +108,10 @@ export function formatTenderRefundAcknowledgment(
       ? labels.cash
       : `${labels.card}${acknowledgment.last4 === null ? "" : ` **** ${acknowledgment.last4}`}`,
   );
-  row(labels.amountColumn, formatMoney(acknowledgment.refund.appliedAmount, language));
-  row(labels.tip, formatMoney(acknowledgment.refund.tipAmount, language));
+  row(labels.refundAmount, formatMoney(acknowledgment.refund.appliedAmount, language));
+  row(labels.refundTip, formatMoney(acknowledgment.refund.tipAmount, language));
   row(
-    labels.refund,
+    labels.refundTotal,
     formatMoney(
       addDecimal(
         decimal(acknowledgment.refund.appliedAmount),

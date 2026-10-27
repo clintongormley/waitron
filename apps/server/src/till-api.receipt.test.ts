@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -6,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
+  locations,
   drawerOpens,
   printers,
   printJobs,
@@ -2292,6 +2294,76 @@ describe("original receipt and payment slip actions", () => {
 });
 
 describe("payment slip persisted capture facts", () => {
+  it.each([
+    { saved: "es-ES", configured: "en-GB" },
+    { saved: "ca-ES", configured: "es-ES" },
+  ])(
+    "A965 payment language uses saved $saved after config and venue language changes",
+    async ({ saved, configured }) => {
+      const { cfg, each, operatorId } = await setupVenue();
+      cfg.locale = configured;
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: [saved] })
+        .where(eq(locations.id, cfg.locationId));
+      await withTransaction(suite.db, (tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
+      );
+      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const cookie = await login(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg);
+      const id = randomUUID();
+      const response = await app.request("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          workingOrderId: id,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1000" }],
+          tender: { method: "card", amount: "1500.00" },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const [savedSale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
+      expect(savedSale!.locale).toBe(saved);
+      const settledAt = new Date(2026, 8, 12, 9, 5).toISOString();
+      await suite.db.execute(
+        sql`update payments set provider = 'sumup', settled_at = ${settledAt}, card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+      );
+      const ask = () =>
+        app.request(`/api/sales/${id}/payment-slip`, {
+          method: "POST",
+          headers: { cookie, "Accept-Language": configured },
+        });
+      for (const changed of [false, true]) {
+        if (changed) {
+          await suite.db
+            .update(locations)
+            .set({ invoiceLocales: ["en-GB"] })
+            .where(eq(locations.id, cfg.locationId));
+          await withTransaction(suite.db, (tx) =>
+            writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }),
+          );
+        }
+        expect((await ask()).status).toBe(200);
+        const jobs = await printJobsFor(cfg);
+        expect(jobs).toHaveLength(changed ? 2 : 1);
+        const text = decodeTicket(new Uint8Array(jobs.at(-1)!.payload));
+        const labels = receiptLabelsFor(saved);
+        expect(text).toContain(labels.paymentHeading);
+        expect(text).toContain(labels.paymentEntry);
+        expect(text).toContain(labels.paymentContactless);
+        expect(text).toContain(saved === "ca-ES" ? "1.500,00 €" : "1500,00 €");
+        expect(text).toContain("09:05");
+        expect(text).not.toContain("Sep");
+      }
+      expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([
+        savedSale,
+      ]);
+    },
+  );
+
   it.each([true, false])(
     "prints an integrated capture with card facts=%s and preserves fiscal rows",
     async (withCard) => {

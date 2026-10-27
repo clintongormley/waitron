@@ -2758,82 +2758,93 @@ describe("the invoice at full payment", () => {
     ).toEqual([]);
   });
 
-  it("prints a slip for each card payment, each paired with its own tender", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
-    const early = new Date(Date.now() - 60_000).toISOString();
-    const late = new Date().toISOString();
-    const first = await insertPayment(billId, {
-      applied: 2000,
-      state: "received",
-      receivedAt: early,
-    });
-    const second = await insertPayment(billId, {
-      applied: 2300,
-      tip: 200,
-      state: "received",
-      receivedAt: late,
-    });
-    // The second payment's row sorts first, as the slip reads them.
-    await inTx(async (tx) => {
-      await tx.insert(payments).values([
-        {
-          id: "00000000-0000-4000-8000-000000000001",
-          workingOrderId: billId,
-          source: venue.cfg.origin.source,
-          deviceId: venue.cfg.origin.deviceId,
-          provider: "simulator",
-          paymentRef: randomUUID(),
-          amount: 2500,
-          state: "captured",
-          settledAt: late,
-          billPaymentId: second,
-        },
-        {
-          id: "ffffffff-0000-4000-8000-000000000001",
-          workingOrderId: billId,
-          source: venue.cfg.origin.source,
-          deviceId: venue.cfg.origin.deviceId,
-          provider: "simulator",
-          paymentRef: randomUUID(),
-          amount: 2000,
-          state: "captured",
-          settledAt: early,
-          billPaymentId: first,
-        },
-      ]);
-    });
-    const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
-    expect(issued).toMatchObject({ total: "43.00" });
-    const [sale] = await inTx((tx) =>
-      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
-    );
-    const linked = await inTx((tx) =>
-      tx
-        .select({ saleId: payments.saleId })
-        .from(payments)
-        .where(eq(payments.workingOrderId, billId)),
-    );
-    expect(linked.map((row) => row.saleId)).toEqual([sale!.id, sale!.id]);
-    const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
+  it.each(["es-ES", "en-GB"])(
+    "prints a slip for each card payment, each paired with its own tender (config %s)",
+    async (locale) => {
+      const billId = await tabWith("Chuletón", "Tarta");
+      const early = new Date(Date.now() - 60_000).toISOString();
+      const late = new Date().toISOString();
+      const first = await insertPayment(billId, {
+        applied: 2000,
+        state: "received",
+        receivedAt: early,
+      });
+      const second = await insertPayment(billId, {
+        applied: 2300,
+        tip: 200,
+        state: "received",
+        receivedAt: late,
+      });
+      // The second payment's row sorts first, as the slip reads them.
+      await inTx(async (tx) => {
+        await tx.insert(payments).values([
+          {
+            id:
+              locale === "es-ES"
+                ? "00000000-0000-4000-8000-000000000001"
+                : "00000000-0000-4000-8000-000000000002",
+            workingOrderId: billId,
+            source: venue.cfg.origin.source,
+            deviceId: venue.cfg.origin.deviceId,
+            provider: "simulator",
+            paymentRef: randomUUID(),
+            amount: 2500,
+            state: "captured",
+            settledAt: late,
+            billPaymentId: second,
+          },
+          {
+            id:
+              locale === "es-ES"
+                ? "ffffffff-0000-4000-8000-000000000001"
+                : "ffffffff-0000-4000-8000-000000000002",
+            workingOrderId: billId,
+            source: venue.cfg.origin.source,
+            deviceId: venue.cfg.origin.deviceId,
+            provider: "simulator",
+            paymentRef: randomUUID(),
+            amount: 2000,
+            state: "captured",
+            settledAt: early,
+            billPaymentId: first,
+          },
+        ]);
+      });
+      const issued = await inTx((tx) =>
+        issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR),
+      );
+      expect(issued).toMatchObject({ total: "43.00" });
+      const [sale] = await inTx((tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+      );
+      const linked = await inTx((tx) =>
+        tx
+          .select({ saleId: payments.saleId })
+          .from(payments)
+          .where(eq(payments.workingOrderId, billId)),
+      );
+      expect(linked.map((row) => row.saleId)).toEqual([sale!.id, sale!.id]);
+      const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
 
-    await printSalePaymentSlip(suite.db, venue.cfg, billId);
+      await printSalePaymentSlip(suite.db, { ...venue.cfg, locale }, billId);
 
-    // In the order they were written: `rowid`, as `print_jobs` has no sequence of its own.
-    const jobs = await inTx((tx) =>
-      tx
-        .select({ id: printJobs.id, payload: printJobs.payload })
-        .from(printJobs)
-        .orderBy(sql`rowid`),
-    );
-    const slips = jobs.filter((job) => !before.some((old) => old.id === job.id));
-    const printed = slips.map((slip) => decodeTicket(slip.payload));
-    expect(printed).toHaveLength(2);
-    // In the order the money moved: the €20.00 card with no tip, then the €23.00 one with its tip.
-    expect(printed[0]).toContain("20,00");
-    expect(printed[0]).not.toContain("Propina");
-    expect(printed[1]).toContain("23,00");
-    expect(printed[1]).toContain("Propina");
-  });
+      // In the order they were written: `rowid`, as `print_jobs` has no sequence of its own.
+      const jobs = await inTx((tx) =>
+        tx
+          .select({ id: printJobs.id, payload: printJobs.payload })
+          .from(printJobs)
+          .orderBy(sql`rowid`),
+      );
+      const slips = jobs.filter((job) => !before.some((old) => old.id === job.id));
+      const printed = slips.map((slip) => decodeTicket(slip.payload));
+      expect(printed).toHaveLength(2);
+      // In the order the money moved: the €20.00 card with no tip, then the €23.00 one with its tip.
+      expect(printed[0]).toContain("20,00");
+      expect(printed[0]).not.toContain("Propina");
+      expect(printed[1]).toContain("23,00");
+      expect(printed[1]).toContain("Propina");
+    },
+  );
 
   it("records the lines an item payment covers with what they cost when paid", async () => {
     const billId = await tabWith("Chuletón", "Tarta");

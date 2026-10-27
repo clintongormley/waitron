@@ -16,7 +16,7 @@ export async function printSalePaymentSlip(
 ): Promise<void> {
   await withTransaction(db, async (tx) => {
     const [sale] = await tx
-      .select({ id: sales.id })
+      .select({ id: sales.id, locale: sales.locale })
       .from(sales)
       .where(eq(sales.workingOrderId, workingOrderId));
     if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId });
@@ -87,7 +87,7 @@ export async function printSalePaymentSlip(
         charged,
         tip,
         card,
-        invoiceLocale: cfg.locale,
+        invoiceLocale: sale.locale,
         printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
       });
       await enqueuePrintJob(tx, { locationId: cfg.locationId }, printer.id, payload);
