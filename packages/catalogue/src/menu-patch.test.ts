@@ -553,6 +553,7 @@ describe("applyMenuPatch on every copy", () => {
       ),
     ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "target" } });
     expect(patchFieldValue(everyCopyFixed, names, "image")).toBeUndefined();
+    expect(patchFieldValue(everyCopyFixed, names, "names", languages)).toBeUndefined();
     expect(patchFieldValue(everyCopyFixed, names, "internalName")).toBe("Drinks");
   });
 
@@ -565,16 +566,18 @@ describe("applyMenuPatch on every copy", () => {
       },
     };
     expect(() => parseMenuPatch([{ target, field: "names", value: throwing }])).toThrow(TypeError);
-    let reads = 0;
-    const throwsOnSecondRead = {
+    // Reads 1 and 2 are the two parses; the third is the merge.
+    let readsOfEn = 0;
+    const throwsInMerge = {
       get en(): string {
-        reads += 1;
-        if (reads > 1) throw new TypeError("boom");
+        readsOfEn += 1;
+        if (readsOfEn > 2) throw new TypeError("boom");
         return "Drinks";
       },
     };
-    const [change] = parseMenuPatch([{ target, field: "names", value: throwsOnSecondRead }]);
+    const [change] = parseMenuPatch([{ target, field: "names", value: throwsInMerge }]);
     expect(() => applyMenuPatch(document, [change!], languages)).toThrow(TypeError);
+    expect(readsOfEn).toBe(3);
   });
 
   it("patches the languages a folder does not fix, and skips a folder fixing them all", async () => {

@@ -222,13 +222,15 @@ function locate(
 }
 
 /** The value a field holds now at the first copy a patch would change, preferring a copy that fixes
- * none of it; `undefined` when the document does not hold the target. */
+ * none of it; `undefined` when no copy takes the change, which for a section's names needs the
+ * `languages` `applyMenuPatch` is given. */
 export function patchFieldValue(
   document: MenuDocument,
   target: MenuPatchTarget,
   field: string,
+  languages?: ContentLanguages,
 ): unknown {
-  const located = locate(document, target, field);
+  const located = locate(document, target, field, languages);
   if (located === undefined) return undefined;
   const copy =
     located.copies.find((candidate) => !Object.hasOwn(fixedOf(candidate), field)) ??
