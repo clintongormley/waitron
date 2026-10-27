@@ -228,8 +228,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
   [Detail](backlog/fiscal.md#loose-ends-left-by-a230-waitronverifactu-021-1099)
 
-- **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
-
 - **The till offers no way back to a simplified invoice for a bill already saved as a full one.**
   [Detail](backlog/fiscal.md#the-till-offers-no-way-back-to-a-simplified-invoice-for-a-bill-already-saved-as-a-full-one).
 
@@ -289,8 +287,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A554. Should any screen show the address an invoice email went to?** An owner question, open.
   [Detail](backlog/fiscal.md#a554-should-any-screen-show-the-address-an-invoice-email-went-to).
 
-- **A555. Keep a counter full invoice's email or A4 choice through payment** — DESIGN PROPOSED,
-  awaiting the owner's one delivery-choice decision and full-design approval.
+- **A555. Keep a counter full invoice's email or A4 choice through payment** — DESIGN APPROVED,
+  plan and build against A739's released interfaces.
   No implementation or public F1 enablement is included.
   [Detail](backlog/fiscal.md#a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21)
 
