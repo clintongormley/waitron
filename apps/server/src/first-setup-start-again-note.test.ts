@@ -1003,6 +1003,79 @@ it("with the database missing, a damaged kept picks file reaches the confirmatio
   await expectStartAgainDeleted(base.f);
 });
 
+/** A Start again past a damaged picks file stamped after every other listed item, then a new claim. */
+async function startedAgainPastDamagedPicks() {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+  const { f, clock, name, timeFloorMs } = base;
+  await summaryThenStartAgain(base);
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  const next = createFirstSetupModuleHost({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    modules: f.modules,
+    environment: {},
+    database: () => suite.db,
+  });
+  const claim = await next.owner.claimFirstSetup(
+    {
+      environment: "production",
+      request: {
+        ...request,
+        seriesCode: "B",
+        fullSeriesCode: "FULL",
+        rectificativeSeriesCode: "RECT",
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  const owner = { ...claim.state, capability: claim.capability };
+  const picksMinute = decodeMinuteIdentity(name) + PICKS_AFTER_NAME_MS / MINUTE_MS;
+  return { f, clock, timeFloorMs, picksMinute, next, owner };
+}
+
+it("after a Start again past a damaged picks file, a clock before the note's time floor is refused, not given a name", async () => {
+  const { f, timeFloorMs, next, owner } = await startedAgainPastDamagedPicks();
+  vi.setSystemTime(timeFloorMs - 3 * MINUTE_MS);
+  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: timeFloorMs },
+  });
+  const state = (await next.store.read())!;
+  const context = firstSetupModuleContext(state, f.module);
+  expect(context.request).toBeNull();
+  expect(state.consumptionIntent).toBe(false);
+  const history = await readModulePreparationHistory(f, f.module);
+  expect(
+    publicHourSelectionHistory(history).records.filter(
+      (record) =>
+        (record as { reference: string }).reference ===
+        `intent/${f.module}/${context.binding.eventId}`,
+    ),
+  ).toEqual([]);
+});
+
+it("after a Start again past a damaged picks file, a clock a minute before the time floor waits, then chooses a name no earlier than the floor", async () => {
+  const { clock, timeFloorMs, picksMinute, next, owner } = await startedAgainPastDamagedPicks();
+  vi.setSystemTime(timeFloorMs - MINUTE_MS);
+  await selectPastWaits(clock, () => compareAndSelect(next, owner));
+  const chosen = decodeMinuteIdentity(await chosenName(next));
+  expect(chosen).toBeGreaterThan(picksMinute);
+  expect(EPOCH_MS + chosen * MINUTE_MS).toBeGreaterThanOrEqual(timeFloorMs);
+});
+
+it("after a Start again past a damaged picks file, a clock past the time floor chooses a later name at once", async () => {
+  const { clock, timeFloorMs, picksMinute, next, owner } = await startedAgainPastDamagedPicks();
+  vi.setSystemTime(timeFloorMs + 5 * MINUTE_MS);
+  // One move only: production setup's own 90 to 150 second wait, never a wait for the note.
+  await selectPastWaits(clock, () => compareAndSelect(next, owner), 1);
+  expect(decodeMinuteIdentity(await chosenName(next))).toBeGreaterThan(picksMinute);
+});
+
 it("with the database missing, the same file times on an intact picks file leave the summary and the note as they were", async () => {
   const base = await damagedPicksAttempt({ picks: false, recoveryRecord: false });
   const shown = await summaryThenStartAgain(base);
