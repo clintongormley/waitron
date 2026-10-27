@@ -221,7 +221,7 @@ describe("computeOverdueOrders", () => {
   it("breaks a tied worst band (same age, different stations) by line_no, not by insertion/row-arrival order", async () => {
     // A second station in the same location — the fixture the tie needs, since the beforeEach station
     // only gives us one. `isDefault: false` avoids colliding with the beforeEach station's own default.
-    const barra = await seedKitchenStation(suite.db, {
+    const barStationId = await seedKitchenStation(suite.db, {
       locationId: brandLocationId(venue.locationId),
       name: "Barra",
       isDefault: false,
@@ -240,7 +240,7 @@ describe("computeOverdueOrders", () => {
     // correct, line_no-ordered answer is "Cocina" (line_no 1).
     await seedFiredLine(
       suite.db,
-      { nodeId: venue.nodeId, stationId: barra },
+      { nodeId: venue.nodeId, stationId: barStationId },
       { orderId, lineNo: 2, ageMinutes: 11, queuedAt: tiedQueuedAt },
     );
     await seedFiredLine(
