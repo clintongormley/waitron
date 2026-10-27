@@ -409,3 +409,28 @@ Setup, till and Node bundles build. `docker info` refuses the absent local daemo
 socket, so local image build/runtime is unqualified. Image CI and measured server
 duration refresh, finish-branch, current-head CI and landing remain open. No
 fiscal writer, protected assertion or frozen expected data changes.
+
+### Cut 1 review corrections — 2026-10-27
+
+One Claude run-it review found that ordinary browser sources could import the
+secondary data export directly. The root guard now follows setup, till and
+dashboard sources as well as country main entries, including literal backtick
+imports. It resolves a forbidden demo export even if the app omitted that package
+from its dependencies. Six planted app imports and an actual Vite build expose
+those paths; removing the fallback fails three retained cases. Source scanning
+covers static imports, re-exports and literal dynamic imports; computed imports
+and bundler plugins remain outside that check.
+
+The exact original exporter is preserved as inert
+`packages/country-es/test-fixtures/demo/original-exporter.ts.txt`. Its digest
+matches the frozen manifest; the formatted current reader has different source
+bytes. The manifest and expected JSON remain unchanged. A changed-byte control
+fails the provenance check.
+
+Regeneration matches every committed tile except Negroni. Both the old and moved
+encoder emit the same Negroni bytes on this runtime. Its existing committed image
+stays unchanged; a future regeneration policy is recorded in the backlog.
+Matched provisioned adjustment reasons keep their existing policies, as the
+unchanged seed writer specifies. Changing the pack's Not served note rule leaves
+the original Madrid rows unchanged. This move preserves that priority; raw pack
+policy records do not promise to replace an existing reason's rules.

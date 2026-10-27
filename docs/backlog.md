@@ -5831,6 +5831,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   with the frozen Madrid comparison and browser-boundary checks. Plain-name
   translation and the three regional cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
+- **Demo media regeneration.** Preserve the committed Negroni picture when
+  defining regeneration behavior; today's generator produces a different tile.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
+
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
   suites, server till-API and configuration-transfer fixtures, shared station fixtures,
   and file names. Keep fixture text with A976.
