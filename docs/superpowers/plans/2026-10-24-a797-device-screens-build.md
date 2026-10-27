@@ -6,7 +6,7 @@
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
 List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
 The handheld's bar**, **slice 6 — Ready warning time, data**, **slice 7 — The Ready bar's
-warning** and **slice 8 — Kitchen group cards** in full tasks; each other slice is expanded into
+warning**, **slice 8 — Kitchen group cards** and **slice 8b — Short names on kitchen cards** in full tasks; each other slice is expanded into
 tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
@@ -220,7 +220,7 @@ with lane G. **Migration:** no. _Expanded into tasks below (2026-10-26)._
 
 **Goal:** the station read carries each table's short name; the card shows it. The read also says
 whether a bill is a counter order, so a counter card reads "Counter #12" (slice 8, D5).
-**Dependencies:** slices 1 and 8. **Migration:** no.
+**Dependencies:** slices 1 and 8. **Migration:** no. _Expanded into tasks below (2026-10-27)._
 
 ### Slice 9 — The Columns controller and collapse (LIGHT)
 
@@ -6819,6 +6819,231 @@ working; Task 5b removes it.
   `till-station-screen.ts` until it lands (design §7's turn).
 - After merge: delete the branch local and remote and check the remote one is gone; the backlog's
   "landed in #N" commit; update the ledger; then slice 8b or 9, in turn with lane G.
+
+---
+
+## Slice 8b — Short names on kitchen cards (one PR, branch `feat/a797-8b-kitchen-short-names`)
+
+**What it changes.** A kitchen card names its table by the table's **short name** ("T1", not
+"Terrace 1"; design §3.3, §3.7), a joined table by its tables' short names ("T4+T5"), and a counter
+order with no table reads **"Counter #12"** («Mostrador #12»; design §3.3). Today a card shows its
+bill's own `label` (`apps/till/src/widgets/station-queue.ts:914`, read), which is null on a table's
+bill until it is paid (slice 8's LOOK finding (2), `a797-8-look-report.md`), so most table cards
+name no table at all. The station read, which both the till's Station screen
+(`GET /api/stations/:id/queue`, `apps/server/src/till-api.ts:2185-2191`) and a kitchen display
+(`stationScreenSlots`, `apps/server/src/device-api.ts:1030-1050`) read through
+`listStationQueues` (`apps/server/src/working-order.ts:7612`), gains each bill's tables' short names.
+
+**Review path: FULL** (what a server read sends the till; this plan's "Review path"). **Migration:
+none.** No venue reset. Built **inline** (the inline-coding trial: this session writes the code,
+test first; no implementer).
+
+How claims are marked in this section: **(ran)** means run on 2026-10-27 against `main` at
+`a711f06b1` (this worktree's base); **(read)** means read in the code at that commit. The probes
+ran in this worktree and were reverted (`git checkout --`) before any commit; their logs are in
+`/Users/clintongormley/waitron-campaign-c/a797-8b-probe/`.
+
+### The turn with lane G's A773-2 (ran)
+
+No lane's queue holds A773-2's PRs B–D (`grep -n "A773-2" ~/waitron-campaign*/queue.md`: only lane
+C's own A797 lines, lane B's copy of them, lane A's placement note and lane F's landed PR A); the
+open pull requests are #2124, #2122 and #1986, and none touches a station or kitchen file
+(`gh pr diff <n> --name-only | grep -E 'station|kitchen'` → nothing for each). So slice 8b takes the
+turn on `station-queue.ts`; it leaves `till-expo-screen.ts` alone (the pass is slice 12b).
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `grep -rln 'listStationQueues\?\b' apps packages --include='*.ts'` (ran), `grep -rn
+'StationQueueGroup\|MergedQueueGroup' apps/till/src --include='*.ts' | grep -v '\.test\.ts'` (ran)
+and `grep -n '\.label' apps/till/src/widgets/station-queue.ts` (ran), each line read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `apps/server/src/working-order.ts:7386-7407` `StationQueueGroup` | one bill's lines at a station; `label` is `working_orders.label` | gains `tableShortNames?: string[]` (D1) |
+| same file `:7612-7840` `listStationQueues` | reads `workingOrders.label`, no table | also reads `deliveryTableId`, then each bill's tables' short names in one batch before the row loop (D1) |
+| `apps/server/src/till-api.ts:2185-2191`, `apps/server/src/device-api.ts:1038`, `:1047`, `:1076` | the till's and the kitchen display's station reads, through `listStationQueue(s)` | unchanged; both carry the field (D1) |
+| `packages/db/src/party-table-labels.ts:193-200` `billPartyTables` | a party bill's tables: its active ones, else the survivor of its merges'; each by id and names, no short name | read, unchanged (D1) |
+| `packages/db/src/schema/dining-tables.ts:19` `short_name` | the table's saved short name, nullable | read (D1) |
+| `apps/till/src/api/client.ts:1650-1673` `StationQueueGroup` | the till's copy of the type | gains the field (D1) |
+| `apps/till/src/state/kitchen-cards.ts` | the card model (`KitchenCard.orders`) | gains `cardPlaces`, `isCounterOrder` (D2, D3) |
+| `apps/till/src/widgets/station-queue.ts:914`, `:925-931` `#card` | `labels`: each bill's `label`, distinct; heading `.number` per bill | places replace labels; "Counter" before a counter order's number (D3, D4) |
+| `apps/till/src/screens/till-counter-screen.ts:242`, `apps/till/src/till-app.ts:3093` | hold a `StationQueueGroup[]`, read no label (`grep -n '\.label' till-counter-screen.ts` → nothing) | unchanged |
+| `apps/till/src/i18n/strings.ts` en `:340`, es `:2108` `tab.counter` | "Counter" «Mostrador», the till's word for the counter | new `station.counter`, same words (D4) |
+
+### Plan decisions for slice 8b
+
+- **D1. The read carries each bill's tables' short names, `tableShortNames?: string[]`.** A party's
+  bill: the tables `billPartyTables` gives its party (its active tables in the order they joined,
+  or, once it holds none, those of the party at the end of its merges;
+  `packages/db/src/party-table-labels.ts:150-200`, read), the same tables the pass names
+  (`orderTableLabels`, `:246-283`). A bill of no party: the table it is delivered to
+  (`working_orders.delivery_table_id`, `packages/db/src/schema/orders.ts`, "this counter order is
+  delivered to that table"), read by id in any location, as `tableNames` does (`:106-115`). Each
+  table by its saved short name, else its label, exactly as the floor read's `shortName`
+  (`working-order.ts:8372`, `r.short_name ?? r.label`); today's names never (the Ready bar's rule,
+  `tightName`, `apps/till/src/state/floor-today.ts:87-97`). **Absent** when the bill is at no table
+  (a counter order, a delivered order whose table was let go, a party holding none), the read's
+  `optional(...)` habit. Read once per call for every bill before the row loop (CLAUDE.md §3: shared
+  data resolved once, not per line). The server sends names, not one joined string, so the till
+  joins them by one rule (D3).
+- **D2. A counter order is a bill with no party; the read already says so.** `party` is absent on a
+  bill of no party (`working-order.ts:7395`), and a bill has no party only as a counter order: the
+  schema says "a counter order has none" (`packages/db/src/schema/orders.ts`, `partyId`), the one
+  writer that clears it moves a paid bill to the counter (`moveSettledBillToCounter`,
+  `apps/server/src/move-bill.ts:333-357`; ran `grep -rn '\.set({[^}]*partyId' apps/server/src packages
+  --include='*.ts' | grep -v '\.test\.ts'` → that line, two merges onto another party, and one
+  test fixture), and an order has no other channel (`SALE_SOURCES`, `packages/shared/src/origin.ts:22`).
+  So no new field. This settles slice 8's D5 worry ("a bill with no `party` may also be a
+  table's"): that bill is a counter order delivered to a table, and D1 names its table.
+- **D3. The heading names each bill's place once.** A bill's place is its tables' short names
+  through `mergeLabel` (number order, joined "+", `packages/ui/src/components/wt-floor-map.ts:144`;
+  how `tightName` names a join), else its `label` as today. The card lists each distinct place
+  once (two bills of one group at T4 read "T4" once). **Counter:** a bill with no party and no table
+  reads "Counter #12" — "Counter" before its number — then its label if it has one ("Counter #12
+  Ana"). A counter order delivered to T4 reads "#12 T4" (design §3.3: "the table's short name (or
+  "Counter #12")"). **The label is not shown beside a short name:** payment freezes the bill's label
+  to its receipt's table name (`working-order.ts:6727-6730`, `apps/server/src/bill-payments.ts:771`,
+  through `readReceiptOrder`'s `orderTableLabels`, `apps/server/src/receipt-order.ts:44-62`; read),
+  so it would repeat the table's full name beside its short name. A label typed by staff on a
+  table's bill is therefore not on the card; it never was before payment either unless typed.
+- **D4. "Counter" is a word of its own,** `<span class="counter">` before the `.number` span, so the
+  number stays one element (tests and the hidden "Advance ticket #12" read it). New string
+  `station.counter`: "Counter" «Mostrador», the till's existing words for the counter
+  (`tab.counter`, `strings.ts:340`, `:2108`), kept as its own key because it names a kind of order,
+  not a tab.
+- **D5. Left as they are:** a group's `numberPartyLabel` ("Group 2 · Terrace 7", shown only when two
+  merged parties' groups share a number, `apps/server/src/order-groups.ts:2310-2333`); the pass
+  (slice 12b); the printed kitchen ticket, which prints the full name (design §3.7, §9); Reprint's
+  and Collect's names and the hidden "Advance ticket #12".
+
+### Changed test checks (from the probes; the build confirms each)
+
+- **Server: none.** Probe 1 (ran): the read sent `tableShortNames: ["PROBE"]` on every bill with a
+  party or a delivery table; the 35 server files that read the station queue
+  (`grep -rln 'listStationQueues\?\b' …` plus the route suites) → `Test Files 35 passed (35)`,
+  `Tests 1945 passed (1945)` (`probe-run1.txt`). Control (ran): the field on EVERY bill → `1 failed |
+  1944 passed`: `till-api.fiscal-sale-paths.test.ts` "Mode T: place files no fiscal doc…" pins the
+  whole group with `toEqual` on a counter order with no table (`probe-run2.txt`), which D1 leaves
+  without the field. So whole-shape pins exist and none is on a bill D1 names.
+- **Till: one.** Probe 2 (ran): "PROBE " inside each party-less bill's `.number` → 6 failed in
+  `station-queue.test.ts` (`probe-till1.txt`); five read `.number`'s text, which D4 keeps, and one
+  reads the heading's accessible name: **"a heading's name starts with its words and ends with
+  Advance ticket"** (`station-queue.test.ts:3413-3428`), whose bill (`ageBill`) has no party, so its
+  name now starts "Counter #7 Table 7" (D3). Its regex gains "Counter ".
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. A table with no saved short name: the card shows its label (D1).
+2. A join of two tables, and a party at two separate tables: "T4+T5" in number order (D1, D3).
+3. A bill whose party was merged into another and holds no table: the survivor's tables (D1).
+4. A counter order with a label, with none, and delivered to a table (D2, D3).
+5. One group across two bills of a party: the place once (D3).
+6. A kitchen display and the till's Station screen both show it (D1); Spanish «Mostrador #12».
+7. A paid table bill (label frozen to "Terrace 1"): the card reads "T1" alone (D3).
+
+---
+
+**Task order and why.** The server read first (Task 1), so the till reads a real field; the till's
+type and naming rule (Task 2); the heading (Task 3); docs (Task 4); the LOOK (Task 5). Each ends
+green and committed.
+
+### Task 1: The station read carries each bill's tables' short names
+
+**Files:**
+- Modify: `apps/server/src/working-order.ts` (`StationQueueGroup`; `listStationQueues`: select
+  `deliveryTableId`; one helper reading every bill's tables' short names; the group's field)
+- Test: new `apps/server/src/station-queue-short-names.test.ts` (`useVenueDb`, the party venue
+  fixture `apps/server/src/testing/party-venue.ts`: `setupPartyVenue`, `seat`, `join`,
+  `orderForParty`, `counterOrder`)
+
+- [ ] **Step 1: Failing tests**, one case each, reading `listStationQueue` and asserting the bill's
+  `tableShortNames` with `toEqual` (and its absence with `not.toHaveProperty`): a party at a table
+  with short name "T1" (label "Terrace 1") → `["T1"]`; a table with no short name → its label; a
+  party at two joined tables → both, in the order they joined; a party merged into another holding
+  no table → the survivor's tables; a counter order → no field; a counter order delivered to a
+  table → that table's short name; and one case through `GET /api/stations/:id/queue` (the till's
+  route) seeing the field on the wire. Run `pnpm --filter @waitron/server exec vitest run
+  src/station-queue-short-names.test.ts`; expect each to fail on the missing field.
+- [ ] **Step 2: Implement** D1. Run the new file (PASS), then the probe's 35 files again (the list
+  in `probe-run1.txt`'s header command); expect `Tests` = 1945 plus the new cases, all passing.
+- [ ] **Step 3:** `pnpm --filter @waitron/server typecheck`; eslint the changed files; `pnpm
+  format:check`; ledger; `git commit -s -m "A797-8b: the station read names each bill's tables by their short names"`
+
+### Task 2: The till's type and the card's places
+
+**Files:**
+- Modify: `apps/till/src/api/client.ts` (`StationQueueGroup.tableShortNames?: string[]`, with D1's
+  meaning in one line), `apps/till/src/state/kitchen-cards.ts` (`isCounterOrder(order)`: no party
+  and no table; `cardPlaces(card)`: each bill's place, D3, distinct, in the card's bill order)
+- Test: `apps/till/src/state/kitchen-cards.test.ts`
+
+- [ ] **Step 1: Failing tests:** one table → its short name; two → `mergeLabel` ("T4+T5" from
+  `["T5", "T4"]`); none → the label; none and no label → nothing; two bills at one place → once;
+  `isCounterOrder` true only with no party and no table. Run `pnpm --filter @waitron/till exec
+  vitest run src/state/kitchen-cards` (memory first); fail.
+- [ ] **Step 2: Implement**; PASS; `pnpm --filter @waitron/till typecheck`; eslint; format; ledger;
+  `git commit -s -m "A797-8b: a kitchen card's places, by its tables' short names"`
+
+### Task 3: The card's heading shows the places and "Counter #12"
+
+**Files:**
+- Modify: `apps/till/src/widgets/station-queue.ts` (`#card`: `cardPlaces` for `labels`;
+  `<span class="counter">` before a counter order's `.number`), `apps/till/src/i18n/strings.ts`
+  (`station.counter` en "Counter", es «Mostrador»)
+- Test: `apps/till/src/widgets/station-queue.test.ts`
+
+- [ ] **Step 1: Failing tests** (describe "a card's place"): a party bill with
+  `tableShortNames: ["T1"]` and label "Terrace 1" → heading shows "T1", not "Terrace 1"; `["T5",
+  "T4"]` → "T4+T5"; a counter order → "Counter #12", and under `setLocale("es")`
+  `t("station.counter")` before the number (no Spanish literal; restored in `finally`); a counter
+  order delivered (`tableShortNames: ["T4"]`, no party) → "#12 T4", no "Counter"; a card of two
+  bills at T4 → "T4" once. Run; fail.
+- [ ] **Step 2: Implement**; change the one check the probe named (Changed test checks) and no
+  other; run `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue
+  src/screens/till-station-screen src/screens/kitchen-allergy src/screens/text-size.layout
+  src/state/kitchen-cards src/screens/till-counter-screen` → every test passes, the count read.
+- [ ] **Step 3:** `pnpm exec vitest run scripts/english-only.test.ts` from the root; typecheck;
+  eslint; format; ledger; `git commit -s -m "A797-8b: a kitchen card names its table by its short name, and a counter order Counter #12"`
+
+### Task 4: Docs, the user guides and the backlog follow the code
+
+**Files:** `apps/server/src/guide/en/kitchen-service.md` and `es/` (the `{#kitchen-screen}`
+section: one sentence — a card names its table by its short name, or reads **Counter #12** /
+**Mostrador #12** for a counter order); `docs/developers/design-system.md` (`### The kitchen
+screen's cards`: one sentence for D3, pointing at `kitchen-cards.ts`); `docs/backlog.md` and
+`docs/backlog/till.md` (A797: slice 8b in review; next slice 9); the design's §3.3 a dated pointer
+(D3's counter-delivered reading and D2).
+
+- [ ] **Step 1:** write them; `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`
+  and `pnpm exec vitest run scripts/guide-links.test.ts`; PASS; `pnpm exec prettier --file-info
+  docs/backlog.md` → `"ignored": true`; `pnpm format:check`.
+- [ ] **Step 2:** `git commit -s -m "docs: A797-8b — guides, design system and backlog for short names on kitchen cards"`
+
+### Task 5 (visual): LOOK at the cards' names
+
+- [ ] **Step 1:** `wa-wt demo waitron-feat-a797-8b-kitchen-short-names`; a kitchen display on the
+  kitchen station and a till signed in, as slice 8's LOOK did (its scripts:
+  `/Users/clintongormley/waitron-campaign-c/a797-8-scripts/`; this slice's go in
+  `a797-8b-scripts/`, never in the worktree; each process id recorded).
+- [ ] **Step 2:** from the till: a table with a short name sends a group; two joined tables send
+  one; a counter order with a note; the first table's bill paid. At **1280 px** on the display and
+  **390 px** on the till's Station screen, light and dark, English and Spanish: each card names
+  its table by its short name, the joined one "T4+T5" (or the demo's names), the counter one
+  "Counter #N" / «Mostrador #N», the paid one still its short name alone; the heading still wraps
+  inside the card at 390 px (slice 8's R2-1).
+- [ ] **Step 3:** save each picture under `/Users/clintongormley/waitron-campaign-c/a797-8b-shots/`,
+  open each, describe it in the ledger and the PR body; put back anything changed; stop the
+  script by its id, then `wa-wt down waitron-feat-a797-8b-kitchen-short-names`.
+
+### Closing slice 8b
+
+- `/finish-branch` with this plan named; review path **FULL**: the plan-against-spec read and two
+  Codex run-it reviews (the second told to test what this plan does not name).
+- PR body. First line: no venue reset. Then: what a cook sees; D1–D5 one line each; Changed test
+  checks; LOOK.
+- **Owner FYI** (questions file and PR): D3 — a counter order delivered to a table reads "#12 T4",
+  not "Counter #12"; a label staff typed on a table's bill is not on the card.
+- After merge: the backlog's "landed in #N" commit; the ledger; then slice 9.
 
 ---
 
