@@ -771,9 +771,123 @@ prints nothing.
 
 ---
 
+# Slice 2 — `feat/a918-2-station-and-profiles`
+
+Written 2026-10-27 when the slice was picked up, from main `947d6ac19` (slice 1 landed in #2128).
+Built **inline** (the lane's inline-coding trial): the driver writes each task's test and code.
+Review path: light by the plan's own test (the action's new field is read only inside
+`@waitron/provisioning`), plus one fresh-context plan review of this task list.
+
+## Task 0 results (run 2026-10-27 on `947d6ac19`)
+
+1. **A configuration import replaces the rows.** `importConfigurationTables`
+   (`packages/provisioning/src/configuration-transfer.ts:640-735`) deletes every row of each table
+   the bundle declares, in reverse order, then inserts the bundle's; `kitchen_stations` and
+   `device_profiles` are declared tables (`packages/db/src/configuration-transfer.ts:67`, `:78`). So a
+   venue set up from an export keeps the exporting venue's station and profile names, and nothing
+   this slice writes survives there; nothing to change for imports.
+2. **Readers of the profile data:** `git grep -n "nameByLocale\|defaultProfileName\|DEFAULT_DEVICE_PROFILES"`
+   prints `packages/layouts/src/device-profile.ts`, its test, `packages/layouts/src/index.ts:35-36`,
+   `packages/provisioning/src/venue-plan.ts:3-4`, `:175-176`, and `apps/server/src/payments-api.test.ts:37`,
+   `:1377-1381` (a fixture insert that needs only a unique name).
+3. **Readers of the station's word:** production code finds the station by `'Cocina'` only in the
+   demo (`apps/server/scripts/demo-seed/seed-catalogue.ts:46-53`); `dev-setup.ts:293` already finds it
+   by `isDefault`.
+4. **`@waitron/layouts`'s dependencies** are `db`, `identity`, `printing`, `shared`, `ui-core`;
+   `@waitron/provisioning` already depends on `@waitron/country-packs` and `@waitron/layouts`.
+
+**Driver ruling: both files' words go in ONE file, `packages/provisioning/src/starter-content.ts`,
+not a second one in `@waitron/layouts`.** Decision 1 puts the file in "the package whose seed writes
+the words", and the written rule says "the writing package's `src/starter-content.ts`"
+(`docs/developers/conventions-data.md:108-109`). Provisioning writes both: the station in
+`applyVenue`'s create-location step (`venue-apply.ts:302-310`) and the profiles through
+`seedDeviceProfiles` (`venue-apply.ts:531-563`), from names `planVenue` picks. `@waitron/layouts`
+only holds the profile data, so it keeps the English name and gains no dependency, and the
+`workspace-cycles` question does not arise. Cost if wrong: the profile words sit one package away
+from the profile data.
+
+## Global constraints (slice 2)
+
+Slice 1's global constraints hold, with these differences: Spanish appears only in
+`packages/provisioning/src/starter-content.ts` (and the existing assertions this slice leaves
+unedited); new tests read expected words from that file. **No visible change for a real venue**: the
+existing assertions that pin «Mostrador», «Cocina», «Móvil» and «Cocina» for an `es-ES` venue
+(`packages/provisioning/src/venue-plan.test.ts:79-127`, `:410-416`; `venue-apply.test.ts:61`, `:75-88`,
+`:356`, `:380`) run **unedited**, and are the evidence. No migration, no error code, no receipt or
+fiscal change.
+
+## Changed test checks (slice 2)
+
+| Where | Now | Becomes | Task |
+| --- | --- | --- | --- |
+| `packages/layouts/src/device-profile.test.ts:300-314` ("names every entry in both es and en", "uses the owner-decided Spanish and English names") | each profile's `nameByLocale` holds `es` and `en`, pinned to today's words | one case: the profiles' `name`s are `Counter`, `Kitchen`, `Handheld`; the Spanish words' pin moves to provisioning (the unedited `venue-plan.test.ts:79-127`) | 1 |
+| `packages/layouts/src/device-profile.test.ts:324-340` (`defaultProfileName`) | the subtag lookup and its Spanish fallback | deleted with the function; the fallback's replacement is the staff language, pinned by `@waitron/country-packs`' slice-1 tests and by Task 1's `ca-ES` case | 1 |
+| `apps/server/src/payments-api.test.ts:1381` | `name: nextName(profile.nameByLocale.es!)` | `name: nextName(profile.name)` (fixture data, not an assertion) | 1 |
+| `apps/server/scripts/demo-seed/*.test.ts`, `apps/server/scripts/dev-setup.test.ts` | predicted unchanged: their venues rename or find the station by default | run unedited in Task 2 | 2 |
+
+## Task 1: the station's and profiles' names from `packages/provisioning/src/starter-content.ts`
+
+Files: `packages/provisioning/src/starter-content.ts` (new), `packages/provisioning/src/starter-content.test.ts`
+(new), `venue-plan.ts`, `venue-plan.test.ts`, `venue-apply.ts`, `venue-apply.test.ts`,
+`packages/layouts/src/device-profile.ts`, its test, `packages/layouts/src/index.ts`,
+`apps/server/src/payments-api.test.ts`.
+
+1. Failing tests first:
+   - `starter-content.test.ts`: `Object.keys(STARTER_PROFILE_NAMES)` equals
+     `DEFAULT_DEVICE_PROFILES.map((p) => p.name)` and `Object.keys(STARTER_STATION_NAMES)` equals
+     `[DEFAULT_STATION_NAME]` (every starter has an entry, every entry is a starter; decision 6).
+   - `venue-plan.test.ts`: the create-location action carries `stationName` equal to
+     `STARTER_STATION_NAMES.Kitchen.es` for the fixture's `es-ES` venue and `"Kitchen"` for `en-GB`; a
+     Barcelona venue (`province: "Barcelona"`, receipts `["ca-ES"]`, a receipt language the screens
+     cannot show) gets the profiles' and the station's `es` words, read from the file.
+   - `venue-apply.test.ts`: an `en-GB` venue's default station is `"Kitchen"`.
+   Run `pnpm --filter @waitron/provisioning exec vitest run src/starter-content.test.ts src/venue-plan.test.ts src/venue-apply.test.ts`:
+   expect the new cases to fail (no file, no `stationName`, «Cocina» for `en-GB`).
+2. Code:
+   - `starter-content.ts` exports `STARTER_STATION_NAMES = { Kitchen: { es: "Cocina" } }` and
+     `STARTER_PROFILE_NAMES = { Counter: { es: "Mostrador" }, Kitchen: { es: "Cocina" }, Handheld: { es: "Móvil" } }`,
+     each `as const satisfies StarterTranslations<Exclude<StarterStaffLanguage, "en">>` (one-name rows
+     hold the staff languages only; a new staff language is a type error here).
+   - `DefaultDeviceProfile.nameByLocale` becomes `name: string` (English); `DEFAULT_PROFILE_LANGUAGE`
+     and `defaultProfileName` are deleted, and their export from `packages/layouts/src/index.ts`.
+   - `planVenue` resolves `staffLanguage` once with `resolveInstalledStarterLanguages({ country, area: request.location.province, receiptLocale: locales[0] })`,
+     names each profile `starterName(STARTER_PROFILE_NAMES, profile.name, staffLanguage)`, and adds
+     `stationName: starterName(STARTER_STATION_NAMES, DEFAULT_STATION_NAME, staffLanguage)` to the
+     create-location action (`DEFAULT_STATION_NAME = "Kitchen"`, exported from `venue-plan.ts`).
+     `describeVenueAction`'s line is unchanged (it never named the station; `:414-415` stay unedited).
+   - `applyVenue` writes `action.stationName` where it wrote `"Cocina"`.
+   - `payments-api.test.ts:1381` reads `profile.name`.
+3. Re-run step 1's command, then `pnpm --filter @waitron/layouts exec vitest run src/device-profile.test.ts`
+   and `pnpm --filter @waitron/server exec vitest run src/payments-api.test.ts`; typecheck
+   `@waitron/layouts`, `@waitron/provisioning`, `@waitron/server`.
+4. Control: change `starterName(STARTER_STATION_NAMES, …)` to pass `"en"`; the unedited
+   `venue-apply.test.ts:61` fails with `"Kitchen"` where it expects «Cocina». Restore.
+
+## Task 2: the demo finds the default station by `is_default`; the written rule; the backlog
+
+1. `seed-catalogue.ts:46-53`'s lookup becomes `where location_id = … and is_default = 1 and active = 1`,
+   its error "no default station". Failing test first, in `apps/server/scripts/demo-seed/seed-catalogue.test.ts`:
+   rename the provisioned default station to a word that is not «Cocina» before seeding, and expect
+   the seed to succeed and rename it to "Kitchen" (today it throws `no "Cocina" station found`). Then
+   run `seed-catalogue.test.ts`, `seed.test.ts` and `apps/server/scripts/dev-setup.test.ts` unedited.
+2. `docs/developers/conventions-data.md:108-116`: the sentence names the station and the profiles
+   as done, in `packages/provisioning/src/starter-content.ts`, says a one-name row gets the staff
+   language and a file of one-name rows holds only the staff languages other than English (`es`), and
+   drops the station and the profiles from the "still written from code" list.
+3. `docs/backlog.md`'s A918 entry: slice 2 done in this PR; slices 3 and 4 no longer wait (the owner
+   answered FYI A with 2, the staff language, 2026-10-27).
+4. English-only check of the diff: `git diff -U0 main...HEAD | grep -E '^\+\+\+ |^\+.*(Cocina|Mostrador|Móvil|[áéíóúñ])'`
+   under `LC_ALL=en_US.UTF-8`: hits only in `packages/provisioning/src/starter-content.ts`, plus file
+   headers.
+
+Root guards before `/finish-branch`: the plan's list (below), and
+`pnpm --filter @waitron/provisioning exec vitest run` whole (the package pins its plan and seed reports).
+
+---
+
 # Later slices (task lists written when each is picked up)
 
-**Slice 2 — `feat/a918-2-station-and-profiles`.** The station's word moves into
+**Slice 2 — `feat/a918-2-station-and-profiles`.** (Its task list is above, under "Slice 2"; this paragraph is the plan as first written.) The station's word moves into
 `packages/provisioning/src/starter-content.ts` (`Kitchen` → «Cocina»), the profiles' into
 `packages/layouts/src/starter-content.ts` (`Counter`, `Kitchen`, `Handheld` → «Mostrador», «Cocina»,
 «Móvil», today's words, `device-profile.ts:139-150`); `DEFAULT_DEVICE_PROFILES` keeps only the English
