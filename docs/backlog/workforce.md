@@ -41,8 +41,7 @@ count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`
 own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
 slots it produces. Opening hours' special-day painter draws from the first date's changeover and
 says so when the dates' changeovers differ. Needs a
-decision on how one grid with one time ruler shows dates with different changeovers. Left open by
-A585-4.
+decision on how one grid with one time ruler shows dates with different changeovers.
 
 ## A710. Readable initials in short staffing blocks
 
@@ -63,8 +62,6 @@ decided on 2026-10-16. No new zoom or scrolling design is agreed.
   heading row; the style of the "which weeks it edits" line (`.covers`).
 - The special-day painter takes its list of dates, and the dates in its heading, from the read's
   first area, as no top-level list exists in `SpecialDayStaffing`.
-
-Left open by A585-4.
 
 ## Pay-period changes after closure
 
@@ -125,7 +122,7 @@ venue-service can ask contributing modules for that count, or deliberately keep 
 
 ## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
-**A763 point 9 (owner, 2026-10-16).** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. The owner's point, as written:
+**Owner, 2026-10-16.** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. The owner's point, as written:
 
 > **Staffing month: the Monday "Rota for this week" link goes**
 > ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
@@ -140,7 +137,7 @@ venue-service can ask contributing modules for that count, or deliberately keep 
 `packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside
 `add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
 and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
-both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the season tints are
+both staffing painters use, copies `hours-view.ts`'s (the season tints are
 already shared through `@waitron/venue-service/dashboard/season-tint`). The same file's
 `dateAroundDay` repeats `hours-view.ts`'s, taking a formatter where that one takes format options,
 because venue-service's `exports` map does not include `hours-view.ts` (A775). A763 added more
@@ -245,14 +242,14 @@ due), then build it.
 A module view draws
 only once the page's own model loads (`render` in
 `packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
-Staffing view sees the switch and the Opening hours error instead (A585-3). Next: decide whether a
+Staffing view sees the switch and the Opening hours error instead. Next: decide whether a
 module view draws without that model.
 
 ## A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day
 
 `readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
 and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
-(A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
+(`locations` is already read once). Next: hand the plan's holiday facts to the
 second read.
 
 ## A702. Opening hours' season chip is clipped on a season name that is one long word
@@ -262,7 +259,7 @@ Next: wrap the chip's text with `overflow-wrap: anywhere` (`packages/venue-servi
 ## At 390 px the staff role dialog's open colour panel covers its own Colour field
 
 Picking a colour still works. See `positionPopup` in
-`packages/ui/src/components/wt-colour-chooser.ts`. Left open by A783.
+`packages/ui/src/components/wt-colour-chooser.ts`.
 
 ## A colour chooser left open while its window narrows may hide the chosen colour
 
@@ -271,16 +268,15 @@ the code by A783's finish-branch re-read on 2026-10-18, not measured: open on th
 wide window short enough that two columns would scroll but four do not, then narrow it until two
 columns are needed; the resize re-places the panel at the same scroll position and nothing scrolls
 the chosen tile into view (`positionPopup` in `packages/ui/src/components/wt-colour-chooser.ts`).
-Next: try it, and if it shows, keep the focused tile in view after the columns change. Left open
-by A783.
+Next: try it, and if it shows, keep the focused tile in view after the columns change.
 
 ## A644. Staffing slots stop at minute 1440 on a business day longer than a day
 
 When the
 changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
 hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
-block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
-review). Next: decide whether a block may run to the day's real end.
+block can ask for anyone in the last hour, while `placeShift` can place a shift there. Next: decide
+whether a block may run to the day's real end.
 
 ## A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to
 
@@ -331,7 +327,7 @@ For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "w
 
 ## A587. Availability and personal preferences
 
-**A587. Availability and personal preferences** — "can't work Wednesdays"; "Anna only works
+"can't work Wednesdays"; "Anna only works
 mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broken rule does, in
 words that say it is the person's preference, not their contract. The `availability` table
 exists unused. Shown in A585's picker and warnings. After A586.
