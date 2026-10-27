@@ -1,6 +1,17 @@
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { Hono } from "hono";
@@ -8,7 +19,11 @@ import * as entry from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import {
+  readStartAgainChoices,
+  readStartAgainNote,
+  START_AGAIN_FLOOR_MARGIN_MS,
   START_AGAIN_MARKER_FILE,
+  START_AGAIN_SET_ASIDE_DIR,
   startAgainMarkerFor,
   writeStartAgainMarker,
 } from "@waitron/provisioning";
@@ -18,6 +33,11 @@ import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { serveRecovery } from "./recovery-listener.js";
+import {
+  START_AGAIN_ADMIN_PASSWORD,
+  startAgainAttempt,
+} from "@waitron/provisioning/testing/start-again-attempt";
+import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
 import { escapeHtml, OPERATOR_TEXT } from "./recovery-surface.js";
@@ -627,3 +647,311 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
     fields: { errorCode: "setup.start_again_incomplete", reason: "unlisted file: venue/venue.db" },
   });
 });
+
+/** A real interrupted attempt with a venue.db written after its marker, and healthy TLS. */
+async function foundFilesBox(note?: { floorMs: number; lastName: string; module: string }) {
+  const base = await mkdtemp(join(tmpdir(), "found-files-start-"));
+  dirs.push(base);
+  const attempt = await startAgainAttempt(base, note === undefined ? {} : { note });
+  const { stateDir, venueDir } = attempt.roots;
+  await mkdir(join(stateDir, "tls"), { recursive: true });
+  for (const [name, value] of Object.entries({
+    "ca.crt": material.caCertPem,
+    "ca.key": material.caKeyPem,
+    "server.crt": material.serverCertPem,
+    "server.key": material.serverKeyPem,
+  }))
+    await writeFile(join(stateDir, "tls", name), value);
+  await writeFile(join(venueDir, "venue.db"), "found database");
+  return { stateDir, venueDir, attempt };
+}
+
+function postFormOverHttps(
+  port: number,
+  path: string,
+  form: Record<string, string>,
+  language = "en-GB",
+) {
+  const body = new URLSearchParams(form).toString();
+  return new Promise<{ status: number; body: string; headers: IncomingHttpHeaders }>(
+    (resolve, reject) => {
+      const req = httpsRequest(
+        {
+          hostname: "127.0.0.1",
+          servername: "waitron.local",
+          port,
+          path,
+          method: "POST",
+          ca: material.caCertPem,
+          headers: {
+            "Accept-Language": language,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": Buffer.byteLength(body),
+          },
+          timeout: 5000,
+        },
+        (res) => {
+          let text = "";
+          res.on("data", (chunk: Buffer) => {
+            text += chunk.toString();
+          });
+          res.on("end", () =>
+            resolve({ status: res.statusCode!, body: text, headers: res.headers }),
+          );
+        },
+      );
+      req.on("error", reject);
+      req.on("timeout", () => req.destroy(new Error("HTTPS test deadline")));
+      req.end(body);
+    },
+  );
+}
+
+it.each(MODES)(
+  "the %s entry passes the survey and its Retry restart as onFinished",
+  async (mode) => {
+    const f = await foundFilesBox();
+    const started = await startIn(mode, f);
+    const page = (await overHttps(started.port, "/", "en-GB")).body;
+    expect(page).toContain("<li>venue/venue.db</li>");
+    const listed = /name="listed" value="([0-9a-f]{64})"/.exec(page)?.[1];
+    expect(listed).toBeDefined();
+    expect(started.restart).not.toHaveBeenCalled();
+    const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "move",
+      listed: listed!,
+    });
+    expect(answer.status).toBe(200);
+    const [movedLead] = START_AGAIN_PAGE_TEXT["en-GB"].moved("\0").split("\0");
+    expect(answer.body).toContain(`${escapeHtml(movedLead!)}state/first-setup-set-aside/`);
+    await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
+    if (mode === "supervised") expect(started.restart).toHaveBeenCalledWith(0);
+    await gone(join(f.venueDir, "venue.db"));
+    expect(started.startServer).not.toHaveBeenCalled();
+  },
+);
+
+const FOUND_FILES = "setup.start_again_files_found" as const;
+const KEPT = "setup.start_again_kept" as const;
+const CHOICE_FORM = 'action="/recovery-api/start-again"';
+const titleOf = (code: typeof FOUND_FILES | typeof KEPT, locale: "en-GB" | "es-ES") =>
+  escapeHtml(OPERATOR_TEXT[code]![locale].title);
+
+/** The digest the page's form carries for the files it lists. */
+async function listedOn(port: number) {
+  const listed = /name="listed" value="([0-9a-f]{64})"/.exec(
+    (await overHttps(port, "/", "en-GB")).body,
+  )?.[1];
+  expect(listed).toBeDefined();
+  return listed!;
+}
+
+/** Every file under `base`, by path relative to it, with its bytes. */
+async function filesUnder(base: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const entry of await readdir(base, { recursive: true, withFileTypes: true }))
+    if (entry.isFile()) {
+      const path = join(entry.parentPath, entry.name);
+      out[path.slice(base.length + 1)] = (await readFile(path)).toString("base64");
+    }
+  return out;
+}
+
+const baseOf = (f: { stateDir: string }) => join(f.stateDir, "..");
+
+it.each(MODES)(
+  "the owner's example: the page lists venue/venue.db and asks for the administrator password, in English and Spanish (%s)",
+  async (mode) => {
+    const f = await foundFilesBox();
+    const started = await startIn(mode, f);
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const page = await overHttps(started.port, "/", locale);
+      expect(page.status).toBe(200);
+      expect(page.body).toContain(titleOf(FOUND_FILES, locale));
+      expect(page.body).toContain(escapeHtml(OPERATOR_TEXT[FOUND_FILES]![locale].action));
+      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].filesFound));
+      expect(page.body).toContain("<li>venue/venue.db</li>");
+      expect(page.body).toContain(CHOICE_FORM);
+      expect(page.body).toContain(`${escapeHtml(START_AGAIN_PAGE_TEXT[locale].password)} *`);
+      expect(page.body).toContain('type="password"');
+      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].keepTitle));
+      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].moveTitle));
+    }
+    expect(JSON.parse((await overHttps(started.port, "/recovery-api/status")).body)).toMatchObject({
+      level: "recovery",
+      lastErrorCode: FOUND_FILES,
+    });
+    expect(started.startServer).not.toHaveBeenCalled();
+    expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
+  },
+);
+
+it.each(MODES)(
+  "Keep: the kept page, the record on disk, and the next start serves the kept page with no form (%s)",
+  async (mode) => {
+    const f = await foundFilesBox();
+    const started = await startIn(mode, f);
+    const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "keep",
+      listed: await listedOn(started.port),
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.body).toContain(titleOf(KEPT, "en-GB"));
+    expect(answer.body).not.toContain(CHOICE_FORM);
+    const later = (await overHttps(started.port, "/", "en-GB")).body;
+    expect(later).toContain(titleOf(KEPT, "en-GB"));
+    expect(later).not.toContain(CHOICE_FORM);
+
+    const records = await readStartAgainChoices(f.stateDir, f.attempt);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      choice: "keep",
+      attemptId: f.attempt.attemptId.toLowerCase(),
+      frozenDigest: f.attempt.frozenDigest,
+      setAside: null,
+      noteFloorMs: null,
+    });
+    expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
+    expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
+    expect(started.restart).not.toHaveBeenCalled();
+
+    const next = await startIn(mode, f);
+    expect(next.startServer).not.toHaveBeenCalled();
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const page = (await overHttps(next.port, "/", locale)).body;
+      expect(page).toContain(titleOf(KEPT, locale));
+      expect(page).toContain(escapeHtml(OPERATOR_TEXT[KEPT]![locale].action));
+      expect(page).not.toContain(titleOf(FOUND_FILES, locale));
+      expect(page).not.toContain(CHOICE_FORM);
+      expect(page).not.toContain('type="password"');
+    }
+    expect(JSON.parse((await overHttps(next.port, "/recovery-api/status")).body)).toMatchObject({
+      lastErrorCode: KEPT,
+    });
+  },
+);
+
+it.each(MODES)(
+  "Move: the answer, one restart, the next start serves setup, venue.db is at state/first-setup-set-aside/<stem>/venue/venue.db with its original bytes, and the note's floor is raised (%s)",
+  async (mode) => {
+    const note = { floorMs: 60_000, lastName: "S000001-W1-A", module: "probe" };
+    const f = await foundFilesBox(note);
+    // Hours ahead of the clock, on the hour, so a floor taken from the clock cannot match.
+    const hourMs = 3_600_000;
+    const fileMs = Math.ceil(Date.now() / hourMs) * hourMs + 5 * hourMs;
+    await utimes(join(f.venueDir, "venue.db"), fileMs / 1000, fileMs / 1000);
+    const floorMs = fileMs + Math.ceil(START_AGAIN_FLOOR_MARGIN_MS / 60_000) * 60_000;
+    expect(floorMs).toBeGreaterThan(note.floorMs);
+    const started = await startIn(mode, f);
+    const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "move",
+      listed: await listedOn(started.port),
+    });
+    expect(answer.status).toBe(200);
+
+    const records = await readStartAgainChoices(f.stateDir, f.attempt);
+    expect(records).toHaveLength(1);
+    const record = records[0]!;
+    const stem = `${Date.parse(record.at)}-${f.attempt.attemptId.toLowerCase()}`;
+    expect(record).toMatchObject({
+      choice: "move",
+      setAside: {
+        state: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/state`,
+        venue: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/venue`,
+      },
+      noteFloorMs: floorMs,
+    });
+    expect(answer.body).toContain(
+      escapeHtml(
+        START_AGAIN_PAGE_TEXT["en-GB"].moved(`state/${START_AGAIN_SET_ASIDE_DIR}/${stem}`),
+      ),
+    );
+    await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
+    if (mode === "supervised") expect(started.restart).toHaveBeenCalledWith(0);
+
+    await gone(join(f.venueDir, "venue.db"));
+    expect(
+      await readFile(
+        join(f.stateDir, START_AGAIN_SET_ASIDE_DIR, stem, "venue", "venue.db"),
+        "utf8",
+      ),
+    ).toBe("found database");
+    expect(await readStartAgainNote(f.stateDir)).toEqual({ version: 1, ...note, floorMs });
+    await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
+    expect(started.startServer).not.toHaveBeenCalled();
+
+    const next = await startIn(mode, f);
+    expect(next.startServer).toHaveBeenCalledOnce();
+    expect(next.restart).not.toHaveBeenCalled();
+    expect(started.restart).toHaveBeenCalledOnce();
+    expect(
+      await readFile(
+        join(f.stateDir, START_AGAIN_SET_ASIDE_DIR, stem, "venue", "venue.db"),
+        "utf8",
+      ),
+    ).toBe("found database");
+  },
+);
+
+it.each(MODES)(
+  "a page opened before a file changed cannot act: change venue.db's bytes, POST the old digest, get filesChanged, and every file is unchanged (%s)",
+  async (mode) => {
+    const f = await foundFilesBox();
+    const started = await startIn(mode, f);
+    const listed = await listedOn(started.port);
+    await writeFile(join(f.venueDir, "venue.db"), "a different found database");
+    const before = await filesUnder(baseOf(f));
+    for (const choice of ["keep", "move"]) {
+      const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
+        password: START_AGAIN_ADMIN_PASSWORD,
+        choice,
+        listed,
+      });
+      expect(answer.status).toBe(409);
+      expect(answer.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].filesChanged));
+    }
+    expect(await filesUnder(baseOf(f))).toEqual(before);
+    expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("a different found database");
+    expect(started.restart).not.toHaveBeenCalled();
+  },
+);
+
+it.each(MODES)(
+  "six wrong passwords, Retry, a new start: the seventh try still waits (%s)",
+  async (mode) => {
+    const f = await foundFilesBox();
+    const started = await startIn(mode, f);
+    const listed = await listedOn(started.port);
+    for (let n = 0; n < 6; n++) {
+      const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
+        password: "not-the-administrator-password",
+        choice: "move",
+        listed,
+      });
+      expect(answer.status).toBe(403);
+      expect(answer.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].wrongPassword));
+    }
+    const retry = await overHttps(started.port, "/recovery-api/retry", "en-GB", "POST");
+    expect(retry).toEqual({ status: 200, body: JSON.stringify({ ok: true }) });
+    await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
+
+    const next = await startIn(mode, f);
+    expect(await listedOn(next.port)).toBe(listed);
+    const seventh = await postFormOverHttps(next.port, "/recovery-api/start-again", {
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "move",
+      listed,
+    });
+    expect(seventh.status).toBe(429);
+    const retryAfter = Number(seventh.headers["retry-after"]);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
+    expect(seventh.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].throttled(1)));
+    expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
+    expect(await readStartAgainChoices(f.stateDir, f.attempt)).toEqual([]);
+    expect(next.restart).not.toHaveBeenCalled();
+  },
+);

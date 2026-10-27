@@ -17,6 +17,14 @@ const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
 
 export async function readDurableHostJson(path: string, limit: number): Promise<unknown> {
+  return (await readDurableHostJsonWithBytes(path, limit))?.value ?? null;
+}
+
+/** The parsed value together with the exact bytes it was parsed from, read once. */
+export async function readDurableHostJsonWithBytes(
+  path: string,
+  limit: number,
+): Promise<{ value: object; bytes: Buffer } | null> {
   let handle: fs.FileHandle;
   try {
     const parent = await fs.lstat(dirname(path));
@@ -33,7 +41,7 @@ export async function readDurableHostJson(path: string, limit: number): Promise<
     if (bytes.length > limit) throw invalid();
     const value: unknown = JSON.parse(bytes.toString("utf8"));
     if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid();
-    return value;
+    return { value, bytes };
   } catch {
     throw invalid();
   } finally {

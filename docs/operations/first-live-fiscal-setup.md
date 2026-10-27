@@ -88,9 +88,13 @@ attempt and keeps one small note of the last invoice series name the attempt cho
 (`first-setup-start-again.json` in the state folder); from then on the box issues no production
 series name at or before that note. Nothing deletes the note except `sudo bash waitron.sh reset
 --all`. If a Start again is cut off, for example by a power cut, the next start finishes it, or
-refuses with a page that says what to do. If the attempt's recovery-key record is damaged, ticking
-the confirmation and pressing **Start again** asks for the administrator password you chose during
-setup, then shows the confirmation again with "This setup's recovery-key record is damaged and
+refuses with a page that says what to do. If that page lists files Start again did not create,
+such as a venue copied from a backup, it offers **Keep everything and stop** or **Move these files
+aside and finish Start again**, behind the administrator password you chose during setup. A Move
+raises the note, if it is lower, to the first whole minute at least 150 seconds after the newest
+time on the moved files. If the
+attempt's recovery-key record is damaged, ticking the confirmation and pressing **Start again**
+asks for the administrator password you chose during setup, then shows the confirmation again with "This setup's recovery-key record is damaged and
 cannot be read." above it; you can still choose **Cancel**.
 
 When the venue database is missing, the box cannot check whether the attempt filed anything to

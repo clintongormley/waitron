@@ -495,8 +495,113 @@ can only press Start again again. Run by A1042's U7d review with the restored da
 undeletable (`chflags uchg`), through the real route and the next start: each press restarted the
 box once, each start restarted it zero times, and nothing kept was deleted.
 
-Follow-up: A1098 covers files the box did not create (the choice to keep them or move them aside).
-A file the box created, such as this restored database, stays a manual loop.
+A1098 built, for a Start again a cut stopped whose next start finds files the box did not create,
+a choice on the recovery page, behind the administrator password: keep everything and stop, or
+move the found files aside into `first-setup-set-aside/` and finish Start again
+(`apps/server/src/recovery-start-again.ts`). A file the box created that cannot be deleted, such
+as this restored database, is not a found file, so it stays a manual loop.
+
+## A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation
+
+Left open by A1098 (owner question Q2, built with option A, the most cautious). When the found
+files include, at any depth, a symbolic link or special file, a lock file (`venue.lock`,
+`venue.lock-journal`, `venue.holder.json`, `migrations.lock`, `recovery.lock`), or more than
+20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses `setup.start_again_incomplete`
+for a reason other than found files, the box shows A1042's `setup.start_again_incomplete` page:
+the explanation and what reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
+`packages/provisioning/src/first-setup-start-again-leftovers.ts`). The same page is shown when
+the start-again note (`<state>/first-setup-start-again.json`) cannot be read: the survey reads it
+to work out the Move's floor, and a note it cannot read makes it explain (the case run held bytes
+that are not JSON). In every one of these cases `classifyStartAgainRefusal` hands back the
+finisher's own refusal, so the survey's reason for explaining is dropped and the start's
+`recovery.serving_refused_start` log line carries the finisher's reason instead (in the run,
+`unlisted file: venue/venue.db` where the survey's was `setup.attempt_invalid`). A finisher refusal with any
+other code is not one of the start's refusals, so that start carries on past it instead
+(`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
+for these boxes, is still open to the owner.
+
+## A1143: files a Move set aside have no way back in the app
+
+Left open by A1098. A Move puts the found files under `<state>/first-setup-set-aside/<stem>/` (or
+the venue folder's own `first-setup-set-aside/` when the two folders are on different
+filesystems). If they were a venue worth keeping, the app offers no way to put them back: **Recover from backup** takes only a backup file, a bucket copy or
+a Waitron Cloud copy (`apps/server/src/guide/en/backup-recovery.md`, "Choose your copy").
+
+## A1144: after Keep, the box stays on its page even if the files are later removed by hand
+
+Left open by A1098. A recorded Keep refuses every later start with `setup.start_again_kept`
+before A1042's finisher runs (`assertStartAgainNotKept`,
+`packages/provisioning/src/first-setup-start-again-choice.ts`, called from `refusedAtStart` in
+`apps/server/src/first-setup-entry.ts`), so removing the found files by hand does not let the box
+finish Start again. The page says it stays until Waitron is reinstalled. Wanted: a way out that
+does not need a reinstall, decided with the owner.
+
+## A1145: a Move on a box with no start-again note raises no series-name floor
+
+Left open by A1098 (owner question Q3, built with option A). A Move raises the start-again note's
+floor to the newest moved file's time plus 150 seconds, rounded up to the minute, through
+`raiseStartAgainNote`, which keeps the note's `lastName`. When the box has no note (no attempt on
+it ever chose a series name), there is no `lastName` to keep and nothing is raised
+(`raiseNoteToRecord`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). A moved
+venue whose names were chosen by a clock running ahead could then share a name with a later setup
+on this box. On such a box the survey's `noteFloorMs` is null, so the Move option names no floor
+either. A1099's "name unknown" note would let the Move raise a floor here too.
+
+## A1146: a found piece on another mount below a root fails after the choice is recorded
+
+Left open by A1098 (plan decision D4). Before recording a Move, the box tests a rename from each
+of the state and venue folders into the set-aside folder. A found piece below one of them that
+sits on yet another mount is found only when its own rename fails (`EXDEV`), after the record is
+written. The choice then answers 409 with the `setup.start_again_move_unfinished` page, which says
+some files may already be in the set-aside folder (run with a failed second rename in
+`packages/provisioning/src/first-setup-start-again-choose.test.ts` and the 409 case in
+`apps/server/src/recovery-surface.test.ts`). Every later start tries the Move again, fails the same
+way, and shows that page until the mount is changed (`refusedAtStart`,
+`apps/server/src/first-setup-entry.ts`; read, not run with `EXDEV`).
+
+## A1147: Start again's finisher removes an empty folder the box did not create
+
+Predates A1098: from A1042 (#2101, `e2a957138`, `git blame`). An empty folder made after the
+marker where the attempt's own folder of that name would be (for example
+`first-fiscal-documents/`) is no finding, because an empty unlisted folder holds nothing to list,
+and the finisher lists it for removal and removes it by `rmdir`
+(`packages/provisioning/src/first-setup-start-again-deletion.ts:290-291`, removal at
+`deleteMarkedAttempt`). Run by the A1098 plan's probe ("Current behaviour", `12a`). Nothing in it
+is lost, but it is a removal of something the box did not create.
+
+## A1148: a stray `venue.db-journal` beside an unchanged marked `venue.db` stays beside the next setup's database
+
+Predates A1098: from A1042 (#2101, `e2a957138`, `git blame`). The finisher's side files are the
+`-wal` and `-shm` files only (`SIDE_FILES`,
+`packages/provisioning/src/first-setup-start-again-deletion.ts:35`), so a `venue.db-journal`
+written beside a marked, unchanged `venue.db` is neither a finding nor deleted: the finisher
+deletes `venue.db` and leaves the journal, which then sits beside the next setup's database. Run
+by the A1098 plan's probe ("Current behaviour", `12b`).
+
+## A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw after a recorded choice answers a bare 500
+
+Left open by A1098. Both recovery-page routes, `POST /recovery-api/retry` and `POST
+/recovery-api/start-again`, start the restart with `void` once the answer is written
+(`apps/server/src/recovery-surface.ts`, `apps/server/src/recovery-start-again.ts`), so a restart
+that rejects is an unhandled rejection, which exits the process (Node 26, a rejection in a
+`finish` listener, run by the A1098 Task 8a review). Separately, the Start again route draws its
+answer after the choice is recorded and outside its error handling, so a throw while drawing
+answers Hono's bare 500 (`apps/server/src/recovery-start-again.test.ts`, "a page that fails to
+draw after a recorded Move is not answered as unfinished, and still restarts once"); the recovery
+app sets no error handler. Wanted: both routes log a failed restart and keep serving the page, and
+the draw failure answers a page that says the choice was recorded.
+
+## A1153: the recovery page's Retry restarts nothing if the browser disconnects before the answer arrives
+
+Left open by A1098 (owner, 2026-10-27: file it, give it the Move's fix). `POST
+/recovery-api/retry` asks for its restart only on the answer's `'finish'` event
+(`apps/server/src/recovery-surface.ts`, unchanged since 2026-09-09 per `git blame`). A browser that
+drops the connection first closes the response without `'finish'`, so the box would stay on the page
+without restarting. The Move had the same shape and was fixed in #2131 by `afterResponse` in
+`apps/server/src/recovery-start-again.ts`: restart once on whichever comes first of the answer
+finishing, the connection closing, or a connection already over. For the Retry this was read, not
+run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
+once-only restart, with a test that closes the connection before the answer is written.
 
 ## A1130: a renewal from the open recovery page extends the backup-recovery session's 15 minutes
 

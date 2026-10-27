@@ -195,6 +195,44 @@ export {
   writeStartAgainMarker,
   type StartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
+export { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+export {
+  START_AGAIN_CHOICES_DIR,
+  assertStartAgainNotKept,
+  startAgainChoiceStem,
+  readStartAgainChoices,
+  writeStartAgainChoice,
+  type StartAgainChoiceRecord,
+} from "./first-setup-start-again-choice.js";
+export { chooseStartAgainLeftovers, rootRelativePath } from "./first-setup-start-again-choose.js";
+export { errnoOf } from "./errno.js";
+export {
+  START_AGAIN_FORGIVE_MS,
+  START_AGAIN_FREE_GUESSES,
+  START_AGAIN_GUESSES_FILE,
+  START_AGAIN_MAX_WAIT_MS,
+  beginStartAgainGuess,
+  startAgainWaitMs,
+} from "./first-setup-start-again-guesses.js";
+export {
+  START_AGAIN_ENTRY_LIMIT,
+  START_AGAIN_FLOOR_MARGIN_MS,
+  classifyStartAgainRefusal,
+  startAgainSetAsideFloorMs,
+  surveyStartAgainLeftovers,
+  type StartAgainEntry,
+  type StartAgainSurvey,
+  type StartAgainUnit,
+} from "./first-setup-start-again-leftovers.js";
+export {
+  moveStartAgainUnits,
+  prepareSetAside,
+  recordedStartAgainMove,
+  resumeStartAgainSetAside,
+  setAsideDestinations,
+  setAsideFolderPaths,
+  type SetAsideIo,
+} from "./first-setup-start-again-set-aside.js";
 export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, realpath, rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import * as provision from "./index.js";
 import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
 import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
+import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -959,3 +960,35 @@ it.each([false, true])(
     expect((await f.store.inspect(laterId)) === first).toBe(abandon);
   },
 );
+it("a set-aside folder is not one of the box's originals", async () => {
+  const f = await fixture();
+  const folders = [
+    join(f.anchor.stateDir, START_AGAIN_SET_ASIDE_DIR, "1761472800000-attempt", "state"),
+    join(f.anchor.venueDir, START_AGAIN_SET_ASIDE_DIR, "1761472800000-attempt"),
+  ];
+  for (const folder of folders) {
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "node.db"), "moved bytes");
+  }
+  const before = await f.store.inspect(recoveryId);
+  for (const folder of folders) {
+    await writeFile(join(folder, "node.db"), "rewritten moved bytes");
+    await writeFile(join(folder, "venue.db"), "another moved file");
+  }
+  expect(await f.store.inspect(recoveryId)).toBe(before);
+  await writeFile(join(f.anchor.stateDir, "beside-set-aside.bin"), "a file the box holds");
+  expect(await f.store.inspect(recoveryId)).not.toBe(before);
+});
+it("an unreadable file in the set-aside folder does not stop inspect", async () => {
+  const f = await fixture();
+  const folder = join(f.anchor.stateDir, START_AGAIN_SET_ASIDE_DIR, "1761472800000-attempt");
+  await mkdir(folder, { recursive: true });
+  const unreadable = join(folder, "node.db");
+  await writeFile(unreadable, "moved bytes the box cannot read");
+  await chmod(unreadable, 0o000);
+  try {
+    await expect(f.store.inspect(recoveryId)).resolves.toMatch(/^[a-f0-9]{64}$/);
+  } finally {
+    await chmod(unreadable, 0o600);
+  }
+});

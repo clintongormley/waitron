@@ -345,11 +345,11 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the start-again note
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate, the start-again note and records, and the files a Move set aside
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
-Both forms wipe every volume in the table above. Plain `reset` keeps three things inside the box's
+Both forms wipe every volume in the table above. Plain `reset` keeps five things inside the box's
 `state` volume:
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
@@ -363,8 +363,11 @@ Both forms wipe every volume in the table above. Plain `reset` keeps three thing
 - `first-setup-start-again-confirmations/`, one small record for each Start again that someone
   confirmed while the venue database was missing, or that discarded a stopped backup recovery: who
   confirmed, when, and what the repair page showed them.
+- `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
+  at Start again.
+- `first-setup-set-aside/`, the files a Move set aside rather than deleted.
 
-`reset --all` removes the whole `state` volume, those three included, so the box mints a brand-new
+`reset --all` removes the whole `state` volume, those five included, so the box mints a brand-new
 certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:
 take it through the trust step, then reopen the dashboard or till. Neither form touches `.env`, so if
 a branch install pinned an image there, the box comes back on that same image. Only the data in the
@@ -409,7 +412,7 @@ It is the way to put a branch on a test box whose database that branch cannot us
 
 ```bash
 sudo bash waitron.sh --reset install <branch-or-ref>
-sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate and the start-again note
+sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate, the start-again note and records, and the files a Move set aside
 ```
 
 The full form is `waitron.sh --reset [--all] [--yes] [--force-production] install [ref]`. The script

@@ -1,7 +1,8 @@
 /**
- * Only the allowed files name the start-again note or its confirmation folder, so nothing else in
- * the product can delete or lower the note (owner, A1042 Q3: only `waitron.sh reset --all` removes
- * it).
+ * Only the allowed files name the start-again note, its confirmation folder, the Keep-or-Move
+ * choice records folder or the set-aside folder, so nothing else in the product can delete them or
+ * lower the note (owner, A1042 Q3: only `waitron.sh reset --all` removes the note; A1098 gives the
+ * choice records and the set-aside folder the same lifetime).
  *
  * Weaker than its name: it reads TEXT in the `.ts`, `.mjs` and `.sh` files `git ls-files` lists,
  * skipping test files, so a path built from pieces escapes it; it never checks what an allowed
@@ -19,14 +20,27 @@ const GIT_SPAWN_TIMEOUT_MS = 30_000;
 
 const ALLOWED = [
   "deploy/waitron.sh",
+  "packages/provisioning/src/first-setup-backup-workspace.ts",
+  "packages/provisioning/src/first-setup-start-again-choice.ts",
   "packages/provisioning/src/first-setup-start-again-confirmation.ts",
+  "packages/provisioning/src/first-setup-start-again-names.ts",
   "packages/provisioning/src/first-setup-start-again-note.ts",
+  "packages/provisioning/src/first-setup-start-again-set-aside.ts",
   "packages/provisioning/src/first-setup-state.ts",
   "packages/provisioning/src/index.ts",
 ];
 
-const NAMES =
-  /first-setup-start-again\.json|\bSTART_AGAIN_NOTE_FILE\b|first-setup-start-again-confirmations/;
+const NAMES = new RegExp(
+  [
+    String.raw`first-setup-start-again\.json`,
+    String.raw`\bSTART_AGAIN_NOTE_FILE\b`,
+    "first-setup-start-again-confirmations",
+    "first-setup-start-again-choices",
+    String.raw`\bSTART_AGAIN_CHOICES_DIR\b`,
+    "first-setup-set-aside",
+    String.raw`\bSTART_AGAIN_SET_ASIDE_DIR\b`,
+  ].join("|"),
+);
 
 // Git exports `GIT_DIR` to every hook, and the pre-push hook runs this suite.
 function isolatedGitEnv(): NodeJS.ProcessEnv {
@@ -66,7 +80,7 @@ function trackedSourceFiles(): string[] {
     });
 }
 
-test("only the allowed files name the start-again note or its confirmations", () => {
+test("only the allowed files name the start-again note, its confirmations, the choice records or the set-aside folder", () => {
   const naming = trackedSourceFiles()
     .filter((file) => NAMES.test(readFileSync(join(ROOT, file), "utf8")))
     .sort();

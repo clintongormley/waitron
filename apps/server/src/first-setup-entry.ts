@@ -8,11 +8,17 @@ import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   assertNoLegacyFirstSetupWorkspace,
+  assertStartAgainNotKept,
   canonicalFirstSetupDirectory,
+  classifyStartAgainRefusal,
   createFirstSetupBackupWorkspace,
   emptyAbandonedBackupRecovery,
   finishStartAgainDeletion,
   isEmptiedTombstone,
+  recordedStartAgainMove,
+  resumeStartAgainSetAside,
+  rootRelativePath,
+  type StartAgainSurvey,
 } from "@waitron/provisioning";
 import { AppError, sqliteFailureOf } from "@waitron/shared";
 import { errnoOf } from "./errno.js";
@@ -85,10 +91,27 @@ export async function resolveFirstSetupEntry(
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log);
 }
 
-const START_REFUSALS = ["setup.workspace_unsupported", "setup.start_again_incomplete"] as const;
+const START_REFUSALS = [
+  "setup.workspace_unsupported",
+  "setup.start_again_incomplete",
+  "setup.start_again_files_found",
+  "setup.start_again_kept",
+  "setup.start_again_move_unfinished",
+] as const;
+
+type StartRefused = {
+  kind: "refused";
+  code: (typeof START_REFUSALS)[number];
+  roots: FirstSetupRoots;
+  error: AppError;
+  survey?: Extract<StartAgainSurvey, { kind: "choice" }>;
+};
 
 /** Runs before A731's entry, which would otherwise serve its repair page from a half-deleted attempt. */
-async function refusedAtStart(roots: FirstSetupRoots, log: Logger) {
+async function refusedAtStart(
+  roots: FirstSetupRoots,
+  log: Logger,
+): Promise<StartRefused | undefined> {
   let canonical: FirstSetupRoots;
   try {
     canonical = {
@@ -99,16 +122,82 @@ async function refusedAtStart(roots: FirstSetupRoots, log: Logger) {
     return undefined;
   }
   await emptyDiscardedRecovery(canonical, log);
+  const refused = (error: unknown): StartRefused | undefined => {
+    if (!(error instanceof AppError)) return undefined;
+    const code = START_REFUSALS.find((candidate) => candidate === error.code);
+    return code === undefined ? undefined : { kind: "refused", code, roots: canonical, error };
+  };
   try {
     await assertNoLegacyFirstSetupWorkspace(canonical);
+    await assertStartAgainNotKept(canonical);
+  } catch (error) {
+    return refused(error);
+  }
+  try {
+    await resumeStartAgainSetAside(canonical);
+  } catch (error) {
+    // Falling through would let A731's entry open venue.db over a half-moved folder.
+    if ((await recordedStartAgainMove(canonical).catch(() => null)) !== null) {
+      const reason =
+        error instanceof AppError &&
+        error.code === "setup.start_again_incomplete" &&
+        error.reason !== undefined
+          ? error.reason
+          : setAsideFailure(canonical, error);
+      return {
+        kind: "refused",
+        code: "setup.start_again_move_unfinished",
+        roots: canonical,
+        error: new AppError("setup.start_again_move_unfinished", {}, { reason }),
+      };
+    }
+    return (
+      refused(error) ?? {
+        kind: "refused",
+        code: "setup.start_again_incomplete",
+        roots: canonical,
+        error: new AppError(
+          "setup.start_again_incomplete",
+          {},
+          {
+            reason: setAsideFailure(canonical, error),
+          },
+        ),
+      }
+    );
+  }
+  try {
     await finishStartAgainDeletion(canonical);
   } catch (error) {
-    if (!(error instanceof AppError)) return undefined;
-    const refusal = START_REFUSALS.find((candidate) => candidate === error.code);
-    if (refusal !== undefined)
-      return { kind: "refused" as const, code: refusal, roots: canonical, error };
+    if (!(error instanceof AppError) || error.code !== "setup.start_again_incomplete")
+      return refused(error);
+    const classified = await classifyStartAgainRefusal(canonical, error);
+    if (classified.survey === undefined)
+      return {
+        kind: "refused",
+        code: "setup.start_again_incomplete",
+        roots: canonical,
+        error: classified.error,
+      };
+    return {
+      kind: "refused",
+      code: "setup.start_again_files_found",
+      roots: canonical,
+      error: classified.error,
+      survey: classified.survey,
+    };
   }
   return undefined;
+}
+
+/**
+ * D1's `set-aside failed: <errno or Waitron code> <root>/<path>`, the path left out when the error
+ * names none or one outside both roots.
+ */
+function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
+  const code = error instanceof AppError ? error.code : (errnoOf(error) ?? "unknown");
+  const where = rootRelativePath(roots, error);
+  return `set-aside failed: ${code}${where === undefined ? "" : ` ${where}`}`;
 }
 
 /** Finishes a discard a power cut stopped after the abandon; a refusal is logged and the start goes on. */

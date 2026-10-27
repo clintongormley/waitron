@@ -12,7 +12,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { get as httpsGet } from "node:https";
+import { get as httpsGet, request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -44,7 +44,18 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createFirstSetupBackupWorkspace, isEmptiedTombstone } from "@waitron/provisioning";
+import {
+  START_AGAIN_CHOICES_DIR,
+  START_AGAIN_GUESSES_FILE,
+  START_AGAIN_MARKER_FILE,
+  START_AGAIN_SET_ASIDE_DIR,
+  createFirstSetupBackupWorkspace,
+  isEmptiedTombstone,
+} from "@waitron/provisioning";
+import {
+  START_AGAIN_ADMIN_PASSWORD,
+  startAgainAttempt,
+} from "@waitron/provisioning/testing/start-again-attempt";
 import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
@@ -77,6 +88,7 @@ import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
+import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 import { OPERATOR_TEXT, escapeHtml } from "./recovery-surface.js";
 import {
   createStaffNoticeLog,
@@ -173,6 +185,40 @@ function causeCodes(error: unknown): { code?: unknown; errcode?: unknown }[] {
 }
 
 const inodeOf = (path: string) => statSync(path).ino;
+
+function postFormOver(
+  port: number,
+  ca: Buffer,
+  path: string,
+  form: Record<string, string>,
+): Promise<{ status?: number; body: string }> {
+  const body = new URLSearchParams(form).toString();
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        host: "127.0.0.1",
+        port,
+        path,
+        method: "POST",
+        ca,
+        servername: "localhost",
+        headers: {
+          "Accept-Language": "en-GB",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => (text += chunk));
+        res.on("end", () => resolve({ status: res.statusCode, body: text }));
+      },
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
 
 function pageOver(port: number, ca: Buffer): Promise<{ status?: number; body: string }> {
   return new Promise((resolve, reject) => {
@@ -1326,6 +1372,80 @@ describe("a start on a real full disk", () => {
       unwatch();
       small.unfill();
       await store.close();
+    }
+  });
+});
+
+describe("a Start again choice on a real full disk", () => {
+  it("a Move on a full disk: a wrong password is answered as a full disk, nothing is recorded or moved, and the page says the disk is full with its next step", async (ctx) => {
+    const small = needDisk(ctx);
+    const attempt = await startAgainAttempt(realpathSync(small.folder("start-again-move")));
+    const { stateDir, venueDir } = attempt.roots;
+    const found = join(venueDir, "venue.db");
+    writeFileSync(found, "found database");
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
+    const ca = readFileSync(join(stateDir, "tls", "ca.crt"));
+
+    const [port] = await freePorts(1);
+    let served: Awaited<ReturnType<typeof serveRecovery>> | undefined;
+    const d = entryDeps(stateDir, {
+      venueDir,
+      baseEnv: { WAITRON_HTTP_LANDING_PORT: "0", WAITRON_HTTP_PORT: String(port) },
+      serveRecovery: vi.fn(async (app: Hono, opts: RecoveryServeOptions) => {
+        served = await serveRecovery(app, opts);
+        return served;
+      }),
+    });
+    try {
+      await runEntry(d);
+      expect(d.startServer).not.toHaveBeenCalled();
+      const page = await pageOver(port!, ca);
+      expect(page.body).toContain("<li>venue/venue.db</li>");
+      const listed = /name="listed" value="([0-9a-f]{64})"/.exec(page.body)?.[1];
+      expect(listed).toBeDefined();
+
+      const marker = readFileSync(join(venueDir, START_AGAIN_MARKER_FILE));
+      const setup = readFileSync(join(stateDir, "first-setup.json"));
+      const foundInode = inodeOf(found);
+      small.fill();
+      expect(small.free()).toBeLessThan(65_536);
+
+      const diskFull = escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].diskFull);
+      // A wrong password is answered diskFull, not wrongPassword.
+      for (const password of ["not-the-password", START_AGAIN_ADMIN_PASSWORD]) {
+        const answer = await postFormOver(port!, ca, "/recovery-api/start-again", {
+          password,
+          choice: "move",
+          listed: listed!,
+        });
+        expect(answer.status).toBe(409);
+        expect(answer.body).toContain(`<p id="start-again-message">${diskFull}</p>`);
+        expect(answer.body).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].wrongPassword));
+        expect(answer.body).toContain('value="move" required checked');
+      }
+
+      for (const name of [START_AGAIN_CHOICES_DIR, START_AGAIN_SET_ASIDE_DIR])
+        expect(() => statSync(join(stateDir, name))).toThrow(
+          expect.objectContaining({ code: "ENOENT" }),
+        );
+      expect(() => statSync(join(venueDir, START_AGAIN_SET_ASIDE_DIR))).toThrow(
+        expect.objectContaining({ code: "ENOENT" }),
+      );
+      expect(() => statSync(join(stateDir, START_AGAIN_GUESSES_FILE))).toThrow(
+        expect.objectContaining({ code: "ENOENT" }),
+      );
+      expect(readFileSync(found, "utf8")).toBe("found database");
+      expect(inodeOf(found)).toBe(foundInode);
+      expect(readFileSync(join(venueDir, START_AGAIN_MARKER_FILE))).toEqual(marker);
+      expect(readFileSync(join(stateDir, "first-setup.json"))).toEqual(setup);
+      expect(d.exit).not.toHaveBeenCalled();
+    } finally {
+      const server = served;
+      if (server !== undefined) await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 });

@@ -44,8 +44,14 @@ export function barrier() {
   return { promise, resolve };
 }
 
-export async function fixture(readableAttempt = false) {
+export async function fixture(
+  readableAttempt = false,
+  box: {
+    prepareBox?: (roots: { venueDir: string; stateDir: string }) => Promise<void>;
+  } = {},
+) {
   const f = await archiveHost();
+  await box.prepareBox?.(f.roots);
   const host = createFirstSetupModuleHost({
     ...f.roots,
     modules: ALL_MODULES,

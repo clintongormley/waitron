@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import {
@@ -322,6 +322,19 @@ async function sha256(path: string): Promise<StartAgainFingerprint> {
   return { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
+/**
+ * The file's fingerprint, or, for a regular file whose size is not `expected`'s, its size alone:
+ * a restored database there can be gigabytes, and both the start and the leftovers survey run this.
+ */
+async function fingerprintAgainst(
+  path: string,
+  expected: StartAgainFingerprint | null,
+): Promise<StartAgainFingerprint> {
+  const found = await lstat(path);
+  if (found.isFile() && found.size !== expected?.size) return { size: found.size, sha256: "" };
+  return sha256(path);
+}
+
 /** Names every present file of the deletion list with its size and SHA-256. */
 export async function startAgainMarkerFor(
   roots: Roots,
@@ -350,13 +363,26 @@ export async function startAgainMarkerFor(
 }
 
 export async function readStartAgainMarker(venueDir: string): Promise<StartAgainMarker | null> {
-  let value: unknown;
+  return (await readMarkerAndHash(venueDir))?.marker ?? null;
+}
+
+async function readMarkerAndHash(
+  venueDir: string,
+): Promise<{ marker: StartAgainMarker; markerSha256: string } | null> {
+  let read: Awaited<ReturnType<typeof readDurableHostJsonWithBytes>>;
   try {
-    value = await readDurableHostJson(join(venueDir, START_AGAIN_MARKER_FILE), MARKER_LIMIT);
+    read = await readDurableHostJsonWithBytes(
+      join(venueDir, START_AGAIN_MARKER_FILE),
+      MARKER_LIMIT,
+    );
   } catch {
     throw incomplete("marker unreadable");
   }
-  return value === null ? null : parseMarker(value);
+  if (read === null) return null;
+  return {
+    marker: parseMarker(read.value),
+    markerSha256: createHash("sha256").update(read.bytes).digest("hex"),
+  };
 }
 
 export async function assertNoStartAgainDeletion(venueDir: string): Promise<void> {
@@ -484,36 +510,82 @@ export async function deleteMarkedAttempt(
   }
 }
 
+export type StartAgainFinding =
+  | { kind: "refused-artifact"; root: Root; name: string }
+  | { kind: "unlisted"; root: Root; name: string }
+  | { kind: "changed"; root: Root; name: string }
+  | { kind: "wal"; name: (typeof WAL_FILES)[number] };
+
+export function startAgainFindingReason(finding: StartAgainFinding): string {
+  switch (finding.kind) {
+    case "refused-artifact":
+      return `refused artifact present: ${finding.root}/${finding.name}`;
+    case "unlisted":
+      return `unlisted file: ${finding.root}/${finding.name}`;
+    case "changed":
+      return `size or hash differs: ${finding.root}/${finding.name}`;
+    case "wal":
+      return `unexpected -wal: venue/${finding.name}`;
+  }
+}
+
+/**
+ * Every finding the finisher refuses for, in its order, up to the first blocker. Takes no lock;
+ * a damaged or unreadable marker, or folders that differ, throws rather than returning a blocker.
+ */
+export async function collectStartAgainFindings(roots: Roots): Promise<{
+  marker: StartAgainMarker;
+  markerSha256: string;
+  findings: StartAgainFinding[];
+  blocker: AppError | null;
+} | null> {
+  const canonical = await canonicalFirstSetupRoots(roots);
+  const read = await readMarkerAndHash(canonical.venueDir);
+  if (read === null) return null;
+  const { marker, markerSha256 } = read;
+  if (marker.venueDir !== canonical.venueDir || marker.stateDir !== canonical.stateDir)
+    throw incomplete("marker folders differ");
+  const findings: StartAgainFinding[] = [];
+  let blocker: AppError | null = null;
+  try {
+    for (const root of ["state", "venue"] as const)
+      for (const name of REFUSED[root])
+        if (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
+          findings.push({ kind: "refused-artifact", root, name });
+    const recorded = new Map(marker.files.map((entry) => [`${entry.root}:${entry.name}`, entry]));
+    for (const item of await itemsOnDisk(canonical)) {
+      if (item.kind !== "file") continue;
+      const expected = recorded.get(`${item.root}:${item.name}`);
+      if (expected === undefined)
+        findings.push({ kind: "unlisted", root: item.root, name: item.name });
+      else if (!same(expected, await fingerprintAgainst(item.path, expected)))
+        findings.push({ kind: "changed", root: item.root, name: item.name });
+    }
+    for (const name of WAL_FILES) {
+      const path = join(canonical.venueDir, name);
+      if (!(await present(path))) continue;
+      const actual = await fingerprintAgainst(path, marker.wal[name]);
+      if (actual.size !== 0 && !same(marker.wal[name], actual))
+        findings.push({ kind: "wal", name });
+    }
+  } catch (error) {
+    blocker = error instanceof AppError ? error : checkFailed(error);
+  }
+  return { marker, markerSha256, findings, blocker };
+}
+
 /** Run at the start: finishes an interrupted Start again deletion, or refuses and deletes nothing. */
 export async function finishStartAgainDeletion(roots: Roots): Promise<void> {
   const canonical = await canonicalFirstSetupRoots(roots);
   if ((await readStartAgainMarker(canonical.venueDir)) === null) return;
   const hold = await lockVenueDatabase(canonical.venueDir);
   try {
-    const marker = await readStartAgainMarker(canonical.venueDir);
-    if (marker === null) return;
-    if (marker.venueDir !== canonical.venueDir || marker.stateDir !== canonical.stateDir)
-      throw incomplete("marker folders differ");
-    for (const root of ["state", "venue"] as const)
-      for (const name of REFUSED[root])
-        if (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
-          throw incomplete(`refused artifact present: ${root}/${name}`);
-    const recorded = new Map(marker.files.map((entry) => [`${entry.root}:${entry.name}`, entry]));
-    for (const item of await itemsOnDisk(canonical)) {
-      if (item.kind !== "file") continue;
-      const expected = recorded.get(`${item.root}:${item.name}`);
-      if (expected === undefined) throw incomplete(`unlisted file: ${item.root}/${item.name}`);
-      if (!same(expected, await sha256(item.path)))
-        throw incomplete(`size or hash differs: ${item.root}/${item.name}`);
-    }
-    for (const name of WAL_FILES) {
-      const path = join(canonical.venueDir, name);
-      if (!(await present(path))) continue;
-      const actual = await sha256(path);
-      if (actual.size !== 0 && !same(marker.wal[name], actual))
-        throw incomplete(`unexpected -wal: venue/${name}`);
-    }
-    await deleteMarkedAttempt(canonical, marker);
+    const collected = await collectStartAgainFindings(canonical);
+    if (collected === null) return;
+    const first = collected.findings[0];
+    if (first !== undefined) throw incomplete(startAgainFindingReason(first));
+    if (collected.blocker !== null) throw collected.blocker;
+    await deleteMarkedAttempt(canonical, collected.marker);
     await removeAndSync(join(canonical.venueDir, START_AGAIN_MARKER_FILE), "file");
   } catch (error) {
     throw error instanceof AppError ? error : checkFailed(error);

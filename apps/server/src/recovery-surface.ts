@@ -5,11 +5,19 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
+import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
+import type { Statfs } from "./free-bytes.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 import { redactSecrets } from "./redact-secrets.js";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
+import {
+  isSecure,
+  mountStartAgainChoice,
+  renderStartAgainSection,
+  type StartAgainView,
+} from "./recovery-start-again.js";
 
 const MAX_LOG_LINES = 200;
 
@@ -25,6 +33,16 @@ export interface RecoveryDeps {
   /** This start was refused before it began, so `failures` does not count it. */
   refusedAtStart?: true;
   log?: Logger;
+  /** Present when the start found files a cut-off Start again did not create. */
+  startAgain?: {
+    roots: { stateDir: string; venueDir: string };
+    survey: Extract<StartAgainSurvey, { kind: "choice" }>;
+    /** The entry's restart, called once a Move's answer has been written. */
+    onFinished: () => Promise<void>;
+    choose?: typeof chooseStartAgainLeftovers;
+    now?: () => Date;
+    statfs?: Statfs;
+  };
 }
 
 /** The page is served before any authentication exists; see `OPERATOR_TEXT` for what reaches it. */
@@ -242,8 +260,9 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
 /**
  * Every string in this table is fixed and chosen by code. The strings on the page that are not —
- * the error code, `lastFailureAt`, the log tail, the last failed start's detail and the recorded
- * trigger names — are HTML-escaped, in either language, as is the line carrying `level` and
+ * the error code, `lastFailureAt`, the log tail, the last failed start's detail, the recorded
+ * trigger names and, on the Start again page, the found files' paths and the set-aside folder's
+ * name — are HTML-escaped, in either language, as is the line carrying `level` and
  * `failures`.
  *
  * The tail and the detail carry caught errors' own words, stacks and `AppError` params: the
@@ -483,6 +502,42 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
     },
   },
+  "setup.start_again_files_found": {
+    "en-GB": {
+      title: "Start again did not finish, and the box found files it did not expect.",
+      action:
+        "An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+      action:
+        "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado.",
+    },
+  },
+  "setup.start_again_kept": {
+    "en-GB": {
+      title: "Start again did not finish, and everything on this box was kept.",
+      action:
+        "Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo.",
+      action:
+        "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
+    },
+  },
+  "setup.start_again_move_unfinished": {
+    "en-GB": {
+      title: "Start again was moving files aside and has not finished.",
+      action:
+        "Some of the files may already be in the set-aside folder; none has been deleted. Press “Retry a normal boot” to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",
+      action:
+        "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
+    },
+  },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
   [HOLDER_STALLED]: holderStalledText(undefined),
 };
@@ -557,8 +612,10 @@ function renderPage(
   log: LogView,
   locale: SupportedLocale,
   freeBytes: FreeSpaceReading,
+  state: RecoveryState = deps.state,
+  section = "",
+  answer?: string,
 ): string {
-  const { state } = deps;
   const page = PAGE_TEXT[locale];
   const text = operatorText(state)[locale];
   const refused = state.refused === true;
@@ -585,6 +642,15 @@ function renderPage(
 <pre>${escapeHtml(log.lastFailure.detail)}</pre>
 `;
   // The retry form sits above the installer detail: the operator's action is the point of the page.
+  // A settled `answer` (a finished Move) takes the place of the operator text and the retry form.
+  const lead =
+    answer ??
+    `<p>${escapeHtml(text.title)}</p>
+<p>${escapeHtml(text.action)}</p>
+${section}<form method="post" action="/recovery-api/retry">
+<button type="submit">${escapeHtml(page.retry)}</button>
+</form>
+`;
   return `<!doctype html>
 <html lang="${locale}">
 <head>
@@ -592,15 +658,11 @@ function renderPage(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(heading)}</title>
 <style>pre { white-space: pre-wrap; } pre, p { overflow-wrap: anywhere; }</style>
+<style>li { overflow-wrap: anywhere; }</style>
 </head>
 <body>
 <h1>${escapeHtml(heading)}</h1>
-<p>${escapeHtml(text.title)}</p>
-<p>${escapeHtml(text.action)}</p>
-<form method="post" action="/recovery-api/retry">
-<button type="submit">${escapeHtml(page.retry)}</button>
-</form>
-<h2>${escapeHtml(page.forInstaller)}</h2>
+${lead}<h2>${escapeHtml(page.forInstaller)}</h2>
 <p>${escapeHtml(status)}</p>
 ${freeSpaceLine(freeBytes, locale)}${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
@@ -611,21 +673,71 @@ ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 }
 
 /**
+ * The recovery page, drawn as the kept page once `isKept()` answers true or the view's code is the
+ * kept one, and as the move-unfinished page or the moved answer, with no choice, from the first view
+ * that asks for it.
+ */
+export function startAgainDraw(
+  deps: RecoveryDeps,
+  isKept: () => boolean,
+): (view: Omit<StartAgainView, "code"> & { code?: StartAgainView["code"] }) => Promise<string> {
+  const { startAgain } = deps;
+  // A recorded Move has changed the files the survey listed, so its form must not come back.
+  let moveUnfinished = false;
+  let moved: StartAgainView["message"];
+  return async (view) => {
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+    if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes);
+    if (view.code === "setup.start_again_move_unfinished") moveUnfinished = true;
+    if (view.message?.kind === "moved") moved = view.message;
+    if (moved !== undefined) view = { ...view, message: moved };
+    const settled = moveUnfinished
+      ? "setup.start_again_move_unfinished"
+      : isKept() || view.code === "setup.start_again_kept"
+        ? "setup.start_again_kept"
+        : null;
+    if (settled !== null) {
+      const state: RecoveryState = { ...deps.state, lastErrorCode: settled };
+      return renderPage(deps, log, view.locale, freeBytes, state);
+    }
+    const section = renderStartAgainSection({
+      survey: startAgain.survey,
+      locale: view.locale,
+      secure: view.secure,
+      now: (startAgain.now ?? (() => new Date()))(),
+      ...(view.message === undefined ? {} : { message: view.message }),
+      ...(view.chosen === undefined ? {} : { chosen: view.chosen }),
+    });
+    if (view.message?.kind === "moved")
+      return renderPage(deps, log, view.locale, freeBytes, deps.state, "", section);
+    return renderPage(deps, log, view.locale, freeBytes, deps.state, section);
+  };
+}
+
+/**
  * Served instead of trading once boot has failed past the retry threshold, or on the first start
- * after the running server stopped itself (`refused`). The one action is retry: there is no
- * degraded-but-trading mode.
+ * after the running server stopped itself (`refused`). The action is retry, or on a Start again
+ * cut off beside found files, Keep or Move: there is no degraded-but-trading mode.
  */
 export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();
+  const { startAgain } = deps;
+  // Kept in-process only: the next start reads the recorded Keep from disk and refuses with it.
+  let kept = false;
+  const draw = startAgainDraw(deps, () => kept);
 
   app.get("/", async (c) => {
-    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
     // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
-    return c.html(renderPage(deps, log, locale, freeBytes));
+    return c.html(await draw({ locale, secure: isSecure(c) }));
   });
+
+  if (startAgain !== undefined)
+    mountStartAgainChoice(app, startAgain, draw, deps.log, () => {
+      kept = true;
+    });
 
   // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {

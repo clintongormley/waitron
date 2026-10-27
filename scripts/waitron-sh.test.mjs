@@ -1495,14 +1495,14 @@ describe("waitron.sh reset", () => {
 
   // Weaker than its name: under the stubbed docker it can only match the command's text. The next
   // case runs the command itself.
-  it("a plain reset's state clean-up spares the start-again note and the confirmation records", () => {
+  it("a plain reset's state clean-up spares the start-again note, the confirmation records, the choice records and the set-aside folder", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
     expect(composeCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations /,
+        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
       ),
     );
   });
@@ -1534,6 +1534,37 @@ describe("waitron.sh reset", () => {
       "tls",
     ]);
     expect(readdirSync(join(state, "first-setup-start-again-confirmations"))).toEqual(["one.json"]);
+    expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
+  });
+
+  it("the reset's state clean-up keeps the Start again choices and the set-aside folder, and removes the guess counter", () => {
+    const match = readFileSync(SCRIPT, "utf8").match(
+      /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
+    );
+    expect(match).not.toBeNull();
+    const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
+    dirs.push(state);
+    mkdirSync(join(state, "tls"));
+    writeFileSync(join(state, "tls", "ca.pem"), "ca");
+    mkdirSync(join(state, "first-setup-start-again-choices"));
+    writeFileSync(join(state, "first-setup-start-again-choices", "choice.json"), "{}");
+    mkdirSync(join(state, "first-setup-set-aside"));
+    writeFileSync(join(state, "first-setup-set-aside", "venue.db"), "db");
+    writeFileSync(join(state, "first-setup-start-again-guesses.json"), "{}");
+    writeFileSync(join(state, "first-setup.json"), "{}");
+    const r = spawnSync("sh", ["-c", match[1]], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, WAITRON_STATE_DIR: state },
+      timeout: 10_000,
+    });
+    expect(r.status).toBe(0);
+    expect(readdirSync(state).sort()).toEqual([
+      "first-setup-set-aside",
+      "first-setup-start-again-choices",
+      "tls",
+    ]);
+    expect(readdirSync(join(state, "first-setup-start-again-choices"))).toEqual(["choice.json"]);
+    expect(readdirSync(join(state, "first-setup-set-aside"))).toEqual(["venue.db"]);
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
 
@@ -1672,14 +1703,14 @@ describe("waitron.sh --reset install", () => {
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
   });
 
-  it("--reset install keeps the start-again note and the confirmation records too", () => {
+  it("--reset install keeps the start-again note, the confirmation records, the choice records and the set-aside folder too", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
     expect(r.status).toBe(0);
     expect(loggedCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations /,
+        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
       ),
     );
   });

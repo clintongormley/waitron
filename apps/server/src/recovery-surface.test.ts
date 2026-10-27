@@ -1,7 +1,9 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { TLSSocket } from "node:tls";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { VENUE_HOLDER_KINDS } from "@waitron/db";
@@ -9,8 +11,22 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { createLogger } from "./logger.js";
-import { FRESH, afterFailure, refusedWhileRunning, type RecoveryState } from "./recovery-state.js";
-import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
+import {
+  FRESH,
+  afterFailure,
+  refusedAtStart,
+  refusedWhileRunning,
+  type RecoveryState,
+} from "./recovery-state.js";
+import {
+  GENERIC_TEXT,
+  OPERATOR_TEXT,
+  escapeHtml,
+  recoveryApp,
+  startAgainDraw,
+  type RecoveryDeps,
+} from "./recovery-surface.js";
+import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 
 const state = afterFailure(
   afterFailure(afterFailure(FRESH, "module.config_invalid", new Date()), "x", new Date()),
@@ -1141,6 +1157,45 @@ describe("a start refused before it began", () => {
           "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
       },
     },
+    {
+      code: "setup.start_again_files_found",
+      "en-GB": {
+        title: "Start again did not finish, and the box found files it did not expect.",
+        action:
+          "An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+        action:
+          "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado.",
+      },
+    },
+    {
+      code: "setup.start_again_kept",
+      "en-GB": {
+        title: "Start again did not finish, and everything on this box was kept.",
+        action:
+          "Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo.",
+        action:
+          "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
+      },
+    },
+    {
+      code: "setup.start_again_move_unfinished",
+      "en-GB": {
+        title: "Start again was moving files aside and has not finished.",
+        action:
+          "Some of the files may already be in the set-aside folder; none has been deleted. Press “Retry a normal boot” to finish moving them, and the box then starts a new first setup. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, including the files moved aside.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",
+        action:
+          "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
+      },
+    },
   ] as const;
 
   async function refusedPage(code: string, acceptLanguage: string): Promise<string> {
@@ -1190,11 +1245,403 @@ describe("a start refused before it began", () => {
     }
   });
 
+  it("never suggests deleting in the Start again choices, except the one owner-approved sentence", () => {
+    const NEVER_DELETE_EN = /\bwipe\b|\berase\b|\bdelet|\breset\b|\bremov/i;
+    const NEVER_DELETE_ES = new RegExp(`${NEVER_WIPE_ES.source}|\\bquit|\\bquít|\\bsuprim`, "i");
+    expect(NEVER_DELETE_EN.test("The files were deleted.")).toBe(true);
+    expect(NEVER_DELETE_ES.test("Quítalo.")).toBe(true);
+    expect(NEVER_DELETE_EN.test("Delete these files.")).toBe(true);
+    expect(NEVER_DELETE_ES.test("Borra estos archivos.")).toBe(true);
+    const strings = (text: (typeof START_AGAIN_PAGE_TEXT)[keyof typeof START_AGAIN_PAGE_TEXT]) =>
+      Object.entries({
+        ...text,
+        more: text.more(3),
+        moveFloor: text.moveFloor("2026-10-27 10:00 UTC"),
+        throttled: `${text.throttled(1)} ${text.throttled(5)}`,
+        moved: text.moved("state/first-setup-set-aside/2026-10-27T10-00-00Z"),
+      });
+    const checked = { "en-GB": NEVER_DELETE_EN, "es-ES": NEVER_DELETE_ES } as const;
+    for (const lang of ["en-GB", "es-ES"] as const) {
+      const entries = strings(START_AGAIN_PAGE_TEXT[lang]);
+      expect(entries.length, lang).toBe(28);
+      for (const [key, value] of entries) {
+        expect(typeof value, `${lang} ${key}`).toBe("string");
+        if (key === "moveDetail") continue;
+        expect(value, `${lang} ${key}`).not.toMatch(checked[lang]);
+      }
+      expect(START_AGAIN_PAGE_TEXT[lang].moveDetail, lang).toMatch(checked[lang]);
+    }
+    expect(START_AGAIN_PAGE_TEXT["en-GB"].moveDetail).toBe(
+      "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again. Its invoice series names are never used again.",
+    );
+    expect(START_AGAIN_PAGE_TEXT["es-ES"].moveDetail).toBe(
+      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo. Sus nombres de serie de facturas no se vuelven a usar.",
+    );
+  });
+
+  it("the unfinished Move names the Retry button the page draws, never tells the person to reinstall, and says reinstalling loses the moved files", async () => {
+    const text = OPERATOR_TEXT["setup.start_again_move_unfinished"]!;
+    for (const [lang, retry, moved] of [
+      ["en-GB", "Retry a normal boot", "the files moved aside"],
+      ["es-ES", "«Reintentar un arranque normal»", "los archivos apartados"],
+    ] as const) {
+      const button = retry.replace(/[«»]/g, "");
+      expect(await refusedPage("setup.start_again_move_unfinished", lang)).toContain(
+        `<button type="submit">${escapeHtml(button)}</button>`,
+      );
+      expect(text[lang].action, lang).toContain(retry);
+      expect(text[lang].action, lang).toContain(moved);
+      expect(text[lang].action, lang).not.toMatch(/(^|[.!?;]\s+)(Reinstall|Reinstala)\b/);
+    }
+  });
+
   it("the unfinished Start again line never tells the person to reinstall, and says what reinstalling loses", () => {
     const text = OPERATOR_TEXT["setup.start_again_incomplete"]!;
     expect(text["en-GB"].action).not.toMatch(/(^|[.!?]\s+)Reinstall\b/);
     expect(text["en-GB"].action).toContain("lost");
     expect(text["es-ES"].action).not.toMatch(/(^|[.!?]\s+)Reinstala\b/);
     expect(text["es-ES"].action).toContain("pierde");
+  });
+});
+
+describe("recoveryApp's Start again choice", () => {
+  const sockets: TLSSocket[] = [];
+  afterEach(() => {
+    for (const socket of sockets.splice(0)) socket.destroy();
+  });
+  const tls = () => {
+    const socket = new TLSSocket(new Socket());
+    sockets.push(socket);
+    return { incoming: { socket } };
+  };
+  type StartAgain = NonNullable<RecoveryDeps["startAgain"]>;
+  const SURVEY: StartAgain["survey"] = {
+    kind: "choice",
+    attemptId: "attempt",
+    frozenDigest: "frozen",
+    markerSha256: "marker",
+    units: [
+      {
+        root: "venue",
+        path: "venue.db",
+        why: "not-created",
+        pieces: ["venue.db"],
+        entries: [{ path: "venue.db", type: "file", ino: "1", size: "10", mtimeNs: "1" }],
+      },
+    ],
+    digest: "d".repeat(64),
+    noteFloorMs: null,
+  };
+  const FOUND = OPERATOR_TEXT["setup.start_again_files_found"]!["en-GB"];
+  const KEPT = OPERATOR_TEXT["setup.start_again_kept"]!["en-GB"];
+  const WORDS = START_AGAIN_PAGE_TEXT["en-GB"];
+  const FORM_ACTION = 'action="/recovery-api/start-again"';
+  const RETRY_ACTION = 'action="/recovery-api/retry"';
+
+  function startAgainOf(choose?: StartAgain["choose"]) {
+    const onFinished = vi.fn(() => Promise.resolve());
+    const startAgain: StartAgain = {
+      roots: { stateDir: "/box/state", venueDir: "/box/venue" },
+      survey: SURVEY,
+      onFinished,
+      choose: choose ?? (() => Promise.resolve({ choice: "keep" as const })),
+      now: () => new Date("2026-10-27T10:00:00.000Z"),
+    };
+    return { onFinished, startAgain };
+  }
+  const filesFoundDeps = (startAgain: StartAgain, log?: RecoveryDeps["log"]): RecoveryDeps => ({
+    state: refusedAtStart(FRESH, "setup.start_again_files_found", new Date()),
+    refusedAtStart: true,
+    logDir: "/nonexistent",
+    onRetry: vi.fn(),
+    startAgain,
+    ...(log === undefined ? {} : { log }),
+  });
+  function app(choose?: StartAgain["choose"], log?: RecoveryDeps["log"]) {
+    const { onFinished, startAgain } = startAgainOf(choose);
+    return { onFinished, app: recoveryApp(filesFoundDeps(startAgain, log)) };
+  }
+  const MOVED = () =>
+    Promise.resolve({
+      choice: "move" as const,
+      setAside: {
+        state: "first-setup-set-aside/s1/state",
+        venue: "first-setup-set-aside/s1/venue",
+      },
+    });
+  const throwingOnChoice: RecoveryDeps["log"] = (_level, event) => {
+    if (event === "recovery.start_again_choice") throw new Error("log sink failed");
+  };
+  const choose = (target: ReturnType<typeof app>["app"], choice: "keep" | "move") =>
+    target.request(
+      "/recovery-api/start-again",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ password: "pw", choice, listed: SURVEY.digest }).toString(),
+      },
+      tls(),
+    );
+
+  it("recoveryApp with startAgain draws the section between the action and Retry, and mounts the route", async () => {
+    const { app: surface } = app();
+    const body = await (await surface.request("/", {}, tls())).text();
+    const action = body.indexOf(escapeHtml(FOUND.action));
+    const found = body.indexOf(escapeHtml(WORDS.filesFound));
+    const form = body.indexOf(FORM_ACTION);
+    const retry = body.indexOf(RETRY_ACTION);
+    expect(action).toBeGreaterThan(-1);
+    expect(found).toBeGreaterThan(action);
+    expect(form).toBeGreaterThan(found);
+    expect(retry).toBeGreaterThan(form);
+    expect(body).toContain("<li>venue/venue.db</li>");
+
+    const plain = await (await surface.request("/")).text();
+    expect(plain).toContain(escapeHtml(WORDS.insecureForm));
+    expect(plain).not.toContain(FORM_ACTION);
+    expect(plain).not.toContain('type="password"');
+
+    const refused = app(() => Promise.reject(new AppError("setup.owner_required", {})));
+    const answer = await choose(refused.app, "keep");
+    expect(answer.status).toBe(403);
+    const page = await answer.text();
+    expect(page).toContain(escapeHtml(FOUND.title));
+    expect(page).toContain(escapeHtml(WORDS.wrongPassword));
+    expect(page.indexOf(FORM_ACTION)).toBeLessThan(page.indexOf(RETRY_ACTION));
+  });
+
+  it("recoveryApp without startAgain answers the route 404 and draws no section", async () => {
+    const surface = recoveryApp({
+      state: refusedAtStart(FRESH, "setup.start_again_files_found", new Date()),
+      refusedAtStart: true,
+      logDir: "/nonexistent",
+      onRetry: vi.fn(),
+    });
+    expect((await choose(surface, "keep")).status).toBe(404);
+    const body = await (await surface.request("/", {}, tls())).text();
+    expect(body).not.toContain(escapeHtml(WORDS.filesFound));
+    expect(body).not.toContain(FORM_ACTION);
+  });
+
+  it("after Keep, GET / shows the kept page and no form", async () => {
+    const { app: surface, onFinished } = app();
+    const answer = await choose(surface, "keep");
+    expect(answer.status).toBe(200);
+    for (const page of [
+      await answer.text(),
+      await (await surface.request("/", {}, tls())).text(),
+    ]) {
+      expect(page).toContain(escapeHtml(KEPT.title));
+      expect(page).toContain(escapeHtml(KEPT.action));
+      expect(page).not.toContain(escapeHtml(FOUND.title));
+      expect(page).not.toContain(escapeHtml(WORDS.filesFound));
+      expect(page).not.toContain(FORM_ACTION);
+      expect(page).not.toContain('type="password"');
+    }
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("after Move, the answer names the folder and draws no form", async () => {
+    const { app: surface, onFinished } = app(() =>
+      Promise.resolve({
+        choice: "move" as const,
+        setAside: {
+          state: "first-setup-set-aside/s1/state",
+          venue: "first-setup-set-aside/s1/venue",
+        },
+      }),
+    );
+    const answer = await choose(surface, "move");
+    expect(answer.status).toBe(200);
+    const page = await answer.text();
+    expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("a Move that failed after its record answers 409 with the move-unfinished page in each language, no choice form, no restart, and GET / stays on it", async () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const text = OPERATOR_TEXT["setup.start_again_move_unfinished"]![locale];
+      const { app: surface, onFinished } = app(() =>
+        Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
+      );
+      const answer = await surface.request(
+        "/recovery-api/start-again",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Language": locale,
+          },
+          body: new URLSearchParams({
+            password: "pw",
+            choice: "move",
+            listed: SURVEY.digest,
+          }).toString(),
+        },
+        tls(),
+      );
+      expect(answer.status, locale).toBe(409);
+      const after = await surface.request("/", { headers: { "Accept-Language": locale } }, tls());
+      for (const page of [await answer.text(), await after.text()]) {
+        expect(page, locale).toContain(escapeHtml(text.title));
+        expect(page, locale).toContain(escapeHtml(text.action));
+        expect(page, locale).not.toContain(
+          escapeHtml(OPERATOR_TEXT["setup.start_again_files_found"]![locale].title),
+        );
+        expect(page, locale).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].filesFound));
+        expect(page, locale).not.toContain(FORM_ACTION);
+        expect(page, locale).not.toContain("<fieldset");
+        expect(page, locale).not.toContain('type="password"');
+        expect(page, locale).toContain(RETRY_ACTION);
+      }
+      expect(onFinished, locale).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a logger that throws on the failed-choice warning still leaves GET / on the move-unfinished page", async () => {
+    const unfinished = OPERATOR_TEXT["setup.start_again_move_unfinished"]!["en-GB"];
+    const throwingOnFailure: RecoveryDeps["log"] = (_level, event) => {
+      if (event === "recovery.start_again_choice_failed") throw new Error("log sink failed");
+    };
+    const { app: surface } = app(
+      () => Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
+      throwingOnFailure,
+    );
+    await choose(surface, "move");
+    const page = await (await surface.request("/", {}, tls())).text();
+    expect(page).toContain(escapeHtml(unfinished.title));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(page).not.toContain('type="password"');
+  });
+
+  it("after a Move that failed after its record, a later Keep or Move is answered with the move-unfinished page and chooses nothing", async () => {
+    const unfinished = OPERATOR_TEXT["setup.start_again_move_unfinished"]!["en-GB"];
+    const chooser = vi
+      .fn<NonNullable<StartAgain["choose"]>>()
+      .mockRejectedValueOnce(new AppError("setup.start_again_move_unfinished", {}))
+      .mockImplementation(MOVED);
+    const { app: surface, onFinished } = app(chooser);
+    expect((await choose(surface, "move")).status).toBe(409);
+    for (const choice of ["move", "keep"] as const) {
+      const again = await choose(surface, choice);
+      expect(again.status, choice).toBe(409);
+      const page = await again.text();
+      expect(page, choice).toContain(escapeHtml(unfinished.title));
+      expect(page, choice).not.toContain(escapeHtml(KEPT.title));
+      expect(page, choice).not.toContain(FORM_ACTION);
+    }
+    expect(chooser).toHaveBeenCalledOnce();
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("a logger that throws on the recorded choice still restarts after a Move", async () => {
+    const { app: surface, onFinished } = app(MOVED, throwingOnChoice);
+    await choose(surface, "move");
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("a logger that throws on the recorded choice still leaves GET / on the kept page after a Keep", async () => {
+    const { app: surface } = app(undefined, throwingOnChoice);
+    await choose(surface, "keep");
+    const page = await (await surface.request("/", {}, tls())).text();
+    expect(page).toContain(escapeHtml(KEPT.title));
+    expect(page).not.toContain(FORM_ACTION);
+  });
+
+  it("a draw asked for the kept code draws the kept page even when nothing set the latch", async () => {
+    const { startAgain } = startAgainOf();
+    const draw = startAgainDraw(filesFoundDeps(startAgain), () => false);
+    const page = await draw({ code: "setup.start_again_kept", locale: "en-GB", secure: true });
+    expect(page).toContain(escapeHtml(KEPT.title));
+    expect(page).not.toContain(escapeHtml(FOUND.title));
+    expect(page).not.toContain(escapeHtml(WORDS.filesFound));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(page).not.toContain('type="password"');
+  });
+
+  it("after Move, the answer in each language says only that Start again finished: no files-found title or action, and no Retry", async () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const found = OPERATOR_TEXT["setup.start_again_files_found"]![locale];
+      const words = START_AGAIN_PAGE_TEXT[locale];
+      const { app: surface } = app(MOVED);
+      const answer = await surface.request(
+        "/recovery-api/start-again",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Language": locale,
+          },
+          body: new URLSearchParams({
+            password: "pw",
+            choice: "move",
+            listed: SURVEY.digest,
+          }).toString(),
+        },
+        tls(),
+      );
+      expect(answer.status, locale).toBe(200);
+      const page = await answer.text();
+      const moved = page.indexOf(escapeHtml(words.moved("state/first-setup-set-aside/s1")));
+      expect(moved, locale).toBeGreaterThan(-1);
+      expect(page.indexOf("<li>venue/venue.db</li>"), locale).toBeGreaterThan(moved);
+      expect(page, locale).not.toContain(escapeHtml(found.title));
+      expect(page, locale).not.toContain(escapeHtml(found.action));
+      expect(page, locale).not.toContain(RETRY_ACTION);
+      expect(page, locale).not.toContain(FORM_ACTION);
+    }
+  });
+
+  it("after Move, GET / in each language draws the moved answer: no files-found title or action, no form, no Retry", async () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const found = OPERATOR_TEXT["setup.start_again_files_found"]![locale];
+      const words = START_AGAIN_PAGE_TEXT[locale];
+      const { app: surface } = app(MOVED);
+      expect((await choose(surface, "move")).status, locale).toBe(200);
+      const after = await surface.request("/", { headers: { "Accept-Language": locale } }, tls());
+      const page = await after.text();
+      expect(page, locale).toContain(escapeHtml(words.moved("state/first-setup-set-aside/s1")));
+      expect(page, locale).not.toContain(escapeHtml(found.title));
+      expect(page, locale).not.toContain(escapeHtml(found.action));
+      expect(page, locale).not.toContain(RETRY_ACTION);
+      expect(page, locale).not.toContain(FORM_ACTION);
+      expect(page, locale).not.toContain('type="password"');
+    }
+  });
+
+  it("a logger that throws on the recorded choice still leaves GET / on the moved answer after a Move", async () => {
+    const { app: surface } = app(MOVED, throwingOnChoice);
+    await choose(surface, "move");
+    const page = await (await surface.request("/", {}, tls())).text();
+    expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+    expect(page).not.toContain(FORM_ACTION);
+    expect(page).not.toContain('type="password"');
+  });
+
+  it("after Move, a later Keep or Move is answered 409 with the moved answer and chooses nothing", async () => {
+    const chooser = vi.fn<NonNullable<StartAgain["choose"]>>(MOVED);
+    const { app: surface, onFinished } = app(chooser);
+    expect((await choose(surface, "move")).status).toBe(200);
+    for (const choice of ["move", "keep"] as const) {
+      const again = await choose(surface, choice);
+      expect(again.status, choice).toBe(409);
+      const page = await again.text();
+      expect(page, choice).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+      expect(page, choice).not.toContain(escapeHtml(KEPT.title));
+      expect(page, choice).not.toContain(escapeHtml(FOUND.title));
+      expect(page, choice).not.toContain(FORM_ACTION);
+      expect(page, choice).not.toContain(RETRY_ACTION);
+    }
+    expect(chooser).toHaveBeenCalledOnce();
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("gives the found-files list items overflow-wrap: anywhere, so a long file name wraps on a phone", async () => {
+    const { app: surface } = app();
+    const body = await (await surface.request("/", {}, tls())).text();
+    const head = body.slice(0, body.indexOf("</head>"));
+    expect(head).toContain("<style>li { overflow-wrap: anywhere; }</style>");
+    expect(body).toContain("<li>venue/venue.db</li>");
   });
 });

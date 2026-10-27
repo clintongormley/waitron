@@ -415,6 +415,17 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
         log: deps.log,
+        ...(admission.survey === undefined
+          ? {}
+          : {
+              startAgain: {
+                roots: admission.roots,
+                survey: admission.survey,
+                onFinished: async () => {
+                  exit(0);
+                },
+              },
+            }),
       }),
       transport,
     );
