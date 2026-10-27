@@ -1564,7 +1564,7 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
-  /** `null` while the item's course is HELD — not advanceable (`ticket.item_held`); a timestamp once
+  /** `null` while the item is HELD — not advanceable (`ticket.item_held`); a timestamp once
    *  fired. */
   firedAt: string | null;
   /** When this dish joined the queue: set at fire, and again when a release re-routes it. */

@@ -351,7 +351,7 @@ export class TillStationQueue extends LitElement {
         border-left-color: var(--wt-color-success);
       }
 
-      /* A HELD line (its course not yet fired, KDS-2 §5a) — greyed and non-advanceable. Greying is a
+      /* A HELD line — greyed and non-advanceable. Greying is a
          MUTED text colour (the token every secondary label uses, so it keeps a11y contrast on the
          surface) plus a dashed box, NOT reduced opacity (which would composite the text against the
          background and fail the color-contrast sweep). It renders as an inert span, so there is no bump. */

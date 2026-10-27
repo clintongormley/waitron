@@ -42,7 +42,7 @@ function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
 }
 
-/** A missing course counts as none, so an older payload still groups; a tie keeps the read's order. */
+/** A tie keeps the read's order. */
 function courseSections(items: readonly StationQueueItem[]): CourseSection[] {
   const byCourse = new Map<string | null, CourseSection>();
   for (const item of items) {
