@@ -306,6 +306,9 @@ export class MenuPatchDialog extends LitElement {
   @state() private reloadFailure: string | null = null;
   /** How many staged changes newer live versions have dropped since the dialog opened. */
   @state() private dropped = 0;
+  /** The `changeKey`s of the staged changes that have let go of new text in a language the venue
+   * switched off. */
+  @state() private trimmed = new Set<string>();
   @state() private queued: LocalTime[] = [];
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
    * Reload, or until a later delivery finds nothing staged and no field failing its check. */
@@ -407,6 +410,7 @@ export class MenuPatchDialog extends LitElement {
     this.refusal = null;
     this.reloadFailure = null;
     this.dropped = 0;
+    this.trimmed = new Set();
     this.queued = [];
     this.newer = null;
     this.#held = null;
@@ -513,7 +517,9 @@ export class MenuPatchDialog extends LitElement {
   /** Checks the draft against the shown version with the venue's content languages as they are. */
   #revalidate(): void {
     const { document } = this.live!;
-    this.dropped += this.#draft!.rebase(document, currentContentLanguages()).dropped;
+    const { dropped, trimmed } = this.#draft!.rebase(document, currentContentLanguages());
+    this.dropped += dropped;
+    if (trimmed.length > 0) this.trimmed = new Set([...this.trimmed, ...trimmed]);
     this.#typeSettled(document);
     this.dropped += this.#forgetSettled(document);
     this.#retireRefusal();
@@ -521,23 +527,25 @@ export class MenuPatchDialog extends LitElement {
     this.requestUpdate();
   }
 
-  /** A staged translated change holds no text in a switched-off language, and a staged name change
-   * holds the live text in each language every folder fixes; its field takes the same, so the
-   * field shows what a send carries once that language is switched back on or a later version
-   * frees it. */
+  /** A staged translated change holds text in exactly the content languages, the stored text in a
+   * language switched on since it was typed, and a staged name change holds the live text in each
+   * language every folder fixes; its field takes the same, so the field shows what a send carries. */
   #typeSettled(document: MenuDocument): void {
     const languages = currentContentLanguages();
     for (const change of this.#draft!.changes()) {
       const typed = this.#typed.get(changeKey(change));
       if (!TRANSLATED.has(change.field) || typed === undefined) continue;
       const value = change.value as Record<string, string>;
+      const shown = typed.value as Record<string, string>;
       const fixed = fixedLanguages(document, change.target, change.field, languages);
-      typed.value = Object.fromEntries([
-        ...Object.entries(typed.value as Record<string, string>).filter(([language]) =>
-          languages.languages.includes(language),
-        ),
-        ...fixed.map((language) => [language, value[language] ?? ""]),
-      ]);
+      typed.value = Object.fromEntries(
+        languages.languages.map((language) => [
+          language,
+          fixed.includes(language) || !Object.hasOwn(shown, language)
+            ? (value[language] ?? "")
+            : shown[language],
+        ]),
+      );
     }
   }
 
@@ -943,16 +951,28 @@ export class MenuPatchDialog extends LitElement {
     return [this.refusal, ...newer];
   }
 
-  #renderDropped(): TemplateResult | typeof nothing {
-    return this.dropped === 0
-      ? nothing
-      : html`<p class="note" role="status" data-test="dropped">
-          ${
-            this.dropped === 1
-              ? t("menu_patch.dropped_one")
-              : fill("menu_patch.dropped_many", { count: String(this.dropped) })
-          }
-        </p>`;
+  #renderDropped(): TemplateResult {
+    return html`${
+      this.dropped === 0
+        ? nothing
+        : html`<p class="note" role="status" data-test="dropped">
+            ${
+              this.dropped === 1
+                ? t("menu_patch.dropped_one")
+                : fill("menu_patch.dropped_many", { count: String(this.dropped) })
+            }
+          </p>`
+    }${
+      this.trimmed.size === 0
+        ? nothing
+        : html`<p class="note" role="status" data-test="trimmed">
+            ${
+              this.trimmed.size === 1
+                ? t("menu_patch.trimmed_one")
+                : fill("menu_patch.trimmed_many", { count: String(this.trimmed.size) })
+            }
+          </p>`
+    }`;
   }
 
   #renderReview(): TemplateResult {

@@ -205,17 +205,25 @@ export class MenuPatchDraft {
     return { ...change, value: settled };
   }
 
-  /** A translated `change` holding text only in the content languages: the patch refuses text in
-   * a switched-off language that differs from the stored one, and keeps the stored text there. */
-  private inLanguages(change: MenuPatchChange): MenuPatchChange {
+  /** A translated `change` holding text in exactly the content languages: a language switched on
+   * that it lacks takes the stored text, or a blank, so a send clears nothing the person did not;
+   * a switched-off language's text goes, since the patch keeps each copy's stored text there and
+   * copies may differ in it. `lost` says whether text that went differed from the stored text. */
+  private inLanguages(change: MenuPatchChange): { change: MenuPatchChange; lost: boolean } {
     const value = change.value;
-    if (!TRANSLATED.has(change.field) || typeof value !== "object" || value === null) return change;
-    const kept = Object.entries(value as Record<string, string>).filter(([language]) =>
-      this.languages.languages.includes(language),
+    if (!TRANSLATED.has(change.field) || typeof value !== "object" || value === null)
+      return { change, lost: false };
+    const text = value as Record<string, string>;
+    const enabled = this.languages.languages;
+    const stored = (patchFieldValue(this.document, change.target, change.field, this.languages) ??
+      {}) as Record<string, string>;
+    const lost = Object.entries(text).some(
+      ([language, typed]) => !enabled.includes(language) && typed !== (stored[language] ?? ""),
     );
-    return kept.length === Object.keys(value).length
-      ? change
-      : { ...change, value: Object.fromEntries(kept) };
+    const kept = enabled.map((language) => [language, text[language] ?? stored[language] ?? ""]);
+    return sameTranslations(Object.fromEntries(kept), text)
+      ? { change, lost }
+      : { change: { ...change, value: Object.fromEntries(kept) }, lost };
   }
 
   private stage(change: MenuPatchChange): void {
@@ -256,19 +264,29 @@ export class MenuPatchDraft {
 
   /** Moves the draft onto a newer live version, judged with `languages`. A change that version
    * already holds goes without being counted; one `applyMenuPatch` refuses on it is dropped and
-   * counted, and so is one left holding only the live text once its text in a switched-off
+   * counted, and so is one left holding only the live text once its new text in a switched-off
    * language is let go, or a name language every folder now fixes takes the live text in place of
-   * what was typed. */
-  rebase(document: MenuDocument, languages = this.languages): { dropped: number } {
+   * what was typed. `trimmed` holds the keys of the changes still staged that let go of new text
+   * in a switched-off language. */
+  rebase(
+    document: MenuDocument,
+    languages = this.languages,
+  ): { dropped: number; trimmed: string[] } {
     this.document = document;
     this.languages = languages;
     const dropped = new Set<string>();
+    const trimmed = new Set<string>();
     for (const [key, staged] of this.staged) {
-      const change = this.settled(this.inLanguages(staged));
+      const { change: inLanguages, lost } = this.inLanguages(staged);
+      const change = this.settled(inLanguages);
+      const lostFixed = change !== inLanguages && lostText(inLanguages, change);
       if (this.isLive(change)) {
-        if (change !== staged && lostText(staged, change)) dropped.add(key);
+        if (lost || lostFixed) dropped.add(key);
         this.unstage(key);
-      } else this.staged.set(key, change);
+      } else {
+        this.staged.set(key, change);
+        if (lost) trimmed.add(key);
+      }
     }
     for (;;) {
       const entries = [...this.staged];
@@ -278,13 +296,14 @@ export class MenuPatchDraft {
           entries.map(([, change]) => change),
           this.languages,
         );
-        return { dropped: dropped.size };
+        return { dropped: dropped.size, trimmed: [...trimmed] };
       } catch (error) {
         if (!isAppError(error) || !hasCode(error, "menu_patch.invalid")) throw error;
         // Each refusal names the first change it could not apply, so dropping it and retrying
         // finds every refused change.
         const [key] = entries[error.params.change]!;
         this.unstage(key);
+        trimmed.delete(key);
         dropped.add(key);
       }
     }

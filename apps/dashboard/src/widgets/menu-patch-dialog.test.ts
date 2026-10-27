@@ -979,6 +979,17 @@ it("on Review, opens the first item holding an error and focuses its field", asy
   expect(bottomMessage(el)).toBe("Correct the fields marked on Salad and Drinks to continue.");
 });
 
+it("on Review, stays on the item shown when it holds an error and focuses its field", async () => {
+  const el = await mount();
+  await pick(el, "Salad");
+  await type(el, "wt-input", "name", "");
+  await pick(el, "Drinks");
+  await type(el, "wt-input", "internal-name", "");
+  await press(el, "review");
+  expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Drinks");
+  expect(el.shadowRoot!.activeElement).toBe(field(el, "wt-input", "internal-name"));
+});
+
 it("says nothing about errors again until Review is pressed once the dialog reopens", async () => {
   const el = await mount();
   await pick(el, "Salad");
@@ -2432,8 +2443,10 @@ it("lets go of a refusal under a language the venue switches off, keeping its ch
   expect(footerButton(el, "review")!.disabled).toBe(false);
 });
 
-it("keeps a translated change in the languages the venue keeps, and counts one it cannot keep", async () => {
-  const el = await mount();
+it("keeps a translated change in the languages the venue keeps, says what it lost, and counts one it cannot keep", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
   await pick(el, "Soup");
   await type(el, "wt-input", "description-en", "Hot");
   await type(el, "wt-input", "description-es", "Caliente");
@@ -2446,11 +2459,87 @@ it("keeps a translated change in the languages the venue keeps, and counts one i
   expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
     "1 change no longer fits the live version and was dropped.",
   );
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+    "1 change lost its wording in a language that was switched off.",
+  );
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
   await el.updateComplete;
   await pick(el, "Soup");
-  // The field shows what a send carries: no English text, which the patch then clears.
-  expect(field(el, "wt-input", "description-en").value).toBe("");
+  // The typed English went with the language; the field shows what a send carries.
+  expect(field(el, "wt-input", "description-en").value).toBe("Old soup");
   expect(field(el, "wt-input", "description-es").value).toBe("Caliente");
-  expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
+  expect(el.changes).toEqual([
+    { target: soup, field: "description", value: { en: "Old soup", es: "Caliente" } },
+  ]);
+});
+
+it("sends the stored text of a language switched off and back on that the person never changed", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
+  const api = stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-es", "Sopa nueva");
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  await el.updateComplete;
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  await el.updateComplete;
+  expect(field(el, "wt-input", "description-en").value).toBe("Old soup");
+  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Soup: Description (ES) Sopa vieja → Sopa nueva"]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [{ target: soup, field: "description", value: { en: "Old soup", es: "Sopa nueva" } }],
+  });
+});
+
+it("sends the stored text, or a blank, in each language switched on while a change is staged, as its field shows", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = {
+    en: "Old soup",
+    es: "Sopa vieja",
+    fr: "Vieille soupe",
+  };
+  const api = stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-es", "Sopa nueva");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es", "fr", "it"] });
+  await el.updateComplete;
+  expect(field(el, "wt-input", "description-fr").value).toBe("Vieille soupe");
+  expect(field(el, "wt-input", "description-it").value).toBe("");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Soup: Description (ES) Sopa vieja → Sopa nueva"]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [
+      {
+        target: soup,
+        field: "description",
+        value: { en: "Old soup", es: "Sopa nueva", fr: "Vieille soupe", it: "" },
+      },
+    ],
+  });
+});
+
+it("counts a change once however many times it loses wording to a switched-off language", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Soup");
+  for (const english of ["Hot", "Warm"]) {
+    await type(el, "wt-input", "description-en", english);
+    await type(el, "wt-input", "description-es", "Caliente");
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    await el.updateComplete;
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+    await el.updateComplete;
+  }
+  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+    "1 change lost its wording in a language that was switched off.",
+  );
 });

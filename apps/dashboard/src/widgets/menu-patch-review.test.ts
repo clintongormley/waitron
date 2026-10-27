@@ -144,6 +144,12 @@ it("words a translated field once per language whose text changed", () => {
   ]);
 });
 
+it("reads a content language a change holds no text in as blank", () => {
+  expect(
+    changeLines(lunch(), [{ target: soup, field: "description", value: { en: "Hot" } }], languages),
+  ).toEqual(["Soup: Description (EN) (empty) → Hot"]);
+});
+
 it("never words a change to a name language every copy's folder fixes", () => {
   const document = lunch();
   const starters = document.root.members[0] as Extract<

@@ -99,19 +99,19 @@ export function changeLines(
     const old = patchFieldValue(document, target, field, languages);
     if (field === "customerName" || field === "names" || field === "description") {
       const before = (old as Record<string, string> | null) ?? {};
-      // The dialog stages every content language's text, a blank one as "".
       const after = value as Record<string, string>;
       const fixed = fixedLanguages(document, target, field, languages);
       return languages.languages
         .filter(
-          (language) => !fixed.includes(language) && (before[language] ?? "") !== after[language],
+          (language) =>
+            !fixed.includes(language) && (before[language] ?? "") !== (after[language] ?? ""),
         )
         .map((language) =>
           fill("menu_patch.change_line", {
             item,
             field: `${label} (${language.toUpperCase()})`,
             from: words(field, before[language] ?? null, false),
-            to: words(field, after[language]!, true),
+            to: words(field, after[language] ?? "", true),
           }),
         );
     }
