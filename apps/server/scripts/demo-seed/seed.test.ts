@@ -298,8 +298,8 @@ describe("seedDemoRestaurant", () => {
       const { rows: zones } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from floor_zones where location_id = ${venue.locationId}`);
       const { products } = await listAvailableProducts(tx, venue.locationId);
-      const drink = products.find((product) => product.name === "Negroni")!;
-      const dish = products.find((product) => product.name === "Solomillo")!;
+      const drink = products.find((product) => product.name === "House Negroni")!;
+      const dish = products.find((product) => product.name === "Sirloin")!;
       const downstairs = zones.find((zone) => zone.name === "Downstairs bar")!;
       const upstairs = zones.find((zone) => zone.name === "Upstairs bar")!;
       const downstairsStation = stations.find((station) => station.name === "Downstairs bar")!;
@@ -435,7 +435,7 @@ describe("seedDemoRestaurant", () => {
       const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from kitchen_stations where location_id = ${venue.locationId}`);
       const { products } = await listAvailableProducts(tx, venue.locationId);
-      const drink = products.find((product) => product.name === "Negroni")!;
+      const drink = products.find((product) => product.name === "House Negroni")!;
       for (const [instant, stationName] of [
         ["2026-10-02T18:00:00Z", "Downstairs bar"],
         ["2026-10-06T18:00:00Z", "Downstairs bar"],
@@ -537,7 +537,7 @@ describe("seedDemoRestaurant", () => {
         from menu_items mi
         join products p on p.id = mi.product_id
         join catalogues c on c.id = mi.menu_id
-        where p.name = 'Negroni'
+        where p.name = 'House Negroni'
         order by c.name`);
       const { rows: optionListRaw } = await tx.execute<{
         product_name: string;
@@ -599,13 +599,13 @@ describe("seedDemoRestaurant", () => {
     });
 
     // The steak asks the cooking question and nothing else does.
-    const coffee = read.products.find((p) => p.name === "Café");
-    const steak = read.products.find((p) => p.name === "Solomillo");
+    const coffee = read.products.find((p) => p.name === "House coffee");
+    const steak = read.products.find((p) => p.name === "Sirloin");
     expect(coffee).toBeDefined();
     expect(steak).toBeDefined();
     expect(coffee!.offeredModifiers).toEqual([]);
     expect(steak!.offeredModifiers.map((entry) => [entry.kind, entry.name])).toEqual([
-      ["options", "Punto"],
+      ["options", "Doneness"],
     ]);
     // The back-dated generator writes one row per dish and nothing below it.
     expect(read.modifierLines).toBe(0);
@@ -614,7 +614,7 @@ describe("seedDemoRestaurant", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
-      "Menú del Día",
+      "Set lunch",
     ]);
     // Every menu is published as seeded, so a till sells it (D17).
     expect(read.menuStates).toEqual(["current", "current", "current", "current"]);
@@ -643,28 +643,28 @@ describe("seedDemoRestaurant", () => {
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Menú del Día"],
+        menus: ["Casa Delgado", "Set lunch"],
       },
       {
         zone_name: "Downstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: true,
-        menus: ["Casa Delgado", "Menú del Día"],
+        menus: ["Casa Delgado", "Set lunch"],
       },
       {
         zone_name: "Terrace",
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Menú del Día"],
+        menus: ["Casa Delgado", "Set lunch"],
       },
       {
         zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Menú del Día"],
+        menus: ["Casa Delgado", "Set lunch"],
       },
     ]);
     expect(read.hours).toEqual([
@@ -687,7 +687,7 @@ describe("seedDemoRestaurant", () => {
       },
       {
         product_id: expect.any(String),
-        menu_name: "Menú del Día",
+        menu_name: "Set lunch",
         gross_price: 900,
         unit_price: 1100,
       },
@@ -704,10 +704,10 @@ describe("seedDemoRestaurant", () => {
     // The cooking list as it is STORED, behind the `offeredModifiers` read above.
     expect(read.optionLists).toEqual([
       {
-        product_name: "Solomillo",
-        list_name: "Punto",
-        default_label: "Punto medio",
-        labels: ["Poco", "Punto medio", "Muy"],
+        product_name: "Sirloin",
+        list_name: "Doneness",
+        default_label: "Medium",
+        labels: ["Rare", "Medium", "Well done"],
       },
     ]);
 
@@ -885,7 +885,7 @@ describe("seedDemoRestaurant", () => {
       products: (await listAvailableProducts(tx, venue.locationId)).products,
     }));
     expect(read.languages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
-    expect(read.products.some((product) => product.name === "Mixed salad")).toBe(true);
+    expect(read.products.some((product) => product.name === "Salad")).toBe(true);
   });
 
   it("seeds a United Kingdom demo from Casa Delgado in English, its practice sales with no fiscal record", async () => {

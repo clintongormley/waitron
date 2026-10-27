@@ -6,7 +6,7 @@ import { createOptionList, writeProductModifiers } from "@waitron/catalogue";
 import type { ProductModifierRef } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
 import type { SeedLocale } from "./locale.js";
-import type { DemoDataSet } from "./data-set.js";
+import { demoPlainText, type DemoDataSet } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedOptionListsInput {
@@ -36,18 +36,18 @@ export async function seedOptionLists(
       const created = await createOptionList(
         tx,
         {
-          name: list.name,
+          name: demoPlainText(list.name, dataSet, locale),
           customerName: inLanguages(list.customerName, languages),
-          kitchenName: list.kitchenName,
+          kitchenName: demoPlainText(list.kitchenName, dataSet, locale),
           defaultLabelId: labels.find((label) => label.preselected)?.id ?? null,
           active: true,
           // `preselected` is the SEED's own word for which label the default names; it is not a key
           // the contract accepts, and passing it through would be refused as `options.invalid`.
           labels: labels.map(({ id, name, customerName, kitchenName }) => ({
             id,
-            name,
+            name: demoPlainText(name, dataSet, locale),
             customerName: inLanguages(customerName, languages),
-            kitchenName,
+            kitchenName: demoPlainText(kitchenName, dataSet, locale),
             available: true,
           })),
         },

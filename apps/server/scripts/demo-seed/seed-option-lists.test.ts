@@ -57,47 +57,49 @@ describe("seedOptionLists", () => {
     );
 
     // ONE options list in the demo catalogue, and it is the cooking question.
-    expect(lists.map((list) => list.name)).toEqual(["Punto"]);
+    expect(lists.map((list) => list.name)).toEqual(["Doneness"]);
     const cooked = lists[0]!;
     expect(cooked).toMatchObject({
-      name: "Punto",
+      name: "Doneness",
       customerName: { en: "How would you like it cooked?", es: "¿Cómo la quiere hecha?" },
-      kitchenName: "PUNTO CARNE",
+      kitchenName: "MEAT TEMPERATURE",
       active: true,
     });
 
     // The three texts differ so a seed that writes one into the wrong column fails here. This
     // checks the names as STORED; a surface reading the wrong one of the three is caught in
     // `apps/server/src/kitchen-print.test.ts`, not here.
-    expect(cooked.labels.map((label) => label.name)).toEqual(["Poco", "Punto medio", "Muy"]);
+    expect(cooked.labels.map((label) => label.name)).toEqual(["Rare", "Medium", "Well done"]);
     expect(cooked.labels.map((label) => label.customerName)).toEqual([
       { en: "Rare, red in the middle", es: "Poco hecho, rojo por dentro" },
       { en: "Medium, pink in the middle", es: "Al punto, rosado por dentro" },
       { en: "Well done, cooked through", es: "Muy hecho, sin nada de rosa" },
     ]);
     expect(cooked.labels.map((label) => label.kitchenName)).toEqual([
-      "POCO HECHO",
-      "AL PUNTO",
-      "MUY HECHO",
+      "RARE MEAT",
+      "MEDIUM MEAT",
+      "WELL DONE MEAT",
     ]);
     expect(cooked.labels.every((label) => label.available)).toBe(true);
 
     // Stored as that label's id — not its position and not its name.
-    const medium = cooked.labels.find((label) => label.name === "Punto medio")!;
+    const medium = cooked.labels.find((label) => label.name === "Medium")!;
     expect(cooked.defaultLabelId).toBe(medium.id);
 
     // Attached to the steak, and to nothing else.
     expect(attachments.get(steakId)).toEqual([{ kind: "options", id: cooked.id }]);
     expect(attachments.get(coffeeId)).toBeUndefined();
 
-    const steak = available.find((product) => product.name === "Solomillo")!;
+    const steak = available.find((product) => product.name === "Sirloin")!;
     expect(steak.offeredModifiers).toHaveLength(1);
     expect(steak.offeredModifiers[0]).toMatchObject({
       kind: "options",
       id: cooked.id,
-      name: "Punto",
+      name: "Doneness",
       defaultLabelId: medium.id,
     });
-    expect(available.find((product) => product.name === "Café")!.offeredModifiers).toEqual([]);
+    expect(available.find((product) => product.name === "House coffee")!.offeredModifiers).toEqual(
+      [],
+    );
   });
 });

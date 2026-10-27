@@ -260,15 +260,19 @@ When you park or complete an order, Waitron saves the chosen product and variant
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
-The demo venue includes a coffee named in each of the venue's content languages, with two variants,
-a separate kitchen name and direct dietary declarations; the Mixed salad has a custom unit. Casa
-Delgado and Menú del Día include a **Drinks** menu as a folder. Drinks prices Caña at 3.00 instead
-of its product price of 2.80; both including menus inherit that price. Menú del Día sets its own
-Negroni price of 9.00. The coffee variants keep their own prices. The demo sirloin carries a seeded
-options list, **Punto**, asking how the steak should be cooked. On **Pollo asado**, you can choose
-up to three optional sides from **Guarniciones**: Padrón peppers (2.00), mixed salad (1.50) and
-house bread (0.50). These prices apply to one portion added to the chicken, so you can try an
-extra priced differently from the same product sold on its own.
+When you set up an English demo, its staff and kitchen names are in English. The till shows
+**Set lunch**, while its customer name is **Lunch menu**. **Salad** uses the kitchen name
+**SALAD · LUNCH** and a custom **Portion** unit, abbreviated **ptn**. **House coffee** has two
+variants and the kitchen name **COFFEE · DOWNSTAIRS BAR**. Customer names keep the venue's
+content languages, so changing staff wording does not replace the words on a receipt.
+
+Casa Delgado and Set lunch include a **Drinks** menu as a folder. Drinks prices **Beer** at
+3.00 instead of its product price of 2.80; both including menus inherit that price. Set lunch
+sets its own **House Negroni** price of 9.00. The coffee variants keep their own prices. The
+**Sirloin** carries the **Doneness** options list. On **Roast chicken**, you can choose up to
+three optional **Sides**: peppers (2.00), salad (1.50) and bread (0.50). These prices apply to
+one portion added to the chicken, so you can try an extra priced differently from the same
+product sold on its own.
 
 ## Read a dish’s nutrition at the till {#nutrition-at-the-till}
 

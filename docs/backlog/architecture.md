@@ -463,7 +463,10 @@ until A977).
   row, relationship, credential and media checks. Its data and unchanged picture
   bytes now live behind the country pack's secondary demo export; shared server
   writers adapt its structural records to domain types.
-  The remaining cuts supply plain names, Catalonia/Balearic data, Valencia and Galicia. Regional restaurant defaults follow the
+  Staff and kitchen names now resolve English/Spanish pairs, including modifiers, reporting
+  categories, stations and reused menu periods. The frozen Madrid comparison permits only
+  explicit name-cell changes and their dependent identities/publication hashes.
+  The remaining cuts supply Catalonia/Balearic data, Valencia and Galicia. Regional restaurant defaults follow the
   province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
 - **Demo media regeneration changes the committed Negroni picture.** The moved

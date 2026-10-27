@@ -5380,6 +5380,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Retain the recovery-activation child's failure before diagnosing its missed process-death point.**
+  A972 CI's archive case exited before its expected SIGKILL marker; the child error is omitted
+  from the report. Preserve its assertions and capture the child status and stderr on recurrence.
+  [Detail](backlog/ci.md#recovery-activation-child-exits-before-the-process-death-point).
+
 - **Audit the other coverage download actions for retained refused responses.**
   The server helper closes this response; other merge jobs still use the action exercised by
   the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).
@@ -5820,8 +5825,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [plan](superpowers/plans/2026-10-27-a972-demo-country-region.md) covers the data move,
   English names, then Catalonia with the Balearic Islands, Valencia and Galicia.
   Spain's records and pictures have moved behind the pack's secondary demo export,
-  with the frozen Madrid comparison and browser-boundary checks. Plain-name
-  translation and the three regional cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  with the frozen Madrid comparison and browser-boundary checks. The three regional cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Demo media regeneration.** Preserve the committed Negroni picture when
   defining regeneration behavior; today's generator produces a different tile.

@@ -1,3 +1,4 @@
+import { demoPlainText } from "./data-set.js";
 import { createExtraList, readProductModifiers, writeProductModifiers } from "@waitron/catalogue";
 import type { ProductModifierRef } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
@@ -21,9 +22,9 @@ export async function seedExtraLists(
       const created = await createExtraList(
         tx,
         {
-          name: list.name,
+          name: demoPlainText(list.name, dataSet, locale),
           customerName: inLanguages(list.customerName, languages),
-          kitchenName: list.kitchenName,
+          kitchenName: demoPlainText(list.kitchenName, dataSet, locale),
           minPicks: list.minPicks,
           maxPicks: list.maxPicks,
           active: true,

@@ -13,6 +13,7 @@ import { getCountryPack } from "@waitron/country-packs";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { seedDemoRestaurant } from "./seed.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
+import { madridWithNameChanges, type MadridNameChange } from "./testing/madrid-name-changes.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 afterEach(() => vi.useRealTimers());
@@ -65,6 +66,29 @@ for (const locale of ["en", "es"] as const) {
     };
     expect(manifest.originalMain).toBe("d5c7ccb1a7ad8c0a936f6bc7a10b98c56b463360");
     expect(createHash("sha256").update(text).digest("hex")).toBe(manifest.fixtures[fixtureName]);
+    const originalChanges: Record<
+      string,
+      { added: string[]; changed: string[]; deleted: string[] }
+    > = {};
+    for (const [name, table] of Object.entries(expected.seeded.tables)) {
+      const before = expected.provisioned.tables[name]!.rows;
+      const after = table.rows;
+      const delta = {
+        added: Object.keys(after).filter((key) => !Object.hasOwn(before, key)),
+        changed: Object.keys(after).filter(
+          (key) =>
+            Object.hasOwn(before, key) &&
+            JSON.stringify(after[key]) !== JSON.stringify(before[key]),
+        ),
+        deleted: Object.keys(before).filter((key) => !Object.hasOwn(after, key)),
+      };
+      if (Object.values(delta).some((keys) => keys.length > 0)) originalChanges[name] = delta;
+    }
+    expect(originalChanges).toEqual(manifest.seedChanges[locale]);
+    const nameChanges = JSON.parse(
+      await readFile(new URL(`plain-name-changes.${locale}.json`, root), "utf8"),
+    ) as MadridNameChange[];
+    expected.seeded = madridWithNameChanges(expected.seeded, nameChanges);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(
@@ -92,6 +116,21 @@ for (const locale of ["en", "es"] as const) {
       };
       if (Object.values(delta).some((keys) => keys.length > 0)) changes[name] = delta;
     }
-    expect(changes).toEqual(manifest.seedChanges[locale]);
+    const expectedChanges: typeof changes = {};
+    for (const [name, table] of Object.entries(expected.seeded.tables)) {
+      const before = expected.provisioned.tables[name]!.rows;
+      const after = table.rows;
+      const delta = {
+        added: Object.keys(after).filter((key) => !Object.hasOwn(before, key)),
+        changed: Object.keys(after).filter(
+          (key) =>
+            Object.hasOwn(before, key) &&
+            JSON.stringify(after[key]) !== JSON.stringify(before[key]),
+        ),
+        deleted: Object.keys(before).filter((key) => !Object.hasOwn(after, key)),
+      };
+      if (Object.values(delta).some((keys) => keys.length > 0)) expectedChanges[name] = delta;
+    }
+    expect(changes).toEqual(expectedChanges);
   });
 }

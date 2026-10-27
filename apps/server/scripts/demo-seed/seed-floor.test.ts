@@ -45,10 +45,10 @@ describe("seedFloor", () => {
     const dataSet = {
       ...CASA_DELGADO_ES,
       stations: {
-        kitchen: "Preparation",
-        downstairsBar: "Ground drinks",
-        upstairsBar: "Upper drinks",
-        deli: "Takeaway",
+        kitchen: { en: "Preparation", es: "Preparation" },
+        downstairsBar: { en: "Ground drinks", es: "Ground drinks" },
+        upstairsBar: { en: "Upper drinks", es: "Upper drinks" },
+        deli: { en: "Takeaway", es: "Takeaway" },
       },
       menus: {
         ...CASA_DELGADO_ES.menus,
@@ -56,7 +56,13 @@ describe("seedFloor", () => {
           ...CASA_DELGADO_ES.menus.restaurant,
           categories: CASA_DELGADO_ES.menus.restaurant.categories.map((category) =>
             category.station === "bar"
-              ? { ...category, categoryName: `Report ${category.name.en}` }
+              ? {
+                  ...category,
+                  categoryName: {
+                    en: `Report ${category.name.en}`,
+                    es: `Report ${category.name.es}`,
+                  },
+                }
               : category,
           ),
         },
@@ -112,7 +118,7 @@ describe("seedFloor", () => {
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
         select id from kitchen_stations where location_id = ${locationId} and name = 'Downstairs bar'`);
       const { products } = await listAvailableProducts(tx, locationId);
-      const drink = products.find((product) => product.name === "Negroni")!;
+      const drink = products.find((product) => product.name === "House Negroni")!;
       const makers = [];
       for (const instant of ["2026-10-02T18:00:00Z", "2026-10-06T18:00:00Z"]) {
         makers.push(

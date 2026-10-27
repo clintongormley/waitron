@@ -18,12 +18,12 @@ import {
   zoneSalePolicies,
 } from "@waitron/venue-service";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { CountryDemoIdentity } from "@waitron/country";
+import type { CountryDemoIdentity, DemoPlainText } from "@waitron/country";
 import { saveLayout } from "../../src/floor-plan.js";
 import { floorPlanSetsFor } from "../../src/floor-plan-sets.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
-import type { DemoDataSet } from "./data-set.js";
+import { demoPlainText, type DemoDataSet } from "./data-set.js";
 
 export interface SeedFloorInput {
   locationId: string;
@@ -48,6 +48,7 @@ export async function seedFloor(
   tx: Transaction,
   { locationId, locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
 ): Promise<void> {
+  const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
   const cfg = toTableCfg(locationId, locale);
 
   const { rows: defaults } = await tx.execute<{ department_id: string; zone_id: string }>(sql`
@@ -60,7 +61,7 @@ export async function seedFloor(
   }
 
   const { floor } = dataSet;
-  const restaurantName = floor.departmentNames.restaurant[locale];
+  const restaurantName = plain(floor.departmentNames.restaurant);
   await tx.execute(sql`
     update departments
     set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant}
@@ -73,7 +74,7 @@ export async function seedFloor(
     .insert(departments)
     .values({
       locationId,
-      name: floor.departmentNames.deli[locale],
+      name: plain(floor.departmentNames.deli),
       tradingName: departmentTradingNames.deli,
       active: true,
     })
@@ -94,13 +95,13 @@ export async function seedFloor(
         : (
             await createServiceZone(tx, cfg, {
               departmentId: defaultPolicy.department_id,
-              name: zone.name[locale],
+              name: plain(zone.name),
               displayOrder: zone.displayOrder,
             })
           ).id;
     if (zone.key === "bar") {
       await tx.execute(sql`
-        update floor_zones set name = ${zone.name[locale]}, display_order = ${zone.displayOrder}
+        update floor_zones set name = ${plain(zone.name)}, display_order = ${zone.displayOrder}
         where id = ${zoneId}`);
     }
     if (zone.key === "bar") {
@@ -114,7 +115,7 @@ export async function seedFloor(
 
   const upstairsBarZone = await createServiceZone(tx, cfg, {
     departmentId: defaultPolicy.department_id,
-    name: floor.upstairsBarZone[locale],
+    name: plain(floor.upstairsBarZone),
     displayOrder: 3,
   });
   await tx
@@ -132,16 +133,16 @@ export async function seedFloor(
         and(
           eq(kitchenStations.locationId, locationId),
           inArray(kitchenStations.name, [
-            dataSet.stations.downstairsBar,
-            dataSet.stations.upstairsBar,
+            plain(dataSet.stations.downstairsBar),
+            plain(dataSet.stations.upstairsBar),
           ]),
         ),
       );
     const downstairsStationId = barStations.find(
-      (station) => station.name === dataSet.stations.downstairsBar,
+      (station) => station.name === plain(dataSet.stations.downstairsBar),
     )?.id;
     const upstairsStationId = barStations.find(
-      (station) => station.name === dataSet.stations.upstairsBar,
+      (station) => station.name === plain(dataSet.stations.upstairsBar),
     )?.id;
     if (downstairsStationId === undefined || upstairsStationId === undefined) {
       throw new Error("seedFloor: bar preparation stations were not created");
@@ -154,7 +155,7 @@ export async function seedFloor(
           categories.name,
           dataSet.menus.restaurant.categories
             .filter((category) => category.station === "bar")
-            .map((category) => category.categoryName ?? category.name.en),
+            .map((category) => plain(category.categoryName ?? category.name)),
         ),
       );
     for (const category of barCategories) {
@@ -169,7 +170,7 @@ export async function seedFloor(
 
   const deliCounterZone = await createServiceZone(tx, cfg, {
     departmentId: deliDepartmentId,
-    name: floor.deliCounterZone[locale],
+    name: plain(floor.deliCounterZone),
     displayOrder: 4,
   });
   if (menuIds !== undefined) {
@@ -186,17 +187,18 @@ export async function seedFloor(
     const restaurant =
       existing ??
       (await saveMenuPeriod(tx, cfg, restaurantId, {
-        name: dataSet.menuPeriodName,
+        name: plain(dataSet.menuPeriodName),
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       }));
     if (existing !== undefined)
       await updateMenuPeriod(tx, cfg, existing.id, {
+        name: plain(dataSet.menuPeriodName),
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       });
     const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
-      name: dataSet.menuPeriodName,
+      name: plain(dataSet.menuPeriodName),
       menuId: menuIds.deli,
       staffMenuIds: [],
     });
@@ -242,7 +244,7 @@ export async function seedFloor(
       );
     }
   }
-  const setName = dataSet.floor.setName[locale];
+  const setName = plain(dataSet.floor.setName);
   const setOf = new Map<string, string>();
   for (const departmentId of [defaultPolicy.department_id, deliDepartmentId]) {
     setOf.set(
