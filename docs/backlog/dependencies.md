@@ -5,9 +5,7 @@ their full text.
 
 ## Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed
 
-**Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed — OPEN (found 2026-10-03 by #1139's
-review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
-`docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming
+Left open by #1139. Still naming
 0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:332` and
 `packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
 `packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:332` and
@@ -19,7 +17,7 @@ Naming 0.45.3: `scripts/journal-monotonic.test.ts:12` and `docs/developers/conve
 
 ## Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7
 
-**Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).**
+Left open by #460.
 
 Packages run `tsc` at 7; the repository root resolves the name `typescript` to
 `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads.
@@ -34,7 +32,7 @@ TypeScript compilers are installed, and that is deliberate_.
 
 ## A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it
 
-**Left behind by the Stryker upgrade (#447, 2026-09-19).**
+Left open by #447.
 
 Vitest 5 was
 abandoned because Stryker 9.6.1 kills almost nothing under it in `packages/fiscal` and
@@ -48,7 +46,7 @@ See the owner's ignore-qualification decision below.
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
 
-**Left behind by the dependency refresh (#432, 2026-09-19).**
+Left open by #432.
 
 #432 raised five low floors (`hono`, `pg`, `playwright`, `@types/pg`,
 `@aws-sdk/client-s3`) so that every package declared one identical range; no commit or doc
@@ -62,18 +60,18 @@ exact pin stayed exact), so it did not restore #432's one-range shape where that
 
 ## Only the request side of that adapter was compared between the two versions
 
-**Left behind by the Hono Node adapter upgrade (#444, 2026-09-19).** `apps/server` and
-`apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1. Two things it leaves open:
+Left open by #444. `apps/server` and
+`apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1.
 
 Version 2 also
 changed response code — `Response` fast paths, null-body handling, a close handler for
 `Blob`/`ReadableStream` responses, and `Response.json()`/`Response.redirect()` — and nothing
-compared a response BODY or its headers across the two. The suites pass, so nothing is known to
-be broken. Re-running the comparison needs a scratch install of 1.19.15.
+compared a response BODY or its headers across the two.
+Re-running the comparison needs a scratch install of 1.19.15.
 
 ## The default browser floor rose, and no BROWSER floor is stated anywhere in the repo
 
-**Left behind by the vite 8 upgrade (#450, 2026-09-19).**
+Left open by #450.
 
 Nothing
 sets a `build.target` and there is no `browserslist`, so the SPAs take vite's default: on 8.3.0
@@ -91,7 +89,7 @@ bump moves it again silently.
 
 ## The browser-mode packages that declare no vite follow the others' by deduplication, not by a declaration
 
-**Left behind by the vite 8 upgrade (#450, 2026-09-19).**
+Left open by #450.
 
 `packages/adjustments`, `bookings`, `media`, `payments-stripe`, `payments-sumup`
 and `venue-service` resolve vite because vitest declares it as a required peer spanning three
@@ -100,7 +98,7 @@ second vite in the tree, they could land on a different one silently.
 
 ## A dependency-optimizer receipt taken on vite 6 was not re-measured
 
-**Left behind by the vite 8 upgrade (#450, 2026-09-19).**
+Left open by #450.
 
 The `vitest.config.ts` of
 `apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui` each carry an
@@ -125,8 +123,8 @@ lives.
 
 ## `node-forge` has a high-severity security alert with no fixed version
 
-**`node-forge` has a high-severity security alert with no fixed version — OPEN (Dependabot alert #20,
-2026-10-01).** Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
+Dependabot alert #20 (2026-10-01). Every version up to 1.4.0, the one in the lockfile,
+accepts some RSA signatures
 it should reject when checking them. It is a direct dependency of `packages/server-kit`,
 `apps/server` and `apps/print-agent`. From reading the code on 2026-10-02 (nothing run), product
 code only creates and signs certificates and certificate requests with it
@@ -147,7 +145,7 @@ Next, diagnose why the updater failed to recognise the new resolution.
 
 ## Whether the vulnerability the upgrade fixes is reachable in this product is open
 
-**Left behind by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server` and
+Left open by #453. `@simplewebauthn/server` and
 `@simplewebauthn/browser` moved to 14.
 
 14.0.2's
@@ -162,8 +160,8 @@ towards reachable rather than away.
 
 ## One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it
 
-One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it at
-0.25.12; since A107 a root `pnpm.overrides` entry moves `@esbuild-kit/core-utils`' copy onto the
+`drizzle-kit`'s own range holds it at 0.25.12; since A107 a root `pnpm.overrides` entry moves
+`@esbuild-kit/core-utils`' copy onto the
 same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
 packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
 
