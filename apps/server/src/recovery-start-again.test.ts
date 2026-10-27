@@ -1,11 +1,30 @@
-import { describe, expect, it } from "vitest";
-import type { StartAgainSurvey, StartAgainUnit } from "@waitron/provisioning";
-import type { SupportedLocale } from "@waitron/shared";
-import { escapeHtml } from "./recovery-surface.js";
+import { EventEmitter } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { TLSSocket } from "node:tls";
+import { Hono } from "hono";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  surveyStartAgainLeftovers,
+  type StartAgainSurvey,
+  type StartAgainUnit,
+} from "@waitron/provisioning";
+import {
+  START_AGAIN_ADMIN,
+  START_AGAIN_ADMIN_PASSWORD,
+  startAgainAttempt,
+} from "@waitron/provisioning/testing/start-again-attempt";
+import { AppError, type SupportedLocale } from "@waitron/shared";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { OPERATOR_TEXT, escapeHtml, type RecoveryDeps } from "./recovery-surface.js";
 import {
   START_AGAIN_PAGE_TEXT,
+  mountStartAgainChoice,
   renderStartAgainSection,
   type StartAgainMessage,
+  type StartAgainView,
 } from "./recovery-start-again.js";
 
 type Choice = Extract<StartAgainSurvey, { kind: "choice" }>;
@@ -329,5 +348,428 @@ describe("renderStartAgainSection", () => {
     for (const key of Object.keys(en) as Array<keyof typeof en>) {
       expect(es[key], key).not.toBe(en[key]);
     }
+  });
+});
+
+const sockets: TLSSocket[] = [];
+const dirs: string[] = [];
+afterEach(async () => {
+  for (const socket of sockets.splice(0)) socket.destroy();
+  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+function tls(extra: Record<string, unknown> = {}) {
+  const socket = new TLSSocket(new Socket());
+  sockets.push(socket);
+  return { incoming: { socket }, ...extra };
+}
+
+type StartAgainDeps = NonNullable<RecoveryDeps["startAgain"]>;
+const ROOTS = { stateDir: "/box/state", venueDir: "/box/venue" };
+const ROUTE_SURVEY = survey([fileUnit("venue", "venue.db"), folderUnit("state", "extra")]);
+const FORM = { password: "the-password", choice: "keep", listed: ROUTE_SURVEY.digest };
+
+function mounted(overrides: Partial<StartAgainDeps> = {}) {
+  const choose = vi.fn<NonNullable<StartAgainDeps["choose"]>>(() =>
+    Promise.resolve({ choice: "keep" as const }),
+  );
+  const onFinished = vi.fn(() => Promise.resolve());
+  const log = vi.fn();
+  const render = vi.fn((view: StartAgainView) => `<main>${view.code}</main>`);
+  const deps: StartAgainDeps = {
+    roots: ROOTS,
+    survey: ROUTE_SURVEY,
+    onFinished,
+    choose,
+    now: () => NOW,
+    ...overrides,
+  };
+  const app = new Hono();
+  mountStartAgainChoice(app, deps, render, log);
+  return { app, choose, onFinished, log, render };
+}
+
+function post(
+  app: Hono,
+  body: string | Record<string, string>,
+  options: { headers?: Record<string, string>; env?: unknown } = {},
+) {
+  return app.request(
+    "/recovery-api/start-again",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...options.headers },
+      body: typeof body === "string" ? body : new URLSearchParams(body).toString(),
+    },
+    options.env ?? tls(),
+  );
+}
+
+describe("mountStartAgainChoice", () => {
+  it("a POST without TLS is refused 403 and choose is never called", async () => {
+    const { app, choose, render } = mounted();
+    for (const env of [{}, { incoming: { socket: new Socket() } }]) {
+      const response = await post(app, FORM, { env });
+      expect(response.status).toBe(403);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(render).toHaveBeenLastCalledWith({
+        code: "setup.start_again_files_found",
+        locale: "en-GB",
+        secure: false,
+        message: { kind: "insecure" },
+      });
+    }
+    expect(choose).not.toHaveBeenCalled();
+  });
+
+  it("a POST from another origin is refused 403", async () => {
+    const { app, choose, render } = mounted();
+    const refused: Array<Record<string, string>> = [
+      { Origin: "https://elsewhere.example" },
+      { "Sec-Fetch-Site": "cross-site" },
+      { "Sec-Fetch-Site": "same-site" },
+    ];
+    for (const headers of refused) {
+      const response = await post(app, FORM, { headers });
+      expect(response.status, JSON.stringify(headers)).toBe(403);
+      expect(render).toHaveBeenLastCalledWith({
+        code: "setup.start_again_files_found",
+        locale: "en-GB",
+        secure: true,
+        message: { kind: "otherPage" },
+      });
+    }
+    expect(choose).not.toHaveBeenCalled();
+    const same = await post(app, FORM, {
+      headers: { Origin: "http://localhost", "Sec-Fetch-Site": "same-origin" },
+    });
+    expect(same.status).toBe(200);
+    expect(choose).toHaveBeenCalledOnce();
+  });
+
+  it("an over-long or wrongly typed body is refused 400", async () => {
+    const { app, choose, render } = mounted();
+    const cases: Array<[string, Parameters<typeof post>[1], Parameters<typeof post>[2]]> = [
+      ["over-long", { ...FORM, password: "x".repeat(4097) }, {}],
+      ["json", JSON.stringify(FORM), { headers: { "Content-Type": "application/json" } }],
+      ["extra field", { ...FORM, other: "1" }, {}],
+      ["repeated field", `${new URLSearchParams(FORM).toString()}&choice=move`, {}],
+      ["no listed", { password: FORM.password, choice: FORM.choice }, {}],
+    ];
+    for (const [name, body, options] of cases) {
+      const response = await post(app, body, options);
+      expect(response.status, name).toBe(400);
+      expect(render, name).toHaveBeenLastCalledWith(
+        expect.objectContaining({ message: { kind: "notSaved" }, secure: true }),
+      );
+    }
+    const wrongChoice = await post(app, { ...FORM, choice: "delete" });
+    expect(wrongChoice.status).toBe(400);
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: { kind: "choiceMissing" } }),
+    );
+    expect(choose).not.toHaveBeenCalled();
+  });
+
+  it("a missing password, or both fields missing, reports the password; a missing choice reports the choice", async () => {
+    const { app, choose, render } = mounted();
+    expect((await post(app, { ...FORM, password: "" })).status).toBe(400);
+    expect(render).toHaveBeenLastCalledWith({
+      code: "setup.start_again_files_found",
+      locale: "en-GB",
+      secure: true,
+      message: { kind: "passwordMissing" },
+      chosen: "keep",
+    });
+    expect((await post(app, { listed: FORM.listed })).status).toBe(400);
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: { kind: "passwordMissing" } }),
+    );
+    expect((await post(app, { password: "p", listed: FORM.listed })).status).toBe(400);
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: { kind: "choiceMissing" } }),
+    );
+    expect(choose).not.toHaveBeenCalled();
+  });
+
+  const low = () => Promise.resolve({ bavail: 1, frsize: FULL_DISK_BYTES - 1 });
+  const roomy = () => Promise.resolve({ bavail: 1, frsize: FULL_DISK_BYTES * 4 });
+  const ROWS: Array<{
+    name: string;
+    error: unknown;
+    status: number;
+    message: StartAgainMessage;
+    statfs?: StartAgainDeps["statfs"];
+  }> = [
+    {
+      name: "setup.request_invalid password",
+      error: new AppError("setup.request_invalid", { field: "password" }),
+      status: 400,
+      message: { kind: "passwordMissing" },
+    },
+    {
+      name: "setup.request_invalid choice",
+      error: new AppError("setup.request_invalid", { field: "choice" }),
+      status: 400,
+      message: { kind: "choiceMissing" },
+    },
+    {
+      name: "setup.owner_required",
+      error: new AppError("setup.owner_required", {}),
+      status: 403,
+      message: { kind: "wrongPassword" },
+    },
+    {
+      name: "password.throttled",
+      error: new AppError("password.throttled", { retryAfterSeconds: 61 }),
+      status: 429,
+      message: { kind: "throttled", minutes: 2 },
+    },
+    {
+      name: "setup.start_again_files_changed",
+      error: new AppError("setup.start_again_files_changed", {}),
+      status: 409,
+      message: { kind: "filesChanged" },
+    },
+    {
+      name: "setup.not_ready",
+      error: new AppError("setup.not_ready", {}),
+      status: 409,
+      message: { kind: "notOffered" },
+    },
+    {
+      name: "setup.start_again_kept",
+      error: new AppError("setup.start_again_kept", {}),
+      status: 409,
+      message: { kind: "notOffered" },
+    },
+    {
+      name: "provisioning.database_in_use",
+      error: new AppError("provisioning.database_in_use", { database: "venue" }),
+      status: 409,
+      message: { kind: "busy" },
+    },
+    {
+      name: "setup.start_again_set_aside_unavailable",
+      error: new AppError("setup.start_again_set_aside_unavailable", {}),
+      status: 409,
+      message: { kind: "moveUnavailable" },
+    },
+    {
+      name: "setup.attempt_invalid on a full disk",
+      error: new AppError("setup.attempt_invalid", {}),
+      status: 409,
+      message: { kind: "diskFull" },
+      statfs: low,
+    },
+    {
+      name: "setup.attempt_invalid with room",
+      error: new AppError("setup.attempt_invalid", {}),
+      status: 409,
+      message: { kind: "notSaved" },
+      statfs: roomy,
+    },
+    {
+      name: "setup.attempt_invalid with free space unknown",
+      error: new AppError("setup.attempt_invalid", {}),
+      status: 409,
+      message: { kind: "notSaved" },
+      statfs: () => Promise.reject(new Error("statfs refused")),
+    },
+    {
+      name: "another code",
+      error: new AppError("setup.start_again_incomplete", {}),
+      status: 409,
+      message: { kind: "notFinished" },
+    },
+    {
+      name: "a plain error",
+      error: new Error("boom"),
+      status: 409,
+      message: { kind: "notFinished" },
+    },
+  ];
+
+  it.each(ROWS)("$name answers $status with $message.kind", async (row) => {
+    const { app, render, log, onFinished } = mounted({
+      choose: () => Promise.reject(row.error),
+      ...(row.statfs === undefined ? {} : { statfs: row.statfs }),
+    });
+    const response = await post(app, { ...FORM, choice: "move" });
+    expect(response.status).toBe(row.status);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).toBe("<main>setup.start_again_files_found</main>");
+    expect(render).toHaveBeenLastCalledWith({
+      code: "setup.start_again_files_found",
+      locale: "en-GB",
+      secure: true,
+      message: row.message,
+      chosen: "move",
+    });
+    expect(response.headers.get("Retry-After")).toBe(
+      row.message.kind === "throttled" ? "61" : null,
+    );
+    if (row.message.kind === "notFinished") {
+      expect(log).toHaveBeenCalledWith("warn", "recovery.start_again_choice_failed", {
+        errorCode: row.error instanceof AppError ? row.error.code : null,
+      });
+    } else {
+      expect(log).not.toHaveBeenCalled();
+    }
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("the full-disk reading is taken over both roots", async () => {
+    const asked: string[] = [];
+    const { app } = mounted({
+      choose: () => Promise.reject(new AppError("setup.attempt_invalid", {})),
+      statfs: (path) => {
+        asked.push(path);
+        return roomy();
+      },
+    });
+    await post(app, FORM);
+    expect(asked.sort()).toEqual([ROOTS.stateDir, ROOTS.venueDir].sort());
+  });
+
+  it("passes the roots, the form and the clock to choose, and answers in the request's language", async () => {
+    const { app, choose, render } = mounted();
+    const response = await post(app, FORM, { headers: { "Accept-Language": "es-ES,es;q=0.9" } });
+    expect(response.status).toBe(200);
+    expect(choose).toHaveBeenCalledWith({
+      roots: ROOTS,
+      password: FORM.password,
+      choice: "keep",
+      listed: FORM.listed,
+      now: expect.any(Function),
+    });
+    const now = choose.mock.calls[0]![0].now;
+    expect(now()).toBe(NOW);
+    expect(render).toHaveBeenLastCalledWith({
+      code: "setup.start_again_kept",
+      locale: "es-ES",
+      secure: true,
+    });
+    expect(response.headers.get("Vary")).toBe("Accept-Language");
+  });
+
+  it("Keep answers the kept page and does not restart", async () => {
+    const { app, onFinished, render } = mounted();
+    const response = await post(app, FORM, { env: tls({ outgoing: new EventEmitter() }) });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("<main>setup.start_again_kept</main>");
+    expect(render).toHaveBeenLastCalledWith({
+      code: "setup.start_again_kept",
+      locale: "en-GB",
+      secure: true,
+    });
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("Move answers moved, naming the set-aside folder", async () => {
+    const { app, render } = mounted({
+      choose: () =>
+        Promise.resolve({
+          choice: "move" as const,
+          setAside: {
+            state: "first-setup-set-aside/s1/state",
+            venue: "first-setup-set-aside/s1/venue",
+          },
+        }),
+    });
+    expect((await post(app, { ...FORM, choice: "move" })).status).toBe(200);
+    expect(render).toHaveBeenLastCalledWith({
+      code: "setup.start_again_files_found",
+      locale: "en-GB",
+      secure: true,
+      message: { kind: "moved", folder: "state/first-setup-set-aside/s1" },
+    });
+  });
+
+  it("Move across two disks names both set-aside folders", async () => {
+    const { app, render } = mounted({
+      choose: () =>
+        Promise.resolve({
+          choice: "move" as const,
+          setAside: { state: "first-setup-set-aside/s1/state", venue: "first-setup-set-aside/s1" },
+        }),
+    });
+    await post(app, { ...FORM, choice: "move" });
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        message: {
+          kind: "moved",
+          folder: "state/first-setup-set-aside/s1/state, venue/first-setup-set-aside/s1",
+        },
+      }),
+    );
+  });
+
+  it("Move restarts only after the answer is written", async () => {
+    const outgoing = new EventEmitter();
+    const { app, onFinished } = mounted({
+      choose: () =>
+        Promise.resolve({
+          choice: "move" as const,
+          setAside: {
+            state: "first-setup-set-aside/s1/state",
+            venue: "first-setup-set-aside/s1/venue",
+          },
+        }),
+    });
+    const response = await post(app, { ...FORM, choice: "move" }, { env: tls({ outgoing }) });
+    expect(response.status).toBe(200);
+    expect(onFinished).not.toHaveBeenCalled();
+    outgoing.emit("finish");
+    expect(onFinished).toHaveBeenCalledOnce();
+    outgoing.emit("finish");
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("the log line names no person", async () => {
+    const { app, log } = mounted({
+      choose: () =>
+        Promise.resolve({
+          choice: "move" as const,
+          setAside: {
+            state: "first-setup-set-aside/s1/state",
+            venue: "first-setup-set-aside/s1/venue",
+          },
+        }),
+    });
+    await post(app, { ...FORM, choice: "move" });
+    expect(log).toHaveBeenCalledOnce();
+    const [level, event, fields] = log.mock.calls[0]! as [string, string, Record<string, unknown>];
+    expect([level, event]).toEqual(["info", "recovery.start_again_choice"]);
+    expect(Object.keys(fields).sort()).toEqual(["attemptId", "choice", "units"]);
+    expect(fields).toEqual({ choice: "move", attemptId: ROUTE_SURVEY.attemptId, units: 2 });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(FORM.password);
+  });
+
+  it("with the real choose and the shared fixture, Keep answers the kept title", async () => {
+    const base = await mkdtemp(join(tmpdir(), "recovery-start-again-"));
+    dirs.push(base);
+    const attempt = await startAgainAttempt(base);
+    await writeFile(join(attempt.roots.venueDir, "venue.db"), "found database");
+    const found = await surveyStartAgainLeftovers(attempt.roots);
+    if (found?.kind !== "choice") throw new Error(`expected choice, got ${JSON.stringify(found)}`);
+    const app = new Hono();
+    const log = vi.fn();
+    mountStartAgainChoice(
+      app,
+      { roots: attempt.roots, survey: found, onFinished: () => Promise.resolve() },
+      (view) => OPERATOR_TEXT[view.code]![view.locale].title,
+      log,
+    );
+    const response = await post(app, {
+      password: START_AGAIN_ADMIN_PASSWORD,
+      choice: "keep",
+      listed: found.digest,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(OPERATOR_TEXT["setup.start_again_kept"]!["en-GB"].title);
+    const logged = JSON.stringify(log.mock.calls);
+    expect(logged).not.toContain(START_AGAIN_ADMIN.displayName);
+    expect(logged).not.toContain(START_AGAIN_ADMIN.email);
   });
 });

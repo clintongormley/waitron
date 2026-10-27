@@ -5,6 +5,8 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
+import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
+import type { Statfs } from "./free-bytes.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -25,6 +27,16 @@ export interface RecoveryDeps {
   /** This start was refused before it began, so `failures` does not count it. */
   refusedAtStart?: true;
   log?: Logger;
+  /** Present when the start found files a cut-off Start again did not create. */
+  startAgain?: {
+    roots: { stateDir: string; venueDir: string };
+    survey: Extract<StartAgainSurvey, { kind: "choice" }>;
+    /** The entry's restart, called once a Move's answer has been written. */
+    onFinished: () => Promise<void>;
+    choose?: typeof chooseStartAgainLeftovers;
+    now?: () => Date;
+    statfs?: Statfs;
+  };
 }
 
 /** The page is served before any authentication exists; see `OPERATOR_TEXT` for what reaches it. */

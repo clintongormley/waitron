@@ -1,6 +1,24 @@
-import type { StartAgainSurvey, StartAgainUnit } from "@waitron/provisioning";
-import type { SupportedLocale } from "@waitron/shared";
-import { escapeHtml } from "./recovery-surface.js";
+import type { ServerResponse } from "node:http";
+import { TLSSocket } from "node:tls";
+import type { Context, Hono } from "hono";
+import {
+  chooseStartAgainLeftovers,
+  type StartAgainSurvey,
+  type StartAgainUnit,
+} from "@waitron/provisioning";
+import {
+  AppError,
+  FALLBACK_LOCALE,
+  hasCode,
+  isAppError,
+  type SupportedLocale,
+} from "@waitron/shared";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
+import "./errors.js";
+import { resolveLoginLocale } from "./login-locale.js";
+import type { Logger } from "./logger.js";
+import { escapeHtml, type RecoveryDeps } from "./recovery-surface.js";
+import { lowestFreeBytes } from "./start-space.js";
 
 export interface StartAgainPageText {
   filesFound: string;
@@ -251,4 +269,210 @@ ${fieldError("start-again-choice-error", choiceError)}<input type="hidden" name=
 ${bottom}<button type="submit">${escapeHtml(text.continue)}</button>
 </form>
 `;
+}
+
+export interface StartAgainView {
+  code: "setup.start_again_files_found" | "setup.start_again_kept";
+  locale: SupportedLocale;
+  secure: boolean;
+  message?: StartAgainMessage;
+  chosen?: "keep" | "move";
+}
+
+/** Draws the whole recovery page for `view`; the route sets the status and headers. */
+export type StartAgainRender = (view: StartAgainView) => string | Promise<string>;
+
+type StartAgainDeps = NonNullable<RecoveryDeps["startAgain"]>;
+
+const MAX_FORM_BYTES = 4096;
+const FORM_FIELDS = ["password", "choice", "listed"] as const;
+
+class Refusal {
+  constructor(
+    readonly status: 400 | 403 | 409 | 429,
+    readonly message: StartAgainMessage,
+    readonly secure = true,
+  ) {}
+}
+
+function invalid(field: string): never {
+  throw new AppError("setup.request_invalid", { field });
+}
+
+function isSecure(c: Context): boolean {
+  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+  return socket instanceof TLSSocket && socket.encrypted;
+}
+
+function fromThisPage(c: Context): boolean {
+  const origin = c.req.header("Origin");
+  const site = c.req.header("Sec-Fetch-Site");
+  return (
+    (origin === undefined || origin === new URL(c.req.url).origin) &&
+    (site === undefined || site === "same-origin" || site === "none")
+  );
+}
+
+async function formBody(c: Context): Promise<string> {
+  const type = c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
+  if (type !== "application/x-www-form-urlencoded") invalid("body");
+  const reader = c.req.raw.body?.getReader();
+  if (reader === undefined) invalid("body");
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      length += next.value.byteLength;
+      if (length > MAX_FORM_BYTES) {
+        await reader.cancel();
+        invalid("body");
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+interface Form {
+  password: string | undefined;
+  choice: "keep" | "move" | undefined;
+  listed: string | undefined;
+}
+
+function parseForm(body: string): Form {
+  const params = new URLSearchParams(body);
+  const keys = [...params.keys()];
+  if (new Set(keys).size !== keys.length) invalid("body");
+  if (keys.some((key) => !(FORM_FIELDS as readonly string[]).includes(key))) invalid("body");
+  const value = (key: (typeof FORM_FIELDS)[number]) => {
+    const found = params.get(key);
+    return found === null || found === "" ? undefined : found;
+  };
+  const choice = value("choice");
+  return {
+    password: value("password"),
+    choice: choice === "keep" || choice === "move" ? choice : undefined,
+    listed: value("listed"),
+  };
+}
+
+async function refusalFor(error: unknown, deps: StartAgainDeps, log?: Logger): Promise<Refusal> {
+  if (isAppError(error)) {
+    if (hasCode(error, "setup.request_invalid")) {
+      const field = error.params.field;
+      if (field === "password") return new Refusal(400, { kind: "passwordMissing" });
+      if (field === "choice") return new Refusal(400, { kind: "choiceMissing" });
+      return new Refusal(400, { kind: "notSaved" });
+    }
+    if (hasCode(error, "password.throttled"))
+      return new Refusal(429, {
+        kind: "throttled",
+        minutes: Math.ceil(error.params.retryAfterSeconds / 60),
+      });
+    switch (error.code) {
+      case "setup.owner_required":
+        return new Refusal(403, { kind: "wrongPassword" });
+      case "setup.start_again_files_changed":
+        return new Refusal(409, { kind: "filesChanged" });
+      case "setup.not_ready":
+      case "setup.start_again_kept":
+        return new Refusal(409, { kind: "notOffered" });
+      case "provisioning.database_in_use":
+        return new Refusal(409, { kind: "busy" });
+      case "setup.start_again_set_aside_unavailable":
+        return new Refusal(409, { kind: "moveUnavailable" });
+      case "setup.attempt_invalid": {
+        const free = await lowestFreeBytes([deps.roots.stateDir, deps.roots.venueDir], deps.statfs);
+        return new Refusal(409, {
+          kind: free !== null && free < FULL_DISK_BYTES ? "diskFull" : "notSaved",
+        });
+      }
+    }
+  }
+  log?.("warn", "recovery.start_again_choice_failed", {
+    errorCode: isAppError(error) ? error.code : null,
+  });
+  return new Refusal(409, { kind: "notFinished" });
+}
+
+/** Each root's folder named as the found-files list names it: `state/...` or `venue/...`. */
+function movedFolder(setAside: { state: string; venue: string }): string {
+  const parent = setAside.state.slice(0, setAside.state.lastIndexOf("/"));
+  if (setAside.venue === `${parent}/venue`) return `state/${parent}`;
+  return `state/${setAside.state}, venue/${setAside.venue}`;
+}
+
+function outgoingOf(c: Context): ServerResponse | undefined {
+  return (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
+}
+
+/**
+ * `POST /recovery-api/start-again`: the Keep or Move form `renderStartAgainSection` draws. Refuses
+ * before choosing unless the request came over TLS from this page; the password goes to `choose`
+ * alone and is never logged.
+ */
+export function mountStartAgainChoice(
+  app: Hono,
+  deps: StartAgainDeps,
+  render: StartAgainRender,
+  log?: Logger,
+): void {
+  const choose = deps.choose ?? chooseStartAgainLeftovers;
+  const now = deps.now ?? (() => new Date());
+
+  app.post("/recovery-api/start-again", async (c) => {
+    const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
+    c.header("Cache-Control", "no-store");
+    c.header("Vary", "Accept-Language");
+    const page = async (status: 200 | Refusal["status"], view: Omit<StartAgainView, "locale">) =>
+      c.html(await render({ ...view, locale }), status);
+    const code = "setup.start_again_files_found" as const;
+
+    let chosen: Form["choice"];
+    try {
+      if (!isSecure(c)) throw new Refusal(403, { kind: "insecure" }, false);
+      if (!fromThisPage(c)) throw new Refusal(403, { kind: "otherPage" });
+      const form = parseForm(await formBody(c));
+      chosen = form.choice;
+      if (form.password === undefined) invalid("password");
+      if (form.choice === undefined) invalid("choice");
+      if (form.listed === undefined) invalid("listed");
+      const result = await choose({
+        roots: deps.roots,
+        password: form.password,
+        choice: form.choice,
+        listed: form.listed,
+        now,
+      });
+      log?.("info", "recovery.start_again_choice", {
+        choice: result.choice,
+        attemptId: deps.survey.attemptId,
+        units: deps.survey.units.length,
+      });
+      if (result.choice === "keep")
+        return await page(200, { code: "setup.start_again_kept", secure: true });
+      const outgoing = outgoingOf(c);
+      if (outgoing === undefined) void deps.onFinished();
+      else outgoing.once("finish", () => void deps.onFinished());
+      return await page(200, {
+        code,
+        secure: true,
+        message: { kind: "moved", folder: movedFolder(result.setAside) },
+      });
+    } catch (error) {
+      const refusal = error instanceof Refusal ? error : await refusalFor(error, deps, log);
+      if (isAppError(error) && hasCode(error, "password.throttled"))
+        c.header("Retry-After", String(error.params.retryAfterSeconds));
+      return page(refusal.status, {
+        code,
+        secure: refusal.secure,
+        message: refusal.message,
+        ...(chosen === undefined ? {} : { chosen }),
+      });
+    }
+  });
 }
