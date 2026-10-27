@@ -116,7 +116,7 @@ async function gatherStartAgainFloor(
   let recoveryRecordDamaged = false;
   const unreadable = new Set<UnreadableRecord>();
   // Only the database-missing path reads past a damaged public record or documents file; with the
-  // database present they keep today's refusals (A1099 plan, difference D-4).
+  // database present they keep today's refusals.
   const unreadableRecord = (error: unknown, damaged: boolean, record: UnreadableRecord) => {
     if (!databaseMissing || !damaged || !(error instanceof AppError)) throw error;
     unreadable.add(record);

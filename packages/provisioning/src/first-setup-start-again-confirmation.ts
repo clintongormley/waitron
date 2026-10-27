@@ -97,7 +97,6 @@ function recoveryShown(value: unknown): StartAgainRecoveryShown {
   };
 }
 
-/** Records named in the fixed order, each at most once. */
 function unreadableShown(value: unknown): StartAgainUnreadable {
   if (
     !object(value) ||

@@ -118,7 +118,6 @@ function shownSummary(value: unknown): StartAgainSummary {
   };
 }
 const UNREADABLE_RECORDS = ["series-picks", "public-record", "fiscal-documents"];
-/** Records named in the fixed order, each at most once. */
 function shownUnreadable(value: unknown): StartAgainUnreadable {
   const unreadable = exact(value, ["records", "floorMs"]);
   const records = unreadable.records;
