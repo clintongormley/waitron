@@ -7749,7 +7749,7 @@ apps/till/src` (ran), each line read:
 | same file `:1114-1134` `#queue` | draws the station's printer-down lines (`#printersDown`, `:1123`) **before** the `<till-station-queue>` tag, which it mounts with `.columns` and `@toggle-column` | slots the name and today's control into `lead` and the printer-down lines into `status` (D1); gains the board's name and `@open-columns` (D7, D8) |
 | same file `:1148-1160` `#pick` | the till's station picker, one button per station, named by the station | read: where the till shows the picked station's name (D1) |
 | same file `:533-546` `#adoptDeviceStation`, `:276-282` the `UrlStateController`, `:484-486` the refreshed station list | a device read replaces `deviceStations`; a URL change restores the till's station; a refreshed list that lost the picked station restores another | each can take away the board a Columns window edits (D9) |
-| same file `:852-868` `#renderMoveDialog`, `:871-874` `render`, `:307-319` `willUpdate` | the screen draws its own Move dialog, and closes it when `api`, `deviceMode` or `deviceId` changes | the Columns window is drawn the same way and closed by the same reset (D9) |
+| same file `:852-868` `#renderMoveDialog`, `:871-874` `render`, `:307-319` `willUpdate` | the screen draws its own Move dialog, and closes it when `api`, `deviceMode` or `deviceId` changes | the Columns window is drawn the same way and closed in the same `willUpdate` (D9) |
 | `apps/till/src/widgets/station-today.ts:222-281` | a status sentence ("Open", "Closed for today → Pass") and a button; needs a manager PIN on a kitchen display | unchanged; slotted into the header row (D1) |
 | `apps/till/src/widgets/till-shell.ts:1121-1123`, `:398` `.language-corner` | on a kitchen display, theme and language in a row of their own above the screen | unchanged (D1) |
 | `apps/till/src/widgets/equipment-dialog.ts:319-321`, `:539-541` | each equipment choice sent as `equipment-change` when made; one Close; no draft scope (not in the `draftScopeFor` list) | the precedent the window follows (D2) |
@@ -7900,8 +7900,8 @@ apps/till/src` (ran), each line read:
   dialog does.
 - **D9. While the window is open.** A 15-second refresh changes neither the window nor the layout
   (the layout is never re-read, slice 9 D11). A change of `api`, `deviceMode` or `deviceId` closes
-  it, in the same `willUpdate` branch that drops the Move dialog (`:307-319`), because the scope it
-  edits is gone. **It also closes when its board is no longer drawn**, checked each time the screen
+  it in `willUpdate` (`:307-319`), the first `deviceId` arriving included, because the scope it
+  edits is gone; the Move dialog's reset there still waits for a previous value. **It also closes when its board is no longer drawn**, checked each time the screen
   redraws: on a kitchen display, its station gone from or no longer drawing on the device's read
   (`#adoptDeviceStation`, `:533-546`, after a 15-second refresh or any reload), or the merged
   board gone; on the till, the picked station changing by any path (a URL change through the
