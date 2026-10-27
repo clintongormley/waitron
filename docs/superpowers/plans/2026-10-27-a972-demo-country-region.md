@@ -441,3 +441,20 @@ this cut lists only the three frozen capture files and original exporter text
 there. Source and test code stay formatted. A digest test rejects a reformatted
 copy and passes after the original bytes are restored. The earlier scoped format
 check covered source files, not these capture files.
+
+### Cut 1 CI runtime correction — 2026-10-27
+
+The first PR root run rejected the generator's compressed-byte digest on Node
+26.12.1. The exact failure reproduces with that official runtime in an installed
+disposable checkout. The original encoder produces identical inflated scanlines
+and identical non-IDAT chunks under local Node 26.11.1 and 26.12.1; the compressed
+IDAT data differs. The test now decodes through the same installed image library
+as the server, asserts PNG format, dimensions and channels, and compares the
+original encoder's pixel digest. Both runtimes pass. A pixel mutation fails and
+a valid alternate compression level passes. No generator or committed image
+changed.
+
+The earlier byte comparison of regenerated and committed pictures applied to
+local Node 26.11.1. With Node 26.12.1, compression changes more file digests while
+the decoded-pixel difference still names only Negroni. The separate committed
+Negroni regeneration policy remains open.

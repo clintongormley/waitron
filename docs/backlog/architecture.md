@@ -467,8 +467,9 @@ until A977).
   province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
 - **Demo media regeneration changes the committed Negroni picture.** The moved
-  generator reproduces the other committed tiles but produces a different Negroni.
-  Preserve the committed picture when qualifying a future regeneration policy;
+  generator produces different pixels for Negroni; a decoded-pixel comparison
+  preserves this finding across tested Node compression versions. Preserve the
+  committed picture when qualifying a future regeneration policy;
   A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
