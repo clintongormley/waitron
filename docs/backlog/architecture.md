@@ -55,7 +55,7 @@ their full text.
   `apps/server/src/boot.ts` (a peer relay URL from `mirror_config`, owner-written config),
   `apps/server/src/mailpit-client.ts` (the loopback Mailpit base URL) and
   `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by `assertSafePrimaryUrl`) — none of
-  the three timed; and the email pattern itself is still copied six times in `apps/dashboard`
+  the three timed; and the email pattern itself is still copied in `apps/dashboard`
   (`login-preference.ts` twice, `screens/login-screen.ts`, `screens/profile-screen.ts`,
   `widgets/person-edit.ts`, `widgets/person-form.ts`), run in the browser on an address the person
   typed or the browser saved (CodeQL did not flag them either). See also the OPEN bullet "The two
@@ -63,8 +63,7 @@ their full text.
 
 ## The two SQL scanners named `stripSql` blank block comments before `--` comments
 
-**OPEN (split
-  from A95).** `scripts/module-graph-honesty.test.ts` and
+**OPEN (split from A95).** `scripts/module-graph-honesty.test.ts` and
   `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/` before
   `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not run;
   whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
@@ -88,7 +87,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 ## Small renames and dead exports the sweep found and could not make
 
 **OPEN (T2, 2026-09-23; narrowed by A92 and #1039).**
-  Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
+  `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
   because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`)
   ran it by that name. PF8 landed as #1088; rename the file and its references in the next T2
   sweep. The `pg` handle
@@ -105,8 +104,8 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). Every pruning pull request passes `scripts/comments-only.mjs <base>`; its header states what
   it refuses and misses. The fiscal packages go under the same gates as any other fiscal change: the
-  golden huella test and the `inmutabilidad` suite pass unedited. Not reached by any package's pull
-  request: `bench/` (about 2,300 comment lines) and the root `vitest.config.ts` and
+  golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/`, the root
+  `vitest.config.ts` and
   `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
   checker and were left.
 
@@ -233,8 +232,7 @@ changing one does not pass `scripts/comments-only.mjs` as a comments-only change
 
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE
 
-**OPEN (found
-2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
+**OPEN.** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
 inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
 Plain GETs are among its callers — `GET /api/box/status`, the unauthenticated content-languages route, and two
 management reads. The single writer is the engine's and is not removable. The unconditional DELETE
@@ -245,8 +243,7 @@ all.
 
 ## Three copies of one SQL identifier validator and two cause-chain walkers
 
-**OPEN (found
-2026-09-23, task F1's review wave).** W8 replaced the probes in
+**OPEN.** W8 replaced the probes in
 `packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
 `packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
 `packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
@@ -303,9 +300,7 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's location
 
-**Correctness:**
-
-1. Scope these alongside the other by-id verbs when multi-location lands. All
+Scope these alongside the other by-id verbs when multi-location lands. All
    four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
    reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
@@ -544,10 +539,9 @@ The [operator procedure](../operations/a760-migration-squash.md)
 
 ## Station deletion's draft-location filter needs a discriminating test
 
-In A435 step 5's second run-it review, deleting the `working_orders` location `exists` clause in
-  `apps/server/src/station-delete.ts` left all 47 station-delete and management-delete cases
-  passing. Add a second-location draft case that fails without the clause, or establish by running
-  the real writers that it is redundant before removing it. Its necessity remains unverified.
+Add a second-location draft case that fails without the `working_orders` location `exists` clause
+  in `apps/server/src/station-delete.ts`, or establish by running the real writers that it is
+  redundant before removing it. Its necessity remains unverified.
 
 ## Loose ends left by A435's printer, reader and device delete (steps 2 to 4)
 
@@ -620,8 +614,8 @@ OPEN.
 
 The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund's opening:
   `enqueueTenderRefundDrawer` takes a required `authorizedBy` and writes it into the row
-  (`apps/server/src/receipt-print.ts:622`, `:645-653`). Found by A980 S2c's review (#2073); the
-  lines predate that branch. Correct the comment to name every reason that sets it.
+  (`apps/server/src/receipt-print.ts:622`, `:645-653`). Correct the comment to name every reason
+  that sets it.
 
 ## A query with tens of thousands of bound values crashes before it reaches the database
 
@@ -629,8 +623,7 @@ Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adap
   (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
   value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
   call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
-  size). Found by A1088's review, whose own query no longer names ids; any other query that binds
-  one value per row can still meet it.
+  size). Any query that binds one value per row can still meet it.
 
 ## Decisions and deliberate limits
 
