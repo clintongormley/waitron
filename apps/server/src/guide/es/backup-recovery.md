@@ -43,6 +43,20 @@ el local de este equipo.
 Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
 equipo se está reiniciando, espera a que responda.
 
+Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
+nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Su página
+muestra los archivos y, con la conexión segura del equipo, pide la contraseña de administrador que
+elegiste al configurar. **Conservarlo todo y parar** deja los archivos como están, y la página sigue
+hasta que se reinstale Waitron. **Apartar estos archivos y terminar «Empezar de nuevo»** mueve los
+archivos, sin cambios, a una carpeta nueva del equipo y termina «Empezar de nuevo»; después el
+equipo empieza una configuración inicial nueva. Si los archivos cambian después de abrir la página,
+el equipo rechaza la elección y no cambia nada: pulsa **Reintentar un arranque normal** para verlos
+de nuevo. A partir de la sexta contraseña incorrecta, la página te hace esperar antes del siguiente
+intento, nunca más de 15 minutos, y cada 15 minutos sin una contraseña incorrecta se perdona una. Si
+la página dice que «Empezar de nuevo» estaba apartando archivos y no ha terminado, pulsa
+**Reintentar un arranque normal** para terminar de moverlos; después el equipo empieza una
+configuración inicial nueva.
+
 ## Elige tu copia {#source}
 
 Elige **Archivo de copia**, **Copia del bucket** o **Copia de Cloud** y el entorno correspondiente.

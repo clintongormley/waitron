@@ -129,7 +129,8 @@ of non-test `.ts` files under `apps/` and `packages/`, so a field made with
 file or a response), or with its tag name split across a `${…}` is invisible to it;
 the field primitives' own files, and `wt-data-table`'s (its search box), are not read at all, so a
 second field added inside one passes; and some files are allowed by name (the hidden username
-inputs for the browser's password manager, in two files, and the print agent's setup page), each
+inputs for the browser's password manager, in two files, the print agent's setup page, and the
+recovery page's password box), each
 held to the number of LINES it draws a field on, so a field swapped for another, a hidden input
 made visible, or a field added on a line that already has one passes. See design-system.md → Forms.
 
@@ -1123,7 +1124,9 @@ however the page was reached, because a start whose failure is classified `stora
 deletes the same leftovers, whatever the free space, before it records the failure.
 
 A start `runEntry` refuses before it begins (`setup.workspace_unsupported`,
-`setup.start_again_incomplete`) is not counted either: its status line reads "Level: recovery.
+`setup.start_again_incomplete`, `setup.start_again_files_found`, `setup.start_again_kept`,
+`setup.start_again_move_unfinished`; `START_REFUSALS`, `apps/server/src/first-setup-entry.ts`) is
+not counted either: its status line reads "Level: recovery.
 This start was refused before it began, and was not counted." («Nivel: recovery. Este arranque se
 rechazó antes de empezar y no se ha contado.»), and it writes `server.boot_started` and then
 `server.boot_failed` with its code to `waitron.log`.
@@ -1139,9 +1142,93 @@ and reads "unknown" («desconocido») when the filesystem cannot say; each such 
 `apps/server/src/node-entry.ts`), with `errno` null: `freeBytes` (`apps/server/src/free-bytes.ts`)
 turns every failed read into null, so the line says the reading failed, not why. `/recovery-api/status` does not carry it. Anyone on the venue's network can now read the box's free space, as they can the log tail.
 
+**A Start again cut off with files it did not create** (A1098). With A1042's Start again marker
+(`first-setup-deleting.json`) on the box, `refusedAtStart` (`apps/server/src/first-setup-entry.ts`)
+can refuse the start four ways:
+
+- `setup.start_again_kept`, when a Keep is recorded for that marker (`assertStartAgainNotKept`).
+  It is checked before the finisher runs, so a kept box stays on this page even if the found
+  files are later removed by hand. The page says what was chosen and what reinstalling would
+  lose, and has no form.
+- `setup.start_again_move_unfinished`, when finishing a recorded Move that a cut stopped
+  (`resumeStartAgainSetAside`) fails. Its page says some files may already be set aside and that
+  Retry finishes moving them. A resume that fails with no Move recorded refuses
+  `setup.start_again_incomplete`.
+- `setup.start_again_files_found`, when A1042's finisher refuses `setup.start_again_incomplete` and
+  `classifyStartAgainRefusal` surveys the box as a `choice`: found files, a setup record whose bytes
+  are the marker's and that `parseFirstSetupState` accepts (`surveyStartAgainLeftovers`,
+  `packages/provisioning/src/first-setup-start-again-leftovers.ts`).
+- `setup.start_again_incomplete`, unchanged, with A1042's explanation, for everything else: the
+  setup record gone, changed or unparseable, a found link, device file or lock file, any other
+  reason the finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries.
+
+The form is drawn only for `setup.start_again_files_found`, and only when the request's socket is
+TLS (`isSecure`, `apps/server/src/recovery-start-again.ts`); over anything else the page shows the
+list and "Open this page over the box's secure connection to choose." `POST
+/recovery-api/start-again` is mounted only on that page and refuses a request that is not TLS
+(403) or not from the page's own origin (403). The radios are a fieldset whose legend is
+`choiceLegend` ("What should the box do? *"). The password box is a plain HTML field, the one
+`ALLOWED` entry `scripts/native-form-fields.test.ts` holds for this file (A1098 Q1, owner,
+2026-10-27): the page loads no script or front-end bundle, so no field primitive can run on it.
+
+The password is the setup record's administrator password (`ownerVerifier`). Every try is counted
+in `<state>/first-setup-start-again-guesses.json` before the password is checked, so a restart does
+not reset the count and a counter that cannot be written refuses the try without checking it
+(`beginStartAgainGuess`, `packages/provisioning/src/first-setup-start-again-guesses.ts`). Five
+wrong guesses are free; from the sixth on, the next try waits 1, 2, 4, 8, then 15 minutes, never
+more than 15; one wrong guess is forgiven for each 15 minutes since the last; a stored wait is
+never read as ending more than 15 minutes from now, so a clock set back cannot lengthen it; a
+damaged counter reads as five wrong guesses (owner question Q5, built with its option A). A plain `waitron.sh reset` removes the
+counter.
+
+The page binds the choice to the list it showed: the form carries the survey's digest as `listed`,
+and `chooseStartAgainLeftovers` (`packages/provisioning/src/first-setup-start-again-choose.ts`)
+refuses `setup.start_again_files_changed` when the box's survey no longer has that digest, once
+before counting the guess and once more under the venue lock after the password. The digest
+changes when a listed file's bytes, a folder's contents or an inode changes.
+
+Each choice writes one record, never replaced and never deleted by the box:
+`<state>/first-setup-start-again-choices/<ms>-<attemptId>.json`, holding the choice, the
+administrator the setup record names, the listed units and digest, and for a Move its set-aside
+folders and note floor (`writeStartAgainChoice`,
+`packages/provisioning/src/first-setup-start-again-choice.ts`). A Move puts the files under
+`<state>/first-setup-set-aside/<stem>/state/` and `…/venue/` when the two roots report one
+filesystem, otherwise the venue files under `<venue>/first-setup-set-aside/<stem>/`
+(`setAsideDestinations`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). Before
+the record it makes those folders and renames an empty probe folder from each source root into
+them; a probe that fails with `EXDEV` removes the empty folders it made and refuses
+`setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
+raises the note, renames the pieces (a database's main file last, never over anything) and runs
+A1042's finisher. A plain `waitron.sh reset` keeps the choices and the set-aside folder; `reset
+--all` removes them. A backup recovery's check of the box's files skips `first-setup-set-aside` in
+each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
+
+The note floor (owner question Q3, built with its option A): a Move raises the start-again note's
+floor to the newest found file's modification time plus 150 seconds, rounded up to the minute
+(`startAgainSetAsideFloorMs`), and only when the box has a note; with none, nothing is raised. The
+Move option shows that time when it is later than the box's clock.
+
+After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
+drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
+recorded Keep from disk. `/recovery-api/status` still reports `setup.start_again_files_found`
+until that next start. After a Move, the answer names the set-aside folder and the process
+restarts once the answer is written, as Retry does. The choice is logged
+`recovery.start_again_choice` (the choice, the attempt id and the number of found units) only after
+it has taken effect.
+
+The one sentence on this page that says something is removed is the Move choice's `moveDetail`
+("… and the rest of the interrupted setup is removed."), the owner's approved exception of
+2026-10-25 15:24 to never suggesting a removal. The choice's words live in their own table,
+`START_AGAIN_PAGE_TEXT`, apart from `OPERATOR_TEXT`. Guard: the case "never suggests deleting in
+the Start again choices, except the one owner-approved sentence" in
+`apps/server/src/recovery-surface.test.ts`, weaker than its name: it reads the two text tables'
+strings, with wider patterns than `OPERATOR_TEXT`'s and `moveDetail` pinned word for word, not the
+rendered page.
+
 Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL,
-the last failure's detail and the recorded trigger names, all HTML-escaped; the trigger names also
-pass through `redactSecrets`. The failure count also does, read as a number, as does the free
+the last failure's detail, the recorded trigger names, and on the Start again page the found
+files' paths and, after a Move, the set-aside folder's name, all HTML-escaped; the trigger names
+also pass through `redactSecrets`. The failure count also does, read as a number, as does the free
 space, and so does a recorded holder kind, which on the page only selects a fixed name from a
 closed table.
 `/recovery-api/status` returns the kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`, and keeps the

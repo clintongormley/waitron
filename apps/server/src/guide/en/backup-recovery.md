@@ -41,6 +41,18 @@ venue.
 If the page says that Start again has not finished, reload it to see what is left to do. If the box
 is restarting, wait until it answers.
 
+If a Start again was cut off and the box then finds files that Start again did not create, such as
+a venue copied from a backup, the box does not start. Its page lists the files and, over the box's
+secure connection, asks for the administrator password you chose during setup. **Keep everything
+and stop** leaves the files as they are, and the page then stays until Waitron is reinstalled.
+**Move these files aside and finish Start again** moves the files, unchanged, into a new folder on
+the box and finishes Start again; the box then starts a new first setup. If the files change after
+the page opens, the box refuses the choice and changes nothing: press **Retry a normal boot** to
+see them again. From the sixth wrong password on, the page makes you wait before the next try,
+never more than 15 minutes, and each 15 minutes without a wrong password forgives one. If the page
+says that Start again was moving files aside and has not finished, press **Retry a normal boot** to
+finish moving them; the box then starts a new first setup.
+
 ## Choose your copy {#source}
 
 Choose **Backup file**, **Bucket copy** or **Cloud copy** and the matching environment.

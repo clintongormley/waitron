@@ -482,9 +482,45 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-full-disk-while-a-backup-recovery-fills-it-is-a-dead-end-for-the-person)
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
-  again.** Each press answers "Start again has not finished" and restarts the box. A1098 covers
-  files the box did not create; one the box created stays a manual loop. Left open by A1042.
+  again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the
+  person keep or move aside files the box did not create after a cut-off Start again; a file the
+  box created that cannot be deleted stays a manual loop. Left open by A1042.
   [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
+
+- **A1142: a cut-off Start again beside found files the Move cannot handle gets only the
+  explanation.** A link, device or lock file, any other finisher refusal, or more than 20,000
+  found entries: no Keep or Move (owner question Q2, built with A). Left open by A1098.
+  [Detail](backlog/setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation)
+
+- **A1143: files a Move set aside have no way back in the app.** Recover from backup takes only a
+  backup file, a bucket copy or a Waitron Cloud copy. Left open by A1098.
+  [Detail](backlog/setup.md#a1143-files-a-move-set-aside-have-no-way-back-in-the-app)
+
+- **A1144: after Keep, the box stays on its page even if the files are later removed by hand.**
+  Left open by A1098.
+  [Detail](backlog/setup.md#a1144-after-keep-the-box-stays-on-its-page-even-if-the-files-are-later-removed-by-hand)
+
+- **A1145: a Move on a box with no start-again note raises no series-name floor.** Waits for
+  A1099's "name unknown" note. Left open by A1098 (owner question Q3).
+  [Detail](backlog/setup.md#a1145-a-move-on-a-box-with-no-start-again-note-raises-no-series-name-floor)
+
+- **A1146: a found piece on another mount below a root fails after the choice is recorded.** The
+  box then shows the unfinished-Move page at every start until the mount is changed. Left open by
+  A1098.
+  [Detail](backlog/setup.md#a1146-a-found-piece-on-another-mount-below-a-root-fails-after-the-choice-is-recorded)
+
+- **A1147: Start again's finisher removes an empty folder the box did not create.** An empty
+  unlisted folder is no finding, and the finisher removes it by `rmdir`. Predates A1098 (A1042,
+  #2101).
+  [Detail](backlog/setup.md#a1147-start-agains-finisher-removes-an-empty-folder-the-box-did-not-create)
+
+- **A1148: a stray `venue.db-journal` beside an unchanged marked `venue.db` stays beside the next
+  setup's database.** It is neither a finding nor deleted. Predates A1098 (A1042, #2101).
+  [Detail](backlog/setup.md#a1148-a-stray-venuedb-journal-beside-an-unchanged-marked-venuedb-stays-beside-the-next-setups-database)
+
+- **A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw
+  after a recorded choice answers a bare 500.** Both recovery-page routes. Left open by A1098.
+  [Detail](backlog/setup.md#a1149-a-failed-restart-after-retry-or-a-move-exits-the-process-and-a-page-that-fails-to-draw-after-a-recorded-choice-answers-a-bare-500)
 
 - **A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery
   waits.** `/setup-api/provision` is outside the recovery's write fence. Read, not run. Left open by
