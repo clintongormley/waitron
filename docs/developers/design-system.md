@@ -5087,8 +5087,9 @@ disabled, with "The included folder sets this name." under it in `--wt-color-tex
 field's description.
 The footer holds Close and "Review N changes", N counting each edited field, including one whose
 value fails its check. Following Forms, a field's own error, the tree's "!" and the bottom sentence
-appear only once Review has been pressed; that press opens the first item holding an error and
-focuses its field. A refusal placed under a field keeps its change staged and Review enabled, and
+appear only once Review has been pressed. That press stays on the item shown if one of its fields
+fails its check, otherwise opens the first item, in the order edited, with a field that fails, and
+focuses the first field marked on the item's form. A refusal placed under a field keeps its change staged and Review enabled, and
 its sentence goes when that field changes or the patch is sent again. The review step lists each change as "<item>:
 <field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
 "Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live

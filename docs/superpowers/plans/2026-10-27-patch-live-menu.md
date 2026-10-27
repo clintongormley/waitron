@@ -389,7 +389,9 @@ Layout (spec decision 5, mockup option A):
   beside price and VAT class: "Sold through its variants: the till charges each variant's own price
   and VAT class."
 - Values are checked in the browser with the same parsers before staging; a bad value shows its
-  error under the field and is not staged.
+  error under the field and is not staged. (2026-10-27, finish-branch fix wave: the error shows
+  only once Review has been pressed, per the Forms contract; a value the server refuses stays
+  staged, with its error under the field.)
 - A refresh of the live document while the dialog is open never resets staged changes.
 
 - [ ] **Step 1: Write failing tests:** the heading shows the live number; search narrows the tree;
