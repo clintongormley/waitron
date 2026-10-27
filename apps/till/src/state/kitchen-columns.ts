@@ -14,7 +14,6 @@ export interface ColumnState {
   collapsed: ColumnKey[];
 }
 
-/** The station screen's columns in slice 9: Waiting, Preparing, Ready, all shown, none collapsed. */
 export const STATION_COLUMNS: ColumnState = {
   order: ["waiting", "preparing", "ready"],
   hidden: [],
@@ -105,7 +104,7 @@ export function saveColumnState(
   try {
     storage.setItem(key, JSON.stringify({ version: VERSION, order, hidden, collapsed }));
   } catch {
-    // A full or refused store: the screen keeps the layout in memory.
+    // A full or refused store saves nothing; the caller still holds the state it passed in.
   }
 }
 

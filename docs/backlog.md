@@ -1641,8 +1641,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   after one; and at 390 px the cards are of uneven widths. Left open by A366 slice 5 Part A.
 
 - **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
-  Should a Ready card stop ageing, age from when it became Ready, or wait for slice 9's collapsed
-  Ready column? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
+  Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
+  now collapse Ready to a strip that draws no cards (slice 9, in review)? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
 
 - **The till's own Station and Pass screens, left with nothing to show, say nothing** — a kitchen
   display shows a sentence saying what to do, but a till or handheld whose choice a profile
@@ -2670,7 +2670,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
   the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
-  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, and slice 8 (the kitchen screen's group cards) in #2123:
+  the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, and slice 8b (short names on kitchen cards) in #2126; slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) is in review:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
