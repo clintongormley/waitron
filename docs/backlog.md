@@ -3135,6 +3135,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (A1180): the thumb at min sat at x 286–297 of a 300px range, and min's mark centre at x 47. No
   app sets right to left yet.
 
+- **`wt-slider` works out its snapped value twice.** The shown number reads it from an off-page
+  range (`#onRange`, A1181) and the filled track from the real one in `updated()`
+  (`packages/ui/src/components/wt-slider.ts`). Both agree today; one source would be tidier. Raised
+  by A1181's convention review as a tidy-up, not a defect.
+
+- **The design system's floor-map paragraph does not say how a focused held merge is drawn.** Since
+  A1181 the focus ring sits outside the selected ring there (`docs/developers/design-system.md`,
+  floor map). The paragraph is not wrong, only silent; reword it as a whole, since inserting a clause
+  leaves "which is then raised…" pointing at the wrong ring.
+
 - **The floor map may hide keyboard focus on a held single table.** A held table that is not a
   merge draws `--wt-selected-ring` on its inner `[part="shape"]`, at the same place the button's
   focus ring sits (`packages/ui/src/components/wt-floor-map.ts`), and the shape's outline may paint
