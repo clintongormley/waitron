@@ -198,6 +198,13 @@ describe("boot's authority clock wiring", () => {
       expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
       expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(clocks.archive!.statfs).toBeUndefined();
+      const live = suite.db.all<{ at: string }>(
+        sql`select registrado_en as at from registro_sif where node_id = ${venue.cfg.nodeId} and revocado_en is null`,
+      );
+      expect(live).toHaveLength(1);
+      expect((await hooks.readInstallationStart())?.toISOString()).toBe(
+        new Date(live[0]!.at).toISOString(),
+      );
       const changed = await fetch(
         `http://127.0.0.1:${httpPort()}/management-api/venue-details/business-day-start`,
         {
