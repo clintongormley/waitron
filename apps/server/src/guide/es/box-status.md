@@ -53,8 +53,9 @@ Cuando no pasa nada, cada fila dice:
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
   las copias guardadas en el equipo, los registros de actividad y el resto del disco. El resto del
-  disco incluye unos 8 MB que el equipo guarda en reserva para poder quitar, con el disco lleno, lo
-  que ya no necesita.
+  disco incluye unos 8 MB que el equipo guarda en reserva para poder arrancar y quitar, con el disco
+  lleno, lo que ya no necesita. Tras un arranque que usó ese espacio, los terminales siguen parados
+  hasta que quedan libres unos 24 MB y el equipo ha vuelto a apartar los 8 MB.
 
 Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
 el equipo los reintenta solo o el encargado tiene que resolver alguno.

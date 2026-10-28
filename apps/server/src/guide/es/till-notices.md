@@ -26,7 +26,9 @@ problema. Una pantalla de cocina no muestra la línea de avisos.
 **No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado** es rojo. El equipo
 no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El
 encargado tiene que liberar espacio en el equipo, en la
-[página Estado del equipo](box-status.md#free-space).
+[página Estado del equipo](box-status.md#free-space). Si el equipo tuvo que usar su espacio de
+reserva para arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres
+unos 24 MB.
 
 **No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado** es rojo.
 La hora del equipo está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que

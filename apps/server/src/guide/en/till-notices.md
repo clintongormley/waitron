@@ -22,7 +22,8 @@ display shows no notice line.
 
 **Nothing can be saved: the box is out of space · Tell a manager** is red. The box has no disk
 space left, so orders, payments and other changes cannot be saved. A manager needs to free space
-on the box, on the [Box status page](box-status.md#free-space).
+on the box, on the [Box status page](box-status.md#free-space). If the box had to use its spare
+space to start, the notice stays, also after a restart, until about 24 MB is free again.
 
 **Sales can't be recorded: the box's clock is wrong · Tell a manager** is red. The box's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the box also

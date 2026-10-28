@@ -2516,8 +2516,11 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   reported and does not start the stop.
 - Boot keeps one `DiskFullState` (`apps/server/src/disk-full-state.ts`) for the venue folder, listens
   to both files, and reads the folder's free space once at start: under 16 MiB (`FULL_DISK_BYTES`,
-  `apps/server/src/boot-failure.ts`) the stop starts on; a reading the filesystem cannot give leaves
-  it off and logs `storage.start_space_unread` (`boot.ts`, after the long-lived open).
+  `apps/server/src/boot-failure.ts`), or while the spare's release marker exists
+  ([The box's spare file](#the-boxs-spare-file)), the stop starts on; with no marker, a reading the
+  filesystem cannot give leaves it off and logs `storage.start_space_unread` (`boot.ts`, after the
+  long-lived open). While the marker exists the stop holds whatever the free space; it lifts only
+  once the spare is back whole and 16 MiB is free.
 - While the stop is on, a write the gate sees, each of the four sale routes and each card-reader
   payment reads the folder's free space before its first transaction. At 16 MiB or more the stop is
   forgotten and the write goes on; under it, or unreadable, the stop holds. A reading does not clear
@@ -3293,20 +3296,82 @@ name — it covers only the duties it names, so a new one that forgets is seen b
 
 **The rule.** The box keeps `<state>/spare-space` (`SPARE_SPACE_FILE`, `@waitron/provisioning`;
 `SPARE_SPACE_BYTES`, 8 MiB of random bytes, `apps/server/src/spare-space.ts`) so that, on a nearly full
-disk, it still has the room to take the venue locks that freeing a backup recovery's copy needs. Within
-the server, only two paths delete it, and only when the lower free space of the state and venue folders is under
-`FULL_DISK_BYTES` (16 MiB): the start's emptying of a discarded recovery (`emptyDiscardedRecovery`,
-`apps/server/src/first-setup-entry.ts`), and the repair host before the four requests of the
-Start-again flow (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`); `waitron.sh
-reset` deletes it too. Only a start
-(`runEntry`, `apps/server/src/node-entry.ts`) writes it back, when at least 24 MiB is free. It is never
-venue data: never backed up, exported or streamed, and the backup recovery's originals walk
-(`packages/provisioning/src/first-setup-backup-workspace.ts`) leaves it out, so writing or deleting it
-cannot refuse a resume. Guard: `scripts/spare-space.test.ts`, weaker than its name: it reads text.
-It reads only non-test `.ts` files under `apps/<app>/src` and `packages/<package>/src`, so test files and nothing under `scripts/` or `deploy/` (`waitron.sh
-reset` among them) are seen. It looks for `SPARE_SPACE_FILE`, the literal `"spare-space"` and
-the release and top-up function names, so a path built another way or a function reached under
-another name escapes it, and it never checks that the originals walk leaves the file out.
+disk, it still has the room to start and to take the venue locks that freeing a backup recovery's
+copy needs. Within the server, three paths delete it, all through `releaseSpare`:
+
+- **The start** (`releaseSpareToStart`, `apps/server/src/node-entry.ts`), before first-setup
+  resolution, whose inspection opens the database: when the lowest free space of the configured
+  and the starting folders is under 8 MiB, or under `FULL_DISK_BYTES` (16 MiB) when the recovery
+  state's last error was `storage.disk_full`. Never at a backup recovery's repair stage. A start at
+  the recovery level still releases, then serves the recovery page.
+- **The start's emptying of a discarded recovery** (`emptyDiscardedRecovery`,
+  `apps/server/src/first-setup-entry.ts`), under 16 MiB.
+- **The repair host before the four requests of the Start-again flow**
+  (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`), under 16 MiB.
+
+`waitron.sh reset` deletes it too. It is never venue data: never backed up, exported or streamed,
+and the backup recovery's originals walk (`packages/provisioning/src/first-setup-backup-workspace.ts`)
+leaves it and its marker out, so writing or deleting either cannot refuse a resume.
+
+**The release marker.** A release that deleted bytes writes `<state>/spare-space.released`
+(`SPARE_SPACE_RELEASED_FILE`) straight after the unlink, inside `releaseSpare`, so every one of the
+three paths leaves it. While it exists the till stop holds, across restarts (owner, A1127 Q3 A):
+`noteFullAtStart` notes the stop when `spareReleased` answers true, and `full()` keeps it while the
+marker exists, whatever the free space ([A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes)).
+`spareReleased` answers true for a marker it cannot read (`storage.spare_marker_unread`, once per
+`full()` call while the stop holds). The marker is deleted only by a top-up that leaves the spare
+whole, or, with room, when a link or folder stands at the spare's path, which the box can never
+write through and an operator with no terminal could never remove.
+
+Two windows release the spare and leave no marker, and the stop then rests on free space alone
+(noted at start only under 16 MiB, lifted at 16 MiB, not held across a restart): a power cut between
+the unlink and the marker's write, and a marker that cannot be created (`storage.spare_marker_write_failed`;
+also logged when it was created but not made durable). Writing the marker before the unlink would
+need room on the disk it exists to relieve, and whether an empty file can be created on a disk that
+refuses data blocks is not measured.
+
+**Who writes it back.** Three writers, each only with the spare plus 16 MiB (24 MiB) free:
+
+- a start (`topUpSpare` in `runEntry`), always;
+- the running box's free-space watch (`apps/server/src/free-space-watch.ts`), once a minute, and
+- Box status's **Free** button (`createSpaceFreer`, `apps/server/src/free-space-now.ts`), before
+  its free-space reading.
+
+The last two share one `restoreSpare` closure that `boot.ts` builds from `spareRestorer`; it writes
+only while the marker exists, and a call while one is under way answers that one's promise, so the
+two cannot both write. Without the marker check every booted test server with room would append
+8 MiB to its state folder at the watch's first reading. Cost: a spare missing with no marker (the
+two windows above, the interleave below, or a first start without 24 MiB) waits for the next start
+with room. The watch writes the spare back first, then reads free space once, so the stop can lift
+in the same reading.
+
+**A second start beside a running server can release that server's spare (accepted).** The start's
+release runs before any venue lock, unlike the staging clean-up beside it. Such a start deletes the
+running box's spare and writes the marker; the running server is not stopped by it (its `full()`
+reads the marker only while a stop is noted) and its watch writes the spare back once 24 MiB is
+free. Interleaved with that server's own write-back, it can leave the spare gone and no marker.
+Skipping the release while `readVenueHolder` shows a fresh holder was not taken: a holder that dies
+leaves its file and reads fresh for 30 s (`VENUE_HOLDER_STALE_MS`), so a start within 30 s of a
+server that died on a full disk would serve the full-disk page instead of booting.
+
+**The spare's folder after a start from a selected backup recovery.** `runEntry` hands the server an
+environment whose `WAITRON_STATE_DIR` is the recovery's target, while the spare lives in the
+configured state folder; it sets `WAITRON_SPARE_SPACE_DIR` to that folder, and the boot uses it,
+falling back to `config.stateDir`. It is not operator configuration.
+
+**The bucket stream does not use the spare's room** (measured once each on HFS+, idle box: 16 KiB
+below the control's free space, local stream files at most 451,603 bytes, no refusal; scripts and
+output in `~/waitron-campaign/a1127-measure/full-boot/stream/README.txt`). Not measured: a box that
+never streamed, and a large venue database, whose start makes a fresh full copy.
+
+**The guard.** `scripts/spare-space.test.ts`, weaker than its name: it reads text. It reads only
+non-test `.ts` files under `apps/<app>/src` and `packages/<package>/src`, so test files and nothing
+under `scripts/` or `deploy/` (`waitron.sh reset` among them) are seen. It looks for
+`SPARE_SPACE_FILE`, `SPARE_SPACE_RELEASED_FILE`, the two names as literals in any quotes, and the
+release, top-up and write-back function names (`restoreSpare` included), and requires each allowed
+file to still name its entry. A path built another way, or a function reached under another name,
+escapes it; `spareReleased` is not guarded at all (it changes nothing); and it never checks that the
+originals walk leaves the files out.
 
 **Why 8 MiB.** Measured on a 32 MiB HFS+ image (scripts and output kept outside the repo, under
 `~/waitron-campaign/a1127-measure/`): one lock needed 8 KiB, the emptying 16 KiB, the whole

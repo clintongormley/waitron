@@ -308,14 +308,21 @@ Free space on the disk, then press Retry. The page does not notice the freed spa
 restarts the app, and the next start tries again.
 
 The box also keeps an 8 MiB spare file, `spare-space`, in the state folder. It is not venue data, and a
-backup recovery's check of the box's files leaves it out. Within the server, only two steps delete it,
-and only when the state folder or the database's folder has under 16 MiB free: a start that finds a
-backup recovery Start again discarded, just before it deletes that recovery's copy; and the setup
-repair page, before the steps of Start again beside a stopped or discarded recovery
-(`waitron.sh reset` deletes it too). Both need a little room to take the
-database's locks, and the spare gives it. Every start that has at least 24 MiB free writes the spare
-back. A repair-stage start never shows the full-disk page; the repair page itself says when the disk
-is full.
+backup recovery's check of the box's files leaves it out. Within the server, three steps delete it:
+a start, before anything else, when the state folder or the database's folder has under 8 MiB free,
+or under 16 MiB after a start that failed on a full disk (never at a recovery's repair stage); a
+start that finds a backup recovery Start again discarded, under 16 MiB free, just before it deletes
+that recovery's copy; and the setup repair page, under 16 MiB free, before the steps of Start again
+beside a stopped or discarded recovery. `waitron.sh reset` deletes it too. The room lets the box
+take the database's locks and start normally instead of serving the full-disk page.
+
+Deleting the spare writes a small marker beside it, `spare-space.released`. While the marker exists
+the tills stay stopped, as on a full disk, also across restarts. A start with at least 24 MiB free,
+the running box's free-space check (once a minute) or Box status's **Free** button writes the spare
+back whole and deletes the marker, and the tills can save again. The running box writes the spare
+back only while the marker exists. `waitron.sh reset` deletes the marker with the rest of the state
+folder. A repair-stage start never shows the full-disk page; the repair page itself says when the
+disk is full.
 
 ### Trying a branch before it merges
 

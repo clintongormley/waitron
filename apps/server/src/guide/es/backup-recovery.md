@@ -59,8 +59,8 @@ equipo se está reiniciando, espera a que responda.
 
 Si la recuperación llenó el disco del equipo, «Empezar de nuevo» sigue funcionando: el equipo guarda
 unos 8 MB de su disco en reserva, y cede ese espacio para poder quitar la recuperación. Si ni eso
-basta, la página dice que el disco está lleno. Al reiniciar el equipo, se quitan los registros y los
-avisos de fallo antiguos mientras arranca, y eso puede dejar sitio suficiente para volver a intentarlo.
+basta, la página dice que el disco está lleno. Cuando la página puede saberlo, dice si reiniciar el
+equipo puede liberar espacio.
 
 Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
 nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su
