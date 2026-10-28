@@ -855,6 +855,55 @@ it("Add station keeps a taken-name refusal under Name while another field change
   expect((q(el, 'wt-input[name="name"]') as WtInput).error).toBe("");
   expect(addActions(el).error).toBe("");
 });
+it("Add station drops a taken-name refusal when Save runs again and fails naming no field", async () => {
+  setLocale("en");
+  const a = api({
+    createStation: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.name_taken" })
+      .mockRejectedValueOnce(new Error("refused")),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Bar");
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  await editSaveField(el, timingField(el, "warmAfterMinutes"), "6");
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledTimes(2);
+  expect(addActions(el).error).toBe(VENUE_SERVICE_STRINGS.en["prep.save_error"]);
+  await editSaveField(el, timingField(el, "overdueAfterMinutes"), "11");
+  expect(formMessages(el.shadowRoot!.querySelector("wt-modal")!)).toEqual([]);
+});
+it("Add station opened again does not bring back the last dialog's colour refusal", async () => {
+  setLocale("en");
+  const a = api({
+    createStation: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "colour" } }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Terrace");
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(addPicker(el).error).toBe(VENUE_SERVICE_STRINGS.en["prep.colour_invalid"]);
+  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "");
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  modal.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await closed;
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  await editSaveField(el, timingField(el, "warmAfterMinutes"), "6");
+  expect(formMessages(el.shadowRoot!.querySelector("wt-modal")!)).toEqual([]);
+});
 const addPicker = (el: PrepStationsScreen) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
     "wt-modal wt-colour-chooser",
