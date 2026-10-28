@@ -456,6 +456,37 @@ describe("approval through the route (plan D6)", () => {
     }
   });
 
+  it("past the bill's limit, answers a request nobody on both lists may approve as 409 no_common_approver", async () => {
+    const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
+      inTx(venue, (tx) =>
+        saveAdjustmentSettings(tx, {
+          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+          billApproverRoles,
+        }),
+      );
+    // Past Guest complaint's €30.00 only managers and admins approve it; only supervisors may
+    // pass this bill.
+    await save("40.00", ["supervisor"]);
+    try {
+      const { billId } = await billWith(venue, [{ name: "Salad", quantity: "10" }]);
+      const off = {
+        action: "discount_amount",
+        amount: "50.00",
+        reasonId: venue.reasonId.complaint,
+      };
+      for (const path of ["/preview", ""] as const) {
+        const refused = await post(billId, off, { cookie: venue.cookie.staff, path });
+        expect([refused.status, refused.json]).toEqual([
+          409,
+          { code: "adjustment.no_common_approver", params: {} },
+        ]);
+      }
+      expect(await recordedOn(billId)).toEqual([]);
+    } finally {
+      await save(null, ["manager", "admin"]);
+    }
+  });
+
   it("answers a wrong PIN as pin.invalid, 401", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const refused = await post(

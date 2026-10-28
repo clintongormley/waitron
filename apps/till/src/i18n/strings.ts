@@ -1198,7 +1198,7 @@ export const en = {
   "adjust.note_shown": "Note: {note}",
   "adjust.approval_reason": "Someone who can approve {reason} must enter their PIN.",
   "adjust.approval_bill_limit":
-    "This takes the bill's comps past {limit}. Someone who can approve past the bill's limit must enter their PIN.",
+    "This takes the bill's comps past {limit}. Someone who may go past the bill's limit and approve this reason must enter their PIN.",
   "adjust.approval_refund": "Someone who can give refunds must enter their PIN.",
   "adjust.approval_any": "Someone who can approve this must enter their PIN.",
   "adjust.ask_approval": "Ask for approval",
@@ -2965,7 +2965,7 @@ export const es: Record<StringKey, string> = {
   "adjust.note_shown": "Nota: {note}",
   "adjust.approval_reason": "Alguien que pueda autorizar «{reason}» debe introducir su PIN.",
   "adjust.approval_bill_limit":
-    "Con esto, los descuentos de la cuenta pasan de {limit}. Alguien que pueda autorizar por encima del límite debe introducir su PIN.",
+    "Con esto, los descuentos de la cuenta pasan de {limit}. Alguien que pueda superar el límite y autorizar este motivo debe introducir su PIN.",
   "adjust.approval_refund": "Alguien que pueda hacer devoluciones debe introducir su PIN.",
   "adjust.approval_any": "Alguien que pueda autorizarlo debe introducir su PIN.",
   "adjust.ask_approval": "Pedir aprobación",

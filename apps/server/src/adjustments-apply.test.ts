@@ -2130,7 +2130,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     ]);
   });
 
-  it("someone on Who can approve past it goes past alone, whoever the reason's lists name", async () => {
+  it("nobody on both Who can approve past it and the reason's approvers is refused", async () => {
     await setLimit("40.00", ["supervisor"]);
     const ownersComp = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
@@ -2149,28 +2149,58 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     expect(await preview(billId, bySupervisor("10.00"))).toMatchObject({
       needsApproval: { by: "reason", roles: ["admin"] },
     });
-    // Past it, past the reason's €30.00 too, the supervisor needs nobody.
-    expect(await preview(billId, bySupervisor("50.00"))).toMatchObject({ needsApproval: null });
-    await adjust(billId, bySupervisor("50.00"));
-    expect(await approvals(billId)).toEqual([["discount_amount", 5000, null]]);
+    // Past it, only supervisors may pass the bill and only admins may approve the reason.
+    await expect(preview(billId, bySupervisor("50.00"))).rejects.toMatchObject({
+      code: "adjustment.no_common_approver",
+    });
+    await refusedWith(billId, bySupervisor("50.00"), "adjustment.no_common_approver");
+    expect(await approvals(billId)).toEqual([]);
   });
 
-  it("past both the reason's limit and the bill's, one PIN from the bill's list is enough", async () => {
-    await setLimit("40.00", ["supervisor"]);
+  it("past both the reason's limit and the bill's, one PIN from someone on both lists is enough", async () => {
+    await setLimit("40.00", ["supervisor", "manager"]);
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
     // Guest complaint allows €30.00 a bill and is approved by managers and admins.
     const complaint = (extra: Partial<Ask> = {}) =>
       billOff("50.00", { reasonId: venue.reasonId.complaint, ...extra });
 
-    expect(await preview(billId, complaint())).toMatchObject(askedOfBill(["supervisor"]));
+    expect(await preview(billId, complaint())).toMatchObject(askedOfBill(["manager"]));
     await refusedWith(
       billId,
-      complaint({ approver: MANAGER_PIN() }),
+      complaint({ approver: SUPERVISOR_PIN() }),
       "adjustment.approval_required",
       PAST_BILL,
     );
-    await adjust(billId, complaint({ approver: SUPERVISOR_PIN() }));
-    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.supervisorId]]);
+    await adjust(billId, complaint({ approver: MANAGER_PIN() }));
+    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.managerId]]);
+  });
+
+  it("Luis, a supervisor on Who can approve past it, needs a manager's PIN for a managers-only reason", async () => {
+    await setLimit("40.00", ["supervisor", "manager"]);
+    const onTheHouse = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        ...REASONS.complaint,
+        name: "On the house A803",
+        names: {},
+        maxAmount: null,
+        applyRoles: ["manager"],
+        approverRoles: ["manager"],
+      }),
+    );
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    const byLuis = (extra: Partial<Ask> = {}) =>
+      billOff("50.00", { reasonId: onTheHouse.id, operatorId: venue.supervisorId, ...extra });
+
+    expect(await preview(billId, byLuis())).toMatchObject(askedOfBill(["manager"]));
+    await refusedWith(billId, byLuis(), "adjustment.approval_required", PAST_BILL);
+    await refusedWith(
+      billId,
+      byLuis({ approver: SUPERVISOR_PIN() }),
+      "adjustment.approval_required",
+      PAST_BILL,
+    );
+    await adjust(billId, byLuis({ approver: MANAGER_PIN() }));
+    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.managerId]]);
   });
 
   it("a PIN from someone off the bill's list is refused", async () => {

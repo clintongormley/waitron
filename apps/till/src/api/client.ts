@@ -932,8 +932,8 @@ export interface AdjustmentReason {
 }
 
 /** Whose PIN an adjustment needs: holders of the reason's approver roles, holders of the roles that
- * may approve past the bill's comp limit (`limit`, a money string), or holders of the refund
- * permission. */
+ * may both approve past the bill's comp limit (`limit`, a money string) and approve the reason, or
+ * holders of the refund permission. */
 export type AdjustmentApproval =
   | { by: "reason"; roles: PersonRole[] }
   | { by: "bill_limit"; roles: PersonRole[]; limit: string }

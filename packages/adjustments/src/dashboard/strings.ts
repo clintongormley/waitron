@@ -99,7 +99,7 @@ const en = {
   "adjustments.limit.heading": "Limit on a bill's comps",
   "adjustments.limit.field": "Most comped on one bill",
   "adjustments.limit.hint":
-    "Every comp on the bill counts, whatever its reason. Above it, someone on the next list enters their PIN.",
+    "Every comp on the bill counts, whatever its reason. Above it, someone on the next list who may also approve the reason enters their PIN.",
   "adjustments.limit.approvers": "Who can approve past it",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
@@ -271,7 +271,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",
   "adjustments.limit.hint":
-    "Cuenta cada descuento de la cuenta, sea cual sea su motivo. Por encima, alguien de la lista siguiente introduce su PIN.",
+    "Cuenta cada descuento de la cuenta, sea cual sea su motivo. Por encima, introduce su PIN alguien de la lista siguiente que también pueda autorizar el motivo.",
   "adjustments.limit.approvers": "Quién puede autorizar más",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",

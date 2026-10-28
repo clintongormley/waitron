@@ -567,7 +567,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       },
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `This takes the bill's comps past ${money("50.00")}. Someone who can approve past the bill's limit must enter their PIN.`,
+      `This takes the bill's comps past ${money("50.00")}. Someone who may go past the bill's limit and approve this reason must enter their PIN.`,
     );
     expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
@@ -583,7 +583,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien que pueda autorizar por encima del límite debe introducir su PIN.`,
+      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien que pueda superar el límite y autorizar este motivo debe introducir su PIN.`,
     );
   });
 
@@ -715,6 +715,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.note_required",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
+    "adjustment.no_common_approver",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
@@ -727,6 +728,52 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     const el = await mount({ kind: "discount", target: steaks, refusal: code });
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
     expect(shownMessages(el).join(" ")).toContain(codeMessage(code));
+  });
+
+  it("says nobody can approve a request past both lists, and leaves every choice in place", async () => {
+    const el = await mount({ kind: "discount", target: steaks });
+    await chooseReason(el, "Regular");
+    el.refusal = "adjustment.no_common_approver";
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "Nobody can approve this: whoever may go past this bill's limit may not approve this reason. Take less off, choose another reason, or Close to change nothing.",
+    );
+    expect(shownMessages(el).filter((message) => message !== "")).toHaveLength(1);
+    expect(continueButton(el).disabled).toBe(false);
+    expect(field(el, "percent").hasAttribute("disabled")).toBe(false);
+    const radios = [...root(el).querySelectorAll<HTMLInputElement>('input[name="reason"]')];
+    expect(radios.length).toBeGreaterThan(0);
+    expect(radios.every((radio) => !radio.disabled)).toBe(true);
+
+    // A refusal about no field stays until the next submission.
+    await type(el, "percent", "5");
+    expect(actions(el).error).toContain(codeMessage("adjustment.no_common_approver"));
+
+    const sent = [
+      ...capture(el, "adjust-preview"),
+      ...capture(el, "adjust-confirm"),
+      ...capture(el, "adjust-edit"),
+    ];
+    const closed = capture(el, "adjust-close");
+    const close = root(el).querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-adjust-close]",
+    )!;
+    expect(close.disabled).toBe(false);
+    await press(close, el);
+    expect(closed).toHaveLength(1);
+    expect(sent).toEqual([]);
+  });
+
+  it("says nobody can approve it in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      kind: "discount",
+      target: steaks,
+      refusal: "adjustment.no_common_approver",
+    });
+    expect(actions(el).error).toBe(
+      "Nadie puede autorizarlo: quien puede superar el límite de esta cuenta no puede autorizar este motivo. Quita menos, elige otro motivo o pulsa Cerrar para no cambiar nada.",
+    );
   });
 
   it("shows a refusal on the confirm step above the action", async () => {

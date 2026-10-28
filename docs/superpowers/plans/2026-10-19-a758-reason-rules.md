@@ -289,7 +289,7 @@ retired. Every other D-number lands in A758-1 to A758-5 below.
     {reason} must enter their PIN." / «Alguien que pueda autorizar «{reason}» debe introducir su
     PIN.»; past the bill limit (picture 04): "This takes the bill's comps past {limit}. Someone who
     can approve past the bill's limit must enter their PIN." / «Con esto, los descuentos de la cuenta
-    pasan de {limit}. Alguien que pueda autorizar por encima del límite debe introducir su PIN.»;
+    pasan de {limit}. Alguien que pueda autorizar por encima del límite debe introducir su PIN.» (2026-10-28: now "Someone who may go past the bill's limit and approve this reason must enter their PIN." — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D37 rule 2);
     cancel: "Someone who can give refunds must enter their PIN." / «Alguien que pueda hacer
     devoluciones debe introducir su PIN.» The PIN prompt (`override.*`, `apps/till/src/i18n/strings.ts:417-420`)
     is reworded in English as picture 03 draws it: "Approve with PIN", "Choose who approves", "Enter

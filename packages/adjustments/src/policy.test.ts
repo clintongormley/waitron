@@ -145,15 +145,16 @@ describe("evaluateComp", () => {
     });
   });
 
-  it("past the bill's comp limit, the reason's approver still needs the bill list", () => {
+  it("past the bill's comp limit, the reason's approver needs someone on both lists", () => {
     const reason = { ...COMPLAINT, approverRoles: ["supervisor" as const, "manager" as const] };
+    // An admin is on the bill's list but may only apply this reason within its €30.00.
     expect(evaluateComp(reason, comp({ reduction: decimal("50.00") }))).toEqual({
       kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager", "admin"], limit: decimal("40.00") },
+      approval: { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") },
     });
   });
 
-  it("past the bill's comp limit, someone on the bill list alone goes straight through", () => {
+  it("past the bill's comp limit, nobody on both lists is refused no_common_approver", () => {
     const reason = {
       ...COMPLAINT,
       applyRoles: ["admin" as const],
@@ -164,7 +165,84 @@ describe("evaluateComp", () => {
       reduction: decimal("50.00"),
       billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager"] },
     });
-    expect(evaluateComp(reason, request)).toEqual({ kind: "allowed" });
+    expect(evaluateComp(reason, request)).toEqual({
+      kind: "refused",
+      code: "adjustment.no_common_approver",
+    });
+  });
+
+  describe("past the bill's limit, whoever approves is allowed both (owner, 2026-10-28)", () => {
+    /** Two €25 steaks free under On the house, which only managers apply or approve, past a €40
+     * bill limit approved by supervisors and managers. */
+    const ON_THE_HOUSE: AdjustmentReason = {
+      ...COMPLAINT,
+      name: "On the house",
+      maxAmount: null,
+      applyRoles: ["manager"],
+      approverRoles: ["manager"],
+    };
+    const twoSteaks = (overrides: Partial<CompRequest> = {}) =>
+      comp({
+        reduction: decimal("50.00"),
+        dishes: [
+          { list: decimal("25.00"), after: decimal("0.00"), allowance: 1 },
+          { list: decimal("25.00"), after: decimal("0.00"), allowance: 1 },
+        ],
+        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor", "manager"] },
+        ...overrides,
+      });
+    const byManagerPastBill = {
+      kind: "needs_approval",
+      approval: { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") },
+    };
+
+    it("Luis, a supervisor on the bill-limit list, needs a manager's PIN", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks())).toEqual(byManagerPastBill);
+    });
+
+    it("a manager, on both lists, goes straight through", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ actorRole: "manager" }))).toEqual({
+        kind: "allowed",
+      });
+    });
+
+    it("within the bill's limit the reason's lists decide, as today", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ reduction: decimal("40.00") }))).toEqual({
+        kind: "needs_approval",
+        approval: { by: "reason", roles: ["manager"] },
+      });
+    });
+
+    it("staff past the bill's limit get the bill list's roles that can do the reason", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ actorRole: "staff" }))).toEqual(
+        byManagerPastBill,
+      );
+    });
+
+    it("a bill-list role that may only apply the reason approves within the reason's limits", () => {
+      // Complaint: supervisors apply it up to €30.00 a bill; €15.00 on a bill with €30.00 comped.
+      const request = comp({
+        actorRole: "staff",
+        reduction: decimal("15.00"),
+        dishes: [{ list: decimal("15.00"), after: decimal("0.00"), allowance: 1 }],
+        billComped: decimal("30.00"),
+        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor"] },
+      });
+      expect(evaluateComp(COMPLAINT, request)).toEqual({
+        kind: "needs_approval",
+        approval: { by: "bill_limit", roles: ["supervisor"], limit: decimal("40.00") },
+      });
+    });
+
+    it("nobody on both lists is refused no_common_approver", () => {
+      const request = twoSteaks({
+        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor"] },
+      });
+      expect(evaluateComp(ON_THE_HOUSE, request)).toEqual({
+        kind: "refused",
+        code: "adjustment.no_common_approver",
+      });
+    });
   });
 
   it("a bill comp limit of none never asks", () => {

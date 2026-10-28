@@ -107,7 +107,10 @@ export type AdjustmentVerdict =
   | { kind: "needs_approval"; approval: Approval }
   | {
       kind: "refused";
-      code: "adjustment.action_not_allowed" | "adjustment.note_required";
+      code:
+        | "adjustment.action_not_allowed"
+        | "adjustment.note_required"
+        | "adjustment.no_common_approver";
     };
 
 export interface CompRequest {
@@ -150,34 +153,49 @@ function lacksNote(reason: AdjustmentReason, note: string | null): boolean {
   return reason.noteRequired && (note === null || note.trim() === "");
 }
 
-/** Past the bill's comp limit, that list approves the whole request (design §3.2, step 3). */
 export function evaluateComp(reason: AdjustmentReason, req: CompRequest): AdjustmentVerdict {
   assertWellFormed(req);
   if (reason.kind !== "comp" || !reason.actions.includes(req.action)) {
     return { kind: "refused", code: "adjustment.action_not_allowed" };
   }
   if (lacksNote(reason, req.note)) return { kind: "refused", code: "adjustment.note_required" };
-  const { maxAmount: billMax, approverRoles: billRoles } = req.billLimit;
-  if (billMax !== null && compareDecimal(addDecimal(req.billComped, req.reduction), billMax) > 0) {
-    return billRoles.includes(req.actorRole)
-      ? { kind: "allowed" }
-      : {
-          kind: "needs_approval",
-          approval: { by: "bill_limit", roles: [...billRoles], limit: billMax },
-        };
-  }
-  if (reason.approverRoles.includes(req.actorRole)) return { kind: "allowed" };
-  const pastItem = belowFloor(req.dishes, reason.maxPercentBp);
-  const pastBill =
-    reason.maxAmount !== null &&
-    compareDecimal(addDecimal(req.priorReductionOnBill, req.reduction), reason.maxAmount) > 0;
-  if (!reason.applyRoles.includes(req.actorRole) || pastItem || pastBill) {
+  const { maxAmount: billMax } = req.billLimit;
+  return approvalFor(reason, req, {
+    pastItem: belowFloor(req.dishes, reason.maxPercentBp),
+    pastBill:
+      reason.maxAmount !== null &&
+      compareDecimal(addDecimal(req.priorReductionOnBill, req.reduction), reason.maxAmount) > 0,
+    pastBillLimit:
+      billMax !== null && compareDecimal(addDecimal(req.billComped, req.reduction), billMax) > 0,
+  });
+}
+
+/** Whoever lets a request through must be allowed both past the bill's comp limit and this
+ * reason; being on the bill-limit list never overrides the reason's own lists (owner, 2026-10-28). */
+function approvalFor(
+  reason: AdjustmentReason,
+  req: CompRequest,
+  past: { pastItem: boolean; pastBill: boolean; pastBillLimit: boolean },
+): AdjustmentVerdict {
+  const canDoReason = (role: PersonRoleValue): boolean =>
+    reason.approverRoles.includes(role) ||
+    (reason.applyRoles.includes(role) && !past.pastItem && !past.pastBill);
+  const billRoles = req.billLimit.approverRoles;
+  const canPassBill = (role: PersonRoleValue): boolean =>
+    !past.pastBillLimit || billRoles.includes(role);
+  if (canDoReason(req.actorRole) && canPassBill(req.actorRole)) return { kind: "allowed" };
+  if (!past.pastBillLimit) {
     return {
       kind: "needs_approval",
       approval: { by: "reason", roles: [...reason.approverRoles] },
     };
   }
-  return { kind: "allowed" };
+  const roles = billRoles.filter(canDoReason);
+  if (roles.length === 0) return { kind: "refused", code: "adjustment.no_common_approver" };
+  return {
+    kind: "needs_approval",
+    approval: { by: "bill_limit", roles, limit: req.billLimit.maxAmount! },
+  };
 }
 
 export function evaluateCancel(reason: AdjustmentReason, req: CancelRequest): AdjustmentVerdict {

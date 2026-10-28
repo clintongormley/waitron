@@ -974,7 +974,8 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
   return line.parentLineId === null ? line : rows.find((row) => row.id === line.parentLineId)!;
 }
 
-/** A comp action's verdict (design §3.2); a reason's per-dish limit is a price floor (plan D36). */
+/** A comp action's verdict (design §3.2); a reason's per-dish limit is a price floor (plan D36), and
+ * past the bill's limit the approver must be allowed both it and the reason (plan D37). */
 async function judgeComp(
   tx: Transaction,
   reason: AdjustmentReason,
