@@ -37,6 +37,8 @@ export function checkedKey(key: string): string {
 /** A backup destination. Fan-out writes one artifact to every configured backend. */
 export interface StorageBackend {
   readonly id: string;
+  /** The folder a local destination writes to; absent for a bucket. */
+  readonly localDir?: string;
   put(key: string, bytes: Uint8Array, call: StorageCall): Promise<void>;
   putFile(key: string, path: string, call: StorageCall): Promise<void>;
   getFile(key: string, outPath: string, call: StorageCall): Promise<void>;
