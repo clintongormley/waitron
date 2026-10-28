@@ -6,6 +6,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  realpath,
   readFile,
   readlink,
   rm,
@@ -2290,6 +2291,17 @@ describe("the box's spare file", () => {
     const { stateDir } = await planted({ statfs: free(12 * MiB) });
     expect((await stat(spareIn(stateDir))).size).toBe(4096);
     expect(existsSync(markerIn(stateDir))).toBe(false);
+  });
+
+  it("a start that did not move hands the boot no spare folder", async () => {
+    // Resolved: the start compares its folders after resolving links, and tmpdir() is one on macOS.
+    const stateDir = await realpath(await mkdtemp(join(tmpdir(), "wt-entry-spare-")));
+    const d = deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 4096 });
+    await runEntry(d);
+    expect(d.startServer).toHaveBeenCalledOnce();
+    expect(vi.mocked(d.startServer).mock.calls[0]![0]).not.toHaveProperty(
+      "WAITRON_SPARE_SPACE_DIR",
+    );
   });
 
   it("a start with exactly 8 MiB free keeps the spare", async () => {

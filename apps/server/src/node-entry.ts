@@ -404,6 +404,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       ...deps.baseEnv,
       WAITRON_STATE_DIR: admission.roots.stateDir,
       WAITRON_VENUE_DIR: admission.roots.venueDir,
+      // The spare stays in the configured state folder; a start that did not move boots from `deps`.
+      WAITRON_SPARE_SPACE_DIR: deps.stateDir,
     },
   };
   const dirs = [rooted.stateDir, rooted.venueDir];

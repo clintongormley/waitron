@@ -169,6 +169,8 @@ import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
+import { isUnset } from "./env-value.js";
+import { spareReleased } from "./spare-space.js";
 import {
   createFreeSpaceState,
   FREE_SPACE_CHECK_MS,
@@ -992,10 +994,20 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
-  const diskFull = createDiskFullState({ dir: config.venueDir, now, log });
+  // Set by the start only when it runs a selected backup recovery's target folder.
+  const spareDir = isUnset(env.WAITRON_SPARE_SPACE_DIR)
+    ? config.stateDir
+    : env.WAITRON_SPARE_SPACE_DIR;
+  const released = () => spareReleased(spareDir, log);
+  const diskFull = createDiskFullState({
+    dir: config.venueDir,
+    now,
+    log,
+    spareReleased: released,
+  });
   const stopWatchingDisk = watchForDiskFull(diskFull, [store.venue, store.node]);
   undoOnFailure.push(async () => stopWatchingDisk());
-  await noteFullAtStart(diskFull, { dir: config.venueDir, log });
+  await noteFullAtStart(diskFull, { dir: config.venueDir, log, spareReleased: released });
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.

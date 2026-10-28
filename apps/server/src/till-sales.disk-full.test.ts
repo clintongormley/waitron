@@ -15,7 +15,7 @@ import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
-import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
+import { createDiskFullState, noteFullAtStart, type DiskFullState } from "./disk-full-state.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -374,6 +374,28 @@ describe("the sale routes while the full-disk stop holds", () => {
 
     expect(answer.status).toBe(200);
     expect(disk.noted()).toBe(false);
+  });
+
+  it("refuses a cash sale with 1 GiB free while the spare's marker exists, and sells once it is gone", async () => {
+    const marker = { present: true };
+    const spareReleased = async () => marker.present;
+    const statfs = () => Promise.resolve({ bavail: 1024 ** 3, frsize: 1 });
+    const disk = createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: quiet,
+      statfs,
+      spareReleased,
+    });
+    await noteFullAtStart(disk, { dir: "/unused", log: quiet, statfs, spareReleased });
+    const id = randomUUID();
+
+    expect(refusal(await sale(venue.appWith({ disk }), id, cash))).toEqual(REFUSED);
+    expect(statusOfOrder(id)).toBeUndefined();
+
+    marker.present = false;
+    expect((await sale(venue.appWith({ disk }), id, cash)).status).toBe(200);
+    expect(statusOfOrder(id)).toBeDefined();
   });
 
   it("collects a placed order again once the folder has 16 MiB free", async () => {

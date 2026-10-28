@@ -13,8 +13,9 @@ export interface DiskFullState {
   noted(): boolean;
   /**
    * Whether a till write must be refused now. Reads the folder's free space only while a refusal
-   * is noted, and forgets the refusal only when that reading finds FULL_DISK_BYTES or more and no
-   * refusal was noted while it read; an unreadable reading keeps it.
+   * is noted, and forgets the refusal only when that reading finds FULL_DISK_BYTES or more, the
+   * spare's release marker is gone, and no refusal was noted while it read; an unreadable reading
+   * keeps it.
    */
   full(): Promise<boolean>;
   /** When the refusal now noted was first noted; null when none is. */
@@ -26,6 +27,7 @@ export function createDiskFullState(deps: {
   now: () => Date;
   log: Logger;
   statfs?: Statfs;
+  spareReleased?: () => Promise<boolean>;
 }): DiskFullState {
   let since: Date | null = null;
   let refusals = 0;
@@ -43,6 +45,7 @@ export function createDiskFullState(deps: {
       const seen = refusals;
       const free = await freeBytes(deps.dir, deps.statfs);
       if (free === null || free < FULL_DISK_BYTES) return true;
+      if (await deps.spareReleased?.()) return true;
       // A refusal noted after this reading began may postdate the space it found.
       if (refusals !== seen) return true;
       // A read racing this one may already have cleared it.
@@ -56,13 +59,14 @@ export function createDiskFullState(deps: {
 }
 
 /**
- * Notes a refusal on `state` when the folder has less than FULL_DISK_BYTES free; an unreadable
- * reading notes nothing and logs. Called once, at start.
+ * Notes a refusal on `state` when the spare's release marker exists or the folder has less than
+ * FULL_DISK_BYTES free; an unreadable reading notes nothing and logs. Called once, at start.
  */
 export async function noteFullAtStart(
   state: DiskFullState,
-  deps: { dir: string; log: Logger; statfs?: Statfs },
+  deps: { dir: string; log: Logger; statfs?: Statfs; spareReleased?: () => Promise<boolean> },
 ): Promise<void> {
+  if (await deps.spareReleased?.()) return state.noteRefused();
   const free = await freeBytes(deps.dir, deps.statfs);
   if (free === null) {
     deps.log("warn", "storage.start_space_unread", {});

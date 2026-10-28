@@ -466,6 +466,13 @@ it("a start running from a selected backup recovery writes the spare in the conf
   });
 });
 
+it("a start from a selected backup recovery hands the boot the configured state folder as the spare's folder", async () => {
+  const f = await fixture("selected");
+  const { env } = await superviseSelected(f);
+  expect(env?.WAITRON_STATE_DIR).toBe(f.target.target.stateDir);
+  expect(env?.WAITRON_SPARE_SPACE_DIR).toBe(f.roots.stateDir);
+});
+
 it("a start from a selected backup recovery reads the failure from the recovery's state folder, judges the recovery's folders too, and deletes the spare in the configured state folder", async () => {
   const f = await fixture("selected");
   const target = f.target.target;
