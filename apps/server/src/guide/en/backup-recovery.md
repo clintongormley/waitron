@@ -29,8 +29,11 @@ deletes it along with the interrupted setup. The page does not offer **Recover f
 it. If the page says the setup database is missing, it shows the stopped recovery after you enter
 the administrator password you chose during setup, and Start again deletes it once you tick
 "Nothing was filed to AEAT and nothing was sold." and choose **Start again** once more. Otherwise
-the page shows **Start again** beside the stopped recovery, available only when the box can check
-that the setup's database is empty. Start again then asks for the administrator password, shows
+the page shows **Start again** beside the stopped recovery. If the setup's database already holds
+saved items, the page says how many after you enter the password, and that none is an invoice.
+Start again is not offered if the database holds an invoice or another item Waitron never deletes,
+if the setup already saved the settings the box trades with, or if it already finished. Start again
+then asks for the administrator password, shows
 the recovery again, and deletes it once you tick "Delete the old attempt and start again." and
 choose **Start again** once more.
 
