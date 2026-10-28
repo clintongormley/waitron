@@ -26,6 +26,7 @@ import {
   type StartAgainUnreadable,
   type BackupRepairRecord,
   type RegisterAnswer,
+  type FirstSetupInspection,
   type FirstSetupState,
 } from "@waitron/provisioning";
 import {
@@ -86,6 +87,33 @@ function refused(cause: "setup-finished" | "kept-records" | "trading-settings"):
 }
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
+}
+/**
+ * The held state's refusals, in this order. Both before the password: a completed setup cannot be
+ * signed into again (`recoverFirstSetupOwner` refuses it), and the page already sees `trading.env`.
+ */
+function assertHeldStartAgainOffered(
+  inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
+  found: FoundRecovery | undefined,
+  status: FirstSetupState["status"],
+): void {
+  const holdsRecords =
+    inspection.database === "occupied" ||
+    (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
+  if (found?.kind !== "stopped" || !holdsRecords) unavailable();
+  if (
+    inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !== "missing"
+  )
+    refused("trading-settings");
+  if (status === "complete") refused("setup-finished");
+}
+function heldShown({
+  rows,
+  kept,
+  records,
+  accepted,
+}: SetupDatabaseHoldings): NonNullable<StartAgainSummary["held"]> {
+  return { rows, kept, records, accepted };
 }
 function unused(state: FirstSetupState) {
   const attempts = [state, ...state.previous];
@@ -436,20 +464,7 @@ export function createFirstSetupResolutionActions(
             inspection.database !== "missing" &&
             (inspection.database !== "no-venue-rows" ||
               !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status));
-          if (held) {
-            const holdsRecords =
-              inspection.database === "occupied" ||
-              (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
-            if (found?.kind !== "stopped" || !holdsRecords) unavailable();
-            // Both before the password: a completed setup cannot be signed into again
-            // (`recoverFirstSetupOwner` refuses it), and the page already sees `trading.env`.
-            if (
-              inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !==
-              "missing"
-            )
-              refused("trading-settings");
-            if (retained.state.status === "complete") refused("setup-finished");
-          }
+          if (held) assertHeldStartAgainOffered(inspection, found, retained.state.status);
           await assertRecoveredOwner(request.owner, retained.state);
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
@@ -475,11 +490,7 @@ export function createFirstSetupResolutionActions(
           );
           if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
           if (holdings === undefined) return summaryOf(retained.state, gathered, recovery);
-          const { rows, kept, records, accepted } = holdings;
-          return {
-            ...summaryOf(retained.state, gathered, recovery),
-            held: { rows, kept, records, accepted },
-          };
+          return { ...summaryOf(retained.state, gathered, recovery), held: heldShown(holdings) };
         }),
       );
     },
@@ -520,19 +531,8 @@ export function createFirstSetupResolutionActions(
             !missing &&
             (inspection.database !== "no-venue-rows" ||
               !PRESENT_START_AGAIN_STATUSES.includes(state.status));
-          if (held) {
-            const holdsRecords =
-              inspection.database === "occupied" ||
-              (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
-            if (found?.kind !== "stopped" || !holdsRecords) unavailable();
-            if (
-              inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !==
-              "missing"
-            )
-              refused("trading-settings");
-            if (state.status === "complete") refused("setup-finished");
-          } else if (missing) {
-            // D3a: with the database missing, any status but complete, and only once confirmed.
+          if (held) assertHeldStartAgainOffered(inspection, found, state.status);
+          else if (missing) {
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
               unavailable();
           } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
@@ -639,14 +639,7 @@ export function createFirstSetupResolutionActions(
             missing || discardsStopped || presentUnreadable
               ? {
                   ...summaryOf(state, gathered, recovery),
-                  ...(holdings !== undefined && {
-                    held: {
-                      rows: holdings.rows,
-                      kept: holdings.kept,
-                      records: holdings.records,
-                      accepted: holdings.accepted,
-                    },
-                  }),
+                  ...(holdings !== undefined && { held: heldShown(holdings) }),
                 }
               : undefined;
           if (
