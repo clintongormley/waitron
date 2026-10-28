@@ -883,15 +883,21 @@ const defaultsModel: VenueDefaults = {
   fixedReceiptLanguage: null,
   defaultProductVatClass: "general",
 };
-const savedCatalan: DashboardApi["putVenueDefaults"] = async (changes) => ({
-  ...defaultsModel,
-  ...changes,
-});
+function storedDefaults() {
+  let stored = defaultsModel;
+  return {
+    getVenueDefaults: async () => stored,
+    put: vi.fn<DashboardApi["putVenueDefaults"]>(async (changes) => {
+      stored = { ...stored, ...changes };
+      return stored;
+    }),
+  };
+}
 
 it("Venue details hosts the Defaults card, whose Save stays quiet until the draft changes", async () => {
-  const put = vi.fn(savedCatalan);
+  const { getVenueDefaults, put } = storedDefaults();
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
-    getVenueDefaults: async () => defaultsModel,
+    getVenueDefaults,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
     putVenueDefaults: put,
   });
@@ -920,10 +926,10 @@ it.each([["venue.view"], ["layout.configure"], ["venue.configure"]])(
 );
 
 it("saving the Defaults card preserves a separate venue-details draft", async () => {
-  const put = vi.fn(savedCatalan);
+  const { getVenueDefaults, put } = storedDefaults();
   const detailsWrite = vi.fn<DashboardApi["patchVenueDetails"]>();
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
-    getVenueDefaults: async () => defaultsModel,
+    getVenueDefaults,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
     putVenueDefaults: put,
     patchVenueDetails: detailsWrite,

@@ -145,6 +145,10 @@ export class VenueDetailsPanel extends LitElement {
   #previewSequence = 0;
   #expected?: VenueDetailValues;
   #generation = 0;
+  /** Each read and each save takes the next place when it is sent, a dialog's answer when it
+   * arrives; the card shows a value only if its place is later than the one it shows. */
+  #places = 0;
+  #shownPlace = 0;
   #scope?: DraftScope<VenueDetailValues>;
   #leave?: LeaveCoordinator;
   readonly #queries = new DashboardQueries(
@@ -176,7 +180,6 @@ export class VenueDetailsPanel extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
-    this.submitting = false;
     this.#previewSequence += 1;
     this.#clockKey = "";
     this.clockPreview = undefined;
@@ -185,15 +188,28 @@ export class VenueDetailsPanel extends LitElement {
   async #load(): Promise<void> {
     const generation = this.#generation;
     try {
-      await this.#queries.watch("getVenueDetails", [], (model) => {
-        if (generation !== this.#generation) return;
-        this.model = model;
-        this.readError = "";
-        this.#refreshPreview();
-      });
+      await this.#queries.watchSent(
+        "getVenueDetails",
+        [],
+        async (read) => {
+          const place = ++this.#places;
+          return { place, model: await read() };
+        },
+        ({ place, model }) => {
+          if (generation !== this.#generation) return;
+          this.#show(place, model);
+          this.readError = "";
+          this.#refreshPreview();
+        },
+      );
     } catch (error) {
       if (generation === this.#generation) this.readError = codeMessage(codeOf(error));
     }
+  }
+  #show(place: number, model: VenueDetailsModel): void {
+    if (place <= this.#shownPlace) return;
+    this.#shownPlace = place;
+    this.model = model;
   }
   #begin(): void {
     if (!this.model || this.readOnly) return;
@@ -417,17 +433,17 @@ export class VenueDetailsPanel extends LitElement {
       return;
     }
     if (this.#needsAcknowledgement()) return;
-    const generation = this.#generation;
+    const place = ++this.#places;
+    const draft = this.draft;
     this.submitting = true;
     this.errors = {};
     this.actionError = "";
     try {
       const result = await this.api.patchVenueDetails({ changes: patch, expected: this.#expected });
-      if (generation !== this.#generation) return;
-      this.model = result.model;
-      this.#cancel();
+      this.#show(place, result.model);
+      if (draft === this.draft) this.#cancel();
     } catch (error) {
-      if (generation !== this.#generation) return;
+      if (draft !== this.draft) return;
       const code = codeOf(error);
       const params =
         typeof error === "object" && error !== null
@@ -456,9 +472,9 @@ export class VenueDetailsPanel extends LitElement {
       } else this.actionError = message;
       return;
     } finally {
-      if (generation === this.#generation) this.submitting = false;
+      this.submitting = false;
     }
-    await this.#load();
+    if (this.isConnected) await this.#load();
   }
   #lockedNotes(): TemplateResult | typeof nothing {
     const keys = new Set<StringKey>();
@@ -594,7 +610,10 @@ export class VenueDetailsPanel extends LitElement {
             <dashboard-legal-name-dialog
               .api=${this.api}
               @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
-                if (generation === this.#generation) this.model = event.detail.model;
+                if (generation === this.#generation) {
+                  this.#show(++this.#places, event.detail.model);
+                  void this.#load();
+                }
               }}
             ></dashboard-legal-name-dialog>
             ${settingsCard({
@@ -694,7 +713,7 @@ export class VenueDetailsPanel extends LitElement {
               .readOnly=${this.readOnly}
               @saved=${(event: CustomEvent<VenueDetailsModel>) => {
                 event.stopPropagation();
-                this.model = event.detail;
+                this.#show(++this.#places, event.detail);
                 void this.#load();
               }}
             ></dashboard-business-day-start-editor>

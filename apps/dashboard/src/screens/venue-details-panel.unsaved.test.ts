@@ -241,7 +241,7 @@ it("live values do not reset the opening baseline, and disconnect invalidates a 
   await panel.updateComplete;
   expect(field(panel, "addressLine1").value).toBe("Calle Mayor 1");
 });
-it("a pending write keeps Cancel disabled and older completion cannot close a reconnected draft", async () => {
+it("a pending write keeps Cancel disabled across a reconnect, and its completion closes the draft it sent", async () => {
   const write = deferred<{ changed: boolean; model: VenueDetailsModel }>();
   const { panel } = await mount({ patchVenueDetails: async () => write.promise });
   await change(panel, "addressLine1", "Different street");
@@ -257,8 +257,12 @@ it("a pending write keeps Cancel disabled and older completion cannot close a re
     changed: true,
     model: venueDetailsFixture({ addressLine1: "Different street" }),
   });
-  await expect.poll(() => field(panel, "addressLine1").value).toBe("Different street");
-  expect(unload()).toBe(true);
+  await expect.poll(() => panel.shadowRoot!.querySelector("[data-test=edit]")).toBeTruthy();
+  expect(panel.shadowRoot!.querySelector("form")).toBeNull();
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")?.textContent?.trim(),
+  ).toBe("Different street");
+  expect(unload()).toBe(false);
 });
 
 it("a detached input cannot edit a replacement opening", async () => {
@@ -299,3 +303,34 @@ it("detached Cancel and Save controls cannot act on a replacement draft", async 
   expect(field(panel, "addressLine1").value).toBe("Different street");
   expect(unload()).toBe(true);
 });
+
+it.each(["succeeds", "is refused"] as const)(
+  "a save answer that %s after a page discard leaves the restored draft alone",
+  async (outcome) => {
+    const write = deferred<{ changed: boolean; model: VenueDetailsModel }>();
+    const { app, panel } = await mount({ patchVenueDetails: async () => write.promise });
+    await change(panel, "addressLine1", "Different street");
+    click(panel, "save");
+    await panel.updateComplete;
+    const discarded = leave(app);
+    await choose(app, "discard");
+    expect(await discarded).toBe("proceeded");
+    await panel.updateComplete;
+    if (outcome === "succeeds")
+      write.resolve({
+        changed: true,
+        model: venueDetailsFixture({ addressLine1: "Different street" }),
+      });
+    else write.reject({ code: "venue.detail_locked", params: { field: "addressLine1" } });
+    await write.promise.catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await panel.updateComplete;
+    expect(field(panel, "addressLine1").value).toBe("Calle Mayor 1");
+    expect(field(panel, "addressLine1").error).toBe("");
+    expect(panel.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(
+      panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=cancel]")!
+        .disabled,
+    ).toBe(false);
+  },
+);

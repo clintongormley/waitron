@@ -3,7 +3,11 @@ import { LitElement } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtInput, WtButton, WtFormActions } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, VenueDetailsModel, VenueDetailWrite } from "../api/client.js";
@@ -389,10 +393,13 @@ it("a detached save cannot replace a reopened panel's new saved values", async (
   r.set(venueDetailsFixture({ name: "Reopened" }));
   host.append(el);
   await flush(el);
+  const reread = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => reread.promise);
   complete({ changed: true, model: venueDetailsFixture({ name: "Old reply" }) });
   await flush(el);
-  await click(el, "[data-test=cancel]");
+  await flush(el);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Reopened");
+  reread.resolve(venueDetailsFixture({ name: "Reopened" }));
 });
 it("shows a refusal without a visible field at the bottom without disabling retry", async () => {
   setLocale("en-GB");
@@ -818,4 +825,127 @@ it("shows the business-day start once, in a third card after Business and Venue"
   expect(count(all, "05:00")).toBe(1);
   expect(all).not.toContain("Business day starts at");
   expect(deepHeadings(el.shadowRoot!)).toEqual(["Business", "Venue", "Business day"]);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+async function savingThroughReconnect(r: ReturnType<typeof rig>) {
+  const pending = deferred<{ changed: boolean; model: VenueDetailsModel }>();
+  vi.mocked(r.api.patchVenueDetails).mockImplementationOnce(() => pending.promise);
+  const el = await editing(r.api);
+  change(el, "addressLine1", "New street");
+  await flush(el);
+  await click(el, "[data-test=save]");
+  await reattachAfterDetachedUpdate(el);
+  await flush(el);
+  return { el, pending };
+}
+
+it("reconnecting while a save is in flight keeps Save disabled, and its answer closes the editor and re-reads", async () => {
+  const r = rig();
+  const { el, pending } = await savingThroughReconnect(r);
+  expect(save(el).disabled).toBe(true);
+  expect(q<WtButton>(el, "[data-test=cancel]")!.disabled).toBe(true);
+  expect(field(el, "addressLine1").disabled).toBe(true);
+  save(el).click();
+  q(el, "form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+  await flush(el);
+  expect(r.api.patchVenueDetails).toHaveBeenCalledOnce();
+  const saved = venueDetailsFixture({ addressLine1: "New street" });
+  r.set(saved);
+  const reads = vi.mocked(r.api.getVenueDetails).mock.calls.length;
+  pending.resolve({ changed: true, model: structuredClone(saved) });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(q(el, "wt-input")).toBeNull();
+  expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("New street");
+  expect(vi.mocked(r.api.getVenueDetails).mock.calls.length).toBeGreaterThan(reads);
+  expect(r.api.patchVenueDetails).toHaveBeenCalledOnce();
+});
+
+it.each([
+  [
+    "under its field",
+    { code: "venue.detail_locked", params: { field: "addressLine1", reason: "sales" } },
+    "Locked: the venue has recorded sales.",
+    "Correct the highlighted fields to continue.",
+  ],
+  [
+    "at the bottom",
+    { code: "authorization.not_permitted" },
+    "",
+    "You don't have permission to do that",
+  ],
+])(
+  "a refusal that arrives after reconnecting during the save goes %s in the resumed draft",
+  async (_where, refusal, fieldError, bottom) => {
+    setLocale("en-GB");
+    const r = rig();
+    const { el, pending } = await savingThroughReconnect(r);
+    pending.reject(refusal);
+    await pending.promise.catch(() => {});
+    await flush(el);
+    await flush(el);
+    expect(field(el, "addressLine1").value).toBe("New street");
+    expect(field(el, "addressLine1").error).toBe(fieldError);
+    expect(actions(el).error).toBe(bottom);
+    expect(save(el).disabled).toBe(false);
+  },
+);
+
+it("a read begun after the save was sent and already shown wins over the save's answer", async () => {
+  const r = rig();
+  r.set(venueDetailsFixture({ name: "Reopened" }));
+  const { el, pending } = await savingThroughReconnect(r);
+  const reread = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => reread.promise);
+  pending.resolve({ changed: true, model: venueDetailsFixture({ name: "Old reply" }) });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(text(q(el, "[data-test=saved-name]"))).toBe("Reopened");
+  reread.resolve(venueDetailsFixture({ name: "Reopened" }));
+});
+
+it("a save's answer is shown when the read begun after it was sent failed", async () => {
+  const r = rig();
+  const pending = deferred<{ changed: boolean; model: VenueDetailsModel }>();
+  vi.mocked(r.api.patchVenueDetails).mockImplementationOnce(() => pending.promise);
+  const el = await editing(r.api);
+  change(el, "addressLine1", "Confirmed street");
+  await flush(el);
+  await click(el, "[data-test=save]");
+  vi.mocked(r.api.getVenueDetails).mockRejectedValue({ code: "connection.failed" });
+  await reattachAfterDetachedUpdate(el);
+  await flush(el);
+  pending.resolve({
+    changed: true,
+    model: venueDetailsFixture({ addressLine1: "Confirmed street" }),
+  });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await flush(el);
+  expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("Confirmed street");
+});
+
+it("after the legal-name dialog's answer the card reads again, so a change in a read it overtook still shows", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  const held = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => held.promise);
+  await r.notify(el);
+  const fixture = venueDetailsFixture();
+  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "Nuevo SL" } };
+  const later = { ...venueDetailsFixture({ name: "Other manager" }), issuer: renamed.issuer };
+  r.set(later);
+  q(el, "dashboard-legal-name-dialog")!.dispatchEvent(
+    new CustomEvent("venue-identity-changed", { detail: { model: renamed } }),
+  );
+  await flush(el);
+  held.resolve(structuredClone(later));
+  await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
+  expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
 });
