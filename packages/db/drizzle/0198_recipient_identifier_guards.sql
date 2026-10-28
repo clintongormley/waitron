@@ -1,0 +1,196 @@
+CREATE TRIGGER working_orders_recipient_identity_insert
+BEFORE INSERT ON working_orders
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'recipient identity is incomplete')
+  WHERE NOT (
+    (new.recipient_identifier_type IS NULL AND new.recipient_identifier_country_code IS NULL)
+    OR (new.recipient_identifier_type IS NOT NULL AND new.recipient_identifier_country_code IS NOT NULL
+      AND new.recipient_identifier_type IN ('vat-number', 'passport', 'residence-country-id', 'residence-certificate', 'other-document')
+      AND new.recipient_identifier_country_code GLOB '[A-Z][A-Z]'
+      AND new.recipient_tax_id IS NOT NULL
+      AND length(trim(new.recipient_tax_id, char(9, 10, 11, 12, 13, 32))) > 0
+      AND new.invoice_type = 'F1')
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER working_orders_recipient_identity_update
+BEFORE UPDATE ON working_orders
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'recipient identity is incomplete')
+  WHERE NOT (
+    (new.recipient_identifier_type IS NULL AND new.recipient_identifier_country_code IS NULL)
+    OR (new.recipient_identifier_type IS NOT NULL AND new.recipient_identifier_country_code IS NOT NULL
+      AND new.recipient_identifier_type IN ('vat-number', 'passport', 'residence-country-id', 'residence-certificate', 'other-document')
+      AND new.recipient_identifier_country_code GLOB '[A-Z][A-Z]'
+      AND new.recipient_tax_id IS NOT NULL
+      AND length(trim(new.recipient_tax_id, char(9, 10, 11, 12, 13, 32))) > 0
+      AND new.invoice_type = 'F1')
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER sales_recipient_identity_insert
+BEFORE INSERT ON sales
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'recipient identity is incomplete')
+  WHERE NOT (
+    (new.counterparty_identifier_type IS NULL AND new.counterparty_identifier_country_code IS NULL)
+    OR (new.counterparty_identifier_type IS NOT NULL AND new.counterparty_identifier_country_code IS NOT NULL
+      AND new.counterparty_identifier_type IN ('vat-number', 'passport', 'residence-country-id', 'residence-certificate', 'other-document')
+      AND new.counterparty_identifier_country_code GLOB '[A-Z][A-Z]'
+      AND new.counterparty_tax_id IS NOT NULL
+      AND length(trim(new.counterparty_tax_id, char(9, 10, 11, 12, 13, 32))) > 0)
+  );
+END;
+--> statement-breakpoint
+DROP TRIGGER working_orders_enforce_transition;
+--> statement-breakpoint
+CREATE TRIGGER working_orders_enforce_transition
+BEFORE UPDATE ON working_orders
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'working order cannot make that transition')
+  WHERE NOT (
+    old.status = 'open'
+    OR (old.status = 'placed' AND new.status IN ('settled', 'abandoned')
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale)
+    OR (old.status = 'placed' AND new.status = 'placed'
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.location_id IS old.location_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.collected_at IS old.collected_at
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND ((new.invoice_type IS old.invoice_type
+          AND new.recipient_tax_id IS old.recipient_tax_id
+          AND new.recipient_legal_name IS old.recipient_legal_name
+          AND new.recipient_address IS old.recipient_address
+          AND new.recipient_country_code IS old.recipient_country_code
+          AND new.recipient_identifier_type IS old.recipient_identifier_type
+          AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+          AND new.invoice_delivery IS old.invoice_delivery
+          AND new.receipt_locale IS old.receipt_locale)
+          OR (new.revision = old.revision + 1
+               AND new.invoice_type IN ('F1', 'F2')
+               AND NOT EXISTS (SELECT 1 FROM sales WHERE working_order_id = old.id)))
+        AND new.delivery_table_label IS old.delivery_table_label)
+    OR (old.status = 'placed' AND new.status = 'placed'
+        AND old.collected_at IS NULL AND new.collected_at IS NOT NULL
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.location_id IS old.location_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.delivery_table_id IS old.delivery_table_id
+        AND new.revision IS old.revision
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale
+        AND new."party_id" IS old."party_id"
+        AND new.delivery_table_label IS old.delivery_table_label)
+    OR (old.status = 'settled' AND new.status = 'settled'
+        AND old.collected_at IS NULL AND new.collected_at IS NOT NULL
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.location_id IS old.location_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.delivery_table_id IS old.delivery_table_id
+        AND new.revision IS old.revision
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale
+        AND new."party_id" IS old."party_id"
+        AND new.delivery_table_label IS old.delivery_table_label)
+    -- A paid bill not yet handed over may leave its party, once; only the server limits this to Finish table's counter collection (A758-7).
+    OR (old.status = 'settled' AND new.status = 'settled'
+        AND old.collected_at IS NULL AND new.collected_at IS NULL
+        AND old.party_id IS NOT NULL AND new.party_id IS NULL
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.location_id IS old.location_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.status IS old.status
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.collected_at IS old.collected_at
+        AND new.delivery_table_id IS old.delivery_table_id
+        AND new.delivery_table_label IS old.delivery_table_label
+        AND new.revision IS old.revision
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale)
+    OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
+        AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.location_id IS old.location_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.status IS old.status
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.collected_at IS old.collected_at
+        AND new.revision IS old.revision
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.party_id IS old.party_id)
+  );
+END;

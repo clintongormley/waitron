@@ -100,6 +100,9 @@ export const workingOrders = table(
     recipientLegalName: label("recipient_legal_name"),
     recipientAddress: label("recipient_address"),
     recipientCountryCode: label("recipient_country_code"),
+    // Both null for a domestic tax number; otherwise the document kind and issuer.
+    recipientIdentifierType: label("recipient_identifier_type"),
+    recipientIdentifierCountryCode: label("recipient_identifier_country_code"),
     // Null means no explicit delivery choice has been staged.
     invoiceDelivery: json<StagedInvoiceDelivery>("invoice_delivery"),
     // Null means the location's receipt language.

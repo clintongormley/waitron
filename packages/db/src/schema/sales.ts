@@ -101,6 +101,9 @@ export const sales = table(
     counterpartyTaxId: label("counterparty_tax_id"),
     counterpartyLegalName: label("counterparty_legal_name"),
     counterpartyCountryCode: label("counterparty_country_code"),
+    // Both null for a domestic tax number; otherwise the document kind and issuer.
+    counterpartyIdentifierType: label("counterparty_identifier_type"),
+    counterpartyIdentifierCountryCode: label("counterparty_identifier_country_code"),
     counterpartyAddress: label("counterparty_address"),
     taxpayerDomicile: label("taxpayer_domicile"),
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
