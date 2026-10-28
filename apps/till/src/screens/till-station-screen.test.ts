@@ -2600,19 +2600,19 @@ describe("till-station-screen kitchen notices", () => {
   });
 
   it("switching station clears the old station's notices while the new queue loads", async () => {
-    let answerBarra!: (queue: StationQueue) => void;
+    let answerBar!: (queue: StationQueue) => void;
     const api = stubApi({
       getStationQueue: vi
         .fn()
         .mockResolvedValueOnce(twoNotices)
-        .mockImplementationOnce(() => new Promise((resolve) => (answerBarra = resolve))),
+        .mockImplementationOnce(() => new Promise((resolve) => (answerBar = resolve))),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
     await flush(el);
     expect(queueWidget(el)!.notices).toEqual([]);
-    answerBarra({ printersDown: [], items: barQueue, notices: [] });
+    answerBar({ printersDown: [], items: barQueue, notices: [] });
     await flush(el);
   });
 
@@ -3193,14 +3193,14 @@ describe("till-station-screen 15-second refresh", () => {
   });
 
   it("an answer for the station just left never shows under the station picked", async () => {
-    let answerCocina!: (queue: StationQueue) => void;
-    let answerBarra!: (queue: StationQueue) => void;
+    let answerKitchen!: (queue: StationQueue) => void;
+    let answerBar!: (queue: StationQueue) => void;
     const api = stubApi({
       getStationQueue: vi
         .fn()
         .mockResolvedValueOnce({ printersDown: [], items: kitchenQueue, notices: [] })
-        .mockImplementationOnce(() => new Promise((resolve) => (answerCocina = resolve)))
-        .mockImplementationOnce(() => new Promise((resolve) => (answerBarra = resolve))),
+        .mockImplementationOnce(() => new Promise((resolve) => (answerKitchen = resolve)))
+        .mockImplementationOnce(() => new Promise((resolve) => (answerBar = resolve))),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
@@ -3208,11 +3208,11 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
     await flush(el);
-    answerCocina(answerNumber(2)); // lands before Barra's own answer
+    answerKitchen(answerNumber(2));
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual([]);
     expect(queueWidget(el)!.notices).toEqual([]);
-    answerBarra({ printersDown: [], items: barQueue, notices: [] });
+    answerBar({ printersDown: [], items: barQueue, notices: [] });
     await flush(el);
     expect(queueWidget(el)!.groups).toEqual(barQueue);
   });
@@ -3886,11 +3886,11 @@ describe("till-station-screen out-of-date banner", () => {
   });
 
   it("switching station clears the banner, and a failure there dates from the switch", async () => {
-    let failBarra!: (reason: unknown) => void;
+    let failBar!: (reason: unknown) => void;
     const api = stubApi({
       getStationQueue: vi.fn((stationId: string) =>
         stationId === "st-2"
-          ? new Promise((_resolve, reject) => (failBarra = reject))
+          ? new Promise((_resolve, reject) => (failBar = reject))
           : Promise.reject({ code: "server.internal" }),
       ),
     });
@@ -3902,7 +3902,7 @@ describe("till-station-screen out-of-date banner", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
     await flush(el);
     expect(banner(el)).toBeNull();
-    failBarra({ code: "server.internal" });
+    failBar({ code: "server.internal" });
     await flush(el);
     expect(banner(el)!.textContent!.trim()).toBe("No updates since 10:20, less than a minute ago");
   });
