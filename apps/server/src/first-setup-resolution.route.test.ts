@@ -294,6 +294,76 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
   }
 });
 
+it("HTTPS passes a shown summary carrying held counts on to Start again, and refuses a malformed one", async () => {
+  const f = await firstFiscalFixture();
+  let server: { close(): Promise<void> } | undefined;
+  let agent: Agent | undefined;
+  try {
+    await ensureBoxSecrets({
+      stateDir: f.stateDir,
+      hostnames: ["localhost", "waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => ["127.0.0.1"],
+    });
+    const [port] = await freePorts(1);
+    server = await startServerOrFirstSetupResolution({
+      WAITRON_STATE_DIR: f.stateDir,
+      WAITRON_VENUE_DIR: f.venueDir,
+      WAITRON_HTTP_PORT: String(port),
+    });
+    agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
+    const origin = `https://127.0.0.1:${port}`;
+    const inspection = await (
+      await fetch(`${origin}/setup-api/first-setup/resolution`, {
+        dispatcher: agent,
+      } as RequestInit)
+    ).json();
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const held = { rows: 20, kept: 3, records: 2, accepted: 1 };
+    const send = (shownHeld: unknown) =>
+      fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
+        dispatcher: agent,
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          inspectionId: inspection.inspectionId,
+          revision: inspection.revision,
+          ownerGeneration: inspection.ownerGeneration,
+          register: { kind: "no-current-master", confirmed: true },
+          confirmMissingDatabase: {
+            nothingFiledOrSold: true,
+            shown: { reached: "named", lastName: null, held: shownHeld },
+          },
+        }),
+      } as RequestInit);
+    // No owner is signed in, so Start again itself answers setup.not_ready once the body is read.
+    const reached = await send(held);
+    expect(reached.status).toBe(503);
+    expect(await reached.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+    for (const malformed of [
+      { ...held, extra: 1 },
+      { rows: 20, kept: 3, records: 2 },
+      { ...held, kept: -1 },
+      { ...held, rows: 20.5 },
+      { ...held, records: "2" },
+      { ...held, accepted: 3 },
+      { ...held, kept: 21 },
+      null,
+    ]) {
+      const response = await send(malformed);
+      expect(response.status, JSON.stringify(malformed)).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "setup.request_invalid", params: { field: "body" } },
+      });
+    }
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  } finally {
+    await server?.close();
+    await agent?.close();
+    await f.dispose();
+  }
+});
+
 it("the loopback resolution listener keeps certificate guidance on the local address", async () => {
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;

@@ -186,6 +186,7 @@ export {
   type StartAgainSummary,
   type StartAgainRecoveryShown,
   type StartAgainUnreadable,
+  type StartAgainHeld,
 } from "./first-setup-start-again-confirmation.js";
 export {
   START_AGAIN_MARKER_FILE,

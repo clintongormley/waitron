@@ -1,5 +1,8 @@
 import { heldSetup } from "../test/held-setup-database.js";
 import { createHash } from "node:crypto";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { Hono } from "hono";
 import { access, lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { getTableName } from "drizzle-orm";
@@ -24,6 +27,7 @@ import {
   createFirstSetupResolutionActions,
   type StartAgainFirstSetupRequest,
 } from "./first-setup-resolution.js";
+import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
 // Tables a test adds to a module's `startAgainDeletable`, as the holdings reader sees it.
 const extraDeletable = vi.hoisted(() => new Map<string, readonly string[]>());
@@ -396,4 +400,42 @@ it("a held setup database with no recovery started still refuses Start again set
   const f = await heldSetup({ recovery: false });
   // With no recovery, a confirmRecoveryDiscard is refused setup.attempt_conflict before this check.
   await expectStartAgainRefused(f, await handMade(f, true, false), { code: "setup.not_ready" });
+});
+
+it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
+  const f = await heldSetup({ invoices: 1 });
+  const startAgain = await askStartAgain(f);
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    startAgain: startAgain.actions.startAgainFirstSetup,
+  });
+  const before = await snapshot(f);
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Waitron-Setup-Owner": startAgain.owner.capability,
+          "X-Waitron-Setup-Attempt": startAgain.owner.attemptId,
+          "X-Waitron-Setup-Revision": String(startAgain.owner.revision),
+          "X-Waitron-Setup-Generation": String(startAgain.owner.ownerGeneration),
+        },
+        body: JSON.stringify({
+          ...startAgain.ids,
+          confirmRecoveryDiscard: { shown: startAgain.shown },
+        }),
+      },
+      { incoming: { socket } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "setup.start_again_refused", params: { cause: "kept-records" } },
+    });
+  } finally {
+    socket.destroy();
+  }
+  expect(await snapshot(f)).toEqual(before);
 });
