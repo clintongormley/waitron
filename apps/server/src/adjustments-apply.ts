@@ -55,6 +55,7 @@ import {
   divideDecimal,
   MONEY_SCALE,
   multiplyDecimal,
+  QUANTITY_SCALE,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
@@ -89,10 +90,11 @@ import {
   removeFromLine,
   splitLinesWithinOrder,
   type SplitRow,
+  type StoredOrderLine,
   type VoidTarget,
 } from "./working-order.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
-import { readPortionBindings } from "./order-portions.js";
+import { readPortionBindings, readWholePortionLines } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import "./errors.js";
 
@@ -105,6 +107,8 @@ export interface AdjustmentAsk {
   expectedRevision: number;
   /** The dish, or the extra, the action names; null for a discount on the whole bill. */
   lineId: string | null;
+  /** Every portion line of one till row, `lineId` among them (plan D31). */
+  lineIds?: string[];
   reasonId: string;
   action: AdjustmentAction;
   /** How much of the line; absent for all of it. An extra is taken only whole. */
@@ -157,6 +161,8 @@ interface Row {
   parentLineId: string | null;
   name: string;
   variantName: string | null;
+  note: string | null;
+  courseId: string | null;
   quantity: number;
   priceQuantity: number;
   unit: number;
@@ -202,7 +208,12 @@ interface Plan {
   /** A cancel's quantity taken off the dish, null for all of it. */
   removed: number | null;
   carve: Carve | null;
+  /** The prices the action sets, on the line, or on a row's stand-in lines (plan D32). */
   changes: Change[];
+  /** What is written: `changes`, or on a row, each of its portions' share of them. */
+  writes: Change[];
+  /** On a row, the split today's second price would have recorded (plan D33). */
+  rowSplits: AdjustmentSplit[];
   /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
   compedExtras: string[];
   reduction: Decimal;
@@ -235,6 +246,8 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
+      note: workingOrderLines.note,
+      courseId: workingOrderLines.courseId,
       quantity: workingOrderLines.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
       unit: workingOrderLines.unitPriceGross,
@@ -433,30 +446,181 @@ async function spreadOverFiledRows(
     discount,
   );
   const ordinal = (subject: Subject) => bindings.get(subject.row.id)?.ordinal ?? 0;
-  return groups.flatMap((members) => {
-    const pieces = results
-      .get(members[0]!.row.id)!
-      .rows.map((piece) => ({ ...piece, left: decimalToThousandths(piece.quantity) }));
-    return [...members]
-      .sort((a, b) => ordinal(a) - ordinal(b))
-      .flatMap(({ row, quantity, carved }) => {
-        const rows: PricedRow[] = [];
-        const cuts: Decimal[] = [];
-        for (let need = quantity; need > 0;) {
-          const piece = pieces.find((candidate) => candidate.left > 0)!;
-          const take = Math.min(need, piece.left);
-          piece.left -= take;
-          need -= take;
-          rows.push({ quantity: thousandthsToDecimal(take), unitGross: piece.unitGross });
-          cuts.push(
-            subtractDecimal(gross(row, take), gross(row, take, decimalToCents(piece.unitGross))),
-          );
-        }
-        const reduction = sumDecimals(cuts);
-        if (compareDecimal(reduction, ZERO) === 0) return [];
-        return [{ row, carved, rows, reduction }];
-      });
+  return groups.flatMap((members) =>
+    handOut(
+      [...members].sort((a, b) => ordinal(a) - ordinal(b)),
+      results.get(members[0]!.row.id)!.rows,
+    ).filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0),
+  );
+}
+
+/** One line's priced rows handed to the lines standing for it, in the order given, each taking
+ * its own quantity from the rows that are left, the higher price first. */
+function handOut(
+  members: readonly Pick<Subject, "row" | "quantity" | "carved">[],
+  priced: readonly PricedRow[],
+): Change[] {
+  const pieces = priced.map((piece) => ({ ...piece, left: decimalToThousandths(piece.quantity) }));
+  return members.map(({ row, quantity, carved }) => {
+    const rows: PricedRow[] = [];
+    const cuts: Decimal[] = [];
+    for (let need = quantity; need > 0;) {
+      const piece = pieces.find((candidate) => candidate.left > 0)!;
+      const take = Math.min(need, piece.left);
+      piece.left -= take;
+      need -= take;
+      rows.push({ quantity: thousandthsToDecimal(take), unitGross: piece.unitGross });
+      cuts.push(
+        subtractDecimal(gross(row, take), gross(row, take, decimalToCents(piece.unitGross))),
+      );
+    }
+    return { row, carved, rows, reduction: sumDecimals(cuts) };
   });
+}
+
+/** A row of identical portions as one stand-in line (plan D32), and what it stands for. */
+interface StandIn {
+  /** The stand-in dish: the first portion's id, prices and line number, the members' quantity. */
+  dish: Row;
+  /** The bill's rows with the members and their extras replaced by the stand-in lines. */
+  view: Row[];
+  /** Every member's dish and extras lines. */
+  lines: Row[];
+  /** Each stand-in line's id, and the lines it stands for, in line order. */
+  membersOf: Map<string, Row[]>;
+}
+
+const STAGE_RANK: Record<AdjustmentStage, number> = { unsent: 0, held: 1, fired: 2, served: 3 };
+
+/** Object keys sorted, so stored descriptions in a different key order compare equal. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/** What a filed group shows, its quantity, cohort and position left out; a list price equal to the
+ * price reads as none, as filing drops it. */
+function groupFields({ identity, locked }: StoredOrderLine): unknown {
+  const { id, lineIds, portionIds, listUnitGross, ...kept } = identity;
+  void id;
+  void lineIds;
+  void portionIds;
+  return {
+    ...kept,
+    listUnitGross:
+      listUnitGross !== null && compareDecimal(listUnitGross, decimal(locked.grossUnitPrice)) !== 0
+        ? listUnitGross
+        : null,
+    locked: { ...locked, quantity: null, parentLineNo: null },
+  };
+}
+
+/** The filed group holding dish line `lineId`, compared without its cohort: its fields and each of
+ * its extras' fields and quantity per dish. */
+function cohortFreeKey(groups: readonly StoredOrderLine[], lineId: string): string {
+  const at = groups.findIndex(
+    (group) => group.locked.parentLineNo == null && (group.identity.lineIds ?? []).includes(lineId),
+  );
+  const dish = groups[at]!;
+  const extras = groups
+    .filter((group) => group.locked.parentLineNo === at + 1)
+    .map((extra) =>
+      canonical([
+        groupFields(extra),
+        divideDecimal(
+          decimal(extra.locked.quantity),
+          decimal(dish.locked.quantity),
+          QUANTITY_SCALE,
+        ),
+      ]),
+    )
+    .sort();
+  return canonical([groupFields(dish), extras]);
+}
+
+/**
+ * The till row `ask.lineIds` names as one stand-in line, else `management.request_invalid` on
+ * `lineIds`: each member a dish line of this bill bound to a whole, unmeasured portion, every one
+ * of them in one filed group but for the cohort, with one note and one course (plan D31). The
+ * stand-in's extras are the members' extras, one per extra, each at the first member's extra's line
+ * number; its served quantity is the members' sum and its kitchen facts the furthest member's (D32).
+ */
+async function standInRow(
+  tx: Transaction,
+  orderId: string,
+  ask: AdjustmentAsk,
+  rows: readonly Row[],
+): Promise<StandIn> {
+  const ids = ask.lineIds!;
+  // Every refusal here is a fault in Waitron: the till names only the rows it grouped.
+  if (ask.action === "cancel") throw invalid("lineIds");
+  if (ids.length < 2 || new Set(ids).size !== ids.length || !ids.includes(ask.lineId!)) {
+    throw invalid("lineIds");
+  }
+  const members = ids.map((id) => rows.find((row) => row.id === id));
+  if (members.some((member) => member === undefined || member.parentLineId !== null)) {
+    throw invalid("lineIds");
+  }
+  const whole = await readWholePortionLines(tx, ids);
+  if (ids.some((id) => !whole.has(id))) throw invalid("lineIds");
+  const groups = await readLockedLines(tx, orderId);
+  if (new Set(ids.map((id) => cohortFreeKey(groups, id))).size !== 1) throw invalid("lineIds");
+  // Filing groups dishes whatever their note or course; the till's row does not.
+  if (new Set(members.map((member) => canonical([member!.note, member!.courseId]))).size !== 1) {
+    throw invalid("lineIds");
+  }
+
+  const dishes = (members as Row[]).sort((a, b) => a.lineNo - b.lineNo);
+  const extraOrder = (row: Row) => canonical([row.name, row.variantName, row.unit, row.quantity]);
+  const families = dishes.map((dish) => ({
+    dish,
+    extras: rows
+      .filter((row) => row.parentLineId === dish.id)
+      .sort((a, b) => (extraOrder(a) < extraOrder(b) ? -1 : extraOrder(a) > extraOrder(b) ? 1 : 0)),
+  }));
+  const sum = (lines: readonly Row[], of: (row: Row) => number) =>
+    lines.reduce((total, row) => total + of(row), 0);
+  const furthest = dishes.reduce((far, dish) =>
+    STAGE_RANK[stageOf(dish)] > STAGE_RANK[stageOf(far)] ? dish : far,
+  );
+  const first = families[0]!;
+  const dish: Row = {
+    ...first.dish,
+    quantity: sum(dishes, (row) => row.quantity),
+    servedQuantity: sum(dishes, (row) => row.servedQuantity),
+    firedQuantity: sum(dishes, (row) => row.firedQuantity),
+    groupId: furthest.groupId,
+    groupState: furthest.groupState,
+    sentAt: furthest.sentAt,
+    ticketItemId: furthest.ticketItemId,
+    ticketFiredAt: furthest.ticketFiredAt,
+    ticketMadeHere: furthest.ticketMadeHere,
+    stationId: furthest.stationId,
+    ticketState: furthest.ticketState,
+  };
+  const membersOf = new Map<string, Row[]>([[dish.id, dishes]]);
+  const extras = first.extras.map((extra, i) => {
+    const standing = families.map((family) => family.extras[i]!);
+    membersOf.set(extra.id, standing);
+    return { ...extra, quantity: sum(standing, (row) => row.quantity) };
+  });
+  const lines = families.flatMap((family) => [family.dish, ...family.extras]);
+  const replaced = new Set(lines.map((row) => row.id));
+  return {
+    dish,
+    view: [...rows.filter((row) => !replaced.has(row.id)), dish, ...extras].sort(
+      (a, b) => a.lineNo - b.lineNo,
+    ),
+    lines,
+    membersOf,
+  };
 }
 
 /** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
@@ -510,6 +674,10 @@ export async function planAdjustment(
   let removed: number | null = null;
   let carve: Carve | null = null;
   let changes: Change[] = [];
+  let writes: Change[] | null = null;
+  const rowSplits: AdjustmentSplit[] = [];
+  let row: StandIn | null = null;
+  let view: readonly Row[] = rows;
   let compedExtras: string[] = [];
   let reduction: Decimal;
   let nominal: Decimal;
@@ -541,11 +709,22 @@ export async function planAdjustment(
     line = rows.find((row) => row.id === ask.lineId) ?? null;
     if (line === null)
       throw new AppError("tab.line_not_found", { tabId: orderId, lineId: ask.lineId });
+    if (ask.lineIds !== undefined) {
+      row = await standInRow(tx, orderId, ask, rows);
+      ({ dish: line, view } = row);
+    }
     const target = line;
     // An extra has no extras of its own, so it is a family of one.
-    const family = [target, ...rows.filter((row) => row.parentLineId === target.id)];
+    const family = [target, ...view.filter((other) => other.parentLineId === target.id)];
     covered = coveredQuantity(orderId, target, ask.quantity);
     const partial = covered < target.quantity;
+    if (row !== null && partial) {
+      throw new AppError("adjustment.quantity_invalid", {
+        workingOrderId: orderId,
+        lineNo: target.lineNo,
+        quantity: ask.quantity!,
+      });
+    }
     const weighed = (target.unitPrecision ?? 0) > 0;
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
@@ -611,13 +790,42 @@ export async function planAdjustment(
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
-      if (ask.action === "comp" && !partial) compedExtras = family.slice(1).map((row) => row.id);
+      const covering = row === null ? family : row.lines;
+      if (ask.action === "comp" && !partial) {
+        compedExtras = (
+          row === null ? family.slice(1) : covering.filter((one) => one.parentLineId !== null)
+        ).map((one) => one.id);
+      }
+      if (row !== null) {
+        const { membersOf } = row;
+        writes = changes.flatMap((change) => {
+          const portions = handOut(
+            membersOf.get(change.row.id)!.map((member) => ({
+              row: member,
+              quantity: member.quantity,
+              carved: false,
+            })),
+            change.rows,
+          );
+          // Today the line's second price is split off it (plan D33).
+          const lower = change.rows[1];
+          if (lower !== undefined) {
+            rowSplits.push({
+              from: portions[0]!.row.id,
+              to: portions.find(
+                (portion) => compareDecimal(portion.rows[0]!.unitGross, lower.unitGross) === 0,
+              )!.row.id,
+            });
+          }
+          return portions;
+        });
+      }
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
       await refusePaidLines(
         tx,
         orderId,
-        family.map((row) => ({ id: row.id, lineNo: row.lineNo, keeps: 0 })),
+        covering.map((one) => ({ id: one.id, lineNo: one.lineNo, keeps: 0 })),
       );
     }
   }
@@ -631,7 +839,7 @@ export async function planAdjustment(
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
   const actorRole = actor.role as PersonRoleValue;
-  const stage = line === null ? null : stageOf(dishOf(line, rows));
+  const stage = line === null ? null : stageOf(dishOf(line, view));
   const verdict =
     ask.action === "cancel"
       ? evaluateCancel(reason, { actorRole, note: ask.note, stage: stage! })
@@ -639,7 +847,7 @@ export async function planAdjustment(
           orderId,
           action: ask.action,
           line,
-          rows,
+          rows: view,
           changes,
           reduction,
           nominal,
@@ -648,9 +856,10 @@ export async function planAdjustment(
         });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   const parents = new Set(
-    (ask.action === "cancel" ? [line!] : changes.map((change) => change.row)).map(
-      (row) => row.parentLineId ?? row.id,
-    ),
+    (ask.action === "cancel"
+      ? [line!]
+      : [...changes.map((change) => change.row), ...(row?.lines ?? [])]
+    ).map((one) => one.parentLineId ?? one.id),
   );
   let recalledDraftId: string | null = null;
   if (parents.size > 0) {
@@ -682,6 +891,8 @@ export async function planAdjustment(
     removed,
     carve,
     changes,
+    writes: writes ?? changes,
+    rowSplits,
     compedExtras,
     reduction,
     nominal,
@@ -969,7 +1180,10 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else {
-        splits = await reprice(tx, cfg, args.orderId, plan.carve, plan.changes);
+        splits = [
+          ...(await reprice(tx, cfg, args.orderId, plan.carve, plan.writes)),
+          ...plan.rowSplits,
+        ];
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
