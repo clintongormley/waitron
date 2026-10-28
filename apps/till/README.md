@@ -135,7 +135,7 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 | Variable              | Required | Default | What it is                                                                                                                                                                                                                                                                                                                                           |
 | --------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WAITRON_LOCATION_ID` | yes      | —       | The venue's location on this node.                                                                                                                                                                                                                                                                                                                   |
-| `WAITRON_NODE_ID`     | yes      | —       | The box that records sales and owns the invoice series.                                                                                                                                                                                                                                                                                              |
+| `WAITRON_NODE_ID`     | yes      | —       | The identity of this box in the venue.                                                                                                                                                                                                                                                                                                               |
 | `WAITRON_TILL_LOCALE` | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
 | `WAITRON_TILL_TIPS`   | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                                                                    |
 
@@ -146,9 +146,10 @@ After this identity-setting rename, reset your existing throwaway demo or test v
 `wa-wt reset demo <worktree-name>` before starting it. Provisioning writes the new settings;
 there is no fallback to the old names.
 
-Each is resolved once at boot by `loadTillConfig` (`apps/server/src/till-config.ts`); a missing or
-malformed value fails the boot loudly (`server.till_config_missing` / `server.till_config_invalid`),
-naming the variable, never echoing its value.
+The server reads these settings once at boot through `tryLoadTillConfig`
+(`apps/server/src/till-config.ts`). With neither identity set, it enters setup mode. Setting only
+one identity refuses boot with `server.config_invalid`; a malformed identity refuses with
+`server.till_config_invalid`. These errors name the setting without echoing its value.
 
 ### A no-browser check
 
