@@ -2116,6 +2116,37 @@ deleted from `licence.yml`'s first job, `pnpm exec vitest run scripts/ci-workflo
 — the first attempt, and the second attempt judged on its own once no stop step sits between them.
 The same command on the unedited file printed `Tests  1 passed | 221 skipped (222)`.
 
+#### Checkout stage diagnostics (28 October 2026, A1178)
+
+A checkout timeout does not identify what Git was waiting for. In three morning main runs
+(`40670031426`, `40674869520`, `40695623711`), each run's 76 first checkouts had medians of
+11, 12 and 12.5 seconds, with no retry. Later run `40723334721` had a 42.5-second median
+and eight retries. Main run `40741827622`, changes job `123005140759`, exhausted both
+120-second attempts while fetching full history. Its log did not identify a transfer or
+indexing stage. The underlying cause remains unknown.
+
+Fresh local HTTPS fetches of morning main `e0f3e261c` and afternoon main `2906505d1`
+produced pack files of 398,612,993 and 404,557,773 bytes, a 1.49% increase, in 17.221 and
+15.171 seconds. These are development-machine controls, not the original hosted transfers.
+They did not reproduce the timeout.
+
+In `ci.yml` and `licence.yml`, both checkout attempts set `GIT_TRACE2_EVENT=1` at step
+scope. Read the JSON events in the checkout log to locate the last entered region and its
+matching exit, or an unfinished child process. After a successful checkout, **Measure checkout
+objects** prints whether the repository is shallow and each pack file's byte count. Those counts describe
+stored packs, not network traffic. The two-minute attempt limits, low-speed settings, cleanup
+and failure-only retry remain in place. Other workflows do not enable these diagnostics.
+
+A local `git ls-remote https://github.com/actions/checkout.git HEAD` control emitted no trace
+events; the same command with `GIT_TRACE2_EVENT=1` emitted 26 JSON events on stderr and
+returned the same ref on stdout. Hosted stage capture and a separately measured shallow
+checkout for jobs that do not read history are the next qualification steps. A later successful
+checkout alone does not explain an earlier timeout.
+
+| Source | Source's words | Use |
+| --- | --- | --- |
+| [Git Trace2 API](https://git-scm.com/docs/api-trace2#_enabling_a_target), checked 28 October 2026 | “`1` or `true` - Writes to `STDERR`.” | Send the event target to the existing step log without a separate artifact upload. |
+
 ### The image build bounds its package installs
 
 A hung package install can consume an image job's whole allowance. The build stage in

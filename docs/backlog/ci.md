@@ -716,6 +716,19 @@ hit the same two checkout timeouts in `test-server (20)`. Both logs end at `git 
 with no transfer progress or lower-level network error; dependency installation and tests
 never ran in that job. The cause remains unverified.
 
+The A1178 diagnosis compared three morning runs with first-checkout medians of 11 to
+12.5 seconds and no retries against later run `40723334721`, with a 42.5-second median
+and eight retries. Fresh local full-history pack controls grew by 1.49%; they did not reproduce
+the hosted timeout. Both CI and licence checkout attempts now emit Git Trace2 JSON events,
+and successful checkouts print stored-pack byte counts. See the
+[measured diagnosis and its limits](../developers/ci-and-gates.md#checkout-stage-diagnostics-28-october-2026-a1178).
+Capture the hosted stage of a recurrence before attributing it to GitHub, the network or local
+indexing. A separately measured shallow checkout for jobs that do not read history remains open.
+
+On 28 October, [main run 40750935978, till shard 3](https://github.com/clintongormley/waitron/actions/runs/40750935978/job/123038600113)
+exhausted both 120-second attempts with `--depth=1`, before installation or tests. Reducing
+full-history transfers does not eliminate this observed shallow-checkout failure mode.
+
 
 ## Profile provisioning's busiest shard after the A679 split
 
