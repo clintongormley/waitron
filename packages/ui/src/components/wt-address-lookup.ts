@@ -259,6 +259,7 @@ export class WtAddressLookup extends LitElement {
   }
 
   override render() {
+    const inputId = this.name || this.inputId;
     const open = this.suggestions.length > 0;
     const line =
       (this.#messageCurrent && this.message) ||
@@ -279,10 +280,10 @@ export class WtAddressLookup extends LitElement {
         })}
         ?data-disabled=${this.disabled}
       >
-        ${fieldLabel(this.inputId, this.label, false)}
+        ${fieldLabel(inputId, this.label, false)}
         <input
           class="field-control"
-          id=${this.inputId}
+          id=${inputId}
           name=${this.name || nothing}
           type="text"
           autocomplete="off"

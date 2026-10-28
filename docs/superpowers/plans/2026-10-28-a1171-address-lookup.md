@@ -66,7 +66,8 @@ auto complete when enabled". Part 3 (the till's invoice recipient dialog) waits 
 7. **Dashboard: the province is never filled — the server always locks it**
    (`apps/server/src/venue-details.ts:148`). The search field shows while line 1, line 2,
    postcode and city are all editable. A chosen address whose area code names another province
-   (matched against the server's `provinces` by code or name) is refused like another country;
+   (matched against the server's `provinces` by code, or by name ignoring accents, case and spacing
+   but not a province's other names, which the server's list does not carry) is refused like another country;
    with no area code, or one the list does not name, the four fields are filled and the server's existing postcode check
    (`venue-details.ts:224-231`) refuses a postcode outside the saved province.
 8. **No credential reaches the browser** — the field only calls the object it is handed. Nothing in
@@ -90,7 +91,7 @@ auto complete when enabled". Part 3 (the till's invoice recipient dialog) waits 
 ### Behaviour of `wt-address-lookup`
 
 - Properties: `provider`, `countryCode`, `label`, `placeholder`, `noResultsLabel`,
-  `unavailableLabel`, `message` (a form's own line, e.g. the other-country refusal), `disabled`,
+  `unavailableLabel`, `message` (a form's own line, e.g. the other-country refusal), `name`, `disabled`,
   `delay` (300 ms).
 - Asks after the person stops typing for 300 ms and the trimmed text has at least 3 characters; a
   shorter text closes the list. An answer to an older text is dropped.
@@ -101,7 +102,8 @@ auto complete when enabled". Part 3 (the till's invoice recipient dialog) waits 
   `role="combobox"`, `aria-expanded`, `aria-controls` and `aria-activedescendant`; the list is a
   `listbox` of `option`s.
 - No suggestions → `noResultsLabel`; a refused `suggest` or `resolve` → `unavailableLabel`; both in
-  one `role="status"` line under the field, with `message` when the form sets one.
+  one `role="status"` line under the field, with `message` when the form sets one, hidden once a
+  new search is typed until the next choice or a new message.
 - On a choice: `resolve`, then `wt-address-chosen` (`bubbles`, `composed`, `detail: { address }`),
   and the search text is cleared.
 

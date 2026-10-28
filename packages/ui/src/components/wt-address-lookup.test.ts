@@ -704,6 +704,15 @@ test("the search field takes the name a form gives it, and has none otherwise", 
   expect(input(el).getAttribute("name")).toBe("domicile-search");
 });
 
+test("a named search field uses its name as its input's id, as wt-input does, and its label points at it", async () => {
+  const el = await mountLookup();
+  expect(input(el).id).toMatch(/^wt-address-lookup/);
+  el.name = "domicile-search";
+  await el.updateComplete;
+  expect(input(el).id).toBe("domicile-search");
+  expect(el.shadowRoot?.querySelector("label")?.htmlFor).toBe("domicile-search");
+});
+
 test("a new search hides the form's line about the last choice, and the search's own line shows", async () => {
   const provider = fakeProvider([MAYOR]);
   const el = await mountLookup(provider);
