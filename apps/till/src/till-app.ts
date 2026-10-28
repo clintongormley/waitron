@@ -12906,7 +12906,7 @@ export class TillApp extends LitElement {
   }
 
   /** Recall names one line, so a grouped row's members go one request each, by line number; the
-   * first that does not apply stops the rest and says why. */
+   * first that is refused or not read back stops the rest and says why. */
   async #onRecallLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
     const sync = this.#draftSync;

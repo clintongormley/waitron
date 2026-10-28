@@ -2777,7 +2777,8 @@ export class TillTableOrderScreen extends LitElement {
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
     // Fire now, Void and Comp act on the first portion of a grouped row: each request names one
-    // line, and firing members one by one would start a fire group and a ticket for each (D14).
+    // line (D14 for Void and Comp), and firing members one by one would start a fire group and a
+    // ticket for each.
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
     else if (action === "recall") this.#recallLines(members.map((member) => member.row.lineNo));
     else if (action === "comp") {

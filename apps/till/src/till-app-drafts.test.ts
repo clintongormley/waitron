@@ -8787,6 +8787,45 @@ describe("recalled draft source splitting", () => {
       expect(order.groupCommandBusy).toBe(false);
     });
 
+    it("A803 portion grouping: a grouped Recall refused on its second member keeps the first recalled, says why and reloads the bill", async () => {
+      let refuse!: (reason: unknown) => void;
+      const recallToDraft = vi
+        .fn()
+        .mockImplementationOnce(async () => ({ revision: 4, draft: recordRecall() }))
+        .mockImplementationOnce(
+          () =>
+            new Promise((_, reject) => {
+              refuse = reject;
+            }),
+        );
+      const { el, order } = await twoPortions(recallToDraft);
+      const reads = api.getTabLines.mock.calls.length;
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(recallToDraft).toHaveBeenCalledTimes(2);
+      expect(order.groupCommandBusy).toBe(true);
+      expect(draft(el).busyAction).toBe("recall");
+      refuse({ code: "ticket.already_fired" });
+      await flush(el, 12);
+      expect(order.party?.revision).toBe(4);
+      expect(banner(el)?.textContent).toContain(codeMessage("ticket.already_fired"));
+      expect(api.getTabLines.mock.calls.length).toBe(reads + 1);
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
+    it("A803 portion grouping: a grouped Recall whose first member is not read back sends no other", async () => {
+      const recallToDraft = vi.fn(async () => {
+        api.listDrafts.mockRejectedValueOnce(new TypeError("read offline"));
+        return { revision: 4, draft: recordRecall() };
+      });
+      const { el, order } = await twoPortions(recallToDraft);
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(recallToDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
     it.each(["ticket.already_started", "ticket.already_fired", "order.payment_in_flight"])(
       "reloads the bill and preserves the specific %s Recall refusal",
       async (code) => {

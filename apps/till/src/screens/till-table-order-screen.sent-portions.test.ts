@@ -248,6 +248,21 @@ it("A803 portion grouping: a grouped sheet sends nothing once its members stop m
   expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
 });
 
+it("A803 portion grouping: a grouped sheet sends nothing once one of its members is gone", async () => {
+  const el = await openGrouped("held");
+  const events = capture(el, "recall-lines");
+  await openMore(el);
+  const recall = q(el, "[data-sent-line-recall]");
+  const orders = structuredClone(el.currentOrders!);
+  orders.groups[0]!.rows = orders.groups[0]!.rows.filter((each) => each.lineId !== "s-2");
+  el.lines = el.lines.filter((line) => line.id !== "s-2" && line.id !== "s-2-lime");
+  el.currentOrders = orders;
+  recall.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+});
+
 it("A803 portion grouping: the sheet of a grouped row says how much of the group is paid", async () => {
   const el = await openGrouped("held", {
     orderId: "wo-4",
