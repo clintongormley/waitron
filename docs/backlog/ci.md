@@ -511,9 +511,10 @@ the job-log REST endpoint returned HTTP 404. Recover runner-side evidence and di
 command from stale runner reporting before changing the installer, retry limits or job deadline.
 The cause is unverified. Lane F retains the snapshots in `receipts/a976-media-localized-20261028/`.
 At the watcher's request, `gh run rerun 40644939856 --job 122671628160` started one second sample
-on the same commit. Compare its setup duration and logs; a successful retry does not diagnose
-the first attempt or demonstrate a repair. If a step again outlives its own five-minute limit,
-retain the recurrence before changing any command deadline.
+on the same commit. Job `122690326840` completed setup in two seconds on its first attempt and
+passed the workforce suite and coverage checks. The overrun did not recur in that sample; this
+does not diagnose the first attempt or demonstrate a repair. If a step again outlives its own
+five-minute limit, retain the recurrence before changing any command deadline.
 
 ## The step-watch guard received an undefined held-thread result
 
