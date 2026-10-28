@@ -172,7 +172,7 @@ it("a run whose need even every deletable backup cannot meet deletes nothing and
   expect(r.freeAtStart + 1 * MiB).toBeLessThan(3 * D + FLOOR);
   expect(r.thrown).toMatchObject({
     code: "backup.staging_space_low",
-    params: { neededBytes: 3 * D + FLOOR },
+    params: { neededBytes: 3 * D + FLOOR, availableBytes: r.freeAtStart },
   });
   expect(r.archive).not.toHaveBeenCalled();
   expect(r.puts).toBe(0);
@@ -195,6 +195,10 @@ it("a copy larger than the estimate is caught before the folder copy", async (ct
   expect(r.freeAtStart - 2 * D).toBeLessThan(D + FLOOR);
   expect(r.archive).toHaveBeenCalledTimes(1);
   expect(r.thrown).toMatchObject({ code: "backup.staging_space_low" });
+  // Only the check after encryption needs the encrypted copy plus the floor: just over D + FLOOR.
+  const { neededBytes } = (r.thrown as { params: { neededBytes: number } }).params;
+  expect(neededBytes).toBeGreaterThan(D + FLOOR);
+  expect(neededBytes).toBeLessThan(D + FLOOR + MiB);
   expect(r.puts).toBe(0);
   expect(r.stored).toEqual([NEWEST]);
   expect(JSON.stringify(r.log.mock.calls)).not.toContain("ENOSPC");
