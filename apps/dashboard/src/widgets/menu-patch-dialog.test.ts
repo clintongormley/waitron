@@ -2457,6 +2457,39 @@ it("moves focus to the variant's form when a dish's link to it is followed", asy
   expect(el.shadowRoot!.activeElement).toBe(form(el).querySelector("h3"));
 });
 
+for (const [width, height] of [
+  [1280, 700],
+  [390, 844],
+] as const)
+  it(`shows the whole focus ring of a variant's heading reached from its dish's link, at ${width}×${height}`, async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, height);
+    try {
+      const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, longLunch())) }));
+      await pick(el, "Lemonade");
+      const body = modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+      body.scrollTop = body.scrollHeight;
+      const heading = form(el).querySelector("h3")!;
+      expect(heading.getBoundingClientRect().top).toBeLessThan(body.getBoundingClientRect().top);
+      const link = form(el).querySelectorAll<HTMLElement>('[data-test="variant-link"]')[1]!;
+      link.focus();
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+      const focused = form(el).querySelector("h3")!;
+      expect(focused.textContent!.trim()).toBe("Large");
+      expect(el.shadowRoot!.activeElement).toBe(focused);
+      expect(focused.matches(":focus-visible")).toBe(true);
+      const style = getComputedStyle(focused);
+      const reach = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+      expect(parseFloat(style.outlineWidth)).toBeGreaterThan(0);
+      expect(focused.getBoundingClientRect().top - reach).toBeGreaterThanOrEqual(
+        body.getBoundingClientRect().top,
+      );
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
 it("keeps focus on a tree item when it is picked", async () => {
   const el = await mount();
   await userEvent.click(node(el, "Lemonade"));

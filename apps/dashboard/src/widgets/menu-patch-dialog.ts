@@ -179,6 +179,9 @@ export class MenuPatchDialog extends LitElement {
         gap: var(--wt-space-4);
         flex: 2 1 var(--wt-field-max-width);
         min-width: 0;
+        /* Scrolled to with its heading focused, whose focus ring would otherwise sit on the
+           scrolling area's edge and lose its top line. */
+        scroll-margin-block-start: var(--wt-space-2);
       }
       h3 {
         margin: 0;
