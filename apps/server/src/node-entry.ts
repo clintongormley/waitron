@@ -390,6 +390,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
   }
+  const discardedCopy = () =>
+    discardedCopyBytes({ stateDir: deps.stateDir, venueDir: deps.venueDir });
   let check: CountCheck;
   if (belowFloor && !(check = await countWritable(rooted)).written) {
     const exit = deps.exit ?? DEFAULT_EXIT;
@@ -403,8 +405,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
         freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
-        discardedCopyBytes: () =>
-          discardedCopyBytes({ stateDir: deps.stateDir, venueDir: deps.venueDir }),
+        discardedCopyBytes: discardedCopy,
         log: deps.log,
       }),
       transport,
@@ -415,10 +416,15 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
   const spareBytes = deps.spareBytes ?? SPARE_SPACE_BYTES;
   if (spareBytes > 0) {
-    const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
-    if (lowest !== null && lowest >= spareBytes + FULL_DISK_BYTES) {
-      await topUpSpare({ stateDir: deps.stateDir, bytes: spareBytes, log: deps.log });
-    }
+    await topUpSpare({
+      stateDir: deps.stateDir,
+      bytes: spareBytes,
+      log: deps.log,
+      hasRoom: async () => {
+        const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+        return lowest !== null && lowest >= spareBytes + FULL_DISK_BYTES;
+      },
+    });
   }
 
   if (admission.kind === "refused") {
@@ -480,7 +486,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   const selected = !moved ? deps : rooted;
-  return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
+  return admission.run((venueHeld) =>
+    runAdmittedEntry(selected, transport, venueHeld, discardedCopy),
+  );
 }
 
 /** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
@@ -526,11 +534,15 @@ export function recordedStartFailureCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;
 }
 
-/** `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. */
+/**
+ * `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. `discardedCopy` reads the
+ * box's configured folders, which `deps` may not be.
+ */
 async function runAdmittedEntry(
   deps: EntryDeps,
   transport: RecoveryServeOptions,
   venueHeld: boolean,
+  discardedCopy: () => Promise<number | null>,
 ): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
@@ -555,6 +567,10 @@ async function runAdmittedEntry(
           exit(0);
         },
         freeSpace: () => lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs),
+        // Only after a full-disk failure: its words say the disk has no room.
+        ...(state.lastErrorCode === "storage.disk_full"
+          ? { discardedCopyBytes: discardedCopy }
+          : {}),
         log: deps.log,
       }),
       {

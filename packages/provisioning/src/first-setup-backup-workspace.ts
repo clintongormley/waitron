@@ -312,6 +312,7 @@ async function originals(
   );
   const pointers = new Set(currentPaths(anchor));
   const recoveries = join(anchor.stateDir, NAMESPACE);
+  const spare = join(anchor.stateDir, SPARE_SPACE_FILE);
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
@@ -329,16 +330,16 @@ async function originals(
       return;
     // Moved files are never a recovery's input, and the box may be unable to read one.
     if (rootsToRead.some((root) => path === join(root, START_AGAIN_SET_ASIDE_DIR))) return;
-    // The spare file is deleted and written back around a full disk; it holds nothing.
-    if (rootsToRead.some((root) => path === join(root, SPARE_SPACE_FILE))) return;
     if (entries.has(path)) return;
     let info;
     try {
       info = await lstat(path);
     } catch (error) {
-      if (missing(error) && isRoot) return;
+      if (missing(error) && (isRoot || path === spare)) return;
       throw error;
     }
+    // The spare file is deleted and written back around a full disk; it holds nothing.
+    if (path === spare && !isRoot && info.isFile()) return;
     if (info.isSymbolicLink()) invalid();
     if (info.isDirectory()) {
       if (!isRoot && !containers.has(path))

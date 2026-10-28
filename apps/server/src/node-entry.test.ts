@@ -34,6 +34,9 @@ import {
 import { OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
+import { discardedCopyBytes } from "./discarded-copy.js";
+
+vi.mock("./discarded-copy.js", { spy: true });
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
 
@@ -2269,5 +2272,39 @@ describe("the box's spare file", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
     await runEntry(deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 0 }));
     expect(existsSync(spareIn(stateDir))).toBe(false);
+  });
+});
+
+describe("a discarded recovery's copy on the recovery-level page", () => {
+  const COPY_LINE =
+    "This disk also still holds 4.2 MB left by a recovery from backup that Start again discarded.";
+
+  async function pageAtRecoveryLevel(lastErrorCode: string): Promise<string> {
+    vi.mocked(discardedCopyBytes).mockResolvedValueOnce(4_194_304);
+    const serveRecovery = vi.fn<(app: Hono) => Promise<void>>(() => Promise.resolve());
+    await runEntry(
+      deps({
+        readRecoveryState: vi.fn(() =>
+          Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3), lastErrorCode }),
+        ),
+        serveRecovery,
+      }),
+    );
+    const app = serveRecovery.mock.calls[0]![0];
+    return (await app.request("/")).text();
+  }
+
+  afterEach(() => {
+    vi.mocked(discardedCopyBytes).mockReset();
+  });
+
+  it("a full disk names the copy still there", async () => {
+    expect(await pageAtRecoveryLevel("storage.disk_full")).toContain(COPY_LINE);
+    expect(discardedCopyBytes).toHaveBeenCalledWith({ stateDir: "/state", venueDir: "/venue" });
+  });
+
+  it("any other failure leaves the line out, as its words say the disk has no room", async () => {
+    expect(await pageAtRecoveryLevel("module.config_invalid")).not.toContain(COPY_LINE);
+    expect(discardedCopyBytes).not.toHaveBeenCalled();
   });
 });

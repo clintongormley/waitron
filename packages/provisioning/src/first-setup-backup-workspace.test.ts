@@ -243,6 +243,54 @@ it("any other new file in the box's state folder changes a recovery's originals 
   expect(await f.store.inspect(recoveryId)).not.toBe(before);
 });
 
+it("a folder named like the spare in the box's state folder is still one of the originals", async () => {
+  const f = await fixture();
+  const evidence = join(f.anchor.stateDir, SPARE_SPACE_FILE, "retained-evidence.json");
+  await mkdir(join(f.anchor.stateDir, SPARE_SPACE_FILE));
+  await writeFile(evidence, "before");
+  const input = await f.input();
+  await f.store.append(input);
+  await writeFile(evidence, "after");
+  await expect(f.store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+});
+
+it("a file named like the spare in a venue folder apart from the state folder is still one of the originals", async () => {
+  const f = await fixture();
+  const file = join(f.anchor.venueDir, SPARE_SPACE_FILE);
+  await writeFile(file, "before");
+  const input = await f.input();
+  await f.store.append(input);
+  await writeFile(file, "after");
+  await expect(f.store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+});
+
+it.each([SPARE_SPACE_FILE, "venue-nested"])(
+  "a venue folder configured as <state>/%s still has its database read as an original",
+  async (name) => {
+    const f = await fixture();
+    const anchor = { stateDir: f.anchor.stateDir, venueDir: join(f.anchor.stateDir, name) };
+    await mkdir(anchor.venueDir);
+    const database = join(anchor.venueDir, "venue.db");
+    await writeFile(database, "before");
+    const store = provision.createFirstSetupBackupWorkspace(anchor);
+    const initial = await f.input();
+    const input = {
+      ...initial,
+      target: { ...f.target, anchor, source: anchor },
+      observation: { ...initial.observation, originalsDigest: await store.inspect(recoveryId) },
+    };
+    await store.append(input);
+    await writeFile(database, "after");
+    await expect(store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+  },
+);
+
 it("refuses symlink originals without changing their target", async () => {
   const f = await fixture(),
     outside = join(f.root, "outside");

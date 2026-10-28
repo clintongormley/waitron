@@ -761,6 +761,15 @@ export function firstSetupOwnerWriteFence(
       : next();
 }
 
+const RESOLUTION = "/setup-api/first-setup/resolution";
+/** The repair page's Start-again steps, each mounted by {@link mountFirstSetupResolutionApi}. */
+export const START_AGAIN_ROUTES = {
+  inspect: { method: "GET", path: RESOLUTION },
+  recover: { method: "POST", path: `${RESOLUTION}/recover` },
+  summary: { method: "POST", path: `${RESOLUTION}/start-again/summary` },
+  startAgain: { method: "POST", path: `${RESOLUTION}/start-again` },
+} as const;
+
 export function mountFirstSetupResolutionApi(
   app: Hono,
   host: FirstFiscalHost,
@@ -786,10 +795,13 @@ export function mountFirstSetupResolutionApi(
     try {
       return await body();
     } catch (error) {
-      if (options.freeSpace !== undefined) {
+      const candidate = isAppError(error)
+        ? error.code === "setup.attempt_invalid"
+        : fullDiskFailure(error, 0);
+      if (options.freeSpace !== undefined && candidate) {
         const free = await freeSpace();
         const full = isAppError(error)
-          ? error.code === "setup.attempt_invalid" && free !== null && free < FULL_DISK_BYTES
+          ? free !== null && free < FULL_DISK_BYTES
           : fullDiskFailure(error, free);
         if (full) {
           // The boundary logs only the code it answers; this keeps what the refusal really was.
@@ -809,7 +821,7 @@ export function mountFirstSetupResolutionApi(
       c.header("Cache-Control", "no-store");
       return next();
     });
-  app.get(`${root}/resolution`, (c) =>
+  app.get(START_AGAIN_ROUTES.inspect.path, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);
       const inspection = await host.resolution.inspectFirstSetupResolution();
@@ -821,7 +833,7 @@ export function mountFirstSetupResolutionApi(
       return c.json(inspection);
     }),
   );
-  app.post(`${root}/resolution/recover`, (c) =>
+  app.post(START_AGAIN_ROUTES.recover.path, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);
       const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
@@ -970,7 +982,7 @@ export function mountFirstSetupResolutionApi(
       throw new AppError("setup.owner_required", {});
   };
   if (options.summary !== undefined)
-    app.post(`${root}/resolution/start-again/summary`, (c) =>
+    app.post(START_AGAIN_ROUTES.summary.path, (c) =>
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);
@@ -999,7 +1011,7 @@ export function mountFirstSetupResolutionApi(
       }),
     );
   if (options.startAgain !== undefined)
-    app.post(`${root}/resolution/start-again`, (c) =>
+    app.post(START_AGAIN_ROUTES.startAgain.path, (c) =>
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);

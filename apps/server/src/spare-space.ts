@@ -14,6 +14,7 @@ import {
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
 import { lowestFreeBytes } from "./start-space.js";
+import { START_AGAIN_ROUTES } from "./setup-first-fiscal-api.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 
@@ -33,35 +34,36 @@ export type OpenSpare = (path: string, flags: number, mode: number) => Promise<S
 /**
  * Appends random bytes to the box's spare file until it holds `bytes`; random so a compressing
  * filesystem cannot store it in less room (design M5b). A link or folder at its path
- * is left alone. Nothing is thrown.
+ * is left alone. `hasRoom` is asked only when the spare is not already a full-size file, and
+ * nothing is written or logged when it answers false. Nothing is thrown.
  */
 export async function topUpSpare(options: {
   stateDir: string;
   bytes: number;
   log: Logger;
+  hasRoom?: () => Promise<boolean>;
   open?: OpenSpare;
 }): Promise<void> {
-  const { stateDir, bytes, log, open = openFile } = options;
+  const { stateDir, bytes, log, hasRoom = async () => true, open = openFile } = options;
   const path = join(stateDir, SPARE_SPACE_FILE);
   try {
     const info = await lstat(path).catch((error: unknown) => {
       if (errnoOf(error) === "ENOENT") return null;
       throw error;
     });
+    if (info?.isFile() && info.size >= bytes) return;
+    if (!(await hasRoom())) return;
     if (info && !info.isFile()) {
       log("warn", "storage.spare_unusable", { kind: kindOf(info) });
       return;
     }
-    if (info && info.size >= bytes) return;
     const { O_WRONLY, O_APPEND, O_CREAT, O_NOFOLLOW } = constants;
     const handle = await open(path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600);
     try {
-      let size = (await handle.stat()).size;
-      while (size < bytes) {
-        const chunk = randomBytes(Math.min(CHUNK_BYTES, bytes - size));
-        const { bytesWritten } = await handle.write(chunk);
-        size += bytesWritten;
-      }
+      // The size is read again before every chunk so two starts topping up at once overshoot
+      // the cap by at most a chunk, not by a whole spare.
+      for (let size = (await handle.stat()).size; size < bytes; size = (await handle.stat()).size)
+        await handle.write(randomBytes(Math.min(CHUNK_BYTES, bytes - size)));
       await handle.sync();
     } finally {
       await handle.close();
@@ -107,12 +109,9 @@ export async function releaseSpare(
   }
 }
 
-const START_AGAIN_STEPS = new Set([
-  "GET /setup-api/first-setup/resolution",
-  "POST /setup-api/first-setup/resolution/recover",
-  "POST /setup-api/first-setup/resolution/start-again/summary",
-  "POST /setup-api/first-setup/resolution/start-again",
-]);
+const START_AGAIN_STEPS = new Set(
+  Object.values(START_AGAIN_ROUTES).map(({ method, path }) => `${method} ${path}`),
+);
 
 /**
  * Before each step of the repair page's Start-again flow, deletes the box's spare file on a nearly

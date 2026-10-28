@@ -257,6 +257,12 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.not_ready": "shell.not_ready",
 };
 
+/** The repair page's steps before activation, the claim included; activation keeps the first-setup map. */
+const REPAIR_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
+  "storage.disk_full": "shell.first_setup.disk_full",
+};
+
 const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
   "setup.request_invalid": "shell.reset.request_invalid",
@@ -1285,14 +1291,10 @@ export class SetupApp extends LitElement {
     const key = code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
-  /**
-   * The repair page's steps before activation, the claim included; activation keeps
-   * `#describeFirstError`.
-   */
   #describeRepairError(error: unknown): Message {
-    return (error as { code?: string } | null)?.code === "storage.disk_full"
-      ? say("shell.first_setup.disk_full")
-      : this.#describeFirstError(error);
+    const code = (error as { code?: string } | null)?.code;
+    const key = code === undefined ? undefined : REPAIR_ERROR_MESSAGES[code];
+    return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
   async #resumeFirstSetup(): Promise<void> {
     this.firstPasswordAttempted = true;
@@ -1568,11 +1570,10 @@ export class SetupApp extends LitElement {
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
     const code = (error as { code?: string } | null)?.code;
-    this.firstOwnerError =
-      code === "storage.disk_full" ||
-      (code !== undefined && FIRST_SETUP_ERROR_MESSAGES[code] !== undefined)
-        ? this.#describeRepairError(error)
-        : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
+    const key = code === undefined ? undefined : REPAIR_ERROR_MESSAGES[code];
+    this.firstOwnerError = key
+      ? say(key)
+      : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
   }
   async #checkPresentAgain(): Promise<void> {
     const session = this.#firstSession;

@@ -33,7 +33,6 @@ const SPARE = 1024 * 1024;
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
-let previousTmp: string | undefined;
 
 // Runs after useVenueDb's own beforeAll, registered when the fixture is imported, so the suite's
 // database stays off the small disk and only each case's folders land on it.
@@ -44,14 +43,12 @@ beforeAll(() => {
     return;
   }
   disk = opened.disk;
-  previousTmp = process.env.TMPDIR;
-  process.env.TMPDIR = realpathSync(disk.folder("tmp"));
+  vi.stubEnv("TMPDIR", realpathSync(disk.folder("tmp")));
 });
 afterEach(() => disk?.unfill());
 afterAll(() => {
   if (disk === undefined) return;
-  if (previousTmp === undefined) delete process.env.TMPDIR;
-  else process.env.TMPDIR = previousTmp;
+  vi.unstubAllEnvs();
   disk.close();
 });
 

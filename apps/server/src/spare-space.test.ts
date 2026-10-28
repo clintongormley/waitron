@@ -169,6 +169,61 @@ describe("topUpSpare", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
+  it("asks whether there is room only when the spare is short, and writes nothing when there is not", async () => {
+    const log = vi.fn();
+    const noRoom = vi.fn(async () => false);
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: noRoom });
+    expect(noRoom).toHaveBeenCalledOnce();
+    expect(existsSync(spare())).toBe(false);
+    await writeFile(spare(), Buffer.alloc(1000, 7));
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: noRoom });
+    expect((await stat(spare())).size).toBe(1000);
+    const room = vi.fn(async () => true);
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: room });
+    expect((await stat(spare())).size).toBe(4096);
+    room.mockClear();
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: room });
+    expect(room).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("a folder at the spare's path on a disk without room is left unlogged", async () => {
+    await mkdir(spare());
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: async () => false });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("two top-ups running at once leave the spare at most one chunk over the cap", async () => {
+    let arrived = 0;
+    let bothRead!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      bothRead = resolve;
+    });
+    const together: Parameters<typeof topUpSpare>[0]["open"] = async (path, flags, mode) => {
+      const handle = await open(path, flags, mode);
+      let first = true;
+      return {
+        stat: async () => {
+          const info = await handle.stat();
+          if (first) {
+            first = false;
+            if (++arrived === 2) bothRead();
+            await gate;
+          }
+          return info;
+        },
+        write: (chunk: Buffer) => handle.write(chunk),
+        sync: () => handle.sync(),
+        close: () => handle.close(),
+      };
+    };
+    await Promise.all(
+      [1, 2].map(() => topUpSpare({ stateDir, bytes: 8 * MiB, log: vi.fn(), open: together })),
+    );
+    expect((await stat(spare())).size).toBeLessThanOrEqual(9 * MiB);
+  });
+
   it("writes nothing when the state folder is missing", async () => {
     const missing = join(root, "missing");
     const log = vi.fn();

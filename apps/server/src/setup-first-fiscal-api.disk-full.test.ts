@@ -45,6 +45,7 @@ function appWith(options: {
   database?: string;
   authorize?: () => Promise<never>;
   log?: Parameters<typeof mountFirstSetupResolutionApi>[2];
+  onFreeRead?: () => void;
 }) {
   const refuse = async (): Promise<never> => {
     throw options.refusal;
@@ -64,6 +65,7 @@ function appWith(options: {
     summary: refuse,
     withPublication: refuse,
     freeSpace: async () => {
+      options.onFreeRead?.();
       if (options.free instanceof Error) throw options.free;
       return options.free;
     },
@@ -245,3 +247,21 @@ it("a refusal reported as a full disk logs what it was", async () => {
     errcode: 14,
   });
 });
+
+it.each(Object.entries(STEPS))(
+  "the %s step reads free space only for a refusal a full disk could explain",
+  async (_step, send) => {
+    const reads = async (refusal: unknown) => {
+      const onFreeRead = vi.fn();
+      await send(appWith({ free: NEARLY_FULL, refusal, onFreeRead }));
+      return onFreeRead.mock.calls.length;
+    };
+    expect({
+      ownerRequired: await reads(new AppError("setup.owner_required", {})),
+      conflict: await reads(new AppError("setup.attempt_conflict", {})),
+      bug: await reads(new TypeError("a bug")),
+      attemptInvalid: await reads(new AppError("setup.attempt_invalid", {})),
+      cannotOpen: await reads(cannotOpen()),
+    }).toEqual({ ownerRequired: 0, conflict: 0, bug: 0, attemptInvalid: 1, cannotOpen: 1 });
+  },
+);

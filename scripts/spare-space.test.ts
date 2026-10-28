@@ -4,9 +4,9 @@
  * room writes it back (`node-entry.ts`).
  *
  * Weaker than its name: it reads TEXT — a non-test `.ts` file under `apps/<app>/src` or
- * `packages/<package>/src`, outside `src/testing/`, naming `SPARE_SPACE_FILE`, the literal
- * `"spare-space"`, `releaseSpare`, `releaseSpareBeforeStartAgain` or `topUpSpare` — so a path built
- * another way, or a function reached under another name, escapes it.
+ * `packages/<package>/src` naming `SPARE_SPACE_FILE`, the literal `"spare-space"`, `releaseSpare`,
+ * `releaseSpareBeforeStartAgain` or `topUpSpare` — so a path built another way, or a function
+ * reached under another name, escapes it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -37,7 +37,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry === "dist" || entry === "testing") continue;
+    if (entry === "node_modules" || entry === "dist") continue;
     if (entry.startsWith(".")) continue;
     const full = join(dir, entry);
     const stats = statSync(full);
