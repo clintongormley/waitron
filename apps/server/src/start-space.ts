@@ -18,7 +18,6 @@ export const CRASH_REPORT = /^holder-frozen-.*\.json$/;
  *  (`packages/store/src/archive.ts`). */
 export const STAGED_DUMP = new RegExp(`^${BACKUP_KEY_PREFIX}\\d{8}T\\d{6}Z\\.dump(\\.partial)?$`);
 
-/** The lowest free space among `dirs` that can report; null when none can. */
 /** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
 export async function insideAny(path: string, roots: readonly string[]): Promise<boolean> {
   const real = async (p: string) => realpath(p).catch(() => resolve(p));
@@ -30,6 +29,7 @@ export async function insideAny(path: string, roots: readonly string[]): Promise
   return false;
 }
 
+/** The lowest free space among `dirs` that can report; null when none can. */
 export async function lowestFreeBytes(
   dirs: readonly string[],
   statfs?: Statfs,

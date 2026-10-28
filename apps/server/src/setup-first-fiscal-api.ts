@@ -859,6 +859,7 @@ export function mountFirstSetupResolutionApi(
       const inspection = await host.resolution
         .inspectFirstSetupResolution()
         .catch(async (error) => {
+          if (isAppError(error) && error.code === "storage.disk_full") throw await diskFull();
           if (
             options.freeSpace !== undefined &&
             !isAppError(error) &&

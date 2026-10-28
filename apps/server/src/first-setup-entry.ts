@@ -40,7 +40,7 @@ import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
 import { releaseSpare, releaseSpareBeforeStartAgain } from "./spare-space.js";
-import { insideAny, lowestFreeBytes } from "./start-space.js";
+import { START_FREE_SPACE_FLOOR, insideAny, lowestFreeBytes } from "./start-space.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -107,8 +107,10 @@ export interface SpareOption {
 /**
  * Whether the box's next start deletes old logs to make room, as `runEntry` decides it: at a
  * backup recovery's repair stage only when the log folder is outside both configured folders, and
- * on every other path always below its free-space floor, which a full disk always is. Undefined
- * when the recovery's stage cannot be read.
+ * otherwise only while free space reads below the start's floor. Undefined at a selected recovery,
+ * whose start cleans the recovery's own logs rather than the box's; while free space reads at or
+ * above the floor or cannot be read; and if the stage read throws. An unreadable recovery reads as
+ * the repair stage, as `runEntry` reads it.
  */
 async function restartDeletesLogs(spare: SpareOption): Promise<boolean | undefined> {
   try {
@@ -116,9 +118,14 @@ async function restartDeletesLogs(spare: SpareOption): Promise<boolean | undefin
       stateDir: spare.stateDir,
       venueDir: spare.venueDir,
     });
-    return (
-      entry.kind !== "repair" || !(await insideAny(spare.logDir, [spare.stateDir, spare.venueDir]))
-    );
+    if (entry.kind === "selected") return undefined;
+    if (
+      entry.kind === "repair" &&
+      (await insideAny(spare.logDir, [spare.stateDir, spare.venueDir]))
+    )
+      return false;
+    const free = await lowestFreeBytes([spare.stateDir, spare.venueDir], spare.statfs);
+    return free !== null && free < START_FREE_SPACE_FLOOR ? true : undefined;
   } catch {
     return undefined;
   }

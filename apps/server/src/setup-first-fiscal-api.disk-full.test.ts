@@ -165,15 +165,41 @@ it.each(Object.entries(READS))(
   },
 );
 
-it("an engine full-disk failure inside GET /resolution's inspection answers 507 with the field", async () => {
-  const app = appWith({
-    free: NEARLY_FULL,
+const inspectionFailing = (error: unknown, free: number) =>
+  appWith({
+    free,
     inspect: async () => {
-      throw Object.assign(new Error("database or disk is full"), { errcode: 13 });
+      throw error;
     },
     restartDeletesLogs: async () => true,
   });
-  expect(await refusal(await app.request(ROUTE, { method: "GET" }, tls()))).toEqual({
+const inspect = (app: Hono) => app.request(ROUTE, { method: "GET" }, tls());
+
+it("a cannot-open failure inside GET /resolution's inspection on a nearly full disk answers 507 with the field", async () => {
+  expect(await refusal(await inspect(inspectionFailing(cannotOpen(), NEARLY_FULL)))).toEqual({
+    status: 507,
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
+  });
+});
+
+it("…and on a disk with room stays a 500", async () => {
+  expect(await answer(await inspect(inspectionFailing(cannotOpen(), ROOM)))).toEqual({
+    status: 500,
+    code: "server.internal",
+  });
+});
+
+it("an engine full-disk failure inside GET /resolution's inspection carries the field", async () => {
+  const full = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+  expect(await refusal(await inspect(inspectionFailing(full, ROOM)))).toEqual({
+    status: 507,
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
+  });
+});
+
+it("the inspection's own storage.disk_full refusal carries the field, as the steps' does", async () => {
+  const app = inspectionFailing(new AppError("storage.disk_full", {}), ROOM);
+  expect(await refusal(await inspect(app))).toEqual({
     status: 507,
     error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
   });

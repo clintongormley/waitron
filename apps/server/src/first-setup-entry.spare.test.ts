@@ -158,15 +158,28 @@ it("with no spare option given, nothing is released", async () => {
 
 const INSPECTION = "/setup-api/first-setup/resolution";
 
-const spareOption = (logDir = join(stateDir, "logs")) => ({
+const spareOption = (
+  logDir = join(stateDir, "logs"),
+  more: { venueDir?: string; statfs?: Statfs } = {},
+) => ({
   stateDir,
   venueDir: anchor.venueDir,
   logDir,
+  ...more,
 });
 
 /** The repair app's answer to "does the next start delete old logs", as its routes ask it. */
-async function restartDeletesLogsIn(logDir?: string) {
-  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), spareOption(logDir));
+async function restartDeletesLogsIn(
+  logDir?: string,
+  more: { venueDir?: string; statfs?: Statfs } = { statfs: freeIs(MiB) },
+) {
+  const entry = await resolveFirstSetupEntry(
+    anchor,
+    {},
+    undefined,
+    vi.fn(),
+    spareOption(logDir, more),
+  );
   if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
   const options = vi.mocked(resolutionApi.mountFirstSetupResolutionApi).mock.lastCall?.[3];
   const ask = () => options!.restartDeletesLogs!();
@@ -187,6 +200,20 @@ it("…says it does not at a repair stage whose log folder is inside the state f
   await repair.dispose();
 });
 
+it("…says it does not at a repair stage whose log folder is inside a venue folder outside the state folder", async () => {
+  await stoppedRecovery();
+  const venueDir = join(root, "venue");
+  const repair = await restartDeletesLogsIn(join(venueDir, "logs"), {
+    venueDir,
+    statfs: freeIs(MiB),
+  });
+  vi.mocked(backupEntry.resolveFirstSetupBackupEntry).mockResolvedValueOnce({
+    kind: "repair",
+  } as never);
+  expect(await repair.ask()).toBe(false);
+  await repair.dispose();
+});
+
 it("…says it does on a box with no backup recovery, whatever the log folder", async () => {
   writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
   const repair = await restartDeletesLogsIn();
@@ -194,7 +221,33 @@ it("…says it does on a box with no backup recovery, whatever the log folder", 
   await repair.dispose();
 });
 
-it("…cannot say when the recovery's stage cannot be read", async () => {
+it("…cannot say at a selected recovery, whose start cleans the recovery's own logs, not the box's", async () => {
+  await stoppedRecovery();
+  const repair = await restartDeletesLogsIn(join(root, "logs"));
+  vi.mocked(backupEntry.resolveFirstSetupBackupEntry).mockResolvedValueOnce({
+    kind: "selected",
+  } as never);
+  expect(await repair.ask()).toBeUndefined();
+  await repair.dispose();
+});
+
+it("…cannot say when the disk reads as having room, where the next start deletes no log", async () => {
+  await stoppedRecovery();
+  const repair = await restartDeletesLogsIn(join(root, "logs"), { statfs: freeIs(512 * MiB) });
+  expect(await repair.ask()).toBeUndefined();
+  await repair.dispose();
+});
+
+it("…cannot say when free space cannot be read", async () => {
+  await stoppedRecovery();
+  const repair = await restartDeletesLogsIn(join(root, "logs"), {
+    statfs: () => Promise.reject(new Error("EIO")),
+  });
+  expect(await repair.ask()).toBeUndefined();
+  await repair.dispose();
+});
+
+it("…cannot say when reading the recovery's stage throws", async () => {
   await stoppedRecovery();
   const repair = await restartDeletesLogsIn();
   vi.mocked(backupEntry.resolveFirstSetupBackupEntry).mockRejectedValueOnce(new Error("EIO"));
