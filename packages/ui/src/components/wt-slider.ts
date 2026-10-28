@@ -53,8 +53,8 @@ export class WtSlider extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
       }
-      /* Drawn from tokens: given an accent colour, Chromium shades the native unfilled track by
-         that colour's lightness alone, so a dark brand colour got a pale track in the dark theme. */
+      /* Drawn from tokens, never the native track: given an accent colour, Chromium shades the
+         unfilled track by that colour's lightness alone, whatever the theme. */
       input {
         appearance: none;
         width: 100%;
@@ -62,11 +62,15 @@ export class WtSlider extends LitElement {
         min-height: var(--wt-tap-min);
         margin: 0;
         background: transparent;
-        accent-color: var(--wt-color-primary);
+        --wt-slider-fill: 0;
         --wt-slider-filled-to: calc(
           var(--wt-slider-thumb-size) / 2 + var(--wt-slider-fill) *
             (100% - var(--wt-slider-thumb-size))
         );
+        --wt-slider-towards: to right;
+      }
+      input:dir(rtl) {
+        --wt-slider-towards: to left;
       }
       /* Separate rules, never one selector list: Chromium drops a whole list that names
          ::-moz-range-track. */
@@ -74,7 +78,7 @@ export class WtSlider extends LitElement {
         height: var(--wt-space-1);
         border-radius: var(--wt-radius-full);
         background: linear-gradient(
-          to right,
+          var(--wt-slider-towards),
           var(--wt-color-primary) var(--wt-slider-filled-to),
           var(--wt-color-track) var(--wt-slider-filled-to)
         );
@@ -182,9 +186,11 @@ export class WtSlider extends LitElement {
     return Array.from({ length: count }, (_, i) => (i * this.step) / span);
   }
 
-  /** How far along the thumb's travel `value` sits: 0 at `min`, 1 at `max`. */
-  #fillShare(value: number): number {
-    return (value - this.min) / (this.max - this.min);
+  /** The fill follows the range's own value, which it has clamped and snapped to its step. */
+  override updated(): void {
+    const input = this.renderRoot.querySelector("input")!;
+    const share = (input.valueAsNumber - this.min) / (this.max - this.min);
+    input.style.setProperty("--wt-slider-fill", String(share));
   }
 
   override render() {
@@ -205,7 +211,6 @@ export class WtSlider extends LitElement {
       aria-invalid=${this.error ? "true" : nothing}
       aria-describedby=${describedBy || nothing}
       aria-valuetext=${this.valueText ? this.valueText(shown) : nothing}
-      style="--wt-slider-fill: ${this.#fillShare(shown)}"
       @input=${this.#onInput}
       @change=${this.#onChange}
     />`;
