@@ -1377,7 +1377,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     });
     await Promise.race([
       collecting,
-      paying.then((response) => {
+      Promise.resolve(paying).then((response) => {
         throw new Error(`Pay finished before reader collection: HTTP ${response.status}`);
       }),
     ]);
