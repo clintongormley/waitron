@@ -11,6 +11,7 @@ import { hostedHourPreparation } from "./hour-preparation.js";
 import { createHourDormantPreparation, isHourDormantInput } from "./hour-dormant-standby.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
 import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
+import { startAgainHistory, startAgainHoldings } from "./start-again-holdings.js";
 
 function snapshot(input: unknown): unknown {
   try {
@@ -85,6 +86,8 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
   confirmation: unconfiguredSetup,
   documentConfirmation: unconfiguredSetup,
   startAgainFloor: hourStartAgainFloor(historicalInitialSetup.retainedAssignments!),
+  startAgainHoldings,
+  startAgainHistory,
   configure(host) {
     return createHourInitialSetup(host, historicalInitialSetup);
   },

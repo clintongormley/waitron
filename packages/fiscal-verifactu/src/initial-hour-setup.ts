@@ -26,6 +26,7 @@ import {
   type RecoveryDocument,
 } from "./recovery-document.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import { startAgainHistory, startAgainHoldings } from "./start-again-holdings.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -401,5 +402,7 @@ export function createHourInitialSetup(
     },
     assignmentPositions: hourAssignmentPositions,
     startAgainFloor: hourStartAgainFloor(base.retainedAssignments!),
+    startAgainHoldings,
+    startAgainHistory,
   };
 }

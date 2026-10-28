@@ -30,6 +30,7 @@ import { FISCAL_NONE_SLOT, FISCAL_NONE_BACKUP_VERIFICATION } from "@waitron/fisc
 import {
   FISCAL_ALERTS,
   FISCAL_CLASSIFICATION,
+  FISCAL_START_AGAIN_DELETABLE,
   FISCAL_PROVISIONING,
   FISCAL_OPERATIONS,
   FISCAL_RESTORE,
@@ -295,6 +296,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-verifactu/drizzle",
     },
     classification: FISCAL_CLASSIFICATION,
+    startAgainDeletable: FISCAL_START_AGAIN_DELETABLE,
     vocabulary: FISCAL_VOCABULARY,
     provisioning: FISCAL_PROVISIONING,
     operations: FISCAL_OPERATIONS,
