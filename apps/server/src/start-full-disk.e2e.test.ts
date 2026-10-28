@@ -158,7 +158,6 @@ function entryDeps(stateDir: string, over: Partial<Parameters<typeof runEntry>[0
     log: vi.fn(),
     exit: vi.fn(),
     freeSpaceFloor: FLOOR,
-    // A 32 MiB image cannot spare 8 MiB per case and still hold the 4 MiB copies.
     spareBytes: 1024 * 1024,
     ...over,
   };

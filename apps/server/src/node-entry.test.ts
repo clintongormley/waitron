@@ -2218,6 +2218,22 @@ describe("the box's spare file", () => {
     expect(existsSync(spareIn(stateDir))).toBe(false);
   });
 
+  it("a start with exactly the spare plus 16 MiB free writes it", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    await runEntry(deps({ stateDir, statfs: free(16 * MiB + 4096), spareBytes: 4096 }));
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+  });
+
+  it("a start whose venue folder has less room than the spare plus 16 MiB writes none", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    const statfs = async (dir: string) => ({
+      bavail: dir === "/venue" ? 16 * MiB : 1024 * MiB,
+      frsize: 1,
+    });
+    await runEntry(deps({ stateDir, statfs, spareBytes: 4096 }));
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+  });
+
   it("a start that serves the full-disk page writes none", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
     const full = Object.assign(new Error("no space"), { code: "ENOSPC" });

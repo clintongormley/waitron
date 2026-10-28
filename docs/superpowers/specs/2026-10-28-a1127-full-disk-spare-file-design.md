@@ -128,7 +128,8 @@ onto a disk that would then read as nearly full, and a disk that fills slowly ge
 1. **The start's emptying of a discarded recovery** (`emptyDiscardedRecovery`): when the journal's last
    record is `abandoned` and the folder is not yet an emptied tombstone — so there is a copy to free —
    it releases the spare, then empties as today. The start's top-up later in the same `runEntry` writes
-   it back. This is Example 2.
+   it back only when the emptying left the spare plus 16 MiB free; otherwise the box runs without a
+   spare until a start with that much room. This is Example 2.
 2. **The repair host, before the four requests of the Start-again flow**: `GET /resolution` (the
    inspection), `POST /resolution/recover` (the password step), `POST /resolution/start-again/summary`
    and `POST /resolution/start-again`, when no recovery is running in this process
@@ -182,8 +183,10 @@ only gives them room to.
    releases both locks.
 3. `runEntry`'s full-disk check writes `recovery.json` back (`countWritable`, `node-entry.ts:462-477`):
    with the copy gone it succeeds, so no full-disk page.
-4. The top-up writes the spare back, now with room (M3: after the emptying and the spare written back,
-   4210688 bytes free on the 32 MiB image, from a 4 MiB copy).
+4. The top-up writes the spare back only when the emptying left at least the spare plus 16 MiB free.
+   On the 32 MiB test image it does not: the emptying frees about 4 MiB, so the spare comes back at
+   the next start with room (pinned by the real-disk case "…but the box's spare file"). M3 measured,
+   by hand, 4210688 bytes free after the emptying with the spare written back regardless.
 5. The start carries on as it would on a roomy disk.
 
 When the spare is missing or too small, step 2 fails as today and the start serves the full-disk page,

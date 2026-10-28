@@ -12,7 +12,7 @@ const CHUNK_BYTES = 1024 * 1024;
 
 export interface SpareHandle {
   stat(): Promise<{ size: number }>;
-  write(chunk: Buffer): Promise<unknown>;
+  write(chunk: Buffer): Promise<{ bytesWritten: number }>;
   sync(): Promise<void>;
   close(): Promise<void>;
 }
@@ -48,8 +48,8 @@ export async function topUpSpare(options: {
       let size = (await handle.stat()).size;
       while (size < bytes) {
         const chunk = randomBytes(Math.min(CHUNK_BYTES, bytes - size));
-        await handle.write(chunk);
-        size += chunk.length;
+        const { bytesWritten } = await handle.write(chunk);
+        size += bytesWritten;
       }
       await handle.sync();
     } finally {

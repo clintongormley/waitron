@@ -140,6 +140,22 @@ describe("topUpSpare", () => {
     expect(log.mock.calls).toEqual([["warn", "storage.spare_write_failed", { errno: "ENOSPC" }]]);
   });
 
+  it("a write that stores part of a chunk is carried on until the spare holds the cap", async () => {
+    const log = vi.fn();
+    const halving: Parameters<typeof topUpSpare>[0]["open"] = async (path, flags, mode) => {
+      const handle = await open(path, flags, mode);
+      return {
+        stat: () => handle.stat(),
+        sync: () => handle.sync(),
+        close: () => handle.close(),
+        write: (chunk: Buffer) => handle.write(chunk.subarray(0, Math.ceil(chunk.length / 2))),
+      };
+    };
+    await topUpSpare({ stateDir, bytes: 4 * MiB, log, open: halving });
+    expect((await stat(spare())).size).toBe(4 * MiB);
+    expect(log).not.toHaveBeenCalled();
+  });
+
   it("writes nothing when the state folder is missing", async () => {
     const missing = join(root, "missing");
     const log = vi.fn();
