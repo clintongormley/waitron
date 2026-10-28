@@ -1333,8 +1333,9 @@ declare module "@waitron/shared" {
      * secret). Built as data by the backups alert source, never thrown. */
     "backup.destination_failed": { destination: string };
     /** The most recent backup run stopped before reaching any destination; `errorCode` is the code
-     * it threw, `unknown` for an error that is not an AppError. `spaceLow`, `neededBytes` and
-     * `availableBytes` are set only when `errorCode` is `backup.staging_space_low`, from its params.
+     * it threw, `unknown` for an error that is not an AppError. `spaceLow` is set only when
+     * `errorCode` is `backup.staging_space_low`; `neededBytes` and `availableBytes` only then too,
+     * from that error's params.
      * Built as data by the backups alert source, never thrown. */
     "backup.run_stopped": {
       errorCode: string;

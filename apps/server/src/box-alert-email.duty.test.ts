@@ -785,17 +785,16 @@ describe("startBoxEmailDuty for backups", () => {
     d.state.recipients = [BEN];
     d.state.backupStopped = REFUSED;
     await d.tick();
-    d.state.backupStopped = {
+    const later = {
       code: "backup.staging_space_low",
       at: "2026-10-28T03:00:40.000Z",
       since: "2026-10-28T03:00:40.000Z",
       sizes: { neededBytes: 2_000_000_000, availableBytes: 200_000_000 },
     };
+    d.state.backupStopped = later;
     await d.tick();
-    expect(d.sent().map((message) => message.text)).toEqual([
-      "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
-      "Backup not made: it needs 2 GB free and the disk has 200 MB.",
-    ]);
+    expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN, later.sizes)]);
+    expect(d.sent()[1]!.text).toBe("Backup not made: it needs 2 GB free and the disk has 200 MB.");
   });
 
   it("emails a string of refusals with no success between them once", async () => {

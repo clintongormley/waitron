@@ -49,8 +49,8 @@ export interface EmailedIncident {
   readonly params: Readonly<Record<string, unknown>>;
 }
 
-/** Emailed once per unbroken string of backup runs whose `runStopped` names
- * `backup.staging_space_low`. */
+/** Emailed once for each unbroken string of backup runs whose `runStopped` names
+ * `backup.staging_space_low` that one of its checks sees. */
 export const BACKUP_REFUSED_EMAIL_CODE = "backup.run_stopped";
 
 type EmailCode = BoxEmailCode | IncidentEmailCode | typeof BACKUP_REFUSED_EMAIL_CODE;

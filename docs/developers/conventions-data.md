@@ -4555,7 +4555,7 @@ row's `registrado_en` (`packages/fiscal-verifactu/src/slot.ts`), or null when th
 `createBackupRoomHooks` (`apps/server/src/backup-deletion-alert.ts`) reads it inside
 `db.withWriteLock` with no change-list drain, because the drain is a write and this read must answer
 on a nearly full disk. A run asks for it only when a room step finds free space under the aim, and
-at most once, so a run with room never waits for the write lock. A box whose fiscal module has no such member (the no-regime module), a null
+at most once, so a run with room takes no write-lock turn to read it. A box whose fiscal module has no such member (the no-regime module), a null
 answer, or a read that throws (logged `backup.installation_start_unreadable`) deletes nothing; the
 room check still runs. A bucket destination has no folder and is never deleted from.
 
@@ -4582,7 +4582,7 @@ one is open a later deletion changes nothing. A failure to record is
 logged `backup.archives_deleted_alert_failed` and never changes the run's outcome. Core's
 `CORE_ALERTS` claims `backup.` for `system.manage` (`packages/db/src/alerts.ts`). The managers' email
 duty emails the open alert (it is in `INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`),
-and emails a refusal once for each unbroken string of runs whose in-memory `runStopped` names
+and emails a refusal once for each unbroken string of runs, seen at one of its once-a-minute checks, whose in-memory `runStopped` names
 `backup.staging_space_low` (`BACKUP_REFUSED_EMAIL_CODE`). A run that passes its room checks clears
 `runStopped`, and a run that stops on the same code as the one before keeps that one's
 `runStopped.since`, so the duty, which checks once a minute, tells a new string from the same one

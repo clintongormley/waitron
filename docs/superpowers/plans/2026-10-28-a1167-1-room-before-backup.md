@@ -200,6 +200,8 @@ Depends on: 8a. **Files:** `apps/server/src/backup-sweep.ts`; `apps/server/src/b
 - [ ] **Step 2:** implement. New optional deps: `installationStartedAt?: () => Promise<Date | null>`, `onArchivesDeleted?: (deleted, at) => Promise<void>`. The run reads the installation start once per run, before the first check; a throw is "cannot tell" (null, logged). `makeRoom`'s `onDeleted` calls `onArchivesDeleted` inside a try that logs and swallows its failure, so the alert is recorded before any refusal is rethrown.
 - [ ] **Step 3:** green: the file, `src/backup-sweep-stopped.test.ts`, `src/backup-sweep.test.ts`; `pnpm exec vitest run scripts/personal-log-params.test.ts`; typecheck. Commit: "A backup run deletes old backups to make room before copying, and reports what it deleted".
 
+_2026-10-29, finish-branch fix wave: the read now happens only when a room step finds free space under the aim, at most once a run, and `onArchivesDeleted` is handed the time of the report, not the run's start (commits 1b5c1356c, cfbd2b043)._
+
 ## Task 9: the second check, before the folder copy
 
 Depends on: 8b. **Files:** `apps/server/src/backup-sweep.ts` (`:170-181`); `apps/server/src/backup-sweep-staging.test.ts`; `apps/server/src/backup-sweep-stopped.test.ts`.
