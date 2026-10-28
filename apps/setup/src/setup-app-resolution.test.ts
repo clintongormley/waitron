@@ -1467,8 +1467,13 @@ async function stoppedPresent(
     summary?: (read: number) => Response | Promise<Response> | undefined;
     /** A Start again without the owner header is refused as the server does for a stopped recovery. */
     passwordRequired?: boolean;
+    /** Merged into every inspection read. */
+    inspection?: Partial<FirstSetupInspection>;
+    /** The answer to each Start again, counted from 0; the default answer when undefined. */
+    startAgain?: (send: number) => Response | undefined;
   } = {},
 ) {
+  let startAgainSends = 0;
   let generation = 1;
   let activityReads = 0;
   let summaryReads = 0;
@@ -1489,6 +1494,10 @@ async function stoppedPresent(
           options.summary?.(summaryReads++) ??
           Response.json(stoppedSummary(options.damaged === true))
         );
+      if (path.endsWith("/resolution/start-again") && options.startAgain) {
+        const answer = options.startAgain(startAgainSends++);
+        if (answer) return answer;
+      }
       if (
         options.passwordRequired &&
         path.endsWith("/resolution/start-again") &&
@@ -1512,7 +1521,12 @@ async function stoppedPresent(
         });
       }
       if (path.endsWith("/resolution"))
-        return Response.json({ ...inspection, revision: generation, ownerGeneration: generation });
+        return Response.json({
+          ...inspection,
+          ...options.inspection,
+          revision: generation,
+          ownerGeneration: generation,
+        });
     },
   });
   await expect
@@ -1939,26 +1953,136 @@ it("with the database present, while Check again reads after a failed summary, t
   await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
 });
 
+const heldSummary = (rows: number) => ({
+  ...stoppedSummary(false),
+  held: { rows, kept: 0, records: 0, accepted: 0 },
+});
+const heldLines = (app: SetupApp) =>
+  [...q(app, "held-database").querySelectorAll("p")].map((p) => p.textContent!.trim());
 it.each(["en-GB", "es-ES"])(
-  "with the database present and holding records beside a stopped recovery, the disabled Start again says why, in %s",
+  "with the database present and holding records beside a stopped recovery, Start again is offered and, after the password, says what the database holds, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
-    const { app } = await mount({
+    const { app, requests } = await stoppedPresent({
       inspection: { database: "occupied", emptyDatabase: false },
-      intercept(path) {
-        if (path.endsWith("/backup/activity"))
-          return Response.json({ activity: stoppedActivity() });
-      },
+      summary: () => Response.json(heldSummary(105)),
     });
     setLocale(locale);
     await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
     await app.updateComplete;
-    expect(q<WtButton>(app, "start-again").disabled).toBe(true);
+    expect(q<WtButton>(app, "start-again").disabled).toBe(false);
     const text = app.shadowRoot!.textContent!;
-    expect(text).toContain(t.startUnavailableOccupied);
+    expect(text).not.toContain(t.startUnavailableOccupied);
     expect(text).not.toContain(t.startUnavailable);
+    await passwordAccepted(app);
+    await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+    expect(heldLines(app)).toEqual([
+      t.heldRows.replace("{rows}", "105"),
+      t.heldNoInvoices,
+      t.heldLost,
+    ]);
+    const order = [
+      q(app, "held-database"),
+      q(app, "recovery-stopped"),
+      [...q(app, "screen-first-owner").querySelectorAll("p")].find(
+        (p) => p.textContent === t.startAgainHelp,
+      )!,
+      q(app, "retire-confirmed"),
+      q(app, "cancel-start-again"),
+      q(app, "confirm-start-again"),
+    ];
+    for (const [index, element] of order.slice(1).entries())
+      expect(
+        order[index]!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
+        String(index),
+      ).toBeTruthy();
+    expect(startAgainRequests(requests)).toEqual([]);
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+    await app.updateComplete;
+    await click(app, "confirm-start-again");
+    await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+    expect(startAgainRequests(requests)[0]!.body).toEqual({
+      inspectionId: "a".repeat(64),
+      revision: 2,
+      ownerGeneration: 2,
+      confirmRecoveryDiscard: { shown: heldSummary(105) },
+    });
+    await expect.poll(() => app.shadowRoot!.textContent).toContain(t.restarting);
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "a setup database holding one row in a table other than the venue's says so in the singular, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app } = await stoppedPresent({
+      inspection: { database: "no-venue-rows", emptyDatabase: false },
+      summary: () => Response.json(heldSummary(1)),
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+    await passwordAccepted(app);
+    await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+    expect(heldLines(app)).toEqual([t.heldRowsOne, t.heldNoInvoicesOne, t.heldLost]);
+  },
+);
+
+it("an empty setup database beside a stopped recovery draws no held lines", async () => {
+  const { app } = await stoppedPresent();
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=held-database]")).toBeNull();
+});
+
+it("a refused Start again from the held confirmation goes back to the password step, still signed in, with the reason shown", async () => {
+  const { app, requests } = await stoppedPresent({
+    inspection: { database: "occupied", emptyDatabase: false },
+    summary: () => Response.json(heldSummary(105)),
+    startAgain: (send) => (send === 0 ? refusal("setup.attempt_conflict", 409) : undefined),
+  });
+  await passwordAccepted(app);
+  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  await app.updateComplete;
+  expect(formErrors(app)).toEqual([shellEn["shell.first_setup.attempt_conflict"]]);
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeDefined();
+});
+
+it.each(["en-GB", "es-ES"])(
+  "a database holding records with no stopped recovery keeps Start again disabled and says why, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app, requests } = await stoppedPresent({
+      inspection: { database: "occupied", emptyDatabase: false },
+      activity: () => null,
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    expect(app.shadowRoot!.querySelector("[data-test=recovery-stopped]")).toBeNull();
+    expect(q<WtButton>(app, "start-again").disabled).toBe(true);
+    expect(app.shadowRoot!.textContent).toContain(t.startUnavailableOccupied);
+    expect(startAgainRequests(requests)).toEqual([]);
+  },
+);
+
+it("saved trading settings beside a stopped recovery and a database holding records keep Start again disabled", async () => {
+  const { app, requests } = await stoppedPresent({
+    inspection: {
+      database: "occupied",
+      emptyDatabase: false,
+      artifacts: [{ name: "trading.env", status: "present", digest: "c".repeat(64) }],
+    },
+  });
+  await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
+  await app.updateComplete;
+  expect(q<WtButton>(app, "start-again").disabled).toBe(true);
+  expect(startAgainRequests(requests)).toEqual([]);
+});
 
 it.each(["en-GB", "es-ES"])(
   "a wrong password at the damaged-record password step keeps that step, shows the refusal and sends no Start again, in %s",

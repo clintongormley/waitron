@@ -1,5 +1,6 @@
 import type { ProvisionBody, SetupApi, EmailSettingsDraft } from "./api/client.js";
 import type {
+  FirstSetupInspection,
   FirstSetupOwner,
   FirstSetupOwnership,
   FirstSetupProvisionBody,
@@ -125,6 +126,17 @@ const REFUSAL_CAUSES: readonly string[] = [
   "setup-finished",
   "kept-records",
 ] satisfies StartAgainRefusalCause[];
+/**
+ * The setup database holds records and no trading settings may have been saved: beside a stopped
+ * recovery, Start again may discard it (A1131's held state).
+ */
+export function heldStartAgainDatabase(inspection: FirstSetupInspection): boolean {
+  return (
+    (inspection.database === "occupied" ||
+      (inspection.database === "no-venue-rows" && !inspection.emptyDatabase)) &&
+    !inspection.artifacts.some((file) => file.name === "trading.env" && file.status !== "missing")
+  );
+}
 /**
  * The cause a `setup.start_again_refused` answer names, or `undefined` for any other error and for
  * a cause this page has no words for, which it shows as a generic refusal.
@@ -722,17 +734,20 @@ export class FirstSetupSession {
       }
     });
   }
+  /** `held`: a stopped recovery is being discarded, so a database that holds records may be too. */
   async #presentDatabaseSnapshot(
     owner: FirstSetupOwner,
     current: () => void,
     refuse: () => never = () => failure("setup.attempt_conflict"),
-  ): Promise<FirstSetupResolutionSnapshot> {
+    held = false,
+  ): Promise<{ snapshot: FirstSetupResolutionSnapshot; holdsRecords: boolean }> {
     const inspection = await this.#api.inspectFirstSetupResolution();
     current();
+    const holdsRecords = held && heldStartAgainDatabase(inspection);
     if (
       inspection.pair !== "valid" ||
       inspection.database === "missing" ||
-      inspection.emptyDatabase !== true ||
+      (inspection.emptyDatabase !== true && !holdsRecords) ||
       inspection.password !== "checkable" ||
       !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
       inspection.revision !== owner.revision ||
@@ -740,9 +755,12 @@ export class FirstSetupSession {
     )
       refuse();
     return {
-      inspectionId: inspection.inspectionId,
-      revision: owner.revision,
-      ownerGeneration: owner.ownerGeneration,
+      snapshot: {
+        inspectionId: inspection.inspectionId,
+        revision: owner.revision,
+        ownerGeneration: owner.ownerGeneration,
+      },
+      holdsRecords,
     };
   }
   #presentDatabaseOwner(): FirstSetupOwner {
@@ -759,10 +777,16 @@ export class FirstSetupSession {
     };
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
-      const snapshot = await this.#presentDatabaseSnapshot(owner, current, unreadable);
+      const { snapshot, holdsRecords } = await this.#presentDatabaseSnapshot(
+        owner,
+        current,
+        unreadable,
+        true,
+      );
       const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
       current();
-      if (summary.recovery === undefined) unreadable();
+      if (summary.recovery === undefined || (holdsRecords && summary.held === undefined))
+        unreadable();
       return summary;
     });
   }
@@ -777,7 +801,7 @@ export class FirstSetupSession {
     };
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
-      const snapshot = await this.#presentDatabaseSnapshot(owner, current, unreadable);
+      const { snapshot } = await this.#presentDatabaseSnapshot(owner, current, unreadable);
       const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
       current();
       if (summary.unreadable === undefined || summary.recovery !== undefined) unreadable();
@@ -788,7 +812,12 @@ export class FirstSetupSession {
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
       try {
-        const snapshot = await this.#presentDatabaseSnapshot(owner, current);
+        const { snapshot } = await this.#presentDatabaseSnapshot(
+          owner,
+          current,
+          undefined,
+          summary?.recovery !== undefined && summary.held !== undefined,
+        );
         const result = await this.#api.startAgainFirstSetup(
           snapshot,
           owner,

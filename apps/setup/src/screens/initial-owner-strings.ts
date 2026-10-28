@@ -52,6 +52,12 @@ export const initialOwnerStrings = {
       "Start again without a password is available only when the box can verify an unused, empty setup.",
     startUnavailableOccupied:
       "Start again is not available: this setup's database already holds records, and Start again deletes only a setup that holds none.",
+    heldRows: "The setup database already holds {rows} saved items.",
+    heldRowsOne: "The setup database already holds 1 saved item.",
+    heldNoInvoices: "None of them is an invoice, so no invoice was sent to AEAT.",
+    heldNoInvoicesOne: "It is not an invoice, so no invoice was sent to AEAT.",
+    heldLost:
+      "Start again deletes them with this attempt. You will enter this setup's details again.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -124,6 +130,12 @@ export const initialOwnerStrings = {
       "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
     startUnavailableOccupied:
       "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros, y Empezar de nuevo solo borra una configuración que no tiene ninguno.",
+    heldRows: "La base de datos de configuración ya guarda {rows} elementos.",
+    heldRowsOne: "La base de datos de configuración ya guarda 1 elemento.",
+    heldNoInvoices: "Ninguno es una factura, así que no se envió ninguna factura a la AEAT.",
+    heldNoInvoicesOne: "No es una factura, así que no se envió ninguna factura a la AEAT.",
+    heldLost:
+      "Empezar de nuevo los borra junto con este intento. Tendrás que volver a introducir los datos de esta configuración.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",

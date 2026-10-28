@@ -1,6 +1,6 @@
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { draftScopeFor } from "@waitron/ui";
-import { FirstSetupSession } from "./first-setup-session.js";
+import { FirstSetupSession, heldStartAgainDatabase } from "./first-setup-session.js";
 import type {
   BackupRepairActivity,
   BackupRepairStatus,
@@ -236,9 +236,10 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 const ACTIVITY_REREAD_MS = 30_000;
 const STOPPED_BACKUP_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
-const presentStartAgainAllowed = (inspection: FirstSetupInspection) =>
+/** `stopped`: a stopped recovery is being discarded, so a database that holds records may be too. */
+const presentStartAgainAllowed = (inspection: FirstSetupInspection, stopped: boolean) =>
   inspection.database !== "missing" &&
-  inspection.emptyDatabase &&
+  (inspection.emptyDatabase || (stopped && heldStartAgainDatabase(inspection))) &&
   inspection.password === "checkable" &&
   inspection.revision !== null &&
   inspection.ownerGeneration !== null;
@@ -1424,7 +1425,14 @@ export class SetupApp extends LitElement {
       this.firstOwnerBusy ||
       !this.firstRetireConfirmed ||
       (missing && shown === undefined) ||
-      (!missing && !this.firstInspection?.emptyDatabase)
+      (!missing &&
+        !this.firstInspection?.emptyDatabase &&
+        !(
+          this.firstDamagedRecord === "confirm" &&
+          this.firstStoppedSummary?.held !== undefined &&
+          this.firstInspection !== undefined &&
+          heldStartAgainDatabase(this.firstInspection)
+        ))
     )
       return;
     const generation = ++this.#firstGeneration;
@@ -1477,13 +1485,14 @@ export class SetupApp extends LitElement {
           this.firstRestartConfirm = false;
           this.firstRetireConfirmed = false;
           this.firstDamagedRecord = "password";
+          const stopped = this.firstStoppedSummary !== undefined;
           this.firstStoppedSummary = undefined;
           this.firstDamagedSummary = undefined;
           this.firstOwnerError = this.#describeRepairError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
           if (!current() || !inspection) return;
           this.firstInspection = inspection;
-          if (!presentStartAgainAllowed(inspection)) await this.#signOutFirstSession();
+          if (!presentStartAgainAllowed(inspection, stopped)) await this.#signOutFirstSession();
           return;
         }
         this.firstOwnerError = this.#describeRepairError(error);
@@ -2520,7 +2529,9 @@ export class SetupApp extends LitElement {
       );
     const canRestart =
       (ask !== undefined && offersStartAgain) ||
-      (inspection?.emptyDatabase === true &&
+      (inspection !== undefined &&
+        (inspection.emptyDatabase ||
+          (stoppedHere !== undefined && heldStartAgainDatabase(inspection))) &&
         state === undefined &&
         inspection.password === "checkable" &&
         inspection.revision !== null &&
@@ -2571,6 +2582,13 @@ export class SetupApp extends LitElement {
         <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
         ${recovery.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
       </div>`;
+    const held = this.firstStoppedSummary?.held;
+    const heldBlock = (rows: number) =>
+      html`<div data-test="held-database">
+        <p>${rows === 1 ? t.heldRowsOne : t.heldRows.replace("{rows}", String(rows))}</p>
+        <p>${rows === 1 ? t.heldNoInvoicesOne : t.heldNoInvoices}</p>
+        <p>${t.heldLost}</p>
+      </div>`;
     const passwordField = html`<wt-input
       data-test="resume-password"
       name="setup-resume-password"
@@ -2608,6 +2626,7 @@ export class SetupApp extends LitElement {
             (record) =>
               html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
           )}
+          ${!missing && held?.kept === 0 && held.records === 0 ? heldBlock(held.rows) : nothing}
           ${
             !missing && this.firstStoppedSummary?.recovery
               ? stoppedBlock(this.firstStoppedSummary.recovery)

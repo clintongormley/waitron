@@ -607,3 +607,85 @@ it.each([
     expect(startAgainRefusalCause(error)).toBeUndefined();
   },
 );
+
+const heldStopped = {
+  ...held,
+  recovery: {
+    startedAt: "2026-10-16T13:00:00.000Z",
+    lastActiveAt: "2026-10-16T13:10:00.000Z",
+    lastActiveSource: "memory",
+    lastName: null,
+    failed: false,
+    cloud: false,
+  },
+} as const satisfies StartAgainSummary;
+const tradingSaved = {
+  artifacts: [{ name: "trading.env", status: "present" as const, digest: "c".repeat(64) }],
+};
+it.each([
+  { name: "a tenant or venue row", inspection: { database: "occupied", emptyDatabase: false } },
+  {
+    name: "a row in another table",
+    inspection: { database: "no-venue-rows", emptyDatabase: false },
+  },
+] as const)(
+  "beside a stopped recovery and a setup database holding $name, the summary is read and Start again sends it back as the discard confirmation",
+  async ({ inspection }) => {
+    const { session, requests } = await fixture({ inspection, summary: heldStopped });
+    await expect(session.stoppedRecoverySummary()).resolves.toEqual(heldStopped);
+    await expect(session.retireDamagedRecord(heldStopped)).resolves.toEqual({ restarting: true });
+    expect(requests.at(-1)!.path).toBe("/setup-api/first-setup/resolution/start-again");
+    expect(requests.at(-1)!.body).toEqual({
+      inspectionId: "b".repeat(64),
+      revision: 2,
+      ownerGeneration: 2,
+      confirmRecoveryDiscard: { shown: heldStopped },
+    });
+  },
+);
+it.each<{ name: string; inspection: Partial<FirstSetupInspection>; summary: StartAgainSummary }>([
+  {
+    name: "saved trading settings",
+    inspection: { database: "occupied", emptyDatabase: false, ...tradingSaved },
+    summary: heldStopped,
+  },
+  {
+    name: "trading settings that cannot be read",
+    inspection: {
+      database: "occupied",
+      emptyDatabase: false,
+      artifacts: [{ name: "trading.env", status: "unreadable" }],
+    },
+    summary: heldStopped,
+  },
+  {
+    name: "a summary that does not say what the database holds",
+    inspection: { database: "occupied", emptyDatabase: false },
+    summary: { ...heldStopped, held: undefined },
+  },
+  {
+    name: "a database whose contents are unknown",
+    inspection: { database: "unknown", emptyDatabase: false },
+    summary: heldStopped,
+  },
+])(
+  "beside a stopped recovery, the summary is not read as the held state with $name, and Start again sends nothing",
+  async ({ inspection, summary }) => {
+    const { session, requests } = await fixture({ inspection, summary });
+    await expect(session.stoppedRecoverySummary()).rejects.toBeInstanceOf(Error);
+    if (summary.held !== undefined)
+      await expect(session.retireDamagedRecord(summary)).rejects.toMatchObject({
+        code: "setup.attempt_conflict",
+      });
+    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+  },
+);
+it("a setup database holding records with no stopped recovery drawn still refuses Start again, even with held counts", async () => {
+  const { session, requests } = await fixture({
+    inspection: { database: "occupied", emptyDatabase: false },
+  });
+  await expect(session.retireDamagedRecord(held)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
