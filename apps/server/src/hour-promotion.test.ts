@@ -886,6 +886,8 @@ bundle([{ entry: "scripts/register-till.ts", outfile: ${JSON.stringify(binary)} 
     if (name.startsWith("GIT_")) delete environment[name];
   await promisify(execFile)(process.execPath, [buildScript], { timeout: 60_000, env: environment });
   const preload = join(root, "synthetic-clock.mjs");
+  // The clock request holds the child for over a second of real time, once, so a child whose
+  // wall and elapsed-time clocks disagree fails on every run.
   await writeFile(
     preload,
     `import https from "node:https";
@@ -896,10 +898,12 @@ globalThis.Date = class extends OriginalDate {
   constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:40:00Z"])); }
   static now() { return OriginalDate.parse("2026-10-16T12:40:00Z"); }
 };
+Object.defineProperty(performance, "now", { value: () => 0 });
+let held = false;
 https.request = (url, options, receive) => {
   if (url.protocol !== "https:" || options.method !== "HEAD" || options.rejectUnauthorized !== true) throw new Error("unexpected clock request");
   const request = new EventEmitter();
-  request.end = () => receive({ headers: { date: new Date().toUTCString() }, statusCode: 200, destroy() {} });
+  request.end = () => { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } receive({ headers: { date: new Date().toUTCString() }, statusCode: 200, destroy() {} }); };
   return request;
 };
 syncBuiltinESMExports();

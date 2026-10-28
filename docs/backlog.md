@@ -5433,11 +5433,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Retain the recovery-activation child's failure before diagnosing its missed process-death point.**
-  A972 CI's archive case exited before its expected SIGKILL marker; the child error is omitted
-  from the report. Preserve its assertions and capture the child status and stderr on recurrence.
-  [Detail](backlog/ci.md#recovery-activation-child-exits-before-the-process-death-point).
-
 - **Audit the other coverage download actions for retained refused responses.**
   The server helper closes this response; other merge jobs still use the action exercised by
   the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).

@@ -607,6 +607,11 @@ browser test** — most of these rules exist because a test passed while proving
   `startServer` or after `close()`**. Guard: `apps/server/src/boot.backup-network.test.ts`'s
   `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
+- **A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
+  refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the children of
+  `apps/server/src/hour-recovery-placement-1.test.ts`, `apps/server/src/hour-recovery-placement-2.test.ts`
+  and `apps/server/src/hour-promotion.test.ts`, weaker than the rule: those children only. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-child-process-that-freezes-date-freezes-performancenow-with-it).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.

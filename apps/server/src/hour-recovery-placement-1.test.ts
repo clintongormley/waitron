@@ -48,6 +48,7 @@ import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/sr
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { encodeRecoveryKit } from "@waitron/stream";
+import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
   it("the default restore command refuses a wrong node key before replacing the destination", async () => {
@@ -821,17 +822,20 @@ describe("selected-hour admission before archive placement", () => {
         return outcome;
       }`;
       const internet = `export async function authenticatedHourHead() { throw new Error("this test makes no network request"); } export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
-      const release = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
+      // Holds the child for over a second of real time, once, between its clock reading and the
+      // re-check, so a child whose wall and elapsed-time clocks disagree is refused on every run.
+      const release = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `import { registerHooks } from "node:module";
       const RealDate = Date;
       globalThis.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); } static now() { return RealDate.parse("2026-10-16T12:42:01Z"); } };
+      Object.defineProperty(performance, "now", { value: () => 0 });
       registerHooks({ resolve(specifier, context, next) {
         const replacement = specifier.endsWith("/allocation-preparation.js") ? ${JSON.stringify(wrapper)} : specifier.endsWith("/hour-clock-internet.js") ? ${JSON.stringify(internet)} : specifier.endsWith("/hour-release.js") ? ${JSON.stringify(release)} : undefined;
         return replacement === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(replacement) };
       }});
       const { runStagedRestore } = await import(${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)});
       await runStagedRestore({ ...JSON.parse(process.argv[1]), log() {} });`;
-      await expect(
+      await expectChildKilled(
         promisify(execFile)(
           process.execPath,
           [
@@ -844,7 +848,8 @@ describe("selected-hour admission before archive placement", () => {
           ],
           { timeout: 45_000 },
         ),
-      ).rejects.toMatchObject({ signal: "SIGKILL", stdout: "activation-writes-before-commit\n" });
+        { signal: "SIGKILL", stdout: "activation-writes-before-commit\n" },
+      );
       const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
       expect(JSON.parse(marker)).toMatchObject({ placementStarted: true });
       expect(await readdir(f.roots.stateDir)).not.toContain("trading.env");

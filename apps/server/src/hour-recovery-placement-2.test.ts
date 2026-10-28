@@ -38,6 +38,7 @@ import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { encodeRecoveryKit } from "@waitron/stream";
+import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
@@ -484,7 +485,9 @@ describe("selected-hour admission before archive placement", () => {
           wallStartedMs: Date.now(), wallFinishedMs: Date.now(),
           monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() };
       }`;
-      const releaseModule = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
+      // Holds the child for over a second of real time, once, between its clock reading and the
+      // re-check, so a child whose wall and elapsed-time clocks disagree is refused on every run.
+      const releaseModule = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `
         import { registerHooks } from "node:module";
         const realDate = Date;
@@ -492,6 +495,7 @@ describe("selected-hour admission before archive placement", () => {
           constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); }
           static now() { return realDate.parse("2026-10-16T12:42:01Z"); }
         };
+        Object.defineProperty(performance, "now", { value: () => 0 });
         registerHooks({ resolve(specifier, context, next) {
           if (specifier.endsWith("/hour-clock-internet.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(internetModule)}`)} };
           if (specifier.endsWith("/hour-release.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(releaseModule)}`)} };
@@ -504,7 +508,7 @@ describe("selected-hour admission before archive placement", () => {
           async (args) => { await restoreFromArtifactFile(args); process.kill(process.pid, "SIGKILL"); },
           async (args) => { await writeStreamRestore(args); process.kill(process.pid, "SIGKILL"); });
       `;
-      await expect(
+      await expectChildKilled(
         promisify(execFile)(
           process.execPath,
           [
@@ -517,7 +521,8 @@ describe("selected-hour admission before archive placement", () => {
           ],
           { timeout: 45_000 },
         ),
-      ).rejects.toMatchObject({ signal: "SIGKILL" });
+        { signal: "SIGKILL" },
+      );
       expect(
         JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
       ).toMatchObject({ placementStarted: true });
