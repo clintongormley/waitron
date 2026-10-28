@@ -416,6 +416,8 @@ doc comment); `till-app.ts` `refusedSplitSide` (~716–719) matching `"guestCoun
 
 ## Task 5: the column becomes `guest_count` — SKIPPED in this PR (Q1 = B); kept as the follow-up's recipe
 
+> 2026-10-28: done by A1164 (owner chose A); migration `0194_sale_receipt_guest_count.sql`.
+
 **Q1 for the lane (record the answer in the ledger before starting):** renaming the column changes
 `pragma table_info(sale_receipt_guests)`, which `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`
 compares against the frozen, digest-pinned `madrid-before-move.{en,es}.json` (measured above,
