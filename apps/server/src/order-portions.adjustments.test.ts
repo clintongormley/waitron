@@ -30,14 +30,14 @@ import {
 } from "@waitron/shared";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { applyAdjustment, previewAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
-import { mergeCheckedBills } from "./bill-actions.js";
+import { mergeCheckedBills, transferItems } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { partyRevision, partyRevisionOfOrder, seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";
 import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
-import { moveLinesToGroup, startGroup } from "./order-groups.js";
+import { moveLinesToGroup, splitHeldLineIntoUnits, startGroup } from "./order-groups.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import {
   inTx,
@@ -1279,14 +1279,24 @@ describe("A803 portions: the lines a comp or discount covered", () => {
 
 /** What each of the bill's comps and discounts took off each line, as `name unit-price off amount
  * of quantity`, in record order; and, unless `copied` (a copy carries its original's rows), that
- * each record's rows add up to its reduction. */
+ * each record's rows, each prorated by the quantity its line holds now, add up to its reduction.
+ * The sum cannot see a row's amount and quantity scaled alike; the strings do. */
 async function takenOn(billId: string, copied = false): Promise<string[][]> {
   const ids = await describeIds(billId);
+  const quantityNow = new Map(
+    (await rowsOf(venue, billId)).map((row) => [row.id, Number(row.quantity) * 1000]),
+  );
   const records = await recordedOn(billId);
   const rows = await inTx(venue, (tx) => tx.select().from(adjustmentLines));
   return records.map((record) => {
     const own = rows.filter((row) => row.adjustmentId === record.id);
-    if (!copied) expect(own.reduce((sum, row) => sum + row.reduction, 0)).toBe(record.reduction);
+    if (!copied)
+      expect(
+        own.reduce(
+          (sum, row) => sum + (row.reduction * (quantityNow.get(row.lineId) ?? 0)) / row.quantity,
+          0,
+        ),
+      ).toBeCloseTo(record.reduction, 6);
     return own
       .map(
         (row) =>
@@ -1630,7 +1640,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
       expect(await asked(billId, fifth(rest!))).toBeNull();
       expect(await asked(billId, fifth(part!))).toMatchObject(ASKS);
       expect(await takenOn(billId)).toEqual([
-        ["Burger 9.00 off 9.00 of 3.000"],
+        ["Burger 6.75 off 9.00 of 3.000", "Burger 9.00 off 9.00 of 3.000"],
         ["Burger 6.75 off 2.25 of 1.000"],
       ]);
     });
@@ -1645,7 +1655,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
 
       expect(await asked(billId, fifth(last!))).toMatchObject(ASKS);
       expect(await takenOn(billId)).toEqual([
-        ["Burger 9.00 off 6.00 of 2.000"],
+        ["Burger 6.75 off 6.00 of 2.000", "Burger 9.00 off 6.00 of 2.000"],
         ["Burger 6.75 off 2.25 of 1.000"],
       ]);
     });
@@ -2329,5 +2339,185 @@ describe("A803 portions: the per-dish floor (plan D36)", () => {
     });
     const tenOffBill = async () => wholeBill(1000, venue.reasonId.staffMeal);
     expect(await oneVerdict(burgers("1"), "Burger", tenOffBill, [free])).toBeNull();
+  });
+});
+
+describe("A803 portions: what a comp or discount took follows each line it is split into (plan D37)", () => {
+  /** Every row naming a line of these bills, as `B<n> name unit-price off amount of quantity`, `n`
+   * the bill's place in `billIds`. */
+  async function takenAcross(billIds: readonly string[]): Promise<string[]> {
+    const ids = new Map<string, string>();
+    for (const [index, billId] of billIds.entries())
+      for (const row of await rowsOf(venue, billId))
+        ids.set(row.id, `B${index + 1} ${row.name} ${row.unitPriceGross}`);
+    const rows = await inTx(venue, (tx) => tx.select().from(adjustmentLines));
+    return rows
+      .filter((row) => ids.has(row.lineId))
+      .map(
+        (row) =>
+          `${ids.get(row.lineId)} off ${centsToDecimal(row.reduction)} of ${thousandthsToDecimal(row.quantity)}`,
+      )
+      .sort();
+  }
+
+  /** 10% off the bill's line of three burgers, as one unbound line; answers its id. */
+  async function tenOffThreeBurgers(bill: Bill): Promise<string> {
+    const [line] = await dishesNamed(bill.billId, "Burger");
+    await adjust(bill.billId, { ...tenOff, lineId: line! });
+    return line!;
+  }
+
+  const takenFromThree = "Burger 10.80 off 3.60 of 3.000";
+
+  it("A803 portions: Split bill moving 2 of an unbound line of three carries its row to the part moved", async () => {
+    const bill = await groupedBill(burgers("3"));
+    await tenOffThreeBurgers(bill);
+    const other = await inTx(venue, (tx) =>
+      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 1, quantity: "2" }]),
+    );
+
+    expect(await takenAcross([bill.billId, other.billId])).toEqual([
+      `B1 ${takenFromThree}`,
+      `B2 ${takenFromThree}`,
+    ]);
+  });
+
+  it("A803 portions: Transfer items of part of a line carries its row to the part moved", async () => {
+    const bill = await groupedBill(burgers("3"));
+    await tenOffThreeBurgers(bill);
+    const other = await inTx(venue, (tx) =>
+      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 2 }]),
+    );
+    await inTx(venue, async (tx) => {
+      const expectedEdits = [];
+      for (const id of [bill.billId, other.billId].sort())
+        expectedEdits.push(await readBillEditState(tx, id));
+      await transferItems(
+        tx,
+        venue.cfg,
+        bill.billId,
+        other.billId,
+        [{ lineNo: 1, quantity: "1" }],
+        {
+          partyId: bill.partyId,
+          expectedPartyRevision: await partyRevision(tx, bill.partyId),
+          operatorId: venue.managerId,
+          expectedEdits,
+        },
+      );
+    });
+
+    expect(await takenAcross([bill.billId, other.billId])).toEqual([
+      `B1 ${takenFromThree}`,
+      `B2 ${takenFromThree}`,
+    ]);
+  });
+
+  /** Three burgers as one unbound line waiting in a held group, 10% off. */
+  async function heldThree(): Promise<Bill & { line: string }> {
+    const bill = await inTx(venue, async (tx) => {
+      const seatedBill = await seated(tx);
+      const round = await priceTabRound(
+        tx,
+        venue.cfg,
+        seatedBill.billId,
+        roundOf(burgers("3")),
+        "checked",
+      );
+      await insertTabRound(tx, venue.cfg, round, round.rows);
+      const groupId = await startGroup(tx, seatedBill.partyId, "hold", venue.staffId);
+      await tx
+        .update(workingOrderLines)
+        .set({ groupId })
+        .where(eq(workingOrderLines.workingOrderId, seatedBill.billId));
+      await bumpRevision(tx, [seatedBill.billId]);
+      return seatedBill;
+    });
+    return { ...bill, line: await tenOffThreeBurgers(bill) };
+  }
+
+  it("A803 portions: a course move of one unit carries its row to the unit moved", async () => {
+    const bill = await heldThree();
+    await inTx(venue, async (tx) =>
+      moveLinesToGroup(
+        tx,
+        venue.cfg,
+        bill.partyId,
+        [{ lineId: bill.line, quantity: "1.000" }],
+        "new",
+        {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await partyRevision(tx, bill.partyId),
+          operatorId: venue.managerId,
+          expectedEdits: [await readBillEditState(tx, bill.billId)],
+        },
+      ),
+    );
+
+    expect(await dishesNamed(bill.billId, "Burger")).toHaveLength(2);
+    expect(await takenAcross([bill.billId])).toEqual([
+      `B1 ${takenFromThree}`,
+      `B1 ${takenFromThree}`,
+    ]);
+  });
+
+  it("A803 portions: a held line split into its units carries its row to every unit", async () => {
+    const bill = await heldThree();
+    await inTx(venue, async (tx) =>
+      splitHeldLineIntoUnits(tx, venue.cfg, bill.partyId, bill.line, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, bill.partyId),
+        operatorId: venue.managerId,
+        expectedEdit: await readBillEditState(tx, bill.billId),
+      }),
+    );
+
+    expect(await dishesNamed(bill.billId, "Burger")).toHaveLength(3);
+    expect(await takenAcross([bill.billId])).toEqual(Array(3).fill(`B1 ${takenFromThree}`));
+  });
+
+  it("A803 portions: a discount on part of a pizza line carries the earlier discount's rows to the pizza and the olives it carves off", async () => {
+    const { billId } = await groupedBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+    const [line] = await dishesNamed(billId, "Pizza");
+    await adjust(billId, { ...tenOff, lineId: line! });
+    await adjust(billId, { ...tenOff, lineId: line!, quantity: "1" });
+
+    expect(await takenOn(billId)).toEqual([
+      [
+        "Olives 1.21 off 0.30 of 2.000",
+        "Olives 1.35 off 0.30 of 2.000",
+        "Pizza 7.29 off 1.80 of 2.000",
+        "Pizza 8.10 off 1.80 of 2.000",
+      ],
+      ["Olives 1.21 off 0.14 of 1.000", "Pizza 7.29 off 0.81 of 1.000"],
+    ]);
+  });
+
+  it("A803 portions: a second carve off the same line carries the original's row again, so the three parts' rows each read one third of it at their quantity", async () => {
+    const bill = await groupedBill(burgers("3"));
+    await tenOffThreeBurgers(bill);
+    const second = await inTx(venue, (tx) =>
+      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    const third = await inTx(venue, (tx) =>
+      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    const billIds = [bill.billId, second.billId, third.billId];
+
+    expect(await takenAcross(billIds)).toEqual([
+      `B1 ${takenFromThree}`,
+      `B2 ${takenFromThree}`,
+      `B3 ${takenFromThree}`,
+    ]);
+    // Each row prorated by its line's quantity now.
+    const quantityNow = new Map<string, number>();
+    for (const billId of billIds)
+      for (const row of await rowsOf(venue, billId))
+        quantityNow.set(row.id, Number(row.quantity) * 1000);
+    const rows = await inTx(venue, (tx) => tx.select().from(adjustmentLines));
+    const standing = rows
+      .filter((row) => quantityNow.has(row.lineId))
+      .map((row) => (row.reduction * quantityNow.get(row.lineId)!) / row.quantity);
+    expect(standing).toEqual([120, 120, 120]);
   });
 });

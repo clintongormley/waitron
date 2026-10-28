@@ -56,7 +56,7 @@ import { withReceiptListPrices } from "./receipt-lines.js";
 import { projectPortionSale, type PortionBinding } from "./portion-sale-projection.js";
 import {
   cancelPortions,
-  copyCoveredLines,
+  carryLineReductions,
   expandPortionRows,
   linkSalePortions,
   readGrowingPortions,
@@ -4614,6 +4614,7 @@ async function carveLines(
   const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
   const copiedLineIds: string[] = [];
+  const carried: { from: string; to: string }[] = [];
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -4678,6 +4679,7 @@ async function carveLines(
         })
         .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
+      carried.push({ from: row.id, to: splitRowId });
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
       if (parentLineId === null)
         await copyAllergyWorkingTicks(tx, [{ from: row.id, to: splitRowId }]);
@@ -4735,6 +4737,7 @@ async function carveLines(
         if (opts.splitIntoUnits && (part + 1) % 32 === 0) await nextTurn();
       }
     }
+    await carryLineReductions(tx, carried);
   }
   if (fromTabId !== toTabId) {
     if (partials.length > 0) {
@@ -6323,7 +6326,7 @@ async function applyLineEdits(
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
     await VENUE_SERVICE.copyLineContexts(tx, cfg, copiedContexts);
     await registerPortions(tx, newPortions);
-    await copyCoveredLines(tx, copiedContexts);
+    await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
   const addedToExisting = changes.filter(

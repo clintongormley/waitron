@@ -31,7 +31,7 @@ import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kit
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
-  copyCoveredLines,
+  carryLineReductions,
   readGrowingPortions,
   registerPortions,
   type PortionRef,
@@ -277,7 +277,7 @@ async function copyRecalledPortion(
   await tx.insert(workingOrderLines).values(rows);
   await VENUE_SERVICE.copyLineContexts(tx, cfg, contexts);
   await registerPortions(tx, portions);
-  await copyCoveredLines(tx, contexts);
+  await carryLineReductions(tx, contexts);
   await copyAllergyWorkingTicks(tx, dishes);
   const reserved = dishes.map(({ to }) => ({ referenceId: randomUUID(), sourceLineId: to }));
   await tx.insert(orderDraftRecalledLines).values(

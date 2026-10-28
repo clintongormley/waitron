@@ -132,9 +132,10 @@ export async function registerPortions(
   }
 }
 
-/** For each `{ from, to }` copy, what each comp or discount took off `from` it took off `to` as
- * well. */
-export async function copyCoveredLines(
+/** For each `{ from, to }`, a copy or a part split off `from`, give `to` every row of what a comp or
+ * discount took off `from`, its amount and quantity unchanged: a row says what was taken off the
+ * quantity its line held then. */
+export async function carryLineReductions(
   tx: Transaction,
   pairs: readonly { from: string; to: string }[],
 ): Promise<void> {
@@ -147,14 +148,15 @@ export async function copyCoveredLines(
       quantity: adjustmentLines.quantity,
     })
     .from(adjustmentLines)
-    .where(
-      inArray(
-        adjustmentLines.lineId,
-        pairs.map(({ from }) => from),
-      ),
-    );
+    .where(inArray(adjustmentLines.lineId, [...new Set(pairs.map(({ from }) => from))]));
+  const byLine = new Map<string, typeof covered>();
+  for (const row of covered) {
+    const held = byLine.get(row.lineId);
+    if (held === undefined) byLine.set(row.lineId, [row]);
+    else held.push(row);
+  }
   const rows = pairs.flatMap(({ from, to }) =>
-    covered.filter((row) => row.lineId === from).map((row) => ({ ...row, lineId: to })),
+    (byLine.get(from) ?? []).map((row) => ({ ...row, lineId: to })),
   );
   if (rows.length > 0) await tx.insert(adjustmentLines).values(rows);
 }
