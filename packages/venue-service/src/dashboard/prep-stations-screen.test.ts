@@ -881,7 +881,12 @@ it("Add station drops a taken-name refusal when Save runs again and fails naming
 });
 it("Add station keeps a refusal naming no field above the buttons until Save is pressed again", async () => {
   setLocale("en");
-  const a = api({ createStation: vi.fn().mockRejectedValue(new Error("refused")) });
+  const a = api({
+    createStation: vi
+      .fn()
+      .mockRejectedValueOnce(new Error("refused"))
+      .mockRejectedValueOnce({ code: "station.name_taken" }),
+  });
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
@@ -897,12 +902,16 @@ it("Add station keeps a refusal naming no field above the buttons until Save is 
   expect(addActions(el).error).toBe(saveError);
   await editSaveField(el, q(el, 'wt-input[name="name"]')!, "");
   expect(addActions(el).error).toBe(`${saveError} ${fixFields}`);
+  expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
+  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Terrace");
+  expect(addActions(el).error).toBe(saveError);
+  expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  expect(a.createStation).toHaveBeenCalledOnce();
+  expect(a.createStation).toHaveBeenCalledTimes(2);
   expect(addActions(el).error).toBe(fixFields);
-  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Terrace");
-  expect(addActions(el).error).toBe("");
+  await editSaveField(el, timingField(el, "warmAfterMinutes"), "7");
+  expect(addActions(el).error).toBe(fixFields);
 });
 it("Add station opened again does not bring back the last dialog's refusal naming no field", async () => {
   setLocale("en");
@@ -921,11 +930,11 @@ it("Add station opened again does not bring back the last dialog's refusal namin
   );
   modal.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
   await closed;
-  await settle(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Garden");
-  expect(addActions(el).error).toBe("");
+  expect(formMessages(el.shadowRoot!.querySelector("wt-modal")!)).toEqual([]);
 });
 it("Add station opened again does not bring back the last dialog's colour refusal", async () => {
   setLocale("en");
