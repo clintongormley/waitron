@@ -28,6 +28,7 @@ import {
   PINS,
   provisionAdjustmentVenue,
   rowsOf,
+  todayLine,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 
@@ -97,17 +98,24 @@ async function setup(release: "hold" | "fire" = "hold") {
     { release },
   );
   const [line, extra] = await rowsOf(venue, p.billId);
-  const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
-  const answer = await call("POST", `/api/parties/${p.partyId}/lines/${line!.id}/recall`, {
-    submissionId: randomUUID(),
-    expectedPartyRevision: party!.revision,
-  });
-  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  const row = await todayLine(venue, p.billId, 1);
+  // The till recalls a row one request per dish, in line order.
+  let answer: Awaited<ReturnType<typeof call>> | undefined;
+  for (const lineId of row.lineIds ?? [row.lineId]) {
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    answer = await call("POST", `/api/parties/${p.partyId}/lines/${lineId}/recall`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party!.revision,
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  }
   return {
     ...p,
     line: line!,
     extra: extra!,
-    draft: (answer.json as unknown as { draft: Draft }).draft,
+    row,
+    extraRow: await todayLine(venue, p.billId, 2),
+    draft: (answer!.json as unknown as { draft: Draft }).draft,
   };
 }
 const observedAdjustments = new Map<
@@ -166,7 +174,7 @@ describe("adjusting an owned recalled family", () => {
     );
     const before = await frozen();
     const draft = await draftOn(p.partyId, p.draft.id);
-    const answer = await post(p.billId, { action: "cancel", lineId: p.line.id, quantity: "1" });
+    const answer = await post(p.billId, { action: "cancel", ...p.row, quantity: "1" });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await rowsOf(venue, p.billId)).toEqual([
       {
@@ -219,7 +227,7 @@ describe("adjusting an owned recalled family", () => {
     );
     expect(taken.status, JSON.stringify(taken.json)).toBe(200);
     const before = await frozen();
-    const refused = await post(p.billId, { action: "cancel", lineId: p.line.id, quantity: "1" });
+    const refused = await post(p.billId, { action: "cancel", ...p.row, quantity: "1" });
     expect(refused.json).toMatchObject({
       code: "draft.taken_over",
       params: { draftId: p.draft.id, ownerId: venue.managerId },
@@ -227,7 +235,7 @@ describe("adjusting an owned recalled family", () => {
     expect(await frozen()).toEqual(before);
     const answer = await post(
       p.billId,
-      { action: "cancel", lineId: p.line.id, quantity: "1" },
+      { action: "cancel", ...p.row, quantity: "1" },
       venue.cookie.manager,
     );
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -263,7 +271,7 @@ describe("adjusting an owned recalled family", () => {
     });
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
     const savedDraft = (saved.json as unknown as BillDraftSnapshot).draft!;
-    const water = (await rowsOf(venue, p.billId))[2]!;
+    const water = { id: (await todayLine(venue, p.billId, 3)).lineId };
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
     const recalled = await call("POST", `/api/parties/${p.partyId}/lines/${water.id}/recall`, {
       submissionId: randomUUID(),
@@ -272,9 +280,7 @@ describe("adjusting an owned recalled family", () => {
     expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
     const { draft } = recalled.json as unknown as { draft: Draft };
     expect(draft.lines[1]).toEqual(savedDraft.lines[1]);
-    expect(
-      (await post(p.billId, { action: "comp", lineId: p.line.id, quantity: "1" })).status,
-    ).toBe(200);
+    expect((await post(p.billId, { action: "comp", ...p.row, quantity: "1" })).status).toBe(200);
     const read = await draftOn(p.partyId, draft.id);
     expect(read.lines).toHaveLength(4);
     expect(read.lines[0]).toMatchObject({ id: draft.lines[0]!.id, quantity: "2.000" });
@@ -296,7 +302,7 @@ describe("adjusting an owned recalled family", () => {
 
   it("advances a draft only once when an own bill discount changes two recalled families", async () => {
     const p = await setup();
-    const water = (await rowsOf(venue, p.billId))[2]!;
+    const water = { id: (await todayLine(venue, p.billId, 3)).lineId };
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
     const recalled = await call("POST", `/api/parties/${p.partyId}/lines/${water.id}/recall`, {
       submissionId: randomUUID(),
@@ -326,7 +332,7 @@ describe("adjusting an owned recalled family", () => {
 
   it("requires takeover before another person adjusts a sent sibling, without changing recalled dishes", async () => {
     const p = await setup();
-    const water = (await rowsOf(venue, p.billId))[2]!;
+    const water = { id: (await todayLine(venue, p.billId, 3)).lineId };
     const before = await frozen();
     const refused = await post(
       p.billId,
@@ -373,7 +379,7 @@ describe("adjusting an owned recalled family", () => {
       return snapshot;
     });
     const before = await frozen();
-    const answer = await post(p.billId, { action: "comp", lineId: p.line.id, quantity: "1" });
+    const answer = await post(p.billId, { action: "comp", ...p.row, quantity: "1" });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const read = await draftOn(p.partyId, p.draft.id);
     expect(read.revision).toBe(p.draft.revision + 1);
@@ -438,7 +444,7 @@ describe("adjusting an owned recalled family", () => {
       const before = await frozen();
       const body = {
         action: "cancel",
-        lineId: p.line.id,
+        ...p.row,
         quantity: "1",
         submissionId: randomUUID(),
         expectedRevision: await billRevision(p.billId),
@@ -507,7 +513,7 @@ describe("adjusting an owned recalled family", () => {
     const before = await frozen();
     const body = {
       action: "cancel",
-      lineId: p.line.id,
+      ...p.row,
       submissionId: randomUUID(),
       expectedRevision: await billRevision(p.billId),
     };
@@ -562,7 +568,7 @@ describe("adjusting an owned recalled family", () => {
       p.billId,
       {
         ...action,
-        lineId: target === "bill" ? null : target === "parent" ? p.line.id : p.extra.id,
+        ...(target === "bill" ? { lineId: null } : target === "parent" ? p.row : p.extraRow),
       },
       venue.cookie.manager,
     );
@@ -590,7 +596,7 @@ describe("adjusting an owned recalled family", () => {
       }),
     );
     const before = await frozen();
-    const ask = { action: "cancel", lineId: p.line.id, quantity: "1", reasonId: reason.id };
+    const ask = { action: "cancel", ...p.row, quantity: "1", reasonId: reason.id };
     expect((await post(p.billId, ask)).json).toMatchObject({ code: "adjustment.note_required" });
     expect(await frozen()).toEqual(before);
     expect((await post(p.billId, { ...ask, note: "Duplicate dish" })).json).toMatchObject({

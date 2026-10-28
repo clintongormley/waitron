@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments } from "@waitron/adjustments";
 import {
@@ -32,6 +32,7 @@ import {
   inTx,
   PINS,
   provisionAdjustmentVenue,
+  todayLine,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import { send } from "./testing/bill-venue.js";
@@ -55,7 +56,13 @@ async function fixture() {
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, bill.billId))
     .orderBy(workingOrderLines.lineNo);
-  return { ...bill, parent: lines[0]!, extra: lines[1]! };
+  return {
+    ...bill,
+    parent: lines[0]!,
+    extra: lines[1]!,
+    row: await todayLine(venue, bill.billId, 1),
+    extraRow: await todayLine(venue, bill.billId, 2),
+  };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function save(p: Fixture, operatorId = venue.staffId) {
@@ -76,16 +83,17 @@ async function request(
   op: Operation,
 ) {
   if (op === "cancel-keep") {
-    const [ticket] = await venue.db
+    const tickets = await venue.db
       .select()
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderLineId, p.parent.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+      .where(inArray(ticketItems.workingOrderLineId, p.row.lineIds ?? [p.row.lineId]));
+    for (const ticket of tickets)
+      await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket.id, "preparing"));
   }
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.billId));
   return {
     orderId: p.billId,
-    lineId: p.parent.id,
+    ...p.row,
     expectedRevision: bill!.revision,
     expectedEdit: expectedEdit!,
     action: "comp" as const,
@@ -100,7 +108,9 @@ async function request(
     expectedBillRevision: bill!.revision,
     expectedContext:
       op === "cancel" || op === "cancel-keep"
-        ? await inTx(venue, (tx) => readCancellationContext(tx, p.partyId, p.parent.id))
+        ? await inTx(venue, (tx) =>
+            readCancellationContext(tx, p.partyId, p.row.lineId, p.row.lineIds),
+          )
         : undefined!,
   };
 }
@@ -276,16 +286,18 @@ for (const op of ["apply", "cancel", "cancel-keep"] as const)
     expect(frozen()).toEqual(before);
   });
 
+/** Recalls the row as the till does: one request per dish, in line order. */
 async function recall(p: Fixture) {
-  return inTx(venue, async (tx) => {
-    await setChangesAfterSending(tx, "held-or-waiting");
-    return recallToDraft(tx, venue.cfg, p.partyId, p.parent.id, {
-      operatorId: venue.staffId,
-      expectedEdit: await readBillEditState(tx, p.billId),
-      expectedPartyRevision: await partyRevision(tx, p.partyId),
-      submissionId: randomUUID(),
+  for (const lineId of p.row.lineIds ?? [p.row.lineId])
+    await inTx(venue, async (tx) => {
+      await setChangesAfterSending(tx, "held-or-waiting");
+      await recallToDraft(tx, venue.cfg, p.partyId, lineId, {
+        operatorId: venue.staffId,
+        expectedEdit: await readBillEditState(tx, p.billId),
+        expectedPartyRevision: await partyRevision(tx, p.partyId),
+        submissionId: randomUUID(),
+      });
     });
-  });
 }
 for (const target of ["parent", "extra", "bill"] as const)
   it(`direct ${target} adjustment refuses its own reserved recalled family`, async () => {
@@ -296,7 +308,8 @@ for (const target of ["parent", "extra", "bill"] as const)
       before = frozen();
     const adjustment = {
       ...ask,
-      lineId: target === "bill" ? null : p[target].id,
+      lineIds: undefined,
+      ...(target === "bill" ? { lineId: null } : target === "parent" ? p.row : p.extraRow),
       action: target === "bill" ? ("discount_percent" as const) : ("comp" as const),
       quantity: undefined,
       ...(target === "bill" ? { percentBp: 1000 } : {}),
@@ -435,7 +448,7 @@ for (const action of ["cancel", "comp", "discount_percent"] as const)
       sourceDraftId: current.draftId!,
       action,
       ...(action === "discount_percent"
-        ? { percentBp: 1000, lineId: null, quantity: undefined }
+        ? { percentBp: 1000, lineId: null, lineIds: undefined, quantity: undefined }
         : {}),
       ...(action === "cancel"
         ? {
@@ -475,7 +488,7 @@ it("the last owned-source removal closes its draft and releases only that bill",
       {
         ...base,
         orderId: p.billId,
-        lineId: p.parent.id,
+        ...p.row,
         expectedEdit: current,
         sourceDraftId: current.draftId!,
         action: "cancel",
