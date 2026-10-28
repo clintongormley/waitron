@@ -182,7 +182,7 @@ describe("computeInputVat", () => {
       .insert(purchaseInvoices)
       .values({
         supplierTaxId: "B00000000",
-        supplierName: "Proveedor",
+        supplierName: "Supplier",
         supplierInvoiceNumber: "RAW1",
         issuedOn: "2026-08-01",
         receivedOn: "2026-08-05",
