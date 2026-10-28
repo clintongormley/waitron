@@ -86,12 +86,12 @@ async function setupVenue() {
     simplifiedInvoiceLimit: null,
   });
 
-  const cana = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+  const beer = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Drinks" });
     const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
-      name: "Caña",
+      name: "Beer",
       pricingUnit: "each",
       unitPrice: "2.50",
       vatClass: "reduced",
@@ -100,7 +100,7 @@ async function setupVenue() {
     return product.id;
   });
   const counter = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
-  return { cfg, cana, counter, menuId: counter.menuId };
+  return { cfg, beer, counter, menuId: counter.menuId };
 }
 
 type Venue = Awaited<ReturnType<typeof setupVenue>>;
@@ -113,7 +113,7 @@ async function park(v: Venue, lines: Parameters<typeof parkOrder>[2]["lines"]): 
 
 const one = (v: Venue, menuVersionId?: string) => [
   {
-    menuItemId: v.counter.offerFor(v.cana),
+    menuItemId: v.counter.offerFor(v.beer),
     quantity: "1",
     ...(menuVersionId === undefined ? {} : { menuVersionId }),
   },
@@ -131,15 +131,15 @@ async function stored(workingOrderId: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 
-/** Patches Caña's price to 3.10 and its class to `general`, from the live version; both ids. */
-async function patchCana(v: Venue): Promise<{ before: string; after: string }> {
+/** Patches Beer's price to 3.10 and its class to `general`, from the live version; both ids. */
+async function patchBeer(v: Venue): Promise<{ before: string; after: string }> {
   return withTransaction(suite.db, async (tx) => {
     const live = await readLiveMenu(tx, v.menuId);
     if (live === null) throw new Error("the counter menu has no live version");
     const menuItemId = Object.keys(live.document.offers).find(
-      (key) => live.document.offers[key]!.productId === v.cana,
+      (key) => live.document.offers[key]!.productId === v.beer,
     );
-    if (menuItemId === undefined) throw new Error("the live version does not offer Caña");
+    if (menuItemId === undefined) throw new Error("the live version does not offer Beer");
     const { versionId } = await patchLiveMenu(
       tx,
       v.menuId,
@@ -161,7 +161,7 @@ async function addLine(v: Venue, id: string, menuVersionId: string) {
     lines: [
       ...kept.map((line) => ({
         workingOrderLineId: line.id,
-        menuItemId: v.counter.offerFor(v.cana),
+        menuItemId: v.counter.offerFor(v.beer),
         quantity: "1",
       })),
       ...one(v, menuVersionId),
@@ -178,7 +178,7 @@ describe("a menu patch and the lines already on open orders", () => {
     // The values the line locked when it was parked, before any patch.
     expect([opened!.unitPriceGross, opened!.vatClass]).toEqual([250, "reduced"]);
 
-    const { after } = await patchCana(v);
+    const { after } = await patchBeer(v);
     expect((await stored(id)).map((line) => [line.unitPriceGross, line.vatClass])).toEqual([
       [250, "reduced"],
     ]);
@@ -193,7 +193,7 @@ describe("a menu patch and the lines already on open orders", () => {
   it("a line asserting the version the patch replaced is refused, and the order is unchanged", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v));
-    const { before, after } = await patchCana(v);
+    const { before, after } = await patchBeer(v);
 
     await expect(addLine(v, id, before)).rejects.toMatchObject({
       code: "menu.version_changed",

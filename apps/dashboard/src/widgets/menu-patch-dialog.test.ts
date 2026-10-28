@@ -267,10 +267,10 @@ it("narrows the tree to the items whose name matches the search, keeping their p
 
 it("finds a name whatever its accents", async () => {
   const el = await mount(
-    stubApi({ getLiveMenu: vi.fn(async () => live(3, lunch("Sopa de calabacín"))) }),
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, lunch("Crème brûlée"))) }),
   );
-  await type(el, "wt-input", "menu-patch-search", "calabacin");
-  expect(treeLabels(el)).toEqual(["Starters", "Sopa de calabacín"]);
+  await type(el, "wt-input", "menu-patch-search", "creme");
+  expect(treeLabels(el)).toEqual(["Starters", "Crème brûlée"]);
 });
 
 /** Lunch with forty more dishes among the Starters, so the tree is taller than the dialog. */
@@ -436,7 +436,7 @@ it("stages a translated name as every content language's text", async () => {
 it("stages a kitchen name, a VAT class and a picture", async () => {
   const el = await mount();
   await pick(el, "Soup");
-  await type(el, "wt-input", "kitchen-name", "SOPA");
+  await type(el, "wt-input", "kitchen-name", "SOUP");
   await chooseOption(form(el).querySelector("wt-combobox")!, "general");
   form(el)
     .querySelector("dashboard-image-upload")!
@@ -449,7 +449,7 @@ it("stages a kitchen name, a VAT class and a picture", async () => {
     );
   await el.updateComplete;
   expect(el.changes).toEqual([
-    { target: soup, field: "kitchenName", value: "SOPA" },
+    { target: soup, field: "kitchenName", value: "SOUP" },
     { target: soup, field: "vatClass", value: "general" },
     { target: soup, field: "image", value: "media:soup" },
   ]);
@@ -1117,22 +1117,22 @@ it("puts a refused value back under its field, on its item, with the bottom mess
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await pick(el, "Soup");
   await press(el, "review");
   await press(el, "put-live");
   expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
   expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Salad");
   expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
-  expect(field(el, "wt-input", "kitchen-name").value).toBe("ENSALADA");
+  expect(field(el, "wt-input", "kitchen-name").value).toBe("SALAD");
   expect(bottomMessage(el)).toBe("Correct the fields marked on Salad to continue.");
   expect(el.shadowRoot!.activeElement).toBe(field(el, "wt-input", "kitchen-name"));
   expect(el.changes).toEqual([
     { target: soup, field: "price", value: "4.00" },
-    { target: { kind: "offer", menuItemId: "mi-salad" }, field: "kitchenName", value: "ENSALADA" },
+    { target: { kind: "offer", menuItemId: "mi-salad" }, field: "kitchenName", value: "SALAD" },
   ]);
   expect(footerButton(el, "review")!.disabled).toBe(false);
-  await type(el, "wt-input", "kitchen-name", "ENSALADA VERDE");
+  await type(el, "wt-input", "kitchen-name", "GREEN SALAD");
   expect(field(el, "wt-input", "kitchen-name").error).toBe("");
   expect(bottomMessage(el)).toBe("");
 });
@@ -1144,7 +1144,7 @@ it("keeps a refused field's sentence until the next send", async () => {
     .mockRejectedValueOnce(new Error("the box is unreachable"));
   const el = await mount(stubApi({ patchLiveMenu }));
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await press(el, "review");
   await press(el, "put-live");
   await pick(el, "Soup");
@@ -1159,12 +1159,12 @@ it("keeps a refused field's sentence until the next send", async () => {
   await press(el, "keep-editing");
   expect(field(el, "wt-input", "kitchen-name").error).toBe("");
   expect(node(el, "Salad").querySelector('[data-test="needs-correcting"]')).toBeNull();
-  expect(field(el, "wt-input", "kitchen-name").value).toBe("ENSALADA");
+  expect(field(el, "wt-input", "kitchen-name").value).toBe("SALAD");
 });
 
 it("lets go of a refused change a newer version already holds, showing the live value", async () => {
   const newer = lunch();
-  newer.offers["mi-salad"]!.kitchenName = "ENSALADA";
+  newer.offers["mi-salad"]!.kitchenName = "SALAD";
   const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4, newer));
   const data = new LiveData();
   const el = await mount(
@@ -1177,7 +1177,7 @@ it("lets go of a refused change a newer version already holds, showing the live 
     }),
   );
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await press(el, "review");
   await press(el, "put-live");
   expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
@@ -1787,7 +1787,7 @@ it("offers a newer live version that arrives while a patch is being sent, once i
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await press(el, "review");
   await press(el, "put-live");
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
@@ -1800,7 +1800,7 @@ it("offers a newer live version that arrives while a patch is being sent, once i
   expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
   expect(el.changes).toEqual([
     { target: soup, field: "price", value: "4.00" },
-    { target: { kind: "offer", menuItemId: "mi-salad" }, field: "kitchenName", value: "ENSALADA" },
+    { target: { kind: "offer", menuItemId: "mi-salad" }, field: "kitchenName", value: "SALAD" },
   ]);
 });
 
@@ -1835,7 +1835,7 @@ it("counts a refused change as dropped when a newer version held during the send
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await press(el, "review");
   await press(el, "put-live");
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
@@ -2122,7 +2122,7 @@ it("retires a no-longer-fits refusal once the change it was about is typed back 
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await press(el, "review");
   await press(el, "put-live");
   expect(bottomMessage(el)).toContain("no longer fits");
@@ -2254,7 +2254,7 @@ it("leaves focus on the refused field when a Reload read during the send moves t
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await reloadThenSend(el, answerReload);
   refuseSecond(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
   await flush(el);
@@ -2423,7 +2423,7 @@ it("keeps focus inside the dialog when a Reload read during the send removes the
   await pick(el, "Soup");
   await type(el, "wt-price-input", "price", "4");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "ENSALADA");
+  await type(el, "wt-input", "kitchen-name", "SALAD");
   await reloadThenSend(el, answerReload, withoutSalad());
   refuseSecond(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
   await flush(el);

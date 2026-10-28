@@ -230,7 +230,7 @@ it("always notes open orders and the products, and names each queued version by 
 });
 
 const price = { target: soup, field: "price", value: "4.00" };
-const kitchen = { target: soup, field: "kitchenName", value: "SOPA" };
+const kitchen = { target: soup, field: "kitchenName", value: "SOUP" };
 
 function refused(code: string, params: Record<string, unknown>): Error {
   return Object.assign(new Error(code), { code, params });
