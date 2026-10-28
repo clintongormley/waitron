@@ -399,3 +399,13 @@ it("selects the Spain time-record exporter only from enabled contributions", () 
     "workforce-es",
   ]);
 });
+
+it("only the fiscal module lets Start again delete an append-only table, and only its activation's", () => {
+  expect(
+    ALL_MODULES.filter((m) => m.startAgainDeletable !== undefined).map((m) => [
+      m.name,
+      m.startAgainDeletable,
+    ]),
+  ).toEqual([["fiscal-verifactu", ["fiscal_allocations"]]]);
+  expect(() => orderedMigrationSets(ALL_MODULES)).not.toThrow();
+});

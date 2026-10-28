@@ -1,4 +1,4 @@
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { OperationBinding } from "./operation-authority.js";
 import type { ModuleOperationHost, OperationClient } from "./operation-preparation.js";
 
@@ -89,7 +89,21 @@ export interface InitialSetupContribution {
     readonly recoveryInputs?: readonly unknown[];
     /** The newest modification time among the attempt's own files and folders other than its databases, given when a name record could not be read. */
     readonly lastWriteMs?: number;
+    /** What `startAgainHistory` returned; one the module cannot read in full refuses. */
+    readonly databaseHistory?: readonly unknown[];
   }): { readonly floorMs: number; readonly lastName: string | null } | null;
+  /**
+   * Invoice records in a setup database Start again is about to delete. Throws when its own tables
+   * are missing from a database whose migration set is applied, never counts them as 0.
+   */
+  startAgainHoldings?(
+    db: Pick<Database, "execute">,
+  ): Promise<{ readonly records: number; readonly accepted: number }>;
+  /**
+   * The module's name history of a setup database Start again is about to delete, read with plain
+   * reads only: no transaction, no write lock, no change-log drain, so a read-only connection serves it.
+   */
+  startAgainHistory?(db: Pick<Database, "execute">): Promise<readonly unknown[]>;
 
   assignmentPositions?(
     context: InitialSetupContext,

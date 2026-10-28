@@ -1,6 +1,10 @@
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { draftScopeFor } from "@waitron/ui";
-import { FirstSetupSession } from "./first-setup-session.js";
+import {
+  FirstSetupSession,
+  heldStartAgainDatabase,
+  startAgainRefusalCause,
+} from "./first-setup-session.js";
 import type {
   BackupRepairActivity,
   BackupRepairStatus,
@@ -236,9 +240,9 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 const ACTIVITY_REREAD_MS = 30_000;
 const STOPPED_BACKUP_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
-const presentStartAgainAllowed = (inspection: FirstSetupInspection) =>
+const presentStartAgainAllowed = (inspection: FirstSetupInspection, stopped: boolean) =>
   inspection.database !== "missing" &&
-  inspection.emptyDatabase &&
+  (inspection.emptyDatabase || (stopped && heldStartAgainDatabase(inspection))) &&
   inspection.password === "checkable" &&
   inspection.revision !== null &&
   inspection.ownerGeneration !== null;
@@ -1127,6 +1131,8 @@ export class SetupApp extends LitElement {
   @state() private firstActivityUnreadable = false;
   /** The ask's summary named a recovery that the backup status did not report as stopped. */
   @state() private firstRecoveryUnsettled = false;
+  /** The server refused Start again for a cause that no later read on this page lifts. */
+  @state() private firstStartAgainRefused?: "setup-finished" | "trading-settings";
   #activityTimer?: ReturnType<typeof setInterval>;
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
@@ -1424,7 +1430,14 @@ export class SetupApp extends LitElement {
       this.firstOwnerBusy ||
       !this.firstRetireConfirmed ||
       (missing && shown === undefined) ||
-      (!missing && !this.firstInspection?.emptyDatabase)
+      (!missing &&
+        !this.firstInspection?.emptyDatabase &&
+        !(
+          this.firstDamagedRecord === "confirm" &&
+          this.firstStoppedSummary?.held !== undefined &&
+          this.firstInspection !== undefined &&
+          heldStartAgainDatabase(this.firstInspection)
+        ))
     )
       return;
     const generation = ++this.#firstGeneration;
@@ -1472,18 +1485,23 @@ export class SetupApp extends LitElement {
           this.firstDamagedRecord = "password";
           return;
         } else if (this.firstDamagedRecord === "confirm") {
+          if (await this.#refusedForGood(error, current)) return;
           // A refused send leaves the session needing a fresh recovery, so the retry goes through
           // the password again, against the attempt as it is now.
           this.firstRestartConfirm = false;
           this.firstRetireConfirmed = false;
           this.firstDamagedRecord = "password";
+          const stopped = this.firstStoppedSummary !== undefined;
           this.firstStoppedSummary = undefined;
           this.firstDamagedSummary = undefined;
-          this.firstOwnerError = this.#describeRepairError(error);
+          this.firstOwnerError =
+            startAgainRefusalCause(error) === "kept-records"
+              ? () => initialOwnerStrings[setupLocale()].heldChanged
+              : this.#describeRepairError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
           if (!current() || !inspection) return;
           this.firstInspection = inspection;
-          if (!presentStartAgainAllowed(inspection)) await this.#signOutFirstSession();
+          if (!presentStartAgainAllowed(inspection, stopped)) await this.#signOutFirstSession();
           return;
         }
         this.firstOwnerError = this.#describeRepairError(error);
@@ -1546,7 +1564,8 @@ export class SetupApp extends LitElement {
         if (!current()) return;
         this.firstStoppedSummary = summary;
       } catch (error) {
-        if (current()) this.#presentReadsFailed(error);
+        if (current() && !(await this.#refusedForGood(error, current)))
+          this.#presentReadsFailed(error);
         return;
       }
     } else if (this.#damagedInferred && this.#seriesPicksUnreadable) {
@@ -1564,6 +1583,14 @@ export class SetupApp extends LitElement {
     this.firstDamagedRecord = "confirm";
     this.firstRetireConfirmed = false;
     this.firstRestartConfirm = true;
+  }
+  /** A Start again refusal no later read on this page lifts: back to the repair page, saying why. */
+  async #refusedForGood(error: unknown, current: () => boolean): Promise<boolean> {
+    const cause = startAgainRefusalCause(error);
+    if (cause !== "setup-finished" && cause !== "trading-settings") return false;
+    this.firstStartAgainRefused = cause;
+    await this.#backToRepairPage(current);
+    return true;
   }
   #presentReadsFailed(error: unknown): void {
     this.firstDamagedRecord = "unread";
@@ -1660,6 +1687,7 @@ export class SetupApp extends LitElement {
       this.firstDamagedSummary = undefined;
       this.firstBackupPhase = undefined;
       this.firstRecoveryUnsettled = false;
+      this.firstStartAgainRefused = undefined;
       this.#stopActivityWatch();
       this.firstActivity = undefined;
       this.firstActivityUnreadable = false;
@@ -2510,9 +2538,25 @@ export class SetupApp extends LitElement {
       !missing && this.firstActivity?.state === "stopped" ? this.firstActivity : undefined;
     const offersStartAgain = !recoveryStarted || stopped !== undefined;
     const unsettled = authenticatedMissing && this.firstRecoveryUnsettled;
-    // A password does not make Start again available for a database that holds records.
+    const tradingSaved =
+      this.firstStartAgainRefused === "trading-settings" ||
+      (stoppedHere !== undefined &&
+        inspection !== undefined &&
+        (inspection.database === "occupied" ||
+          (inspection.database === "no-venue-rows" && !inspection.emptyDatabase)) &&
+        inspection.artifacts.some(
+          (file) => file.name === "trading.env" && file.status !== "missing",
+        ));
     const unavailable =
-      inspection?.database === "occupied" ? t.startUnavailableOccupied : t.startUnavailable;
+      this.firstStartAgainRefused === "setup-finished"
+        ? t.setupFinished
+        : tradingSaved
+          ? inspection?.password === "checkable"
+            ? `${t.tradingSaved} ${t.tradingSavedPassword}`
+            : t.tradingSaved
+          : inspection?.database === "occupied"
+            ? t.startUnavailableOccupied
+            : t.startUnavailable;
     const lastActive = (at: string, source?: "memory" | "saved-step") =>
       (source === "saved-step" ? t.recoveryLastSaved : t.recoveryLastActive).replace(
         "{at}",
@@ -2520,7 +2564,10 @@ export class SetupApp extends LitElement {
       );
     const canRestart =
       (ask !== undefined && offersStartAgain) ||
-      (inspection?.emptyDatabase === true &&
+      (inspection !== undefined &&
+        this.firstStartAgainRefused === undefined &&
+        (inspection.emptyDatabase ||
+          (stoppedHere !== undefined && heldStartAgainDatabase(inspection))) &&
         state === undefined &&
         inspection.password === "checkable" &&
         inspection.revision !== null &&
@@ -2560,16 +2607,46 @@ export class SetupApp extends LitElement {
       }}
       >${t.startAgain}</wt-button
     >`;
-    const stoppedBlock = (recovery: {
-      startedAt: string;
-      lastActiveAt: string;
-      lastActiveSource?: "memory" | "saved-step";
-      cloud?: boolean;
-    }) =>
-      html`<div data-test="recovery-stopped">
-        <p>${t.recoveryStopped.replace("{started}", shownAt(recovery.startedAt))}</p>
+    const stoppedBlock = (
+      recovery: {
+        startedAt: string;
+        lastActiveAt: string;
+        lastActiveSource?: "memory" | "saved-step";
+        cloud?: boolean;
+      },
+      refused = false,
+    ) => {
+      const started = refused ? t.recoveryStoppedRefused : t.recoveryStopped;
+      return html`<div data-test="recovery-stopped">
+        <p>${started.replace("{started}", shownAt(recovery.startedAt))}</p>
         <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
         ${recovery.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
+      </div>`;
+    };
+    const held = this.firstStoppedSummary?.held;
+    const heldRowsLine = (rows: number) =>
+      html`<p>${rows === 1 ? t.heldRowsOne : t.heldRows.replace("{rows}", String(rows))}</p>`;
+    const heldBlock = (rows: number) =>
+      html`<div data-test="held-database">
+        ${heldRowsLine(rows)}
+        <p>${rows === 1 ? t.heldNoInvoicesOne : t.heldNoInvoices}</p>
+        <p>${t.heldLost}</p>
+      </div>`;
+    const heldRefused = (rows: number, kept: number, records: number, accepted: number) =>
+      html`<div data-test="held-refused">
+        ${heldRowsLine(rows)}
+        ${kept > 0 ? html`<p>${kept === 1 ? t.heldKeptOne : t.heldKept.replace("{kept}", String(kept))}</p>` : nothing}
+        ${
+          records > 0
+            ? html`<p>
+                ${(records === 1
+                  ? t.heldInvoiceOne
+                  : t.heldInvoices.replace("{records}", String(records))
+                ).replace("{accepted}", String(accepted))}
+              </p>`
+            : nothing
+        }
+        <p>${t.heldFault}</p>
       </div>`;
     const passwordField = html`<wt-input
       data-test="resume-password"
@@ -2598,57 +2675,62 @@ export class SetupApp extends LitElement {
           dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}
         >${t.recoverBackup}</wt-button
       >`;
-    const startAgainConfirm = this.firstRestartConfirm
-      ? html`${
-            this.#showsDamagedRecord(missing, ask)
-              ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
-              : nothing
-          }
-          ${(unreadable?.records ?? []).map(
-            (record) =>
-              html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
-          )}
-          ${
-            !missing && this.firstStoppedSummary?.recovery
-              ? stoppedBlock(this.firstStoppedSummary.recovery)
-              : nothing
-          }
-          <p>${t.startAgainHelp}</p>
-          ${namesFrom ? html`<p data-test="names-from">${namesFrom}</p>` : nothing}
-          <label
-            ><input
-              data-test="retire-confirmed"
-              name=${missing ? "missing-database-confirmed" : "retire-empty-setup"}
-              type="checkbox"
-              .checked=${this.firstRetireConfirmed}
-              ?disabled=${this.firstOwnerBusy}
-              @change=${(event: Event) => {
-                this.firstRetireConfirmed = (event.currentTarget as HTMLInputElement).checked;
-              }}
-            />${missing ? t.missingConfirm : t.retireConfirmed}</label
-          >
-          <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}>
-            <wt-button
-              slot="cancel"
-              data-test="cancel-start-again"
-              variant="secondary"
-              ?disabled=${this.firstOwnerBusy}
-              @click=${() => {
-                if (damaged) this.firstOwnerError = undefined;
-                this.firstRestartConfirm = false;
-                this.firstRetireConfirmed = false;
-              }}
-              >${t.cancel}</wt-button
+    const cancelStartAgain = html`<wt-button
+      slot="cancel"
+      data-test="cancel-start-again"
+      variant="secondary"
+      ?disabled=${this.firstOwnerBusy}
+      @click=${() => {
+        if (damaged) this.firstOwnerError = undefined;
+        this.firstRestartConfirm = false;
+        this.firstRetireConfirmed = false;
+      }}
+      >${t.cancel}</wt-button
+    >`;
+    const stoppedShown = missing ? undefined : this.firstStoppedSummary?.recovery;
+    const startAgainConfirm = !this.firstRestartConfirm
+      ? nothing
+      : !missing && held !== undefined && (held.kept > 0 || held.records > 0)
+        ? html`${heldRefused(held.rows, held.kept, held.records, held.accepted)}
+            ${stoppedShown ? stoppedBlock(stoppedShown, true) : nothing}
+            <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}
+              >${cancelStartAgain}</wt-form-actions
+            >`
+        : html`${
+              this.#showsDamagedRecord(missing, ask)
+                ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
+                : nothing
+            }
+            ${(unreadable?.records ?? []).map(
+              (record) =>
+                html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
+            )}
+            ${!missing && held ? heldBlock(held.rows) : nothing}
+            ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
+            <p>${t.startAgainHelp}</p>
+            ${namesFrom ? html`<p data-test="names-from">${namesFrom}</p>` : nothing}
+            <label
+              ><input
+                data-test="retire-confirmed"
+                name=${missing ? "missing-database-confirmed" : "retire-setup"}
+                type="checkbox"
+                .checked=${this.firstRetireConfirmed}
+                ?disabled=${this.firstOwnerBusy}
+                @change=${(event: Event) => {
+                  this.firstRetireConfirmed = (event.currentTarget as HTMLInputElement).checked;
+                }}
+              />${missing ? t.missingConfirm : t.retireConfirmed}</label
             >
-            <wt-button
-              data-test="confirm-start-again"
-              variant=${this.firstRetireConfirmed || this.firstOwnerBusy ? "danger" : "secondary"}
-              ?disabled=${!this.firstRetireConfirmed || this.firstOwnerBusy}
-              @click=${() => void this.#startAgainFirstSetup()}
-              >${t.startAgain}</wt-button
-            >
-          </wt-form-actions>`
-      : nothing;
+            <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}>
+              ${cancelStartAgain}
+              <wt-button
+                data-test="confirm-start-again"
+                variant=${this.firstRetireConfirmed || this.firstOwnerBusy ? "danger" : "secondary"}
+                ?disabled=${!this.firstRetireConfirmed || this.firstOwnerBusy}
+                @click=${() => void this.#startAgainFirstSetup()}
+                >${t.startAgain}</wt-button
+              >
+            </wt-form-actions>`;
     return html`<section data-test="screen-first-owner">
       <h1>${inspection || offersNothing ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
@@ -2762,7 +2844,14 @@ export class SetupApp extends LitElement {
                     ${stopped ? nothing : recoverBackup(this.firstBackupPhase === "uncertain")}${offersStartAgain ? startAgain : nothing}
                   </div>
                   ${offersStartAgain ? startAgainConfirm : nothing}`
-              : html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${
+              : html`${
+                  stoppedHere
+                    ? stoppedBlock(
+                        stoppedHere,
+                        tradingSaved || this.firstStartAgainRefused === "setup-finished",
+                      )
+                    : nothing
+                }${
                   unsettled
                     ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
                     : nothing

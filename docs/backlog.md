@@ -596,10 +596,15 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   measured on a box. Left open by A1042.
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
-- **A1131: Start again stays enabled beside a stopped recovery when the setup database holds
-  records, and when a recovery record cannot be read with the database missing.** Explain what is
-  on the box and what could be lost, then let the person choose. Owner, 2026-10-26.
-  [Detail](backlog/setup.md#a1131-start-again-stays-enabled-beside-a-stopped-recovery-or-an-unreadable-recovery-record)
+- **A1131: Start again beside a recovery record that cannot be read, with the setup database
+  missing.** Only Reconnect is enabled today. Waits for the owner's 2026-10-28 design: a recovered
+  database moves to the standard database path before anything writes to it.
+  [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing)
+
+- **On a full disk, the repair page's password step needs room for a whole copy of the setup
+  database.** The box's 8 MiB spare covered a 3.6 MB one; a larger one is believed to be refused.
+  Left open by A1131.
+  [Detail](backlog/setup.md#on-a-full-disk-the-repair-pages-password-step-needs-room-for-a-whole-copy-of-the-setup-database)
 
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.

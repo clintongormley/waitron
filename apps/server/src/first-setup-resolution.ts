@@ -26,6 +26,7 @@ import {
   type StartAgainUnreadable,
   type BackupRepairRecord,
   type RegisterAnswer,
+  type FirstSetupInspection,
   type FirstSetupState,
 } from "@waitron/provisioning";
 import {
@@ -47,6 +48,10 @@ import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
 import { readSeriesPicks, seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
+import {
+  readSetupDatabaseHoldings,
+  type SetupDatabaseHoldings,
+} from "./first-setup-database-holdings.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -77,8 +82,38 @@ const UNREADABLE_ORDER: readonly UnreadableRecord[] = [
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
 }
+function refused(cause: "setup-finished" | "kept-records" | "trading-settings"): never {
+  throw new AppError("setup.start_again_refused", { cause });
+}
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
+}
+/**
+ * The held state's refusals, in this order, all before the password: the page already sees
+ * `trading.env`, and `recoverFirstSetupOwner` refuses a setup whose publication completed.
+ */
+function assertHeldStartAgainOffered(
+  inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
+  found: FoundRecovery | undefined,
+  status: FirstSetupState["status"],
+): void {
+  const holdsRecords =
+    inspection.database === "occupied" ||
+    (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
+  if (found?.kind !== "stopped" || !holdsRecords) unavailable();
+  if (
+    inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !== "missing"
+  )
+    refused("trading-settings");
+  if (status === "complete") refused("setup-finished");
+}
+function heldShown({
+  rows,
+  kept,
+  records,
+  accepted,
+}: SetupDatabaseHoldings): NonNullable<StartAgainSummary["held"]> {
+  return { rows, kept, records, accepted };
 }
 function unused(state: FirstSetupState) {
   const attempts = [state, ...state.previous];
@@ -110,6 +145,7 @@ async function gatherStartAgainFloor(
   deletion: { discarding?: string },
   recoveryFloor: Floor | null,
   databaseMissing: boolean,
+  databaseHistory?: SetupDatabaseHoldings["history"],
 ) {
   const attempts = [state, ...state.previous];
   const names = frozenModuleNames(state);
@@ -198,6 +234,9 @@ async function gatherStartAgainFloor(
           })),
         preparations: picks.preparations,
         publicEvidence: usable.map(({ item }) => item),
+        ...(databaseHistory?.[module] !== undefined && {
+          databaseHistory: databaseHistory[module],
+        }),
       },
     });
   }
@@ -421,26 +460,37 @@ export function createFirstSetupResolutionActions(
           }
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
-          if (
+          const held =
             inspection.database !== "missing" &&
             (inspection.database !== "no-venue-rows" ||
-              !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status))
-          )
-            unavailable();
+              !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status));
+          if (held) assertHeldStartAgainOffered(inspection, found, retained.state.status);
           await assertRecoveredOwner(request.owner, retained.state);
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
+          const discarding = found === undefined ? {} : { discarding: found.id };
+          let holdings: SetupDatabaseHoldings | undefined;
+          if (held) {
+            // Before the read, which may copy the whole database: a refusal here costs nothing.
+            await assertStartAgainAllowedOnDisk(roots, { ...discarding, held: true });
+            // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
+            holdings = await readSetupDatabaseHoldings(roots, host.modules!);
+            // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
+            if (holdings.rows === 0) unavailable();
+          }
           const gathered = await gatherStartAgainFloor(
             roots,
             retained.state,
             snapshot.originals,
             host.modules,
-            found === undefined ? {} : { discarding: found.id },
+            discarding,
             found?.kind === "stopped" ? found.floor : null,
             inspection.database === "missing",
+            holdings?.history,
           );
           if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
-          return summaryOf(retained.state, gathered, recovery);
+          if (holdings === undefined) return summaryOf(retained.state, gathered, recovery);
+          return { ...summaryOf(retained.state, gathered, recovery), held: heldShown(holdings) };
         }),
       );
     },
@@ -477,12 +527,15 @@ export function createFirstSetupResolutionActions(
             (missing || request.confirmRecoveryDiscard !== undefined)
           )
             conflict();
-          if (missing) {
-            // D3a: with the database missing, any status but complete, and only once confirmed.
+          const held =
+            !missing &&
+            (inspection.database !== "no-venue-rows" ||
+              !PRESENT_START_AGAIN_STATUSES.includes(state.status));
+          if (held) assertHeldStartAgainOffered(inspection, found, state.status);
+          else if (missing) {
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
               unavailable();
           } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
-          if (!["no-venue-rows", "missing"].includes(inspection.database)) unavailable();
           const noOtherHistory = inspection.artifacts.every(
             (artifact) =>
               ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
@@ -500,9 +553,19 @@ export function createFirstSetupResolutionActions(
             ((request.register === undefined && emptyWorkspace) ||
               (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
           const unusedAssignment = Boolean(assignment);
+          // The held state has no assignment (it needs an empty database), so its damaged record is
+          // the one the summary showed, checked once the floor is gathered.
           const recoveryRecordDamaged =
-            !missing && typeof assignment === "object" && assignment.recoveryRecordDamaged;
-          if (request.owner === undefined) {
+            !missing && !held && typeof assignment === "object" && assignment.recoveryRecordDamaged;
+          let holdings: SetupDatabaseHoldings | undefined;
+          if (held) {
+            await assertRecoveredOwner(request.owner, state);
+            if (request.register?.kind === "no-current-master") unavailable();
+            // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
+            holdings = await readSetupDatabaseHoldings(roots, host.modules!);
+            if (holdings.rows === 0) unavailable();
+            if (holdings.kept > 0 || holdings.records > 0) refused("kept-records");
+          } else if (request.owner === undefined) {
             if (
               !unusedAssignment &&
               (!emptyWorkspace ||
@@ -518,8 +581,9 @@ export function createFirstSetupResolutionActions(
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();
-          const box = await assertStartAgainAllowedOnDisk(roots, discarding);
-          const markerFor = async (markerOptions: { discarding?: string }) => {
+          const heldOption = held ? { held: true as const } : {};
+          const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
+          const markerFor = async (markerOptions: { discarding?: string; held?: true }) => {
             const marker = await startAgainMarkerFor(
               box,
               { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
@@ -533,7 +597,7 @@ export function createFirstSetupResolutionActions(
               unavailable();
             return marker;
           };
-          let marker = await markerFor(discarding);
+          let marker = await markerFor({ ...discarding, ...heldOption });
           const picksDamaged =
             !missing &&
             host.modules !== undefined &&
@@ -547,7 +611,8 @@ export function createFirstSetupResolutionActions(
               picksDamaged ? { seriesPicksUnreadable: true } : {},
             );
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
-          if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
+          const damagedShown = request.recoveryRecordDamagedShown === true;
+          if (!held && recoveryRecordDamaged !== damagedShown) conflict();
           const gathered = await gatherStartAgainFloor(
             roots,
             state,
@@ -556,7 +621,9 @@ export function createFirstSetupResolutionActions(
             discarding,
             found?.kind === "stopped" ? found.floor : null,
             missing,
+            holdings?.history,
           );
+          if (held && gathered.recoveryRecordDamaged !== damagedShown) conflict();
           const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
@@ -570,7 +637,10 @@ export function createFirstSetupResolutionActions(
           const confirmation = request.confirmMissingDatabase;
           const shown =
             missing || discardsStopped || presentUnreadable
-              ? summaryOf(state, gathered, recovery)
+              ? {
+                  ...summaryOf(state, gathered, recovery),
+                  ...(holdings !== undefined && { held: heldShown(holdings) }),
+                }
               : undefined;
           if (
             missing &&
@@ -635,8 +705,8 @@ export function createFirstSetupResolutionActions(
                 );
               },
             );
-            await assertStartAgainAllowedOnDisk(box);
-            marker = await markerFor({});
+            await assertStartAgainAllowedOnDisk(box, heldOption);
+            marker = await markerFor(heldOption);
           }
           await writeStartAgainMarker(box, marker);
           try {

@@ -18,12 +18,14 @@ import {
   type StartAgainSummary,
 } from "@waitron/provisioning";
 import { selectedRepair } from "../test/first-setup-backup-recovery-fixture.js";
+import { heldSetup } from "../test/held-setup-database.js";
 import "./testing/hour-test-clock.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import "./first-setup-backup-source.js";
 import * as backupEntry from "./first-setup-backup-entry.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
+import { SPARE_SPACE_BYTES } from "./spare-space.js";
 
 vi.mock("./first-setup-backup-source.js", { spy: true });
 vi.mock("./first-setup-backup-entry.js", { spy: true });
@@ -79,7 +81,10 @@ type Owner = {
 type Inspection = { inspectionId: string; revision: number; ownerGeneration: number };
 
 /** The repair page's Start-again flow over the box's real routes: inspection, password, summary, Start again. */
-async function startAgainOverRoutes(app: Hono) {
+async function startAgainOverRoutes(
+  app: Hono,
+  confirmation: "confirmMissingDatabase" | "confirmRecoveryDiscard" = "confirmMissingDatabase",
+) {
   const read = async () => {
     const answer = await app.request(ROUTE, {}, tls());
     expect(answer.status, await answer.clone().text()).toBe(200);
@@ -127,7 +132,10 @@ async function startAgainOverRoutes(app: Hono) {
       headers,
       body: JSON.stringify({
         ...ids,
-        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+        [confirmation]:
+          confirmation === "confirmMissingDatabase"
+            ? { nothingFiledOrSold: true, shown }
+            : { shown },
       }),
     },
     tls(),
@@ -256,4 +264,43 @@ it("without a spare file, the password step of the Start-again flow on a full di
 
   expect(recovered.status, await recovered.clone().text()).toBe(507);
   expect(await recovered.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+});
+
+it("in the held state, with the box's spare file, the summary answers with what the setup database holds and Start again completes on a full disk", async (ctx) => {
+  const small = needDisk(ctx);
+  const f = await heldSetup();
+  expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
+  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
+  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
+  // The box's own size: the password step copies the setup database, which needs more than 1 MiB.
+  await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
+  const entry = await resolveFirstSetupEntry(
+    f.roots,
+    { WAITRON_ENV: "preproduction" },
+    undefined,
+    () => {},
+    { stateDir: f.roots.stateDir },
+  );
+  if (entry.kind !== "resolution") throw new Error("repair app missing");
+  const recoveryId = (await f.workspace.read()).at(-1)!.target.recoveryId;
+  small.fill();
+  expect(small.free()).toBeLessThan(65_536);
+
+  const shown = await startAgainOverRoutes(entry.app, "confirmRecoveryDiscard");
+
+  expect(shown.held).toMatchObject({ kept: 0, records: 0 });
+  expect(shown.held?.rows).toBeGreaterThan(0);
+  await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
+  for (const gone of [
+    join(f.roots.venueDir, "venue.db"),
+    join(f.roots.stateDir, "modules.json"),
+    join(f.roots.stateDir, "first-setup.json"),
+  ])
+    await expect(access(gone)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await f.workspace.read()).at(-1)).toMatchObject({
+    phase: "abandoned",
+    target: { recoveryId },
+  });
+  expect(await isEmptiedTombstone(f.roots, recoveryId)).toBe(true);
+  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.installationName);
 });

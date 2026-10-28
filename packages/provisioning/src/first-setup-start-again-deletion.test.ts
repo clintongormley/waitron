@@ -10,6 +10,7 @@ import { emptyAbandonedBackupRecovery } from "./first-setup-backup-discard.js";
 import {
   START_AGAIN_MARKER_FILE,
   assertStartAgainAllowedOnDisk,
+  collectStartAgainFindings,
   deleteMarkedAttempt,
   finishStartAgainDeletion,
   startAgainMarkerFor,
@@ -415,4 +416,75 @@ it("reports a recovery folder it cannot read as a failed check, naming the error
   } finally {
     await chmod(target, 0o700);
   }
+});
+
+const MODULES = "state/modules.json";
+async function heldBox() {
+  const roots = await box();
+  await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{}}\n');
+  return roots;
+}
+const marked = (marker: Awaited<ReturnType<typeof startAgainMarkerFor>>) =>
+  marker.files.map((file) => `${file.root}/${file.name}`).sort();
+
+it("with held, the disk check accepts the setup's modules.json; without it, refuses", async () => {
+  const roots = await heldBox();
+  await assertStartAgainAllowedOnDisk(roots, { held: true });
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+    code: "setup.not_ready",
+    reason: "refused artifact: state/modules.json",
+  });
+});
+
+it("the marker names modules.json only with held", async () => {
+  const roots = await heldBox();
+  expect(marked(await startAgainMarkerFor(roots, attempt, { held: true }))).toEqual([
+    "state/first-setup.json",
+    MODULES,
+    "venue/first-setup-claim.json",
+    "venue/venue.db",
+  ]);
+  expect(marked(await startAgainMarkerFor(roots, attempt))).not.toContain(MODULES);
+});
+
+it("a marker naming modules.json is read back, finished, and deletes it", async () => {
+  const roots = await heldBox();
+  await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt, { held: true }));
+  const collected = await collectStartAgainFindings(roots);
+  expect(collected).toMatchObject({ findings: [], blocker: null });
+  expect(marked(collected!.marker)).toContain(MODULES);
+  await finishStartAgainDeletion(roots);
+  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
+  expect(await exists(join(roots.stateDir, "modules.json"))).toBe(false);
+  expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(false);
+});
+
+it("a marker not naming modules.json still finds it a refused artifact, and the finisher deletes nothing", async () => {
+  const roots = await box();
+  await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
+  await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{}}\n');
+  expect((await collectStartAgainFindings(roots))?.findings).toEqual([
+    { kind: "refused-artifact", root: "state", name: "modules.json" },
+  ]);
+  expect(await refusal(finishStartAgainDeletion(roots))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: "refused artifact present: state/modules.json",
+  });
+  expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
+  expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
+});
+
+it("a modules.json changed after the marker named it is a changed finding, and the finisher deletes nothing", async () => {
+  const roots = await heldBox();
+  await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt, { held: true }));
+  await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{"other":{}}}\n');
+  expect((await collectStartAgainFindings(roots))?.findings).toEqual([
+    { kind: "changed", root: "state", name: "modules.json" },
+  ]);
+  expect(await refusal(finishStartAgainDeletion(roots))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: "size or hash differs: state/modules.json",
+  });
+  expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
+  expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
 });

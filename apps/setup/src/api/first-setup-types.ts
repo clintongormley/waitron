@@ -137,7 +137,17 @@ export interface StartAgainSummary {
   recoveryRecordDamaged?: true;
   recovery?: StartAgainRecoveryShown;
   unreadable?: StartAgainUnreadable;
+  held?: StartAgainHeld;
 }
+/** What the setup database holds beside a stopped recovery: its rows, the kept ones, and invoices. */
+export interface StartAgainHeld {
+  rows: number;
+  kept: number;
+  records: number;
+  accepted: number;
+}
+/** Why the server refused Start again with `setup.start_again_refused`. */
+export type StartAgainRefusalCause = "trading-settings" | "setup-finished" | "kept-records";
 export type StartAgainUnreadableRecord = "series-picks" | "public-record" | "fiscal-documents";
 /** The damaged name records, in that fixed order, and the first minute new series names can use. */
 export interface StartAgainUnreadable {

@@ -1,10 +1,12 @@
 import type { ProvisionBody, SetupApi, EmailSettingsDraft } from "./api/client.js";
 import type {
+  FirstSetupInspection,
   FirstSetupOwner,
   FirstSetupOwnership,
   FirstSetupProvisionBody,
   FirstSetupState,
   FirstSetupResolutionSnapshot,
+  StartAgainRefusalCause,
   StartAgainSummary,
 } from "./api/first-setup-types.js";
 
@@ -102,6 +104,51 @@ const sameUnreadable = (a: StartAgainSummary["unreadable"], b: StartAgainSummary
       a.floorMs === b.floorMs &&
       a.records.length === b.records.length &&
       a.records.every((record, index) => record === b.records[index]);
+const HELD_KEYS = ["rows", "kept", "records", "accepted"] as const;
+const count = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0;
+// Not `records <= kept`: the server shows a module's invoice records even where the module wrongly
+// lists its invoice table as deletable.
+function readableHeld(value: unknown): boolean {
+  return (
+    object(value) &&
+    Object.keys(value).length === HELD_KEYS.length &&
+    HELD_KEYS.every((key) => Object.hasOwn(value, key) && count(value[key])) &&
+    (value.accepted as number) <= (value.records as number) &&
+    (value.kept as number) <= (value.rows as number)
+  );
+}
+const sameHeld = (a: StartAgainSummary["held"], b: StartAgainSummary["held"]) =>
+  a === undefined
+    ? b === undefined
+    : b !== undefined && HELD_KEYS.every((key) => a[key] === b[key]);
+const REFUSAL_CAUSES: readonly string[] = [
+  "trading-settings",
+  "setup-finished",
+  "kept-records",
+] satisfies StartAgainRefusalCause[];
+/**
+ * The setup database holds records and no trading settings may have been saved: beside a stopped
+ * recovery, Start again may discard it (A1131's held state).
+ */
+export function heldStartAgainDatabase(inspection: FirstSetupInspection): boolean {
+  return (
+    (inspection.database === "occupied" ||
+      (inspection.database === "no-venue-rows" && !inspection.emptyDatabase)) &&
+    !inspection.artifacts.some((file) => file.name === "trading.env" && file.status !== "missing")
+  );
+}
+/**
+ * The cause a `setup.start_again_refused` answer names, or `undefined` for any other error and for
+ * a cause this page has no words for, which it shows as a generic refusal.
+ */
+export function startAgainRefusalCause(error: unknown): StartAgainRefusalCause | undefined {
+  if (!object(error) || error.code !== "setup.start_again_refused" || !object(error.params))
+    return undefined;
+  const cause = Object.hasOwn(error.params, "cause") ? error.params.cause : undefined;
+  return typeof cause === "string" && REFUSAL_CAUSES.includes(cause)
+    ? (cause as StartAgainRefusalCause)
+    : undefined;
+}
 function summaryOf(value: unknown): StartAgainSummary {
   const summary = value as Partial<Record<keyof StartAgainSummary, unknown>> | null;
   if (
@@ -109,13 +156,21 @@ function summaryOf(value: unknown): StartAgainSummary {
     typeof summary !== "object" ||
     Object.keys(summary).some(
       (key) =>
-        !["reached", "lastName", "recoveryRecordDamaged", "recovery", "unreadable"].includes(key),
+        ![
+          "reached",
+          "lastName",
+          "recoveryRecordDamaged",
+          "recovery",
+          "unreadable",
+          "held",
+        ].includes(key),
     ) ||
     !SUMMARY_REACHED.includes(summary.reached as string) ||
     !(summary.lastName === null || (typeof summary.lastName === "string" && summary.lastName)) ||
     !(summary.recoveryRecordDamaged === undefined || summary.recoveryRecordDamaged === true) ||
     !(summary.recovery === undefined || readableRecovery(summary.recovery)) ||
-    !(summary.unreadable === undefined || readableUnreadable(summary.unreadable))
+    !(summary.unreadable === undefined || readableUnreadable(summary.unreadable)) ||
+    !(summary.held === undefined || readableHeld(summary.held))
   )
     failure("setup.attempt_invalid");
   return summary as StartAgainSummary;
@@ -125,6 +180,7 @@ const sameSummary = (a: StartAgainSummary, b: StartAgainSummary) =>
   a.lastName === b.lastName &&
   a.recoveryRecordDamaged === b.recoveryRecordDamaged &&
   sameUnreadable(a.unreadable, b.unreadable) &&
+  sameHeld(a.held, b.held) &&
   (a.recovery === undefined
     ? b.recovery === undefined
     : b.recovery !== undefined &&
@@ -678,17 +734,20 @@ export class FirstSetupSession {
       }
     });
   }
+  /** `held`: a stopped recovery is being discarded, so a database that holds records may be too. */
   async #presentDatabaseSnapshot(
     owner: FirstSetupOwner,
     current: () => void,
     refuse: () => never = () => failure("setup.attempt_conflict"),
-  ): Promise<FirstSetupResolutionSnapshot> {
+    held = false,
+  ): Promise<{ snapshot: FirstSetupResolutionSnapshot; holdsRecords: boolean }> {
     const inspection = await this.#api.inspectFirstSetupResolution();
     current();
+    const holdsRecords = held && heldStartAgainDatabase(inspection);
     if (
       inspection.pair !== "valid" ||
       inspection.database === "missing" ||
-      inspection.emptyDatabase !== true ||
+      (inspection.emptyDatabase !== true && !holdsRecords) ||
       inspection.password !== "checkable" ||
       !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
       inspection.revision !== owner.revision ||
@@ -696,9 +755,12 @@ export class FirstSetupSession {
     )
       refuse();
     return {
-      inspectionId: inspection.inspectionId,
-      revision: owner.revision,
-      ownerGeneration: owner.ownerGeneration,
+      snapshot: {
+        inspectionId: inspection.inspectionId,
+        revision: owner.revision,
+        ownerGeneration: owner.ownerGeneration,
+      },
+      holdsRecords,
     };
   }
   #presentDatabaseOwner(): FirstSetupOwner {
@@ -715,10 +777,16 @@ export class FirstSetupSession {
     };
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
-      const snapshot = await this.#presentDatabaseSnapshot(owner, current, unreadable);
+      const { snapshot, holdsRecords } = await this.#presentDatabaseSnapshot(
+        owner,
+        current,
+        unreadable,
+        true,
+      );
       const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
       current();
-      if (summary.recovery === undefined) unreadable();
+      if (summary.recovery === undefined || (holdsRecords && summary.held === undefined))
+        unreadable();
       return summary;
     });
   }
@@ -733,7 +801,7 @@ export class FirstSetupSession {
     };
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
-      const snapshot = await this.#presentDatabaseSnapshot(owner, current, unreadable);
+      const { snapshot } = await this.#presentDatabaseSnapshot(owner, current, unreadable);
       const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
       current();
       if (summary.unreadable === undefined || summary.recovery !== undefined) unreadable();
@@ -744,7 +812,12 @@ export class FirstSetupSession {
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
       try {
-        const snapshot = await this.#presentDatabaseSnapshot(owner, current);
+        const { snapshot } = await this.#presentDatabaseSnapshot(
+          owner,
+          current,
+          undefined,
+          summary?.recovery !== undefined && summary.held !== undefined,
+        );
         const result = await this.#api.startAgainFirstSetup(
           snapshot,
           owner,

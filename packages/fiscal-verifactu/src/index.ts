@@ -42,6 +42,7 @@ export { verifyChain } from "./verify.js";
 export { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
 export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";
 export { FISCAL_CLASSIFICATION } from "./classification.js";
+export { FISCAL_START_AGAIN_DELETABLE } from "./start-again-holdings.js";
 export { fiscalAllocations } from "./schema/allocations.js";
 export { activateAllocation } from "./allocation.js";
 export { drawEmergencyIdentity, validateAllocationEnvelope } from "./allocation-envelope.js";

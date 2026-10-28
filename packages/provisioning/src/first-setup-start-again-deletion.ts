@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
@@ -14,6 +12,7 @@ import {
 } from "./first-setup-backup-workspace.js";
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { removeAndSync } from "./folder-sync.js";
+import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -58,8 +57,18 @@ const REFUSED = {
 
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
-/** `discarding`: the id of the backup recovery this Start again is about to discard. */
-type Options = { discarding?: string };
+/**
+ * `discarding`: the id of the backup recovery this Start again is about to discard. `held`: the
+ * setup database holds what activation wrote, so the `modules.json` activation writes after its
+ * commit is deleted with it rather than refused.
+ */
+type Options = { discarding?: string; held?: true };
+const MODULES = "modules.json";
+/** A marker that names `modules.json` was taken with `held`. */
+const heldBy = (marker: StartAgainMarker): Options =>
+  marker.files.some((entry) => entry.root === "state" && entry.name === MODULES)
+    ? { held: true }
+    : {};
 export interface StartAgainFingerprint {
   size: number;
   sha256: string;
@@ -107,6 +116,7 @@ function listed(root: Root, name: string): boolean {
       "module-preparation-state.json",
       "first-setup-node-key.json",
       "module-operation-public.json",
+      MODULES,
       "first-setup.json",
     ].includes(name);
   if (parts[0] === DOCUMENTS) return parts.length === 2;
@@ -291,6 +301,7 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     items.push({ kind: "folder", path: join(roots.stateDir, DOCUMENTS) });
   await file("state", "first-setup-node-key.json");
   await file("state", "module-operation-public.json");
+  if (options.held === true) await file("state", MODULES);
   const kept = await backupRecoveryKept(roots, options);
   if (options.discarding !== undefined && !kept)
     throw incomplete(`layout unexpected: ${RECORDS}/${BACKUP}`);
@@ -468,7 +479,8 @@ export async function assertStartAgainAllowedOnDisk(
     for (const name of REFUSED[root])
       if (
         (await exists(join(rootOf(root), name))) &&
-        !(root === "venue" && name === RECORDS && (await venuePointerOnly(canonical, options)))
+        !(root === "venue" && name === RECORDS && (await venuePointerOnly(canonical, options))) &&
+        !(root === "state" && name === MODULES && options.held === true)
       )
         throw notReady(`refused artifact: ${root}/${name}`);
   await assertNoStartAgainDeletion(canonical.venueDir);
@@ -480,27 +492,23 @@ export async function assertStartAgainAllowedOnDisk(
   }
   const node = join(canonical.venueDir, "node.db");
   if (await exists(node)) {
-    // An immutable open leaves no side files behind, but reads only the main file, so a -wal
-    // that may hold pages is refused rather than read past.
-    const wal = await info(`${node}-wal`).catch((error: unknown) => {
-      throw notReady(`check failed: ${codeOf(error)} ${node}-wal`);
-    });
-    if (wal !== null && wal.size !== 0) throw notReady("node.db-wal holds pages");
-    const url = pathToFileURL(node);
-    url.searchParams.set("mode", "ro");
-    url.searchParams.set("immutable", "1");
+    const opened = await openImmutableWhenWalEmpty(node);
+    if (opened.kind === "wal") throw notReady("node.db-wal holds pages");
+    if (opened.kind === "failed")
+      throw notReady(
+        opened.stage === "wal"
+          ? `check failed: ${codeOf(opened.error)} ${node}-wal`
+          : "node.db unreadable",
+      );
     let tables: unknown[];
     try {
-      const connection = new DatabaseSync(url, { readOnly: true });
-      try {
-        tables = connection
-          .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
-          .all();
-      } finally {
-        connection.close();
-      }
+      tables = opened.connection
+        .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
+        .all();
     } catch {
       throw notReady("node.db unreadable");
+    } finally {
+      opened.connection.close();
     }
     if (tables.length !== 0) throw notReady("node.db holds a table");
   }
@@ -523,7 +531,7 @@ export async function deleteMarkedAttempt(
   const named = new Set(value.files.map((entry) => `${entry.root}:${entry.name}`));
   let current = "";
   try {
-    for (const item of await itemsOnDisk(canonical)) {
+    for (const item of await itemsOnDisk(canonical, heldBy(value))) {
       current = item.path;
       if (item.kind === "folder") await remove(item.path, "folder");
       else if (item.kind === "side" || named.has(`${item.root}:${item.name}`))
@@ -572,13 +580,17 @@ export async function collectStartAgainFindings(roots: Roots): Promise<{
     throw incomplete("marker folders differ");
   const findings: StartAgainFinding[] = [];
   let blocker: AppError | null = null;
+  const held = heldBy(marker);
   try {
     for (const root of ["state", "venue"] as const)
       for (const name of REFUSED[root])
-        if (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
+        if (
+          !(root === "state" && name === MODULES && held.held === true) &&
+          (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
+        )
           findings.push({ kind: "refused-artifact", root, name });
     const recorded = new Map(marker.files.map((entry) => [`${entry.root}:${entry.name}`, entry]));
-    for (const item of await itemsOnDisk(canonical)) {
+    for (const item of await itemsOnDisk(canonical, held)) {
       if (item.kind !== "file") continue;
       const expected = recorded.get(`${item.root}:${item.name}`);
       if (expected === undefined)

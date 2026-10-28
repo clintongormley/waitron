@@ -24,6 +24,9 @@ declare module "@waitron/shared" {
     };
     /** `module`'s requirement on `dependency` is not a valid semver range. */
     "module.requires_invalid": { module: string; dependency: string; range: string };
+    /** `module` lists `table` in `startAgainDeletable`, but its own classification does not mark
+     * that table append-only. */
+    "module.start_again_deletable_invalid": { module: string; table: string };
     /** "No regime" is itself a module, never an empty slot. */
     "module.fiscal_slot_empty": Record<string, never>;
     "module.fiscal_slot_ambiguous": { candidates: readonly string[] };

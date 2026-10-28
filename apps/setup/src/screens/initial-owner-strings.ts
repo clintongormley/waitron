@@ -22,6 +22,7 @@ export const initialOwnerStrings = {
     recoveryRunningNext: "If it stops before it finishes, you can start again here.",
     recoveryStopped:
       "A recovery from backup started on {started} and did not finish. Start again deletes it.",
+    recoveryStoppedRefused: "A recovery from backup started on {started} and did not finish.",
     recoveryStoppedCloud:
       "Its approval in Waitron Cloud closes by itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's venue.",
     recoveryUnreadable: "This box found a recovery from backup whose records cannot be read.",
@@ -51,7 +52,26 @@ export const initialOwnerStrings = {
     startUnavailable:
       "Start again without a password is available only when the box can verify an unused, empty setup.",
     startUnavailableOccupied:
-      "Start again is not available: this setup's database already holds records, and Start again deletes only a setup that holds none.",
+      "Start again is not available: this setup's database already holds records.",
+    heldRows: "The setup database already holds {rows} saved items.",
+    heldRowsOne: "The setup database already holds 1 saved item.",
+    heldNoInvoices: "None of them is an invoice, so no invoice was sent to AEAT.",
+    heldNoInvoicesOne: "It is not an invoice, so no invoice was sent to AEAT.",
+    heldLost:
+      "Start again deletes them with this attempt. You will enter this setup's details again.",
+    heldKept: "It holds {kept} items that Waitron never deletes.",
+    heldKeptOne: "It holds 1 item that Waitron never deletes.",
+    heldInvoices: "{records} of them are invoices; AEAT accepted {accepted}.",
+    heldInvoiceOne: "1 of them is an invoice; AEAT accepted {accepted}.",
+    heldChanged:
+      "The setup database changed after this page read it. Enter the password again to see what it holds now.",
+    heldFault:
+      "An unfinished setup should hold none of these, so this is a fault in Waitron. Start again would delete them, so it is not offered. Reconnect keeps everything as it is.",
+    tradingSaved:
+      "This setup already saved the settings the box trades with. Start again would delete a setup that is ready to trade, so it is not offered here.",
+    tradingSavedPassword: "Enter your setup password to see what is left to do.",
+    setupFinished:
+      "This setup already finished. Start again would delete a finished setup, so it is not offered. Reconnect to check the saved result.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -88,6 +108,7 @@ export const initialOwnerStrings = {
     recoveryRunningNext: "Si se detiene antes de terminar, podrás empezar de nuevo aquí.",
     recoveryStopped:
       "Una recuperación desde una copia, iniciada el {started}, no terminó. Empezar de nuevo la borra.",
+    recoveryStoppedRefused: "Una recuperación desde una copia, iniciada el {started}, no terminó.",
     recoveryStoppedCloud:
       "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
     recoveryUnreadable:
@@ -123,7 +144,26 @@ export const initialOwnerStrings = {
     startUnavailable:
       "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
     startUnavailableOccupied:
-      "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros, y Empezar de nuevo solo borra una configuración que no tiene ninguno.",
+      "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros.",
+    heldRows: "La base de datos de configuración ya guarda {rows} elementos.",
+    heldRowsOne: "La base de datos de configuración ya guarda 1 elemento.",
+    heldNoInvoices: "Ninguno es una factura, así que no se envió ninguna factura a la AEAT.",
+    heldNoInvoicesOne: "No es una factura, así que no se envió ninguna factura a la AEAT.",
+    heldLost:
+      "Empezar de nuevo los borra junto con este intento. Tendrás que volver a introducir los datos de esta configuración.",
+    heldKept: "Tiene {kept} elementos que Waitron nunca borra.",
+    heldKeptOne: "Tiene 1 elemento que Waitron nunca borra.",
+    heldInvoices: "{records} son facturas; la AEAT aceptó {accepted}.",
+    heldInvoiceOne: "1 es una factura; la AEAT aceptó {accepted}.",
+    heldChanged:
+      "La base de datos de configuración cambió después de que esta página la leyera. Vuelve a introducir la contraseña para ver qué guarda ahora.",
+    heldFault:
+      "Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. Empezar de nuevo los borraría, así que no se ofrece. Reconectar lo deja todo como está.",
+    tradingSaved:
+      "Esta configuración ya guardó los ajustes con los que vende el equipo. Empezar de nuevo borraría una configuración lista para vender, así que no se ofrece aquí.",
+    tradingSavedPassword: "Introduce tu contraseña de configuración para ver qué falta.",
+    setupFinished:
+      "Esta configuración ya terminó. Empezar de nuevo borraría una configuración terminada, así que no se ofrece. Reconecta para comprobar el resultado guardado.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",

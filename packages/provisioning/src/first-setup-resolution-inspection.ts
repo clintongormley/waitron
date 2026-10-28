@@ -3,11 +3,10 @@ import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { AppError } from "@waitron/shared";
-import type { SQLWrapper } from "drizzle-orm";
-import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
-import { lockVenueDatabase, type Database } from "@waitron/db";
+import { lockVenueDatabase } from "@waitron/db";
+import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
@@ -86,20 +85,7 @@ async function inspectDatabase(
   try {
     connection = new DatabaseSync(join(roots.venueDir, "venue.db"), { readOnly: true });
     connection.exec("begin");
-    const dialect = new SQLiteSyncDialect();
-    const target: Pick<Database, "execute"> = {
-      execute<Row extends Record<string, unknown>>(query: SQLWrapper | string) {
-        const compiled =
-          typeof query === "string"
-            ? { sql: query, params: [] }
-            : dialect.sqlToQuery(query.getSQL());
-        return {
-          rows: connection!
-            .prepare(compiled.sql)
-            .all(...(compiled.params as SQLInputValue[])) as Row[],
-        };
-      },
-    };
+    const target = executeTarget(connection);
     const tenants = await readTenantIdentities(target);
     const locations = await readOperationalVenueIds(target);
     const database = tenants.length === 0 && locations.length === 0 ? "no-venue-rows" : "occupied";

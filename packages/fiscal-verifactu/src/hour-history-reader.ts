@@ -7,7 +7,8 @@ import {
 import { sql } from "drizzle-orm";
 import type { HourHistorySource } from "./hour-history.js";
 import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js";
-import { fiscalAllocations } from "./schema/allocations.js";
+import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
+import type { FiscalAllocation, RecoveryApproval } from "./allocation-envelope.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { registroSif } from "./schema/sif.js";
@@ -40,67 +41,64 @@ function time(...values: (Date | string | null | undefined)[]): number | null {
       );
 }
 
-export async function readHourHistory(
-  tx: Transaction,
+type Moment = Date | string | null;
+
+/** The rows `hourHistorySource` judges, whether a query builder or plain reads fetched them. */
+export interface HourHistoryRows {
+  readonly tenant: boolean;
+  readonly series: readonly {
+    id: string;
+    nodeId: string;
+    code: string;
+    purpose: string;
+    retiredAt: Moment;
+  }[];
+  readonly sifs: readonly {
+    id: string;
+    nodeId: string;
+    nif: string;
+    idSistemaInformatico: string;
+    numeroInstalacion: string;
+    registradoEn: Moment;
+    revocadoEn: Moment;
+  }[];
+  readonly allocations: readonly {
+    eventKey: string;
+    allocationKey: string;
+    nodeId: string;
+    sifId: string;
+    taxpayerNif: string;
+    softwareId: string;
+    environment: string;
+    installationIdentity: string;
+    allocation: FiscalAllocation | null;
+    approval: RecoveryApproval | null;
+    bases: unknown;
+    result: ActivationResult | null;
+    activatedAt: Moment;
+  }[];
+  readonly reservations: readonly {
+    eventKey: string;
+    allocationKey: string;
+    nodeId: string;
+    sourceNodeId: string;
+    taxpayerNif: string;
+    softwareId: string;
+    environment: string;
+    installationIdentity: string;
+    evidence: unknown;
+    bases: unknown;
+    establishedAt: Moment;
+  }[];
+}
+
+export function hourHistorySource(
+  { tenant, series, sifs, allocations, reservations }: HourHistoryRows,
   environment: DeploymentEnvironment | null,
-): Promise<HourHistorySource> {
-  const tenant = await readTenant(tx);
-  // No node, software or retirement predicate may hide an already spent invoice name.
-  const series = await tx
-    .select({
-      id: invoiceSeries.id,
-      nodeId: invoiceSeries.nodeId,
-      code: invoiceSeries.code,
-      purpose: invoiceSeries.purpose,
-      retiredAt: invoiceSeries.retiredAt,
-    })
-    .from(invoiceSeries);
-  const sifs = await tx
-    .select({
-      id: registroSif.id,
-      nodeId: registroSif.nodeId,
-      nif: registroSif.nif,
-      idSistemaInformatico: registroSif.idSistemaInformatico,
-      numeroInstalacion: registroSif.numeroInstalacion,
-      registradoEn: registroSif.registradoEn,
-      revocadoEn: registroSif.revocadoEn,
-    })
-    .from(registroSif);
-  const allocations = await tx
-    .select({
-      eventKey: fiscalAllocations.eventKey,
-      allocationKey: fiscalAllocations.allocationKey,
-      nodeId: fiscalAllocations.nodeId,
-      sifId: fiscalAllocations.sifId,
-      taxpayerNif: fiscalAllocations.taxpayerNif,
-      softwareId: fiscalAllocations.softwareId,
-      environment: fiscalAllocations.environment,
-      installationIdentity: fiscalAllocations.installationIdentity,
-      allocation: fiscalAllocations.allocation,
-      approval: fiscalAllocations.approval,
-      bases: fiscalAllocations.bases,
-      result: fiscalAllocations.result,
-      activatedAt: fiscalAllocations.activatedAt,
-    })
-    .from(fiscalAllocations);
-  const reservations = await tx
-    .select({
-      eventKey: fiscalReservations.eventKey,
-      allocationKey: fiscalReservations.allocationKey,
-      nodeId: fiscalReservations.nodeId,
-      sourceNodeId: fiscalReservations.sourceNodeId,
-      taxpayerNif: fiscalReservations.taxpayerNif,
-      softwareId: fiscalReservations.softwareId,
-      environment: fiscalReservations.environment,
-      installationIdentity: fiscalReservations.installationIdentity,
-      evidence: fiscalReservations.evidence,
-      bases: fiscalReservations.bases,
-      establishedAt: fiscalReservations.establishedAt,
-    })
-    .from(fiscalReservations);
+): HourHistorySource {
   let complete =
     series.length + sifs.length + allocations.length + reservations.length === 0 ||
-    (tenant !== null && environment !== null);
+    (tenant && environment !== null);
   const records: unknown[] = [];
   for (const row of sifs)
     records.push({
@@ -199,6 +197,70 @@ export async function readHourHistory(
     });
   }
   return { reference: "venue", complete, records };
+}
+
+export async function readHourHistory(
+  tx: Transaction,
+  environment: DeploymentEnvironment | null,
+): Promise<HourHistorySource> {
+  const tenant = await readTenant(tx);
+  // No node, software or retirement predicate may hide an already spent invoice name.
+  const series = await tx
+    .select({
+      id: invoiceSeries.id,
+      nodeId: invoiceSeries.nodeId,
+      code: invoiceSeries.code,
+      purpose: invoiceSeries.purpose,
+      retiredAt: invoiceSeries.retiredAt,
+    })
+    .from(invoiceSeries);
+  const sifs = await tx
+    .select({
+      id: registroSif.id,
+      nodeId: registroSif.nodeId,
+      nif: registroSif.nif,
+      idSistemaInformatico: registroSif.idSistemaInformatico,
+      numeroInstalacion: registroSif.numeroInstalacion,
+      registradoEn: registroSif.registradoEn,
+      revocadoEn: registroSif.revocadoEn,
+    })
+    .from(registroSif);
+  const allocations = await tx
+    .select({
+      eventKey: fiscalAllocations.eventKey,
+      allocationKey: fiscalAllocations.allocationKey,
+      nodeId: fiscalAllocations.nodeId,
+      sifId: fiscalAllocations.sifId,
+      taxpayerNif: fiscalAllocations.taxpayerNif,
+      softwareId: fiscalAllocations.softwareId,
+      environment: fiscalAllocations.environment,
+      installationIdentity: fiscalAllocations.installationIdentity,
+      allocation: fiscalAllocations.allocation,
+      approval: fiscalAllocations.approval,
+      bases: fiscalAllocations.bases,
+      result: fiscalAllocations.result,
+      activatedAt: fiscalAllocations.activatedAt,
+    })
+    .from(fiscalAllocations);
+  const reservations = await tx
+    .select({
+      eventKey: fiscalReservations.eventKey,
+      allocationKey: fiscalReservations.allocationKey,
+      nodeId: fiscalReservations.nodeId,
+      sourceNodeId: fiscalReservations.sourceNodeId,
+      taxpayerNif: fiscalReservations.taxpayerNif,
+      softwareId: fiscalReservations.softwareId,
+      environment: fiscalReservations.environment,
+      installationIdentity: fiscalReservations.installationIdentity,
+      evidence: fiscalReservations.evidence,
+      bases: fiscalReservations.bases,
+      establishedAt: fiscalReservations.establishedAt,
+    })
+    .from(fiscalReservations);
+  return hourHistorySource(
+    { tenant: tenant !== null, series, sifs, allocations, reservations },
+    environment,
+  );
 }
 
 // No index covers this column, so this reads every fiscal record: keep it off any path a trading box runs.

@@ -723,8 +723,8 @@ naming on the box would be refused for good.
 
 #### A1161: with the database present, a public record or documents file still dead-ends Start again
 
-Left open by A1099 (plan difference D-4, owner point 2). With the venue database present, Start
-again is allowed only for a provably unused attempt, and that proof refuses `setup.not_ready`
+Left open by A1099 (plan difference D-4, owner point 2). With the venue database present and no
+stopped recovery beside it, Start again is allowed only for a provably unused attempt, and that proof refuses `setup.not_ready`
 whenever a public fiscal record (`state/module-operation-public.json`) or an unexpected
 fiscal-documents file exists, damaged or intact (`firstSetupUnusedAssignment` in
 `apps/server/src/first-setup-unused-assignment.ts` and `noOtherHistory` in

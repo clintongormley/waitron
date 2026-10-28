@@ -1285,3 +1285,141 @@ it("a recorded input the module cannot read names nothing, and a readable one be
     }),
   ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
 });
+const databaseRecord = (identity: unknown, taxpayerNif = "89890001K") => ({
+  reference: "invoice_series/series",
+  kind: "series",
+  taxpayerNif,
+  environment: "preproduction",
+  softwareId: "W1",
+  nodeId: "node",
+  identity,
+  recordedAtMs: null,
+});
+const databaseSource = (records: unknown[], complete = true) => ({
+  reference: "venue",
+  complete,
+  records,
+});
+const historyInvalid = expect.objectContaining({
+  code: "sif.allocation_invalid",
+  params: { reason: "history_invalid" },
+});
+it("a setup database's history names its latest minute", () => {
+  const seat = configured().seat;
+  const floor = (
+    databaseHistory: unknown[],
+    attempts = [] as { context: InitialSetupContext; input: unknown }[],
+  ) => seat.startAgainFloor!({ attempts, preparations: [], publicEvidence: [], databaseHistory });
+  expect(floor([databaseSource([databaseRecord("0CNPG")])])).toEqual({
+    floorMs: minuteMs("2026-10-16T12:01:00.000Z"),
+    lastName: "0CNPG",
+  });
+  expect(floor([{ ...databaseSource([databaseRecord("0CNPG")]), reference: "elsewhere" }])).toEqual(
+    { floorMs: minuteMs("2026-10-16T12:01:00.000Z"), lastName: "0CNPG" },
+  );
+  expect(
+    floor([databaseSource([databaseRecord("0CNNA")])], [{ context: fixture(), input: undefined }]),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00.000Z"), lastName: "0CNNW" });
+  expect(floor([databaseSource([])])).toBeNull();
+  expect(floor([])).toBeNull();
+  for (const [kind, reference] of [
+    ["activation", "registro_sif/sif"],
+    ["intent", "fiscal_allocations/event"],
+    ["reservation", "fiscal_reservations/event"],
+  ])
+    expect(
+      floor([
+        databaseSource([
+          databaseRecord("0CNPG"),
+          {
+            ...databaseRecord("0CNQT"),
+            kind,
+            reference,
+            recordedAtMs: minuteMs("2026-10-16T12:42:00.000Z"),
+          },
+        ]),
+      ]),
+    ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+});
+it("a setup database's later name under another taxpayer or environment still raises the floor", () => {
+  const seat = configured().seat;
+  const floor = (records: unknown[]) =>
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      databaseHistory: [databaseSource(records)],
+    });
+  expect(floor([databaseRecord("0CNPG"), databaseRecord("0CNQT", "B12345674")])).toEqual({
+    floorMs: minuteMs("2026-10-16T12:43:00.000Z"),
+    lastName: "0CNQT",
+  });
+  expect(
+    floor([databaseRecord("0CNPG"), { ...databaseRecord("0CNQT"), environment: "production" }]),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+  expect(
+    floor([
+      databaseRecord("0CNPG"),
+      {
+        ...databaseRecord("0CNQT", "B12345674"),
+        kind: "reservation",
+        reference: "fiscal_reservations/event",
+        recordedAtMs: minuteMs("2026-10-16T12:42:00.000Z"),
+      },
+    ]),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+});
+it("a setup database's history that is incomplete refuses", () => {
+  expect(() =>
+    configured().seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      databaseHistory: [databaseSource([databaseRecord("0CNPG")], false)],
+    }),
+  ).toThrowError(historyInvalid);
+});
+it("a setup database's record with no readable name refuses", () => {
+  const seat = configured().seat;
+  for (const identity of [undefined, null, "", "nope", 7])
+    expect(() =>
+      seat.startAgainFloor!({
+        attempts: [],
+        preparations: [],
+        publicEvidence: [],
+        databaseHistory: [databaseSource([databaseRecord("0CNPG"), databaseRecord(identity)])],
+      }),
+    ).toThrowError(historyInvalid);
+});
+it("a malformed setup database history refuses", () => {
+  const seat = configured().seat;
+  for (const source of [
+    null,
+    "venue",
+    [],
+    { reference: "venue", complete: true },
+    { reference: "venue", complete: true, records: {} },
+    { reference: "venue", complete: "yes", records: [] },
+    databaseSource([null]),
+    databaseSource(["0CNPG"]),
+    // eslint-disable-next-line no-sparse-arrays
+    databaseSource([databaseRecord("0CNPG"), , databaseRecord("0CNQT")]),
+  ])
+    expect(() =>
+      seat.startAgainFloor!({
+        attempts: [],
+        preparations: [],
+        publicEvidence: [],
+        databaseHistory: [source],
+      }),
+    ).toThrowError(historyInvalid);
+  expect(() =>
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      // eslint-disable-next-line no-sparse-arrays
+      databaseHistory: [databaseSource([databaseRecord("0CNPG")]), , databaseSource([])],
+    }),
+  ).toThrowError(historyInvalid);
+});

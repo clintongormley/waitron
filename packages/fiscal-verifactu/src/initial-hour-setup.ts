@@ -26,6 +26,7 @@ import {
   type RecoveryDocument,
 } from "./recovery-document.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import { startAgainHistory, startAgainHoldings } from "./start-again-holdings.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -141,7 +142,14 @@ const START_AGAIN_WRITE_MARGIN_MS = 150_000;
 export function hourStartAgainFloor(
   retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
 ): NonNullable<InitialSetupContribution["startAgainFloor"]> {
-  return ({ attempts, preparations, publicEvidence, recoveryInputs = [], lastWriteMs }) => {
+  return ({
+    attempts,
+    preparations,
+    publicEvidence,
+    recoveryInputs = [],
+    lastWriteMs,
+    databaseHistory = [],
+  }) => {
     let minutes: number[];
     try {
       minutes = [
@@ -166,6 +174,17 @@ export function hourStartAgainFloor(
         ...recoveryInputs.flatMap((input) => {
           const identity = hourInputIdentity(input);
           return identity === null ? [] : [decodeMinuteIdentity(identity)];
+        }),
+        // Every name the database ever held, whatever its taxpayer or environment: a name is
+        // never reused, so no record is filtered out.
+        // `Array.from` turns a hole into `undefined`, which is refused; `flatMap`/`map` skip it.
+        ...Array.from(databaseHistory).flatMap((source) => {
+          if (!record(source) || source.complete !== true || !Array.isArray(source.records))
+            refuse();
+          return Array.from(source.records).map((row: unknown) => {
+            if (!record(row) || !isMinuteIdentity(row.identity)) refuse();
+            return decodeMinuteIdentity(row.identity);
+          });
         }),
       ];
     } catch {
@@ -401,5 +420,7 @@ export function createHourInitialSetup(
     },
     assignmentPositions: hourAssignmentPositions,
     startAgainFloor: hourStartAgainFloor(base.retainedAssignments!),
+    startAgainHoldings,
+    startAgainHistory,
   };
 }

@@ -14,6 +14,7 @@ import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
+  type StartAgainHeld,
   type StartAgainRecoveryShown,
   type StartAgainSummary,
   type StartAgainUnreadable,
@@ -43,6 +44,7 @@ const boundary = createErrorBoundary(
     "setup.start_again_incomplete": 409,
     "setup.workspace_unsupported": 409,
     "setup.recovery_in_progress": 409,
+    "setup.start_again_refused": 409,
   },
   "setup.provision_failed",
 );
@@ -95,13 +97,14 @@ function shownSummary(value: unknown): StartAgainSummary {
   const shown = exact(
     value,
     ["reached", "lastName"],
-    ["recoveryRecordDamaged", "recovery", "unreadable"],
+    ["recoveryRecordDamaged", "recovery", "unreadable", "held"],
   );
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
   const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
   const unreadable = Object.hasOwn(shown, "unreadable")
     ? shownUnreadable(shown.unreadable)
     : undefined;
+  const held = Object.hasOwn(shown, "held") ? shownHeld(shown.held) : undefined;
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
     !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string) ||
@@ -117,6 +120,25 @@ function shownSummary(value: unknown): StartAgainSummary {
     ...(damaged && { recoveryRecordDamaged: true as const }),
     ...(recovery !== undefined && { recovery }),
     ...(unreadable !== undefined && { unreadable }),
+    ...(held !== undefined && { held }),
+  };
+}
+// The same bounds the confirmation record's reader holds, so a confirmation the route accepts
+// can always be written.
+function shownHeld(value: unknown): StartAgainHeld {
+  const held = exact(value, ["rows", "kept", "records", "accepted"]);
+  const counts = [held.rows, held.kept, held.records, held.accepted];
+  if (
+    !counts.every((count) => Number.isSafeInteger(count) && (count as number) >= 0) ||
+    (held.accepted as number) > (held.records as number) ||
+    (held.kept as number) > (held.rows as number)
+  )
+    invalid();
+  return {
+    rows: held.rows as number,
+    kept: held.kept as number,
+    records: held.records as number,
+    accepted: held.accepted as number,
   };
 }
 const UNREADABLE_RECORDS = ["series-picks", "public-record", "fiscal-documents"];
