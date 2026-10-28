@@ -64,7 +64,7 @@ async function venue() {
     const bar = (await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" })).id;
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
     const period = async (departmentId: string, name: string) => {
-      const menuId = (await createCatalogue(tx, { name })).id;
+      const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;

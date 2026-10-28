@@ -77,6 +77,12 @@ beforeEach(async () => {
   await suite.db.execute(
     sql`update products set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
+  await suite.db.execute(
+    sql`update catalogues set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
+  );
+  await suite.db.execute(
+    sql`update sections set internal_name = 'earlier test ' || owner_menu_id where role = 'menu_root'`,
+  );
 });
 
 const noopLog: Logger = () => {};

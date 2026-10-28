@@ -475,7 +475,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         tradingName: "Bar",
       })
       .returning({ id: departments.id });
-    const menu = await db.transaction((tx) => createCatalogue(tx, { name: "Drinks" }));
+    const menu = await db.transaction((tx) =>
+      createCatalogue(tx, { name: `Drinks ${locationId}` }),
+    );
     return {
       locationId: locationId as string,
       zoneId: zone!.id,

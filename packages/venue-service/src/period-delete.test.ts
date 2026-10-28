@@ -88,7 +88,7 @@ async function venue() {
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
     const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    const menu = (await createCatalogue(tx, { name: "Carta" })).id;
+    const menu = (await createCatalogue(tx, { name: `Period menu ${locationId}` })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>

@@ -78,7 +78,7 @@ async function routed() {
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
-    const menuId = (await createCatalogue(tx, { name: "Dinner" })).id;
+    const menuId = (await createCatalogue(tx, { name: `Dinner ${cfg.locationId}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const dinner = (
