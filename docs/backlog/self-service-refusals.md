@@ -873,6 +873,42 @@ The effective-key diagnosis and correction workflow remains open.
 
 **Fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
 
+**2026-10-28 environment-boundary recheck**, against `dda0bbff55ec4255e26c1ebc1cdd16487b255a33`:
+
+The earlier operator-level suggestion to correct the host environment is not a complete remedy.
+You must compare the record, database and effective process environments before choosing a path.
+The proposed [environment inspection and recovery scope](../superpowers/specs/2026-10-28-a1089-fiscal-environment-recovery-design.md)
+awaits the owner's scope decision. It changes no runtime behavior.
+
+| Boundary | Source finding and exercised limit |
+| --- | --- |
+| Filing refusal | `packages/fiscal-verifactu/src/drain.ts:661` distinguishes a missing record stamp from a different environment. The five existing deployment-environment guard cases pass: mismatch and missing metadata submit zero records, a matching fixture is accepted, a refused predecessor holds its successors, and another healthy chain can submit. The matching fixture is a separate case, not a restart of the refused row. |
+| Startup refusal | `apps/server/src/deployment-guard.ts:13` compares the database stamp with the host; for an unstamped production database it also asks the fiscal contribution about nonproduction or unknown history. `apps/server/src/boot.ts:973` calls it before normal migrations. The existing startup case refuses the mismatch even with a missing migrations path and checks that the retained record and empty deployment table are unchanged. |
+| Effective configuration | `apps/server/src/box-env.ts` merges nonempty process values over saved files; `apps/server/src/trading-config.ts:31` writes the wizard's environment. `deploy/README.md:652` deliberately keeps `WAITRON_ENV` out of the operator `.env` example. These sources do not establish that changing the process value alone reconciles a database or its history. |
+| Available alert action | `packages/fiscal-verifactu/src/alerts.ts:12` claims fiscal incidents with `fiscal.view` and no target screen. `apps/dashboard/src/widgets/alert-format.ts:38` supplies a target only when the alert names one. The traced handled action acknowledges an incident; it does not change environment metadata or resubmit a record. |
+| Failed-start surface | `apps/server/src/recovery-surface.ts:351` gives the deployment mismatch an installer referral. A dashboard-only inspection would not repair that failed-start path. Its replacement needs its own authenticated recovery entry; lane A's setup/backup redesign is not authorised by this proposal. |
+| Restore boundary | `apps/server/src/restore-gate.ts:20` refuses a backup from the other environment. A backup is not evidence that missing record metadata may be filled in, nor that a later fiscal record can be discarded. |
+
+Existing checks run unchanged:
+
+```sh
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.test.ts -t 'deployment-environment guard'
+pnpm --filter @waitron/server exec vitest run src/deployment-guard.test.ts src/restore-gate.test.ts src/alerts.test.ts src/alerts-api.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/server exec vitest run src/box-env.test.ts
+```
+
+They report **5**, **73**, **20** and **7** passing cases respectively; the name-filtered drain command
+skips 47 unrelated cases. These are local fixtures, not live AEAT, an environment repair, or an
+end-to-end recovery qualification. No record, stamp, fiscal guard, production source or original
+assertion changes in this milestone.
+
+**Still open:** choose whether to plan running-dashboard evidence inspection first, leaving
+failed-start and persistent repair open, or design the complete authenticated configuration and
+failed-start remedy before a build. Keep both support messages in scope until a real action exists.
+Unknown or contradictory metadata must not be guessed, rewritten, promoted or treated as proof of
+a Waitron bug. Acknowledging the alert does not resolve its cause.
+
 ### fiscal-reconcile
 
 **Reconciliation alerts need a production caller and an evidence/decision route.** Do not

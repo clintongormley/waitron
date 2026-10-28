@@ -199,6 +199,8 @@ under `docs/backlog/`.
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
+  The [proposed evidence and recovery scope](superpowers/specs/2026-10-28-a1089-fiscal-environment-recovery-design.md)
+  awaits an owner decision. The startup database guard also applies; a host-setting change alone is not a qualified remedy.
 
 - **A1089: a fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
   [Audit](backlog/self-service-refusals.md#fiscal-reply).
