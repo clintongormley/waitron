@@ -8,6 +8,7 @@ import type {
   DeviceId,
   ErrorCode,
   ErrorParams,
+  IncidentOrigin,
   IncidentSource,
   Origin,
   SaleId,
@@ -75,7 +76,7 @@ export type IncidentSeverity = "warning" | "error";
 
 export interface RecordIncidentInput {
   /** The device the problem arose on, or the job that found it. */
-  origin: Origin;
+  origin: IncidentOrigin;
   saleId?: SaleId;
   /** `code` and `params` are taken from it, never re-derived. */
   error: AppError;
@@ -151,7 +152,7 @@ export async function recordIncidentOnce(
 }
 
 /** Unacknowledged incidents for one source and device, newest first. Only tests call it. */
-export async function openIncidents(tx: Transaction, origin: Origin): Promise<Incident[]> {
+export async function openIncidents(tx: Transaction, origin: IncidentOrigin): Promise<Incident[]> {
   const rows = await tx
     .select({
       id: incidents.id,
@@ -274,7 +275,7 @@ export async function findIncident(tx: Transaction, id: string): Promise<TenantI
 
 export async function currentIncidentsOf(
   tx: Transaction,
-  input: { origin: Origin; code: string },
+  input: { origin: IncidentOrigin; code: string },
 ): Promise<{ open: TenantIncident | null; lastHandled: TenantIncident | null }> {
   const ofCode = and(
     eq(incidents.source, input.origin.source),

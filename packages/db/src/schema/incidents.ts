@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, json, label, newId, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
-import { originChecks, sourceColumn } from "./origin.js";
+import { incidentSourceColumn, originChecks } from "./origin.js";
 import { sales } from "./sales.js";
 
 export type IncidentSeverity = "warning" | "error";
@@ -26,7 +26,7 @@ export const incidents = table(
   "incidents",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    source: sourceColumn("source").notNull(),
+    source: incidentSourceColumn("source").notNull(),
     /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
