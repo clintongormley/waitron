@@ -282,6 +282,7 @@ it("in the held state, with the box's spare file, the summary answers with what 
     { stateDir: f.roots.stateDir },
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
+  const recoveryId = (await f.workspace.read()).at(-1)!.target.recoveryId;
   small.fill();
   expect(small.free()).toBeLessThan(65_536);
 
@@ -296,6 +297,10 @@ it("in the held state, with the box's spare file, the summary answers with what 
     join(f.roots.stateDir, "first-setup.json"),
   ])
     await expect(access(gone)).rejects.toMatchObject({ code: "ENOENT" });
-  expect((await f.workspace.read()).at(-1)?.phase).toBe("abandoned");
-  expect(await readStartAgainNote(f.roots.stateDir)).not.toBeNull();
+  expect((await f.workspace.read()).at(-1)).toMatchObject({
+    phase: "abandoned",
+    target: { recoveryId },
+  });
+  expect(await isEmptiedTombstone(f.roots, recoveryId)).toBe(true);
+  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.installationName);
 });
