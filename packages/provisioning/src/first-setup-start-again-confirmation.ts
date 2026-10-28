@@ -14,6 +14,14 @@ export type StartAgainSummary = {
   readonly lastName: string | null;
   readonly recoveryRecordDamaged?: true;
   readonly recovery?: StartAgainRecoveryShown;
+  readonly unreadable?: StartAgainUnreadable;
+};
+
+const UNREADABLE_RECORDS = ["series-picks", "public-record", "fiscal-documents"] as const;
+
+export type StartAgainUnreadable = {
+  readonly records: readonly (typeof UNREADABLE_RECORDS)[number][];
+  readonly floorMs: number;
 };
 
 /** A stopped backup recovery that Start again would discard, as the summary showed it. */
@@ -89,6 +97,30 @@ function recoveryShown(value: unknown): StartAgainRecoveryShown {
   };
 }
 
+function unreadableShown(value: unknown): StartAgainUnreadable {
+  if (
+    !object(value) ||
+    Object.keys(value).some((key) => key !== "records" && key !== "floorMs") ||
+    !Array.isArray(value.records) ||
+    value.records.length === 0 ||
+    !Number.isSafeInteger(value.floorMs)
+  )
+    throw invalid();
+  const positions = value.records.map((record) =>
+    (UNREADABLE_RECORDS as readonly unknown[]).indexOf(record),
+  );
+  if (
+    positions.some(
+      (position, index) => position < 0 || (index > 0 && position <= positions[index - 1]!),
+    )
+  )
+    throw invalid();
+  return {
+    records: value.records as StartAgainUnreadable["records"],
+    floorMs: value.floorMs as number,
+  };
+}
+
 function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgainConfirmation {
   const { at, attemptId, database, administrator, ownerGeneration, shown } = value as Record<
     string,
@@ -108,8 +140,11 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     !(REACHED as readonly unknown[]).includes(shown.reached) ||
     (shown.lastName !== null && typeof shown.lastName !== "string") ||
     (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true) ||
-    // With the database present, the only Start again that writes a record discards a recovery.
-    (database === "present" && !Object.hasOwn(shown, "recovery"))
+    // With the database present, a Start again writes a record only when it discards a recovery
+    // or goes past damaged name records.
+    (database === "present" &&
+      !Object.hasOwn(shown, "recovery") &&
+      !Object.hasOwn(shown, "unreadable"))
   )
     throw invalid();
   return {
@@ -124,6 +159,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
       lastName: shown.lastName as string | null,
       ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
       ...(Object.hasOwn(shown, "recovery") && { recovery: recoveryShown(shown.recovery) }),
+      ...(Object.hasOwn(shown, "unreadable") && { unreadable: unreadableShown(shown.unreadable) }),
     },
   };
 }

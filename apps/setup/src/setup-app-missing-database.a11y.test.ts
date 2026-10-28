@@ -10,6 +10,7 @@ import {
   click,
   damagedSummary,
   missingDatabaseFixture,
+  namesDamagedSummary,
   recoverMissing,
   runningActivity,
   stoppedActivity,
@@ -31,6 +32,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
         "finished",
         "confirmation",
         "damaged",
+        "names-damaged",
         "refusal",
       ] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible missing-database repair`, async () => {
@@ -47,7 +49,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   }
                 : state === "damaged"
                   ? { summary: damagedSummary }
-                  : {}),
+                  : state === "names-damaged"
+                    ? { summary: namesDamagedSummary }
+                    : {}),
               intercept(path) {
                 if (state === "refusal" && path.endsWith("/start-again"))
                   return Response.json(
@@ -57,7 +61,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
               },
             });
             if (state !== "password") await recoverMissing(app);
-            if (state === "confirmation" || state === "damaged" || state === "refusal") {
+            if (
+              state === "confirmation" ||
+              state === "damaged" ||
+              state === "names-damaged" ||
+              state === "refusal"
+            ) {
               await click(app, "start-again");
               await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
             }
@@ -67,6 +76,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
             }
             await app.updateComplete;
             if (state === "damaged") expect(q(app, "recovery-record-damaged")).not.toBeNull();
+            if (state === "names-damaged") {
+              expect(q(app, "name-record-damaged")).not.toBeNull();
+              expect(q(app, "names-from")).not.toBeNull();
+            }
             await expectNoA11yViolations(host);
             expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
             const section = q<HTMLElement>(app, "screen-first-owner")!;
@@ -74,7 +87,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             expect(q(app, "screen-cert")).toBeNull();
             const button = q<WtButton>(
               app,
-              state === "confirmation" || state === "damaged"
+              state === "confirmation" || state === "damaged" || state === "names-damaged"
                 ? "confirm-start-again"
                 : state === "recovered" || state === "finished"
                   ? "start-again"

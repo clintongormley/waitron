@@ -774,7 +774,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   working node.** Setup/restore/re-registration/promotion use five symbols for the box's UTC minute,
   after another machine's clock agrees within 30 seconds (no confirmation) and strictly later than
   all readable historical names and no earlier than the start-again note's floor (`first-setup-start-again.json` in the state
-  folder; a Start again Move raises it, if lower, to the first whole minute at least 150 seconds after the moved files' newest modification time), which only `waitron.sh reset --all` removes (owner, 2026-10-24, A1042); guard
+  folder; a Start again Move or a Start again past a damaged name record raises it, if lower, to a minute taken from file times, A1098 and A1099, detail in [conventions-data.md](docs/developers/conventions-data.md)), which only `waitron.sh reset --all` removes (owner, 2026-10-24, A1042); guard
   `scripts/start-again-note-writers.test.ts`, weaker than its name: reads which files name the note, its records or the set-aside folder. Setup/restore wait 90–150 seconds. Only preproduction throwaway
   skips second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-

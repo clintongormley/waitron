@@ -136,6 +136,13 @@ export interface StartAgainSummary {
   lastName: string | null;
   recoveryRecordDamaged?: true;
   recovery?: StartAgainRecoveryShown;
+  unreadable?: StartAgainUnreadable;
+}
+export type StartAgainUnreadableRecord = "series-picks" | "public-record" | "fiscal-documents";
+/** The damaged name records, in that fixed order, and the first minute new series names can use. */
+export interface StartAgainUnreadable {
+  records: StartAgainUnreadableRecord[];
+  floorMs: number;
 }
 export interface BackupRepairStatus {
   phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";

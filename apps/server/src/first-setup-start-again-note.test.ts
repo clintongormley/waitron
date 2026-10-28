@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   access,
   lstat,
+  utimes,
   mkdtemp,
   mkdir,
   readFile,
@@ -17,16 +18,18 @@ import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
+import { AppError } from "@waitron/shared";
 import {
   START_AGAIN_MARKER_FILE,
   finishStartAgainDeletion,
   raiseStartAgainNote,
   readModulePreparationHistory,
+  readWellFormedModulePreparations,
   readStartAgainMarker,
   readStartAgainNote,
   startAgainMarkerFor,
@@ -36,11 +39,13 @@ import {
   assertOtherFirstSetupAllowed,
   createFirstSetupBackupWorkspace,
   type FirstSetupChange,
+  type StartAgainSummary,
 } from "@waitron/provisioning";
 import {
   EPOCH_MS,
   MINUTE_MS,
   decodeMinuteIdentity,
+  encodeMinuteIdentity,
 } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { publicHourSelectionHistory } from "@waitron/fiscal-verifactu/src/hour-selection.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
@@ -48,6 +53,7 @@ import { expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { PASSWORD, request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
+import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import {
@@ -68,7 +74,11 @@ import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
-  return { ...actual, raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote) };
+  return {
+    ...actual,
+    raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote),
+    readWellFormedModulePreparations: vi.fn(actual.readWellFormedModulePreparations),
+  };
 });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -304,6 +314,7 @@ const CONFIRMATIONS = "first-setup-start-again-confirmations";
 async function missingDatabase(
   changes: readonly FirstSetupChange[] = [],
   afterRemove?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
+  stamp?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
 ) {
   const base = await abandonedAttempt();
   const { f } = base;
@@ -320,6 +331,7 @@ async function missingDatabase(
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
+  await stamp?.(f);
   const current = await f.host.resolution.inspectFirstSetupResolution();
   const owner = {
     attemptId: recovered.state.attemptId,
@@ -709,6 +721,96 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
   expect(reached).toEqual([{ shown }, { shown: damaged }]);
 });
 
+it("the Start again route takes confirmUnreadable only in its exact shape, with a shown unreadable", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const reached: unknown[] = [];
+  const app = routes(f, {
+    ...actions,
+    startAgainFirstSetup: async (body) => {
+      reached.push(body.confirmUnreadable);
+    },
+  });
+  const unreadable = { records: ["series-picks"], floorMs: 1_792_162_020_000 };
+  const shown = { reached: "named", lastName: name, unreadable };
+  const send = (confirmUnreadable: unknown) =>
+    sendStartAgain(app, owner, { ...ids, register: request.register, confirmUnreadable });
+  for (const malformed of [
+    null,
+    "yes",
+    [],
+    {},
+    { shown, extra: 1 },
+    { nothingFiledOrSold: true, shown },
+    { shown: { reached: "named", lastName: name } },
+    { shown: { ...shown, extra: 1 } },
+    { shown: { ...shown, unreadable: { ...unreadable, extra: 1 } } },
+    { shown: { ...shown, unreadable: { records: [], floorMs: unreadable.floorMs } } },
+    { shown: { ...shown, unreadable: { ...unreadable, floorMs: 1.5 } } },
+    { shown: { ...shown, unreadable: null } },
+  ]) {
+    const refused = await send(malformed);
+    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+  expect(reached).toEqual([]);
+  const passed = await send({ shown });
+  expect(passed.status, await passed.clone().text()).toBe(200);
+  expect(reached).toEqual([{ shown }]);
+});
+
+it("the Start again route takes a shown unreadable only in its exact shape, and passes it on", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const reached: unknown[] = [];
+  const app = routes(f, {
+    ...actions,
+    startAgainFirstSetup: async (body) => {
+      reached.push(body.confirmMissingDatabase?.shown);
+    },
+  });
+  const unreadable = { records: ["series-picks", "public-record"], floorMs: 1_792_162_020_000 };
+  const send = (value: unknown) =>
+    sendStartAgain(app, owner, {
+      ...ids,
+      register: request.register,
+      confirmMissingDatabase: {
+        nothingFiledOrSold: true,
+        shown: { reached: "named", lastName: name, unreadable: value },
+      },
+    });
+  for (const malformed of [
+    { floorMs: unreadable.floorMs },
+    { records: [], floorMs: unreadable.floorMs },
+    { records: ["node-key"], floorMs: unreadable.floorMs },
+    { records: ["series-picks", "series-picks"], floorMs: unreadable.floorMs },
+    { records: ["public-record", "series-picks"], floorMs: unreadable.floorMs },
+    { records: "series-picks", floorMs: unreadable.floorMs },
+    { ...unreadable, extra: 1 },
+    { records: unreadable.records },
+    { ...unreadable, floorMs: String(unreadable.floorMs) },
+    { ...unreadable, floorMs: 1.5 },
+    null,
+  ]) {
+    const refused = await send(malformed);
+    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+  expect(reached).toEqual([]);
+  const all = {
+    records: ["series-picks", "public-record", "fiscal-documents"],
+    floorMs: unreadable.floorMs,
+  };
+  for (const value of [unreadable, all]) {
+    const passed = await send(value);
+    expect(passed.status, await passed.clone().text()).toBe(200);
+  }
+  expect(reached).toEqual([
+    { reached: "named", lastName: name, unreadable },
+    { reached: "named", lastName: name, unreadable: all },
+  ]);
+});
+
 function recoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   return join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`);
 }
@@ -831,6 +933,1165 @@ it("the Start again route takes recoveryRecordDamagedShown only as true", async 
       error: { code: "setup.request_invalid", params: { field: "body" } },
     });
   }
+});
+
+function picksFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  return join(f.stateDir, "module-preparation-state.json");
+}
+
+async function damagePicks(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  await expect(lstat(picksFile(f))).resolves.toMatchObject({ size: expect.any(Number) });
+  await writeFile(picksFile(f), "{damaged");
+}
+
+async function stampTree(path: string, at: Date) {
+  const found = await lstat(path).catch(() => null);
+  if (found === null) return;
+  if (found.isDirectory())
+    for (const entry of await readdir(path)) await stampTree(join(path, entry), at);
+  await utimes(path, at, at);
+}
+
+const PICKS_AFTER_NAME_MS = 120 * MINUTE_MS;
+
+/** Every listed item a minute after the attempt's name, the picks file two hours after it. */
+async function stampAfterName(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  const state = (await f.store.read())!;
+  const name = (firstSetupModuleContext(state, f.module).request as { identity: string }).identity;
+  const nameMs = EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS;
+  const listed = new Date(nameMs + MINUTE_MS);
+  await stampTree(f.stateDir, listed);
+  await stampTree(join(f.venueDir, "first-setup-claim.json"), listed);
+  const picks = new Date(nameMs + PICKS_AFTER_NAME_MS);
+  await utimes(picksFile(f), picks, picks);
+}
+
+async function damagedPicksAttempt(options: { picks: boolean; recoveryRecord: boolean }) {
+  const base = await missingDatabase(
+    [],
+    async (f) => {
+      if (options.picks) await damagePicks(f);
+      if (options.recoveryRecord) await damageRecoveryRecord(f);
+    },
+    stampAfterName,
+  );
+  const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
+  const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
+  return { ...base, timeFloorMs };
+}
+
+async function summaryThenStartAgain(base: Awaited<ReturnType<typeof missingDatabase>>) {
+  const { f, actions, owner, ids, request } = base;
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  const shown = await answered.json();
+  await actions.startAgainFirstSetup({
+    ...request,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  return shown;
+}
+
+it("with the database missing, a damaged kept picks file reaches the confirmation, and the note keeps a time floor with no name", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+  expect(base.timeFloorMs).toBeGreaterThan(base.floorMs);
+  const shown = await summaryThenStartAgain(base);
+  expect(shown).toEqual({
+    reached: "named",
+    lastName: base.name,
+    unreadable: { records: ["series-picks"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  await expectStartAgainDeleted(base.f);
+});
+
+/** A Start again past a damaged picks file stamped after every other listed item, then a new claim. */
+async function startedAgainPastDamagedPicks() {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+  const { f, clock, name, timeFloorMs } = base;
+  await summaryThenStartAgain(base);
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  const next = createFirstSetupModuleHost({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    modules: f.modules,
+    environment: {},
+    database: () => suite.db,
+  });
+  const claim = await next.owner.claimFirstSetup(
+    {
+      environment: "production",
+      request: {
+        ...request,
+        seriesCode: "B",
+        fullSeriesCode: "FULL",
+        rectificativeSeriesCode: "RECT",
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  const owner = { ...claim.state, capability: claim.capability };
+  const picksMinute = decodeMinuteIdentity(name) + PICKS_AFTER_NAME_MS / MINUTE_MS;
+  return { f, clock, timeFloorMs, picksMinute, next, owner };
+}
+
+it("after a Start again past a damaged picks file, a clock before the note's time floor is refused, not given a name", async () => {
+  const { f, timeFloorMs, next, owner } = await startedAgainPastDamagedPicks();
+  vi.setSystemTime(timeFloorMs - 3 * MINUTE_MS);
+  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: timeFloorMs },
+  });
+  const state = (await next.store.read())!;
+  const context = firstSetupModuleContext(state, f.module);
+  expect(context.request).toBeNull();
+  expect(state.consumptionIntent).toBe(false);
+  const history = await readModulePreparationHistory(f, f.module);
+  expect(
+    publicHourSelectionHistory(history).records.filter(
+      (record) =>
+        (record as { reference: string }).reference ===
+        `intent/${f.module}/${context.binding.eventId}`,
+    ),
+  ).toEqual([]);
+});
+
+it("after a Start again past a damaged picks file, a clock a minute before the time floor waits, then chooses a name no earlier than the floor", async () => {
+  const { clock, timeFloorMs, picksMinute, next, owner } = await startedAgainPastDamagedPicks();
+  vi.setSystemTime(timeFloorMs - MINUTE_MS);
+  await selectPastWaits(clock, () => compareAndSelect(next, owner));
+  const chosen = decodeMinuteIdentity(await chosenName(next));
+  expect(chosen).toBeGreaterThan(picksMinute);
+  expect(EPOCH_MS + chosen * MINUTE_MS).toBeGreaterThanOrEqual(timeFloorMs);
+});
+
+it("after a Start again past a damaged picks file, a clock past the time floor chooses a later name at once", async () => {
+  const { clock, timeFloorMs, picksMinute, next, owner } = await startedAgainPastDamagedPicks();
+  vi.setSystemTime(timeFloorMs + 5 * MINUTE_MS);
+  // One move only: production setup's own 90 to 150 second wait, never a wait for the note.
+  await selectPastWaits(clock, () => compareAndSelect(next, owner), 1);
+  expect(decodeMinuteIdentity(await chosenName(next))).toBeGreaterThan(picksMinute);
+});
+
+it("with the database missing, the same file times on an intact picks file leave the summary and the note as they were", async () => {
+  const base = await damagedPicksAttempt({ picks: false, recoveryRecord: false });
+  const shown = await summaryThenStartAgain(base);
+  expect(shown).toEqual({ reached: "named", lastName: base.name });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.floorMs,
+    lastName: base.name,
+    module: "fiscal-verifactu",
+  });
+});
+
+it("with the database missing, a damaged recovery record beside a damaged picks file shows both", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: true });
+  const shown = await summaryThenStartAgain(base);
+  expect(shown).toEqual({
+    reached: "named",
+    lastName: base.name,
+    recoveryRecordDamaged: true,
+    unreadable: { records: ["series-picks"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+});
+
+it("with the database present and no password, a damaged kept picks file asks for the password, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...startRequest,
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision!,
+      ownerGeneration: inspected.ownerGeneration!,
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.start_again_password_required",
+    params: { seriesPicksUnreadable: true },
+  });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+it("with the database present and the setup password, a damaged kept picks file without confirmUnreadable is refused setup.attempt_conflict, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const recovered = await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: current.inspectionId,
+      revision: current.revision!,
+      ownerGeneration: current.ownerGeneration!,
+      owner: {
+        attemptId: recovered.state.attemptId,
+        revision: recovered.state.revision,
+        ownerGeneration: recovered.state.ownerGeneration,
+        capability: recovered.capability,
+      },
+      register: startRequest.register,
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+/** `extraSeat` installs a copy of the frozen module, seat and all, under a name the attempt never froze. */
+async function presentDamagedPicks(
+  options: { seat?: boolean; extraSeat?: boolean; damaged?: boolean } = {},
+) {
+  const base = await abandonedAttempt();
+  const { f } = base;
+  if (options.damaged !== false) await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const recovered = await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  await stampAfterName(f);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const owner = {
+    attemptId: recovered.state.attemptId,
+    revision: recovered.state.revision,
+    ownerGeneration: recovered.state.ownerGeneration,
+    capability: recovered.capability,
+  };
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const modules =
+    options.seat === false
+      ? f.host.modules!.map((module) =>
+          module.name !== f.module
+            ? module
+            : {
+                ...module,
+                provisioning: {
+                  ...module.provisioning,
+                  initialSetup: {
+                    ...module.provisioning!.initialSetup!,
+                    startAgainFloor: undefined,
+                  },
+                },
+              },
+        )
+      : f.host.modules!;
+  const installed = options.extraSeat
+    ? [
+        ...modules,
+        { ...f.host.modules!.find((module) => module.name === f.module)!, name: "probe-extra" },
+      ]
+    : modules;
+  const actions = createFirstSetupResolutionActions({
+    ...f,
+    host: { ...f.host, modules: installed },
+  });
+  const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
+  const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
+  return { ...base, actions, owner, ids, timeFloorMs };
+}
+
+it("with the database present and the setup password, a damaged kept picks file gets a summary naming it, and Start again without confirming it is refused setup.attempt_conflict", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  expect(await answered.json()).toEqual({
+    reached: "named",
+    lastName: name,
+    unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+  });
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({ ...ids, owner, register: startRequest.register }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+});
+
+type Fixture = Awaited<ReturnType<typeof abandonedAttempt>>["f"];
+const pickBinding = (f: Fixture, eventId: string) => ({
+  module: f.module,
+  action: "select-hour",
+  eventId,
+  sourceId: "later-source",
+  targetNodeId: "later-node",
+});
+/** A chosen-name revision the hour module reads on its own, naming the minute at `atMs`. */
+function pickRevision(f: Fixture, atMs: number) {
+  const binding = pickBinding(f, "later-event");
+  const value = {
+    version: 1,
+    entries: [
+      {
+        kind: "intent",
+        binding,
+        operatorId: "owner-1",
+        scope: { taxpayerNif: request.taxId, environment: "production" },
+        bases: [
+          { code: "A", purpose: "standard" },
+          { code: "FF", purpose: "full" },
+          { code: "R", purpose: "rectificative" },
+        ],
+        contextKey: "country/zone/module-version/owner-generation-1",
+        softwareId: "W1",
+        references: [],
+        identity: encodeMinuteIdentity(atMs),
+        issuedAt: new Date(atMs).toISOString(),
+      },
+    ],
+  };
+  expect(publicHourSelectionHistory([value]).records).toHaveLength(1);
+  return { binding, value };
+}
+const PICK_DAMAGE = {
+  none: () => [],
+  "a revision the hour module cannot use": (f: Fixture) => [
+    { binding: pickBinding(f, "unusable-event"), value: { version: 1, entries: [{}] } },
+  ],
+  "a revision whose binding is malformed": (f: Fixture) => [
+    { binding: { module: f.module }, value: {} },
+  ],
+};
+type PickDamage = keyof typeof PICK_DAMAGE;
+/**
+ * An abandoned attempt whose kept picks file also holds a readable pick `pickAfterNameMs` after
+ * the attempt's own name, beside `damage`, stamped as `stampAfterName` does.
+ */
+async function attemptWithLaterPick(
+  database: "missing" | "present",
+  damage: PickDamage,
+  pickAfterNameMs: number,
+) {
+  const base =
+    database === "missing"
+      ? await damagedPicksAttempt({ picks: false, recoveryRecord: false })
+      : await presentDamagedPicks({ damaged: false });
+  const { f } = base;
+  const pickMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + pickAfterNameMs;
+  const file = JSON.parse(await readFile(picksFile(f), "utf8")) as { revisions: unknown[] };
+  file.revisions.push(pickRevision(f, pickMs), ...PICK_DAMAGE[damage](f));
+  await writeFile(picksFile(f), JSON.stringify(file));
+  await stampAfterName(f);
+  const damaged = damage !== "none";
+  const shown =
+    database === "missing" || damaged
+      ? await base.actions.startAgainSummary({ ...base.ids, owner: base.owner })
+      : undefined;
+  await base.actions.startAgainFirstSetup({
+    ...base.ids,
+    owner: base.owner,
+    register: base.startRequest.register,
+    ...(database === "missing"
+      ? { confirmMissingDatabase: { nothingFiledOrSold: true as const, shown: shown! } }
+      : damaged
+        ? { confirmUnreadable: { shown: shown! } }
+        : {}),
+  });
+  return { ...base, pickMs, pickName: encodeMinuteIdentity(pickMs), shown };
+}
+
+it.each(
+  (["missing", "present"] as const).flatMap((database) =>
+    (Object.keys(PICK_DAMAGE) as PickDamage[]).map((damage) => ({ database, damage })),
+  ),
+)(
+  "with the database $database, a readable pick later than the file times beside $damage keeps its name in the note, and the next setup never chooses it",
+  async ({ database, damage }) => {
+    const later = await attemptWithLaterPick(
+      database,
+      damage,
+      PICKS_AFTER_NAME_MS + 60 * MINUTE_MS,
+    );
+    const { f, clock, pickMs, pickName, shown } = later;
+    expect(pickMs).toBeGreaterThan(later.timeFloorMs);
+    expect(await readStartAgainNote(f.stateDir)).toEqual({
+      version: 1,
+      floorMs: pickMs + MINUTE_MS,
+      lastName: pickName,
+      module: "fiscal-verifactu",
+    });
+    if (shown !== undefined)
+      expect(shown).toEqual({
+        reached: "named",
+        lastName: pickName,
+        ...(damage !== "none" && {
+          unreadable: { records: ["series-picks"], floorMs: pickMs + MINUTE_MS },
+        }),
+      });
+    const next = createFirstSetupModuleHost({
+      stateDir: f.stateDir,
+      venueDir: f.venueDir,
+      modules: f.modules,
+      environment: {},
+      database: () => suite.db,
+    });
+    const claim = await next.owner.claimFirstSetup(
+      { environment: "production", request: { ...request } },
+      randomBytes(32).toString("base64url"),
+    );
+    vi.setSystemTime(pickMs - 2 * MINUTE_MS);
+    await expect(
+      selectPastWaits(clock, () =>
+        compareAndSelect(next, { ...claim.state, capability: claim.capability }),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: pickMs + MINUTE_MS },
+    });
+  },
+);
+
+it.each(["missing", "present"] as const)(
+  "with the database %s, a readable pick earlier than the file times beside a revision the hour module cannot use leaves the time floor in the note, and the summary names the pick",
+  async (database) => {
+    const later = await attemptWithLaterPick(
+      database,
+      "a revision the hour module cannot use",
+      30 * MINUTE_MS,
+    );
+    const { f, pickMs, pickName, timeFloorMs, shown } = later;
+    expect(pickMs + MINUTE_MS).toBeLessThan(timeFloorMs);
+    expect(decodeMinuteIdentity(pickName)).toBeGreaterThan(decodeMinuteIdentity(later.name));
+    expect(await readStartAgainNote(f.stateDir)).toEqual({
+      version: 1,
+      floorMs: timeFloorMs,
+      lastName: null,
+      module: "fiscal-verifactu",
+    });
+    expect(shown).toEqual({
+      reached: "named",
+      lastName: pickName,
+      unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+    });
+  },
+);
+
+async function expectPresentNothingWritten(
+  f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
+  before: Awaited<ReturnType<typeof folderTrees>>,
+) {
+  expect(await folderTrees(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+}
+
+it("with the database present, the exact shown summary past a damaged kept picks file starts again, the note keeps a time floor with no name, and the confirmation record holds it", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const app = routes(f, actions);
+  const shown = (await (
+    await postSummary(app, ids, ownerHeaders(owner))
+  ).json()) as StartAgainSummary;
+  expect(timeFloorMs).toBeGreaterThan(EPOCH_MS + (decodeMinuteIdentity(name) + 1) * MINUTE_MS);
+  const accepted = await sendStartAgain(app, owner, {
+    ...ids,
+    register: startRequest.register,
+    confirmUnreadable: { shown },
+  });
+  expect(accepted.status, await accepted.clone().text()).toBe(200);
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  const files = await readdir(join(f.stateDir, CONFIRMATIONS));
+  expect(files).toHaveLength(1);
+  const record = JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8"));
+  expect(record).toMatchObject({ database: "present" });
+  expect(record.shown).toEqual(shown);
+  expect(record.shown).toEqual({
+    reached: "named",
+    lastName: name,
+    unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+  });
+  await expectStartAgainDeleted(f);
+});
+
+it.each([
+  [
+    "lacks the unreadable records",
+    (shown: StartAgainSummary) =>
+      Object.fromEntries(
+        Object.entries(shown).filter(([key]) => key !== "unreadable"),
+      ) as StartAgainSummary,
+  ],
+  [
+    "shows a floor one minute earlier",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs - MINUTE_MS },
+    }),
+  ],
+  [
+    "shows a floor one minute later",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs + MINUTE_MS },
+    }),
+  ],
+])(
+  "with the database present, a Start again whose confirmUnreadable summary %s is refused setup.attempt_conflict, and nothing is written",
+  async (_label, change) => {
+    const { f, actions, owner, ids, startRequest } = await presentDamagedPicks();
+    const shown = await actions.startAgainSummary({ ...ids, owner });
+    expect(shown.unreadable).toBeDefined();
+    const before = await folderTrees(f);
+    await expect(
+      actions.startAgainFirstSetup({
+        ...ids,
+        owner,
+        register: startRequest.register,
+        confirmUnreadable: { shown: change(shown) },
+      }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    await expectPresentNothingWritten(f, before);
+  },
+);
+
+it("with the database present, the same file times on an intact picks file leave the summary refused and Start again password-free, and the note keeps the name", async () => {
+  const { f, name, floorMs, actions, startRequest } = await abandonedAttempt();
+  await stampAfterName(f);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  expect(current.inspectionId).toBe(startRequest.inspectionId);
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  await expect(actions.startAgainSummary({ ...ids, owner: f.ownerAttempt })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await actions.startAgainFirstSetup({ ...startRequest, ...ids });
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs,
+    lastName: name,
+    module: "fiscal-verifactu",
+  });
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  await expectStartAgainDeleted(f);
+});
+
+it("with the database present, a venue.db-shm time moved between the summary and Start again leaves the floor as shown, and Start again goes ahead", async () => {
+  const { f, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shm = join(f.venueDir, "venue.db-shm");
+  if ((await lstat(shm).catch(() => null)) === null) await writeFile(shm, "");
+  const later = new Date((await lstat(shm)).mtimeMs + 60 * MINUTE_MS);
+  await utimes(shm, later, later);
+  await actions.startAgainFirstSetup({
+    ...ids,
+    owner,
+    register: startRequest.register,
+    confirmUnreadable: { shown },
+  });
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: shown.unreadable!.floorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  expect(shown.unreadable?.floorMs).toBe(timeFloorMs);
+  await expectStartAgainDeleted(f);
+});
+
+it("with the database present, a listed file's time moved later between the summary and Start again, bytes unchanged, is refused setup.attempt_conflict, and nothing is written", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks();
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown.unreadable?.floorMs).toBe(timeFloorMs);
+  const key = join(f.stateDir, "first-setup-node-key.json");
+  const bytes = await readFile(key);
+  const later = new Date(EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS + 3 * 60 * MINUTE_MS);
+  await utimes(key, later, later);
+  expect(await readFile(key)).toEqual(bytes);
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  expect(current.inspectionId).toBe(ids.inspectionId);
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: startRequest.register,
+      confirmUnreadable: { shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectPresentNothingWritten(f, before);
+});
+
+it("with the database present and an intact picks file, confirmUnreadable is refused setup.attempt_conflict, and nothing is written", async () => {
+  const { f, name, actions, owner, ids, startRequest, timeFloorMs } = await presentDamagedPicks({
+    damaged: false,
+  });
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: startRequest.register,
+      confirmUnreadable: {
+        shown: {
+          reached: "named",
+          lastName: name,
+          unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
+        },
+      },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expectPresentNothingWritten(f, before);
+});
+
+it("with the database missing, confirmUnreadable beside the confirmation is refused setup.attempt_conflict, and nothing is written", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+  const { f, actions, owner, ids, request } = base;
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown.unreadable).toBeDefined();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...request,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      confirmUnreadable: { shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await folderTrees(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+it.each([
+  { which: "the database missing", database: "missing" as const },
+  { which: "confirmRecoveryDiscard beside it", database: "present" as const },
+])(
+  "with no password, confirmUnreadable sent with $which is refused setup.attempt_conflict, and nothing is written",
+  async ({ database }) => {
+    const { f, name, actions, startRequest } = await abandonedAttempt();
+    await damagePicks(f);
+    if (database === "missing") await rm(join(f.venueDir, "venue.db"));
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    const shown: StartAgainSummary = {
+      reached: "named",
+      lastName: name,
+      unreadable: { records: ["series-picks"], floorMs: EPOCH_MS + 60 * MINUTE_MS },
+    };
+    const before = await folderTrees(f);
+    await expect(
+      actions.startAgainFirstSetup({
+        ...startRequest,
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision!,
+        ownerGeneration: inspected.ownerGeneration!,
+        confirmUnreadable: { shown },
+        ...(database === "present" && { confirmRecoveryDiscard: { shown } }),
+      }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(await folderTrees(f)).toEqual(before);
+    await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readStartAgainNote(f.stateDir)).toBeNull();
+    expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  },
+);
+
+it("with the database present, a summary whose attempt read throws is refused setup.not_ready, not the read's own error", async () => {
+  const { f, actions, owner, ids } = await presentDamagedPicks();
+  const { store, resolution } = f.host;
+  const read = store.readForRepair.bind(store);
+  const inspect = resolution.inspectFirstSetupResolution.bind(resolution);
+  let armed = false;
+  let faults = 0;
+  vi.spyOn(resolution, "inspectFirstSetupResolution").mockImplementation(async () => {
+    const inspection = await inspect();
+    armed = true;
+    return inspection;
+  });
+  vi.spyOn(store, "readForRepair").mockImplementation(async () => {
+    if (!armed) return read();
+    armed = false;
+    faults += 1;
+    throw new Error("read fault");
+  });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(faults).toBe(1);
+});
+
+it("with the database present, picks the first read finds damaged but the gather reads as intact leave the summary refused setup.not_ready", async () => {
+  const { f, owner, ids } = await presentDamagedPicks({ damaged: false });
+  let picksReads = 0;
+  const reader = vi.mocked(readWellFormedModulePreparations);
+  const read = reader.getMockImplementation()!;
+  reader.mockImplementation(async (...args) => {
+    picksReads += 1;
+    return read(...args);
+  });
+  onTestFinished(() => {
+    reader.mockImplementation(read);
+  });
+  const modules = f.host.modules!.map((module) => {
+    const initialSetup = module.provisioning?.initialSetup;
+    if (module.name !== f.module || initialSetup?.startAgainFloor === undefined) return module;
+    const floor = initialSetup.startAgainFloor;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...initialSetup,
+          startAgainFloor: (input: Parameters<typeof floor>[0]) => {
+            if (
+              input.attempts.length === 0 &&
+              input.publicEvidence.length === 0 &&
+              picksReads === 1
+            )
+              throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
+            return floor(input);
+          },
+        },
+      },
+    };
+  });
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules } });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(picksReads).toBe(2);
+});
+
+it("with the database present, a damaged kept picks file still needs the recovered owner before the summary answers", async () => {
+  const { f, actions, ids } = await presentDamagedPicks();
+  const response = await postSummary(routes(f, actions), ids, ownerHeaders(f.ownerAttempt));
+  expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+});
+
+it("with the database present, a damaged kept picks file of a frozen module with no start-again seat leaves the summary refused", async () => {
+  const { f, actions, owner, ids } = await presentDamagedPicks({ seat: false });
+  const response = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+
+it("with the database present, a damaged kept picks file read only by a module the attempt never froze leaves the summary refused before the password", async () => {
+  const { f, actions, ids } = await presentDamagedPicks({ seat: false, extraSeat: true });
+  const response = await postSummary(routes(f, actions), ids, ownerHeaders(f.ownerAttempt));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+
+it.each([
+  [
+    "lacks the unreadable records",
+    (shown: StartAgainSummary) => ({ ...shown, unreadable: undefined }),
+  ],
+  [
+    "shows a floor one minute earlier",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs - MINUTE_MS },
+    }),
+  ],
+  [
+    "shows a floor one minute later",
+    (shown: StartAgainSummary) => ({
+      ...shown,
+      unreadable: { ...shown.unreadable!, floorMs: shown.unreadable!.floorMs + MINUTE_MS },
+    }),
+  ],
+])(
+  "with the database missing, a Start again whose shown summary %s is refused setup.attempt_conflict, and nothing is written",
+  async (_label, change) => {
+    const base = await damagedPicksAttempt({ picks: true, recoveryRecord: false });
+    const { f, actions, owner, ids, request } = base;
+    const app = routes(f, actions);
+    const shown = (await (
+      await postSummary(app, ids, ownerHeaders(owner))
+    ).json()) as StartAgainSummary;
+    expect(shown.unreadable).toEqual({ records: ["series-picks"], floorMs: base.timeFloorMs });
+    const before = await folderTrees(f);
+    const refused = await sendStartAgain(app, owner, {
+      ...ids,
+      register: request.register,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown: change(shown) },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
+    expect(await folderTrees(f)).toEqual(before);
+    await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readStartAgainNote(f.stateDir)).toBeNull();
+    expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  },
+);
+
+it("with the database missing, the exact shown summary with unreadable records starts again over the route, and the confirmation record holds it", async () => {
+  const base = await damagedPicksAttempt({ picks: true, recoveryRecord: true });
+  const { f, actions, owner, ids, request } = base;
+  const app = routes(f, actions);
+  const shown = (await (
+    await postSummary(app, ids, ownerHeaders(owner))
+  ).json()) as StartAgainSummary;
+  const accepted = await sendStartAgain(app, owner, {
+    ...ids,
+    register: request.register,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  expect(accepted.status, await accepted.clone().text()).toBe(200);
+  const files = await readdir(join(f.stateDir, CONFIRMATIONS));
+  expect(files).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8")).shown,
+  ).toEqual({
+    reached: "named",
+    lastName: base.name,
+    recoveryRecordDamaged: true,
+    unreadable: { records: ["series-picks"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  await expectStartAgainDeleted(f);
+});
+
+function publicRecordFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  return join(f.stateDir, "module-operation-public.json");
+}
+
+function documentsFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"], name: string) {
+  return join(f.stateDir, "first-fiscal-documents", name);
+}
+
+async function createDamaged(path: string) {
+  await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  await writeFile(path, "{damaged");
+}
+
+async function damagedRecordsAttempt(
+  damage: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
+) {
+  const base = await missingDatabase([], damage, stampAfterName);
+  const picksMs = EPOCH_MS + decodeMinuteIdentity(base.name) * MINUTE_MS + PICKS_AFTER_NAME_MS;
+  const timeFloorMs = (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS;
+  return { ...base, timeFloorMs };
+}
+
+it.each([
+  {
+    which: "a damaged public record",
+    records: ["public-record"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) =>
+      createDamaged(publicRecordFile(f)),
+  },
+  {
+    which: "a public record holding evidence the module cannot use",
+    records: ["public-record"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      const state = (await f.store.read())!;
+      await writeFile(
+        publicRecordFile(f),
+        JSON.stringify({
+          version: 1,
+          modules: {},
+          history: [
+            {
+              attemptId: state.frozen.attemptId,
+              revision: state.revision,
+              ownerGeneration: state.ownerGeneration,
+              module: f.module,
+              current: { unusable: true },
+            },
+          ],
+        }),
+      );
+    },
+  },
+  {
+    which: "a damaged documents file with the recovery record removed",
+    records: ["fiscal-documents"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      await rm(recoveryRecord(f));
+      await createDamaged(documentsFile(f, `${f.module}.json`));
+    },
+  },
+  {
+    which: "a stray documents file with the recovery record removed",
+    records: ["fiscal-documents"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      await rm(recoveryRecord(f));
+      await writeFile(documentsFile(f, "stray.json"), "{}");
+    },
+  },
+  {
+    which: "a damaged picks file and a damaged public record",
+    records: ["series-picks", "public-record"],
+    damage: async (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => {
+      await damagePicks(f);
+      await createDamaged(publicRecordFile(f));
+    },
+  },
+])(
+  "with the database missing, $which reaches the confirmation, and the note keeps a time floor with no name",
+  async ({ records, damage }) => {
+    const base = await damagedRecordsAttempt(damage);
+    expect(base.timeFloorMs).toBeGreaterThan(base.floorMs);
+    const shown = await summaryThenStartAgain(base);
+    expect(shown).toEqual({
+      reached: "named",
+      lastName: base.name,
+      unreadable: { records, floorMs: base.timeFloorMs },
+    });
+    expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+      version: 1,
+      floorMs: base.timeFloorMs,
+      lastName: null,
+      module: "fiscal-verifactu",
+    });
+    await expectStartAgainDeleted(base.f);
+  },
+);
+
+it("with the database missing, a kept recovery statement the module cannot use is named as the fiscal documents, and the note keeps a time floor with no name", async () => {
+  const base = await damagedRecordsAttempt(async () => {});
+  const { statement } = JSON.parse(await readFile(recoveryRecord(base.f), "utf8")) as {
+    statement: unknown;
+  };
+  await expect(access(publicRecordFile(base.f))).rejects.toMatchObject({ code: "ENOENT" });
+  const refusedItems: unknown[] = [];
+  const modules = base.f.host.modules!.map((module) => {
+    const initialSetup = module.provisioning?.initialSetup;
+    if (module.name !== base.f.module || initialSetup?.startAgainFloor === undefined) return module;
+    const floor = initialSetup.startAgainFloor;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...initialSetup,
+          startAgainFloor: (input: Parameters<typeof floor>[0]) => {
+            if (input.attempts.length === 0 && input.publicEvidence.length === 1) {
+              refusedItems.push(input.publicEvidence[0]);
+              throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
+            }
+            return floor(input);
+          },
+        },
+      },
+    };
+  });
+  const actions = createFirstSetupResolutionActions({
+    ...base.f,
+    host: { ...base.f.host, modules },
+  });
+  const shown = await summaryThenStartAgain({ ...base, actions });
+  expect(refusedItems.length).toBeGreaterThan(0);
+  for (const item of refusedItems) expect(item).toEqual(statement);
+  expect(shown).toEqual({
+    reached: "named",
+    lastName: base.name,
+    unreadable: { records: ["fiscal-documents"], floorMs: base.timeFloorMs },
+  });
+  expect(await readStartAgainNote(base.f.stateDir)).toEqual({
+    version: 1,
+    floorMs: base.timeFloorMs,
+    lastName: null,
+    module: "fiscal-verifactu",
+  });
+  await expectStartAgainDeleted(base.f);
+});
+
+async function expectRefusedUnchanged(
+  f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
+  run: () => Promise<unknown>,
+  code: string,
+) {
+  const before = await attemptFiles(f);
+  await expect(run()).rejects.toMatchObject({ code });
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+}
+
+it.each(["first-setup.json", "first-setup-claim.json"])(
+  "with the database missing, a damaged %s beside a damaged picks file is refused setup.owner_required at the password step, and nothing changes",
+  async (file) => {
+    const { f } = await abandonedAttempt();
+    await damagePicks(f);
+    await rm(join(f.venueDir, "venue.db"));
+    await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    await expectRefusedUnchanged(
+      f,
+      () =>
+        f.host.owner.recoverFirstSetupOwner({
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision!,
+          ownerGeneration: inspected.ownerGeneration!,
+          clientClaimNonce: randomBytes(32).toString("base64url"),
+          password: PASSWORD,
+        }),
+      "setup.owner_required",
+    );
+  },
+);
+
+it.each(["first-setup.json", "first-setup-claim.json"])(
+  "with the database present, a damaged %s beside a damaged picks file leaves the box reading no revision, so Start again is refused setup.attempt_conflict for the revision it sends, and nothing changes",
+  async (file) => {
+    const { f, actions, startRequest } = await abandonedAttempt();
+    await damagePicks(f);
+    await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    expect(inspected.revision).toBeNull();
+    await expectRefusedUnchanged(
+      f,
+      () =>
+        actions.startAgainFirstSetup({
+          ...startRequest,
+          inspectionId: inspected.inspectionId,
+          revision: startRequest.revision,
+          ownerGeneration: startRequest.ownerGeneration,
+        }),
+      "setup.attempt_conflict",
+    );
+  },
+);
+
+it("a corrupt venue database beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).not.toBe("missing");
+  await expectRefusedUnchanged(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...startRequest,
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision!,
+        ownerGeneration: inspected.ownerGeneration!,
+      }),
+    "setup.not_ready",
+  );
+});
+
+it.each(["module-operation-public.json", "first-fiscal-documents/stray.json"])(
+  "with the database present, a damaged %s still refuses Start again setup.not_ready, and nothing changes",
+  async (file) => {
+    const { f, actions, startRequest } = await abandonedAttempt();
+    await createDamaged(join(f.stateDir, file));
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    await expectRefusedUnchanged(
+      f,
+      () =>
+        actions.startAgainFirstSetup({
+          ...startRequest,
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision!,
+          ownerGeneration: inspected.ownerGeneration!,
+        }),
+      "setup.not_ready",
+    );
+  },
+);
+
+it("with the database missing, an outside evidence file configured beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
+  const base = await missingDatabase([], damagePicks, stampAfterName);
+  const { f, owner, request: startAgain } = base;
+  const outsidePath = join(f.root, "outside-history.json");
+  await writeFile(outsidePath, "{}");
+  const resolution = createFirstSetupResolutionInspection({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    store: f.store,
+    expectedMigrationSets: f.modules.map((module) => module.migrations.name),
+    publicEvidencePaths: [outsidePath],
+  });
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, resolution } });
+  const current = await resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown).toMatchObject({ unreadable: { records: ["series-picks"] } });
+  await expectRefusedUnchanged(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...startAgain,
+        ...ids,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      }),
+    "setup.not_ready",
+  );
+});
+
+it("with the database missing, a damaged note beside a damaged picks file is shown, then Start again is refused setup.attempt_invalid after its confirmation record", async () => {
+  const base = await missingDatabase(
+    [],
+    async (f) => {
+      await damagePicks(f);
+      await createDamaged(join(f.stateDir, NOTE));
+    },
+    stampAfterName,
+  );
+  const { f, actions, owner, ids, request: startAgain } = base;
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  const shown = await answered.json();
+  expect(shown).toMatchObject({ unreadable: { records: ["series-picks"] } });
+  const before = await attemptFiles(f);
+  const note = await readFile(join(f.stateDir, NOTE));
+  await expect(
+    actions.startAgainFirstSetup({
+      ...startAgain,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  // Start again writes its confirmation record before it raises the note (backlog entry (iii)).
+  expect(await readdir(join(f.stateDir, CONFIRMATIONS))).toHaveLength(1);
+  expect(await readFile(join(f.stateDir, NOTE))).toEqual(note);
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  expect(await attemptFiles(f)).toEqual(before);
 });
 
 it("the password-required refusal answers 403 over HTTPS", async () => {

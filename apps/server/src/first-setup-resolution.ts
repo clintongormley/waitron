@@ -20,14 +20,23 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
   START_AGAIN_MARKER_LIMIT,
+  attemptLastWriteMs,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
+  type StartAgainUnreadable,
   type BackupRepairRecord,
   type RegisterAnswer,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { initialSetupFor, type WaitronModule } from "@waitron/module";
-import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
+import {
+  initialSetupFor,
+  type InitialSetupContribution,
+  type WaitronModule,
+} from "@waitron/module";
+import {
+  readFirstFiscalEvidenceSnapshot,
+  readWellFormedFirstFiscalEvidence,
+} from "./first-fiscal-evidence.js";
 import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
@@ -37,6 +46,7 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
+import { readSeriesPicks, seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -46,6 +56,7 @@ export interface StartAgainFirstSetupRequest {
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   confirmRecoveryDiscard?: { shown: StartAgainSummary };
+  confirmUnreadable?: { shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
 }
 export interface StartAgainSummaryRequest {
@@ -54,6 +65,15 @@ export interface StartAgainSummaryRequest {
   ownerGeneration: number;
   owner?: FirstSetupOwnerAttempt;
 }
+type Seat = NonNullable<InitialSetupContribution["startAgainFloor"]>;
+type UnreadableRecord = StartAgainUnreadable["records"][number];
+const PUBLIC_RECORD = "state/module-operation-public.json";
+const DOCUMENTS = "state/first-fiscal-documents/";
+const UNREADABLE_ORDER: readonly UnreadableRecord[] = [
+  "series-picks",
+  "public-record",
+  "fiscal-documents",
+];
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
 }
@@ -72,25 +92,53 @@ function unused(state: FirstSetupState) {
       ),
   );
 }
+function frozenModuleNames(state: FirstSetupState): string[] {
+  return [
+    ...new Set(
+      [state, ...state.previous].flatMap((attempt) =>
+        attempt.frozen.modules.map(({ module }) => module),
+      ),
+    ),
+  ];
+}
 /** Outside evidence refuses Start again, so only the attempt's own public evidence is read here. */
 async function gatherStartAgainFloor(
   roots: FirstSetupRoots,
   state: FirstSetupState,
   originals: readonly { name: string; bytes: Uint8Array | null }[],
   modules: readonly WaitronModule[] | undefined,
+  deletion: { discarding?: string },
+  recoveryFloor: Floor | null,
+  databaseMissing: boolean,
 ) {
   const attempts = [state, ...state.previous];
-  const names = [
-    ...new Set(attempts.flatMap((attempt) => attempt.frozen.modules.map(({ module }) => module))),
-  ];
-  if (names.length === 0) return { floor: null, recoveryRecordDamaged: false };
+  const names = frozenModuleNames(state);
+  if (names.length === 0)
+    return { floor: recoveryFloor, known: null, recoveryRecordDamaged: false };
   if (modules === undefined) unavailable();
-  let latest: { floorMs: number; lastName: string; module: string } | null = null;
   let recoveryRecordDamaged = false;
+  const unreadable = new Set<UnreadableRecord>();
+  // Only the database-missing path reads past a damaged public record or documents file; with the
+  // database present a damaged one is refused.
+  const unreadableRecord = (error: unknown, damaged: boolean, record: UnreadableRecord) => {
+    if (!databaseMissing || !damaged || !(error instanceof AppError)) throw error;
+    unreadable.add(record);
+  };
+  const inputs: { module: string; seat: Seat; input: Parameters<Seat>[0] }[] = [];
   for (const module of names) {
     const seat = initialSetupFor(modules, module)?.startAgainFloor;
     if (seat === undefined) continue;
-    const publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
+    let publicEvidence: unknown[];
+    try {
+      publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
+    } catch (error) {
+      unreadableRecord(
+        error,
+        originals.find((entry) => entry.name === PUBLIC_RECORD)?.bytes != null,
+        "public-record",
+      );
+      publicEvidence = readWellFormedFirstFiscalEvidence(module, originals);
+    }
     const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
     let recovery: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
     let seen = originals;
@@ -104,41 +152,100 @@ async function gatherStartAgainFloor(
         throw error;
       // The kept recovery record is the recovery sheet's public statement, which never sets Start
       // again's floor (`isNamelessEvidence`), so one that cannot be read is treated as missing.
-      // Every other reader here still refuses.
       recovery = null;
       recoveryRecordDamaged = true;
       seen = originals.map((entry) =>
         entry.name === recoveryName ? { name: entry.name, bytes: null } : entry,
       );
     }
-    const document =
-      recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(module, state, seen));
-    if (document !== undefined) publicEvidence.push(document);
-    const floor = seat({
-      attempts: attempts
-        .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === module))
-        .map((attempt) => ({
-          context: firstSetupModuleContext(attempt, module),
-          input: attempt.inputs[module],
-        })),
-      preparations: await readModulePreparationHistory(roots, module),
-      publicEvidence,
+    let document = recovery?.statement;
+    if (document == null)
+      try {
+        document = await readFirstFiscalDeliverySnapshot(module, state, seen);
+      } catch (error) {
+        unreadableRecord(
+          error,
+          seen.some((entry) => entry.name.startsWith(DOCUMENTS) && entry.bytes !== null),
+          "fiscal-documents",
+        );
+      }
+    const evidence = [
+      ...publicEvidence.map((item) => ({ item, record: "public-record" as const })),
+      ...(document === undefined ? [] : [{ item: document, record: "fiscal-documents" as const }]),
+    ];
+    const usable = !databaseMissing
+      ? evidence
+      : evidence.filter(({ item, record }) => {
+          try {
+            seat({ attempts: [], preparations: [], publicEvidence: [item] });
+            return true;
+          } catch (error) {
+            unreadableRecord(error, true, record);
+            return false;
+          }
+        });
+    const picks = await readSeriesPicks(roots, module, seat);
+    if (picks.unreadable) unreadable.add("series-picks");
+    inputs.push({
+      module,
+      seat,
+      input: {
+        attempts: attempts
+          .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === module))
+          .map((attempt) => ({
+            context: firstSetupModuleContext(attempt, module),
+            input: attempt.inputs[module],
+          })),
+        preparations: picks.preparations,
+        publicEvidence: usable.map(({ item }) => item),
+      },
     });
-    if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
-      latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
   }
-  return { floor: latest, recoveryRecordDamaged };
+  const latestOf = (lastWriteMs?: number) => {
+    let latest: Floor | null = null;
+    for (const { module, seat, input } of inputs) {
+      const floor = seat(lastWriteMs === undefined ? input : { ...input, lastWriteMs });
+      if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
+        latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
+    }
+    return latest;
+  };
+  const known = latestOf();
+  let floor = known;
+  if (unreadable.size > 0) {
+    const lastWriteMs = await attemptLastWriteMs(roots, deletion).catch((error: unknown) => {
+      throw error instanceof AppError
+        ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
+        : error;
+    });
+    if (lastWriteMs === null) unavailable();
+    floor = latestOf(lastWriteMs);
+  }
+  if (recoveryFloor !== null && (floor === null || recoveryFloor.floorMs > floor.floorMs))
+    floor = recoveryFloor;
+  if (unreadable.size === 0) return { floor, known, recoveryRecordDamaged };
+  if (floor === null) unavailable();
+  return {
+    floor,
+    known,
+    recoveryRecordDamaged,
+    unreadable: {
+      records: UNREADABLE_ORDER.filter((record) => unreadable.has(record)),
+      floorMs: floor.floorMs,
+    },
+  };
 }
 function summaryOf(
   state: FirstSetupState,
   gathered: Awaited<ReturnType<typeof gatherStartAgainFloor>>,
   recovery: StartAgainRecoveryShown | undefined,
 ): StartAgainSummary {
-  const summary = startAgainSummary(state, gathered.floor?.lastName ?? null);
+  const summary = startAgainSummary(state, gathered.known?.lastName ?? null);
   return {
     ...summary,
     ...(gathered.recoveryRecordDamaged && { recoveryRecordDamaged: true as const }),
     ...(recovery !== undefined && { recovery }),
+    ...(gathered.unreadable !== undefined && { unreadable: gathered.unreadable }),
   };
 }
 type BackupRecovery = Pick<
@@ -152,7 +259,7 @@ const PRESENT_START_AGAIN_STATUSES: readonly string[] = [
   "consumption-intent",
   "abandoned",
 ];
-type Floor = { floorMs: number; lastName: string; module: string };
+type Floor = { floorMs: number; lastName: string | null; module: string };
 type FoundRecovery =
   | { kind: "stopped"; id: string; floor: Floor | null; shown: StartAgainRecoveryShown }
   | { kind: "unemptied"; id: string };
@@ -301,7 +408,17 @@ export function createFirstSetupResolutionActions(
           const recovery = found?.kind === "stopped" ? found.shown : undefined;
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
-          if (inspection.database !== "missing" && recovery === undefined) unavailable();
+          if (inspection.database !== "missing" && found?.kind === "unemptied") unavailable();
+          const presentPicksOnly = inspection.database !== "missing" && found === undefined;
+          if (presentPicksOnly) {
+            const attempt = await host.store.readForRepair().catch(() => null);
+            if (
+              attempt === null ||
+              host.modules === undefined ||
+              !(await seriesPicksUnreadable(roots, host.modules, frozenModuleNames(attempt.state)))
+            )
+              unavailable();
+          }
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
           if (
@@ -318,7 +435,11 @@ export function createFirstSetupResolutionActions(
             retained.state,
             snapshot.originals,
             host.modules,
+            found === undefined ? {} : { discarding: found.id },
+            found?.kind === "stopped" ? found.floor : null,
+            inspection.database === "missing",
           );
+          if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
           return summaryOf(retained.state, gathered, recovery);
         }),
       );
@@ -334,6 +455,7 @@ export function createFirstSetupResolutionActions(
             "register",
             "confirmMissingDatabase",
             "confirmRecoveryDiscard",
+            "confirmUnreadable",
             "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
@@ -350,6 +472,11 @@ export function createFirstSetupResolutionActions(
           if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
           const discardsStopped = !missing && found?.kind === "stopped";
           if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
+          if (
+            request.confirmUnreadable !== undefined &&
+            (missing || request.confirmRecoveryDiscard !== undefined)
+          )
+            conflict();
           if (missing) {
             // D3a: with the database missing, any status but complete, and only once confirmed.
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
@@ -407,8 +534,18 @@ export function createFirstSetupResolutionActions(
             return marker;
           };
           let marker = await markerFor(discarding);
-          if ((recoveryRecordDamaged || discardsStopped) && request.owner === undefined)
-            throw new AppError("setup.start_again_password_required", {});
+          const picksDamaged =
+            !missing &&
+            host.modules !== undefined &&
+            (await seriesPicksUnreadable(roots, host.modules, frozenModuleNames(state)));
+          if (
+            (recoveryRecordDamaged || discardsStopped || picksDamaged) &&
+            request.owner === undefined
+          )
+            throw new AppError(
+              "setup.start_again_password_required",
+              picksDamaged ? { seriesPicksUnreadable: true } : {},
+            );
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
           const gathered = await gatherStartAgainFloor(
@@ -416,20 +553,25 @@ export function createFirstSetupResolutionActions(
             state,
             snapshot.originals,
             host.modules,
+            discarding,
+            found?.kind === "stopped" ? found.floor : null,
+            missing,
           );
-          let floor = gathered.floor;
-          if (
-            found?.kind === "stopped" &&
-            found.floor !== null &&
-            (floor === null || found.floor.floorMs > floor.floorMs)
-          )
-            floor = found.floor;
+          const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
           const finishing = found?.kind === "unemptied";
+          const presentUnreadable =
+            !missing && !discardsStopped && gathered.unreadable !== undefined;
+          // With the database present, no summary is shown while an abandoned journal is being
+          // finished, so nothing confirms a damaged name record on that path.
+          if (finishing && presentUnreadable) throw new AppError("setup.attempt_invalid", {});
+          if (presentUnreadable !== (request.confirmUnreadable !== undefined)) conflict();
           const confirmation = request.confirmMissingDatabase;
           const shown =
-            missing || discardsStopped ? summaryOf(state, gathered, recovery) : undefined;
+            missing || discardsStopped || presentUnreadable
+              ? summaryOf(state, gathered, recovery)
+              : undefined;
           if (
             missing &&
             (confirmation?.nothingFiledOrSold !== true ||
@@ -437,6 +579,8 @@ export function createFirstSetupResolutionActions(
           )
             conflict();
           if (discardsStopped && !isDeepStrictEqual(request.confirmRecoveryDiscard?.shown, shown))
+            conflict();
+          if (presentUnreadable && !isDeepStrictEqual(request.confirmUnreadable?.shown, shown))
             conflict();
           const backup = options.backupRecovery;
           const refuseRunning = async (): Promise<never> => {
@@ -447,7 +591,7 @@ export function createFirstSetupResolutionActions(
           // No await between this check and the first write: the record and the note change the
           // recovery's originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
-          if ((missing || discardsStopped) && !finishing) {
+          if ((missing || discardsStopped || presentUnreadable) && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
             await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),

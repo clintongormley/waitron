@@ -313,3 +313,93 @@ it("a record with the database present that showed no backup recovery is refused
   ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
   expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
 });
+
+const unreadable = {
+  records: ["series-picks", "public-record", "fiscal-documents"] as const,
+  floorMs: 1_792_162_020_000,
+};
+
+it.each([
+  ["all three records", unreadable],
+  ["one record", { records: ["public-record"] as const, floorMs: unreadable.floorMs }],
+])(
+  "a confirmation that showed unreadable name records (%s) keeps them in the record",
+  async (_label, shownUnreadable) => {
+    const dir = await stateDir();
+    const shown = {
+      ...record.shown,
+      recoveryRecordDamaged: true as const,
+      unreadable: shownUnreadable,
+    };
+    await writeStartAgainConfirmation(dir, { ...record, shown });
+    const stored = JSON.parse(
+      await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+    ) as { shown: { unreadable: object } };
+    expect(stored).toEqual({ version: 1, ...record, shown });
+    expect(Object.keys(stored.shown)).toEqual([
+      "reached",
+      "lastName",
+      "recoveryRecordDamaged",
+      "unreadable",
+    ]);
+    expect(Object.keys(stored.shown.unreadable)).toEqual(["records", "floorMs"]);
+  },
+);
+
+it("a confirmation that discards a stopped recovery past unreadable name records keeps both", async () => {
+  const dir = await stateDir();
+  const present = {
+    ...record,
+    database: "present" as const,
+    shown: { ...record.shown, recovery, unreadable },
+  };
+  await writeStartAgainConfirmation(dir, present);
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
+  ).toEqual({ version: 1, ...present });
+});
+
+it("a record with the database present is written when it showed a damaged picks file and no backup recovery", async () => {
+  const dir = await stateDir();
+  const present = {
+    ...record,
+    database: "present" as const,
+    shown: {
+      ...record.shown,
+      unreadable: { records: ["series-picks"] as const, floorMs: unreadable.floorMs },
+    },
+  };
+  await writeStartAgainConfirmation(dir, present);
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
+  ).toEqual({ version: 1, ...present });
+});
+
+it.each([
+  ["missing records", { floorMs: unreadable.floorMs }],
+  ["empty records", { records: [], floorMs: unreadable.floorMs }],
+  ["an unknown record name", { records: ["node-key"], floorMs: unreadable.floorMs }],
+  ["a repeated record", { records: ["series-picks", "series-picks"], floorMs: unreadable.floorMs }],
+  [
+    "records out of order",
+    { records: ["public-record", "series-picks"], floorMs: unreadable.floorMs },
+  ],
+  ["records other than a list", { records: "series-picks", floorMs: unreadable.floorMs }],
+  ["an extra key", { ...unreadable, extra: 1 }],
+  ["a missing floor", { records: unreadable.records }],
+  ["a text floor", { ...unreadable, floorMs: String(unreadable.floorMs) }],
+  ["a fractional floor", { ...unreadable, floorMs: 1.5 }],
+  ["null", null],
+])(
+  "a shown unreadable with %s is refused setup.attempt_invalid and writes nothing",
+  async (_label, value) => {
+    const dir = await stateDir();
+    await expect(
+      writeStartAgainConfirmation(dir, {
+        ...record,
+        shown: { ...record.shown, unreadable: value },
+      } as unknown as typeof record),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+    expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+  },
+);

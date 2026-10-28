@@ -1032,9 +1032,11 @@ declare module "@waitron/shared" {
     "setup.reset_unavailable": Record<string, never>;
     /**
      * Start again with the database present cannot go ahead without the setup password: the kept
-     * recovery-key record cannot be read. NO params.
+     * recovery-key record cannot be read, the kept series picks file cannot be read, or it would
+     * discard a stopped recovery. `seriesPicksUnreadable` is present, and true, when the picks file
+     * cannot be read.
      */
-    "setup.start_again_password_required": Record<string, never>;
+    "setup.start_again_password_required": { seriesPicksUnreadable?: true };
     /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`

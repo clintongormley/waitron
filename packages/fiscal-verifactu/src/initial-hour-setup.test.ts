@@ -1068,6 +1068,83 @@ it("the floor is the start of the minute after the name", () => {
     }),
   ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00.000Z"), lastName: "0CNNW" });
 });
+it("a last write alone gives a time floor with no name", () => {
+  expect(
+    configured().seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      lastWriteMs: Date.parse("2026-10-16T15:42:10.000Z"),
+    }),
+  ).toEqual({ floorMs: Date.parse("2026-10-16T15:45:00.000Z"), lastName: null });
+});
+it("a known name and a last write give the later floor, naming the name only when it is the later", () => {
+  const seat = configured().seat;
+  const named = (lastWriteMs: number) =>
+    seat.startAgainFloor!({
+      attempts: [{ context: fixture(), input: undefined }],
+      preparations: [],
+      publicEvidence: [],
+      lastWriteMs,
+    });
+  expect(named(minuteMs("2026-10-16T11:30:00.000Z"))).toEqual({
+    floorMs: minuteMs("2026-10-16T11:41:00.000Z"),
+    lastName: "0CNNW",
+  });
+  expect(named(minuteMs("2026-10-16T15:42:10.000Z"))).toEqual({
+    floorMs: minuteMs("2026-10-16T15:45:00.000Z"),
+    lastName: null,
+  });
+  expect(named(minuteMs("2026-10-16T11:38:00.000Z"))).toEqual({
+    floorMs: minuteMs("2026-10-16T11:41:00.000Z"),
+    lastName: "0CNNW",
+  });
+});
+it("the time floor is the start of the minute after the last write plus 150 seconds", () => {
+  const seat = configured().seat;
+  const floor = (lastWriteMs: number) =>
+    seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [], lastWriteMs });
+  expect(floor(minuteMs("2026-10-16T15:42:30.000Z"))).toEqual({
+    floorMs: minuteMs("2026-10-16T15:46:00.000Z"),
+    lastName: null,
+  });
+  expect(floor(minuteMs("2026-10-16T15:42:29.999Z"))).toEqual({
+    floorMs: minuteMs("2026-10-16T15:45:00.000Z"),
+    lastName: null,
+  });
+  expect(floor(minuteMs("2025-06-01T00:00:00.000Z"))).toEqual({
+    floorMs: minuteMs("2026-01-01T00:00:00.000Z"),
+    lastName: null,
+  });
+});
+it("a last write that is not a whole number of milliseconds refuses", () => {
+  const seat = configured().seat;
+  for (const lastWriteMs of [1.5, Number.NaN])
+    expect(() =>
+      seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [], lastWriteMs }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "history_invalid" },
+      }),
+    );
+});
+it("an unreadable intent still refuses beside a last write", async () => {
+  const { seat, state } = await selectedIntents("2026-10-16T11:45:00.000Z", "0CNNW");
+  expect(() =>
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [state],
+      publicEvidence: [],
+      lastWriteMs: minuteMs("2026-10-16T15:42:10.000Z"),
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "history_invalid" },
+    }),
+  );
+});
 it("an unreadable intent refuses rather than giving no floor", async () => {
   const { seat, state } = await selectedIntents("2026-10-16T11:45:00.000Z", "0CNNW");
   const refused = expect.objectContaining({

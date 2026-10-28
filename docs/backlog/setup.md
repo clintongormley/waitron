@@ -541,7 +541,8 @@ it ever chose a series name), there is no `lastName` to keep and nothing is rais
 (`raiseNoteToRecord`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). A moved
 venue whose names were chosen by a clock running ahead could then share a name with a later setup
 on this box. On such a box the survey's `noteFloorMs` is null, so the Move option names no floor
-either. A1099's "name unknown" note would let the Move raise a floor here too.
+either. Since A1099 the note can hold no name (`lastName: null`) with only a time floor, so the
+Move could write one here too; building that is this entry.
 
 ## A1146: a found piece on another mount below a root fails after the choice is recorded
 
@@ -671,12 +672,13 @@ the start (`setup.workspace_unsupported`), and the page asks for Waitron to be r
 
 - **The note's file:** `first-setup-start-again.json` in the box's own state folder
   (`packages/provisioning/src/first-setup-start-again-note.ts`). It holds the last series name, the
-  earliest moment a later name may be taken, and the module that gave it. A write only ever replaces
+  earliest moment a later name may be taken, and the module that gave it (2026-10-27, A1099: after
+  Start again past a damaged name record it may hold no name, only the time floor). A write only ever replaces
   it with a later moment, and no backup carries it: a restore archive or recovery bundle holding it
   is refused.
 - **The floor:** first setup, a restore, a re-registration and a promotion all read the note as a
   time floor (the earliest moment a new name may be taken), so none of them issues a production
-  series name at or before it.
+  series name before it.
 - **Q1:** with the venue database missing, the repair page asks instead of refusing: it says the box
   cannot check whether anything was filed or sold, shows what the attempt's own record says it
   reached, and Start again goes ahead only once the person confirms nothing was; each confirmation

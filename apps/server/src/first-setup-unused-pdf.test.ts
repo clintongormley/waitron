@@ -573,3 +573,56 @@ it("a damaged record beside a refused artifact refuses setup.not_ready without a
   await expect(f.start(f.answer())).rejects.toMatchObject({ code: "setup.not_ready" });
   await unchanged();
 });
+async function damagePicks(f: Awaited<ReturnType<typeof fixture>>) {
+  const path = join(f.stateDir, "module-preparation-state.json");
+  await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
+  await writeFile(path, "{damaged");
+}
+it("with the database present, a damaged kept picks file asks for the setup password, says so, and nothing changes", async () => {
+  const f = await fixture();
+  await damagePicks(f);
+  const unchanged = await startAgainUnchanged(f);
+  const refused = await f.start().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(refused).toMatchObject({ code: "setup.start_again_password_required" });
+  expect((refused as { params: unknown }).params).toEqual({ seriesPicksUnreadable: true });
+  await unchanged();
+});
+it("a damaged recovery-key record alone asks for the setup password with no params", async () => {
+  const f = await fixture();
+  await damageRecord(f, "manifest");
+  const refused = await f.start().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(refused).toMatchObject({ code: "setup.start_again_password_required" });
+  expect((refused as { params: unknown }).params).toEqual({});
+});
+it("a damaged kept picks file is not read for a frozen module with no start-again seat, so Start again goes ahead without the password", async () => {
+  const f = await fixture();
+  await damagePicks(f);
+  const modules = f.host.modules!.map((module) =>
+    module.name !== f.module
+      ? module
+      : {
+          ...module,
+          provisioning: {
+            ...module.provisioning,
+            initialSetup: { ...module.provisioning!.initialSetup!, startAgainFloor: undefined },
+          },
+        },
+  );
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules } });
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision!,
+      ownerGeneration: inspected.ownerGeneration!,
+      register: f.answer(),
+    }),
+  ).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f);
+});

@@ -20,7 +20,10 @@ export {
 } from "./privacy-contact.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
-export { readModulePreparationHistory } from "./module-preparation-state.js";
+export {
+  readModulePreparationHistory,
+  readWellFormedModulePreparations,
+} from "./module-preparation-state.js";
 export { createRecoveryPreparationHost } from "./recovery-preparation-host.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";
@@ -180,12 +183,14 @@ export {
   type StartAgainConfirmation,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
+  type StartAgainUnreadable,
 } from "./first-setup-start-again-confirmation.js";
 export {
   START_AGAIN_MARKER_FILE,
   START_AGAIN_MARKER_LIMIT,
   assertNoStartAgainDeletion,
   assertStartAgainAllowedOnDisk,
+  attemptLastWriteMs,
   clearStartAgainMarker,
   deleteMarkedAttempt,
   finishStartAgainDeletion,

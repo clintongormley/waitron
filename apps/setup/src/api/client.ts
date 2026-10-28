@@ -655,6 +655,7 @@ export class SetupApi {
     confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary },
     recoveryRecordDamagedShown?: true,
     confirmRecoveryDiscard?: { shown: StartAgainSummary },
+    confirmUnreadable?: { shown: StartAgainSummary },
   ): Promise<{ restarting: true }> {
     return this.#request(
       "/setup-api/first-setup/resolution/start-again",
@@ -664,6 +665,7 @@ export class SetupApi {
         ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
         ...(recoveryRecordDamagedShown === undefined ? {} : { recoveryRecordDamagedShown }),
         ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+        ...(confirmUnreadable === undefined ? {} : { confirmUnreadable }),
       },
       owner === undefined ? undefined : firstSetupHeaders(owner),
     );

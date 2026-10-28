@@ -2,9 +2,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton, WtInput } from "@waitron/ui";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
+import type { StartAgainSummary } from "./api/first-setup-types.js";
 import { initial, venue } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
-import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import { initialOwnerStrings, namesFromText } from "./screens/initial-owner-strings.js";
 import { backupRepairStrings } from "./i18n/backup-repair.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 
@@ -14,6 +15,8 @@ import {
   damagedSummary,
   missingDatabaseFixture,
   namedSummary,
+  namesDamagedSummary,
+  namesFloorMs,
   recoverMissing,
   recoveryStartedAt,
   runningActivity,
@@ -492,6 +495,87 @@ it("an undamaged record shows no damaged notice", async () => {
   const { app } = await damagedConfirmation("en-GB", namedSummary);
   expect(q(app, "retire-confirmed")).not.toBeNull();
   expect(q(app, "recovery-record-damaged")).toBeNull();
+});
+
+const confirmationLines = (app: Parameters<typeof q>[0]) => {
+  const box = q(app, "retire-confirmed")!;
+  return [...app.shadowRoot!.querySelectorAll("p")]
+    .filter((p) => p.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING)
+    .map((p) => p.textContent!.trim());
+};
+
+it.each(locales)(
+  "a damaged series-picks record is named, then what Start again deletes, then when new names can start, then the tick box ($locale)",
+  async ({ locale, browser }) => {
+    const { app, requests } = await damagedConfirmation(browser, namesDamagedSummary);
+    const t = initialOwnerStrings[locale];
+    const lines = confirmationLines(app);
+    expect(lines.slice(-3)).toEqual([
+      t.seriesPicksDamaged,
+      t.startAgainHelp,
+      namesFromText(browser, namesFloorMs),
+    ]);
+    expect(
+      [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
+        p.textContent!.trim(),
+      ),
+    ).toEqual([t.seriesPicksDamaged]);
+    expect(q(app, "names-from")!.textContent!.trim()).toBe(namesFromText(browser, namesFloorMs));
+    expect(q(app, "recovery-record-damaged")).toBeNull();
+    expect(startAgainRequests(requests)).toHaveLength(0);
+  },
+);
+
+it("two damaged name records draw two lines in the summary's order", async () => {
+  const summary: StartAgainSummary = {
+    ...namedSummary,
+    unreadable: { records: ["public-record", "fiscal-documents"], floorMs: namesFloorMs },
+  };
+  const { app } = await damagedConfirmation("en-GB", summary);
+  const t = initialOwnerStrings.en;
+  expect(
+    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
+      p.textContent!.trim(),
+    ),
+  ).toEqual([t.publicRecordDamaged, t.fiscalDocumentsDamaged]);
+});
+
+it("a damaged recovery-key record and a damaged name record are both named before what Start again deletes", async () => {
+  const summary: StartAgainSummary = { ...namesDamagedSummary, recoveryRecordDamaged: true };
+  const { app } = await damagedConfirmation("en-GB", summary);
+  const t = initialOwnerStrings.en;
+  expect(confirmationLines(app).slice(-4)).toEqual([
+    t.recoveryRecordDamaged,
+    t.seriesPicksDamaged,
+    t.startAgainHelp,
+    namesFromText("en-GB", namesFloorMs),
+  ]);
+});
+
+it("Cancel past damaged name records sends nothing", async () => {
+  const { app, requests } = await damagedConfirmation("en-GB", namesDamagedSummary);
+  await click(app, "cancel-start-again");
+  expect(startAgainRequests(requests)).toHaveLength(0);
+  expect(q(app, "name-record-damaged")).toBeNull();
+  expect(q(app, "names-from")).toBeNull();
+});
+
+it("confirming sends the summary as displayed, the damaged name records included", async () => {
+  const { app, requests } = await damagedConfirmation("en-GB", namesDamagedSummary);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+  const body = startAgainRequests(requests)[0]!.body as {
+    confirmMissingDatabase: { shown: unknown };
+  };
+  expect(body.confirmMissingDatabase.shown).toEqual(namesDamagedSummary);
+});
+
+it("a summary without damaged name records draws neither their lines nor when new names can start", async () => {
+  const { app } = await damagedConfirmation("en-GB", namedSummary);
+  expect(q(app, "retire-confirmed")).not.toBeNull();
+  expect(q(app, "name-record-damaged")).toBeNull();
+  expect(q(app, "names-from")).toBeNull();
 });
 
 const runningLines = (locale: "en" | "es") => {

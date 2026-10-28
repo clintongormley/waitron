@@ -19,6 +19,7 @@ export interface ClockWords {
   differDo: string;
   later: string;
   laterFrom: (time: string) => string;
+  laterFromDay: (date: string, time: string) => string;
 }
 
 export interface ClockComparison {
@@ -45,6 +46,7 @@ export const clockWaitStrings = {
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
     laterFrom: (time: string) => `You can carry on from ${time}.`,
+    laterFromDay: (date: string, time: string) => `You can carry on from ${date}, ${time}.`,
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
@@ -58,6 +60,8 @@ export const clockWaitStrings = {
     later:
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
+    laterFromDay: (date: string, time: string) =>
+      `Podrás seguir a partir del ${date} a las ${time}.`,
   },
 } satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
 
@@ -76,6 +80,16 @@ export function dateTimeFormat(
     formats.set(key, format);
   }
   return format;
+}
+
+function dayIn(ms: number, timeZone: string): number {
+  const parts = dateTimeFormat("en", timeZone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(ms);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return part("year") * 10_000 + part("month") * 100 + part("day");
 }
 
 export const SECOND_CLOCK_POLL_MS = 15_000;
@@ -259,16 +273,24 @@ export function renderClockProblem(
       <p>${words.differDo}</p>
     </section>`;
   if (problem?.kind === "later") {
-    const time =
-      problem.allowedFromMs === undefined
-        ? undefined
-        : dateTimeFormat(locale, timeZone, {
-            hour: "2-digit",
-            minute: "2-digit",
-            hourCycle: "h23",
-          }).format(problem.allowedFromMs);
+    const from = problem.allowedFromMs;
+    let carryOn: string | undefined;
+    if (from !== undefined) {
+      const time = dateTimeFormat(locale, timeZone, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).format(from);
+      carryOn =
+        dayIn(from, timeZone) > dayIn(Date.now(), timeZone)
+          ? words.laterFromDay(
+              dateTimeFormat(locale, timeZone, { dateStyle: "medium" }).format(from),
+              time,
+            )
+          : words.laterFrom(time);
+    }
     return html`<p role="status" data-test="minute-not-later">
-      ${words.later}${time === undefined ? nothing : html` ${words.laterFrom(time)}`}
+      ${words.later}${carryOn === undefined ? nothing : html` ${carryOn}`}
     </p>`;
   }
   return nothing;
