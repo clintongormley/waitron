@@ -136,8 +136,8 @@ function hdiutilImage(): { ok: true; disk: SmallDisk } {
 }
 
 /**
- * A filesystem of 64 MiB or less that the tests may fill, or why there is none. Two files filling
- * one filesystem at once fail each other, so each names its own variable.
+ * A filesystem of 64 MiB or less that the tests may fill, or why there is none. Each file that fills
+ * one names its own variable, so one file's fill never takes the room another's case measures.
  */
 export function openSmallDisk(
   variable = "WAITRON_FULL_DISK_DIR",

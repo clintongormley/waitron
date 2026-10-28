@@ -19,6 +19,8 @@ it("a named variable pointing at a large filesystem is refused, naming that vari
 it("with the named variable unset on Linux, there is no small filesystem, and the reason names that variable", () => {
   vi.stubEnv(VARIABLE, "");
   vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+  // On macOS a failed stub would attach a disk image this case never detaches.
+  expect(process.platform).toBe("linux");
   expect(openSmallDisk(VARIABLE)).toEqual({
     ok: false,
     reason: `no small filesystem: set ${VARIABLE} to one of 64 MiB or less`,

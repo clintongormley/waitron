@@ -2443,7 +2443,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     expect(mtu, "loopback's packet size must be set before the tests run").toBeLessThan(run);
   });
 
-  // Each real-disk file fills its own filesystem: two filling one at once fail each other.
+  // Each real-disk file fills its own filesystem, so one file's fill never takes another's room.
   it.each([
     ["full-disk", "WAITRON_FULL_DISK_DIR"],
     ["full-disk-start-again", "WAITRON_FULL_DISK_DIR_START_AGAIN"],
@@ -2460,6 +2460,14 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
       );
       expect(mount, `no step mounts a 32m tmpfs at $RUNNER_TEMP/${dir}`).toBeGreaterThan(-1);
       expect(mount, "the small filesystem must be mounted before the tests run").toBeLessThan(run);
+      const at = (text) => body.findIndex((line) => code(line) && line.trim() === text);
+      expect(at(`mkdir -p "$RUNNER_TEMP/${dir}"`), `no mkdir of ${dir} before its mount`).toBe(
+        mount - 1,
+      );
+      expect(
+        at(`sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/${dir}"`),
+        `no chown of ${dir} after its mount`,
+      ).toBe(mount + 1);
       const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
       const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
       expect(body.slice(stepStart, runKey)).toContain(

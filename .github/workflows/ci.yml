@@ -1076,7 +1076,7 @@ jobs:
         run: sudo ip link set dev lo mtu 1500
 
       # Why: testing-guide.md, "The full-disk start tests run on a small filesystem".
-      # Each real-disk file fills its own: two filling one at once fail each other.
+      # Each real-disk file fills its own, so one file's fill never takes another's room.
       - name: Mount small filesystems for the full-disk tests
         run: |
           set -euo pipefail
