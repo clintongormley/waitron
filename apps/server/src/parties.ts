@@ -1,3 +1,5 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
+import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
@@ -55,7 +57,14 @@ export interface PartyBill {
   revision: number;
   invoiceType: "F1" | "F2";
   invoiceDelivery?: BillInvoiceDelivery;
-  recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+  recipient: {
+    taxId: string;
+    legalName: string;
+    address: string;
+    countryCode: string;
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  } | null;
   /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
   label: string | null;
@@ -535,6 +544,8 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
             invoiceType: workingOrders.invoiceType,
             invoiceDelivery: workingOrders.invoiceDelivery,
             taxId: workingOrders.recipientTaxId,
+            identifierType: workingOrders.recipientIdentifierType,
+            identifierCountryCode: workingOrders.recipientIdentifierCountryCode,
             legalName: workingOrders.recipientLegalName,
             address: workingOrders.recipientAddress,
             countryCode: workingOrders.recipientCountryCode,
@@ -591,6 +602,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
         choice.countryCode !== null
           ? {
               taxId: choice.taxId,
+              ...storedRecipientIdentifier(choice.identifierType, choice.identifierCountryCode),
               legalName: choice.legalName,
               address: choice.address,
               countryCode: choice.countryCode,

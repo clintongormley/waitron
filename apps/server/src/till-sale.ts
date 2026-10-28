@@ -1,3 +1,4 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -319,7 +320,14 @@ export interface TillSaleResult extends ReceiptPresentation {
   operationDate?: string;
   invoiceType?: "F1" | "F2";
   issuer?: { venueName: string; nif: string; domicile?: string };
-  recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
+  recipient?: {
+    taxId: string;
+    legalName: string;
+    countryCode: string;
+    address: string;
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  };
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;

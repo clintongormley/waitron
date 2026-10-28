@@ -1,3 +1,4 @@
+import { storedRecipientIdentifier } from "./invoice-selection.js";
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import {
@@ -138,6 +139,10 @@ export async function readInvoiceDocument(
       issuer,
       recipient: {
         taxId: sale.counterpartyTaxId,
+        ...storedRecipientIdentifier(
+          sale.counterpartyIdentifierType,
+          sale.counterpartyIdentifierCountryCode,
+        ),
         legalName: sale.counterpartyLegalName!,
         countryCode: sale.counterpartyCountryCode!,
         address: sale.counterpartyAddress!,

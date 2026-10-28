@@ -1,3 +1,5 @@
+import { recipientIdentifierResult } from "@waitron/country-packs";
+import type { RecipientIdentifier } from "@waitron/country-packs";
 import "./errors.js";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { Context, Hono } from "hono";
@@ -37,13 +39,28 @@ export interface InvoiceCustomerDataDeps {
 const SEARCH_PATH = "/management-api/invoice-customers/personal-data";
 const DOWNLOAD_PATH = "/management-api/invoice-customers/personal-data/export";
 
-/** The query's one `taxId`, normalised. */
-function queriedTaxId(c: Context): string {
+function queriedIdentifier(c: Context): RecipientIdentifier {
   const query = new URL(c.req.url).searchParams;
   const keys = [...query.keys()];
-  if (keys.some((key) => key !== "taxId") || query.getAll("taxId").length > 1)
+  const accepted = ["taxId", "identifierType", "identifierCountryCode"];
+  if (
+    keys.some((key) => !accepted.includes(key)) ||
+    accepted.some((key) => query.getAll(key).length > 1)
+  )
     throw new AppError("management.request_invalid", { field: "query" });
-  return requiredInvoiceTaxId(query.get("taxId") ?? undefined);
+  if (!query.has("identifierType") && !query.has("identifierCountryCode")) {
+    return { taxId: requiredInvoiceTaxId(query.get("taxId") ?? undefined) };
+  }
+  const input = {
+    taxId: query.get("taxId"),
+    ...(query.has("identifierType") ? { identifierType: query.get("identifierType") } : {}),
+    ...(query.has("identifierCountryCode")
+      ? { identifierCountryCode: query.get("identifierCountryCode") }
+      : {}),
+  };
+  const checked = recipientIdentifierResult(input);
+  if (!checked.valid) throw new AppError("management.request_invalid", { field: checked.field });
+  return checked.value;
 }
 
 export function mountInvoiceCustomerDataApi(
@@ -72,12 +89,12 @@ export function mountInvoiceCustomerDataApi(
       const found = await deps.db.withWriteLock(async () => {
         // Permission before the query: a refused caller gets one answer whatever they typed.
         await authorize(token);
-        const taxId = queriedTaxId(c);
-        return { taxId, sales: await findInvoiceCustomerSales(tx, taxId) };
+        const identity = queriedIdentifier(c);
+        return { identity, sales: await findInvoiceCustomerSales(tx, identity.taxId, identity) };
       });
       c.header("Cache-Control", "no-store");
       return c.json({
-        taxId: found.taxId,
+        ...found.identity,
         invoices: found.sales.map(({ invoice, issuedAt, name, total }) => ({
           invoice,
           issuedAt,
@@ -95,12 +112,12 @@ export function mountInvoiceCustomerDataApi(
       const at = (deps.now ?? (() => new Date()))();
       const first = await deps.db.withWriteLock(async () => {
         const { authorizedBy } = await authorize(token);
-        const taxId = queriedTaxId(c);
+        const identity = queriedIdentifier(c);
         const place = await venuePlace(tx, deps.nodeId);
         const tenant = await readTenant(tx);
         const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
-        const sales = await findInvoiceCustomerSales(tx, taxId);
-        return { authorizedBy, taxId, place, tenant, privacyNoticeUrl, sales };
+        const sales = await findInvoiceCustomerSales(tx, identity.taxId, identity);
+        return { authorizedBy, taxId: identity.taxId, place, tenant, privacyNoticeUrl, sales };
       });
       const newest = first.sales.at(-1);
       if (newest === undefined) throw new AppError("invoice_customer.not_found", {});

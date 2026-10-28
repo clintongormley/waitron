@@ -847,15 +847,29 @@ describe("recordSubstitution — the customer is checked where it enters", () =>
     expect(row?.counterpartyTaxId).toBe("B12345674");
   });
 
-  it("checks no tax ID for a country with no checker of its own", async () => {
-    // The fake files any country; a real regime refuses a recipient it cannot file on its own.
+  it("preserves a foreign document without Spanish normalization", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
     const { saleId: f3Id } = await substitute(backend, [ticket], {
-      counterparty: { taxId: "anything", legalName: "Acme", countryCode: "ZZ" },
+      counterparty: {
+        taxId: "anything",
+        legalName: "Acme",
+        countryCode: "FR",
+        identifierType: "passport",
+        identifierCountryCode: "FR",
+      },
     });
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
     expect(row?.counterpartyTaxId).toBe("anything");
+  });
+
+  it("refuses an untyped foreign value before allocating or filing an F3", async () => {
+    const error = await refusal(new FakeFiscalBackend(suite.db), {
+      taxId: "anything",
+      legalName: "Acme",
+      countryCode: "FR",
+    });
+    expect(error).toMatchObject({ code: "counterparty.invalid", params: { field: "taxId" } });
   });
 
   it("refuses a legal name over the regime's cap, counted in characters, and accepts one at it", async () => {
@@ -885,5 +899,29 @@ describe("recordSubstitution — the customer is checked where it enters", () =>
       counterparty: { ...RECIPIENT, legalName: "x".repeat(500) },
     });
     expect(await countRows("sale_substitutions")).toBe(1);
+  });
+});
+
+it("stores an F3's actual foreign document and supplied address", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const { saleId: ticket } = await sellTicket(backend);
+  const request = {
+    counterparty: {
+      taxId: " Ab-09 /xy ",
+      legalName: "Customer",
+      countryCode: "ES",
+      identifierType: "passport" as const,
+      identifierCountryCode: "FR",
+    },
+    recipientAddress: "2 Main Street, 28013 Madrid, Madrid",
+  };
+  const { saleId } = await substitute(backend, [ticket], request);
+  const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+  expect(row).toMatchObject({
+    counterpartyTaxId: " Ab-09 /xy ",
+    counterpartyIdentifierType: "passport",
+    counterpartyIdentifierCountryCode: "FR",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: request.recipientAddress,
   });
 });

@@ -266,7 +266,7 @@ describe("stored bill invoice selection", () => {
     ).rejects.toMatchObject({ code: "invoice.recipient_invalid", params: { field } });
   });
 
-  it.each([null, "E", "FR"])(
+  it.each([null, "E", "ZZ"])(
     "refuses saved recipient country %s before numbering",
     async (country) => {
       const order = await bill(true);
@@ -278,11 +278,10 @@ describe("stored bill invoice selection", () => {
         withTransaction(suite.db, (tx) =>
           selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00")),
         ),
-      ).rejects.toMatchObject(
-        country === "FR"
-          ? { code: "fiscal.foreign_recipient_unsupported", params: { countryCode: "FR" } }
-          : { code: "management.request_invalid", params: { field: "recipient.countryCode" } },
-      );
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "recipient.countryCode" },
+      });
     },
   );
 });
@@ -313,5 +312,64 @@ describe("country-free recipient validation", () => {
     ).toThrowError(
       expect.objectContaining({ code: "invoice.recipient_invalid", params: { field: "address" } }),
     );
+  });
+});
+
+describe("accepted identities and independent postal countries", () => {
+  it("accepts a Spanish identifier with a foreign address without a postcode", () => {
+    expect(
+      checkedInvoiceRecipient(policy, {
+        ...recipient,
+        taxId: " b 1234567 4 ",
+        countryCode: "fr",
+        address: "2 Main Street, Paris",
+      }),
+    ).toEqual({ ...recipient, countryCode: "FR", address: "2 Main Street, Paris" });
+  });
+  it("preserves an actual passport independently of an ES address", () => {
+    const value = {
+      ...recipient,
+      taxId: " Ab-09 /xy ",
+      identifierType: "passport",
+      identifierCountryCode: "FR",
+    };
+    expect(checkedInvoiceRecipient(policy, value)).toEqual(value);
+  });
+  it.each([
+    { identifierType: "passport", field: "identifierCountryCode" },
+    { identifierCountryCode: "FR", field: "identifierType" },
+    { identifierType: "passport", identifierCountryCode: "ZZ", field: "identifierCountryCode" },
+    { identifierType: null, field: "identifierType" },
+  ])("refuses malformed identity at $field", ({ field, ...patch }) => {
+    expect(() => checkedInvoiceRecipient(policy, { ...recipient, ...patch })).toThrowError(
+      expect.objectContaining({ code: "invoice.recipient_invalid", params: { field } }),
+    );
+  });
+  it("reads stored foreign metadata into the selected recipient and sale", async () => {
+    const order = await bill(true);
+    await suite.db
+      .update(workingOrders)
+      .set({
+        recipientTaxId: " Ab-09 /xy ",
+        recipientIdentifierType: "passport",
+        recipientIdentifierCountryCode: "FR",
+      })
+      .where(eq(workingOrders.id, order.id));
+    const selected = await withTransaction(suite.db, (tx) =>
+      selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00")),
+    );
+    expect(selected.recipient).toEqual({
+      ...recipient,
+      taxId: " Ab-09 /xy ",
+      identifierType: "passport",
+      identifierCountryCode: "FR",
+    });
+    expect(selected.sale.counterparty).toEqual({
+      taxId: " Ab-09 /xy ",
+      legalName: recipient.legalName,
+      countryCode: "ES",
+      identifierType: "passport",
+      identifierCountryCode: "FR",
+    });
   });
 });

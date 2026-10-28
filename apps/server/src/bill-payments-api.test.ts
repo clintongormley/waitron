@@ -2856,9 +2856,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     },
   );
 
-  it("refuses a foreign F1 recipient without saving personal details", async () => {
+  it("saves a Spanish identifier independently of a foreign postal country", async () => {
     const billId = await tabWith("Chuletón");
-    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "F1",
       recipient: {
@@ -2869,15 +2869,13 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       },
     });
 
-    expect(refused).toEqual({
-      status: 409,
-      json: { code: "fiscal.foreign_recipient_unsupported", params: { countryCode: "FR" } },
-    });
+    expect(saved).toEqual({ status: 200, json: { revision: 1 } });
     const [after] = await inTx((tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
     );
-    expect(after!.invoiceType).toBe("F2");
-    expect(after!.recipientTaxId).toBeNull();
+    expect(after!.invoiceType).toBe("F1");
+    expect(after!.recipientTaxId).toBe("B12345674");
+    expect(after!.recipientCountryCode).toBe("FR");
   });
 
   it("refuses an unknown invoice type before changing the bill", async () => {

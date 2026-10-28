@@ -1,3 +1,4 @@
+import { NoneBackend } from "@waitron/fiscal-none";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -30,6 +31,7 @@ import {
   saleSettlements,
   sales,
   tenders,
+  tenants,
   triggerRaised,
   withTransaction,
   workingOrders,
@@ -2089,5 +2091,37 @@ describe("recordSale — saved full-invoice service date", () => {
     const { saleId } = await run(new FakeFiscalBackend(suite.db));
     const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(saved).toMatchObject({ operationDate: null });
+  });
+});
+
+describe("accepted document persistence", () => {
+  it.each(["fake", "none"])("stores explicit foreign identity with %s backend", async (kind) => {
+    await suite.db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street" });
+    const backend = kind === "none" ? new NoneBackend() : new FakeFiscalBackend(suite.db);
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "FOREIGN", purpose: "full" })
+      .returning();
+    const { saleId } = await run(backend, {
+      seriesId: brandSeriesId(full!.id),
+      counterparty: {
+        taxId: " Ab-09 /xy ",
+        legalName: "Customer",
+        countryCode: "ES",
+        identifierType: "passport",
+        identifierCountryCode: "FR",
+      },
+      recipientAddress: "2 Main Street, 28013 Madrid, Madrid",
+    });
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row).toMatchObject({
+      counterpartyTaxId: " Ab-09 /xy ",
+      counterpartyCountryCode: "ES",
+      counterpartyIdentifierType: "passport",
+      counterpartyIdentifierCountryCode: "FR",
+      counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
+      fiscalBackend: kind,
+    });
+    expect(await countRows("fake_fiscal_records")).toBe(kind === "none" ? 0 : 1);
   });
 });

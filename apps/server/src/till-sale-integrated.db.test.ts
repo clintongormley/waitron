@@ -755,9 +755,9 @@ describe("walk-up invoice preparation", () => {
     },
     {
       invoiceType: "F1",
-      recipient: { ...recipient, countryCode: "FR" },
-      code: "fiscal.foreign_recipient_unsupported",
-      params: { countryCode: "FR" },
+      recipient: { ...recipient, countryCode: "ZZ" },
+      code: "management.request_invalid",
+      params: { field: "recipient.countryCode" },
     },
   ])("refuses malformed or unsupported walk-up invoice input %#", async (request) => {
     const { cfg, cafe } = await setupVenue();

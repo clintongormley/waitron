@@ -118,7 +118,9 @@ declare module "@waitron/shared" {
     "sale.total_exceeds_simplified_limit": { total: string; limit: string };
     /** A full invoice's customer the record could not carry: a tax ID rejected by its country,
      * a blank or overlong legal name, or a missing postal address. No personal value is carried. */
-    "counterparty.invalid": { field: "taxId" | "legalName" | "address" };
+    "counterparty.invalid": {
+      field: "taxId" | "legalName" | "address" | "identifierType" | "identifierCountryCode";
+    };
     /** A VAT breakdown's bases and taxes, summed and compared by value, do not equal the total; a
      * chained record that disagrees with its own total cannot be repaired. Thrown before anything
      * is written: by `recordSale` for a supplied breakdown, compared as given and at the cent; and

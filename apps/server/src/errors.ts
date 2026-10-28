@@ -339,7 +339,9 @@ declare module "@waitron/shared" {
      */
     "working_order.out_of_date": { workingOrderId: string; revision: number };
     "sale.full_invoice_unavailable": Record<string, never>;
-    "invoice.recipient_invalid": { field: "taxId" | "legalName" | "address" };
+    "invoice.recipient_invalid": {
+      field: "taxId" | "legalName" | "address" | "identifierType" | "identifierCountryCode";
+    };
     "invoice.choice_locked": Record<string, never>;
     /**
      * A write reached an OPEN order a card payment is in flight on: an integrated payment between

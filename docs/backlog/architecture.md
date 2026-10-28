@@ -412,8 +412,9 @@ until A977).
 - **A963 — recipient addresses in any country (owner, 2026-10-28).** The country belongs to
   the address and is selected separately from fiscal identity. Spain's postcode/province checks
   apply to Spanish addresses; foreign addresses require street and locality, with postcode/province
-  optional. Complete identity storage, filing, customer exports and form integration on the
-  owner-held PR. [Rework plan](../superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
+  optional. Identity storage, filing, request/read propagation and customer exports have focused
+  local checks. Form/document-label integration and final qualification remain on the owner-held PR;
+  public counter F1 payment stays with A555. [Rework plan](../superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
 - **A964 — point 3(3), and the first of point 2.** Kitchen tickets
   (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
   the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than

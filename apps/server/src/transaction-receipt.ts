@@ -1,3 +1,4 @@
+import { storedRecipientIdentifier } from "./invoice-selection.js";
 import { eq } from "drizzle-orm";
 import {
   invoiceSeries,
@@ -152,6 +153,10 @@ export async function readTransactionReceipt(
       : {
           recipient: {
             taxId: sale.counterpartyTaxId,
+            ...storedRecipientIdentifier(
+              sale.counterpartyIdentifierType,
+              sale.counterpartyIdentifierCountryCode,
+            ),
             legalName: sale.counterpartyLegalName!,
             countryCode: sale.counterpartyCountryCode!,
             address: sale.counterpartyAddress!,

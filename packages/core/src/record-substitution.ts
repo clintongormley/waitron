@@ -41,6 +41,7 @@ export interface RecordSubstitutionInput {
    */
   substitutedSaleIds: SaleId[];
   counterparty: Counterparty;
+  recipientAddress?: string | null;
   /** The F3's own total, positive: it restates the substituted operations rather than negating
    * them, and `corrects_sale_id` stays null. */
   total: string;
@@ -189,6 +190,9 @@ export async function recordSubstitution(
     counterpartyTaxId: counterparty.taxId,
     counterpartyLegalName: counterparty.legalName,
     counterpartyCountryCode: counterparty.countryCode,
+    counterpartyIdentifierType: counterparty?.identifierType ?? null,
+    counterpartyIdentifierCountryCode: counterparty?.identifierCountryCode ?? null,
+    counterpartyAddress: input.recipientAddress ?? null,
   });
 
   // On this same transaction, attached to the F3.
