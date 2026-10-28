@@ -4265,7 +4265,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Review every permission: fewer, coarser, and consistently named**
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
-- **A1002: custom roles and a built-in Admin that holds every privilege.** Awaiting owner approval.
+- **A1002: several roles per person, fixed built-in names and editable ordinary grants.** Design
+  revised 2026-10-28; accepted catalog, attendance, context and removal-only deletion decisions
+  incorporated. Sole-role deletion outcome first, then complete revised design approval; no plan/build.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
