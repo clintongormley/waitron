@@ -207,8 +207,8 @@ links**, **Buttons**, **Fields and focus** and **Text**. Each starts closed when
 editor, and each has a closed line of its own that says what in it is set by hand, such as "1 set by
 hand: Page (light)" or "None set by hand". While colours set by hand in that section, or, in the
 **Text** section, text sizes, are hard to read, the line adds how many, as in "1 set by hand: Page
-(light) · 1 hard to read". A brand colour that is hard to read counts in none of the sections. Press
-a section's heading to open it. A section stays open or closed as you leave it, closing and opening
+(light) · 1 hard to read". The brand colour's own warning counts in none of the sections. Press a
+section's heading to open it. A section stays open or closed as you leave it, closing and opening
 Advanced included, until the editor closes; the next time the editor opens, every section starts
 closed.
 

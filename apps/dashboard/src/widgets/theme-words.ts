@@ -23,7 +23,7 @@ import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { currentContentLanguages } from "@waitron/ui";
 import { catalogues, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import { type AdvancedSectionId, COLOUR_SECTIONS, inSection } from "./advanced-sections.js";
+import { type AdvancedSectionId, inSection, sectionKeys } from "./advanced-sections.js";
 import { countOf } from "./count-text.js";
 import { TEXT_FIELDS, textSetByHand, type TextField } from "./look-draft.js";
 
@@ -267,9 +267,8 @@ export function sectionHeading(id: AdvancedSectionId): string {
 
 function sectionNames(id: AdvancedSectionId, choices: ThemeChoices): string[] {
   if (id === "text") return textNames(choices);
-  const keys = COLOUR_SECTIONS.find((section) => section.id === id)!.keys;
   return MODES.flatMap((mode) =>
-    keys
+    sectionKeys(id)
       .filter((key) => choices.handSet[mode][key] !== undefined)
       .map((key) => handItem(key, mode)),
   );

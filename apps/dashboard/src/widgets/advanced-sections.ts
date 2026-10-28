@@ -56,6 +56,10 @@ const SECTION_OF = new Map<ThemeColour, ColourSectionId>(
   COLOUR_SECTIONS.flatMap((section) => section.keys.map((key) => [key, section.id] as const)),
 );
 
+export function sectionKeys(id: ColourSectionId): readonly ThemeColour[] {
+  return COLOUR_SECTIONS.find((section) => section.id === id)!.keys;
+}
+
 export function sectionOfColour(key: ThemeColour): ColourSectionId {
   return SECTION_OF.get(key)!;
 }

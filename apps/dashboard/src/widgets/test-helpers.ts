@@ -84,7 +84,7 @@ export function cleanupWidgets(): void {
 export interface OpenFoldOptions {
   /**
    * Clicks the header button in the page's own script instead of through the browser driver: no
-   * pointer, no scrolling into view, and no driver round trip (about 185 ms a click). For a fold
+   * pointer, no scrolling into view, and no driver round trip. For a fold
    * opened as setup, never for a case about the header click itself.
    */
   readonly domClick?: boolean;

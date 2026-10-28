@@ -336,6 +336,7 @@ describe("what opens a section", () => {
     expect(disclosure(el).open).toBe(true);
     expect(opened(el)).toEqual([false, false, false, true, false]);
     expect(erring(el)).toEqual([false, false, false, true, false]);
+    expect(disclosure(el).hasAttribute("has-error")).toBe(true);
     el.errors = {};
     await settled(el);
     expect(sectionAt(el, "fields").open).toBe(true);
@@ -398,9 +399,15 @@ describe("what opens a section", () => {
     expect(buttons.classList.contains("animating")).toBe(false);
     expect(buttons.style.height).toBe("");
     await nextFrame();
+    expect(sectionAt(el, "buttons").open).toBe(true);
     const body = disclosure(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
     expect(body.classList.contains("animating")).toBe(true);
-    expect(parseFloat(body.style.height)).toBeGreaterThanOrEqual(body.scrollHeight - 1);
+    const target = parseFloat(body.style.height);
+    expect(target).toBeGreaterThanOrEqual(body.scrollHeight - 1);
+    await vi.waitFor(() => expect(body.classList.contains("animating")).toBe(false), {
+      timeout: 5000,
+    });
+    expect(target).toBeGreaterThanOrEqual(body.getBoundingClientRect().height - 1);
   });
 });
 
@@ -461,6 +468,10 @@ describe("layout", () => {
       const [light, dark] = [...row.querySelectorAll<HTMLElement>(".value")];
       expect(Math.abs(box(light!).left - box(name).left), key).toBeLessThanOrEqual(1);
       expect(box(dark!).top, key).toBeGreaterThanOrEqual(box(light!).bottom);
+      expect(
+        modeLabels(row).map((label) => label.textContent!.trim()),
+        key,
+      ).toEqual([t("theme.light"), t("theme.dark")]);
       for (const label of modeLabels(row)) expect(box(label).height, key).toBeGreaterThan(0);
     }
     expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
@@ -721,9 +732,7 @@ describe("the fixed line", () => {
 describe("one pick per frame", () => {
   let frames: FrameRequestCallback[];
   let cancel: ReturnType<typeof vi.spyOn>;
-  // A fold opens over animation frames, which this suite holds back; without motion it opens at once.
-  beforeEach(async () => {
-    await commands.emulateReducedMotion("reduce");
+  beforeEach(() => {
     frames = [];
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       frames.push(callback);
@@ -731,9 +740,8 @@ describe("one pick per frame", () => {
     });
     cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
   });
-  afterEach(async () => {
+  afterEach(() => {
     vi.restoreAllMocks();
-    await commands.emulateReducedMotion(null);
   });
 
   function pick(el: ThemeAdvanced, colour: string) {

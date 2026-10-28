@@ -4,7 +4,7 @@ import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, fixAll, type ThemeChoices } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import { ADVANCED_SECTIONS, type AdvancedSectionId } from "../widgets/advanced-sections.js";
 import {
   cleanupWidgets,
@@ -379,12 +379,16 @@ describe("sections are closed again the next time the editor opens", () => {
     const warnings = deriveTheme(CHRISTMAS).warnings;
     for (const id of ADVANCED_SECTIONS)
       expect(section(el, id).summary, id).toBe(sectionSummary(id, CHRISTMAS, warnings));
+    const pageLight = fill("appearance.hand_item", {
+      name: t("appearance.colour.bg"),
+      mode: t("appearance.mode.light"),
+    });
     expect(ADVANCED_SECTIONS.map((id) => section(el, id).summary)).toEqual([
-      "1 set by hand: Page (light)",
+      fill("appearance.advanced_set_one", { names: pageLight }),
       t("appearance.section_none"),
       t("appearance.section_none"),
       t("appearance.section_none"),
-      "1 set by hand: Small text",
+      fill("appearance.advanced_set_one", { names: t("appearance.text.size.sm") }),
     ]);
   });
 });

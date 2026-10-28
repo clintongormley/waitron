@@ -811,6 +811,10 @@ describe("Advanced's sections", () => {
     ...LEMON,
     handSet: { light: { text: "#6a6a6a" }, dark: {} },
   };
+  const PALE_TEXTS: ThemeChoices = {
+    ...WAITRON_CHOICES,
+    handSet: { light: { text: "#aaaaaa", "text-muted": "#bbbbbb" }, dark: {} },
+  };
 
   it("sums up each section when it is closed", () => {
     const none = "None set by hand";
@@ -907,11 +911,30 @@ describe("Advanced's sections", () => {
     const twoFixes = summaries(TWO_FIXES, derived(TWO_FIXES));
     expect(twoFixes.surfaces).toBe(`${one(item("surface-sunken", "light"))} · ${hard}`);
     expect(twoFixes["text-colours"]).toBe(`${one(item("text", "light"))} · ${hard}`);
+    expect(sectionSummary("surfaces", BOTH_PAGES, derived(BOTH_PAGES))).toBe(
+      esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("bg", "light")}, ${item("bg", "dark")}`,
+      }),
+    );
+    expect(sectionSummary("fields", FOCUS_AND_FILL, derived(FOCUS_AND_FILL))).toBe(
+      esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("field-fill", "light")}, ${item("focus", "light")}`,
+      }),
+    );
     expect(sectionSummary("fields", FOCUS_LIGHT_FILL_DARK, derived(FOCUS_LIGHT_FILL_DARK))).toBe(
       esFill("appearance.advanced_set", {
         n: "2",
         names: `${item("focus", "light")}, ${item("field-fill", "dark")}`,
       }),
+    );
+    expect(sectionSummary("buttons", HOVER, derived(HOVER)).endsWith(` · ${hard}`)).toBe(true);
+    expect(sectionSummary("text-colours", PALE_TEXTS, derived(PALE_TEXTS))).toBe(
+      `${esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("text", "light")}, ${item("text-muted", "light")}`,
+      })} · ${esFill("appearance.hard_to_read_count", { count: "2" })}`,
     );
     expect(sectionSummary("buttons", DARK_BUTTONS, derived(DARK_BUTTONS))).toBe(
       one(item("primary", "dark")),

@@ -11,8 +11,8 @@ import {
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { ADVANCED_SECTIONS } from "../widgets/advanced-sections.js";
 import { setLocale, t } from "../i18n/t.js";
+import { ADVANCED_SECTIONS } from "../widgets/advanced-sections.js";
 import {
   cleanupWidgets,
   mountWidget,
@@ -93,6 +93,15 @@ const disclosure = (el: Card) =>
   advanced(el).shadowRoot!.querySelector(
     "[data-test=advanced]",
   ) as HTMLElementTagNameMap["wt-disclosure"];
+const openSections = (el: Card) =>
+  ADVANCED_SECTIONS.filter(
+    (id) =>
+      (
+        advanced(el).shadowRoot!.querySelector(
+          `[data-test=section-${id}]`,
+        ) as HTMLElementTagNameMap["wt-disclosure"]
+      ).open,
+  );
 const handCode = (el: Card, mode: string, key: string) =>
   advanced(el).shadowRoot!.querySelector(
     `wt-input[name="handSet.${mode}.${key}"]`,
@@ -786,16 +795,7 @@ describe("the dark version's own button colour", () => {
     await userEvent.click(link);
     await settle(el);
     expect(disclosure(el).open).toBe(true);
-    expect(
-      ADVANCED_SECTIONS.filter(
-        (id) =>
-          (
-            advanced(el).shadowRoot!.querySelector(
-              `[data-test=section-${id}]`,
-            ) as HTMLElementTagNameMap["wt-disclosure"]
-          ).open,
-      ),
-    ).toEqual(["buttons"]);
+    expect(openSections(el)).toEqual(["buttons"]);
     const inner = handCode(el, "dark", "primary").shadowRoot!.querySelector("input");
     await expect.poll(() => focused(el)).toBe(inner);
     expect(button(el, "save").variant).toBe("secondary");

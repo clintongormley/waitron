@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { THEME_COLOURS, type ThemeWarning } from "@waitron/ui-core/theme";
+import {
+  type ColourWarning,
+  THEME_COLOURS,
+  type ThemeWarning,
+  type WarningField,
+} from "@waitron/ui-core/theme";
 import {
   ADVANCED_SECTIONS,
   COLOUR_SECTIONS,
@@ -8,11 +13,9 @@ import {
   sectionOfColour,
 } from "./advanced-sections.js";
 
-function colourWarning(
-  field: `handSet.${"light" | "dark"}.${string}` | "brandColor",
-): ThemeWarning {
+function colourWarning(field: WarningField): ColourWarning {
   const mode = field.startsWith("handSet.dark") ? "dark" : "light";
-  return { field, mode, against: [], fix: null, blockedBy: [] } as ThemeWarning;
+  return { field, mode, against: [], fix: null, blockedBy: [] };
 }
 
 const TEXT_WARNING: ThemeWarning = {
