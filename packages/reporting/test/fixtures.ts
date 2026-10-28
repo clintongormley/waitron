@@ -346,7 +346,7 @@ export async function seedPurchaseInvoice(
     .insert(purchaseInvoices)
     .values({
       supplierTaxId: opts.supplierTaxId ?? "B00000000",
-      supplierName: "Proveedor",
+      supplierName: "Supplier",
       supplierInvoiceNumber: opts.supplierInvoiceNumber,
       issuedOn: opts.issuedOn,
       receivedOn: opts.receivedOn,

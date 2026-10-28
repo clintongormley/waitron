@@ -5940,8 +5940,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   demos after moving their useful checks into English tests. Low priority; needed before A977
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A976. Finish the server's English test-venue defaults.** Other helpers, reporting supplier
-  samples and screen expectations remain. Continue package by package from A977's list; keep accent-sensitive
+- **A976. Finish the server's English test-venue defaults.** Other helpers and screen
+  expectations remain. Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
