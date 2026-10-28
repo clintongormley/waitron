@@ -240,6 +240,7 @@ export {
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
 export {
+  ABANDONABLE as ABANDONABLE_BACKUP_PHASES,
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,

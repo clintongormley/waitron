@@ -69,7 +69,12 @@ const PHASES: BackupRepairPhase[] = [
   "selected",
   "abandoned",
 ];
-const ABANDONABLE: BackupRepairPhase[] = ["prepared", "placement-started", "restored"];
+/** The phases a recovery can be abandoned from: a stopped recovery Start again would discard. */
+export const ABANDONABLE: readonly BackupRepairPhase[] = [
+  "prepared",
+  "placement-started",
+  "restored",
+];
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";

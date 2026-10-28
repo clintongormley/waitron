@@ -3,7 +3,9 @@ import { lstat, open as openFile, unlink as unlinkFile } from "node:fs/promises"
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { MiddlewareHandler } from "hono";
+import { isAppError } from "@waitron/shared";
 import {
+  ABANDONABLE_BACKUP_PHASES,
   SPARE_SPACE_FILE,
   createFirstSetupBackupWorkspace,
   isEmptiedTombstone,
@@ -132,7 +134,10 @@ export function releaseSpareBeforeStartAgain(options: {
         if (free !== null && free < FULL_DISK_BYTES && (await discardable(roots)))
           await releaseSpare(stateDir, log);
       } catch (error) {
-        log("warn", "storage.spare_release_skipped", { errno: errnoOf(error) ?? null });
+        log("warn", "storage.spare_release_skipped", {
+          errno: errnoOf(error) ?? null,
+          errorCode: isAppError(error) ? error.code : null,
+        });
       }
     }
     await next();
@@ -142,6 +147,6 @@ export function releaseSpareBeforeStartAgain(options: {
 async function discardable(roots: FirstSetupRoots): Promise<boolean> {
   const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1);
   if (last === undefined) return false;
-  if (["prepared", "placement-started", "restored"].includes(last.phase)) return true;
+  if (ABANDONABLE_BACKUP_PHASES.includes(last.phase)) return true;
   return last.phase === "abandoned" && !(await isEmptiedTombstone(roots, last.target.recoveryId));
 }

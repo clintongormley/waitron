@@ -904,7 +904,7 @@ it("with the database present, the fence refuses a well-formed discard while the
   expect(startAgain).toHaveBeenCalledTimes(1);
 });
 
-it("on a nearly full disk with a spare, Start again over a stopped recovery releases the spare, discards the recovery and raises the note to its series name", async () => {
+it("an inspection read under a nearly full reading releases the spare, and Start again over the stopped recovery then discards it and raises the note to its series name", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));

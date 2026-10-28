@@ -192,7 +192,9 @@ describe("releaseSpareBeforeStartAgain", () => {
   });
 
   /** A backup recovery's journal in `roots()`, its records going through `phases` in turn. */
-  async function journal(phases: ("prepared" | "placement-started" | "abandoned" | "emptied")[]) {
+  async function journal(
+    phases: ("prepared" | "placement-started" | "restored" | "abandoned" | "emptied")[],
+  ) {
     const anchor = roots();
     await mkdir(anchor.venueDir, { recursive: true });
     const id = randomUUID();
@@ -232,6 +234,8 @@ describe("releaseSpareBeforeStartAgain", () => {
         await workspace.append({ ...input, input: { accepted: true }, phase });
         (await lockVenueDatabase(target.target.venueDir)).release();
       }
+      if (phase === "restored")
+        await workspace.append({ ...input, input: { accepted: true }, phase });
       if (phase === "abandoned") await workspace.abandon(id);
       if (phase === "emptied") {
         const { emptyAbandonedBackupRecovery } = await import("@waitron/provisioning");
@@ -275,6 +279,18 @@ describe("releaseSpareBeforeStartAgain", () => {
       expect(log).toHaveBeenCalledWith("warn", "storage.spare_released", { bytes: 4096 });
     },
   );
+
+  it.each([
+    [["prepared"]],
+    [["prepared", "placement-started"]],
+    [["prepared", "placement-started", "restored"]],
+  ] as const)("a recovery stopped after %j: released", async (phases) => {
+    await journal([...phases]);
+    await writeFile(spare(), Buffer.alloc(4096, 1));
+    const { app: a } = app();
+    await a.request(ROOT);
+    expect(existsSync(spare())).toBe(false);
+  });
 
   it("a POST under /resolution/backup/ releases nothing", async () => {
     await journal(["prepared"]);
@@ -366,6 +382,12 @@ describe("releaseSpareBeforeStartAgain", () => {
     const { app: a, log } = app();
     expect((await a.request(ROOT)).status).toBe(200);
     expect(existsSync(spare())).toBe(true);
-    expect(log).toHaveBeenCalledWith("warn", "storage.spare_release_skipped", expect.anything());
+    expect(log.mock.calls).toEqual([
+      [
+        "warn",
+        "storage.spare_release_skipped",
+        { errno: null, errorCode: "setup.attempt_uncertain" },
+      ],
+    ]);
   });
 });
