@@ -140,6 +140,9 @@ export class VenueDetailsPanel extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .retry {
+        justify-self: start;
+      }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
@@ -662,10 +665,23 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
-    return html`${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
+    return html`${
+      this.readError && !this.actionError
+        ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
+            <wt-button
+              class="retry"
+              data-test="retry"
+              variant="secondary"
+              @click=${() => void this.#load()}
+              >${t("location_settings.retry")}</wt-button
+            >`
+        : nothing
+    }
     ${
       !model
-        ? html`<p role="status">${t("venue_details.loading")}</p>`
+        ? this.readError
+          ? nothing
+          : html`<p role="status">${t("venue_details.loading")}</p>`
         : html`
             ${settingsCard({
               id: "business-card",

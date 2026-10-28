@@ -1036,3 +1036,58 @@ it("a failed read after the business-day editor's answer is tried again and ends
     vi.useRealTimers();
   }
 });
+
+it("a failed first read offers Retry, and Retry draws the cards and clears the message", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+  const el = await mount(r.api);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(q(el, "[data-test=saved-name]")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Loading venue details");
+  const retry = q(el, "[data-test=retry]")!;
+  expect(text(retry)).toBe("Retry");
+  expect(retry.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width / 2);
+  retry.click();
+  await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Venue");
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+  expect(q(el, "[data-test=retry]")).toBeNull();
+});
+
+it("a failed later read keeps the cards with Retry, and Retry shows the newest values", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  expect(q(el, "[data-test=retry]")).toBeNull();
+  vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+  await r.notify(el);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(text(q(el, "[data-test=saved-name]"))).toBe("Venue");
+  r.set(venueDetailsFixture({ name: "Other manager" }));
+  await click(el, "[data-test=retry]");
+  await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+  expect(q(el, "[data-test=retry]")).toBeNull();
+});
+
+it("a save's answer arriving after a newer Retry read never replaces what Retry showed", async () => {
+  const r = rig();
+  const pending = deferred<{ changed: boolean; model: VenueDetailsModel }>();
+  vi.mocked(r.api.patchVenueDetails).mockImplementationOnce(() => pending.promise);
+  const el = await editing(r.api);
+  change(el, "addressLine1", "New street");
+  await flush(el);
+  await click(el, "[data-test=save]");
+  vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+  await r.notify(el);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  r.set(venueDetailsFixture({ addressLine1: "Newer street" }));
+  await click(el, "[data-test=retry]");
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeNull();
+  const followUp = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => followUp.promise);
+  pending.resolve({ changed: true, model: venueDetailsFixture({ addressLine1: "New street" }) });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await flush(el);
+  expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("Newer street");
+  followUp.resolve(venueDetailsFixture({ addressLine1: "Newer street" }));
+});
