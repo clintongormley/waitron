@@ -37,7 +37,10 @@ import {
   resolveFirstSetupBackupEntry,
 } from "./first-setup-backup-entry.js";
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
-import { startFailureCode } from "./boot-failure.js";
+import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
+import type { Statfs } from "./free-bytes.js";
+import { releaseSpare } from "./spare-space.js";
+import { lowestFreeBytes } from "./start-space.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -64,8 +67,9 @@ export async function resolveFirstSetupEntry(
   environment: Readonly<Record<string, string | undefined>>,
   requestRestart?: () => void,
   log: Logger = () => {},
+  spare?: SpareOption,
 ) {
-  const refused = await refusedAtStart(roots, log);
+  const refused = await refusedAtStart(roots, log, spare);
   if (refused !== undefined) return refused;
   const backup = await resolveFirstSetupBackupEntry(roots);
   if (backup.kind === "repair")
@@ -91,6 +95,12 @@ export async function resolveFirstSetupEntry(
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log);
 }
 
+/** The box's configured state folder, where its spare file lives, and how its free space is read. */
+export interface SpareOption {
+  stateDir: string;
+  statfs?: Statfs;
+}
+
 const START_REFUSALS = [
   "setup.workspace_unsupported",
   "setup.start_again_incomplete",
@@ -111,6 +121,7 @@ type StartRefused = {
 async function refusedAtStart(
   roots: FirstSetupRoots,
   log: Logger,
+  spare: SpareOption | undefined,
 ): Promise<StartRefused | undefined> {
   let canonical: FirstSetupRoots;
   try {
@@ -121,7 +132,7 @@ async function refusedAtStart(
   } catch {
     return undefined;
   }
-  await emptyDiscardedRecovery(canonical, log);
+  await emptyDiscardedRecovery(canonical, log, spare);
   const refused = (error: unknown): StartRefused | undefined => {
     if (!(error instanceof AppError)) return undefined;
     const code = START_REFUSALS.find((candidate) => candidate === error.code);
@@ -201,7 +212,11 @@ function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
 }
 
 /** Finishes a discard a power cut stopped after the abandon; a refusal is logged and the start goes on. */
-async function emptyDiscardedRecovery(roots: FirstSetupRoots, log: Logger) {
+async function emptyDiscardedRecovery(
+  roots: FirstSetupRoots,
+  log: Logger,
+  spare: SpareOption | undefined,
+) {
   let target: string | undefined;
   let path: string | undefined;
   try {
@@ -211,6 +226,10 @@ async function emptyDiscardedRecovery(roots: FirstSetupRoots, log: Logger) {
     target = last.target.target.venueDir;
     path = join(roots.stateDir, "first-setup-resolutions", "backup-recovery", id);
     if (await isEmptiedTombstone(roots, id)) return;
+    if (spare !== undefined) {
+      const free = await lowestFreeBytes([roots.stateDir, roots.venueDir, target], spare.statfs);
+      if (free !== null && free < FULL_DISK_BYTES) await releaseSpare(spare.stateDir, log);
+    }
     await emptyAbandonedBackupRecovery(roots, id);
   } catch (error) {
     const errno = errnoOf(error);

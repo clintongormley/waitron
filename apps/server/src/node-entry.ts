@@ -330,6 +330,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     deps.baseEnv,
     () => (deps.exit ?? DEFAULT_EXIT)(0),
     deps.log,
+    { stateDir: deps.stateDir, statfs: deps.statfs },
   );
   const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
   const transportPort = httpPortFrom(transportEnv);

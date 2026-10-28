@@ -49,6 +49,7 @@ import {
   START_AGAIN_GUESSES_FILE,
   START_AGAIN_MARKER_FILE,
   START_AGAIN_SET_ASIDE_DIR,
+  SPARE_SPACE_FILE,
   createFirstSetupBackupWorkspace,
   isEmptiedTombstone,
 } from "@waitron/provisioning";
@@ -779,8 +780,8 @@ describe("a start on a real full disk", () => {
     const small = needDisk(ctx);
     const stateDir = await startedBefore(small, "discarded-full");
     const discarded = await discardedRecovery(stateDir);
-    const spare = join(stateDir, "spare");
-    writeFileSync(spare, Buffer.alloc(1024 * 1024, 69));
+    const filler = join(stateDir, "filler");
+    writeFileSync(filler, Buffer.alloc(1024 * 1024, 69));
     small.fill();
     expect(small.free()).toBeLessThan(65_536);
 
@@ -816,7 +817,7 @@ describe("a start on a real full disk", () => {
     expect(page).toContain(TITLE);
     expect(page).toContain(escapeHtml(OPERATOR_TEXT["storage.disk_full"]!["en-GB"].action));
 
-    rmSync(spare);
+    rmSync(filler);
     const room = entryDeps(stateDir);
     await runEntry(room);
     expect(vi.mocked(room.log).mock.calls.map(([, event]) => event)).not.toContain(
@@ -826,6 +827,26 @@ describe("a start on a real full disk", () => {
     expect(() => statSync(discarded.database)).toThrow();
     expect(room.serveRecovery).not.toHaveBeenCalled();
     expect(room.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a discarded recovery on a full disk with nothing to delete but the box's spare file: the start deletes the spare, empties the recovery and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "discarded-spare");
+    const discarded = await discardedRecovery(stateDir);
+    const spare = join(stateDir, SPARE_SPACE_FILE);
+    writeFileSync(spare, Buffer.alloc(1024 * 1024, 71));
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    const events = vi.mocked(d.log).mock.calls.map(([, event]) => event);
+    expect(events).not.toContain("setup.recovery_cleanup_refused");
+    expect(events).toContain("storage.spare_released");
+    expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(true);
+    expect(() => statSync(discarded.database)).toThrow();
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    expect(d.startServer).toHaveBeenCalledTimes(1);
   });
 
   it("a discarded recovery on a full disk with a rotated log: the start deletes the log, then empties the recovery and boots", async (ctx) => {
