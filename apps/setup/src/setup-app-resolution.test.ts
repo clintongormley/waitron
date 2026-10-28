@@ -2440,6 +2440,14 @@ it("with the database present, a summary read refused storage.disk_full says the
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
 });
 
+it("with the database present, a stopped recovery's summary read refused storage.disk_full keeps the server's word on restarting", async () => {
+  const { app } = await stoppedPresent({
+    summary: (read) => (read === 0 ? diskFull({ restartDeletesLogs: false }) : undefined),
+  });
+  await passwordAccepted(app);
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_FREES_NOTHING["en-GB"]);
+});
+
 it("with the database present, a summary read refused storage.disk_full without the field says nothing about restarting", async () => {
   const { app } = await damagedRecord({
     damagedSummary: picksSummary(false),
