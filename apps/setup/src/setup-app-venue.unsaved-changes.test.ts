@@ -124,6 +124,34 @@ describe("setup venue unsaved changes", () => {
     expect((el as unknown as State).draft.venue).toEqual(initialVenue);
   });
 
+  it("a chosen address from the address search counts as an unsaved change", async () => {
+    const { venue } = await mount();
+    venue.addressProvider = {
+      suggest: async () => [],
+      resolve: async () => ({ lines: [], locality: "", postalCode: "", countryCode: "ES" }),
+    };
+    await venue.updateComplete;
+    expect(unload()).toBe(false);
+    venue.shadowRoot!.querySelector("[data-test=address-lookup]")!.dispatchEvent(
+      new CustomEvent("wt-address-chosen", {
+        detail: {
+          address: {
+            lines: ["Carrer de Pelai 1"],
+            locality: "Barcelona",
+            administrativeAreaCode: "08",
+            postalCode: "08001",
+            countryCode: "ES",
+          },
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await venue.updateComplete;
+    expect(field(venue, "addressLine1").value).toBe("Carrer de Pelai 1");
+    expect(unload()).toBe(true);
+  });
+
   it("Back protects an invalid empty receipt-language selection and clears after revert", async () => {
     const { el, venue } = await mount();
     const radio = venue.shadowRoot!.querySelector<HTMLInputElement>('[data-test="locale-es-ES"]')!;

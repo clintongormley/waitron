@@ -5,6 +5,8 @@ import {
   submitOnEnter,
   baseStyles,
   leaveCoordinatorFor,
+  type AddressChosenDetail,
+  type AddressLookupProvider,
   type DraftScope,
 } from "@waitron/ui";
 import {
@@ -25,6 +27,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-address-lookup.js";
 import { countryName } from "../country-name.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -82,6 +85,9 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
 };
 
 type FieldKey = TextField | "invoiceLocales";
+
+/** The venue's own address, or the business's one-line registered address. */
+type AddressSearch = "address" | "domicile";
 
 interface VenueForm {
   demoLocationNameSource: "automatic" | "custom";
@@ -242,6 +248,8 @@ export class SetupVenueScreen extends LitElement {
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ attribute: false }) defaults: VenueDefaults = {};
+  /** Address suggestions; without one the address search fields stay hidden. Nothing sets it yet. */
+  @property({ attribute: false }) addressProvider?: AddressLookupProvider;
 
   constructor() {
     super();
@@ -297,6 +305,9 @@ export class SetupVenueScreen extends LitElement {
   @state() private attempted = false;
 
   @state() private refusalDismissed = false;
+
+  /** Which address search last returned an address in a country other than the form's. */
+  @state() private foreignAddress?: { readonly which: AddressSearch; readonly country: string };
 
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
   @state() private serverInvalid?: { readonly key: TextField; readonly refusal: ServerField };
@@ -487,11 +498,59 @@ export class SetupVenueScreen extends LitElement {
     this.#scope?.changed();
   }
 
+  #onAddressChosen(which: AddressSearch, event: CustomEvent<AddressChosenDetail>): void {
+    event.stopPropagation();
+    const pack = this.#pack();
+    const address = event.detail.address;
+    if (pack === undefined || address.countryCode !== pack.countryCode) {
+      this.foreignAddress = { which, country: this.values.country };
+      return;
+    }
+    if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
+    const postal = pack.postalCode?.validate(address.postalCode);
+    const area =
+      (address.administrativeAreaCode === undefined
+        ? undefined
+        : findAdministrativeArea(pack, address.administrativeAreaCode)) ??
+      (postal?.valid === true
+        ? findAdministrativeAreaByPostalCode(pack, postal.normalized)
+        : undefined);
+    if (which === "domicile") {
+      const place = `${address.postalCode} ${address.locality}`.trim();
+      const taxpayerDomicile = [...address.lines, place, area?.name ?? ""]
+        .filter((part) => part.trim() !== "")
+        .join(", ");
+      this.#fill({ taxpayerDomicile });
+      return;
+    }
+    const [addressLine1 = "", ...rest] = address.lines;
+    this.#fill({
+      addressLine1,
+      // The person's own line 2 (a floor, a unit) stays unless the address brings one.
+      ...(rest.length > 0 ? { addressLine2: rest.join(", ") } : {}),
+      postalCode: address.postalCode,
+      city: address.locality,
+      ...(area === undefined ? {} : { province: area.name }),
+    });
+    if (area === undefined) return;
+    this.#followDemoName(pack, area);
+    if (this.#invoiceLocalesFollowAreaDefault)
+      this.invoiceLocales = defaultInvoiceLocales(pack, area);
+  }
+
+  #fill(filled: Partial<Record<TextField, string>>): void {
+    if (this.serverInvalid !== undefined && this.serverInvalid.key in filled)
+      this.serverInvalid = undefined;
+    this.values = { ...this.values, ...filled };
+    this.#scope?.changed();
+  }
+
   #onCountry(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const country = event.detail.value;
     const pack = getVenueSetupCountryPack(country);
     this.values = { ...this.values, country, postalCode: "", province: "" };
+    this.foreignAddress = undefined;
     this.#followDemoName(pack, undefined);
     if (pack !== undefined) {
       this.invoiceLocales = defaultInvoiceLocales(pack, undefined);
@@ -706,6 +765,28 @@ export class SetupVenueScreen extends LitElement {
     >`;
   }
 
+  #addressSearch(which: AddressSearch, pack: CountryPack | undefined): TemplateResult {
+    const foreign = this.foreignAddress?.which === which ? this.foreignAddress : undefined;
+    return html`<wt-address-lookup
+      class="field"
+      data-test=${`${which}-lookup`}
+      .provider=${this.addressProvider}
+      country-code=${pack?.countryCode ?? ""}
+      label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}
+      placeholder=${t("venue.address_lookup.placeholder")}
+      no-results-label=${t("venue.address_lookup.no_results")}
+      unavailable-label=${t("venue.address_lookup.unavailable")}
+      .message=${
+        foreign === undefined
+          ? ""
+          : format("venue.address_lookup.other_country", {
+              country: countryName(foreign.country, currentLocale()),
+            })
+      }
+      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#onAddressChosen(which, event)}
+    ></wt-address-lookup>`;
+  }
+
   #field(label: string, key: TextField, type = "text"): TemplateResult {
     const error = this.#errors.get(key) ?? "";
     const demoName = this.#demo && key === "name";
@@ -789,7 +870,7 @@ export class SetupVenueScreen extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onCountry(event)}
         >${this.#help("country")}</wt-combobox
       >
-      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#field(t("venue.label.taxpayer_domicile"), "taxpayerDomicile")}`}
+      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#addressSearch("domicile", pack)}${this.#field(t("venue.label.taxpayer_domicile"), "taxpayerDomicile")}`}
       ${this.#demo ? nothing : html`<h2>${t("venue.section.location")}</h2>`}
       ${this.#field(t("venue.label.location_name"), "name")}
       ${
@@ -842,6 +923,7 @@ export class SetupVenueScreen extends LitElement {
               ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
             </fieldset> `
       }
+      ${this.#addressSearch("address", pack)}
       ${this.#field(t("venue.label.address_line1"), "addressLine1")}
       ${this.#field(t("venue.label.address_line2"), "addressLine2")}
       <div class="pair">

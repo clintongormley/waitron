@@ -58,6 +58,11 @@ export class WtAddressLookup extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
+      /* Important, so a form that sets its fields' display cannot show an empty box. */
+      :host([hidden]) {
+        display: none !important;
+      }
+
       .list {
         list-style: none;
         margin: var(--wt-space-1) 0 0;

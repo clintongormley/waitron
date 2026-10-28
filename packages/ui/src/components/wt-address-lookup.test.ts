@@ -90,6 +90,12 @@ test("without a provider it is hidden and draws nothing", async () => {
   expect(el.getBoundingClientRect().height).toBe(0);
 });
 
+test("stays hidden when the page around it gives it a display", async () => {
+  const el = await mountLookup(null);
+  el.style.display = "block";
+  expect(el.getBoundingClientRect().height).toBe(0);
+});
+
 test("with a provider it shows a labelled search field", async () => {
   const el = await mountLookup();
   expect(el.hidden).toBe(false);
