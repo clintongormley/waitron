@@ -172,8 +172,14 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-- **A1154: remove the obsolete till-registration command and per-device fiscal fixtures.** The
-  [implementation plan](superpowers/plans/2026-10-27-a1154-node-registration.md) preserves setup, restore and promotion. The owner approved the two protected helper references on 2026-10-28. The command/action removal, shared node fixtures and recurrence guard are implemented and under qualification. The eventual PR remains owner-held.
+- **A1155: rename the box identity setting `WAITRON_TILL_NODE_ID` to `WAITRON_NODE_ID`.** Left
+  open by A1154 (#2172), which removed the till-registration command and kept the fiscal identity on
+  the node. Drop `WAITRON_TILL_LOCATION_ID` too if the database can answer it. Its own PR; demo and
+  test boxes need a venue reset (`wa-wt reset`). Queued in lane E.
+
+- **A1156: split the server's `TillConfig` (`config.till`) into box identity and till-app
+  settings.** Left open by A1154; after A1155, as a separate change (owner, 2026-10-27). Queued in
+  lane E.
 
 - **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
   connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
