@@ -272,7 +272,9 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
     ...languageRulesFor(code),
     ...(CATALONIA_PROVINCES.has(code) || BALEARIC_PROVINCES.has(code)
       ? { demo: { dataSet: "casa-delgado-ca", locationName: "Can Delgado" } }
-      : {}),
+      : VALENCIAN_PROVINCES.has(code)
+        ? { demo: { dataSet: "casa-delgado-valencia", locationName: "Casa Delgado de l'Horta" } }
+        : {}),
   }),
 );
 

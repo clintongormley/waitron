@@ -159,21 +159,33 @@ describe("demo data sets", () => {
     expect(set.floor.tables).toBe(DEMO_TABLES);
     expect(set.staff).toBe(DEMO_STAFF);
     expect(set.adjustmentReasons).toBe(DEMO_ADJUSTMENT_REASONS);
-    expect(set.menus.drinksName).toEqual({ en: "Drinks", es: "Bebidas", ca: catalan.drinks });
+    expect(set.menus.drinksName).toEqual({
+      en: "Drinks",
+      es: "Bebidas",
+      ca: catalan.drinks,
+      "ca-ES-valencia": catalan.drinks,
+    });
     expect(set).not.toHaveProperty("watcherName");
     expect(set.floor.departmentNames).toEqual({
-      restaurant: { en: "Restaurant and bar", es: "Restaurante y bar", ca: catalan.restaurant },
-      deli: { en: "Deli", es: "Charcutería", ca: catalan.deli },
+      restaurant: {
+        en: "Restaurant and bar",
+        es: "Restaurante y bar",
+        ca: catalan.restaurant,
+        "ca-ES-valencia": catalan.restaurant,
+      },
+      deli: { en: "Deli", es: "Charcutería", ca: catalan.deli, "ca-ES-valencia": catalan.deli },
     });
     expect(set.floor.upstairsBarZone).toEqual({
       en: "Upstairs bar",
       es: "Bar de arriba",
       ca: catalan.upstairs,
+      "ca-ES-valencia": catalan.upstairs,
     });
     expect(set.floor.deliCounterZone).toEqual({
       en: "Deli counter",
       es: "Mostrador de charcutería",
       ca: catalan.counter,
+      "ca-ES-valencia": catalan.counter,
     });
   });
 

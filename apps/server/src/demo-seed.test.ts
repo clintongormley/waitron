@@ -1,3 +1,4 @@
+import { VALENCIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -187,4 +188,17 @@ it("refuses an absent stored location before seeding", async () => {
     seedInstalledDemo(suite.db, { ...RESULT, locationId: "missing" }, venueWithLocales(["es-ES"])),
   ).rejects.toThrow("missing location");
   expect(seedDemoRestaurant).not.toHaveBeenCalled();
+});
+
+it.each([
+  VALENCIA_DEMO_TEXT.alicanteProvince,
+  VALENCIA_DEMO_TEXT.castellonProvince,
+  VALENCIA_DEMO_TEXT.province,
+])("selects Valencian demo from stored %s even with a stale Madrid request", async (province) => {
+  await suite.db.execute(
+    sql`update locations set province=${province} where id=${RESULT.locationId}`,
+  );
+  await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
+  expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-valencia");
+  expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
 });

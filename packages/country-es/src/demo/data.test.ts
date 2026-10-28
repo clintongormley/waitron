@@ -51,10 +51,25 @@ describe("pack-owned Spanish demo", () => {
     );
     expect(JSON.stringify(set)).not.toContain("dashPass123");
     expect(set.stations).toEqual({
-      kitchen: { en: "Kitchen", es: "Cocina", ca: "Cuina" },
-      downstairsBar: { en: "Downstairs bar", es: "Bar de abajo", ca: "Bar de baix" },
-      upstairsBar: { en: "Upstairs bar", es: "Bar de arriba", ca: "Bar de dalt" },
-      deli: { en: "Deli counter", es: "Mostrador de charcutería", ca: "Taulell de xarcuteria" },
+      kitchen: { en: "Kitchen", es: "Cocina", ca: "Cuina", "ca-ES-valencia": "Cuina" },
+      downstairsBar: {
+        en: "Downstairs bar",
+        es: "Bar de abajo",
+        ca: "Bar de baix",
+        "ca-ES-valencia": "Bar de baix",
+      },
+      upstairsBar: {
+        en: "Upstairs bar",
+        es: "Bar de arriba",
+        ca: "Bar de dalt",
+        "ca-ES-valencia": "Bar de dalt",
+      },
+      deli: {
+        en: "Deli counter",
+        es: "Mostrador de charcutería",
+        ca: "Taulell de xarcuteria",
+        "ca-ES-valencia": "Taulell de xarcuteria",
+      },
     });
     expect(set.menuPriceOverrides).toEqual([
       { menu: "drinks", productImage: "cana-cerveza.png", grossPrice: "3.00" },

@@ -94,3 +94,18 @@ describe("starter languages", () => {
     expect(SUPPORTED_LOCALE_CODES.map((code) => code.split("-")[0])).toEqual(["es", "en"]);
   });
 });
+
+it.each(["03", "12", "46"])(
+  "keeps Valencian content distinct from receipt and screen languages (%s)",
+  (area) => {
+    expect(resolveInstalledStartingContentLanguages({ country: "ES", area })).toMatchObject({
+      defaultLanguage: "ca-ES-valencia",
+      languages: ["ca-ES-valencia", "es", "en"],
+    });
+    for (const receiptLocale of ["es-ES", "en-GB"])
+      expect(resolveInstalledStarterLanguages({ country: "ES", area, receiptLocale })).toEqual({
+        staffLanguage: receiptLocale === "es-ES" ? "es" : "en",
+        languages: ["ca-ES-valencia", "es", "en"],
+      });
+  },
+);

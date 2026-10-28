@@ -457,12 +457,12 @@ until A977).
   explicit name-cell changes and their dependent identities/publication hashes, plus the column renames
   listed in `RENAMED_COLUMNS` (`seed.madrid-baseline.test.ts`; today `sale_receipt_guests.guests` →
   `guest_count`, A1164), which fail when unused.
-  Catalonia and the Balearic Islands now share Can Delgado, with seven regional dishes, cava and Catalan plain names. The remaining cuts supply Valencia and Galicia. Regional restaurant defaults follow the
+  Catalonia and the Balearic Islands now share Can Delgado, with seven regional dishes, cava and Catalan plain names. Valencia now adds Casa Delgado de l'Horta, seven regional dishes, Requena wine and Valencian plain names. Galicia remains open. Regional restaurant defaults follow the
   province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in
   English/Spanish, both themes and phone/desktop widths when the development stack can start.
-  The Catalan cut's local launch refused at Mailpit's absent Docker socket; its native setup
+  The Catalan and Valencian cuts' local launches refused at Mailpit's absent Docker socket; their native setup
   component views and database/media checks do not qualify those live screens.
 - **Demo media regeneration changes the committed Negroni picture.** The moved
   generator produces different pixels for Negroni; a decoded-pixel comparison

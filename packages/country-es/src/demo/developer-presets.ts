@@ -9,6 +9,15 @@ const REGIONAL_ADDRESS = {
   dayCutover: "05:00",
 } as const;
 export const DEMO_DEVELOPER_PRESETS = {
+  valencia: {
+    ...REGIONAL_ADDRESS,
+    dataSet: "casa-delgado-valencia",
+    locationName: "Casa Delgado de l'Horta",
+    postalCode: "46001",
+    city: "València",
+    province: "Valencia/València",
+    receiptLocale: "es-ES",
+  },
   catalonia: {
     ...REGIONAL_ADDRESS,
     postalCode: "08001",

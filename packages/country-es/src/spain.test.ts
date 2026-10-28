@@ -417,7 +417,18 @@ describe("regional demo identities", () => {
     },
   );
   it("leaves the Madrid and other regional demos on the country default", () => {
-    for (const code of ["28", "46", "15"])
+    for (const code of ["28", "15"])
       expect(SPAIN.administrativeAreas.find((area) => area.code === code)?.demo).toBeUndefined();
   });
+});
+
+it.each(["03", "12", "46"])("selects the Valencian demo only in province %s", (code) => {
+  const area = SPAIN.administrativeAreas.find((area) => area.code === code)!;
+  expect(area.demo).toStrictEqual({
+    dataSet: "casa-delgado-valencia",
+    locationName: "Casa Delgado de l'Horta",
+  });
+  expect(area.defaultLocale).toBe("ca-ES");
+  expect(area.defaultContentLocale).toBe("ca-ES-valencia");
+  expect(area.fixedReceiptLocale).toBeUndefined();
 });

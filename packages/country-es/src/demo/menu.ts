@@ -11,7 +11,12 @@ export const PRODUCT_OPTION_LISTS = [
     productImage: "solomillo.png",
     lists: [
       {
-        name: { en: "Doneness", es: "Punto", ca: "Punt de cocció" },
+        name: {
+          en: "Doneness",
+          es: "Punto",
+          ca: "Punt de cocció",
+          "ca-ES-valencia": "Punt de cocció",
+        },
         customerName: {
           en: "How would you like it cooked?",
           es: "¿Cómo la quiere hecha?",
@@ -19,10 +24,15 @@ export const PRODUCT_OPTION_LISTS = [
           "ca-ES-valencia": "Com la vol feta?",
           gl: "Como a quere feita?",
         },
-        kitchenName: { en: "MEAT TEMPERATURE", es: "PUNTO CARNE", ca: "Cocció de la carn · cuina" },
+        kitchenName: {
+          en: "MEAT TEMPERATURE",
+          es: "PUNTO CARNE",
+          ca: "Cocció de la carn · cuina",
+          "ca-ES-valencia": "Cocció de la carn · cuina",
+        },
         labels: [
           {
-            name: { en: "Rare", es: "Poco", ca: "Poc" },
+            name: { en: "Rare", es: "Poco", ca: "Poc", "ca-ES-valencia": "Poc" },
             customerName: {
               en: "Rare, red in the middle",
               es: "Poco hecho, rojo por dentro",
@@ -30,10 +40,15 @@ export const PRODUCT_OPTION_LISTS = [
               "ca-ES-valencia": "Poc feta, roja per dins",
               gl: "Pouco feita, vermella por dentro",
             },
-            kitchenName: { en: "RARE MEAT", es: "POCO HECHO", ca: "Carn poc feta · cuina" },
+            kitchenName: {
+              en: "RARE MEAT",
+              es: "POCO HECHO",
+              ca: "Carn poc feta · cuina",
+              "ca-ES-valencia": "Carn poc feta · cuina",
+            },
           },
           {
-            name: { en: "Medium", es: "Punto medio", ca: "Al punt" },
+            name: { en: "Medium", es: "Punto medio", ca: "Al punt", "ca-ES-valencia": "Al punt" },
             customerName: {
               en: "Medium, pink in the middle",
               es: "Al punto, rosado por dentro",
@@ -41,11 +56,16 @@ export const PRODUCT_OPTION_LISTS = [
               "ca-ES-valencia": "Al punt, rosada per dins",
               gl: "Ao punto, rosada por dentro",
             },
-            kitchenName: { en: "MEDIUM MEAT", es: "AL PUNTO", ca: "Carn al punt · cuina" },
+            kitchenName: {
+              en: "MEDIUM MEAT",
+              es: "AL PUNTO",
+              ca: "Carn al punt · cuina",
+              "ca-ES-valencia": "Carn al punt · cuina",
+            },
             preselected: true,
           },
           {
-            name: { en: "Well done", es: "Muy", ca: "Molt" },
+            name: { en: "Well done", es: "Muy", ca: "Molt", "ca-ES-valencia": "Molt" },
             customerName: {
               en: "Well done, cooked through",
               es: "Muy hecho, sin nada de rosa",
@@ -53,7 +73,12 @@ export const PRODUCT_OPTION_LISTS = [
               "ca-ES-valencia": "Molt feta, gens rosada",
               gl: "Moi feita, nada rosada",
             },
-            kitchenName: { en: "WELL DONE MEAT", es: "MUY HECHO", ca: "Carn molt feta · cuina" },
+            kitchenName: {
+              en: "WELL DONE MEAT",
+              es: "MUY HECHO",
+              ca: "Carn molt feta · cuina",
+              "ca-ES-valencia": "Carn molt feta · cuina",
+            },
           },
         ],
       },
@@ -66,7 +91,12 @@ export const PRODUCT_EXTRA_LISTS = [
     productImage: "pollo-asado.png",
     lists: [
       {
-        name: { en: "Sides", es: "Guarniciones", ca: "Guarnicions" },
+        name: {
+          en: "Sides",
+          es: "Guarniciones",
+          ca: "Guarnicions",
+          "ca-ES-valencia": "Guarnicions",
+        },
         customerName: {
           en: "Choose your sides",
           es: "Elige tus acompañamientos",
@@ -78,6 +108,7 @@ export const PRODUCT_EXTRA_LISTS = [
           en: "CHICKEN SIDES",
           es: "GUARNICIÓN POLLO",
           ca: "Guarnició del pollastre · cuina",
+          "ca-ES-valencia": "Guarnició del pollastre · cuina",
         },
         minPicks: 0,
         maxPicks: 3,
@@ -108,8 +139,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "IBERIAN HAM · DELI",
           es: "JAMÓN · CHARCUTERÍA",
           ca: "Pernil · xarcuteria",
+          "ca-ES-valencia": "Pernil · xarcuteria",
         },
-        staffName: { en: "Iberian ham", es: "Jamón ibérico", ca: "Pernil ibèric" },
+        staffName: {
+          en: "Iberian ham",
+          es: "Jamón ibérico",
+          ca: "Pernil ibèric",
+          "ca-ES-valencia": "Pernil ibèric",
+        },
         customerName: {
           en: "Sliced Iberian ham (per kg)",
           es: "Jamón ibérico cortado (por kg)",
@@ -127,8 +164,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "CHORIZO · DELI",
           es: "CHORIZO · CHARCUTERÍA",
           ca: "Xoriço · xarcuteria",
+          "ca-ES-valencia": "Xoriço · xarcuteria",
         },
-        staffName: { en: "Chorizo", es: "Chorizo", ca: "Xoriço" },
+        staffName: { en: "Chorizo", es: "Chorizo", ca: "Xoriço", "ca-ES-valencia": "Xoriço" },
         customerName: {
           en: "Iberian chorizo (per kg)",
           es: "Chorizo ibérico (por kg)",
@@ -142,8 +180,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "chorizo-iberico.png",
       },
       {
-        kitchenName: { en: "PORK LOIN · DELI", es: "LOMO · CHARCUTERÍA", ca: "Llom · xarcuteria" },
-        staffName: { en: "Pork loin", es: "Lomo", ca: "Llom" },
+        kitchenName: {
+          en: "PORK LOIN · DELI",
+          es: "LOMO · CHARCUTERÍA",
+          ca: "Llom · xarcuteria",
+          "ca-ES-valencia": "Llom · xarcuteria",
+        },
+        staffName: { en: "Pork loin", es: "Lomo", ca: "Llom", "ca-ES-valencia": "Llom" },
         customerName: {
           en: "Cured pork loin (per kg)",
           es: "Lomo embuchado (por kg)",
@@ -161,8 +204,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "SALCHICHÓN · DELI",
           es: "SALCHICHÓN · CHARCUTERÍA",
           ca: "Llonganissa · xarcuteria",
+          "ca-ES-valencia": "Llonganissa · xarcuteria",
         },
-        staffName: { en: "Salchichón", es: "Salchichón al peso", ca: "Llonganissa" },
+        staffName: {
+          en: "Salchichón",
+          es: "Salchichón al peso",
+          ca: "Llonganissa",
+          "ca-ES-valencia": "Llonganissa",
+        },
         customerName: {
           en: "Salchichón sausage (per kg)",
           es: "Salchichón (por kg)",
@@ -176,8 +225,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "salchichon.png",
       },
       {
-        kitchenName: { en: "CECINA · DELI", es: "CECINA · CHARCUTERÍA", ca: "Cecina · xarcuteria" },
-        staffName: { en: "Cecina", es: "Cecina", ca: "Cecina" },
+        kitchenName: {
+          en: "CECINA · DELI",
+          es: "CECINA · CHARCUTERÍA",
+          ca: "Cecina · xarcuteria",
+          "ca-ES-valencia": "Cecina · xarcuteria",
+        },
+        staffName: { en: "Cecina", es: "Cecina", ca: "Cecina", "ca-ES-valencia": "Cecina" },
         customerName: {
           en: "Cured beef cecina (per kg)",
           es: "Cecina de León (por kg)",
@@ -195,8 +249,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "SOBRASADA · DELI",
           es: "SOBRASADA · CHARCUTERÍA",
           ca: "Sobrassada · xarcuteria",
+          "ca-ES-valencia": "Sobrassada · xarcuteria",
         },
-        staffName: { en: "Sobrasada", es: "Sobrasada al peso", ca: "Sobrassada" },
+        staffName: {
+          en: "Sobrasada",
+          es: "Sobrasada al peso",
+          ca: "Sobrassada",
+          "ca-ES-valencia": "Sobrassada",
+        },
         customerName: {
           en: "Mallorcan sobrasada (per kg)",
           es: "Sobrasada (por kg)",
@@ -227,8 +287,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "MANCHEGO · DELI",
           es: "MANCHEGO · CHARCUTERÍA",
           ca: "Manxec · xarcuteria",
+          "ca-ES-valencia": "Manxec · xarcuteria",
         },
-        staffName: { en: "Manchego", es: "Manchego", ca: "Manxec" },
+        staffName: { en: "Manchego", es: "Manchego", ca: "Manxec", "ca-ES-valencia": "Manxec" },
         customerName: {
           en: "Cured Manchego (per kg)",
           es: "Manchego curado (por kg)",
@@ -246,8 +307,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "CABRALES · DELI",
           es: "CABRALES · CHARCUTERÍA",
           ca: "Cabrales · xarcuteria",
+          "ca-ES-valencia": "Cabrales · xarcuteria",
         },
-        staffName: { en: "Cabrales", es: "Cabrales al peso", ca: "Cabrales" },
+        staffName: {
+          en: "Cabrales",
+          es: "Cabrales al peso",
+          ca: "Cabrales",
+          "ca-ES-valencia": "Cabrales",
+        },
         customerName: {
           en: "Cabrales blue cheese (per kg)",
           es: "Cabrales (por kg)",
@@ -265,8 +332,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "IDIAZÁBAL · DELI",
           es: "IDIAZÁBAL · CHARCUTERÍA",
           ca: "Idiazábal · xarcuteria",
+          "ca-ES-valencia": "Idiazábal · xarcuteria",
         },
-        staffName: { en: "Idiazábal", es: "Idiazábal al peso", ca: "Idiazábal" },
+        staffName: {
+          en: "Idiazábal",
+          es: "Idiazábal al peso",
+          ca: "Idiazábal",
+          "ca-ES-valencia": "Idiazábal",
+        },
         customerName: {
           en: "Idiazábal smoked cheese (per kg)",
           es: "Idiazábal (por kg)",
@@ -280,8 +353,18 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "idiazabal.png",
       },
       {
-        kitchenName: { en: "TORTA · DELI", es: "TORTA · CHARCUTERÍA", ca: "Torta · xarcuteria" },
-        staffName: { en: "Torta cheese", es: "Torta", ca: "Formatge torta" },
+        kitchenName: {
+          en: "TORTA · DELI",
+          es: "TORTA · CHARCUTERÍA",
+          ca: "Torta · xarcuteria",
+          "ca-ES-valencia": "Torta · xarcuteria",
+        },
+        staffName: {
+          en: "Torta cheese",
+          es: "Torta",
+          ca: "Formatge torta",
+          "ca-ES-valencia": "Formatge torta",
+        },
         customerName: {
           en: "Torta del Casar (per kg)",
           es: "Torta del Casar (por kg)",
@@ -295,8 +378,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "torta-del-casar.png",
       },
       {
-        kitchenName: { en: "MAHÓN · DELI", es: "MAHÓN · CHARCUTERÍA", ca: "Maó · xarcuteria" },
-        staffName: { en: "Mahón", es: "Mahón", ca: "Maó" },
+        kitchenName: {
+          en: "MAHÓN · DELI",
+          es: "MAHÓN · CHARCUTERÍA",
+          ca: "Maó · xarcuteria",
+          "ca-ES-valencia": "Maó · xarcuteria",
+        },
+        staffName: { en: "Mahón", es: "Mahón", ca: "Maó", "ca-ES-valencia": "Maó" },
         customerName: {
           en: "Mahón cheese (per kg)",
           es: "Queso de Mahón (por kg)",
@@ -327,8 +415,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "ANCHOVIES · DELI",
           es: "ANCHOAS · CHARCUTERÍA",
           ca: "Anxoves · xarcuteria",
+          "ca-ES-valencia": "Anxoves · xarcuteria",
         },
-        staffName: { en: "Anchovies", es: "Anchoas", ca: "Anxoves" },
+        staffName: { en: "Anchovies", es: "Anchoas", ca: "Anxoves", "ca-ES-valencia": "Anxoves" },
         customerName: {
           en: "Cantabrian anchovies (per kg)",
           es: "Anchoas del Cantábrico (por kg)",
@@ -346,8 +435,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "OLIVES · DELI",
           es: "ACEITUNAS · CHARCUTERÍA",
           ca: "Olives · xarcuteria",
+          "ca-ES-valencia": "Olives · xarcuteria",
         },
-        staffName: { en: "Olives", es: "Aceitunas", ca: "Olives" },
+        staffName: { en: "Olives", es: "Aceitunas", ca: "Olives", "ca-ES-valencia": "Olives" },
         customerName: {
           en: "Marinated olives (per kg)",
           es: "Aceitunas aliñadas (por kg)",
@@ -361,8 +451,18 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "aceitunas.png",
       },
       {
-        kitchenName: { en: "OCTOPUS · DELI", es: "PULPO · CHARCUTERÍA", ca: "Pop · xarcuteria" },
-        staffName: { en: "Octopus in oil", es: "Pulpo en aceite", ca: "Pop en oli" },
+        kitchenName: {
+          en: "OCTOPUS · DELI",
+          es: "PULPO · CHARCUTERÍA",
+          ca: "Pop · xarcuteria",
+          "ca-ES-valencia": "Pop · xarcuteria",
+        },
+        staffName: {
+          en: "Octopus in oil",
+          es: "Pulpo en aceite",
+          ca: "Pop en oli",
+          "ca-ES-valencia": "Pop en oli",
+        },
         customerName: {
           en: "Octopus in olive oil (per kg)",
           es: "Pulpo en aceite (por kg)",
@@ -380,8 +480,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "TUNA BELLY · DELI",
           es: "VENTRESCA · CHARCUTERÍA",
           ca: "Ventresca · xarcuteria",
+          "ca-ES-valencia": "Ventresca · xarcuteria",
         },
-        staffName: { en: "Tuna belly", es: "Ventresca", ca: "Ventresca" },
+        staffName: {
+          en: "Tuna belly",
+          es: "Ventresca",
+          ca: "Ventresca",
+          "ca-ES-valencia": "Ventresca",
+        },
         customerName: {
           en: "White tuna belly (per kg)",
           es: "Ventresca de bonito (por kg)",
@@ -409,8 +515,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Creïlles braves",
           gl: "Patacas bravas",
         },
-        staffName: { en: "Bravas", es: "Bravas", ca: "Braves" },
-        kitchenName: { en: "POTATOES · TAPAS", es: "PATATAS · TAPAS", ca: "Patates · tapes" },
+        staffName: { en: "Bravas", es: "Bravas", ca: "Braves", "ca-ES-valencia": "Braves" },
+        kitchenName: {
+          en: "POTATOES · TAPAS",
+          es: "PATATAS · TAPAS",
+          ca: "Patates · tapes",
+          "ca-ES-valencia": "Creïlles · tapes",
+        },
         pricingUnit: "each",
         unitPrice: "6.50",
         vatClass: "reduced",
@@ -424,11 +535,17 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Croquetes de pernil",
           gl: "Croquetas de xamón",
         },
-        staffName: { en: "Croquettes", es: "Croquetas", ca: "Croquetes" },
+        staffName: {
+          en: "Croquettes",
+          es: "Croquetas",
+          ca: "Croquetes",
+          "ca-ES-valencia": "Croquetes",
+        },
         kitchenName: {
           en: "HAM CROQUETTES · TAPAS",
           es: "CROQ JAMON",
           ca: "Croquetes de pernil · cuina",
+          "ca-ES-valencia": "Croquetes de pernil · cuina",
         },
         pricingUnit: "each",
         unitPrice: "7.80",
@@ -443,11 +560,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Gambes a l'all",
           gl: "Gambas ao allo",
         },
-        staffName: { en: "Prawns", es: "Gambas", ca: "Gambes" },
+        staffName: { en: "Prawns", es: "Gambas", ca: "Gambes", "ca-ES-valencia": "Gambes" },
         kitchenName: {
           en: "GARLIC PRAWNS · TAPAS",
           es: "GAMBAS AJILLO",
           ca: "Gambes amb all · cuina",
+          "ca-ES-valencia": "Gambes amb all · cuina",
         },
         pricingUnit: "each",
         unitPrice: "9.90",
@@ -459,8 +577,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "OMELETTE · TAPAS",
           es: "TORTILLA · TAPAS",
           ca: "Truita de patates · cuina",
+          "ca-ES-valencia": "Truita de creïlles · cuina",
         },
-        staffName: { en: "Omelette", es: "Tortilla", ca: "Truita" },
+        staffName: { en: "Omelette", es: "Tortilla", ca: "Truita", "ca-ES-valencia": "Truita" },
         customerName: {
           en: "Spanish omelette",
           es: "Tortilla española",
@@ -474,8 +593,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "tortilla.png",
       },
       {
-        kitchenName: { en: "BREAD · TAPAS", es: "PAN · TAPAS", ca: "Pa · tapes" },
-        staffName: { en: "Bread", es: "Pan", ca: "Pa" },
+        kitchenName: {
+          en: "BREAD · TAPAS",
+          es: "PAN · TAPAS",
+          ca: "Pa · tapes",
+          "ca-ES-valencia": "Pa · tapes",
+        },
+        staffName: { en: "Bread", es: "Pan", ca: "Pa", "ca-ES-valencia": "Pa" },
         customerName: {
           en: "House bread",
           es: "Pan de la casa",
@@ -493,8 +617,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "TOMATO BREAD · TAPAS",
           es: "PAN TOMATE · TAPAS",
           ca: "Pa amb tomàquet · cuina",
+          "ca-ES-valencia": "Pa amb tomàquet · cuina",
         },
-        staffName: { en: "Tomato toast", es: "Tostada de tomate", ca: "Torrada de tomàquet" },
+        staffName: {
+          en: "Tomato toast",
+          es: "Tostada de tomate",
+          ca: "Torrada de tomàquet",
+          "ca-ES-valencia": "Torrada de tomàquet",
+        },
         customerName: {
           en: "Bread with tomato",
           es: "Pan con tomate",
@@ -528,8 +658,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Pop a la gallega",
           gl: "Polbo á feira",
         },
-        staffName: { en: "Octopus", es: "Pulpo", ca: "Pop" },
-        kitchenName: { en: "OCTOPUS · SHARING", es: "PULPO GALLEGA", ca: "Pop · per compartir" },
+        staffName: { en: "Octopus", es: "Pulpo", ca: "Pop", "ca-ES-valencia": "Pop" },
+        kitchenName: {
+          en: "OCTOPUS · SHARING",
+          es: "PULPO GALLEGA",
+          ca: "Pop · per compartir",
+          "ca-ES-valencia": "Pop · per compartir",
+        },
         pricingUnit: "each",
         unitPrice: "16.50",
         vatClass: "reduced",
@@ -540,8 +675,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "PEPPERS · SHARING",
           es: "PIMIENTOS · RACIONES",
           ca: "Pebrots · per compartir",
+          "ca-ES-valencia": "Pebrots · per compartir",
         },
-        staffName: { en: "Peppers", es: "Pimientos", ca: "Pebrots" },
+        staffName: { en: "Peppers", es: "Pimientos", ca: "Pebrots", "ca-ES-valencia": "Pebrots" },
         customerName: {
           en: "Padrón peppers",
           es: "Pimientos de Padrón",
@@ -559,8 +695,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "CALAMARI · SHARING",
           es: "CALAMARES · RACIONES",
           ca: "Calamars · per compartir",
+          "ca-ES-valencia": "Calamars · per compartir",
         },
-        staffName: { en: "Calamari", es: "Calamares", ca: "Calamars" },
+        staffName: {
+          en: "Calamari",
+          es: "Calamares",
+          ca: "Calamars",
+          "ca-ES-valencia": "Calamars",
+        },
         customerName: {
           en: "Fried calamari",
           es: "Calamares a la romana",
@@ -578,8 +720,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "CHEESE BOARD · SHARING",
           es: "QUESOS · RACIONES",
           ca: "Formatges · per compartir",
+          "ca-ES-valencia": "Formatges · per compartir",
         },
-        staffName: { en: "Cheeses", es: "Quesos", ca: "Formatges" },
+        staffName: { en: "Cheeses", es: "Quesos", ca: "Formatges", "ca-ES-valencia": "Formatges" },
         customerName: {
           en: "Cheese board",
           es: "Tabla de quesos",
@@ -613,11 +756,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Paella de marisc",
           gl: "Paella de marisco",
         },
-        staffName: { en: "Paella", es: "Paella", ca: "Paella" },
+        staffName: { en: "Paella", es: "Paella", ca: "Paella", "ca-ES-valencia": "Paella" },
         kitchenName: {
           en: "SEAFOOD PAELLA · MAINS",
           es: "PAELLA MARISCO",
           ca: "Paella de marisc · cuina",
+          "ca-ES-valencia": "Paella de marisc · cuina",
         },
         pricingUnit: "each",
         unitPrice: "18.90",
@@ -632,11 +776,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Filet al whisky",
           gl: "Solombo ao whisky",
         },
-        staffName: { en: "Sirloin", es: "Solomillo", ca: "Filet" },
+        staffName: { en: "Sirloin", es: "Solomillo", ca: "Filet", "ca-ES-valencia": "Filet" },
         kitchenName: {
           en: "SIRLOIN · WHISKY SAUCE",
           es: "SOLOMILLO WHISKY",
           ca: "Filet al whisky · cuina",
+          "ca-ES-valencia": "Filet al whisky · cuina",
         },
         pricingUnit: "each",
         unitPrice: "21.50",
@@ -648,8 +793,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "COD · PIL-PIL",
           es: "BACALAO · PIL-PIL",
           ca: "Bacallà al pil-pil · cuina",
+          "ca-ES-valencia": "Bacallà al pil-pil · cuina",
         },
-        staffName: { en: "Cod", es: "Bacalao", ca: "Bacallà" },
+        staffName: { en: "Cod", es: "Bacalao", ca: "Bacallà", "ca-ES-valencia": "Bacallà" },
         customerName: {
           en: "Cod pil-pil",
           es: "Bacalao al pil-pil",
@@ -667,8 +813,9 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "HAKE · GRILL",
           es: "MERLUZA · PLANCHA",
           ca: "Lluç a la planxa · cuina",
+          "ca-ES-valencia": "Lluç a la planxa · cuina",
         },
-        staffName: { en: "Hake", es: "Merluza", ca: "Lluç" },
+        staffName: { en: "Hake", es: "Merluza", ca: "Lluç", "ca-ES-valencia": "Lluç" },
         customerName: {
           en: "Grilled hake",
           es: "Merluza a la plancha",
@@ -695,8 +842,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     color: "#f1bcb3",
     products: [
       {
-        kitchenName: { en: "CUSTARD · DESSERT", es: "CREMA · POSTRES", ca: "Crema · postres" },
-        staffName: { en: "Catalan custard", es: "Crema", ca: "Crema" },
+        kitchenName: {
+          en: "CUSTARD · DESSERT",
+          es: "CREMA · POSTRES",
+          ca: "Crema · postres",
+          "ca-ES-valencia": "Crema · postres",
+        },
+        staffName: { en: "Catalan custard", es: "Crema", ca: "Crema", "ca-ES-valencia": "Crema" },
         customerName: {
           en: "Catalan cream",
           es: "Crema catalana",
@@ -714,6 +866,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "ALMOND CAKE · DESSERT",
           es: "TARTA · POSTRES",
           ca: "Pastís d'ametlla · cuina",
+          "ca-ES-valencia": "Pastís d'ametlla · cuina",
         },
         customerName: {
           en: "Santiago almond cake",
@@ -722,15 +875,25 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Pastís de Santiago",
           gl: "Torta de Santiago",
         },
-        staffName: { en: "Almond cake", es: "Tarta Santiago", ca: "Pastís d'ametlla" },
+        staffName: {
+          en: "Almond cake",
+          es: "Tarta Santiago",
+          ca: "Pastís d'ametlla",
+          "ca-ES-valencia": "Pastís d'ametlla",
+        },
         pricingUnit: "each",
         unitPrice: "5.50",
         vatClass: "reduced",
         image: "tarta-de-santiago.png",
       },
       {
-        kitchenName: { en: "FLAN · DESSERT", es: "FLAN · POSTRES", ca: "Flam · postres" },
-        staffName: { en: "Flan", es: "Flan", ca: "Flam" },
+        kitchenName: {
+          en: "FLAN · DESSERT",
+          es: "FLAN · POSTRES",
+          ca: "Flam · postres",
+          "ca-ES-valencia": "Flam · postres",
+        },
+        staffName: { en: "Flan", es: "Flan", ca: "Flam", "ca-ES-valencia": "Flam" },
         customerName: {
           en: "Home-made flan",
           es: "Flan casero",
@@ -748,8 +911,14 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "RICE PUDDING · DESSERT",
           es: "ARROZ LECHE · POSTRES",
           ca: "Arròs amb llet · cuina",
+          "ca-ES-valencia": "Arròs amb llet · cuina",
         },
-        staffName: { en: "Rice dessert", es: "Arroz dulce", ca: "Arròs dolç" },
+        staffName: {
+          en: "Rice dessert",
+          es: "Arroz dulce",
+          ca: "Arròs dolç",
+          "ca-ES-valencia": "Arròs dolç",
+        },
         customerName: {
           en: "Rice pudding",
           es: "Arroz con leche",
@@ -776,8 +945,18 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     color: "#9fd5cb",
     products: [
       {
-        kitchenName: { en: "NEGRONI · BAR", es: "NEGRONI · BARRA", ca: "Negroni · barra" },
-        staffName: { en: "House Negroni", es: "Negroni de la casa", ca: "Negroni de la casa" },
+        kitchenName: {
+          en: "NEGRONI · BAR",
+          es: "NEGRONI · BARRA",
+          ca: "Negroni · barra",
+          "ca-ES-valencia": "Negroni · barra",
+        },
+        staffName: {
+          en: "House Negroni",
+          es: "Negroni de la casa",
+          ca: "Negroni de la casa",
+          "ca-ES-valencia": "Negroni de la casa",
+        },
         customerName: {
           en: "Negroni",
           es: "Negroni",
@@ -804,7 +983,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     color: "#dfc395",
     products: [
       {
-        kitchenName: { en: "RED WINE · BAR", es: "TINTO · BARRA", ca: "Vi negre · barra" },
+        kitchenName: {
+          en: "RED WINE · BAR",
+          es: "TINTO · BARRA",
+          ca: "Vi negre · barra",
+          "ca-ES-valencia": "Vi negre · barra",
+        },
         customerName: {
           en: "Glass of house red",
           es: "Copa de vino tinto de la casa",
@@ -812,14 +996,24 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Copa de vi negre de la casa",
           gl: "Copa de viño tinto da casa",
         },
-        staffName: { en: "House red", es: "Tinto casa", ca: "Negre de la casa" },
+        staffName: {
+          en: "House red",
+          es: "Tinto casa",
+          ca: "Negre de la casa",
+          "ca-ES-valencia": "Negre de la casa",
+        },
         pricingUnit: "each",
         unitPrice: "3.50",
         vatClass: "general",
         image: "vino-tinto.png",
       },
       {
-        kitchenName: { en: "DRAUGHT BEER · BAR", es: "CERVEZA · BARRA", ca: "Cervesa · barra" },
+        kitchenName: {
+          en: "DRAUGHT BEER · BAR",
+          es: "CERVEZA · BARRA",
+          ca: "Cervesa · barra",
+          "ca-ES-valencia": "Cervesa · barra",
+        },
         customerName: {
           en: "Draught beer",
           es: "Caña de cerveza",
@@ -827,7 +1021,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Canya de cervesa",
           gl: "Caña de cervexa",
         },
-        staffName: { en: "Beer", es: "Caña", ca: "Canya" },
+        staffName: { en: "Beer", es: "Caña", ca: "Canya", "ca-ES-valencia": "Canya" },
         pricingUnit: "each",
         unitPrice: "2.80",
         vatClass: "general",
@@ -847,8 +1041,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     color: "#add7ef",
     products: [
       {
-        kitchenName: { en: "COLA · BAR", es: "COLA · BARRA", ca: "Cola · barra" },
-        staffName: { en: "Cola", es: "Cola", ca: "Cola" },
+        kitchenName: {
+          en: "COLA · BAR",
+          es: "COLA · BARRA",
+          ca: "Cola · barra",
+          "ca-ES-valencia": "Cola · barra",
+        },
+        staffName: { en: "Cola", es: "Cola", ca: "Cola", "ca-ES-valencia": "Cola" },
         customerName: {
           en: "Cola soft drink",
           es: "Refresco de cola",
@@ -862,8 +1061,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "refresco-cola.png",
       },
       {
-        kitchenName: { en: "MINERAL WATER · BAR", es: "AGUA · BARRA", ca: "Aigua · barra" },
-        staffName: { en: "Water", es: "Agua", ca: "Aigua" },
+        kitchenName: {
+          en: "MINERAL WATER · BAR",
+          es: "AGUA · BARRA",
+          ca: "Aigua · barra",
+          "ca-ES-valencia": "Aigua · barra",
+        },
+        staffName: { en: "Water", es: "Agua", ca: "Aigua", "ca-ES-valencia": "Aigua" },
         customerName: {
           en: "Bottled mineral water",
           es: "Agua mineral",
@@ -877,8 +1081,13 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         image: "agua-mineral.png",
       },
       {
-        kitchenName: { en: "ORANGE JUICE · BAR", es: "NARANJA · BARRA", ca: "Taronja · barra" },
-        staffName: { en: "Orange", es: "Naranja", ca: "Taronja" },
+        kitchenName: {
+          en: "ORANGE JUICE · BAR",
+          es: "NARANJA · BARRA",
+          ca: "Taronja · barra",
+          "ca-ES-valencia": "Taronja · barra",
+        },
+        staffName: { en: "Orange", es: "Naranja", ca: "Taronja", "ca-ES-valencia": "Taronja" },
         customerName: {
           en: "Orange juice",
           es: "Zumo de naranja",
@@ -906,7 +1115,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           "ca-ES-valencia": "Café",
           gl: "Café",
         },
-        staffName: { en: "House coffee", es: "Café de la casa", ca: "Cafè de la casa" },
+        staffName: {
+          en: "House coffee",
+          es: "Café de la casa",
+          ca: "Cafè de la casa",
+          "ca-ES-valencia": "Cafè de la casa",
+        },
         description: {
           en: "Freshly ground espresso from the downstairs bar",
           es: "Espresso recién molido de la barra de abajo",
@@ -918,6 +1132,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
           en: "COFFEE · DOWNSTAIRS BAR",
           es: "CAFÉ · BAR DE ABAJO",
           ca: "Cafè · bar de baix",
+          "ca-ES-valencia": "Cafè · bar de baix",
         },
         dietaryDeclarations: ["vegetarian", "halal"],
         variants: [
@@ -929,13 +1144,28 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
               "ca-ES-valencia": "Sol",
               gl: "Só",
             },
-            staffName: { en: "Single coffee", es: "Café solo", ca: "Cafè sol" },
-            kitchenName: { en: "COFFEE · SINGLE", es: "CAFÉ · SOLO", ca: "Cafè sol · cuina" },
+            staffName: {
+              en: "Single coffee",
+              es: "Café solo",
+              ca: "Cafè sol",
+              "ca-ES-valencia": "Cafè sol",
+            },
+            kitchenName: {
+              en: "COFFEE · SINGLE",
+              es: "CAFÉ · SOLO",
+              ca: "Cafè sol · cuina",
+              "ca-ES-valencia": "Cafè sol · cuina",
+            },
             unitPrice: "1.40",
             available: true,
           },
           {
-            kitchenName: { en: "COFFEE · DOUBLE", es: "CAFÉ · DOBLE", ca: "Cafè doble · cuina" },
+            kitchenName: {
+              en: "COFFEE · DOUBLE",
+              es: "CAFÉ · DOBLE",
+              ca: "Cafè doble · cuina",
+              "ca-ES-valencia": "Cafè doble · cuina",
+            },
             customerName: {
               en: "Double",
               es: "Doble",
@@ -943,7 +1173,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
               "ca-ES-valencia": "Dosi doble",
               gl: "Dobre",
             },
-            staffName: { en: "Double coffee", es: "Café doble", ca: "Cafè doble" },
+            staffName: {
+              en: "Double coffee",
+              es: "Café doble",
+              ca: "Cafè doble",
+              "ca-ES-valencia": "Cafè doble",
+            },
             unitPrice: "2.10",
             available: true,
           },
@@ -958,7 +1193,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
 ] as const satisfies readonly CountryDemoCategory<CasaDelgadoLanguage>[];
 
 export const CASA_DELGADO = {
-  name: { en: "Casa Delgado", es: "Casa Delgado", ca: "Can Delgado" },
+  name: {
+    en: "Casa Delgado",
+    es: "Casa Delgado",
+    ca: "Can Delgado",
+    "ca-ES-valencia": "Can Delgado",
+  },
   customerName: {
     en: "Our menu",
     es: "Nuestra carta",
@@ -970,7 +1210,12 @@ export const CASA_DELGADO = {
 } as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
 
 export const DELI_TAKEAWAY = {
-  name: { en: "Deli takeaway", es: "Charcutería para llevar", ca: "Xarcuteria per emportar" },
+  name: {
+    en: "Deli takeaway",
+    es: "Charcutería para llevar",
+    ca: "Xarcuteria per emportar",
+    "ca-ES-valencia": "Xarcuteria per emportar",
+  },
   customerName: {
     en: "Cured meats and cheese to take away",
     es: "Embutidos y quesos para llevar",
@@ -985,7 +1230,12 @@ export const DELI_TAKEAWAY = {
 } as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
 
 export const MENU_DEL_DIA = {
-  name: { en: "Set lunch", es: "Menú del Día", ca: "Menú del dia" },
+  name: {
+    en: "Set lunch",
+    es: "Menú del Día",
+    ca: "Menú del dia",
+    "ca-ES-valencia": "Menú del dia",
+  },
   customerName: {
     en: "Lunch menu",
     es: "Menú del mediodía",
@@ -1006,7 +1256,7 @@ export const MENU_DEL_DIA = {
       color: "#c7df92",
       products: [
         {
-          staffName: { en: "Salad", es: "Ensalada", ca: "Amanida" },
+          staffName: { en: "Salad", es: "Ensalada", ca: "Amanida", "ca-ES-valencia": "Amanida" },
           customerName: {
             en: "Mixed salad",
             es: "Ensalada mixta",
@@ -1021,11 +1271,16 @@ export const MENU_DEL_DIA = {
             "ca-ES-valencia": "Tomaca, fulles i ceba amb l'amaniment a banda",
             gl: "Tomate, follas e cebola co aliño á parte",
           },
-          kitchenName: { en: "SALAD · LUNCH", es: "ENSALADA · MENÚ", ca: "Amanida · menú" },
+          kitchenName: {
+            en: "SALAD · LUNCH",
+            es: "ENSALADA · MENÚ",
+            ca: "Amanida · menú",
+            "ca-ES-valencia": "Amanida · menú",
+          },
           dietaryDeclarations: ["vegan"],
           unit: {
-            staffName: { en: "Portion", es: "Ración", ca: "Ració" },
-            staffAbbreviation: { en: "ptn", es: "rac", ca: "rac" },
+            staffName: { en: "Portion", es: "Ración", ca: "Ració", "ca-ES-valencia": "Ració" },
+            staffAbbreviation: { en: "ptn", es: "rac", ca: "rac", "ca-ES-valencia": "rac" },
             name: {
               en: "serving",
               es: "ración",
@@ -1049,16 +1304,36 @@ export const MENU_DEL_DIA = {
             "ca-ES-valencia": "Gaspatxo andalús",
             gl: "Gazpacho andaluz",
           },
-          staffName: { en: "Gazpacho", es: "Gazpacho", ca: "Gaspatxo" },
-          kitchenName: { en: "GAZPACHO · LUNCH", es: "GAZPACHO · MENÚ", ca: "Gaspatxo · menú" },
+          staffName: {
+            en: "Gazpacho",
+            es: "Gazpacho",
+            ca: "Gaspatxo",
+            "ca-ES-valencia": "Gaspatxo",
+          },
+          kitchenName: {
+            en: "GAZPACHO · LUNCH",
+            es: "GAZPACHO · MENÚ",
+            ca: "Gaspatxo · menú",
+            "ca-ES-valencia": "Gaspatxo · menú",
+          },
           pricingUnit: "each",
           unitPrice: "5.50",
           vatClass: "reduced",
           image: "gazpacho.png",
         },
         {
-          kitchenName: { en: "LENTILS · LUNCH", es: "LENTEJAS · MENÚ", ca: "Llenties · menú" },
-          staffName: { en: "Lentils", es: "Lentejas", ca: "Llenties" },
+          kitchenName: {
+            en: "LENTILS · LUNCH",
+            es: "LENTEJAS · MENÚ",
+            ca: "Llenties · menú",
+            "ca-ES-valencia": "Llenties · menú",
+          },
+          staffName: {
+            en: "Lentils",
+            es: "Lentejas",
+            ca: "Llenties",
+            "ca-ES-valencia": "Llenties",
+          },
           customerName: {
             en: "Stewed lentils",
             es: "Lentejas estofadas",
@@ -1081,7 +1356,12 @@ export const MENU_DEL_DIA = {
         "ca-ES-valencia": "Segons",
         gl: "Segundos",
       },
-      categoryName: { en: "Lunch mains", es: "Segundos del menú", ca: "Segons del menú" },
+      categoryName: {
+        en: "Lunch mains",
+        es: "Segundos del menú",
+        ca: "Segons del menú",
+        "ca-ES-valencia": "Segons del menú",
+      },
       station: "kitchen",
       color: "#c6cbed",
       products: [
@@ -1093,11 +1373,17 @@ export const MENU_DEL_DIA = {
             "ca-ES-valencia": "Pollastre torrat amb creïlles",
             gl: "Polo asado con patacas",
           },
-          staffName: { en: "Roast chicken", es: "Pollo asado", ca: "Pollastre rostit" },
+          staffName: {
+            en: "Roast chicken",
+            es: "Pollo asado",
+            ca: "Pollastre rostit",
+            "ca-ES-valencia": "Pollastre rostit",
+          },
           kitchenName: {
             en: "CHICKEN + CHIPS",
             es: "POLLO + PATATAS",
             ca: "Pollastre amb patates · cuina",
+            "ca-ES-valencia": "Pollastre amb creïlles · cuina",
           },
           pricingUnit: "each",
           unitPrice: "9.50",
@@ -1109,8 +1395,14 @@ export const MENU_DEL_DIA = {
             en: "BATTERED HAKE · LUNCH",
             es: "MERLUZA · MENÚ",
             ca: "Lluç arrebossat · menú",
+            "ca-ES-valencia": "Lluç arrebossat · menú",
           },
-          staffName: { en: "Hake in batter", es: "Merluza frita", ca: "Lluç fregit" },
+          staffName: {
+            en: "Hake in batter",
+            es: "Merluza frita",
+            ca: "Lluç fregit",
+            "ca-ES-valencia": "Lluç fregit",
+          },
           customerName: {
             en: "Battered hake",
             es: "Merluza rebozada",

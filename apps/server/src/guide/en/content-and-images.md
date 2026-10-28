@@ -13,6 +13,9 @@ In Catalonia and the Balearic Islands, the demo's library uses Catalan staff nam
 including **Botifarra amb mongetes**, in both English and Spanish screens. Its regional
 pictures belong to that practice restaurant; you still choose and replace pictures in the same way.
 
+In the Valencian Community, the demo's photograph library uses Valencian staff names,
+such as **All i pebre** and **Orxata amb fartons**, with its regional pictures.
+
 ## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled

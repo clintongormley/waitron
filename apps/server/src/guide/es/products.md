@@ -353,6 +353,13 @@ Una demostración en Cataluña o las Islas Baleares empieza como **Can Delgado**
 **Especialitats de la casa** incluye **Botifarra amb mongetes**, y la carta de bebidas incluye
 **Copa de cava**. Los nombres internos y de cocina están en catalán aunque las pantallas estén
 en español o inglés. Los textos para el cliente conservan el catalán, el español y el inglés.
+En la Comunitat Valenciana, la demostración empieza como **Casa Delgado de l'Horta**.
+Su sección **Especialitats de l'Horta** incluye **All i pebre** y **Paella valenciana**,
+y Bebidas incluye **Copa de vi de Requena**. Los nombres internos y de cocina están
+en valenciano mientras las pantallas siguen en español o inglés. Los textos para
+el cliente empiezan en valenciano, español e inglés; los tiques salen en español
+por defecto.
+
 Durante la preparación, el nombre sugerido sigue el código postal o la provincia hasta que lo editas.
 Después de escribir un nombre, Waitron lo conserva al cambiar de región, también al revisar y volver.
 

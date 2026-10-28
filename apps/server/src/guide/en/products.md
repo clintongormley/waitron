@@ -335,6 +335,12 @@ A demo in Catalonia or the Balearic Islands starts as **Can Delgado**. Its extra
 **Especialitats de la casa** section includes **Botifarra amb mongetes**, and its Drinks
 menu includes **Copa de cava**. Staff and kitchen names are Catalan even when the screens
 are in English or Spanish. Customer wording keeps Catalan, Spanish and English.
+In the Valencian Community, your demo starts as **Casa Delgado de l'Horta**. Its
+**Especialitats de l'Horta** section includes **All i pebre** and **Paella valenciana**,
+and Drinks includes **Copa de vi de Requena**. Staff and kitchen names use Valencian
+while the screens remain English or Spanish. Customer text starts in Valencian,
+Spanish and English; receipts default to Spanish.
+
 During setup, the suggested restaurant name follows the postcode or province until you edit it.
 Once you type a name, Waitron keeps it when you change the region, including after Review and Back.
 

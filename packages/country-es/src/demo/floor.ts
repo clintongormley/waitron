@@ -1,10 +1,23 @@
 import type { CountryDemoZone, CountryDemoRawTable } from "@waitron/country";
 export const DEMO_ZONES = [
-  { key: "dining", name: { en: "Dining room", es: "Comedor", ca: "Menjador" }, displayOrder: 0 },
-  { key: "terrace", name: { en: "Terrace", es: "Terraza", ca: "Terrassa" }, displayOrder: 1 },
+  {
+    key: "dining",
+    name: { en: "Dining room", es: "Comedor", ca: "Menjador", "ca-ES-valencia": "Menjador" },
+    displayOrder: 0,
+  },
+  {
+    key: "terrace",
+    name: { en: "Terrace", es: "Terraza", ca: "Terrassa", "ca-ES-valencia": "Terrassa" },
+    displayOrder: 1,
+  },
   {
     key: "bar",
-    name: { en: "Downstairs bar", es: "Bar de abajo", ca: "Bar de baix" },
+    name: {
+      en: "Downstairs bar",
+      es: "Bar de abajo",
+      ca: "Bar de baix",
+      "ca-ES-valencia": "Bar de baix",
+    },
     displayOrder: 2,
   },
 ] as const satisfies readonly CountryDemoZone[];

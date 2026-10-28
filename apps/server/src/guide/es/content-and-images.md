@@ -13,6 +13,10 @@ En Cataluña y las Islas Baleares, la biblioteca de demostración usa nombres in
 como **Botifarra amb mongetes**, tanto en las pantallas en español como en inglés. Las imágenes
 regionales pertenecen a ese restaurante de práctica; las eliges y sustituyes de la misma manera.
 
+En la Comunitat Valenciana, la biblioteca de fotografías de demostración usa nombres
+internos en valenciano, como **All i pebre** y **Orxata amb fartons**, con sus imágenes
+regionales.
+
 ## Elige los idiomas de tu contenido {#languages}
 
 Un local nuevo empieza con los idiomas que Waitron mantiene activados para su región, más el inglés.
