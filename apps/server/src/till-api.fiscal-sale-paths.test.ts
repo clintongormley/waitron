@@ -1340,6 +1340,14 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
+    const collect = provider.collect.bind(provider);
+    const collecting = new Promise<void>((resolve) => {
+      provider.collect = (params) => {
+        const result = collect(params);
+        resolve();
+        return result;
+      };
+    });
     const app = new Hono();
     mountTillApi(
       app,
@@ -1367,7 +1375,13 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         readerId: "00000000-0000-4000-8000-000000000247",
       }),
     });
-    await vi.waitFor(() => expect(provider.pendingDemoReaderPayments()).toHaveLength(1));
+    await Promise.race([
+      collecting,
+      paying.then((response) => {
+        throw new Error(`Pay finished before reader collection: HTTP ${response.status}`);
+      }),
+    ]);
+    expect(provider.pendingDemoReaderPayments()).toHaveLength(1);
 
     const cancelled = await app.request("/api/demo-reader/cancel", {
       method: "POST",

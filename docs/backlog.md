@@ -5483,13 +5483,6 @@ values rather than PIN substrings inside random IDs. See the
   both attempts before running tests. Their underlying causes remain unknown.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
 
-- **A main-run payment-cancellation test found no reader cancel request.**
-  In exact-merge run `40750935978`, server shard 13 (`123038600497`) failed
-  `till-api.fiscal-sale-paths.test.ts`'s “lets the paying till cancel a pending pretend reader
-  payment”: the expected one request was an empty list. Checkout and the test command ran;
-  this is distinct from till shard 3's checkout timeout in that run. Diagnose the failed
-  assertion before changing payment code or the test; the cause is unknown.
-
 - **Profile provisioning's busiest shard after the A679 split.**
   [Detail](backlog/ci.md#profile-provisionings-busiest-shard-after-the-a679-split).
 

@@ -38,6 +38,31 @@ paused helper alive with a timer made both probes reach the timeout; removing fr
 isolation then failed with `shallow.lock: File exists`. The helper's cleanup stops its recorded
 processes.
 
+## Observe reader collection before cancelling its pending payment
+
+When a test needs a pending reader payment, observe the real collector entering its pending
+state before sending Cancel. Keep the real collector and its database writes running. Race that
+notification against the HTTP response, so a refused pay request fails with its status instead
+of waiting for a reader operation that never starts. Read the response body only in the path
+that checks its outcome.
+
+On 2026-10-28, A1179 traced main CI `40750935978`, server job `123038600497`, to the
+one-second `vi.waitFor` in “lets the paying till cancel a pending pretend reader payment”.
+The failing assertion checked the simulator's pending list before the test sent Cancel.
+In an installed disposable checkout, holding pay dispatch until that wait expired reproduced
+`expected [] to have a length of 1`. Releasing dispatch then passed every original cancellation
+assertion. With dispatch delayed by 1,200 ms, observing the real collector passed the same
+assertions. Removing the simulator's pending-entry deletion failed the empty-list assertion;
+restoring it passed. The historical CI pay response was not retained, so its precise delay or
+refusal remains unobserved. No payment implementation changed.
+
+Run the owning case with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/till-api.fiscal-sale-paths.test.ts \
+  -t 'lets the paying till cancel a pending pretend reader payment'
+```
+
 **Asking for a database**
 
 ## There is one database target, and a helper opens it.
