@@ -64,7 +64,7 @@ export async function readMadridSemantics(db: Database): Promise<MadridSemantics
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function stable(value: unknown): string {
+export function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)

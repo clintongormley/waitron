@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CanonicalMadridSemantics } from "./madrid-semantics.js";
+import { stable, type CanonicalMadridSemantics } from "./madrid-semantics.js";
 
 export interface MadridNameChange {
   table: string;
@@ -7,16 +7,6 @@ export interface MadridNameChange {
   column: string;
   old: unknown;
   new: string;
-}
-
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-  if (value !== null && typeof value === "object")
-    return `{${Object.entries(value)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, child]) => `${JSON.stringify(key)}:${stable(child)}`)
-      .join(",")}}`;
-  return JSON.stringify(value);
 }
 
 const NAME_COLUMNS: Record<string, readonly string[]> = {
