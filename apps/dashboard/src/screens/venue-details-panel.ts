@@ -176,7 +176,6 @@ export class VenueDetailsPanel extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
-    this.submitting = false;
     this.#previewSequence += 1;
     this.#clockKey = "";
     this.clockPreview = undefined;
@@ -418,16 +417,17 @@ export class VenueDetailsPanel extends LitElement {
     }
     if (this.#needsAcknowledgement()) return;
     const generation = this.#generation;
+    const draft = this.draft;
     this.submitting = true;
     this.errors = {};
     this.actionError = "";
     try {
       const result = await this.api.patchVenueDetails({ changes: patch, expected: this.#expected });
-      if (generation !== this.#generation) return;
-      this.model = result.model;
-      this.#cancel();
+      // A reconnect starts a newer read, which this older answer must not overwrite.
+      if (generation === this.#generation) this.model = result.model;
+      if (draft === this.draft) this.#cancel();
     } catch (error) {
-      if (generation !== this.#generation) return;
+      if (draft !== this.draft) return;
       const code = codeOf(error);
       const params =
         typeof error === "object" && error !== null
@@ -456,9 +456,9 @@ export class VenueDetailsPanel extends LitElement {
       } else this.actionError = message;
       return;
     } finally {
-      if (generation === this.#generation) this.submitting = false;
+      this.submitting = false;
     }
-    await this.#load();
+    if (this.isConnected) await this.#load();
   }
   #lockedNotes(): TemplateResult | typeof nothing {
     const keys = new Set<StringKey>();
