@@ -50,6 +50,7 @@ import {
   START_AGAIN_MARKER_FILE,
   START_AGAIN_SET_ASIDE_DIR,
   SPARE_SPACE_FILE,
+  SPARE_SPACE_RELEASED_FILE,
   createFirstSetupBackupWorkspace,
   isEmptiedTombstone,
 } from "@waitron/provisioning";
@@ -101,7 +102,8 @@ import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
 
-const FLOOR = 8 * 1024 * 1024;
+const MiB = 1024 * 1024;
+const FLOOR = 8 * MiB;
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
 const DELETED = escapeHtml(
   "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full.",
@@ -865,9 +867,10 @@ describe("a start on a real full disk", () => {
     small.unfill();
     await runEntry(entryDeps(stateDir));
     expect(statSync(spare).size).toBe(1024 * 1024);
+    expect(() => statSync(join(stateDir, SPARE_SPACE_RELEASED_FILE))).toThrow();
   });
 
-  it("a start with room writes the box's spare file; a full disk with nothing to free keeps it and serves the page", async (ctx) => {
+  it("a start with room writes the box's spare file; a full disk with nothing else to free deletes it, writes the marker and boots", async (ctx) => {
     const small = needDisk(ctx);
     const stateDir = await startedBefore(small, "spare-kept");
     const spare = join(stateDir, SPARE_SPACE_FILE);
@@ -877,11 +880,47 @@ describe("a start on a real full disk", () => {
 
     const d = entryDeps(stateDir);
     await runEntry(d);
-    expect(d.startServer).not.toHaveBeenCalled();
-    expect(vi.mocked(d.log).mock.calls.map(([, event]) => event)).toContain(
-      "recovery.serving_disk_full",
-    );
+    const events = vi.mocked(d.log).mock.calls.map(([, event]) => event);
+    expect(events).toContain("storage.spare_released");
+    expect(events).not.toContain("recovery.serving_disk_full");
+    expect(() => statSync(spare)).toThrow();
+    expect(statSync(join(stateDir, SPARE_SPACE_RELEASED_FILE)).isFile()).toBe(true);
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a start with 12 MiB free keeps the box's spare file, and one with 6 MiB free deletes it, writes the marker and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "spare-12-6");
+    const spare = join(stateDir, SPARE_SPACE_FILE);
+    small.fill(12 * MiB);
+    await runEntry(entryDeps(stateDir));
     expect(statSync(spare).size).toBe(1024 * 1024);
+    small.unfill();
+
+    small.fill(6 * MiB);
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(() => statSync(spare)).toThrow();
+    expect(statSync(join(stateDir, SPARE_SPACE_RELEASED_FILE)).isFile()).toBe(true);
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a start with 12 MiB free after a start that failed for a full disk deletes the spare", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "spare-12-failed");
+    const spare = join(stateDir, SPARE_SPACE_FILE);
+    await writeRecoveryState(stateDir, {
+      ...FRESH,
+      failures: 1,
+      lastErrorCode: "storage.disk_full",
+      lastFailureAt: new Date().toISOString(),
+    });
+    small.fill(12 * MiB);
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(() => statSync(spare)).toThrow();
+    expect(statSync(join(stateDir, SPARE_SPACE_RELEASED_FILE)).isFile()).toBe(true);
+    expect(d.startServer).toHaveBeenCalledTimes(1);
   });
 
   it("a discarded recovery on a full disk with a rotated log: the start deletes the log, then empties the recovery and boots", async (ctx) => {
@@ -933,7 +972,8 @@ describe("a start on a real full disk", () => {
 
   it("a start with nothing to delete serves the recovery page at once", async (ctx) => {
     const small = needDisk(ctx);
-    const stateDir = await startedBefore(small, "nothing");
+    // No spare: this case is the full-disk page, which a spare's release would otherwise avoid.
+    const stateDir = await startedBefore(small, "nothing", { spareBytes: 0 });
     nothingDir = stateDir;
     await ensureBoxSecrets({
       stateDir,
@@ -951,6 +991,7 @@ describe("a start on a real full disk", () => {
     const [port] = await freePorts(1);
     let served: Awaited<ReturnType<typeof serveRecovery>> | undefined;
     const d = entryDeps(stateDir, {
+      spareBytes: 0,
       baseEnv: { WAITRON_HTTP_LANDING_PORT: "0", WAITRON_HTTP_PORT: String(port) },
       serveRecovery: vi.fn(async (app: Hono, opts: RecoveryServeOptions) => {
         served = await serveRecovery(app, opts);
@@ -979,7 +1020,7 @@ describe("a start on a real full disk", () => {
     const small = needDisk(ctx);
     expect(nothingDir).toBeDefined();
     small.unfill();
-    const d = entryDeps(nothingDir!);
+    const d = entryDeps(nothingDir!, { spareBytes: 0 });
     await runEntry(d);
     expect(d.startServer).toHaveBeenCalledTimes(1);
   });

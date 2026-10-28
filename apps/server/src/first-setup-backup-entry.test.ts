@@ -492,12 +492,18 @@ it("a start at a recovery's repair stage on a nearly full disk keeps the spare",
   const f = await fixture();
   const spare = join(f.roots.stateDir, "spare-space");
   await writeFile(spare, Buffer.alloc(4096, 1));
+  const log = vi.fn();
   const { surface } = await superviseSelected(f, {
     spareBytes: 4096,
     statfs: async () => ({ bavail: 1024 * 1024, frsize: 1 }),
+    log,
   });
   expect(surface).toBeDefined();
   expect((await stat(spare)).size).toBe(4096);
+  await expect(stat(join(f.roots.stateDir, "spare-space.released"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(log).not.toHaveBeenCalledWith("warn", "storage.spare_released", expect.anything());
 });
 
 it("a supervised start after a finished backup recovery runs the server on the restored target", async () => {
