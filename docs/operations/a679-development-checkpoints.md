@@ -1,5 +1,7 @@
 # A679 development checkpoints through 19 October 2026
 
+> 2026-10-28: A1154 removes the obsolete operator chain-reset command and action. The registration checks below remain a historical record; use the [current recovery paths](hour-recovery.md#a-working-box-keeps-its-fiscal-identity).
+
 > 2026-10-22: historical; series names are now five-symbol UTC minutes ([A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) §6.5).
 
 > 2026-10-25: historical on Start again too; Start again no longer keeps a retirement archive or moves the box into a first-setup workspace — it deletes the attempt and keeps one small note of the last series name (A1042, [plan](../superpowers/plans/2026-10-24-a1042-start-again-series-note.md)). The workspace, retirement and selection checks below record the earlier tree.

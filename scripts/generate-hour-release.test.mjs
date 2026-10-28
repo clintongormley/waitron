@@ -434,7 +434,7 @@ child.stdout.on('data', bytes => {
     expect(entries).toContain("dist/server.js");
     expect(entries).toContain("dist/node-entry.js");
     expect(entries).toContain("dist/bin-restore.js");
-    expect(entries).toContain("dist/register-till.js");
+    expect(entries).not.toContain(`dist/${["register", "till"].join("-")}.js`);
     expect(entries).toContain("dist/bin.js");
     writeFileSync(
       join(cwd, "entry.ts"),

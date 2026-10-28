@@ -15,6 +15,7 @@ import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
 import { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
+import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { fiscalReservations } from "./schema/reservations.js";
@@ -84,7 +85,7 @@ describe("FISCAL_PROVISIONING.seed", () => {
     expect((error as Error).message).toContain("tenants is empty");
   });
 
-  it("re-seeding an existing node mints a fresh installation number and a new chain", async () => {
+  it("restoring an existing node mints a fresh installation number and a new chain", async () => {
     const bases = [
       { code: "FA", purpose: "standard" },
       { code: "RF", purpose: "rectificative" },
@@ -92,7 +93,9 @@ describe("FISCAL_PROVISIONING.seed", () => {
     const initial = allocationFixture({ node: NODE, bases, identity: "S000001" });
     const recovery = allocationFixture({ node: NODE, bases, identity: "P000042" });
     await initial.transaction(db, "setup", (tx, operation) => seed.run(tx, NODE, operation));
-    await recovery.transaction(db, "re-register", (tx, operation) => seed.run(tx, NODE, operation));
+    await recovery.transaction(db, "restore", (tx, operation) =>
+      ALLOCATED_FISCAL_RESTORE(tx, NODE, operation),
+    );
     const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(sif.numeroInstalacion).toBe("P000042");
     const head = await db.execute<{ h: string | null }>(

@@ -14,7 +14,7 @@ import { currentSif, esPrimerRegistro, type SifRegistration } from "./registro-s
 import { MAX_BASE_CODE_LENGTH, liveSeriesBases } from "./reserved-series.js";
 import { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { altaFor, seedSale, seedTill } from "./testing/seed.js";
+import { altaFor, seedSale, seedNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
@@ -216,17 +216,17 @@ describe("restoreFiscal", () => {
   it("the first record appended after the restore is a chain start under the new SIF, and the chain verifies", async () => {
     // Through the REAL append path (appendToChain computes the hash and derives primer_registro),
     // before and after the hook — never a fixture that writes the hash by hand.
-    const till = await seedTill(db);
+    const seededNode = await seedNode(db);
     const { rows } = await db.execute<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${till.nodeId}`,
+      sql`select location_id from nodes where id = ${seededNode.nodeId}`,
     );
     const node: ProvisionedNode = {
       locationId: brandLocationId(rows[0]!.location_id),
-      nodeId: till.nodeId,
+      nodeId: seededNode.nodeId,
     };
-    const sale1 = await seedSale(db, till, 1);
+    const sale1 = await seedSale(db, seededNode, 1);
     const before = await db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till, sale1, 1, 1)),
+      appendToChain(tx, seededNode.nodeId, altaFor(seededNode, sale1, 1, 1)),
     );
 
     const bases = await liveSeriesBases(db, node);
@@ -240,11 +240,11 @@ describe("restoreFiscal", () => {
       softwareId: previous.idSistemaInformatico,
     });
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, node, operation));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, till.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, seededNode.nodeId));
 
-    const sale2 = await seedSale(db, till, 2);
+    const sale2 = await seedSale(db, seededNode, 2);
     const after = await db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till, sale2, 2, 2)),
+      appendToChain(tx, seededNode.nodeId, altaFor(seededNode, sale2, 2, 2)),
     );
     // Through the builder: only it maps the stored 0/1 `primer_registro` back to a boolean.
     const rec = await db
@@ -257,7 +257,7 @@ describe("restoreFiscal", () => {
       .where(eq(registrosFacturacion.id, after.id));
     expect(rec[0]).toEqual({ primer_registro: true, anterior_huella: null, sif_id: fresh.id });
     expect(after.secuencia).toBe(before.secuencia + 1); // the sequence is ours and continues
-    const report = await withTransaction(db, (tx) => verifyChain(tx, till.nodeId));
+    const report = await withTransaction(db, (tx) => verifyChain(tx, seededNode.nodeId));
     expect(report).toMatchObject({ ok: true, issues: [] });
   });
 

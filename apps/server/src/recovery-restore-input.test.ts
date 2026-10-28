@@ -380,7 +380,7 @@ it.each(["marker", "file"])(
   },
 );
 
-it.each(["promote", "re-register"])(
+it.each(["promote"])(
   "refuses a %s operation before constructing a cold-restore runner",
   (action) => {
     expect(() =>
@@ -427,7 +427,7 @@ it.each(["invalid", "wrong-action"])(
     const recoveryOperation =
       kind === "invalid"
         ? { ...request, input: undefined }
-        : { ...request, binding: { ...request.binding, action: "re-register" } };
+        : { ...request, binding: { ...request.binding, action: "promote" } };
     await expect(
       stageRestoreRequest(stateDir, {
         artifact: Buffer.from("new"),

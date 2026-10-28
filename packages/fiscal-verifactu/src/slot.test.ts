@@ -15,7 +15,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { makeAuthority } from "../test/certificate-fixtures.js";
-import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
@@ -323,7 +323,7 @@ describe("FISCAL_SLOT.certificate", () => {
   }
 
   async function setupSeal() {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
     await sealAeatSecret(
       { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(INSTALLED_AT) },

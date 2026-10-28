@@ -50,7 +50,6 @@ const SMTP = {
 const identity = formatEnvFile({
   WAITRON_TILL_NODE_ID: T.nodeId,
   WAITRON_TILL_LOCATION_ID: T.locationId,
-  WAITRON_TILL_SERIES_ID: T.seriesId,
   WAITRON_ENV: "production",
 });
 const suite = useVenueDb({

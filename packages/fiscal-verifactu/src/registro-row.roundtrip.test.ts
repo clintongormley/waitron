@@ -11,17 +11,17 @@ import {
   toRegistroRow,
   type RegistroRow,
 } from "./registro-row.js";
-import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
+import { seedSale, seedNode, TEST_NIF, TEST_SISTEMA, type SeededNode } from "./testing/seed.js";
 import { deviceOrigin } from "@waitron/shared";
 
 // Record flattening, storage, rehydration and XML assembly, without concurrency: one writer
 // against one venue database is all these cases need.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-let till: SeededTill;
+let node: SeededNode;
 
 beforeEach(async () => {
-  till = await seedTill(suite.db);
+  node = await seedNode(suite.db);
 });
 
 // Distinct invoice number per sale, so successive `seedSale` calls in one test never collide on the
@@ -36,11 +36,11 @@ let invoiceSequence = 0;
  */
 async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
-  const saleId = await seedSale(suite.db, till, invoiceSequence);
+  const saleId = await seedSale(suite.db, node, invoiceSequence);
   const row = toRegistroRow(record, {
-    origin: deviceOrigin(till.deviceId),
-    nodeId: till.nodeId,
-    sifId: till.sifId,
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
+    sifId: node.sifId,
     saleId,
     secuencia: 1,
     // Must equal the record's own offsetMinutes, so `fromRegistroRow` reproduces the exact
@@ -335,9 +335,9 @@ describe("toRegistroRow — an anulación's issuer name", () => {
     });
     expect(() =>
       toRegistroRow(record, {
-        origin: deviceOrigin(till.deviceId),
-        nodeId: till.nodeId,
-        sifId: till.sifId,
+        origin: deviceOrigin(node.deviceId),
+        nodeId: node.nodeId,
+        sifId: node.sifId,
         saleId: "s",
         secuencia: 1,
         offsetMinutes: 120,

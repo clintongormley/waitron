@@ -1,6 +1,6 @@
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
+import { ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { stampDeployment } from "@waitron/db";
 import { floorTodayTables } from "@waitron/db";
 import { Hono } from "hono";
@@ -645,8 +645,8 @@ describe("venue details preserve committed history", () => {
       identity: "P000042",
       bases,
     });
-    await fixture.transaction(suite.db, "re-register", (tx, operation) =>
-      ALLOCATED_FISCAL_SEED.run(
+    await fixture.transaction(suite.db, "restore", (tx, operation) =>
+      ALLOCATED_FISCAL_RESTORE(
         tx,
         { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId },
         operation,

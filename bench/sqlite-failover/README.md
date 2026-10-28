@@ -738,7 +738,7 @@ those are reachable in it: the pragma readbacks, the WAL floor and the offline a
 **The volume mapping, and the assumption inside it.** `SALES_PER_DAY = 250` and `DAYS = 30`, so 7500
 sales. **250 a day is an ASSUMPTION and not a measurement** — nothing in this repository records the
 deli's real ticket count, and the nearest stated figure,
-[`bench/pglite-throughput/src/bench.ts:60-78`](../pglite-throughput/src/bench.ts), models the worst
+[`docs/research/2026-07-20-pglite-throughput-source.ts.txt:60-78`](../../docs/research/2026-07-20-pglite-throughput-source.ts.txt), models the worst
 realistic MINUTE (16 sales a minute across four tills), which implies no daily total whatever. Every
 figure below is therefore also given per sale, so a reader who knows the real rate can rescale it.
 And the load is **volume, not wall-clock** (spec §9): thirty days of trading driven through in about
@@ -755,7 +755,7 @@ day, and litestream documents no such number.
 
 **The bars, and where each comes from.**
 
-- p95 ≤ 150ms and p99 ≤ 400ms are the pglite bench's, `bench/pglite-throughput/src/bench.ts:82-83`,
+- p95 ≤ 150ms and p99 ≤ 400ms are the pglite bench's, `docs/research/2026-07-20-pglite-throughput-source.ts.txt:82-83`,
   and their justification is the cashier's perceived wait at `bench.ts:75-78` — the receipt cannot
   print until the commit lands. Spec §4's S4 asks for exactly this reuse.
 - Peak WAL ≤ 64KiB a sale is a **stated ceiling and not a derived one**. Nothing in this repository
@@ -1410,8 +1410,7 @@ What those three keep out is the rig's **scenarios** — no CI job and no pre-pu
 container. They do not keep the PACKAGE out of anything: it is a workspace member, so CI's shard
 filters and the root guards see it by name, and it has to be wired for that. It is listed in
 `PACKAGES_WITHOUT_TESTS` and placed in `LIGHT_B_PACKAGES` (`scripts/changed-scope.mjs`), and
-subtracted from `test-light-a`'s selection in `.github/workflows/ci.yml` — exactly how
-`@waitron/bench-pglite` is wired. Three root guards go red without that wiring —
+subtracted from `test-light-a`'s selection in `.github/workflows/ci.yml`. Three root guards go red without that wiring —
 `scripts/changed-scope.test.mjs`, `scripts/ci-workflow.test.mjs` and
 `scripts/coverage-thresholds.test.ts`, the last by crashing rather than asserting. They live in the root Vitest project, which CI's ungated
 `root-guards` job and `.husky/pre-push` both run. The general rule, for whoever adds the next workspace
@@ -1441,8 +1440,6 @@ That matters beyond this rig — the real ledger has used the same mechanism sin
 ## Several files, not one
 
 `node src/scenarios.ts` runs the TypeScript directly — Node 26 strips types natively, with no build
-step and no `tsx`. Unlike `bench/pglite-throughput`, which is one self-contained file because native
-stripping does not do the `.js`-suffix remapping the rest of the repo relies on, this package spreads
-over several modules and every relative import carries an explicit `.ts` extension
+step and no `tsx`. This package spreads over several modules and every relative import carries an explicit `.ts` extension
 (`import { openNode } from "../model.ts"`). `tsconfig.json` sets `allowImportingTsExtensions` so the
 typechecker accepts the same specifiers Node executes.

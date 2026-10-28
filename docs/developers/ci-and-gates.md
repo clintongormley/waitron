@@ -205,17 +205,14 @@ case has nothing to do with the storage engine:** an interrupted vitest run stil
 its workers to ppid 1, where they spin at ~100% CPU until killed. So the occasion to run it is after
 an interrupted run of ANY suite, not before a database one.
 
-**What that grep does NOT say is that the labelled rig is the only container starter, and an earlier
-version of this paragraph said so.** `bench/pglite-throughput/src/bench.ts:331` starts a real
-`postgres:18-alpine` through `PostgreSqlContainer` and chains no `.withLabels` at all, so an
-interrupted run of that rig leaks a container the reaper's label filter can never match. Clear it by
+**Historical receipt; the executable PGlite comparison was retired on 2026-10-28 (A1154).** `docs/research/2026-07-20-pglite-throughput-source.ts.txt:331` started a real
+`postgres:18-alpine` through `PostgreSqlContainer` and chained no `.withLabels` at all, so an
+interrupted run of that rig left a container the reaper's label filter can never match. Clear it by
 hand — `docker ps -a --filter ancestor=postgres:18-alpine`, then `docker rm -f` what that names,
 after `docker volume inspect` on anything attached. Measured on this machine on 2026-09-23: that
 filter named leaked `postgres:18-alpine` containers, and `docker inspect --format
 '{{json .Config.Labels}}'` on each printed `{}` — no `com.waitron.reapable`, so the reaper would
-indeed have walked past them. Neither bench declares a `test` script — `pnpm-workspace.yaml` says
-that is on purpose — so this only bites someone who ran the rig by hand. `docs/backlog.md` carries
-the open choice between stamping the label there and keeping the by-hand cleanup.
+indeed have walked past them. The retained `bench/sqlite-failover` workspace member has no test script. The retired comparison's source and results remain historical evidence, not a current command to run.
 
 Run the normal hook once through the push, then verify CI scope and required checks on the current
 head. A green hook proves only its own checks; it is not evidence of package tests or coverage.

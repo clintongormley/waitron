@@ -11,7 +11,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
+import { TENANT_A, seedTenantNodeSif } from "../test/fixtures.js";
 
 /**
  * The four AEAT rectificativa columns on `registros_facturacion` and their two CHECK constraints.
@@ -20,7 +20,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  */
 const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
-  setup: seedTenantTillSif,
+  setup: seedTenantNodeSif,
   resetPerTest: false,
 });
 

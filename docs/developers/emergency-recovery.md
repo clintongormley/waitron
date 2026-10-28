@@ -69,8 +69,8 @@ The public recovery operation keeps the same `binding`. Its module `input` conta
 The approval has the same format as a paper recovery approval: matching event, source, target,
 operator and incident reference, with `oldMachineOffline: true`, `oldMachineAbsent: false` and
 `noParallelRecovery: true`. Supply the node recovery key separately, never in this record.
-Archive encryption still uses its own key. An administrator-led re-registration uses its
-authenticated person ID and `re-register` instead of `restore`.
+Archive encryption still uses its own key. A working box retains its chain; a replacement uses
+restore and an admitted spare uses promotion.
 
 After authenticating the key, the collector rereads your outside confirmation. It draws the
 identity from the operating system's cryptographic generator and writes the allocation, complete

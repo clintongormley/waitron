@@ -243,10 +243,10 @@ it.each(["standard", "full", "rectificative"])(
   },
 );
 
-it("consults an exact committed re-registration without changing counters or evidence", async () => {
+it("consults an exact committed restore without changing counters or evidence", async () => {
   await seed();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
-  const operation = { ...binding, action: "re-register" };
+  const operation = { ...binding, action: "restore" };
   await activate(operation, "0CNQR", "2026-10-16T12:40:00.000Z");
   const before = {
     allocations: await suite.db.select().from(fiscalAllocations),
@@ -261,7 +261,7 @@ it("consults an exact committed re-registration without changing counters or evi
   }).toEqual(before);
   await expect(read({ ...operation, sourceId: "another-recovery" })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "event_mismatch" },
+    params: { reason: "prior_activation_requires_replay" },
   });
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
 });

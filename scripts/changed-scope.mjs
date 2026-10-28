@@ -303,7 +303,6 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/printing",
   "@waitron/print-agent",
   "@waitron/print-agent-app",
-  "@waitron/bench-pglite",
   "@waitron/bench-sqlite-failover",
   "@waitron/diagnostics",
   "@waitron/sync-enrolment",
@@ -322,7 +321,7 @@ export const LIGHT_B_PACKAGES = [
  * `pnpm --filter "...<member>" test:coverage` over a listed member prints `None of the selected
  * packages has a "test:coverage" script` on STDOUT and exits **0**.
  */
-export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite", "@waitron/bench-sqlite-failover"];
+export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-sqlite-failover"];
 
 /** A gate that fires when one named package is in the resolved scope. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);

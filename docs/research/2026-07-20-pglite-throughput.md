@@ -1,3 +1,5 @@
+> **2026-10-28:** A1154 retires the executable PGlite comparison. The product uses SQLite and node-owned chains. The old seed refuses with `42P18` before measurement. Its [source](2026-07-20-pglite-throughput-source.ts.txt) and [original README](2026-07-20-pglite-throughput-readme.md) are retained as historical evidence; the numbers below describe that earlier experiment.
+
 # PGlite throughput against the local-server topology
 
 **Date:** 2026-07-20

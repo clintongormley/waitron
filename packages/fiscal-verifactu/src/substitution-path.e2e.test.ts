@@ -14,7 +14,7 @@ import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.j
 import type { RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+import { seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -27,7 +27,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
-let till: SeededTill;
+let node: SeededNode;
 // A separate series lets the backend test file an F3 without reusing the ticket's invoice number.
 // Core enforces the full-series purpose; the backend receives the already chosen series code.
 let substitutionSeriesId: string;
@@ -39,12 +39,12 @@ const RECIPIENT: Counterparty = {
 };
 
 beforeEach(async () => {
-  till = await seedTill(suite.db, "A");
+  node = await seedNode(suite.db, "A");
   // Through the table: `id` and `created_at` are `$defaultFn` generators that only the insert
   // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: till.nodeId, code: "F3", purpose: "full", nextNumber: 1 })
+    .values({ nodeId: node.nodeId, code: "F3", purpose: "full", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   substitutionSeriesId = series!.id;
   backend = new VerifactuBackend({
@@ -65,8 +65,8 @@ function substitutionSaleFor(
   overrides: Partial<SaleForFiscalRecord> = {},
 ): SaleForFiscalRecord {
   return {
-    origin: deviceOrigin(till.deviceId),
-    nodeId: till.nodeId,
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
     saleId: brandSaleId(saleId),
     // Never read by `recordSubstitution` (it uses `seriesCode`/`invoiceNumber` for NumSerieFactura);
     // branded only to satisfy the type.
@@ -87,10 +87,10 @@ function substitutionSaleFor(
  * positive totals. `seriesCode` "A" → NumSerieFactura "A/<n>". */
 function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    origin: deviceOrigin(till.deviceId),
-    nodeId: till.nodeId,
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
     saleId: brandSaleId(saleId),
-    seriesId: brandSeriesId(till.seriesId),
+    seriesId: brandSeriesId(node.seriesId),
     seriesCode: "A",
     invoiceNumber,
     issuedAt: new Date("2026-03-01T12:05:00.000Z"),
@@ -105,7 +105,7 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
 /** Records one substituted F2 ticket (seeding its `sales` row first). Returns the ticket sale's
  * id — a `substitutedSaleId` an F3 points at. */
 async function recordTicket(invoiceNumber: number): Promise<string> {
-  const ticketId = await seedSale(suite.db, till, invoiceNumber);
+  const ticketId = await seedSale(suite.db, node, invoiceNumber);
   await withTransaction(suite.db, async (tx) => {
     await backend.recordSale(tx, ticketSaleFor(ticketId, invoiceNumber));
   });
@@ -120,8 +120,8 @@ async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
     .insert(sales)
     .values({
       source: "device",
-      deviceId: till.deviceId,
-      nodeId: till.nodeId,
+      deviceId: node.deviceId,
+      nodeId: node.nodeId,
       seriesId: substitutionSeriesId,
       invoiceNumber,
       issuedAt: "2026-03-02T12:05:00+01:00",
@@ -198,7 +198,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     const row = await registro(substitutionId);
     expect({ source: row.source, deviceId: row.deviceId }).toEqual({
       source: "device",
-      deviceId: till.deviceId,
+      deviceId: node.deviceId,
     });
   });
 
@@ -293,11 +293,11 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     const ticketId = await recordTicket(1);
     await expect(substitute([ticketId, ticketId])).rejects.toThrow(/duplicate/i);
 
-    // Nothing chained: the till carries only the ticket's own F2 alta; the F3 was never appended.
+    // Nothing chained: the node carries only the ticket's own F2 alta; the F3 was never appended.
     const rows = await suite.db
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, till.nodeId));
+      .where(eq(registrosFacturacion.nodeId, node.nodeId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.tipoFactura).toBe("F2");
   });
@@ -323,8 +323,8 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     const rows = await suite.db
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, till.nodeId));
-    // Every registro on this till is an alta — the two F2 tickets and the one F3 — and not one of
+      .where(eq(registrosFacturacion.nodeId, node.nodeId));
+    // Every registro on this node is an alta — the two F2 tickets and the one F3 — and not one of
     // them is an anulación.
     expect(rows.map((r) => r.tipoRegistro).sort()).toEqual(["alta", "alta", "alta"]);
     // Each substituted ticket still has exactly its own single alta, untouched.
@@ -406,7 +406,7 @@ describe("recordSubstitution from five callers started together", () => {
     const rows = await suite.db
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, till.nodeId))
+      .where(eq(registrosFacturacion.nodeId, node.nodeId))
       .orderBy(asc(registrosFacturacion.secuencia));
 
     // Ticket at 1, the five F3s at 2..6 — distinct, contiguous, no gaps.

@@ -127,29 +127,8 @@ records the limits of clock and operator assurance; the
 replaces its hour names with minute names and its clock confirmation with the 30-second rule.
 
 
-## Re-register an existing node from the operator command
+## A working box keeps its fiscal identity
 
-Use this command only with an operation already selected by the authenticated preparation host.
-It asks no question and does not choose a name for you. Keep the operation file and
-its host state together; editing its event, source or target does not create a new authorisation.
-
-Stop the server before opening its venue folder. Set `WAITRON_STATE_DIR` to the state directory
-that retains the selection. Set `WAITRON_VENUE_DIR` if the venue is outside that directory's
-`venue` subdirectory. `WAITRON_RECOVERY_OPERATION_FILE` names the selected operation file;
-`WAITRON_NODE_RECOVERY_KEY` supplies the matching secret through the environment, never an argument.
-After building the server, run:
-
-```sh
-node apps/server/dist/register-till.js <nodeId> --confirm-old-box-gone --confirm-sole-recovery
-```
-
-Those confirmations attest that the former seller is stopped and no parallel recovery is running.
-The command checks the key again, refreshes its clock comparison and checks the retained selection
-before activation. This non-interactive entry needs usable internet time alongside the box clock.
-An unavailable second clock refuses `sif.allocation_invalid` with reason `second_clock_missing`
-(`apps/server/src/hour-promotion.test.ts`, "register-till refuses %s without changing the
-selected venue", row "offline clock").
-Do not delete the retained state to bypass that refusal.
-
-A new event starts the selected series at one and retains the retired series and counters. An
-exact replay returns the original installation and preserves subsequent counter advances.
+You cannot start a new chain on a working box while keeping its database. Use the restore procedure
+for a replacement box, or promote a previously admitted spare. Those paths retain the clock,
+history and authentication checks described above.

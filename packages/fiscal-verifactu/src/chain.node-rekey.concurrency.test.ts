@@ -1,8 +1,8 @@
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { captureError, locations, nodes, withTransaction } from "@waitron/db";
+import { captureError, invoiceSeries, locations, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -11,12 +11,12 @@ import { appendToChain } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { VerifactuBackend } from "./backend.js";
 import {
-  addTillToNode,
+  addDeviceToNode,
   altaFor,
   seedSale,
-  seedTill,
+  seedNode,
   TEST_SISTEMA,
-  type SeededTill,
+  type SeededNode,
 } from "./testing/seed.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
@@ -34,10 +34,10 @@ const WRITERS = 20;
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-let node: SeededTill;
+let node: SeededNode;
 
 beforeEach(async () => {
-  node = await seedTill(suite.db, "A");
+  node = await seedNode(suite.db, "A");
 });
 
 describe("appendToChain from many callers started together, keyed by node", () => {
@@ -80,16 +80,29 @@ describe("appendToChain from many callers started together, keyed by node", () =
   // Two tills of ONE node → ONE chain: sales rung at EITHER till take the next secuencia on the
   // node's chain.
   it("continues one node chain across sales rung at two different tills of that node", async () => {
-    const tillB = await addTillToNode(suite.db, node, "B");
+    const beforeSeries = await suite.db
+      .select()
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, node.nodeId));
+    const secondDevice = await addDeviceToNode(suite.db, node);
+    expect(secondDevice.deviceId).not.toBe(node.deviceId);
+    expect(secondDevice.nodeId).toBe(node.nodeId);
+    expect(secondDevice.sifId).toBe(node.sifId);
+    expect(secondDevice.seriesId).toBe(node.seriesId);
+    expect(
+      await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, node.nodeId)),
+    ).toEqual(beforeSeries);
 
     // Alternate the ringing till: A, B, A, B, ... All append to node.nodeId's one chain.
-    const rung: SeededTill[] = Array.from({ length: 6 }, (_, i) => (i % 2 === 0 ? node : tillB));
+    const rung: SeededNode[] = Array.from({ length: 6 }, (_, i) =>
+      i % 2 === 0 ? node : secondDevice,
+    );
     let sec = 0;
-    for (const till of rung) {
+    for (const node of rung) {
       sec += 1;
-      const saleId = await seedSale(suite.db, till, sec);
+      const saleId = await seedSale(suite.db, node, sec);
       await suite.db.transaction((tx) =>
-        appendToChain(tx, node.nodeId, altaFor(till, saleId, sec, sec)),
+        appendToChain(tx, node.nodeId, altaFor(node, saleId, sec, sec)),
       );
     }
 
@@ -100,7 +113,9 @@ describe("appendToChain from many callers started together, keyed by node", () =
     // One continuous per-node sequence spanning both tills...
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3, 4, 5, 6]);
     // ...and both devices' snapshots are present (the chain is the node's, not either device's).
-    expect(new Set(rows.map((r) => r.device_id))).toEqual(new Set([node.deviceId, tillB.deviceId]));
+    expect(new Set(rows.map((r) => r.device_id))).toEqual(
+      new Set([node.deviceId, secondDevice.deviceId]),
+    );
   });
 });
 
@@ -182,7 +197,7 @@ describe("the series↔node guard (record-sale)", () => {
   }
 
   it("rejects a sale whose node does not own the series", async () => {
-    const other = await seedTill(suite.db, "OTH"); // a DIFFERENT node
+    const other = await seedNode(suite.db, "OTH"); // a DIFFERENT node
     const backend = backendFor();
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {

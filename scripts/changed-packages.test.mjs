@@ -873,7 +873,7 @@ describe("the runnable CLI", () => {
   });
 
   it("exits 0 when the only selected package is the exempt one", () => {
-    const result = runnable([entry(PACKAGES_WITHOUT_TESTS[0], "bench/pglite-throughput")]);
+    const result = runnable([entry(PACKAGES_WITHOUT_TESTS[0], "bench/sqlite-failover")]);
     expect(result.status).toBe(0);
     expect(result.stderr).toMatch(/nothing to run/i);
   });

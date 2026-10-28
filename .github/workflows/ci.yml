@@ -2756,7 +2756,6 @@ jobs:
           set -- "$@" --filter "!@waitron/printing"
           set -- "$@" --filter "!@waitron/print-agent"
           set -- "$@" --filter "!@waitron/print-agent-app"
-          set -- "$@" --filter "!@waitron/bench-pglite"
           set -- "$@" --filter "!@waitron/bench-sqlite-failover"
           set -- "$@" --filter "!@waitron/diagnostics"
           set -- "$@" --filter "!@waitron/sync-enrolment"

@@ -143,7 +143,7 @@ export function useBackupVerificationFixture() {
     };
     const binding = {
       module: "fiscal-verifactu",
-      action: hour === 0 ? "setup" : "re-register",
+      action: hour === 0 ? "setup" : "restore",
       eventId: approval.eventId,
       sourceId: approval.sourceId,
       targetNodeId: verificationNode.nodeId,

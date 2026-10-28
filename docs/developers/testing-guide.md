@@ -272,9 +272,7 @@ found a healthy container with a requested TCP binding but an empty published-po
 focused rerun passed without explaining the first failure. During #329's full gate `docker inspect`
 showed `HostConfig.PortBindings["5432/tcp"] = [{ HostIp: "", HostPort: "0" }]` beside
 `NetworkSettings.Ports["5432/tcp"] = []`. Nothing under `packages/`
-or `apps/` starts a container now, so the live subjects are the two `bench/` rigs that start a
-container, both of which publish a port: `bench/pglite-throughput/src/bench.ts` starts a
-`PostgreSqlContainer`, and `bench/sqlite-failover/src/store.ts:76` publishes a port with
+or `apps/` starts a container now, so the live subject is `bench/sqlite-failover/src/store.ts`, which publishes a port with
 `withExposedPorts(9000)` and reads it back with `getMappedPort(9000)`, which is the same shape the
 failure above took. The rule was briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that
 no PACKAGE fixture binds a port — true, and narrower than "the tree" — and restored with that hedge
@@ -872,9 +870,9 @@ for both suites above, every variable accounted for.
 
 ## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally, for the `bench/` rigs.
 
-Two rigs start a container: `bench/sqlite-failover`, whose `startStore` opens a MinIO container
-(`bench/sqlite-failover/src/store.ts`), and `bench/pglite-throughput`, which starts a PostgreSQL one
-(`bench/pglite-throughput/src/bench.ts`). Ryuk hangs on this machine, so it has to be off; with it off
+`bench/sqlite-failover` opens a MinIO container through `startStore`
+(`bench/sqlite-failover/src/store.ts`). The earlier PGlite comparison is retired; its source is
+[archived](../research/2026-07-20-pglite-throughput-source.ts.txt). Ryuk hangs on this machine, so it has to be off; with it off
 an interrupted run leaks, which is the next section.
 
 No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do, so a
@@ -889,7 +887,7 @@ The bloat (once: 173 volumes, 23 GB) starved the `freePort` race in `apps/server
 end-to-end suites, while an isolated re-run passed and proved nothing. Run `pnpm reap` when that
 bites. The command (`scripts/reap-testcontainers.mjs`) removes containers labelled
 `com.waitron.reapable` — stamped by `startStore` in `bench/sqlite-failover/src/store.ts`, which
-nothing pins, and NOT by `bench/pglite-throughput`, whose container `pnpm reap` leaves behind — AND older than 2 h —
+nothing pins, and NOT by the retired PGlite comparison, whose containers `pnpm reap` cannot identify — AND older than 2 h —
 so another repo's or a live watch-mode container survives — with their anon volumes. It never
 touches images and there is no blanket `docker volume prune` (it would reach other projects and the
 named dev volumes). `docker volume inspect` before any manual `rm`. Once a leaked container is gone

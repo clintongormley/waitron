@@ -10,13 +10,13 @@ import { computeHuella } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { registerSif } from "./registro-sif.js";
-import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+import { altaFor, anulacionFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyBackupFiscalChains } from "./backup-verification-chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let directory: string | undefined;
-let other: SeededTill;
+let other: SeededNode;
 
 afterEach(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });
@@ -24,22 +24,22 @@ afterEach(async () => {
 });
 
 async function append(
-  till: SeededTill,
+  node: SeededNode,
   number: number,
   kind = "alta",
   producer?: { NombreRazon: string; NIF: string },
 ) {
-  const sale = await seedSale(suite.db, till, number);
+  const sale = await seedSale(suite.db, node, number);
   const [sif] = suite.db.all<{
     nif: string;
     numero_instalacion: string;
   }>(
-    sql`select nif, numero_instalacion from registro_sif where node_id = ${till.nodeId} and revocado_en is null`,
+    sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
   );
   const pending =
     kind === "void"
-      ? anulacionFor(till, sale, number - 1, number)
-      : altaFor(till, sale, number, number);
+      ? anulacionFor(node, sale, number - 1, number)
+      : altaFor(node, sale, number, number);
   pending.input.SistemaInformatico = {
     ...pending.input.SistemaInformatico,
     IDOtro: undefined,
@@ -49,7 +49,7 @@ async function append(
   };
   if (pending.tipo === "alta") {
     pending.input.IDEmisorFactura = sif!.nif;
-    pending.input.NumSerieFactura = `${till.nodeId}/${number}`;
+    pending.input.NumSerieFactura = `${node.nodeId}/${number}`;
     pending.input.DescripcionOperacion = "Fixture meal";
     if (kind === "correction") {
       pending.input.TipoFactura = "R5";
@@ -57,7 +57,7 @@ async function append(
       pending.input.FacturasRectificadas = [
         {
           IDEmisorFactura: pending.input.IDEmisorFactura,
-          NumSerieFactura: `${till.nodeId}/1`,
+          NumSerieFactura: `${node.nodeId}/1`,
           FechaExpedicionFactura: pending.input.FechaExpedicionFactura,
         },
       ];
@@ -67,7 +67,7 @@ async function append(
       pending.input.FacturasSustituidas = [
         {
           IDEmisorFactura: pending.input.IDEmisorFactura,
-          NumSerieFactura: `${till.nodeId}/1`,
+          NumSerieFactura: `${node.nodeId}/1`,
           FechaExpedicionFactura: pending.input.FechaExpedicionFactura,
         },
       ];
@@ -77,18 +77,18 @@ async function append(
     }
   } else {
     pending.input.IDEmisorFacturaAnulada = sif!.nif;
-    pending.input.NumSerieFacturaAnulada = `${till.nodeId}/${number - 1}`;
+    pending.input.NumSerieFacturaAnulada = `${node.nodeId}/${number - 1}`;
   }
-  return suite.db.transaction((tx) => appendToChain(tx, till.nodeId, pending));
+  return suite.db.transaction((tx) => appendToChain(tx, node.nodeId, pending));
 }
 
-async function reregister(till: SeededTill, installation: string) {
+async function reregister(node: SeededNode, installation: string) {
   const [sif] = suite.db.all<{ nif: string }>(
-    sql`select nif from registro_sif where node_id = ${till.nodeId} and revocado_en is null`,
+    sql`select nif from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
   );
   await suite.db.transaction((tx) =>
     registerSif(tx, {
-      nodeId: till.nodeId,
+      nodeId: node.nodeId,
       nif: sif!.nif,
       idSistemaInformatico: "WT",
       numeroInstalacion: installation,
@@ -98,20 +98,20 @@ async function reregister(till: SeededTill, installation: string) {
 
 async function capture(populate = true, resetOther = false) {
   if (populate) {
-    const first = await seedTill(suite.db, "Source");
-    other = await seedTill(suite.db, "Inactive");
-    for (const till of [first, other]) {
-      await append(till, 1);
-      await append(till, 2, "void");
-      await append(till, 3, "correction");
-      await append(till, 4, "substitution");
+    const first = await seedNode(suite.db, "Source");
+    other = await seedNode(suite.db, "Inactive");
+    for (const node of [first, other]) {
+      await append(node, 1);
+      await append(node, 2, "void");
+      await append(node, 3, "correction");
+      await append(node, 4, "substitution");
     }
     await reregister(other, "second");
     await append(other, 5);
     await append(other, 6);
     await reregister(first, "empty-current");
     if (resetOther) await reregister(other, "empty-next");
-    await seedTill(suite.db, "Never traded");
+    await seedNode(suite.db, "Never traded");
   }
   directory = await mkdtemp(join(tmpdir(), "waitron-fiscal-backup-"));
   const [{ file }] = suite.db.all<{ file: string }>(sql`pragma database_list`);
@@ -216,10 +216,10 @@ describe("complete captured fiscal chains", () => {
   });
 
   it("accepts records whose software block names a producer other than the taxpayer", async () => {
-    const till = await seedTill(suite.db, "Producer");
+    const node = await seedNode(suite.db, "Producer");
     const producer = { NombreRazon: "Producer Person", NIF: "12345678Z" };
-    await append(till, 1, "alta", producer);
-    await append(till, 2, "void", producer);
+    await append(node, 1, "alta", producer);
+    await append(node, 2, "void", producer);
     await capture(false);
     expect(await verify()).toBe(true);
   });

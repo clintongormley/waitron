@@ -54,7 +54,7 @@ export async function withRecoveryKeyAuthority<T>(
     typeof secret !== "string" ||
     secret.length === 0 ||
     binding.targetNodeId !== targetNodeId ||
-    !["restore", "re-register", "promote"].includes(binding.action)
+    !["restore", "promote"].includes(binding.action)
   )
     return refuse();
   const verifier = await readBreakGlassVerifier(deps.db, targetNodeId);

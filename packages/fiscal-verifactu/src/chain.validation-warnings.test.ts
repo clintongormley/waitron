@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+import { altaFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 
 // What `appendToChain` does with each warning `@waitron/verifactu` 0.2.1's `validate` can emit.
 // Most of them cannot arise from a record Waitron builds, so the real `validate` runs and one
@@ -25,10 +25,10 @@ vi.mock("@waitron/verifactu", async (importOriginal) => {
 });
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-let till: SeededTill;
+let node: SeededNode;
 
 beforeEach(async () => {
-  till = await seedTill(suite.db, "A");
+  node = await seedNode(suite.db, "A");
   injected.issues = [];
 });
 
@@ -41,10 +41,10 @@ function warning(code: ValidationCode): ValidationIssue {
 }
 
 async function append(
-  alta = (saleId: Parameters<typeof altaFor>[1]) => altaFor(till, saleId, 1, 1),
+  alta = (saleId: Parameters<typeof altaFor>[1]) => altaFor(node, saleId, 1, 1),
 ) {
-  const saleId = await seedSale(suite.db, till, 1);
-  return withTransaction(suite.db, (tx) => appendToChain(tx, till.nodeId, alta(saleId)));
+  const saleId = await seedSale(suite.db, node, 1);
+  return withTransaction(suite.db, (tx) => appendToChain(tx, node.nodeId, alta(saleId)));
 }
 
 async function incidents() {
@@ -124,7 +124,7 @@ describe("any other warning files the record with its own incident, never as a t
 
   it("flags a real one too: an IPSI line with no regime code, which is a warning until 2027", async () => {
     await append((saleId) => {
-      const alta = altaFor(till, saleId, 1, 1);
+      const alta = altaFor(node, saleId, 1, 1);
       const ipsiLine = { ...alta.input.Desglose[0]!, Impuesto: "02" as const };
       delete ipsiLine.ClaveRegimen;
       return { ...alta, input: { ...alta.input, Desglose: [ipsiLine] } };

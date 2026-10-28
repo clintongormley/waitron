@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { invoiceSeries, openVenueDatabase, stampDeployment, withTransaction } from "@waitron/db";
+import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -13,10 +13,8 @@ import { locationId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { writeAllocationInput } from "./testing/allocation-input.js";
-import { provisionNode } from "./provision-till.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
-import { registerTill } from "../scripts/register-till.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { hashPassword, persons } from "@waitron/identity";
@@ -63,56 +61,27 @@ async function rows(db = suite.db) {
     allocations: await db.select().from(fiscalAllocations),
   };
 }
-it.each(["provision-node", "register-till", "restore-runner"])(
-  "production %s refuses a signed paper input even with its correct key and outside files",
-  async (entry) => {
-    const action = entry === "restore-runner" ? "restore" : "re-register";
-    const fixture = allocationFixture({ node, bases, identity: "P000042", recoveryKey: true });
-    const environment = await writeAllocationInput(root, fixture, action);
-    for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
-    const { binding, input } = fixture.request(action);
-    const request = { binding, input };
-    const before = await rows();
-    const venueDir = join(root, "venue");
-    if (entry === "register-till") {
-      await mkdir(venueDir);
-      await suite.db.archiveTo(join(venueDir, "venue.db"));
-    }
-    const pending =
-      entry === "provision-node"
-        ? provisionNode(
-            suite.db,
-            { nodeId: node.nodeId, recovery: { ...request, secret } },
-            ALL_MODULES,
-          )
-        : entry === "register-till"
-          ? registerTill(node.nodeId, {
-              ...environment,
-              WAITRON_NODE_RECOVERY_KEY: secret,
-              WAITRON_VENUE_DIR: venueDir,
-            })
-          : runRestoreHooks({
-              db: suite.db,
-              modules: ALL_MODULES,
-              node,
-              log: () => {},
-              withModuleOperations: createRecoveryRestoreRunner(ALL_MODULES, request, secret),
-            });
-    await expect(pending).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "outside_confirmation_missing" },
-    });
-    expect(await rows()).toEqual(before);
-    if (entry === "register-till") {
-      const copy = await openVenueDatabase(venueDir);
-      try {
-        expect(await rows(copy.venue)).toEqual(before);
-      } finally {
-        await copy.close();
-      }
-    }
-  },
-);
+it("production restore runner refuses a signed paper input even with its correct key and outside files", async () => {
+  const action = "restore";
+  const fixture = allocationFixture({ node, bases, identity: "P000042", recoveryKey: true });
+  const environment = await writeAllocationInput(root, fixture, action);
+  for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+  const { binding, input } = fixture.request(action);
+  const request = { binding, input };
+  const before = await rows();
+  const pending = runRestoreHooks({
+    db: suite.db,
+    modules: ALL_MODULES,
+    node,
+    log: () => {},
+    withModuleOperations: createRecoveryRestoreRunner(ALL_MODULES, request, secret),
+  });
+  await expect(pending).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "outside_confirmation_missing" },
+  });
+  expect(await rows()).toEqual(before);
+});
 
 const ADMIN = "e1000000-0000-4000-8000-000000000009";
 const PASSWORD = "synthetic-retired-promotion-password";

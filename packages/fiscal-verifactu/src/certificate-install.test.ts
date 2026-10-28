@@ -18,7 +18,7 @@ import {
   type AnsweringServer,
   type Candidate,
 } from "../test/certificate-fixtures.js";
-import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { RC2_CANDIDATE } from "../test/openssl-certificates.js";
 import { mtlsFetch } from "./aeat-transport.js";
@@ -86,7 +86,7 @@ interface Venue {
 
 /** The taxpayer, and `installed` sealed by setup at `installedAt`. */
 async function venue(installedAt = "2026-10-18T10:00:00.000Z"): Promise<Venue> {
-  await seedTenantTillSif(suite.db);
+  await seedTenantNodeSif(suite.db);
   const ring = testRing();
   await sealAeatSecret(
     { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(installedAt) },
@@ -385,7 +385,7 @@ describe("installCertificate's write", () => {
   });
 
   it("installs on a box with no vault entry yet when the card read none", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const v = { ring: testRing(), revision: null };
     const server = await serve();
     const answer = await installCertificate(depsFor(v, server), bodyFor(v, candidate), NOW);
@@ -628,7 +628,7 @@ describe("installCertificate's log", () => {
 
 describe("venueTimeZone", () => {
   it("reads the location's zone, and UTC for a missing location or an unknown zone", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const read = (id: string) => withTransaction(suite.db, (tx) => venueTimeZone(tx, id));
     expect(await read(TENANT_A.locationId)).toBe("Europe/Madrid");
     expect(await read("a0000000-0000-4000-8000-0000000000ff")).toBe("UTC");

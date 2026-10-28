@@ -17,7 +17,7 @@ import {
   altaFor,
   anulacionFor,
   seedSale,
-  seedTill,
+  seedNode,
 } from "../packages/fiscal-verifactu/src/testing/seed.js";
 
 const { sql } = createRequire(new URL("../packages/db/package.json", import.meta.url))(
@@ -90,7 +90,7 @@ function snapshot(tables: string[]) {
 }
 
 it("applies the certificate migration without changing any filed fiscal row", async () => {
-  const till = await seedTill(suite.db);
+  const till = await seedNode(suite.db);
   const sale = await seedSale(suite.db, till, 1);
   await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, sale, 1, 1)));
   await suite.db.transaction((tx) =>

@@ -58,7 +58,7 @@ it("refuses to resume when no local activation committed", async () => {
 });
 it.each([
   { module: "different-regime" },
-  { action: "re-register" },
+  { action: "promote" },
   { eventId: "different-event" },
   { sourceId: "different-backup" },
   { targetNodeId: "00000000-0000-4000-8000-000000000099" },

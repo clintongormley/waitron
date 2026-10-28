@@ -114,7 +114,7 @@ async function attempt(
     ),
   );
 }
-it.each(["setup", "restore", "re-register"])(
+it.each(["setup", "restore"])(
   "%s refuses a signed old40 below the independently known burn42, and permits43",
   async (action) => {
     const prefix = action === "setup" ? "S" : "P",

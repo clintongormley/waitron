@@ -72,7 +72,7 @@ function parseOperationInput(
 }
 
 export function parseRecoveryOperationInput(value: unknown): RecoveryOperationInput | null {
-  return parseOperationInput(value, ["restore", "re-register", "promote"]);
+  return parseOperationInput(value, ["restore", "promote"]);
 }
 
 export function parseStandbyOperationInput(value: unknown): RecoveryOperationInput | null {

@@ -270,3 +270,17 @@ describe("fresh setup authority carried into a module seed", () => {
     ]);
   });
 });
+
+it("an existing venue never reruns a module seed without operation input", async () => {
+  let calls = 0;
+  const module = regime(async () => {
+    calls += 1;
+    return "established";
+  });
+  const deps = { db: suite.db, modules: [module] };
+  const first = await applyVenue(planVenue(request, [module]), deps);
+  const second = await applyVenue(planVenue(request, [module]), deps);
+  expect(second.nodeId).toBe(first.nodeId);
+  expect(calls).toBe(1);
+  expect(second.seeded).toEqual([]);
+});

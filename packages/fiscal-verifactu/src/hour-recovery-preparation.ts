@@ -38,7 +38,7 @@ function hourOperator(
   const operator = readOperationAuthority(authority, binding)?.operatorId;
   if (
     binding.module !== "fiscal-verifactu" ||
-    !(promotion ? ["promote"] : ["restore", "re-register"]).includes(binding.action)
+    !(promotion ? ["promote"] : ["restore"]).includes(binding.action)
   )
     return refuse("event_mismatch");
   if (promotion && typeof operator === "string") return operator;

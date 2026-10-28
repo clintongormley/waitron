@@ -401,7 +401,7 @@ host supplies that ordering.
 
 ## Pin committed hour preparation's action boundary
 
-A679's first final installed review removed the restore/re-register-only check in
+A679's first final installed review removed the restore-only check in
 `hour-selection.ts`'s committed path. The 548 hour cases and 165 promotion/recovery server
 cases still passed. Test the internal accepted/refused action boundary without changing it.
 

@@ -60,7 +60,7 @@ const CONTROL_PREFIX = `${VENUE}/gen-2-${NODE}`;
  * clock-driven compaction.
  *
  * **250 sales a day is an ASSUMPTION, not a measurement.** Nothing in this repository records the
- * deli's real ticket count. The nearest stated figure is `bench/pglite-throughput/src/bench.ts:60-78`,
+ * deli's real ticket count. The nearest stated figure is `docs/research/2026-07-20-pglite-throughput-source.ts.txt:60-78`,
  * which models the deli's worst realistic MINUTE — 16 sales a minute across four tills — and a
  * peak-minute figure implies no daily total whatever. Every number recorded below is therefore
  * reported PER SALE as well as per run, so a reader who knows the real day rate can rescale it.
@@ -71,9 +71,9 @@ const SALES = SALES_PER_DAY * DAYS;
 
 /**
  * The latency bars, taken from the pglite bench rather than invented here:
- * `bench/pglite-throughput/src/bench.ts:82-83` sets `maxP95Ms: 150` and `maxP99Ms: 400`. Their
+ * `docs/research/2026-07-20-pglite-throughput-source.ts.txt:82-83` sets `maxP95Ms: 150` and `maxP99Ms: 400`. Their
  * justification is the cashier's perceived wait, stated at
- * `bench/pglite-throughput/src/bench.ts:75-78` — the receipt cannot print until the transaction
+ * `docs/research/2026-07-20-pglite-throughput-source.ts.txt:75-78` — the receipt cannot print until the transaction
  * commits, 150ms at p95 keeps that below the wait a person notices, and 400ms at p99 keeps the
  * worst sale of a rush from feeling like a queue. Reusing them is what spec §4's S4 asks for.
  */

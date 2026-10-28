@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SOAP_ENDPOINTS_SELLO } from "@waitron/verifactu";
 import { expect, it, vi } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
-import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { installCertificate } from "./certificate-install.js";
@@ -31,7 +31,7 @@ const candidate = authority.issue();
 const NOW = new Date("2026-10-18T11:00:00Z");
 
 it("with no transport given, checks with AEAT's endpoint for the environment through mtlsFetch, and a refused connection leaves the vault unchanged", async () => {
-  await seedTenantTillSif(suite.db);
+  await seedTenantNodeSif(suite.db);
   const ring = loadKeyRing({
     WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",

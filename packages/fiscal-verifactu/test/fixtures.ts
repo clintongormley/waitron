@@ -45,7 +45,7 @@ export const TENANT_B = {
  * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement
  * coverage is checked on settlement.
  */
-export async function seedTenantTillSif(db: Database): Promise<void> {
+export async function seedTenantNodeSif(db: Database): Promise<void> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
@@ -201,7 +201,7 @@ export async function seedSoldRegistro(
   `);
 }
 
-export interface SeededTillWithSif {
+export interface SeededNodeWithSif {
   locationId: string;
   /** A till device at that location, for a sale recorded with a device origin. */
   deviceId: DeviceId;
@@ -219,7 +219,7 @@ function freshNif(): string {
   return nifWithControlLetter(20_000_000 + nifSequence);
 }
 
-async function insertLocationTillSeries(
+async function insertLocationNodeSeries(
   tx: Transaction,
 ): Promise<{ locationId: string; nodeId: NodeId; seriesId: SeriesId }> {
   const [location] = await tx
@@ -270,7 +270,7 @@ async function insertLocationTillSeries(
 export async function seedTenantWithSif(
   db: Database,
   options: { nif?: string } = {},
-): Promise<SeededTillWithSif> {
+): Promise<SeededNodeWithSif> {
   const nif = options.nif ?? freshNif();
   const seeded = await db.transaction(async (tx) => {
     // The target is named rather than left bare so a `tenants_country_tax_id_key` collision — a
@@ -279,7 +279,7 @@ export async function seedTenantWithSif(
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
       .onConflictDoNothing({ target: tenants.id });
-    const { locationId, nodeId, seriesId } = await insertLocationTillSeries(tx);
+    const { locationId, nodeId, seriesId } = await insertLocationNodeSeries(tx);
     await registerSif(tx, { nodeId, nif, idSistemaInformatico: "WT" });
     // No `working_orders` row and no `workingOrderId`: `recordSale` writes `input.workingOrderId`
     // to `sales.working_order_id`, a real FK onto `working_orders`, so the write-path suites here

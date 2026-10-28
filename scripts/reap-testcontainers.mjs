@@ -6,9 +6,7 @@ import { execFileSync } from "node:child_process";
 // on this machine), which disables Testcontainers' own reaper, so an INTERRUPTED run leaves a container
 // and its anonymous volume behind.
 //
-// WHAT IT CANNOT REACH: guard 1 below selects on a label each rig has to stamp for itself. `runPostgres`
-// in `bench/pglite-throughput/src/bench.ts` starts a `postgres:18-alpine` with no `.withLabels` call, so
-// an interrupted run of that rig leaves a container this script will never select.
+// Only a rig that stamps the label is visible to this reaper.
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
 //  1. LABEL. It removes only containers carrying `com.waitron.reapable`, never the generic

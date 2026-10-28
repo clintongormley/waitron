@@ -4,9 +4,7 @@ import { DEMO_DEVELOPER_PRESETS, DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/
 // against a production directory — it chains real fiscal records under `preproduction`, and it
 // refuses `WAITRON_ENV=production` before touching the directory.
 //
-// Re-registering a node starts a new hash chain (CLAUDE.md §5), so this reuses a venue the `.env`
-// names and refuses when the directory holds one it cannot account for. The only "start over" is
-// `pnpm dev:reset`, which removes the venue directory.
+
 import {
   receiptLanguageRules,
   findAdministrativeArea,

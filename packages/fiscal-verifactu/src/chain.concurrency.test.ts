@@ -10,14 +10,14 @@ import {
   altaFor,
   seedNodesForSifContention,
   seedSale,
-  seedTill,
+  seedNode,
   TEST_SISTEMA,
-  type SeededTill,
+  type SeededNode,
 } from "./testing/seed.js";
 
 const WRITERS = 20;
 
-let node: SeededTill;
+let node: SeededNode;
 
 /**
  * Twenty appends started together against ONE venue file.
@@ -33,7 +33,7 @@ let node: SeededTill;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  node = await seedTill(suite.db, "A");
+  node = await seedNode(suite.db, "A");
 });
 
 /** A promise plus the function that settles it. */

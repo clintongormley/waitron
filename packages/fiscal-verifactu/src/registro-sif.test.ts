@@ -93,7 +93,7 @@ describe("registerSif", () => {
 
   it("never reuses a number after a reimage", async () => {
     // The failure mode most likely in a self-hosted deployment, and the one a manual list gets
-    // wrong. A wiped till has no registration, so it must re-register — correct by construction.
+    // wrong. A wiped node has no registration, so it needs a restored identity — correct by construction.
     // The wipe is simulated by doing nothing to the upstream database at all and simply calling
     // registerSif again: that is exactly what a reformatted machine does.
     const before = await withTransaction(db, (tx) =>
@@ -183,7 +183,7 @@ describe("writeReservedSif", () => {
   });
 });
 
-describe("re-registration begins a new chain", () => {
+describe("a new SIF identity begins a new chain", () => {
   it("does not continue the old chain", async () => {
     // A new NúmeroInstalación is a NEW SIF IDENTITY, therefore a new chain. Chains
     // cannot be merged or migrated: the old one ends, a new one begins.
@@ -191,7 +191,7 @@ describe("re-registration begins a new chain", () => {
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
 
-    // Simulate the till having sold: the chain head now points at a real registro and carries a
+    // Simulate the node having recorded a sale: the chain head now points at a real registro and carries a
     // huella. See seedSoldRegistro's doc comment for why this must be a real
     // registros_facturacion row rather than a bare column update.
     await seedSoldRegistro(db, {
@@ -229,7 +229,7 @@ describe("re-registration begins a new chain", () => {
 
   it("reports PrimerRegistro from local state, not from a flag", async () => {
     // AEAT returns a non-rejecting warning if PrimerRegistro="S" is claimed when records already
-    // exist for that SIF+NIF — a useful signal that a till was accidentally re-provisioned. It is
+    // exist for that SIF+NIF — a useful signal that a node was accidentally re-provisioned. It is
     // only useful if the value is DERIVED. A caller-set flag would make the warning report the
     // caller's belief back to itself.
     const reg = await withTransaction(db, (tx) =>
