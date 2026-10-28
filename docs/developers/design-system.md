@@ -679,7 +679,7 @@ standard modal is wider, so its body holds a form at the form width beside a cla
 (`formMessageStyles`, so both the message a dialog shows in its footer and the one a
 `wt-form-actions` placed in the body shows above its buttons). `--wt-field-max-width` is `none` at
 the theme root. It narrows nothing else: a table, a preview, a `wt-disclosure`, a screen's own
-paragraphs and the footer's buttons keep the modal's full width. A screen does not set its own
+paragraphs (unless the screen applies the width to them, below) and the footer's buttons keep the modal's full width. A screen does not set its own
 form width; it chooses the modal's size.
 
 The seven field elements' label, hint and error are inside the element, so the cap holds them too.
@@ -696,7 +696,8 @@ A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer; the zone editor's `.form` reads it too, so Save ends where its fields
-end. Guards: the form-width
+end. The station editor (`station-editor.ts`) applies it to its minutes row, its notes and its
+printers read-out, so they end where its fields end. Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; each field and the
 message bounded by the narrower of the form width and the body in every modal size at 1280px; wide
@@ -705,7 +706,9 @@ content and the footer row at full width; each field at the body's width at 390p
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/department-dialogs.test.ts` (these two measure the
 reasons screen's two role `wt-combobox`es and the department Rename dialog's `wt-input` and
-field error); and the zone editor's Save-edge cases at 1280 and 390px in
+field error); the station editor's case "at %ipx (printers managed: %s) the minutes, notes and
+read-out end where the fields end" in `packages/venue-service/src/dashboard/station-editor.test.ts`;
+and the zone editor's Save-edge cases at 1280 and 390px in
 `packages/venue-service/src/dashboard/zone-edit-dialog.test.ts`. A new field primitive that does not read
 `--wt-field-max-width` is seen by none of them, and neither is a new screen-styled native control.
 
