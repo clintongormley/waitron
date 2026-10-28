@@ -554,3 +554,33 @@ inspected in English and Spanish, both themes, at phone and desktop widths.
 owned temporary state directory refuses at Mailpit because the Docker socket is
 absent. Live till, kitchen and dashboard observations remain unqualified; reading
 the image configuration does not qualify them.
+
+
+### Cut 4 local qualification — 2026-10-28
+
+Valencia now selects Casa Delgado de l'Horta in provinces 03, 12 and 46. The
+secondary dataset adds seven dishes, Requena wine, regional staff and all its
+pictures. Existing plain-name maps gain explicit Valencian entries; a syntax
+comparison with `c0fbcd888` retained every original expression apart from
+formatting and commas after removing those added keys. Inherited customer maps
+and the Madrid frozen comparisons remain checked separately.
+
+The focused commands above passed 122 Spain-pack, 89 country-registry, 132 server
+and 20 protected fiscal cases. The setup selection, ownership, accessibility and
+surrounding focused suites passed 601 cases, including eight temporary screenshot
+cases. Both browser builds and their demo-boundary check passed; the five package
+typechecks passed. Deleting the Valencian province selection, selecting Catalan
+plain names, and removing the regional wine each failed the corresponding test in
+an installed disposable checkout; restored country and seed suites passed.
+
+The eight setup views were inspected in English/Spanish, light/dark and
+390/1280 widths. `WAITRON_DEMO_REGION=valencia wa-wt demo
+waitron-feat-a972-valencia-demo` refused at Mailpit's absent Docker socket. Live
+seeded till, kitchen and dashboard inspection therefore remains unqualified in
+the backlog. These are local results, not a statement about later CI or landing.
+
+Six existing exact-shape assertions gain only authorized Valencian map keys or
+the registry id. The country-default fixture drops province 46 because three new
+province cases now require its Valencian identity. Every original assertion value
+and fiscal fixture remains unchanged. This cut follows the approved low-risk
+finish protocol; no external whole-branch review is required.

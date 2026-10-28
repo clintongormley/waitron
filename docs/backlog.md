@@ -5921,10 +5921,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [plan](superpowers/plans/2026-10-27-a972-demo-country-region.md) covers the data move,
   English names, then Catalonia with the Balearic Islands, Valencia and Galicia.
   Spain's records and pictures have moved behind the pack's secondary demo export,
-  with the frozen Madrid comparison and browser-boundary checks. Catalonia and the shared Balearic demo now have regional dishes, Catalan plain names and geography-aware setup. Valencia and Galicia remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  with the frozen Madrid comparison and browser-boundary checks. Catalonia and the shared Balearic demo now have regional dishes, Catalan plain names and geography-aware setup. The Valencian demo now adds its own restaurant, dishes, wine and staff; Galicia remains open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in both
-  screen languages, themes and phone/desktop widths when the stack is available. The Catalan cut's
+  screen languages, themes and phone/desktop widths when the stack is available. The Catalan and Valencian cuts'
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Demo media regeneration.** Preserve the committed Negroni picture when

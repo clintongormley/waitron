@@ -711,6 +711,11 @@ then "has timed out after 2 minutes", before dependency installation or tests. T
 no transfer progress or lower-level network error. The cause of that wait remains unverified;
 retain this failure when comparing later runs rather than treating a fresh pass as its diagnosis.
 
+On 28 October, [PR #2202's run 40729880084](https://github.com/clintongormley/waitron/actions/runs/40729880084/job/122963741771)
+hit the same two checkout timeouts in `test-server (20)`. Both logs end at `git fetch`,
+with no transfer progress or lower-level network error; dependency installation and tests
+never ran in that job. The cause remains unverified.
+
 
 ## Profile provisioning's busiest shard after the A679 split
 

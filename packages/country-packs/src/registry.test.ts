@@ -1,3 +1,4 @@
+import { VALENCIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
 import { describe, expect, it } from "vitest";
 import {
@@ -322,5 +323,25 @@ describe("installed demo geography", () => {
     expect(registry.resolveInstalledDemoIdentity({ country: "XX", area: "08" })).toBeUndefined();
     expect(registry.resolveInstalledDemoIdentity({ area: "08" })).toBeUndefined();
     expect(getVenueSetupCountryPack("GB")).toBeUndefined();
+  });
+});
+
+it.each([
+  "03",
+  "12",
+  "46",
+  "Alicante",
+  "Alacant",
+  VALENCIA_DEMO_TEXT.castellonAlias,
+  VALENCIA_DEMO_TEXT.castelloAlias,
+  "Valencia",
+  VALENCIA_DEMO_TEXT.city,
+  VALENCIA_DEMO_TEXT.province,
+])("resolves the Valencian demo from stored province %s", async (area) => {
+  const { resolveInstalledDemoIdentity } = await import("./registry.js");
+  expect(resolveInstalledDemoIdentity({ country: "ES", area })).toStrictEqual({
+    ...getCountryPack("ES")!.demo,
+    dataSet: "casa-delgado-valencia",
+    locationName: VALENCIA_DEMO_TEXT.locationName,
   });
 });

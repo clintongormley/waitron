@@ -1,3 +1,4 @@
+import { VALENCIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -691,4 +692,64 @@ describe("developer demo regions", () => {
           await rm(root, { recursive: true, force: true });
         }
       }, 30000);
+});
+
+describe("Valencian developer demo", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("resolves a trimmed selector with Spanish receipts and Valencian geography", async () => {
+    const { resolveDeveloperDemo } = await import("./dev-setup.js");
+    expect(resolveDeveloperDemo(" valencia ")).toMatchObject({
+      dataSet: "casa-delgado-valencia",
+      locationName: VALENCIA_DEMO_TEXT.locationName,
+      postalCode: "46001",
+      city: VALENCIA_DEMO_TEXT.city,
+      province: VALENCIA_DEMO_TEXT.province,
+      timeZone: "Europe/Madrid",
+      receiptLocale: "es-ES",
+    });
+  });
+  it.each(["en-GB", "es-ES"])(
+    "seeds Valencian names with %s staff and preserves reuse",
+    async (locale) => {
+      const root = await mkdtemp(join(tmpdir(), "a972-valencia-dev-"));
+      try {
+        vi.stubEnv("WAITRON_ENV", "dev");
+        vi.stubEnv("WAITRON_DEMO_REGION", "valencia");
+        vi.stubEnv("WAITRON_SEED_LOCALE", locale);
+        vi.stubEnv("WAITRON_SEED_SALES_DAYS", "0");
+        const opts = { venueDir: join(root, "venue"), envPath: join(root, ".env"), stateDir: root };
+        const first = await devSetup(opts);
+        expect(first.env.WAITRON_TILL_LOCALE).toBe("es-ES");
+        const store = await openVenueDatabase(opts.venueDir);
+        try {
+          expect(
+            store.venue.all(sql`select name,postal_code,province,invoice_locales from locations`),
+          ).toEqual([
+            {
+              name: VALENCIA_DEMO_TEXT.locationName,
+              postal_code: "46001",
+              province: VALENCIA_DEMO_TEXT.province,
+              invoice_locales: '["es-ES"]',
+            },
+          ]);
+          expect(
+            store.venue.all(
+              sql`select name,kitchen_name from products where name=${VALENCIA_DEMO_TEXT.dish}`,
+            ),
+          ).toEqual([
+            { name: VALENCIA_DEMO_TEXT.dish, kitchen_name: VALENCIA_DEMO_TEXT.dishKitchen },
+          ]);
+        } finally {
+          await store.close();
+        }
+        vi.stubEnv("WAITRON_DEMO_REGION", "madrid");
+        const reused = await devSetup(opts);
+        expect(reused.reused).toBe(true);
+        expect(reused.env).toEqual(first.env);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+    30000,
+  );
 });
