@@ -21,7 +21,11 @@ import { readLineCancellations, serviceQuantities } from "./line-service-state.j
 import { survivingParty } from "./party-allergy.js";
 import { fingerprint, partyFamily } from "./parties.js";
 import { isRecalledDish } from "./draft-source.js";
-import { enqueueAllergyCorrectionSlips, type CorrectionItem } from "./kitchen-print.js";
+import {
+  enqueueAllergyCorrectionSlips,
+  foldPortionNotices,
+  type CorrectionItem,
+} from "./kitchen-print.js";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
 
@@ -280,6 +284,9 @@ async function changedIngredientBlocks(
   );
 }
 
+const allergyKey = (item: { allergyBlock: KitchenAllergyBlock | null }) =>
+  fingerprint({ block: item.allergyBlock });
+
 async function enqueueKitchenAllergyUpdates(
   tx: Transaction,
   cfg: TradingContext,
@@ -379,7 +386,7 @@ async function enqueueKitchenAllergyUpdates(
     byOrder.set(row.orderId, items);
   }
   for (const [orderId, items] of byOrder) {
-    for (const item of items)
+    for (const item of await foldPortionNotices(tx, cfg, items, allergyKey))
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
         cfg,
@@ -493,16 +500,18 @@ export async function notifyKitchenAllergyDestination(
       allergyBlock: copy.currentBlock,
       ...(row.firedAt === null && row.group !== null ? { group: row.group } : {}),
     };
-    await VENUE_SERVICE.recordKitchenNotices(
-      tx,
-      cfg,
-      row.orderId,
-      [{ ...item, quantity: thousandthsToDecimal(quantity) }],
-      copy.currentBlock === null ? "allergy_removed" : "allergy_changed",
-      { allergyBlock: copy.currentBlock },
-    );
     byOrder.set(row.orderId, [...(byOrder.get(row.orderId) ?? []), item]);
   }
-  for (const [orderId, items] of byOrder)
+  for (const [orderId, items] of byOrder) {
+    for (const item of await foldPortionNotices(tx, cfg, items, allergyKey))
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        cfg,
+        orderId,
+        [{ ...item, quantity: thousandthsToDecimal(item.quantity) }],
+        item.allergyBlock === null ? "allergy_removed" : "allergy_changed",
+        { allergyBlock: item.allergyBlock },
+      );
     await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+  }
 }

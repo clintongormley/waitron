@@ -58,6 +58,7 @@ import {
   ordersWithPrintProblem,
   readCancelledExtra,
   reprintOrderTickets,
+  type CorrectionItem,
 } from "./kitchen-print.js";
 import { deletePrinter } from "./printer-delete.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
@@ -2855,6 +2856,69 @@ describe("A803 portion grouping", () => {
       expect(count(printedLines(slip.payload), `${thousandthsToDecimal(1000)} x Burger`)).toBe(1);
   });
 
+  it.each(["VOID", "RECALLED"] as const)(
+    "A803 portion grouping: a %s of two identical portions records one notice of 2; unbound lines keep a notice each",
+    async (kind) => {
+      const { cfg, catalogueId } = await setupVenue();
+      const shown = await asApp(cfg, async (tx) => {
+        const k = await portionKitchen(tx, cfg, catalogueId);
+        const burger = k.offer(k.ids.burger);
+        await addPortionRound(tx, cfg, k.tabId, [{ menuItemId: burger, quantity: "2" }], {
+          fire: true,
+        });
+        await enqueueCorrectionSlips(tx, cfg, k.tabId, await firedAt(tx, k.tabId, k.cocina), kind);
+        const portions = await listStationNotices(tx, cfg, k.cocina);
+        const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
+        await addTabRound(tx, cfg, k.tabId, [chips]);
+        await addTabRound(tx, cfg, k.tabId, [chips]);
+        const unbound = await firedAt(tx, k.tabId, k.fryer);
+        expect(unbound).toHaveLength(2);
+        await enqueueCorrectionSlips(tx, cfg, k.tabId, unbound, kind);
+        return {
+          portions: portions.map(({ quantity }) => quantity),
+          unbound: (await listStationNotices(tx, cfg, k.fryer)).map(({ quantity }) => quantity),
+        };
+      });
+
+      expect(shown.portions).toEqual([thousandthsToDecimal(2000)]);
+      expect(shown.unbound).toEqual([thousandthsToDecimal(1000), thousandthsToDecimal(1000)]);
+    },
+  );
+
+  it("A803 portion grouping: notices keep portions apart at two stations, with different notes, or started apart", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const added = await asApp(cfg, async (tx) => {
+      const k = await portionKitchen(tx, cfg, catalogueId);
+      const burger = k.offer(k.ids.burger);
+      await addPortionRound(
+        tx,
+        cfg,
+        k.tabId,
+        [
+          { menuItemId: burger, quantity: "2" },
+          { menuItemId: burger, quantity: "1", note: "No onion" },
+        ],
+        { fire: true },
+      );
+      const [first, second, noted] = await firedAt(tx, k.tabId, k.cocina);
+      const noticesAt = async (stationId: string) =>
+        (await listStationNotices(tx, cfg, stationId)).length;
+      const during = async (items: CorrectionItem[]) => {
+        const before = [await noticesAt(k.cocina), await noticesAt(k.fryer)];
+        await enqueueCorrectionSlips(tx, cfg, k.tabId, items, "RECALLED");
+        return [(await noticesAt(k.cocina)) - before[0]!, (await noticesAt(k.fryer)) - before[1]!];
+      };
+      return {
+        stations: await during([first!, { ...second!, stationId: k.fryer }]),
+        notes: await during([first!, noted!]),
+        started: await during([first!, { ...second!, wasStarted: true }]),
+        same: await during([first!, second!]),
+      };
+    });
+
+    expect(added).toEqual({ stations: [1, 1], notes: [2, 0], started: [2, 0], same: [1, 0] });
+  });
+
   it("A803 portion grouping: a correction keeps identical unbound lines on their own slips, as today", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const slips = await asApp(cfg, async (tx) => {
@@ -2897,10 +2961,20 @@ describe("A803 portion grouping", () => {
         const cancelled = await jobsDuring(tx, () =>
           enqueueHoldCorrections(tx, cfg, k.tabId, oysters, { kind: "HOLD CANCELLED" }),
         );
-        return { count: oysters.length, changed, cancelled };
+        const notices = await listStationNotices(tx, cfg, k.cocina);
+        return { count: oysters.length, changed, cancelled, notices };
       });
 
       expect(printed.count).toBe(12);
+      expect(
+        printed.notices.map(({ kind, direction, quantity }) => ({ kind, direction, quantity })),
+      ).toEqual(
+        expect.arrayContaining([
+          { kind: "changed", direction: "removed", quantity: thousandthsToDecimal(12_000) },
+          { kind: "void", direction: null, quantity: thousandthsToDecimal(12_000) },
+        ]),
+      );
+      expect(printed.notices).toHaveLength(2);
       for (const slips of [printed.changed, printed.cancelled]) {
         expect(slips).toHaveLength(1);
         const lines = printedLines(slips[0]!.payload);

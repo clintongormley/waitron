@@ -993,7 +993,7 @@ export async function enqueueCorrectionSlips(
     tx,
     cfg,
     orderId,
-    items.map(toNoticeItem),
+    (await foldPortionNotices(tx, cfg, items)).map(toNoticeItem),
     kind === "VOID" ? "void" : "recalled",
   );
   await printCorrectionSlips(tx, cfg, orderId, items, { kind });
@@ -1008,9 +1008,14 @@ export async function enqueueStationMoved(
   toStationName: string,
 ): Promise<void> {
   if (items.length === 0) return;
-  await VENUE_SERVICE.recordKitchenNotices(tx, cfg, orderId, items.map(toNoticeItem), "rerouted", {
-    reroutedTo: toStationName,
-  });
+  await VENUE_SERVICE.recordKitchenNotices(
+    tx,
+    cfg,
+    orderId,
+    (await foldPortionNotices(tx, cfg, items)).map(toNoticeItem),
+    "rerouted",
+    { reroutedTo: toStationName },
+  );
   const fired = items.filter((item) => item.group === undefined);
   const held = items.filter((item) => item.group !== undefined);
   if (fired.length > 0)
@@ -1041,7 +1046,7 @@ export async function enqueueHoldCorrections(
     tx,
     cfg,
     orderId,
-    items.map(toNoticeItem),
+    (await foldPortionNotices(tx, cfg, items)).map(toNoticeItem),
     change.kind === "HOLD CANCELLED" ? "void" : "changed",
     { direction: change.kind === "HOLD CANCELLED" ? null : change.direction },
   );
@@ -1135,6 +1140,52 @@ export async function enqueueExtraCancelled(
     cancelledExtra,
     locale: cfg.locale,
   });
+}
+
+/**
+ * `items` as the kitchen screen should be told of them: identical whole portions
+ * ({@link readWholePortionLines}) at one station, started alike, with the same `sameAs`, folded into
+ * the first of them with their quantities summed, as one line of that quantity is told; every other
+ * item as it is.
+ */
+export async function foldPortionNotices<T extends CorrectionItem>(
+  tx: Transaction,
+  cfg: TillConfig,
+  items: readonly T[],
+  sameAs: (item: T) => unknown = () => null,
+): Promise<T[]> {
+  const whole = await readWholePortionLines(
+    tx,
+    items.map((item) => item.workingOrderLineId),
+  );
+  if (whole.size === 0) return [...items];
+  const built = await buildTicketItems(tx, cfg, [...whole]);
+  const out: T[] = [];
+  const byKey = new Map<string, number>();
+  for (const item of items) {
+    const entry = whole.has(item.workingOrderLineId)
+      ? built.get(item.workingOrderLineId)
+      : undefined;
+    const merge = entry === undefined ? undefined : mergeKey(atFiredQuantity(entry.item, item));
+    const key =
+      merge === undefined
+        ? undefined
+        : JSON.stringify([
+            item.stationId,
+            item.wasStarted,
+            item.group ?? null,
+            merge,
+            sameAs(item),
+          ]);
+    const at = key === undefined ? undefined : byKey.get(key);
+    if (at !== undefined) {
+      out[at] = { ...out[at]!, quantity: out[at]!.quantity + item.quantity };
+      continue;
+    }
+    if (key !== undefined) byKey.set(key, out.length);
+    out.push(item);
+  }
+  return out;
 }
 
 function toNoticeItem(item: CorrectionItem) {

@@ -38,6 +38,8 @@ import { joinTables } from "./testing/table-action-fixture.js";
 import { recallToDraft } from "./draft-recall.js";
 import { submitGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { registerPortions } from "./order-portions.js";
+import { moveDishesToStation } from "./station-move.js";
 import {
   OPERATOR,
   inTx,
@@ -719,5 +721,124 @@ describe("A669 notices", () => {
     expect(text[0]!.join("\n")).toContain("Corrected guest");
     expect(text[1]!.join("\n")).toContain(KITCHEN_ALLERGY_WORDS.es.removed);
     expect(text[1]!.join("\n")).not.toContain("Window guest");
+  });
+});
+
+describe("A803 portions", () => {
+  /** Two one-Burger dish lines sent and ticked for the guest; with `bound`, two portions of one
+   * cohort, as a sent "2 × Burger" is stored. */
+  async function sentTwo(bound: boolean) {
+    const tableId = await v.table(`Portions ${randomUUID().slice(0, 8)}`);
+    const p = await seat(v, tableId);
+    const burger = { menuItemId: v.item("Burger"), quantity: "1", note: "Dish note" };
+    await inTx(v, async (tx) =>
+      submitGroups(tx, v.cfg, p.partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: p.revision,
+        operatorId: OPERATOR,
+        expectedEdit: await readBillEditState(tx, p.tabId),
+        groups: [{ release: "fire", lines: [burger, burger] }],
+        allergy: {
+          party: { answer: "allergies", guests: [guest] },
+          ticks: [0, 1].map((lineIndex) => ({
+            line: { kind: "submitted" as const, groupIndex: 0, lineIndex },
+            guestIndex: 0,
+          })),
+        },
+      }),
+    );
+    const lines = await v.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, p.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toHaveLength(2);
+    if (bound) {
+      const cohort = randomUUID();
+      await inTx(v, (tx) =>
+        registerPortions(
+          tx,
+          lines.map((line, i) => ({
+            portionId: randomUUID(),
+            lineId: line.id,
+            ordinal: i + 1,
+            pricingCohortId: cohort,
+            measured: false,
+          })),
+        ),
+      );
+    }
+    const snap = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
+    const [ticket] = await v.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, p.tabId));
+    return {
+      ...p,
+      tableId,
+      ticket: ticket!,
+      guest: snap.guests[0]!,
+      lineIds: lines.map((l) => l.id),
+    };
+  }
+  const shown = async (at = stationId) =>
+    (await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, at))).map(
+      ({ kind, quantity, lineName }) => ({ kind, quantity, lineName }),
+    );
+
+  it("A803 portions: a guest edit on two identical portions records one notice of 2", async () => {
+    const p = await sentTwo(true);
+    await edit(p, patch(p, { note: "Fresh tools" }));
+    expect(await shown()).toEqual([
+      { kind: "allergy_changed", quantity: "2.000", lineName: "BURG" },
+    ]);
+  });
+
+  it("A803 portions: the same two dishes unbound keep a notice each, as today", async () => {
+    const p = await sentTwo(false);
+    await edit(p, patch(p, { note: "Fresh tools" }));
+    expect(await shown()).toEqual([
+      { kind: "allergy_changed", quantity: "1.000", lineName: "BURG" },
+      { kind: "allergy_changed", quantity: "1.000", lineName: "BURG" },
+    ]);
+  });
+
+  it("A803 portions: identical portions given different instructions keep a notice each", async () => {
+    const p = await sentTwo(true);
+    await edit(p, {
+      party: {
+        answer: "allergies",
+        guests: [
+          { ...p.guest, note: "Fresh tools" },
+          { ...guest, who: "Second guest" },
+        ],
+      },
+      ticks: [{ line: { kind: "working", id: p.lineIds[1]! }, guestIndex: 1 }],
+    });
+    expect(await shown()).toEqual([
+      { kind: "allergy_changed", quantity: "1.000", lineName: "BURG" },
+      { kind: "allergy_changed", quantity: "1.000", lineName: "BURG" },
+    ]);
+  });
+
+  it("A803 portions: moving two identical, corrected portions to another station tells each station once", async () => {
+    const p = await sentTwo(true);
+    await edit(p, patch(p, { note: "Fresh tools" }));
+    const next = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Next cook" }));
+    await inTx(v, (tx) =>
+      moveDishesToStation(
+        tx,
+        v.cfg,
+        p.tabId,
+        { submissionId: randomUUID(), lineIds: p.lineIds, stationId: next.id },
+        { kind: "kitchen", deviceId: null, personId: OPERATOR },
+      ),
+    );
+    expect((await shown()).filter(({ kind }) => kind === "rerouted")).toEqual([
+      { kind: "rerouted", quantity: "2.000", lineName: "BURG" },
+    ]);
+    expect(await shown(next.id)).toEqual([
+      { kind: "allergy_changed", quantity: "2.000", lineName: "BURG" },
+    ]);
   });
 });
