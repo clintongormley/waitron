@@ -1,5 +1,13 @@
 import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
-import { addDecimal, compareDecimal, decimal, type Decimal } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  decimalToThousandths,
+  multiplyDecimal,
+  subtractDecimal,
+  type Decimal,
+} from "@waitron/shared";
 import type { AdjustmentStage } from "./schema/adjustments.js";
 import type { ReasonKind } from "./schema/reasons.js";
 
@@ -210,4 +218,46 @@ export function policySnapshotOf(reason: AdjustmentReason): AdjustmentPolicySnap
     approverRoles: [...reason.approverRoles],
     noteRequired: reason.noteRequired,
   };
+}
+
+/** A dish, or identical dishes at one price, as the per-dish floor reads it (plan D36): its list
+ * price and what it is charged after every reduction, each summed over the dish and its extras;
+ * `allowance` is whole cents ({@link floorAllowance}). */
+export interface DishPrice {
+  list: Decimal;
+  after: Decimal;
+  allowance: number;
+}
+
+/**
+ * Whether any dish is taken below its floor (owner, 2026-10-28): what is off it reaches the limit's
+ * exact share of its list price plus its allowance (plan D36 reading 3).
+ */
+export function belowFloor(dishes: readonly DishPrice[], maxPercentBp: number | null): boolean {
+  if (maxPercentBp === null) return false;
+  return dishes.some(({ list, after, allowance }) => {
+    const off = multiplyDecimal(subtractDecimal(list, after), decimal("10000"));
+    const floor = addDecimal(
+      multiplyDecimal(list, decimal(String(maxPercentBp))),
+      decimal(String(allowance * 100)),
+    );
+    return compareDecimal(off, floor) >= 0;
+  });
+}
+
+/** The cents the spread's rounding can move on a dish: its lines' priced quantity (quantity over
+ * the quantity its price is for), summed and rounded up once to a whole number. */
+export function floorAllowance(
+  lines: readonly { quantity: Decimal; priceQuantity: Decimal }[],
+): number {
+  let numerator = 0n;
+  let denominator = 1n;
+  for (const { quantity, priceQuantity } of lines) {
+    const q = BigInt(decimalToThousandths(quantity));
+    const p = BigInt(decimalToThousandths(priceQuantity));
+    if (q <= 0n || p <= 0n) throw new RangeError("a line's quantities are not above zero");
+    numerator = numerator * p + q * denominator;
+    denominator *= p;
+  }
+  return Number((numerator + denominator - 1n) / denominator);
 }

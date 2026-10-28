@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
   approves,
+  belowFloor,
   evaluateCancel,
   evaluateComp,
+  floorAllowance,
   policySnapshotOf,
   type AdjustmentReason,
   type Approval,
@@ -313,5 +315,69 @@ describe("policySnapshotOf", () => {
     expect(snapshot.applyRoles).toEqual(["supervisor", "manager", "admin"]);
     expect(snapshot.approverRoles).toEqual(["manager", "admin"]);
     expect(policySnapshotOf({ ...COMPLAINT, maxAmount: null }).maxAmount).toBeNull();
+  });
+});
+
+describe("belowFloor: a dish is never charged below its floor (owner, 2026-10-28; plan D36)", () => {
+  const dish = (list: string, after: string, allowance = 1) => ({
+    list: decimal(list),
+    after: decimal(after),
+    allowance,
+  });
+
+  it("a €12.00 dish left at €6.00 is at its 50% floor and goes through; at €5.99 it asks", () => {
+    expect(belowFloor([dish("12.00", "6.00")], 5000)).toBe(false);
+    expect(belowFloor([dish("12.00", "5.99")], 5000)).toBe(true);
+  });
+
+  it("a €3.33 dish left at €1.66 goes through under 50%, at €1.65 it asks", () => {
+    expect(belowFloor([dish("3.33", "1.66")], 5000)).toBe(false);
+    expect(belowFloor([dish("3.33", "1.65")], 5000)).toBe(true);
+  });
+
+  it("three €3.33 dishes, allowance 3: €4.98 left goes through, €4.95 asks", () => {
+    expect(belowFloor([dish("9.99", "4.98", 3)], 5000)).toBe(false);
+    expect(belowFloor([dish("9.99", "4.95", 3)], 5000)).toBe(true);
+  });
+
+  it("3 kg of €12.99 Fish, allowance 3: €19.47 left goes through, €19.44 asks", () => {
+    expect(belowFloor([dish("38.97", "19.47", 3)], 5000)).toBe(false);
+    expect(belowFloor([dish("38.97", "19.44", 3)], 5000)).toBe(true);
+  });
+
+  it("€1.01 off one €3.34 dish goes through under 30%: the allowance is a whole cent", () => {
+    expect(belowFloor([dish("3.34", "2.33")], 3000)).toBe(false);
+    expect(belowFloor([dish("3.34", "2.32")], 3000)).toBe(true);
+  });
+
+  it("one entry below its floor asks though another is not", () => {
+    expect(belowFloor([dish("12.00", "12.00"), dish("12.00", "5.99")], 5000)).toBe(true);
+  });
+
+  it("a reason with no per-dish limit never asks on it", () => {
+    expect(belowFloor([dish("12.00", "0.00")], null)).toBe(false);
+  });
+});
+
+describe("floorAllowance: the cents rounding can move on a dish (plan D36 reading 3)", () => {
+  const line = (quantity: string, priceQuantity = "1.000") => ({
+    quantity: decimal(quantity),
+    priceQuantity: decimal(priceQuantity),
+  });
+
+  it("counts each line's priced quantity, summed and rounded up once", () => {
+    expect(floorAllowance([line("1.000")])).toBe(1);
+    expect(floorAllowance([line("3.000")])).toBe(3);
+    expect(floorAllowance([line("3.000", "1.000")])).toBe(3);
+    expect(floorAllowance([line("0.350", "1.000")])).toBe(1);
+    expect(floorAllowance([line("0.350", "0.100")])).toBe(4);
+    expect(floorAllowance([line("1.000"), line("2.000")])).toBe(3);
+    expect(floorAllowance([line("3.000"), line("6.000")])).toBe(9);
+    expect(floorAllowance([line("0.350"), line("0.350")])).toBe(1);
+  });
+
+  it("refuses a line whose quantity is not above zero", () => {
+    expect(() => floorAllowance([line("-1.500")])).toThrow(RangeError);
+    expect(() => floorAllowance([line("1.000", "0.000")])).toThrow(RangeError);
   });
 });
