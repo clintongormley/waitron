@@ -5,6 +5,8 @@ import {
   draftScopeFor,
   saveActionState,
   submitOnEnter,
+  type AddressChosenDetail,
+  type AddressLookupProvider,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -12,6 +14,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-address-lookup.js";
 import "./business-day-start-editor.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
@@ -25,7 +28,7 @@ import type {
   VenueClockView,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
   VENUE_DETAIL_FIELDS,
@@ -59,6 +62,8 @@ const REASONS: Record<string, StringKey> = {
   geography_context: "venue_details.geography_context",
 };
 const nameOf = (field: VenueDetailField) => (field === "name" ? "venueName" : field);
+/** The fields a chosen address fills; the province is never among them, as the server locks it. */
+const SEARCH_FILLS = ["addressLine1", "addressLine2", "postalCode", "city"] as const;
 
 @customElement("dashboard-venue-details-panel")
 export class VenueDetailsPanel extends LitElement {
@@ -132,6 +137,8 @@ export class VenueDetailsPanel extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) readOnly = false;
+  /** Address suggestions; without one the address search stays hidden. Nothing sets it yet. */
+  @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @state() private model?: VenueDetailsModel;
   @state() private draft?: VenueDetailValues;
   @state() private submitting = false;
@@ -142,6 +149,8 @@ export class VenueDetailsPanel extends LitElement {
   @state() private acknowledged = "";
   @state() private clockPreview?: VenueClockPreview;
   @state() private clockError = "";
+  /** Why the address search's last chosen address was not copied. */
+  @state() private refusedAddress?: "country" | "province";
   #clockKey = "";
   #previewSequence = 0;
   #expected?: VenueDetailValues;
@@ -231,6 +240,7 @@ export class VenueDetailsPanel extends LitElement {
     if (!this.model || this.readOnly) return;
     this.#expected = { ...this.model.details };
     this.draft = { ...this.model.details };
+    this.refusedAddress = undefined;
     this.errors = {};
     this.attempted = false;
     this.actionError = "";
@@ -277,6 +287,7 @@ export class VenueDetailsPanel extends LitElement {
     this.#scope = undefined;
     this.draft = undefined;
     this.#expected = undefined;
+    this.refusedAddress = undefined;
     this.errors = {};
     this.actionError = "";
     this.attempted = false;
@@ -412,14 +423,44 @@ export class VenueDetailsPanel extends LitElement {
   }
   #change(field: VenueDetailField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    this.#apply({ [field]: event.detail.value });
+  }
+  #addressChosen(event: CustomEvent<AddressChosenDetail>): void {
+    event.stopPropagation();
+    if (!this.draft || !this.model || this.readOnly || this.submitting) return;
+    const address = event.detail.address;
+    const code = address.administrativeAreaCode;
+    const area =
+      code === undefined
+        ? undefined
+        : this.model.provinces.find(
+            ({ code: known, name }) =>
+              known === code || name.toLocaleLowerCase() === code.toLocaleLowerCase(),
+          );
+    if (address.countryCode !== this.model.issuer.country) this.refusedAddress = "country";
+    else if (area !== undefined && area.name !== this.draft.province)
+      this.refusedAddress = "province";
+    else {
+      this.refusedAddress = undefined;
+      const [addressLine1 = "", ...rest] = address.lines;
+      this.#apply({
+        addressLine1,
+        // The venue's own line 2 (a unit, a floor) stays unless the address brings one.
+        ...(rest.length > 0 ? { addressLine2: rest.join(", ") } : {}),
+        postalCode: address.postalCode,
+        city: address.locality,
+      });
+    }
+  }
+  #apply(values: Partial<Record<VenueDetailField, string>>): void {
     if (!this.draft || this.readOnly || this.submitting) return;
     const previousPatch = JSON.stringify(this.#patch());
-    this.draft = { ...this.draft, [field]: event.detail.value };
+    this.draft = { ...this.draft, ...values };
     this.#scope?.changed();
     if (JSON.stringify(this.#patch()) !== previousPatch) this.acknowledged = "";
     const next = venueDetailProblems(this.#patch());
     const errors = { ...this.errors };
-    delete errors[field];
+    for (const field of Object.keys(values) as VenueDetailField[]) delete errors[field];
     if (this.attempted) {
       for (const key of VENUE_DETAIL_FIELDS) {
         if (next[key]) errors[key] = t(PROBLEMS[next[key]]!);
@@ -562,10 +603,42 @@ export class VenueDetailsPanel extends LitElement {
   #isLockedRow(field: VenueDetailField): boolean {
     return this.model!.policy[field].decision === "refuse" && this.#patch()[field] === undefined;
   }
+  #addressSearch(): TemplateResult | typeof nothing {
+    const model = this.model!;
+    if (SEARCH_FILLS.some((field) => model.policy[field].decision === "refuse")) return nothing;
+    const expected = this.#expected;
+    const generation = this.#generation;
+    return html`<wt-address-lookup
+      class="field"
+      .provider=${this.addressProvider}
+      country-code=${model.issuer.country}
+      label=${t("venue_details.address_lookup.label")}
+      placeholder=${t("venue_details.address_lookup.placeholder")}
+      no-results-label=${t("venue_details.address_lookup.no_results")}
+      unavailable-label=${t("venue_details.address_lookup.unavailable")}
+      .message=${
+        this.refusedAddress === "country"
+          ? fill("venue_details.address_lookup.other_country", {
+              country: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
+                model.issuer.country,
+              )!,
+            })
+          : this.refusedAddress === "province"
+            ? t("venue_details.address_lookup.other_province")
+            : ""
+      }
+      ?disabled=${this.submitting}
+      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => {
+        if (this.isConnected && expected === this.#expected && generation === this.#generation)
+          this.#addressChosen(event);
+      }}
+    ></wt-address-lookup>`;
+  }
   #fields(): TemplateResult {
     const pair = !this.#isLockedRow("postalCode") && !this.#isLockedRow("city");
     return html`<div class="fields">
-      ${this.#field("name")} ${this.#field("addressLine1")} ${this.#field("addressLine2")}
+      ${this.#field("name")} ${this.#addressSearch()} ${this.#field("addressLine1")}
+      ${this.#field("addressLine2")}
       ${
         pair
           ? html`<div class="pair">${this.#field("postalCode")} ${this.#field("city")}</div>`
