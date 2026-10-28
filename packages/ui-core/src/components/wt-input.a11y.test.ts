@@ -24,17 +24,17 @@ function contrastRatio(a: string, b: string): number {
 
 describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) => {
   test("labelled input", async () => {
-    await mountThemed('<wt-input label="Peso (kg)" value="1.25"></wt-input>', theme);
+    await mountThemed('<wt-input label="Weight (kg)" value="1.25"></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("invalid input", async () => {
-    await mountThemed('<wt-input label="Peso (kg)" invalid value="-1"></wt-input>', theme);
+    await mountThemed('<wt-input label="Weight (kg)" invalid value="-1"></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("placeholder", async () => {
-    await mountThemed('<wt-input label="Peso (kg)" placeholder="1.25"></wt-input>', theme);
+    await mountThemed('<wt-input label="Weight (kg)" placeholder="1.25"></wt-input>', theme);
     await expectNoA11yViolations(host);
     const root = host.querySelector("wt-input")!.shadowRoot!;
     const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
@@ -44,7 +44,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
 
   test("input with a hint", async () => {
     await mountThemed(
-      '<wt-input label="Precio" hint="Déjalo vacío para usar el precio del producto."></wt-input>',
+      '<wt-input label="Price" hint="Leave empty to use the product price."></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -55,35 +55,35 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
   });
 
   test("disabled input", async () => {
-    await mountThemed('<wt-input label="Peso (kg)" disabled></wt-input>', theme);
+    await mountThemed('<wt-input label="Weight (kg)" disabled></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("resting label in an empty field", async () => {
-    await mountThemed('<wt-input label="Nombre"></wt-input>', theme);
+    await mountThemed('<wt-input label="Name"></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("focused field", async () => {
-    const el = await mountThemed('<wt-input label="Nombre"></wt-input>', theme);
+    const el = await mountThemed('<wt-input label="Name"></wt-input>', theme);
     el.focus();
     expect(el.shadowRoot!.activeElement).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
   test("field with its label hidden", async () => {
-    await mountThemed('<wt-input label="Buscar" hide-label></wt-input>', theme);
+    await mountThemed('<wt-input label="Search" hide-label></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("disabled field holding a value", async () => {
-    await mountThemed('<wt-input label="Nombre" value="Ana" disabled></wt-input>', theme);
+    await mountThemed('<wt-input label="Name" value="Ana" disabled></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("invalid field with an error message", async () => {
     await mountThemed(
-      '<wt-input label="Correo" value="ana@" error="Escribe un correo válido"></wt-input>',
+      '<wt-input label="Email" value="ana@" error="Enter a valid email address"></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -91,7 +91,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
 
   test("read-only field holding a value", async () => {
     await mountThemed(
-      '<wt-input label="Correo" name="chosen-email" type="email" value="ana@example.com" readonly></wt-input>',
+      '<wt-input label="Email" name="chosen-email" type="email" value="ana@example.com" readonly></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -101,7 +101,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
 
   test("read-only field with an action at its end", async () => {
     await mountThemed(
-      '<wt-input label="Correo" value="ana@example.com" readonly><button slot="end" aria-label="Usar otra cuenta">✎</button></wt-input>',
+      '<wt-input label="Email" value="ana@example.com" readonly><button slot="end" aria-label="Use another account">✎</button></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -109,7 +109,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
 
   test("field with a help button beside it", async () => {
     await mountThemed(
-      '<wt-input label="Correo"><button slot="help" aria-label="Ayuda">?</button></wt-input>',
+      '<wt-input label="Email"><button slot="help" aria-label="Help">?</button></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);

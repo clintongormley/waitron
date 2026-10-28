@@ -5921,7 +5921,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A976. Finish the server's English test-venue defaults.**
   Other helpers and screen expectations remain. Media's main library suite takes its Spanish
   Save label, card actions, usage labels, preview and form message from the catalogue.
-  Later cleanup goes package by package from A977's list. Keep accent-sensitive filename samples and deliberate multilingual metadata.
+  The core button, input and textarea accessibility suites use English sample text; their
+  behavioral assertions and both themes remain. Later cleanup goes package by package from
+  A977's list. Keep accent-sensitive filename samples and deliberate multilingual metadata.
   Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 

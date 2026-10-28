@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) => {
   test("text button", async () => {
-    await mountThemed("<wt-button>Cobrar</wt-button>", theme);
+    await mountThemed("<wt-button>Pay</wt-button>", theme);
     await expectNoA11yViolations(host);
   });
 
@@ -17,7 +17,7 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
   // the button has no accessible name at all.
   test("icon-only button", async () => {
     await mountThemed(
-      '<wt-button aria-label="Cerrar"><wt-icon name="close"></wt-icon></wt-button>',
+      '<wt-button aria-label="Close"><wt-icon name="close"></wt-icon></wt-button>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -25,24 +25,24 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
 
   test.each(["true", "false"] as const)("menu trigger, aria-expanded=%s", async (expanded) => {
     await mountThemed(
-      `<wt-button aria-haspopup="menu" aria-expanded="${expanded}">Idioma</wt-button>`,
+      `<wt-button aria-haspopup="menu" aria-expanded="${expanded}">Language</wt-button>`,
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
   test.each(["primary", "secondary", "danger", "ghost"] as const)("%s variant", async (variant) => {
-    await mountThemed(`<wt-button variant="${variant}">Cobrar</wt-button>`, theme);
+    await mountThemed(`<wt-button variant="${variant}">Pay</wt-button>`, theme);
     await expectNoA11yViolations(host);
   });
 
   test("disabled button", async () => {
-    await mountThemed("<wt-button disabled>Cobrar</wt-button>", theme);
+    await mountThemed("<wt-button disabled>Pay</wt-button>", theme);
     await expectNoA11yViolations(host);
   });
 
   test.each(["primary", "danger"] as const)("disabled %s variant", async (variant) => {
-    await mountThemed(`<wt-button variant="${variant}" disabled>Guardar</wt-button>`, theme);
+    await mountThemed(`<wt-button variant="${variant}" disabled>Save</wt-button>`, theme);
     await expectNoA11yViolations(host);
   });
 
@@ -60,13 +60,13 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
   // The loading state nests a wt-spinner; it must be decorative so the button's accessible name stays
   // its own (localized) label and aria-busy carries the state.
   test("loading button", async () => {
-    await mountThemed("<wt-button loading>Buscando…</wt-button>", theme);
+    await mountThemed("<wt-button loading>Searching…</wt-button>", theme);
     await expectNoA11yViolations(host);
   });
 
   test("round icon-only button", async () => {
     await mountThemed(
-      '<wt-button shape="round" variant="primary" aria-label="Añadir"><wt-icon name="plus"></wt-icon></wt-button>',
+      '<wt-button shape="round" variant="primary" aria-label="Add"><wt-icon name="plus"></wt-icon></wt-button>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -76,7 +76,7 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
 describe.each(["light", "dark"] as const)("wt-button hovered a11y (%s theme)", (theme) => {
   async function mountOn(surface: string, variant: string): Promise<HTMLButtonElement> {
     await mountThemed(
-      `<div style="background: var(${surface}); padding: var(--wt-space-4)"><wt-button variant="${variant}">Cobrar</wt-button></div>`,
+      `<div style="background: var(${surface}); padding: var(--wt-space-4)"><wt-button variant="${variant}">Pay</wt-button></div>`,
       theme,
     );
     const button = host.querySelector("wt-button")!;
@@ -128,7 +128,7 @@ function contrastRatio(a: string, b: string): number {
 
 test("in dark, a disabled primary button sits within 1.5:1 of its surface while an enabled one stands out", async () => {
   await mountThemed(
-    `<div style="background: var(--wt-color-surface); padding: var(--wt-space-4)"><wt-button variant="primary" disabled>Guardar</wt-button><wt-button variant="primary">Guardar</wt-button></div>`,
+    `<div style="background: var(--wt-color-surface); padding: var(--wt-space-4)"><wt-button variant="primary" disabled>Save</wt-button><wt-button variant="primary">Save</wt-button></div>`,
     "dark",
   );
   const surface = getComputedStyle(host.querySelector("div")!).backgroundColor;

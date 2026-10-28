@@ -77,7 +77,7 @@ test("a short labelled textarea is still a full tap target, and its field box gr
 
 test("the textarea fills the box under the label, so text it scrolls never runs under the label", async () => {
   const el = await mount(
-    `<wt-textarea label="Note" rows="2" value="${"una línea\n".repeat(12)}"></wt-textarea>`,
+    `<wt-textarea label="Note" rows="2" value="${"one line\n".repeat(12)}"></wt-textarea>`,
   );
   const { field, label, textarea } = parts(el);
   textarea.scrollTop = textarea.scrollHeight;
@@ -89,8 +89,8 @@ test("the textarea fills the box under the label, so text it scrolls never runs 
 });
 
 test("the value starts where a one-line field's value does", async () => {
-  const area = await mount('<wt-textarea label="Note" value="Sin cebolla"></wt-textarea>');
-  const line = await mount('<wt-input label="Note" value="Sin cebolla"></wt-input>');
+  const area = await mount('<wt-textarea label="Note" value="No onion"></wt-textarea>');
+  const line = await mount('<wt-input label="Note" value="No onion"></wt-input>');
   const areaTop =
     parts(area).textarea.getBoundingClientRect().top +
     parseFloat(getComputedStyle(parts(area).textarea).paddingTop) -
@@ -239,9 +239,9 @@ test("the hint is the placeholder, italic and muted, and stays the textarea's hi
 
 test("an explicit placeholder wins over the hint", async () => {
   const el = await mount(
-    '<wt-textarea label="Note" placeholder="Sin cebolla" hint="For the kitchen"></wt-textarea>',
+    '<wt-textarea label="Note" placeholder="No onion" hint="For the kitchen"></wt-textarea>',
   );
-  expect(parts(el).textarea.getAttribute("placeholder")).toBe("Sin cebolla");
+  expect(parts(el).textarea.getAttribute("placeholder")).toBe("No onion");
 });
 
 test("a required textarea is marked visibly and in the native contract", async () => {
