@@ -13,7 +13,7 @@ import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/wai
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { BUSY_COUNTER as BUSY, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -40,6 +40,14 @@ const handheld: Partial<TillShell> = {
   activeScreen: "floor",
   operatorName: "Ana",
   affordances: ["station", "expo"],
+  legalName: "Bar Pepe SL",
+};
+
+const counter: Partial<TillShell> = {
+  formFactor: "till",
+  activeScreen: "counter",
+  operatorName: "Ana",
+  affordances: ["find-bill", "schedule"],
   legalName: "Bar Pepe SL",
 };
 
@@ -86,7 +94,7 @@ async function lockupLoaded(line: WtPoweredBy): Promise<HTMLImageElement> {
   return lockup;
 }
 
-/** Mounts a handheld with the stored logo and waits for the logo the bar or nothing draws. */
+/** Mounts a handheld, or the shell `props` describe, with the stored logo, and lets it settle. */
 async function mountWithLogo(theme?: "light" | "dark", props: Partial<TillShell> = {}) {
   startFrom(withLogo(LIGHT));
   const { el } = await mountWidget<TillShell>("till-shell", { ...handheld, ...props }, theme);
@@ -234,6 +242,181 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
   it("under Dark the lockup is the dark drawing", async () => {
     await atViewport(390, 844, async () => {
       const el = await mountWithLogo("dark");
+      await openMenu(el);
+      const lockup = await lockupLoaded(lineOf(el)!);
+      expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_DARK_URL);
+    });
+  });
+});
+
+describe("Powered by Waitron at the foot of a cash register's More", () => {
+  const counterLogo = (el: TillShell) =>
+    el.shadowRoot!.querySelector<WtVenueLogo>(".head > wt-venue-logo.counter-logo");
+
+  it("with a venue logo, one line comes last, after Log out and a rule, in the strings' words", async () => {
+    await atViewport(1280, 800, async () => {
+      const el = await mountWithLogo(undefined, counter);
+      await openMenu(el);
+      expect(lines(el)).toHaveLength(1);
+      const line = lineOf(el)!;
+      expect(moreMenu(el).lastElementChild).toBe(line);
+      const rule = line.previousElementSibling!;
+      expect(rule.matches("hr.menu-rule")).toBe(true);
+      expect(rule.previousElementSibling!.matches(".logout")).toBe(true);
+      expect(line.getAttribute("label")).toBe(t("login.powered_by"));
+      expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
+      const lockup = await lockupLoaded(line);
+      expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_URL);
+      const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
+      expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
+    });
+  });
+
+  it("with no venue logo, no line", async () => {
+    startFrom(FIXTURE_ANSWER);
+    await atViewport(1280, 800, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", counter);
+      await openMenu(el);
+      expect(lineOf(el)).toBeNull();
+      expect(moreMenu(el).lastElementChild!.matches(".logout")).toBe(true);
+    });
+  });
+
+  it("while waiting for the theme's answer, no line", async () => {
+    startFrom(null);
+    await atViewport(1280, 800, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", counter);
+      await openMenu(el);
+      expect(currentVenueLogo().kind).toBe("waiting");
+      expect(lineOf(el)).toBeNull();
+    });
+  });
+
+  it("with a logo reported failed, no line", async () => {
+    // The counter bar draws the box, whose own load would clear a failure of a loadable image.
+    const answer = withLogo("/no-such.png");
+    startFrom(answer);
+    reportVenueLogoFailure(answer.logo);
+    await atViewport(1280, 800, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", counter);
+      await expect.poll(() => counterLogo(el)?.hasAttribute("failed")).toBe(true);
+      await openMenu(el);
+      expect(currentVenueLogo()).toMatchObject({ failed: true });
+      expect(lineOf(el)).toBeNull();
+    });
+  });
+
+  it("goes when the logo fails and comes back once its retry loads", async () => {
+    await atViewport(1280, 800, async () => {
+      const loads = nextLogoLoad();
+      const el = await mountWithLogo(undefined, counter);
+      await loads;
+      expect(lineOf(el)).not.toBeNull();
+      const bar = counterLogo(el)!;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        bar.shadowRoot!.querySelector("img")!.dispatchEvent(new Event("error"));
+        await settle(el);
+        expect(currentVenueLogo()).toMatchObject({ failed: true });
+        expect(lineOf(el)).toBeNull();
+        const back = nextLogoLoad();
+        await vi.advanceTimersByTimeAsync(60_001);
+        await back;
+        await settle(el);
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(currentVenueLogo()).toMatchObject({ failed: false });
+      expect(lines(el)).toHaveLength(1);
+    });
+  });
+
+  it("the line shows while a logo is in use even when the bar has no room for the logo", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      await atViewport(1024, 768, async () => {
+        const loads = nextLogoLoad();
+        const el = await mountWithLogo(undefined, BUSY);
+        await loads;
+        await settle(el);
+        expect(counterLogo(el)!.checkVisibility({ visibilityProperty: true })).toBe(false);
+        expect(lines(el)).toHaveLength(1);
+        expect(moreMenu(el).lastElementChild).toBe(lineOf(el));
+      });
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("with Testing shown, the line still comes last", async () => {
+    await atViewport(1280, 800, async () => {
+      const el = await mountWithLogo(undefined, {
+        ...counter,
+        testingKitchen: true,
+        affordances: ["find-bill", "schedule", "station"],
+      });
+      await openMenu(el);
+      const line = lineOf(el)!;
+      expect(moreMenu(el).lastElementChild).toBe(line);
+      const rule = line.previousElementSibling!;
+      expect(rule.matches("hr.menu-rule")).toBe(true);
+      expect(rule.previousElementSibling!.matches("details[data-testing]")).toBe(true);
+    });
+  });
+
+  it("says Powered by in Spanish from the strings", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      await atViewport(1280, 800, async () => {
+        const el = await mountWithLogo(undefined, counter);
+        await openMenu(el);
+        const line = lineOf(el)!;
+        await line.updateComplete;
+        const words = line.shadowRoot!.querySelector('[part="label"]')!.textContent;
+        expect(words).toBe(t("login.powered_by"));
+        expect(words).not.toBe("Powered by");
+      });
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it.each([
+    [1024, 768],
+    [1280, 800],
+  ] as const)(
+    "at %ix%i the line sits inside the open menu and the window",
+    async (width, height) => {
+      await atViewport(width, height, async () => {
+        const el = await mountWithLogo(undefined, counter);
+        await openMenu(el);
+        const line = lineOf(el)!;
+        const lockup = await lockupLoaded(line);
+        await frame();
+        const pop = popup(el);
+        pop.scrollTop = pop.scrollHeight;
+        await frame();
+        const box = pop.getBoundingClientRect();
+        for (const part of [line.shadowRoot!.querySelector('[part="label"]')!, lockup]) {
+          const r = part.getBoundingClientRect();
+          expect(r.width).toBeGreaterThan(0);
+          expect(r.left).toBeGreaterThanOrEqual(box.left);
+          expect(r.right).toBeLessThanOrEqual(box.right);
+          expect(r.top).toBeGreaterThanOrEqual(box.top);
+          expect(r.bottom).toBeLessThanOrEqual(box.bottom);
+          expect(r.left).toBeGreaterThanOrEqual(0);
+          expect(r.right).toBeLessThanOrEqual(window.innerWidth);
+          expect(r.bottom).toBeLessThanOrEqual(window.innerHeight);
+        }
+      });
+    },
+  );
+
+  it("under Dark the lockup is the dark drawing", async () => {
+    await atViewport(1280, 800, async () => {
+      const el = await mountWithLogo("dark", counter);
       await openMenu(el);
       const lockup = await lockupLoaded(lineOf(el)!);
       expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_DARK_URL);

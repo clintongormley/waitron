@@ -86,10 +86,11 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
-    // No step back: the bar draws its logo only while no step is taken. An error is heard here
-    // because a box failing a logo already reported failed changes no state that would refit.
-    this.addEventListener("wt-logo-load", () => void this.#fit());
-    this.addEventListener("wt-logo-error", () => void this.#fit());
+    // A handheld refits with no step back, since its bar draws the logo only while no step is
+    // taken; a counter measures its room again. An error is heard here because a box failing a
+    // logo already reported failed changes no state that would refit.
+    this.addEventListener("wt-logo-load", () => void this.#refit());
+    this.addEventListener("wt-logo-error", () => void this.#refit());
     this.addEventListener("wt-guide-open", (event) =>
       this.#onGuideOpen(event as CustomEvent<{ href: string }>),
     );
@@ -143,6 +144,11 @@ export class TillShell extends LitElement {
 
       .head > wt-venue-logo {
         flex: none;
+      }
+      /* Kept in the page so it keeps its loaded image and its own retry while it has no room. */
+      .head > wt-venue-logo.counter-logo:not([data-room]) {
+        position: absolute;
+        visibility: hidden;
       }
 
       .brand {
@@ -466,14 +472,19 @@ export class TillShell extends LitElement {
     this.#stripObserver?.disconnect();
     this.#stripObserver = undefined;
     this.#watchedStrip = undefined;
+    this.#counterObserver?.disconnect();
+    this.#counterTargets.clear();
     this.#run += 1;
+    this.#counterRun += 1;
     this.#stopLogoRetry();
   }
 
   /** With More closed and above phone width: 0, the brand mark (the venue's logo, or the word) and
    * the name on the bar; 1, the brand mark hidden; 2, the brand mark hidden and the name in More. */
   @state() private steps = 0;
+  @state() private counterLogoRoom = false;
   #run = 0;
+  #counterRun = 0;
   #stepBackOwed = false;
   readonly #venueLogo = new VenueLogoController(this);
   // Compared in `updated`, not taken from the controller's `onChange`: a host coming back to the
@@ -485,8 +496,11 @@ export class TillShell extends LitElement {
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
   #stripObserver?: ResizeObserver;
+  #counterObserver?: ResizeObserver;
+  #counterTargets = new Set<Element>();
   #watchedStrip?: Element;
   #watchedPopup?: Element;
+  #watchedZonePopup?: Element;
   #shownName = false;
   #heldName?: boolean;
   readonly #onPopupToggle = () => {
@@ -494,6 +508,7 @@ export class TillShell extends LitElement {
     if (this.#menuOpen()) return;
     if (this.#stepBackOwed) void this.#fit();
   };
+  readonly #onZonePopupToggle = () => void this.#measureCounterLogo();
 
   /** An open More can hold the name though `steps` puts it on the bar; once it has closed, above
    * phone width, raise `steps` to cover it, so closing it moves nothing back before the fit steps
@@ -516,12 +531,21 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
-    if (this.formFactor !== "till") this.#release();
+    if (this.formFactor !== "till") {
+      this.counterLogoRoom = false;
+      this.#release();
+    }
   }
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
-    if (this.formFactor === "till") return;
+    if (this.formFactor === "till") {
+      this.#observeCounter();
+      void this.#measureCounterLogo();
+      return;
+    }
+    this.#counterObserver?.disconnect();
+    this.#counterTargets.clear();
     this.#observe();
     const logo = logoKey(this.#venueLogo.state);
     const logoChanged = logo !== this.#drawnLogo;
@@ -626,6 +650,40 @@ export class TillShell extends LitElement {
     this.#watchedStrip = strip;
   }
 
+  /** The strip itself is not observed: its width is what the logo changes. Only targets new since
+   * the last render are observed, since each new observation reports once, and one made while
+   * notifications are being delivered is a ResizeObserver loop. */
+  #observeCounter(): void {
+    if (!this.isConnected) return;
+    this.#counterObserver ??= new ResizeObserver(() => void this.#measureCounterLogo());
+    const targets = new Set<Element>([
+      this,
+      ...this.renderRoot.querySelectorAll(
+        ".head > .counter-logo, .head > .session, .till-strip > *",
+      ),
+    ]);
+    for (const target of this.#counterTargets)
+      if (!targets.has(target)) this.#counterObserver.unobserve(target);
+    for (const target of targets)
+      if (!this.#counterTargets.has(target)) this.#counterObserver.observe(target);
+    this.#counterTargets = targets;
+    const zonePopup = this.#zonePopup();
+    if (zonePopup !== this.#watchedZonePopup) {
+      this.#watchedZonePopup?.removeEventListener("toggle", this.#onZonePopupToggle);
+      zonePopup?.addEventListener("toggle", this.#onZonePopupToggle);
+      this.#watchedZonePopup = zonePopup;
+    }
+  }
+
+  /** Undefined on a bar with one zone, which has no zone menu. */
+  #zonePopup(): Element | undefined {
+    return (
+      this.renderRoot
+        .querySelector("wt-row-actions[data-counter-zones]")
+        ?.shadowRoot?.querySelector("[popover]") ?? undefined
+    );
+  }
+
   #popup(): Element | undefined {
     return (
       this.renderRoot
@@ -645,6 +703,37 @@ export class TillShell extends LitElement {
       ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge, .head wt-help-switch, .head wt-venue-logo",
     );
     await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
+  }
+
+  #refit(): Promise<void> {
+    return this.formFactor === "till" ? this.#measureCounterLogo() : this.#fit();
+  }
+
+  /** The strip's width is taken as it would be with the logo in the row. A box still loading, or
+   * failed, is 0 px wide and so never has room. */
+  async #measureCounterLogo(): Promise<void> {
+    const run = ++this.#counterRun;
+    await this.#settled();
+    if (run !== this.#counterRun || this.formFactor !== "till" || !this.isConnected) return;
+    // The open zone menu's popup stays where it opened, so its trigger must not move under it.
+    if (this.#zonePopup()?.matches(":popover-open")) return;
+    const head = this.renderRoot.querySelector<HTMLElement>(".head");
+    const strip = head?.querySelector<HTMLElement>(".till-strip");
+    const box = head?.querySelector<HTMLElement>(":scope > wt-venue-logo.counter-logo");
+    if (!head || !strip || !box) {
+      this.counterLogoRoom = false;
+      return;
+    }
+    const logoWidth = box.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(head).columnGap) || 0;
+    const rects = [...strip.children].map((child) => child.getBoundingClientRect());
+    const content =
+      rects.length === 0
+        ? 0
+        : Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
+    const stripWidth =
+      strip.getBoundingClientRect().width + (box.hasAttribute("data-room") ? logoWidth + gap : 0);
+    this.counterLogoRoom = logoWidth > 0 && content + logoWidth + gap <= stripWidth;
   }
 
   #wraps(): boolean {
@@ -705,6 +794,22 @@ export class TillShell extends LitElement {
       @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
       ><span class="brand" slot="fallback">${BRAND}</span></wt-venue-logo
     >`;
+  }
+
+  #counterLogo(): TemplateResult | typeof nothing {
+    const state = this.#venueLogo.state;
+    if (state.kind !== "logo") return nothing;
+    const { logo } = state;
+    return html`<wt-venue-logo
+      class="counter-logo"
+      size="bar"
+      light=${logo.light}
+      dark=${logo.dark ?? nothing}
+      alt=${this.legalName}
+      ?data-room=${this.counterLogoRoom}
+      @wt-logo-error=${() => reportVenueLogoFailure(logo)}
+      @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
+    ></wt-venue-logo>`;
   }
 
   #emit(type: string, detail?: unknown): void {
@@ -1013,6 +1118,7 @@ export class TillShell extends LitElement {
             </details>`
           : nothing
       }
+      ${this.#poweredBy()}
     </wt-row-actions>`;
   }
 
@@ -1124,7 +1230,7 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.formFactor === "till" || this.steps > 0 || this.phone ? nothing : this.#brandMark()}
+                  ${this.formFactor === "till" ? this.#counterLogo() : this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${
                     this.formFactor === "till"
                       ? html`<div class="till-strip">

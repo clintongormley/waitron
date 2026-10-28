@@ -1499,6 +1499,15 @@ whether those reads should follow today's map once a group is left.
 - **No text-size warning in theme dialogs (A841, owner, 2026-10-25).** Switching or deleting a
   theme says nothing about the tills' text size.
 
+- **A theme document missing an optional key reads it as empty (A841 slices 7, 10 and 11).** An
+  optional key missing from a stored or copied theme document reads as its empty value (`logo`
+  `null`, `textScale` 100 and `text` `{}`), with no configuration format change.
+
+- **Product and bill names in a language Chromium does not hyphenate break inside a long word with
+  no hyphen (A841 slice 10b).** English is among those languages. The measurement is under "A
+  name's language" in
+  [conventions-ui.md](../developers/conventions-ui.md#what-an-open-till-keeps-current).
+
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration

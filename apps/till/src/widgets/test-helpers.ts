@@ -21,7 +21,9 @@ import type {
 import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
+import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 import indexHtml from "../../index.html?raw";
+import type { TillShell } from "./till-shell.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -747,3 +749,31 @@ export function oneLine(inside: HTMLElement = document.body): number {
   probe.remove();
   return height;
 }
+
+export const QUIET_COUNTER: Partial<TillShell> = {
+  formFactor: "till",
+  activeScreen: "counter",
+  operatorName: "Ana",
+  legalName: "Bar Lucía SL",
+};
+
+export const BUSY_COUNTER: Partial<TillShell> = {
+  formFactor: "till",
+  activeScreen: "counter",
+  showCounter: true,
+  showFloor: true,
+  counterZones: [
+    { id: "a", name: "Bar" },
+    { id: "b", name: "Terrace" },
+  ],
+  selectedCounterZoneId: "a",
+  parkedCount: 3,
+  waitingCount: 2,
+  operatorName: "Ana Fernández",
+  affordances: ["expo"],
+  transferAvailable: true,
+  transferCount: 2,
+  legalName: "Bar Lucía SL",
+};
+
+export const COUNTER_LOGO = png(120, 40);

@@ -1797,7 +1797,7 @@ saved with new choices, or one of its logo's images is reframed or replaced in t
 (`packages/ui/src/venue-theme.ts`), which fetches `/api/theme` and replaces the venue's sheet when
 it differs from the one applied, and each poll asks again once, however many zones it reads, so
 a failed fetch is retried on the next poll; pinned by "A841 the till follows the theme in use" in
-`apps/till/src/till-app-setup-refresh.test.ts`. The handheld bar (`till-shell`) and the sign-in
+`apps/till/src/till-app-setup-refresh.test.ts`. A handheld's or cash register's bar (`till-shell`) and the sign-in
 screen (`till-lock-screen`) name the logo, as its alt text, by the start read's venue name
 (`issuer.venueName`), and take the logo itself from the venue theme state (`VenueLogoController`,
 `packages/ui/src/venue-theme.ts`), so it follows `themeHash` as the colours do. The till fetches `/api/theme` from the page's own
