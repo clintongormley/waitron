@@ -418,7 +418,7 @@ it.each([
     keep: "Keep",
     remove: "Remove",
     badge: "Archived when saved",
-    none: "Every variant is disabled.",
+    none: "Every variant is archived.",
   },
   {
     locale: "es-ES",
@@ -426,7 +426,7 @@ it.each([
     keep: "Conservar",
     remove: "Eliminar",
     badge: "Se archivará al guardar",
-    none: "Todas las variantes están deshabilitadas.",
+    none: "Todas las variantes están archivadas.",
   },
 ])(
   "in $locale, archives and keeps a saved variant, and removes one never saved",
@@ -476,7 +476,7 @@ it("says so when every variant was archived before and keeps those rows hidden",
   await el.updateComplete;
   expect(rows(el)).toHaveLength(0);
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')!.textContent!.trim()).toBe(
-    t("editor.variants_all_disabled"),
+    t("editor.variants_all_archived"),
   );
   el.variants = [...el.variants];
   await el.updateComplete;
