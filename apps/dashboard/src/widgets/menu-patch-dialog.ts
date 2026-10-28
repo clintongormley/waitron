@@ -715,7 +715,8 @@ export class MenuPatchDialog extends LitElement {
     this.#close();
   }
 
-  /** Returns whether the refusal went under a field, which then has focus. */
+  /** Returns whether the refusal went under a field, which then has focus while the form is drawn.
+   * A failed read draws no form; the refusal stays under its field for when the read succeeds. */
   async #refused(error: unknown, sent: readonly MenuPatchChange[]): Promise<boolean> {
     const placed = placeRefusal(error, sent);
     if ("refusal" in placed) {
@@ -739,7 +740,8 @@ export class MenuPatchDialog extends LitElement {
     this.picked = targetKey(change.target);
     this.step = "edit";
     await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="form"]')!);
+    const form = this.renderRoot.querySelector('[data-test="form"]');
+    if (form !== null) await focusFirstInvalid(form);
     return true;
   }
 

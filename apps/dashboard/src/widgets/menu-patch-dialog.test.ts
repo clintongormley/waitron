@@ -1773,6 +1773,64 @@ it("shows a refusal for a change the venue's content languages drop while it is 
   }
 });
 
+it("keeps a field's refusal for when the form is back after a read fails during the send, and applies what waited for the answer", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, document))
+    .mockRejectedValueOnce(new Error("the box is unreachable"))
+    .mockResolvedValue(live(3, document));
+  let refuse!: (error: Error) => void;
+  const el = await mount(
+    stubApi({
+      liveData: data,
+      getLiveMenu,
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    }),
+  );
+  const failures: unknown[] = [];
+  const record = (event: PromiseRejectionEvent) => {
+    event.preventDefault();
+    failures.push(event.reason);
+  };
+  window.addEventListener("unhandledrejection", record);
+  try {
+    await pick(el, "Soup");
+    await type(el, "wt-input", "description-en", "Hot");
+    await type(el, "wt-input", "description-es", "Caliente");
+    await pick(el, "Salad");
+    await type(el, "wt-input", "kitchen-name", "SALAD");
+    await press(el, "review");
+    await press(el, "put-live");
+    data.invalidate([{ type: "menu_versions", id: "v-3" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="read-error"]')).not.toBeNull(),
+    );
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await el.updateComplete;
+    refuse(refusal("menu_patch.invalid", { change: 1, field: "kitchenName" }));
+    await flush(el);
+    await flush(el);
+    expect(failures).toEqual([]);
+    expect(el.changes).toEqual([
+      { target: soup, field: "description", value: { en: "Hot" } },
+      { target: { kind: "offer", menuItemId: "mi-salad" }, field: "kitchenName", value: "SALAD" },
+    ]);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="read-error"] wt-button')!.click();
+    await vi.waitFor(() => expect(form(el)).not.toBeNull());
+    expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Salad");
+    expect(field(el, "wt-input", "kitchen-name").error).toBe("Check this value.");
+    expect(refusalsIn(el)).toBe("Correct the fields marked on Salad to continue.");
+    expect(trimmedNote(el)).toBe(
+      "1 change lost what was typed in a language removed from the content languages.",
+    );
+  } finally {
+    window.removeEventListener("unhandledrejection", record);
+  }
+});
+
 it("offers a newer live version that arrives while a patch is being sent, once it is refused", async () => {
   const data = new LiveData();
   const getLiveMenu = vi.fn().mockResolvedValueOnce(live(3)).mockResolvedValue(live(4));
