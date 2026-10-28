@@ -14,6 +14,7 @@ import {
   thousandthsToMake,
 } from "./kitchen-cards.js";
 import { overviewRows } from "./kitchen-overview.js";
+import { allergyBlock } from "../../test/kitchen-allergy-fixtures.js";
 
 const THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
@@ -408,6 +409,14 @@ describe("A803 portion grouping: a card's rows", () => {
       soldInEach: true,
       ...overrides,
     });
+  const answerFor = (list: string, label: string) => ({
+    listName: { "en-GB": list },
+    listCustomerName: null,
+    listKitchenName: null,
+    labelName: { "en-GB": label },
+    labelCustomerName: null,
+    labelKitchenName: null,
+  });
   const rows = (card: KitchenCard) =>
     card.sections.map((section) => section.rows.map((row) => row.map((item) => item.id)));
 
@@ -436,31 +445,33 @@ describe("A803 portion grouping: a card's rows", () => {
     expect(rows(card)).toEqual([[["a", "b"]]]);
   });
 
+  it("A803 portion grouping: answers in another order still group", () => {
+    const card = one(
+      bill("o-1", [
+        portion("a", {
+          optionSnapshots: [answerFor("Cooking", "Rare"), answerFor("Side", "Fries")],
+        }),
+        portion("b", {
+          optionSnapshots: [answerFor("Side", "Fries"), answerFor("Cooking", "Rare")],
+        }),
+      ]),
+    );
+    expect(rows(card)).toEqual([[["a", "b"]]]);
+  });
+
   const apart: [string, Partial<StationQueueItem>][] = [
     ["another name", { name: "Fish" }],
     ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
-    [
-      "another answer",
-      {
-        optionSnapshots: [
-          {
-            listId: "l",
-            optionId: "o",
-            listNames: { "en-GB": "Cooking" },
-            optionNames: { "en-GB": "Rare" },
-          } as never,
-        ],
-      },
-    ],
+    ["another answer", { optionSnapshots: [answerFor("Cooking", "Rare")] }],
     ["another note", { note: "no salt" }],
     ["another state", { state: "preparing" }],
     ["held", { firedAt: null }],
-    ["an allergy block", { allergy: { guests: [], allergens: ["gluten"], notes: [] } as never }],
+    ["an allergy block", { allergy: allergyBlock }],
     [
       "another own allergen profile",
-      { asServed: { allergens: { gluten: "contains" }, pending: false } as never },
+      { asServed: { allergens: { gluten: { kinds: ["wheat"] } }, pending: false } },
     ],
-    ["another diet", { asServedDiet: { vegan: true } as never }],
+    ["another diet", { asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] } }],
     ["a cross reference", { crossRefs: [{ kind: "with", name: "Fries", stationName: "Fryer" }] }],
     ["another after-period mark", { afterPeriod: "starters" }],
     [

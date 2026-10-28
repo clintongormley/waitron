@@ -82,16 +82,6 @@ const READ_LIMIT_MS = 25_000;
  * classified against its OWN `queuedAt`/`thresholds`. The server's `ExpoItem.band`/`ExpoOrder.worstBand`
  * are ignored: this screen re-derives both on every render so they keep escalating between refreshes.
  */
-/** A section's items as drawn: identical portions as one row, each row's items in the read's
- * order. The station, fire time and thresholds are in the key, so a row's age band is its first's. */
-function expoRows(items: readonly ExpoItem[]): ExpoItem[][] {
-  return portionGroups(
-    items,
-    (item) => kitchenPortionKey(item, item.qty, [item.stationName, item.queuedAt, item.thresholds]),
-    () => 0,
-  );
-}
-
 @customElement("till-expo-screen")
 export class TillExpoScreen extends LitElement {
   constructor() {
@@ -867,7 +857,7 @@ export class TillExpoScreen extends LitElement {
             </div>`
       }
       <ul class="items">
-        ${expoRows(group.items).map((members) => html`<li>${this.#item(members)}</li>`)}
+        ${this.#rows(group.items).map((members) => html`<li>${this.#item(members)}</li>`)}
       </ul>
       ${group.groupId === null ? nothing : this.#groupLever(order, party, group, group.groupId, name)}
     </div>`;
@@ -908,15 +898,27 @@ export class TillExpoScreen extends LitElement {
     return html`<div class="course" data-course=${course.courseId ?? "none"}>
       ${course.courseName ? html`<div class="course-head">${course.courseName}</div>` : nothing}
       <ul class="items">
-        ${expoRows(course.items).map((members) => html`<li>${this.#item(members)}</li>`)}
+        ${this.#rows(course.items).map((members) => html`<li>${this.#item(members)}</li>`)}
       </ul>
       ${this.#lever(order, course)}
     </div>`;
   }
 
+  /** A section's items as drawn: identical portions as one row, in the read's order (a stable sort).
+   * A portion's time is keyed only as the Forgotten flag it draws: the server stamps each ticket
+   * item's `queuedAt` on its own, so portions fired together can differ by a millisecond. */
+  #rows(items: readonly ExpoItem[]): ExpoItem[][] {
+    return portionGroups(
+      items,
+      (item) =>
+        kitchenPortionKey(item, item.qty, [item.stationName, this.#itemBand(item) === "forgotten"]),
+      () => 0,
+    );
+  }
+
   /** A FORGOTTEN item is flagged with a text label, not a second border colour, which would compete with
-   *  the item's own kitchen-state border for the same CSS property. */
-  /** `members`: identical portions drawn as one row from its first (spec §3.1). */
+   *  the item's own kitchen-state border for the same CSS property. `members`: identical portions
+   *  drawn as one row from its first (spec §3.1). */
   #item(members: ExpoItem[]): TemplateResult {
     const [item] = members as [ExpoItem, ...ExpoItem[]];
     const held = item.firedAt === null;

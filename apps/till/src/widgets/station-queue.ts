@@ -930,7 +930,8 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  #move(group: MergedQueueGroup, members: readonly StationQueueItem[]): void {
+  /** `name`: the dish the move dialog names, its count too when the row is grouped. */
+  #move(group: MergedQueueGroup, members: readonly StationQueueItem[], name: string): void {
     const [item] = members as [StationQueueItem, ...StationQueueItem[]];
     this.dispatchEvent(
       new CustomEvent("move-station", {
@@ -940,7 +941,7 @@ export class TillStationQueue extends LitElement {
           ...(members.length > 1
             ? { lineIds: members.map((member) => member.workingOrderLineId) }
             : {}),
-          name: item.name,
+          name,
           stationId: group.stationId ?? this.stationId,
         },
         bubbles: true,
@@ -1454,6 +1455,7 @@ export class TillStationQueue extends LitElement {
     state: TemplateResult | typeof nothing,
   ): TemplateResult {
     const [item] = members as [StationQueueItem, ...StationQueueItem[]];
+    const name = members.length === 1 ? item.name : this.#dish(item, members.length);
     const station =
       group.stationId === undefined ? undefined : this.stationNames?.get(group.stationId);
     const main = html`<span class="line-main">
@@ -1507,8 +1509,8 @@ export class TillStationQueue extends LitElement {
         size="sm"
         variant="secondary"
         data-move-station=${item.id}
-        aria-label=${`${t("table.move_station")} · ${item.name}`}
-        @click=${() => this.#move(group, members)}
+        aria-label=${`${t("table.move_station")} · ${name}`}
+        @click=${() => this.#move(group, members, name)}
         >${t("table.move_station")}</wt-button
       >
     </div>`;

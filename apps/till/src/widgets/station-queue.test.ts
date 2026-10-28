@@ -4866,14 +4866,16 @@ describe("A803 portion grouping: the station queue", () => {
     const moved = vi.fn();
     el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
     expect(el.shadowRoot!.querySelectorAll("[data-move-station]")).toHaveLength(1);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="p1"]')!.click();
+    const button = el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="p1"]')!;
+    expect(button.getAttribute("aria-label")).toBe(`${t("table.move_station")} · 2× Burger`);
+    button.click();
     expect(moved.mock.calls).toEqual([
       [
         {
           workingOrderId: "wo-p",
           lineId: "wol-p1",
           lineIds: ["wol-p1", "wol-p2"],
-          name: "Burger",
+          name: "2× Burger",
           stationId: "st-1",
         },
       ],
