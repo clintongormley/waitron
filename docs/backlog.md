@@ -5937,7 +5937,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.** Other helpers and screen
-  expectations remain. Continue package by package from A977's list; keep accent-sensitive
+  expectations remain; the combobox accessibility suite's sample wording is English. Continue
+  package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, and deliberate multilingual metadata. Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
