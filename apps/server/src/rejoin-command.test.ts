@@ -106,14 +106,16 @@ describe("waitron-rejoin rejoin", () => {
     expect(opened).toEqual([join(STATE_DIR, "venue")]);
   });
 
-  it("refuses when the WAITRON_TILL_*_ID are absent (unprovisioned box)", async () => {
+  it("refuses when the box identity settings are absent (unprovisioned box)", async () => {
     const { code, out } = await run({
       WAITRON_NODE_ID: undefined,
 
       WAITRON_LOCATION_ID: undefined,
     });
     expect(code).toBe(1);
-    expect(out.join("\n")).toMatch(/WAITRON_TILL/);
+    expect(out).toEqual([
+      "WAITRON_NODE_ID and WAITRON_LOCATION_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
+    ]);
   });
 
   it("reports a partial till config by code (server.config_invalid) and returns 1", async () => {

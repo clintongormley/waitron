@@ -711,10 +711,7 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("boots in setup mode over HTTPS from a minted self-signed cert, serves /setup-api/status, refuses plain HTTP, and does not mount the trading routes", async () => {
-    // Setup mode: no `WAITRON_TILL_*` ids and no credentials key. Boot still migrates, but mounts only
-    // /health and the unauthenticated setup surface, over HTTPS from a cert it mints
-    // (`ensureBoxSecrets`). `WAITRON_STATE_DIR` is required here: without it `ensureBoxSecrets` would
-    // write into `boot.ts`'s from-source default (`apps/server/src/state`) and pollute the checkout.
+    // A separate state directory keeps the generated setup keys out of the source checkout.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-state-"));
     const server = await startServer({

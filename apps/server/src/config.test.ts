@@ -101,13 +101,13 @@ describe("loadConfig", () => {
     expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "notaport" })).toThrow();
   });
 
-  it("populates config.till from the WAITRON_TILL_* environment (the venue's identity on this node)", () => {
+  it("populates config.till from the node identity environment settings", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config.till).toEqual(EXPECTED_TILL);
   });
 
   // Setup mode: an unprovisioned box has no till identity, and loading does not throw.
-  it("leaves config.till undefined when both WAITRON_TILL_*_ID are absent, else populates it", () => {
+  it("leaves config.till undefined when both identity settings are absent, else populates it", () => {
     const setup = loadConfig({}, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
 

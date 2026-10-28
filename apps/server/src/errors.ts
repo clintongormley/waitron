@@ -119,13 +119,13 @@ declare module "@waitron/shared" {
       otherValue?: number;
     };
     /**
-     * A required `WAITRON_TILL_*` environment variable is unset (absent, or the empty string). `key`
+     * A required node identity environment variable is unset (absent, or the empty string). `key`
      * is the variable NAME and is the only field: the value is never echoed, so a secret pasted into
      * the wrong variable cannot land in an error's params.
      */
     "server.till_config_missing": { key: string };
     /**
-     * A `WAITRON_TILL_*` value is present but a branded-id constructor rejected it. `key` names the
+     * A node identity value is present but a branded-id constructor rejected it. `key` names the
      * variable and is the only field; the rejected value is not carried, for the reason
      * `server.till_config_missing` gives.
      */

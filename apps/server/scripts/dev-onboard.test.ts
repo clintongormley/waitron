@@ -31,8 +31,8 @@ describe("renderSetupEnvFile", () => {
       "WAITRON_ENV=dev",
       "WAITRON_HTTP_PORT=8080",
     ]);
-    // A stray WAITRON_TILL_*_ID would push the box into trading mode.
     expect(text).not.toMatch(/WAITRON_TILL_/);
+    expect(text).not.toMatch(/WAITRON_(?:NODE|LOCATION)_ID/);
     expect(text).not.toMatch(/WAITRON_CREDENTIALS_KEY/);
   });
 
@@ -95,6 +95,8 @@ describe("devOnboard against a real venue directory", () => {
     });
     expect(Object.keys(written)).not.toContain("WAITRON_CREDENTIALS_KEY");
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
+    expect(written).not.toHaveProperty("WAITRON_NODE_ID");
+    expect(written).not.toHaveProperty("WAITRON_LOCATION_ID");
   });
 
   it("writes the shifted server port for a second setup stack", async () => {
