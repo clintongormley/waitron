@@ -3440,7 +3440,8 @@ Three generated migrations also carry hand-written SQL:
 `packages/media/drizzle/0005_photo_name_only.sql`, `packages/db/drizzle/0036_party_rename.sql` and
 `packages/db/drizzle/0194_sale_receipt_guest_count.sql`. In `0194` only the copy line's `SELECT` is
 hand-written: drizzle's rebuild for the `guests` → `guest_count` rename selects the NEW column name
-from the old table and fails with `no such column` on every existing database, so a regeneration
+from the old table and fails with `no such column` on every database, a fresh one included (the
+earlier migrations create the table with `guests` before `0194` runs), so a regeneration
 must paste `"sale_id", "guests", "created_at"` back (`sale-receipt-guests-upgrade.test.ts` fails
 without it).
 In `0036` the whole file is hand-written: its header says drizzle-kit's generated SQL for the rename

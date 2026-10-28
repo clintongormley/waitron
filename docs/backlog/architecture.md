@@ -454,7 +454,9 @@ until A977).
   writers adapt its structural records to domain types.
   Staff and kitchen names now resolve English/Spanish pairs, including modifiers, reporting
   categories, stations and reused menu periods. The frozen Madrid comparison permits only
-  explicit name-cell changes and their dependent identities/publication hashes.
+  explicit name-cell changes and their dependent identities/publication hashes, plus the column renames
+  listed in `RENAMED_COLUMNS` (`seed.madrid-baseline.test.ts`; today `sale_receipt_guests.guests` →
+  `guest_count`, A1164), which fail when unused.
   Catalonia and the Balearic Islands now share Can Delgado, with seven regional dishes, cava and Catalan plain names. The remaining cuts supply Valencia and Galicia. Regional restaurant defaults follow the
   province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.

@@ -106,8 +106,16 @@ it("renames guests to guest_count on a database carrying the append-only trigger
     "sale_receipt_guests_append_only_update",
   ]);
 
+  expect(
+    db.all(
+      sql`select m.name from sqlite_master m, pragma_foreign_key_list(m.name) f where m.type = 'table' and f."table" = 'sale_receipt_guests'`,
+    ),
+  ).toEqual([]);
+
   await runMigrations(db, CORE_MIGRATIONS);
   installAppendOnlyTriggers(db, CORE_MIGRATIONS.appendOnlyTables);
+
+  expect(db.all(sql`pragma foreign_key_check`)).toEqual([]);
 
   expect(db.all(sql`select sale_id, guest_count from sale_receipt_guests order by rowid`)).toEqual([
     { sale_id: first, guest_count: 4 },
