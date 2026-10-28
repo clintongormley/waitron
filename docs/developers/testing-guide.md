@@ -134,6 +134,14 @@ four selected server upgrade files ran9cases. RED/GREEN and assertion inventory:
 `~/waitron-campaign-e/receipts/a963-task8-20261028/` (`upgrade-fixture-red.log`,
 `historical-server-fixtures.log`, `db-coverage.log`, `historical-server-fixtures-green.log`).
 
+The same branch's Madrid seed baseline compares the current schema with a frozen capture.
+After adding nullable columns, extend the in-memory expected schema explicitly; do not
+regenerate the capture or remove schema/row comparisons. Running
+`pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts`
+reproduced the two missing-column failures, then passed after the four identity columns
+were appended to each expected phase. The captures, digests and original assertions stayed
+unchanged (`madrid-red.log` and `madrid-green.log` in the same receipt folder).
+
 ## A migration set gets a whole database-backed suite by calling one function.
 
 `packages/db/src/testing/schema-conformance.ts` is a suite FACTORY — a function you call at the top

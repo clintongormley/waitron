@@ -196,3 +196,20 @@ mapping, counter refusal, footer/required flags, guide twins and schema guards. 
 Five matching existing suites ran312cases; the actions branch was source-traced only.
 Those cases are sibling qualification, not new independent mutations of all six sites. The
 actual foreign issue/replay and export controls remain the Task6/7 receipts.
+
+## CI baseline supplement, 2026-10-28
+
+Current-head run `40683056413`, server shard 6, refused the two Madrid seed baseline
+comparisons because the frozen capture predates Task5's four nullable identity columns.
+The driver reproduced both failures with
+`pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts`.
+The in-memory expected schema now explicitly appends the two sales and two working-order
+columns in each phase. The original captures, manifest digests, row counts, exact whole-table
+equality, name/rename mappings and every existing expectation remain unchanged. These
+fixtures contain no sales or working-order rows in any phase. The baseline and three
+comparison-helper suites pass26cases; server types and changed-file lint/format pass.
+Receipts: `madrid-red.log`, `madrid-green.log`, `madrid-types.log` under the Task8 receipt folder.
+
+The final prose audit also retires A1a's obsolete identifier-decision entry and its summary
+paraphrases. The owner chose explicit document type and issuer in A963; the existing F3
+route/qualification work stays under A231. No protected fiscal prose or test is edited.

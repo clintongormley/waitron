@@ -98,6 +98,14 @@ for (const locale of ["en", "es"] as const) {
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
+      for (const [name, columns] of [
+        ["sales", ["counterparty_identifier_type", "counterparty_identifier_country_code"]],
+        ["working_orders", ["recipient_identifier_type", "recipient_identifier_country_code"]],
+      ] as const) {
+        expected[phase].tables[name]!.columns.push(
+          ...columns.map((name) => ({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 })),
+        );
+      }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(
         Object.keys(manifest.phases[locale]![phase]!),
