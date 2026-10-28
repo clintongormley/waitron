@@ -258,16 +258,20 @@ box (`WAITRON_LOG_DIR=/var/lib/waitron/logs`, its own volume, `deploy/Dockerfile
 staging part. This is what makes "Restart the box" above a step the person can take. When the log
 folder is inside either root (a development layout), the repair start deletes nothing, as today.
 
-**The repair start still never shows the full-disk page.** Today it uses `belowFloor: false` there
-(`node-entry.ts:314-325`), so the full-disk check at `:366-374` cannot serve the full-disk page in
-place of the repair page, which is the only page where the stopped recovery can be discarded. The
-repair start keeps passing `belowFloor: false` whatever the clean-up finds; the clean-up is used only
-for its deletions.
+**The repair start must never show the full-disk page.** Today it uses `belowFloor: false` there
+(`node-entry.ts:314-325`), but `:367-372` recomputes it whenever the folders the start runs from
+differ as text from the configured ones (`moved`). A repair taken from a recorded journal returns
+`selected.target.source` (`first-setup-backup-entry.ts:102`), stored resolved through symbolic links
+(`first-setup-backup-workspace.ts:114-118`), and `deps.stateDir` is not resolved, so on a configured
+path through a link (macOS `/var` → `/private/var`) a repair start can serve the full-disk page in
+place of the repair page today (read, not run; round-3 check, 2026-10-28). The repair start keeps
+`belowFloor: false` whatever the clean-up finds, and skips that recomputation at the repair stage;
+the clean-up is used only for its deletions.
 
 **A decision beyond the three approved items.** The owner approved the spare file, the repair page's
 answer and the full-disk page's words. The repair-stage log clean-up is this design's own addition, made
-because the owner asked this item to "read whether today's repair entry path should run the space
-clean-up too"; the PR lists it for approval.
+because the item's brief asked whether today's repair entry path should run the space clean-up too;
+the PR lists it for approval.
 
 ## The full-disk page
 
