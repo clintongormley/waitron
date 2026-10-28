@@ -5,6 +5,7 @@ import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { access, lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { getTableName, sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
@@ -49,6 +50,17 @@ vi.mock("./modules.js", async (importOriginal) => {
   };
 });
 afterEach(() => extraDeletable.clear());
+const holdingsRead = vi.hoisted(() => ({ calls: 0 }));
+vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./first-setup-database-holdings.js")>();
+  return {
+    ...actual,
+    readSetupDatabaseHoldings: (...args: Parameters<typeof actual.readSetupDatabaseHoldings>) => {
+      holdingsRead.calls += 1;
+      return actual.readSetupDatabaseHoldings(...args);
+    },
+  };
+});
 
 type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
 type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
@@ -160,6 +172,16 @@ it("a complete attempt with no saved trading settings refuses setup.start_again_
 
 it("a held setup database with no recovery started is still refused setup.not_ready, and nothing changes", async () => {
   await expectRefused(await heldSetup({ recovery: false }), { code: "setup.not_ready" });
+});
+
+it("a held summary the disk check refuses is refused before what the setup database holds is read, and nothing changes", async () => {
+  const f = await heldSetup();
+  const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
+  node.exec("create table t(x)");
+  node.close();
+  holdingsRead.calls = 0;
+  await expectRefused(f, { code: "setup.not_ready", reason: "node.db holds a table" });
+  expect(holdingsRead.calls).toBe(0);
 });
 
 it.each([

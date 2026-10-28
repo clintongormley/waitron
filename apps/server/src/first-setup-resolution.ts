@@ -456,6 +456,8 @@ export function createFirstSetupResolutionActions(
           const discarding = found === undefined ? {} : { discarding: found.id };
           let holdings: SetupDatabaseHoldings | undefined;
           if (held) {
+            // Before the read, which may copy the whole database: a refusal here costs nothing.
+            await assertStartAgainAllowedOnDisk(roots, { ...discarding, held: true });
             // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
             holdings = await readSetupDatabaseHoldings(roots, host.modules!);
             // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
@@ -473,7 +475,6 @@ export function createFirstSetupResolutionActions(
           );
           if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
           if (holdings === undefined) return summaryOf(retained.state, gathered, recovery);
-          await assertStartAgainAllowedOnDisk(roots, { ...discarding, held: true });
           const { rows, kept, records, accepted } = holdings;
           return {
             ...summaryOf(retained.state, gathered, recovery),

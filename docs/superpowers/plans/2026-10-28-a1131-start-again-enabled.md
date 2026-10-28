@@ -835,3 +835,5 @@ The tables in Tasks 8a, 8b and 9 above are the plan; where the built code differ
 - With a damaged recovery-key record, the server compares the page's flag with the summary's own
   reading.
 - The guide's wording (Task 9) is the one in `apps/server/src/guide/*/backup-recovery.md`.
+- In the held state the summary runs `assertStartAgainAllowedOnDisk` before it reads the
+  holdings, not after the floor is gathered, so a disk refusal never pays for the database copy.
