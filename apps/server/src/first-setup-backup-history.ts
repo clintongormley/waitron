@@ -1,8 +1,6 @@
-import { constants } from "node:fs";
-import { mkdtemp, open, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { lockVenueDatabase, openVenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import {
@@ -14,6 +12,7 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { readFirstSetupBackupSetups } from "./first-setup-backup-setups.js";
+import { copyVenueFiles } from "./venue-private-copy.js";
 
 interface Options extends FirstSetupRoots {
   module: WaitronModule;
@@ -28,28 +27,6 @@ export async function readFirstSetupBackupHistory(options: Options): Promise<{
   const refuse = (): never => {
     throw new AppError("module.operation_invalid", { module: options.module.name });
   };
-  const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
-  async function copy(source: string, target: string): Promise<boolean> {
-    let input;
-    try {
-      input = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    } catch (error) {
-      if (missing(error)) return false;
-      throw error;
-    }
-    try {
-      if (!(await input.stat()).isFile()) refuse();
-      const output = await open(target, "wx", 0o600);
-      try {
-        await pipeline(input.createReadStream(), output.createWriteStream());
-      } finally {
-        await output.close();
-      }
-      return true;
-    } finally {
-      await input.close();
-    }
-  }
   return options.withVenueExclusion(async () => {
     await options.recheck();
     const roots: FirstSetupRoots[] = [await canonicalFirstSetupRoots(options)];
@@ -60,16 +37,7 @@ export async function readFirstSetupBackupHistory(options: Options): Promise<{
       let scratch: string | undefined;
       try {
         scratch = await mkdtemp(join(tmpdir(), "waitron-backup-history-"));
-        const present = await copy(join(venueDir, "venue.db"), join(scratch, "venue.db"));
-        let sidecar = false;
-        for (const suffix of ["-wal", "-journal", "-shm"])
-          sidecar =
-            (await copy(join(venueDir, `venue.db${suffix}`), join(scratch, `venue.db${suffix}`))) ||
-            sidecar;
-        if (!present) {
-          if (sidecar) refuse();
-          continue;
-        }
+        if (!(await copyVenueFiles(venueDir, scratch, refuse))) continue;
         const reader = options.module.operations?.readRecoveryHistory;
         if (reader === undefined) return refuse();
         // SQLite may rebuild journals while reading; only this disposable copy is opened.
