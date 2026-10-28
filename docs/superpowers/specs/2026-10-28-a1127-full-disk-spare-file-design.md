@@ -115,6 +115,9 @@ onto a disk that would then read as nearly full, and a disk that fills slowly ge
 
 - A write the system refuses is logged `storage.spare_write_failed` with its `errno` and never thrown:
   whatever was written stays (a smaller spare still helps), and the next start with room tops it up.
+- The spare is always the one in the box's configured state folder, `deps.stateDir` in `runEntry`, never
+  `rooted.stateDir`: for a box running from a selected recovery that is the recovery's target folder
+  (`node-entry.ts:352-372`), which is inside the configured one.
 - The start's wiring passes the size as `EntryDeps.spareBytes` (default `SPARE_SPACE_BYTES`); `0`
   keeps no spare, which the control cases use. Only `runEntry` writes it: a server already running holds
   its own venue lock and never needs room to take it.
@@ -134,7 +137,17 @@ onto a disk that would then read as nearly full, and a disk that fills slowly ge
    emptied. This is Example 1. Nothing writes the spare back in the repair host: Start again restarts
    the box (`requestRestart`), and that start tops the spare up, now with room.
 
-A release logs `storage.spare_released` with the free space before and the bytes released. No other
+   The release step is mounted in `resolutionApp` (`apps/server/src/first-setup-entry.ts:297-362`) before
+   `mountFirstSetupResolutionFence` (`:312`), whose `fenceWrite` calls `sealLapsed()` and can write.
+   `resolutionApp` is reached from four places, and every one passes the spare option: the backup
+   recovery's repair branch (`:71-76`) and the three in `resolveLegacyFirstSetupEntry` (`:251-277`), which
+   serves the repair page of a box that started with no recovery folder. That last case is how Example 1
+   happens without a restart: a recovery opened on that page whose placement fails is marked failed
+   (`apps/server/src/first-setup-backup-recovery.ts:1465-1471`), so `runningInMemory()` turns false and
+   the next request of the flow releases the spare.
+
+A release that deleted bytes logs `storage.spare_released` with the free space before and the bytes
+released; finding no spare logs nothing. No other
 path releases it: not the recovery's own steps under `/resolution/backup/`, not the start's log
 clean-up, not Box status's **Free** (`apps/server/src/free-space-now.ts`), not the running server.
 Guard: `scripts/spare-space.test.ts` (Task 8 of the plan), weaker than its name: it reads text, and
@@ -188,25 +201,48 @@ which now says what is still there (below).
 4. The next start tops the spare up.
 
 **The repair page's full-disk answer.** If the spare was already used or never written, a request of
-the Start-again flow can still fail for lack of room. Those three POST routes (not the activation
-routes, whose "Do not repeat activation" caution stays) then answer **`507 storage.disk_full`** instead
-of `500 server.internal` or `setup.attempt_invalid`, when the request failed with an error that is not
-an `AppError`, or with `setup.attempt_invalid`, AND the lower free space of the state and venue folders
-read after the failure is under `FULL_DISK_BYTES`. That is A1098's rule for its own form
-(`apps/server/src/recovery-start-again.ts:397-401`). A refusal with any other code keeps its code (a wrong
-password stays a wrong password). Weaker than its name: an `attempt_invalid` from a damaged record on a
-nearly full disk is reported as a full disk; the real refusal shows once there is room.
+the Start-again flow can still fail for lack of room. The three POST routes of that flow (not the
+activation routes, whose "Do not repeat activation" caution stays) then answer
+**`507 storage.disk_full`** in two cases, judged on the lower free space of the state and venue folders
+read after the failure:
 
-The setup app gains words for `storage.disk_full` (`FIRST_SETUP_ERROR_MESSAGES`), which both the
-Start-again answer and a refused summary read (`#presentReadsFailed`) use:
+- an error that is not an `AppError`, when `fullDiskFailure(error, free)` holds
+  (`apps/server/src/boot-failure.ts:71-77`): the house's own test, so a plain bug is not called a full
+  disk just because the released spare left the disk under 16 MiB;
+- `setup.attempt_invalid` with under `FULL_DISK_BYTES` free, because a refused record write arrives with
+  no cause (`durable-host-json.ts:15`). That is A1098's rule for its own form
+  (`apps/server/src/recovery-start-again.ts:397-401`). Weaker than its name: an `attempt_invalid` from a
+  damaged record on a nearly full disk is reported as a full disk; the real refusal shows once there is
+  room.
 
-- EN: "The box's disk is full, so this step could not be saved. Restart the box: as it starts, it deletes
-  old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot
-  free more space by itself; reinstalling Waitron frees the disk but deletes everything on this box."
+A refusal with any other code keeps its code (a wrong password stays a wrong password).
+
+**The page's first read says so too.** With the setup database present and no spare left, the
+inspection answers `database: "unknown"` on a full disk (M6b), which hides Start again
+(`presentStartAgainAllowed`, `apps/setup/src/setup-app.ts:238-243`) with no word about the disk. So
+`GET /resolution` answers `507 storage.disk_full` when the inspection says `"unknown"` and under
+`FULL_DISK_BYTES` is free. With room, an `"unknown"` answer is unchanged.
+
+**The setup app draws these words only on the repair page's own steps.** `FIRST_SETUP_ERROR_MESSAGES`
+(`setup-app.ts:226-235`) is copied into the adoption, reset, bucket and Cloud maps (`:251`, `:259`,
+`:375`, `:406`), is what `#recordConnectionFailure` (`:819-826`) uses to send a code to the first-owner
+screen, and backs `#describeFirstError`, which the activation steps use with the fallback "Reconnect to
+check the saved result. Do not repeat activation." (`apps/setup/src/screens/initial-owner-strings.ts:63`).
+On Linux a full disk already answers `507 storage.disk_full` (`packages/server-kit/src/error-boundary.ts:34-40`),
+so adding the code to that shared map would make an activation step say "Then try again". The words
+therefore get their own key, `shell.first_setup.disk_full`, drawn by a repair-page helper used only by
+the repair page's inspection reads, the password step, the Start-again summary (`#presentReadsFailed`)
+and Start again. Every other caller keeps its words; a test pins that an activation step refused
+`storage.disk_full` still draws "Do not repeat activation".
+
+- EN: "The box's disk is full, so this step could not be saved. Restart the box: as it starts, it
+  removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron
+  cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on
+  it is lost."
 - ES: "El disco del equipo está lleno, así que este paso no se ha podido guardar. Reinicia el equipo: al
-  arrancar, borra registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo.
-  Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo; reinstalar Waitron libera
-  el disco, pero borra todo lo que hay en este equipo."
+  arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo.
+  Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el
+  equipo empieza de cero, pero se pierde todo lo que contiene."
 
 The last sentence follows OPEN QUESTION Q1's default and changes with it. "Restart the box" is already
 used on these pages (`apps/server/src/guide/en/backup-recovery.md:85`; `apps/setup/src/i18n/backup-repair.ts:27`).
@@ -222,6 +258,17 @@ box (`WAITRON_LOG_DIR=/var/lib/waitron/logs`, its own volume, `deploy/Dockerfile
 staging part. This is what makes "Restart the box" above a step the person can take. When the log
 folder is inside either root (a development layout), the repair start deletes nothing, as today.
 
+**The repair start still never shows the full-disk page.** Today it uses `belowFloor: false` there
+(`node-entry.ts:314-325`), so the full-disk check at `:366-374` cannot serve the full-disk page in
+place of the repair page, which is the only page where the stopped recovery can be discarded. The
+repair start keeps passing `belowFloor: false` whatever the clean-up finds; the clean-up is used only
+for its deletions.
+
+**A decision beyond the three approved items.** The owner approved the spare file, the repair page's
+answer and the full-disk page's words. The repair-stage log clean-up is this design's own addition, made
+because the owner asked this item to "read whether today's repair entry path should run the space
+clean-up too"; the PR lists it for approval.
+
 ## The full-disk page
 
 The start's full-disk page (`storage.disk_full` in `OPERATOR_TEXT`) is shown only after the box has
@@ -234,23 +281,39 @@ in both cases that remain: nothing more the box can free, or a discarded copy it
   - EN: "The box has deleted the temporary copies, old logs and crash reports it can make again, and the
     disk is still full. Your sales and the venue's database are not touched. Waitron cannot free more
     space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files
-    that are not Waitron's. Once more space is free, press Retry. Reinstalling Waitron frees the disk but
-    deletes everything on this box, sales included, unless a backup is restored afterwards."
-  - ES: "El equipo ha borrado las copias temporales, los registros y los avisos de fallo antiguos que
+    that are not Waitron's. Once more space is free, press “Retry a normal boot”. If you reinstall
+    Waitron instead, the box starts fresh, but everything on it is lost, sales included, unless a backup
+    is restored afterwards."
+  - ES: "El equipo ha quitado las copias temporales, los registros y los avisos de fallo antiguos que
     puede volver a crear, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan.
     Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las
     copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más
-    espacio libre, pulsa «Reintentar un arranque normal». Reinstalar Waitron libera el disco, pero borra
-    todo lo que hay en este equipo, ventas incluidas, salvo que después se restaure una copia de
-    seguridad."
+    espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el equipo
+    empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se
+    restaure una copia de seguridad."
 - **One more line, only while a discarded recovery's copy is still there** (the journal's last record is
   `abandoned` and the folder is not an emptied tombstone, checked when the page is drawn, with the copy's
   size summed over its regular files):
   - EN: "This disk also still holds {size} left by a recovery from backup that Start again discarded. The
-    box deletes it as it starts, but it needs a little free space to do that safely, and has none."
+    box removes it as it starts, but it needs a little free space to do that safely, and has none."
   - ES: "Este disco también guarda todavía {size} de una recuperación desde copia de seguridad que
-    «Empezar de nuevo» descartó. El equipo la borra al arrancar, pero necesita un poco de espacio libre
+    «Empezar de nuevo» descartó. El equipo la quita al arrancar, pero necesita un poco de espacio libre
     para hacerlo con seguridad, y no lo tiene."
+
+**These words pass the page's own checks.** `recovery-surface.test.ts` refuses any action that suggests
+wiping: "wipe", "erase", "delete", "reset" in English and `NEVER_WIPE_ES` (`:198`, applied at `:402-409`)
+in Spanish, which matches "borra" and so would refuse "ha borrado" and "pero borra todo". The Spanish
+therefore says «ha quitado» and «se pierde todo», and the reinstall sentence follows the owner-approved
+A1098 line «…pero se pierde todo lo que contiene…» (`recovery-surface.test.ts:1191-1198`). The button is
+named as drawn, “Retry a normal boot” (`recovery-surface.ts:184`). Measured: the patterns copied from the
+test, run over these four texts, match none of them, and match the earlier draft's Spanish (control):
+`~/waitron-campaign/a1127-measure/wording-guard-check.txt`.
+
+**Existing tests that pin the old words** change with them: `recovery-surface.test.ts` "names a full disk
+in both languages" and "says the box has already deleted what it could, in both languages"
+(`:495-527`), `DELETED` in `node-entry.full-disk.test.ts:92-94` and in
+`start-full-disk.e2e.test.ts:107-109`, and the prose in `docs/developers/conventions-ui.md:1112-1122`.
+They pin wording, which is what this item changes; their other assertions stay.
 
 The status and free-space lines stay. The "For whoever installed this box" heading (`PAGE_TEXT`) is a
 separate label for the installer detail below the action and is not touched here.
@@ -284,19 +347,24 @@ Reply "A1127 Q1: A", "B" or "C" (B and C would be new items; A1127 ships A meanw
 
 ## What this does not change
 
-- **Fiscal records, chains and series names.** The spare module writes and deletes one file,
-  `<state>/spare-space`, and opens no database. The two release points run before code that exists
-  today and is not changed by this item: the emptying deletes a discarded recovery's folder except its
-  records and lock files (`KEPT_IN_TARGET`, `first-setup-backup-discard.ts:20-21`), and Start again
-  writes the same confirmation record, note and abandon record it writes today
-  (`first-setup-resolution.ts:596-648`). The copy being deleted was never the box's database: it is a
-  recovery that never reached `selected`, which the owner ruled disposable on 2026-10-25 (A1042).
-  `registros_facturacion`, the hour chain and the invoice series are not touched, and the
-  series-name floor reads only the attempt's own listed files (above). The plan's last task greps the
-  branch's diff for `registros`, `chain` and `series` and stops to ask the owner on any hit outside
-  the docs.|fiscal\|series" ` over the files this item adds finds nothing to change, and the
-  series-name floor reads only the attempt's own listed files (above). If a task finds otherwise, it
-  stops and asks.
+- **Fiscal records and chains.** The spare module writes and deletes one file, `<state>/spare-space`,
+  and opens no database. The two release points run before code that exists today and that this item
+  does not change: the emptying deletes a discarded recovery's folder except its records and lock files
+  (`KEPT_IN_TARGET`, `first-setup-backup-discard.ts:20-21`), and Start again writes the same
+  confirmation record, note and abandon record it writes today (`first-setup-resolution.ts:596-648`).
+  The copy being deleted was never the box's database: it is a stopped or discarded recovery, which
+  the owner ruled disposable on 2026-10-25 (A1042). `registros_facturacion` and the hour chain are not
+  touched.
+- **Series names: protected as today, now also on a full disk.** Start again over a stopped recovery
+  takes a time floor from that recovery's series names (`gatherStartAgainFloor` with the stopped
+  recovery's floor, `first-setup-resolution.ts:551-558`) and raises the start-again note to it
+  (`:605`) before it abandons, empties or deletes anything (`:606-640`). `raiseStartAgainNote` only
+  ever raises the floor (`packages/provisioning/src/first-setup-start-again-note.ts:57-71`). This item
+  makes that path reachable on a full disk; it does not change it. So the plan proves two things: after
+  a Start again on a full disk the note carries the stopped recovery's series name, and when the note
+  cannot be written, nothing is abandoned, emptied or deleted. The spare's own time never enters the
+  floor, which reads only the attempt's listed files (above). The plan's last task checks the branch's
+  added lines for fiscal names and stops to ask the owner on any hit.
 - **The lock rules.** No lock file is ever unlinked; every lock is still taken before a venue folder
   changes. `recovery.json` is still changed only through `updateRecoveryState`.
 - **What free-space deletion deletes**, at the start or from Box status: unchanged, and it never
@@ -318,7 +386,9 @@ Reply "A1127 Q1: A", "B" or "C" (B and C would be new items; A1127 ships A meanw
 - `docs/developers/conventions-data.md`: a section "The box's spare file" beside "One process per venue
   folder", the receipts above; "What free-space deletion deletes" says it never deletes the spare.
 - `docs/developers/testing-guide.md`, "The full-disk start tests run on a small filesystem": the new
-  cases and `spareBytes`.
+  cases, `spareBytes`, and the second real-disk file with its own small filesystem
+  (`WAITRON_FULL_DISK_DIR_START_AGAIN`; two files filling one filesystem would fail each other).
+- `docs/developers/conventions-ui.md:1112-1122`, which quotes the full-disk page's old first sentence.
 - `CLAUDE.md` §3 (Data): one line for the rule and its guard, weaker than its name.
 - `docs/backlog/setup.md`: the entry "A full disk while a backup recovery fills it is a dead end for the
   person" and its line in `docs/backlog.md` are deleted. What stays open becomes short entries: Q1's B
@@ -332,10 +402,12 @@ Reply "A1127 Q1: A", "B" or "C" (B and C would be new items; A1127 ships A meanw
   (uid 10001, `deploy/Dockerfile:186,283`) with only `cap_net_bind_service` (`:179`), so it cannot write
   into the reserved blocks, and `freeBytes` reads `bavail`, the unprivileged figure
   (`apps/server/src/free-bytes.ts:5-12`); both read, not run. CI's `test-server-stream` job runs the
-  new real-disk cases on a 32 MiB Linux tmpfs, which gives a Linux tmpfs reading, not ext4.
+  new real-disk cases on 32 MiB Linux tmpfs mounts, which gives a Linux tmpfs reading, not ext4.
 - **Copy-on-write filesystems with snapshots** (btrfs, zfs): deleting a file may free nothing while a
   snapshot holds it, and compression could store a fill pattern in less space. Not the box's setup as
   far as `deploy/` says; not measured.
-- **Whether Docker's volumes share the host's root filesystem** on every box: true for the default
-  local volume driver (believed, not run here). If the state volume were on its own filesystem, the
+- **Whether Docker's volumes share the host's root filesystem** on every box, including the `logs`
+  volume, whose rotated logs the repair-stage clean-up deletes to make room for the state folder: true
+  for the default local volume driver (believed, not run here). If `logs` were on another filesystem,
+  that clean-up would free nothing for the state folder. If the state volume were on its own filesystem, the
   spare still sits beside what it frees, since it lives in the state folder.
