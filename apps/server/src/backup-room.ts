@@ -1,9 +1,14 @@
 import * as fs from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
+import type { Logger } from "./logger.js";
 import type { StorageBackend } from "./storage-backend.js";
+import "./errors.js";
 
 /** A local backup folder on the disk that holds the run's working folder, by its real path. */
 export interface BackupFolder {
@@ -118,6 +123,86 @@ async function realOrNearest(path: string): Promise<{ real: string; existing: st
       if (errnoOf(error) !== "ENOENT" || parent === current) throw error;
       rest.unshift(basename(current));
       current = parent;
+    }
+  }
+}
+
+export interface MakeRoomOptions {
+  neededBytes: number;
+  floorBytes: number;
+  aimBytes: number;
+  stagingDir: string;
+  statfs?: Statfs;
+  folders: readonly BackupFolder[];
+  installationStartedAt: Date | null;
+  signal: AbortSignal;
+  log: Logger;
+  /** Called once, before the step returns or throws, whenever it deleted anything. Its failure is
+   * the caller's to log; it never replaces the step's own outcome. */
+  onDeleted: (deleted: readonly DeletableArchive[]) => Promise<void>;
+  /** DI for tests; defaults to `node:fs/promises`'s `unlink`. */
+  unlink?: (path: string) => Promise<void>;
+}
+
+/**
+ * Makes `neededBytes` plus `aimBytes` free at `stagingDir` by deleting the oldest deletable archives,
+ * or plus `floorBytes` when the aim cannot be reached. Refuses with `backup.staging_space_low`,
+ * deleting nothing, when free space plus every deletable archive's size falls short of the floor.
+ * Only a fresh `statfs` reading decides when to stop: an archive can free less than its size (a hard
+ * link, a sparse file), so a step can delete and still be refused. Free space that cannot be read is
+ * let through.
+ */
+export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
+  const floor = opts.neededBytes + opts.floorBytes;
+  const aim = opts.neededBytes + opts.aimBytes;
+  let free = await freeBytes(opts.stagingDir, opts.statfs);
+  if (free === null || free >= aim) return;
+  const archives = await listDeletableArchives(opts.folders, opts.installationStartedAt);
+  const offered = archives.reduce((sum, a) => sum + a.bytes, 0);
+  if (free + offered < floor)
+    throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });
+  const target = free + offered >= aim ? aim : floor;
+  const unlink = opts.unlink ?? fs.unlink;
+  const deleted: DeletableArchive[] = [];
+  try {
+    for (const archive of archives) {
+      if (free >= target) break;
+      opts.signal.throwIfAborted();
+      const path = join(archive.dir, archive.key);
+      try {
+        // Checked again just before deleting, so a file swapped for a link is never followed.
+        if (!(await fs.lstat(path)).isFile()) continue;
+        await unlink(path);
+      } catch (error) {
+        if (errnoOf(error) === "ENOENT") continue;
+        opts.log("warn", "backup.archive_delete_failed", {
+          destination: archive.destination,
+          key: archive.key,
+          errorCode: codeOf(error),
+          errno: errnoOf(error) ?? null,
+        });
+        free = await freeBytes(opts.stagingDir, opts.statfs);
+        break;
+      }
+      deleted.push(archive);
+      opts.log("info", "backup.archive_deleted", {
+        destination: archive.destination,
+        key: archive.key,
+        bytes: archive.bytes,
+        reason: "backup_room",
+      });
+      free = await freeBytes(opts.stagingDir, opts.statfs);
+      if (free === null) return;
+    }
+    if (free !== null && free < floor)
+      throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });
+  } finally {
+    if (deleted.length > 0) {
+      try {
+        await opts.onDeleted(deleted);
+      } catch {
+        // The caller's report logs its own failure.
+      }
     }
   }
 }
