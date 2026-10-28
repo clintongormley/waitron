@@ -5327,6 +5327,11 @@ Not in any track until the standalone primary is done.
   from a postcode shown for review, its own session token, and the provider's area codes turned
   into the pack's. Left open by A1171 parts 1–2.
 
+- **A1171: the dashboard's Venue card knows a province only by its code and main name.** The server's
+  `provinces` list carries no other names, so a chosen address naming "Alicante" for
+  "Alicante/Alacant" is not recognised there and is left to the server's postcode check at Save.
+  Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
+
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
   The owner approved both Harbour Kitchen handovers and retained defaults on 24 October 2026.
   Exact formats, compatible A947 amendments, separate build authority and physical runtime qualification remain open.
