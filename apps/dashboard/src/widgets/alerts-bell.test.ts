@@ -425,7 +425,7 @@ describe("dashboard-alerts-bell", () => {
   });
 });
 
-describe("backup preparation space guidance", () => {
+describe("backup refused for lack of room", () => {
   it.each(["en", "es"])(
     "says how much room a backup needs and how much the disk has, in %s, and opens Backups",
     async (locale) => {

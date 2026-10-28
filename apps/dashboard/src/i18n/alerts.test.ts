@@ -321,6 +321,12 @@ describe("a backup that stopped before reaching any destination", () => {
     );
   });
 
+  it("keeps no staging-space words in the backup stop word list", () => {
+    expect(Object.hasOwn(ALERT_WORDS["backup_stop"]!.words, "backup.staging_space_low")).toBe(
+      false,
+    );
+  });
+
   it("draws a dash for each size a space refusal does not carry", () => {
     const params = { errorCode: "backup.staging_space_low", spaceLow: true };
     expect(alertMessage("backup.run_stopped", params, "en")).toBe(
