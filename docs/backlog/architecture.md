@@ -409,6 +409,13 @@ are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every ite
 for its own diff (grep it for non-English text before pushing — the guard will not see most of it
 until A977).
 
+- **A963 — recipient addresses in any country (owner, 2026-10-28).** The country belongs to
+  the address and is selected separately from fiscal identity. Spain-only postcode/province and NIF
+  checks apply only to ES; foreign addresses require street and locality, with postcode/province
+  optional. The owner asked for an optional tax number, but AEAT's F1 recipient-identifier rule
+  needs an explicit answer before the identity path is changed. Generic country rendering and
+  structured postal helpers are independent; the selector, request and filing integration remain
+  open on the owner-held PR. [Rework plan](../superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
 - **A964 — point 3(3), and the first of point 2.** Kitchen tickets
   (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
   the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than
@@ -632,12 +639,13 @@ Casa Delgado de l'Horta and Galicia uses A Casa Delgado. No further country demo
 are included in these five cuts. The [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md)
 records the delivered scope; live seeded-screen qualification remains separate.
 
-**A963 recipient addresses (owner, 2026-10-20; implemented 2026-10-27).**
-Spain's pack owns completeness of the country-free recipient address. The separate country code
+**A963 recipient addresses (owner, 2026-10-20; extended 2026-10-28).**
+The recipient may live in any country; Spain's pack owns Spain's address-completeness rule. The separate country code
 selects the country name in the receipt language for thermal receipts, A4 invoices and the till
 ticket; order details use the screen language. Recorded address text is rendered unchanged,
 followed by the country line, without recognising or rewriting older address spellings.
-[Implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md).
+[Original implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md) and
+[foreign-recipient rework](../superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
 
 **A918 starter content in the venue's languages (owner, 2026-10-19, 2026-10-20 and 2026-10-27).**
 The owner: "These default starter names in the general module should be in English only, and

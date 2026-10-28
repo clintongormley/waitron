@@ -846,3 +846,21 @@ it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
     expect(text).not.toContain("Spain");
   },
 );
+
+it("prints a French snapshot country in Catalan in the real PDF", async () => {
+  const input = structuredClone(fixture);
+  input.invoiceLocale = "ca-ES";
+  input.result.recipient = {
+    taxId: "Passport 123",
+    legalName: "Alex Guest",
+    address: "2 Main Street, Paris",
+    countryCode: "FR",
+  };
+  const before = structuredClone(input);
+  const { pages } = await rendered(input);
+  const text = pages.map((page) => page.text).join(" ");
+  expect(text).toContain("2 Main Street, Paris");
+  expect(text).toContain(new Intl.DisplayNames(["ca-ES"], { type: "region" }).of("FR")!);
+  expect(text).not.toContain("France");
+  expect(input).toEqual(before);
+});

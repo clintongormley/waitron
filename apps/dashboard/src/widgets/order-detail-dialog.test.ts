@@ -450,3 +450,38 @@ it.each(["en-GB", "es-ES"])(
     expect(el.shadowRoot!.textContent).toContain("2 Main Street, 28013 Madrid, Madrid");
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "shows a French snapshot country in the %s screen language",
+  async (locale) => {
+    setLocale(locale);
+    const filed = {
+      ...detail,
+      invoices: [
+        {
+          ...detail.invoices[0]!,
+          invoiceType: "F1",
+          recipient: {
+            taxId: "Passport 123",
+            legalName: "Alex Guest",
+            countryCode: "FR",
+            address: "2 Main Street, Paris",
+          },
+        },
+      ],
+    };
+    const api = {
+      getOrder: vi.fn().mockResolvedValue(filed),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi;
+    const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+      api,
+      orderId: "bill-1",
+    });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Alex Guest"));
+    expect(el.shadowRoot!.textContent).toContain(
+      new Intl.DisplayNames([locale], { type: "region" }).of("FR")!,
+    );
+    expect(el.shadowRoot!.textContent).toContain("2 Main Street, Paris");
+  },
+);

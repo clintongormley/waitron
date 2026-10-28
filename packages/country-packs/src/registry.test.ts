@@ -370,7 +370,7 @@ describe("recipient country names", () => {
     expect(countryNameFor("ES", "en-GB")).toBe("Spain");
     expect(countryNameFor("ES", "unknown")).toBe("Spain");
   });
-  it.each(["GB", "XX"])("keeps the country code for an unlabelled country %s", (code) => {
+  it.each(["XX"])("keeps the country code for an unlabelled country %s", (code) => {
     expect(countryNameFor(code, "en-GB")).toBe(code);
     expect(receiptCountryNameFor(code, "es-ES")).toBe(code);
   });
@@ -378,4 +378,36 @@ describe("recipient country names", () => {
 
 it("keeps the country name Spanish for the screen's bare-language alias", () => {
   expect(countryNameFor("ES", "es")).toBe(getCountryPack("ES")!.countryNames!["es-ES"]);
+});
+
+describe("recipient countries without installed packs", () => {
+  it.each([
+    ["FR", "France"],
+    ["GB", "United Kingdom"],
+    ["IE", "Ireland"],
+    ["HK", "Hong Kong SAR China"],
+  ])("names %s on English screens without installing a venue pack", (code, name) => {
+    expect(countryNameFor(code, "en-GB")).toBe(name);
+    expect(countryNameFor(code, "invalid_locale")).toBe(name);
+    expect(countryNameFor(code, "unknown")).toBe(name);
+  });
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "names a French address in receipt language %s rather than a recipient pack default",
+    (locale) => {
+      const name = new Intl.DisplayNames([locale], { type: "region" }).of("FR");
+      expect(receiptCountryNameFor("FR", locale)).toBe(name);
+      expect(countryNameFor("FR", locale)).toBe(name);
+    },
+  );
+  it.each(["en-GB", "es", "unknown", "invalid_locale", ""])(
+    "uses the actual Spanish receipt-word fallback for a foreign address at %s",
+    (locale) => {
+      const name = new Intl.DisplayNames(["es-ES"], { type: "region" }).of("FR");
+      expect(receiptCountryNameFor("FR", locale)).toBe(name);
+    },
+  );
+  it.each(["XX", "ZZ", "EU", "ESP", "123", ""])("keeps unassigned stored code %s raw", (code) => {
+    expect(countryNameFor(code, "en-GB")).toBe(code);
+    expect(receiptCountryNameFor(code, "ca-ES")).toBe(code);
+  });
 });

@@ -1,3 +1,4 @@
+import { normalizeRecipientCountryCode } from "./recipient-countries.js";
 import type {
   CountryPack,
   FiscalModules,
@@ -11,10 +12,11 @@ import {
   resolveCountryDemoIdentity,
 } from "@waitron/country";
 import { contentLanguageCode, FALLBACK_LOCALE, type ContentLanguageRules } from "@waitron/shared";
-import { SPAIN, SPAIN_RECEIPT_LABELS } from "@waitron/country-es";
+import { SPAIN, SPAIN_RECEIPT_LABELS, SPAIN_RECIPIENT_REGION_NAMES } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
 export type { FiscalModules } from "@waitron/country";
+export { SPAIN_RECIPIENT_REGION_NAMES as RECIPIENT_REGION_NAMES };
 
 /** The sole registry of country implementations installed in this build. */
 export const COUNTRY_PACKS: readonly CountryPack[] = [SPAIN, UNITED_KINGDOM];
@@ -168,21 +170,32 @@ export function receiptLabelsFor(locale: string): ReceiptLabels {
   return FALLBACK_RECEIPT_LABELS;
 }
 
+function regionNameFor(code: string, locale: string): string | undefined {
+  try {
+    const language = new Intl.Locale(locale).language;
+    const stored = SPAIN_RECIPIENT_REGION_NAMES[language]?.[code];
+    return stored ?? new Intl.DisplayNames([locale], { type: "region", fallback: "none" }).of(code);
+  } catch {
+    return undefined;
+  }
+}
+
 export function countryNameFor(countryCode: string, locale: string): string {
-  const pack = getCountryPack(countryCode);
+  const code = normalizeRecipientCountryCode(countryCode);
+  if (code === undefined) return countryCode;
+  const pack = getCountryPack(code);
   return (
     pack?.countryNames?.[locale] ??
+    regionNameFor(code, locale) ??
     pack?.countryNames?.["en-GB"] ??
-    (pack === undefined ? undefined : pack.countryNames?.[pack.defaultLocale]) ??
-    countryCode
+    regionNameFor(code, "en-GB") ??
+    code
   );
 }
 
 export function receiptCountryNameFor(countryCode: string, locale: string): string {
-  const pack = getCountryPack(countryCode);
-  if (pack === undefined) return countryCode;
-  const receiptLocale = pack.invoiceLocales.includes(locale) ? locale : pack.defaultLocale;
-  return (
-    pack.countryNames?.[receiptLocale] ?? pack.countryNames?.[pack.defaultLocale] ?? countryCode
-  );
+  const receiptLocale = COUNTRY_PACKS.some((pack) => pack.receiptLabels?.[locale] !== undefined)
+    ? locale
+    : FALLBACK_RECEIPT_LOCALE;
+  return countryNameFor(countryCode, receiptLocale);
 }

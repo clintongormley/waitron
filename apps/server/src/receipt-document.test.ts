@@ -1196,3 +1196,41 @@ describe("recipient country presentation", () => {
     },
   );
 });
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "unknown"])(
+  "renders a French snapshot country using invoice words at %s without changing its address",
+  (locale) => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = locale;
+    input.result.recipient = {
+      taxId: "Passport 123",
+      legalName: "Alex Guest",
+      address: "2 Main Street, Paris",
+      countryCode: "FR",
+    };
+    const before = structuredClone(input);
+    const language = ["es-ES", "ca-ES", "gl-ES", "eu-ES"].includes(locale) ? locale : "es-ES";
+    const country = new Intl.DisplayNames([language], { type: "region" }).of("FR");
+    const words = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "text" ? [element.text] : [],
+    );
+    expect(words[words.indexOf("2 Main Street, Paris") + 1]).toBe(country);
+    expect(words.filter((word) => word === country)).toHaveLength(1);
+    expect(input).toEqual(before);
+  },
+);
+it.each(["58mm", "80mm"] as const)("prints a foreign snapshot country once on %s", (paperWidth) => {
+  const input = structuredClone(FULL_INVOICE_FIXTURE);
+  input.invoiceLocale = "ca-ES";
+  input.result.recipient = {
+    taxId: "Passport 123",
+    legalName: "Alex Guest",
+    address: "2 Main Street, Paris",
+    countryCode: "FR",
+  };
+  input.printer = { paperWidth, resolution: "180dpi" };
+  const country = new Intl.DisplayNames(["ca-ES"], { type: "region" }).of("FR")!;
+  const words = printedLines(formatReceipt(input)).map((line) => line.trim());
+  expect(words).toContain("2 Main Street, Paris");
+  expect(words.filter((word) => word === country)).toHaveLength(1);
+});

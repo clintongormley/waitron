@@ -1,3 +1,5 @@
+> **2026-10-28:** The [foreign-recipient rework plan](2026-10-28-a963-foreign-recipient-rework.md) supersedes the ES-only target below; its fiscal-identity owner gate remains pending. Completed tasks below are historical.
+
 # A963 Invoice Address and Country Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline, task by task. Steps use checkbox (`- [ ]`) syntax. Lane E's driver implements after reading this artifact; unattended execution is already authorised. This author changes documentation only.
