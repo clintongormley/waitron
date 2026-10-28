@@ -4067,16 +4067,13 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   (found in A757 slice 7's review, 2026-10-19).**
   [Detail](backlog/dashboard.md#a905-the-department-dialog-can-take-back-another-managers-older-copy-of-the-venue-after-a-save-found-in-a757-slice-7s-review-2026-10-19)
 
-- **A1133. The Defaults card can show an older value after a save, and the Defaults and Venue cards
-  allow a second write after reconnecting mid-save (found by reading in A980 S1a's review,
-  2026-10-26).** `apps/dashboard/src/screens/venue-defaults-panel.ts` shows a late save answer over
-  a newer live value and throws away a live read begun during the save (its `#writes` counter);
-  `venue-defaults-panel.ts` and `venue-details-panel.ts` turn `submitting` off on disconnect.
-  `appearance-screen.ts` uses the same counter and may share the first. The Privacy card's fix
-  (`venue-privacy-panel.ts`: an order number per read and save, a background re-read after a
-  successful save, `submitting` kept across reconnection) is the pattern. The Defaults card's test
-  "ignores a departed card's late %s once it is back" asserts Save is enabled after reconnecting
-  mid-save and changes with it.
+- **A1168. The Appearance screen throws away a theme list read begun before a change it applied
+  (left open by A1133, which fixed the same counter in the Defaults card).**
+  `apps/dashboard/src/screens/appearance-screen.ts`'s `#writes` counter drops every `listThemes`
+  read begun before a theme change it applied locally, so a newer list another manager saved in
+  between is dropped and shows only when a later read answers (found by reading, not run). The Privacy and Defaults cards' fix (an order
+  number per read and per applied answer, then a background re-read) is the pattern. Left out of
+  A1133 because lane A's A841 theme-editor slices own this screen.
 
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
   2026-10-19).**
