@@ -747,6 +747,40 @@ it("says so when a Reload replaces typed name text that a newer version's folder
   expect(trimmedNote(el)).toBeNull();
 });
 
+it("lets go of a name language failing its own check once a newer version's folder sets it, and stages the rest", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, before))
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "x".repeat(5000));
+  await type(el, "wt-input", "names-es", "Para empezar");
+  await press(el, "review");
+  expect(field(el, "wt-input", "names-en").error).not.toBe("");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  expect(field(el, "wt-input", "names-en").error).toBe("");
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-starters" },
+      field: "names",
+      value: { en: "Fixed English", es: "Para empezar" },
+    },
+  ]);
+  expect(footerButton(el, "review")!.disabled).toBe(false);
+  expect(bottomMessage(el)).toBe(
+    "1 change lost the name typed in a language the included folder now sets.",
+  );
+});
+
 it("says so when a Reload replaces typed name text that a newer version's folder now sets in a field failing its own check", async () => {
   const data = new LiveData();
   const before = lunch();

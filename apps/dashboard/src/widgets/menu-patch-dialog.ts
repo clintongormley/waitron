@@ -609,10 +609,10 @@ export class MenuPatchDialog extends LitElement {
   }
 
   /** After a rebase, a field neither staged nor failing its check shows the newer live value again.
-   * A failing field whose failing language is removed is checked again in the languages left, whose
-   * text `#followHeld` has kept and counted. A failing field the form can no longer draw is
-   * forgotten too, or nothing could clear it; returns how many of those there were. A refusal the
-   * form can no longer draw goes, and its change stays staged. */
+   * A failing field whose failing language is removed, or now set by every folder, is checked again
+   * in the text `#followHeld` has left it, which counted what that took. A failing field the form
+   * can no longer draw is forgotten too, or nothing could clear it; returns how many of those there
+   * were. A refusal the form can no longer draw goes, and its change stays staged. */
   #forgetSettled(document: MenuDocument): number {
     const items = itemNames(document);
     const languages = currentContentLanguages();
@@ -628,7 +628,11 @@ export class MenuPatchDialog extends LitElement {
         patchFieldValue(document, held.target, field, languages) !== undefined;
       const inLanguage = (typed: Typed) =>
         typed.language === null || languages.languages.includes(typed.language);
-      if (shown && !held.refused && held.error !== "" && !inLanguage(held))
+      const editable = (typed: Typed) =>
+        typed.language === null ||
+        (languages.languages.includes(typed.language) &&
+          !fixedLanguages(document, typed.target, field, languages).includes(typed.language));
+      if (shown && !held.refused && held.error !== "" && !editable(held))
         this.#check(held.target, field, held.value);
       const typed = this.#typed.get(key)!;
       const drawn = shown && inLanguage(typed);
