@@ -171,8 +171,8 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
   });
 
   it.each<[string, Mode]>([
-    ["cell 1: Demo", "demo"],
-    ["cell 2: Preparation", "prepare"],
+    ["Demo", "demo"],
+    ["Preparation", "prepare"],
   ])(
     "%s on a WAITRON_ENV=production box is marked with the box's environment, and the allocation's refusal reaches the client as 400",
     async (_l, mode) => {
@@ -198,8 +198,8 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
   );
 
   it.each<[string, Box]>([
-    ["cell 3: a WAITRON_ENV=production box", PRODUCTION_BOX],
-    ["cell 4: a preproduction box that is not a dev box", PREPRODUCTION_BOX],
+    ["a WAITRON_ENV=production box", PRODUCTION_BOX],
+    ["a preproduction box that is not a dev box", PREPRODUCTION_BOX],
   ])("does not mark Live on %s; the request is stamped production", async (_l, box) => {
     const { post, received, throwawayLines } = harness(box);
 
@@ -211,7 +211,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     expect(throwawayLines()).toEqual([]);
   });
 
-  it("cell 5: marks Live on a dev box, whose request is stamped preproduction", async () => {
+  it("marks Live on a dev box, whose request is stamped preproduction", async () => {
     const { post, received, throwawayLines } = harness(DEV_BOX);
 
     expect((await post(body("live"))).status).toBe(200);
@@ -232,7 +232,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     ["Demo on a dev box", DEV_BOX, "demo"],
     ["Preparation on a dev box", DEV_BOX, "prepare"],
     ["Live on a dev box", DEV_BOX, "live"],
-  ])("cell 6: never marks a request that carries initialOperations (%s)", async (_l, box, mode) => {
+  ])("never marks a request that carries initialOperations (%s)", async (_l, box, mode) => {
     const { post, received, throwawayLines } = harness(box);
 
     expect((await post({ ...body(mode), initialOperations: INITIAL_OPERATIONS })).status).toBe(200);
@@ -242,7 +242,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     expect(throwawayLines()).toEqual([]);
   });
 
-  it("cell 6: never marks a production Live request that carries initialOperations", async () => {
+  it("never marks a production Live request that carries initialOperations", async () => {
     const { post, received } = harness(PREPRODUCTION_BOX);
 
     expect(
@@ -253,7 +253,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     expect(received[0]).not.toHaveProperty("initialAllocation");
   });
 
-  it("cell 14: ignores a forged initialAllocation field on a Live body from a non-dev box", async () => {
+  it("ignores a forged initialAllocation field on a Live body from a non-dev box", async () => {
     const { post, received, throwawayLines } = harness(PREPRODUCTION_BOX);
 
     const forged = {
@@ -267,7 +267,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     expect(throwawayLines()).toEqual([]);
   });
 
-  it("cell 14: a forged initialAllocation field cannot replace the route's own marker", async () => {
+  it("a forged initialAllocation field cannot replace the route's own marker", async () => {
     const { post, received } = harness(PREPRODUCTION_BOX);
 
     const forged = {
@@ -292,7 +292,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   });
   let stateDir: string;
   beforeEach(async () => {
-    stateDir = await mkdtemp(join(tmpdir(), "waitron-setup-throwaway-route-"));
+    stateDir = await mkdtemp(join(tmpdir(), "waitron-setup-api-throwaway-"));
   });
   afterEach(async () => {
     await rm(stateDir, { recursive: true, force: true });
@@ -308,7 +308,6 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     };
   }
 
-  /** Cell 12's facts, for a venue stamped `environment`. */
   function expectThrowawayVenue(environment: string) {
     expect(venueDb.db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
       { numero_instalacion: "0CNNW" },
@@ -400,7 +399,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   it.each<[string, Mode]>([
     ["Demo", "demo"],
     ["Preparation", "prepare"],
-  ])("cell 12: %s with no initialOperations makes a throwaway venue", async (_l, mode) => {
+  ])("%s with no initialOperations makes a throwaway venue", async (_l, mode) => {
     const res = await realApp(PREPRODUCTION_BOX)(body(mode));
 
     expect(res.status, await res.clone().text()).toBe(200);
@@ -408,7 +407,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expectThrowawayVenue("preproduction");
   });
 
-  it("cell 5: Live on a dev box with no initialOperations makes a throwaway venue", async () => {
+  it("Live on a dev box with no initialOperations makes a throwaway venue", async () => {
     const res = await realApp(DEV_BOX)(body("live"));
 
     expect(res.status, await res.clone().text()).toBe(200);
@@ -416,8 +415,8 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   });
 
   it.each<[string, Box]>([
-    ["cell 3: a WAITRON_ENV=production box", PRODUCTION_BOX],
-    ["cell 4: a preproduction box that is not a dev box", PREPRODUCTION_BOX],
+    ["a WAITRON_ENV=production box", PRODUCTION_BOX],
+    ["a preproduction box that is not a dev box", PREPRODUCTION_BOX],
   ])(
     "%s refuses Live with no initialOperations at the fiscal-test gate, writing nothing",
     async (_l, box) => {
@@ -432,8 +431,8 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   );
 
   it.each<[string, Box]>([
-    ["cell 3: a WAITRON_ENV=production box", PRODUCTION_BOX],
-    ["cell 4: a preproduction box that is not a dev box", PREPRODUCTION_BOX],
+    ["a WAITRON_ENV=production box", PRODUCTION_BOX],
+    ["a preproduction box that is not a dev box", PREPRODUCTION_BOX],
   ])(
     "%s, past the fiscal-test gate, has Live with no initialOperations refused by the allocation path, leaving only the production stamp",
     async (_l, box) => {
@@ -457,7 +456,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     },
   );
 
-  it("cell 13: a committed Demo whose first response was lost replays to 200 with the same venue", async () => {
+  it("a committed Demo whose first response was lost replays to 200 with the same venue", async () => {
     let first = true;
     const post = realApp(PREPRODUCTION_BOX, {
       provision: async (req) => {

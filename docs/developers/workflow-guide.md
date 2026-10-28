@@ -326,8 +326,8 @@ can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 Demo, Preparation and isolated readiness use the fiscal module's disposable preproduction
 preparation (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`), which names from the
 box's clock with no second clock and no history check. Through the setup page, Live on a
-development box (`config.devMode`) takes it too (`apps/server/src/setup-throwaway.route.test.ts`,
-"cell 5: marks Live on a dev box, whose request is stamped preproduction"). Any other Live setup,
+development box (`config.devMode`) takes it too (`apps/server/src/setup-api.throwaway.test.ts`,
+"marks Live on a dev box, whose request is stamped preproduction"). Any other Live setup,
 and the terminal's, uses the owned flow: five symbols for the UTC minute, after a second clock on
 another machine agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
 name needs a second clock within 30 seconds of the box"), strictly later than every name in the
@@ -389,7 +389,7 @@ refusal of production activation without email.
 **Live on a real box needs a supplied allocation** (A679). On a box that is not a development box,
 a Live setup that is otherwise complete but has no allocation stops at `setup.fiscal_test_required`
 (HTTP 409) before its fiscal test, and past the test at `sif.allocation_invalid` with `reason:
-reauthentication_required` (HTTP 400), as `apps/server/src/setup-throwaway.route.test.ts` shows.
+reauthentication_required` (HTTP 400), as `apps/server/src/setup-api.throwaway.test.ts` shows.
 
 **How to recognise a throwaway venue.** Its `fiscal_allocations` row has an `allocation_key`
 beginning `throwaway-` and environment `preproduction`, the deployment is stamped `preproduction`,
