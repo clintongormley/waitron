@@ -1006,11 +1006,14 @@ export async function discardDraft(
       if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
       const adjustmentIds: string[] = [];
       // A row of identical dishes recalled together is cancelled as one, as today's one line is.
-      const rows = await rowsAmong(
-        tx,
-        billId,
-        sources.map((source) => source.sourceLineId),
-      );
+      const rows =
+        sources.length === 0
+          ? []
+          : await rowsAmong(
+              tx,
+              billId,
+              sources.map((source) => source.sourceLineId),
+            );
       for (const row of rows) {
         // Reservation release and charge cancellation share the validated Discard transaction.
         await tx

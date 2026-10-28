@@ -68,20 +68,15 @@ async function refundValues(
           .from(saleLinePortions)
           .innerJoin(saleLines, eq(saleLines.id, saleLinePortions.saleLineId))
           .where(eq(saleLines.saleId, saleId));
+  const linked = new Set(links.map((link) => link.saleLineId));
+  const unboundStored = stored.filter((row) => !bindings.has(row.parentLineId ?? row.id));
+  const unlinkedFiled = filed.filter((row) => !linked.has(row.id));
   return lineIds.map((lineId) => {
     const parent = stored.find((row) => row.id === lineId && row.parentLineId === null);
     if (parent === undefined) return undefined;
     if (bindings.size === 0) return byPosition(stored, filed, lineId);
     const binding = bindings.get(lineId);
-    if (binding === undefined) {
-      const linked = new Set(links.map((link) => link.saleLineId));
-      const bound = (row: Stored) => bindings.has(row.parentLineId ?? row.id);
-      return byPosition(
-        stored.filter((row) => !bound(row)),
-        filed.filter((row) => !linked.has(row.id)),
-        lineId,
-      );
-    }
+    if (binding === undefined) return byPosition(unboundStored, unlinkedFiled, lineId);
     return byPortion(
       filed,
       links,

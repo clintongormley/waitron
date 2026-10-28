@@ -24,15 +24,10 @@ import { persons, type PinAttempts } from "@waitron/identity";
 import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext } from "./line-cancel-context.js";
-import { requireCancellationContext } from "./line-cancel-context.js";
+import { requireRowCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
 import type { TradingContext } from "./trading-context.js";
-import {
-  applyAdjustment,
-  cancelRowMembers,
-  reasonNameIn,
-  type AdjustmentArgs,
-} from "./adjustments-apply.js";
+import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
@@ -134,7 +129,7 @@ export async function cancelItem(
       approverId: ask.approver?.personId,
     },
     async () => {
-      const context = await requireCancellationContext(
+      const { context, dishIds } = await requireRowCancellationContext(
         tx,
         partyId,
         lineId,
@@ -164,11 +159,7 @@ export async function cancelItem(
           revision: bill!.revision,
         });
       await requireBillEditor(tx, bill!.id, operatorId, expectedEdit);
-      const members =
-        ask.lineIds === undefined
-          ? null
-          : await cancelRowMembers(tx, bill!.id, lineId, ask.lineIds);
-      const dishIds = members ?? [lineId];
+      const members = ask.lineIds === undefined ? null : dishIds;
       await refuseRecalledWrite(tx, inArray(workingOrderLines.id, dishIds));
       const dishes =
         members === null

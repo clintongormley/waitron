@@ -41,6 +41,17 @@ export async function readCancellationContext(
   lineId: string,
   lineIds?: readonly string[],
 ): Promise<CancellationContext> {
+  return (await readRowContext(tx, partyId, lineId, lineIds)).context;
+}
+
+/** The context, and the dish lines it was read over: `lineId`, or the till row `lineIds` names in
+ * line order. */
+async function readRowContext(
+  tx: Transaction,
+  partyId: string,
+  lineId: string,
+  lineIds: readonly string[] | undefined,
+): Promise<{ context: CancellationContext; dishIds: string[] }> {
   const [subject] = await tx
     .select({ parentId: workingOrderLines.parentLineId, bill: workingOrders })
     .from(workingOrderLines)
@@ -83,7 +94,7 @@ export async function readCancellationContext(
     tx,
     family.map((line) => line.lineId),
   );
-  return orderedCancellationContext({
+  const context = orderedCancellationContext({
     billStatus: subject.bill.status,
     stage: family.some((line) => isStarted(line.state) || line.servedQuantity > 0)
       ? "started"
@@ -100,6 +111,7 @@ export async function readCancellationContext(
       cancelledQuantity: thousandthsToDecimal(cancellations.get(line.lineId) ?? 0),
     })),
   });
+  return { context, dishIds };
 }
 
 export async function requireCancellationContext(
@@ -107,11 +119,22 @@ export async function requireCancellationContext(
   partyId: string,
   lineId: string,
   expected: CancellationContext,
-  lineIds?: readonly string[],
 ): Promise<CancellationContext> {
+  return (await requireRowCancellationContext(tx, partyId, lineId, expected, undefined)).context;
+}
+
+/** {@link requireCancellationContext} over the till row `lineIds` names, answering its dish lines
+ * too. */
+export async function requireRowCancellationContext(
+  tx: Transaction,
+  partyId: string,
+  lineId: string,
+  expected: CancellationContext,
+  lineIds: readonly string[] | undefined,
+): Promise<{ context: CancellationContext; dishIds: string[] }> {
   // Kitchen transitions need not advance a bill or party revision.
-  const context = await readCancellationContext(tx, partyId, lineId, lineIds);
-  if (!isDeepStrictEqual(orderedCancellationContext(expected), context))
-    throw new AppError("tab.cancel_context_changed", { context });
-  return context;
+  const read = await readRowContext(tx, partyId, lineId, lineIds);
+  if (!isDeepStrictEqual(orderedCancellationContext(expected), read.context))
+    throw new AppError("tab.cancel_context_changed", { context: read.context });
+  return read;
 }

@@ -698,8 +698,8 @@ export async function cancelRowMembers(
 /**
  * The dish lines `lineIds` names, gathered into the rows the till would draw them as, each row in
  * line order and the rows in the order of their first line in `lineIds`: whole portions in one filed
- * group, its cohort included, with the same note and course; any other line alone. For a Discard,
- * which names no rows (plan D31's one exception).
+ * group, its cohort included, in the same release group with the same note and course; any other
+ * line alone. For a Discard, which names no rows (plan D31's one exception).
  */
 export async function rowsAmong(
   tx: Transaction,
@@ -713,7 +713,7 @@ export async function rowsAmong(
     if (!whole.has(id)) return id;
     const row = rows.find((one) => one.id === id)!;
     const group = groups.findIndex(({ identity }) => (identity.lineIds ?? []).includes(id));
-    return canonical([group, row.note, row.courseId]);
+    return canonical([group, row.groupId, row.note, row.courseId]);
   };
   const byKey = new Map<string, Row[]>();
   for (const id of lineIds) {
