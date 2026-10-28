@@ -2320,9 +2320,9 @@ same outcome. Reproduced locally (A1163) by holding the child for 1.1 s of real 
 clock reading and the re-check: both of that file's process-death cases (archive and stream)
 then exited with code 1 and `clock_corrected`. Freezing `performance.now` beside `Date` made both pass with the hold in
 place. The same hold made `hour-recovery-placement-2.test.ts`'s two process-death cases exit 1
-with `clock_corrected`, and a hold in `hour-promotion.test.ts`'s built register-till child made it
-refuse (`second_clock_missing`); freezing `performance.now` made each pass. Unlike the in-process
-experiment, these holds stay in the three tests, so a child whose clocks disagree fails every run.
+with `clock_corrected`. The recovery-placement tests retain their holds. The built-command
+case was retired by A1154 on 28 October 2026; its original receipt is preserved in the
+[changed-check inventory](../operations/a1154-changed-checks.md#a1163-clock-receipt-before-command-retirement).
 `expectChildKilled` (`apps/server/src/testing/child-process-death.ts`) prints the exit code,
 stdout and stderr when a child is not killed as expected.
 
