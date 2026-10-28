@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -640,5 +641,172 @@ describe("makeRoom", () => {
     await expect(makeRoom({ ...short.args, onDeleted: failing })).rejects.toMatchObject({
       code: "backup.staging_space_low",
     });
+  });
+
+  /** Free space answering each value in turn, then the last one again. */
+  function readings(...values: number[]): Disk {
+    let reads = 0;
+    return {
+      statfs: async () => {
+        const value = values[Math.min(reads, values.length - 1)]!;
+        reads += 1;
+        return { bavail: value, frsize: 1 };
+      },
+      reads: () => reads,
+    };
+  }
+
+  async function sixBackups(bytes: number) {
+    const dir = await folder("backups");
+    const staging = await folder("staging");
+    const keys = [];
+    for (const n of [1, 2, 3, 4, 5, 6]) keys.push(await archive(dir, hours(n), bytes));
+    return { dir, staging, keys, paths: keys.map((k) => join(dir, k)) };
+  }
+
+  it("stops once the deleted archives' sizes cover the shortfall when free space does not rise, then refuses", async () => {
+    const f = await sixBackups(300);
+    // The aim is 600 away, so the two oldest archives' sizes cover it.
+    const d = readings(900);
+    const { args, onDeleted } = base(f, d);
+
+    await expect(makeRoom(args)).rejects.toMatchObject({
+      code: "backup.staging_space_low",
+      params: { neededBytes: NEED + FLOOR, availableBytes: 900 },
+    });
+    expect(f.paths.map(exists)).toEqual([false, false, true, true, true, true]);
+    expect(d.reads()).toBe(3);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0], f.keys[1]]]);
+  });
+
+  it("deletes no more than the sizes promised when free space does not rise but already meets the floor", async () => {
+    const f = await sixBackups(SIZE);
+    const d = readings(NEED + FLOOR);
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom(args);
+
+    expect(f.paths.map(exists)).toEqual([false, false, true, true, true, true]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0], f.keys[1]]]);
+  });
+
+  it("stops when free space lands exactly on the need plus the aim", async () => {
+    const f = await backups();
+    const d = readings(NEED + FLOOR, NEED + AIM);
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom(args);
+
+    expect(f.paths.map(exists)).toEqual([false, true, true, true]);
+    expect(d.reads()).toBe(2);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0]]]);
+  });
+
+  it("stops when free space lands exactly on the need plus the floor", async () => {
+    const f = await backups();
+    // 850 + 600 falls short of the aim, so the floor is the goal.
+    const d = readings(850, NEED + FLOOR);
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom(args);
+
+    expect(f.paths.map(exists)).toEqual([false, true, true, true]);
+    expect(d.reads()).toBe(2);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0]]]);
+  });
+
+  it("has finished reporting before it returns or throws", async () => {
+    let done = false;
+    const slow = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      done = true;
+    };
+    const f = await backups();
+    const ok = base(f, disk(f.paths, NEED + AIM - 350));
+    await makeRoom({ ...ok.args, onDeleted: slow });
+    expect(done).toBe(true);
+
+    done = false;
+    const g = await backups("backups2");
+    const short = base(g, disk(g.paths, NEED + FLOOR - 3 * SIZE, { rises: false }));
+    await expect(makeRoom({ ...short.args, onDeleted: slow })).rejects.toMatchObject({
+      code: "backup.staging_space_low",
+    });
+    expect(done).toBe(true);
+  });
+
+  it("treats an aim below the floor as the floor", async () => {
+    const f = await backups();
+    const d = disk(f.paths, NEED + 60);
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom({ ...args, aimBytes: 50 });
+
+    expect(f.paths.map(exists)).toEqual([false, true, true, true]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0]]]);
+  });
+
+  it("re-reads free space after skipping an entry before deleting another", async () => {
+    const f = await backups();
+    const other = join(f.staging, "other-file");
+    await writeFile(other, "x");
+    const d = disk([...f.paths, other], 900);
+    const statfs: Statfs = async (path) => {
+      const reading = await d.statfs(path);
+      // Just after the first deletion's reading, something else frees the next archive and more.
+      if (d.reads() === 2) {
+        await rm(f.paths[1]!);
+        await rm(other);
+      }
+      return reading;
+    };
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom({ ...args, statfs });
+
+    expect(f.paths.map(exists)).toEqual([false, false, true, true]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0]]]);
+  });
+
+  it("skips an archive whose folder became a link to another folder, leaving that folder's files alone", async () => {
+    const f = await backups();
+    const other = await folder("other");
+    for (const key of f.keys.slice(1, 3)) await writeFile(join(other, key), "not a backup");
+    const moved = join(root, "moved");
+    const d = readings(900);
+    const statfs: Statfs = async (path) => {
+      const reading = await d.statfs(path);
+      if (d.reads() === 2) {
+        await rename(f.dir, moved);
+        await symlink(other, f.dir);
+      }
+      return reading;
+    };
+    const { args, log, onDeleted } = base(f, d);
+
+    await expect(makeRoom({ ...args, statfs })).rejects.toMatchObject({
+      code: "backup.staging_space_low",
+      params: { neededBytes: NEED + FLOOR, availableBytes: 900 },
+    });
+    expect(f.keys.slice(1, 3).map((k) => exists(join(other, k)))).toEqual([true, true]);
+    expect(f.keys.map((k) => exists(join(moved, k)))).toEqual([false, true, true, true]);
+    expect(log.mock.calls.map(([, event]) => event)).toEqual(["backup.archive_deleted"]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0]]]);
+  });
+
+  it("refuses a size that is not a finite number or is below zero, before reading or deleting anything", async () => {
+    const f = await backups();
+    for (const bad of [
+      { neededBytes: Number.NaN },
+      { floorBytes: -1 },
+      { aimBytes: Number.POSITIVE_INFINITY },
+    ]) {
+      const d = disk(f.paths, 0);
+      await expect(makeRoom({ ...base(f, d).args, ...bad })).rejects.toThrow(
+        /^makeRoom's \w+ must be a finite number of bytes, zero or more, not /,
+      );
+      expect(d.reads()).toBe(0);
+    }
+    expect(f.paths.every(exists)).toBe(true);
   });
 });

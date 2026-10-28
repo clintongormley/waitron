@@ -146,35 +146,53 @@ export interface MakeRoomOptions {
 
 /**
  * Makes `neededBytes` plus `aimBytes` free at `stagingDir` by deleting the oldest deletable archives,
- * or plus `floorBytes` when the aim cannot be reached. Refuses with `backup.staging_space_low`,
- * deleting nothing, when free space plus every deletable archive's size falls short of the floor.
- * Only a fresh `statfs` reading decides when to stop: an archive can free less than its size (a hard
- * link, a sparse file), so a step can delete and still be refused. Free space that cannot be read is
- * let through.
+ * or plus `floorBytes` when the aim cannot be reached (an aim below the floor counts as the floor).
+ * Refuses with `backup.staging_space_low`, deleting nothing, when free space plus every deletable
+ * archive's size falls short of the floor. Free space is read again after each deletion or skipped
+ * entry, and deleting stops when that reading reaches the goal or the deleted archives' sizes cover
+ * the shortfall first read, whichever comes first. An archive can free less than its size (a hard
+ * link, a sparse file), so a step can delete and still be refused: only the reading decides success.
+ * Free space that cannot be read is let through.
  */
 export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
+  for (const [name, bytes] of [
+    ["neededBytes", opts.neededBytes],
+    ["floorBytes", opts.floorBytes],
+    ["aimBytes", opts.aimBytes],
+  ] as const)
+    if (!Number.isFinite(bytes) || bytes < 0)
+      throw new Error(
+        `makeRoom's ${name} must be a finite number of bytes, zero or more, not ${bytes}`,
+      );
   const floor = opts.neededBytes + opts.floorBytes;
-  const aim = opts.neededBytes + opts.aimBytes;
+  const aim = opts.neededBytes + Math.max(opts.aimBytes, opts.floorBytes);
   let free = await freeBytes(opts.stagingDir, opts.statfs);
   if (free === null || free >= aim) return;
   const archives = await listDeletableArchives(opts.folders, opts.installationStartedAt);
   const offered = archives.reduce((sum, a) => sum + a.bytes, 0);
   if (free + offered < floor)
     throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });
-  const target = free + offered >= aim ? aim : floor;
+  const goal = free + offered >= aim ? aim : floor;
+  const shortfall = goal - free;
   const unlink = opts.unlink ?? fs.unlink;
   const deleted: DeletableArchive[] = [];
+  let deletedBytes = 0;
   try {
     for (const archive of archives) {
-      if (free >= target) break;
+      if (free >= goal || deletedBytes >= shortfall) break;
       opts.signal.throwIfAborted();
-      const path = join(archive.dir, archive.key);
       try {
-        // Checked again just before deleting, so a file swapped for a link is never followed.
-        if (!(await fs.lstat(path)).isFile()) continue;
-        await unlink(path);
+        if (await deleteArchive(archive, unlink)) {
+          deleted.push(archive);
+          deletedBytes += archive.bytes;
+          opts.log("info", "backup.archive_deleted", {
+            destination: archive.destination,
+            key: archive.key,
+            bytes: archive.bytes,
+            reason: "backup_room",
+          });
+        }
       } catch (error) {
-        if (errnoOf(error) === "ENOENT") continue;
         opts.log("warn", "backup.archive_delete_failed", {
           destination: archive.destination,
           key: archive.key,
@@ -184,13 +202,6 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
         free = await freeBytes(opts.stagingDir, opts.statfs);
         break;
       }
-      deleted.push(archive);
-      opts.log("info", "backup.archive_deleted", {
-        destination: archive.destination,
-        key: archive.key,
-        bytes: archive.bytes,
-        reason: "backup_room",
-      });
       free = await freeBytes(opts.stagingDir, opts.statfs);
       if (free === null) return;
     }
@@ -204,5 +215,23 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
         // The caller's report logs its own failure.
       }
     }
+  }
+}
+
+/** Deletes one listed archive, or answers false, so it is neither deleted nor reported, when it is
+ * gone, is no longer a plain file, or its folder's real path is no longer the one it was listed by. */
+async function deleteArchive(
+  archive: DeletableArchive,
+  unlink: (path: string) => Promise<void>,
+): Promise<boolean> {
+  const path = join(archive.dir, archive.key);
+  try {
+    if (!(await fs.lstat(path)).isFile()) return false;
+    if ((await fs.realpath(archive.dir)) !== archive.dir) return false;
+    await unlink(path);
+    return true;
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return false;
+    throw error;
   }
 }
