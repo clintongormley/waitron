@@ -2593,7 +2593,7 @@ describe("A803 portion grouping", () => {
       fryerPrinter,
       tabId,
       offer: offers.offerFor,
-      ids: { burger, oysters, chips, octopus },
+      ids: { burger, oysters, chips, octopus, cheese: productIds[0]! },
       cheese,
     };
   }
@@ -2913,10 +2913,87 @@ describe("A803 portion grouping", () => {
         notes: await during([first!, noted!]),
         started: await during([first!, { ...second!, wasStarted: true }]),
         same: await during([first!, second!]),
+        mixed: await (async () => {
+          const burger = { menuItemId: k.offer(k.ids.burger), quantity: "1" };
+          await addTabRound(tx, cfg, k.tabId, [burger]);
+          await addTabRound(tx, cfg, k.tabId, [burger]);
+          const unbound = (await firedAt(tx, k.tabId, k.cocina)).slice(3);
+          expect(unbound).toHaveLength(2);
+          return during([first!, second!, ...unbound]);
+        })(),
       };
     });
 
-    expect(added).toEqual({ stations: [1, 1], notes: [2, 0], started: [2, 0], same: [1, 0] });
+    expect(added).toEqual({
+      stations: [1, 1],
+      notes: [2, 0],
+      started: [2, 0],
+      same: [1, 0],
+      mixed: [3, 0],
+    });
+  });
+
+  it("A803 portion grouping: a void of two portions whose extra is made elsewhere tells that station the extras' whole count", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const fryer = await asApp(cfg, async (tx) => {
+      const k = await portionKitchen(tx, cfg, catalogueId);
+      await routeProductTo(tx, cfg, k.ids.cheese, k.fryer);
+      await addPortionRound(
+        tx,
+        cfg,
+        k.tabId,
+        [{ menuItemId: k.offer(k.ids.burger), quantity: "2", extras: k.cheese(2) }],
+        { fire: true },
+      );
+      const extras = await firedAt(tx, k.tabId, k.fryer);
+      expect(extras).toHaveLength(2);
+      const items = await tx
+        .select({ lineId: ticketItems.workingOrderLineId, quantity: workingOrderLines.quantity })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(ticketItems.stationId, k.fryer));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        k.tabId,
+        extras.map((item) => ({
+          ...item,
+          quantity: items.find((row) => row.lineId === item.workingOrderLineId)!.quantity,
+        })),
+        "VOID",
+      );
+      return (await listStationNotices(tx, cfg, k.fryer)).map(({ quantity }) => quantity);
+    });
+
+    expect(fryer).toEqual([thousandthsToDecimal(4000)]);
+  });
+
+  it("A803 portion grouping: notices keep identical portions of two held courses apart", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const added = await asApp(cfg, async (tx) => {
+      const k = await portionKitchen(tx, cfg, catalogueId);
+      await addPortionRound(
+        tx,
+        cfg,
+        k.tabId,
+        [{ menuItemId: k.offer(k.ids.burger), quantity: "2" }],
+        { fire: true },
+      );
+      const [first, second] = await firedAt(tx, k.tabId, k.cocina);
+      await enqueueHoldCorrections(
+        tx,
+        cfg,
+        k.tabId,
+        [
+          { ...first!, group: 1 },
+          { ...second!, group: 2 },
+        ],
+        { kind: "HOLD CANCELLED" },
+      );
+      return (await listStationNotices(tx, cfg, k.cocina)).length;
+    });
+
+    expect(added).toBe(2);
   });
 
   it("A803 portion grouping: a correction keeps identical unbound lines on their own slips, as today", async () => {

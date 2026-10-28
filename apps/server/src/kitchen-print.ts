@@ -989,14 +989,15 @@ export async function enqueueCorrectionSlips(
   items = await withoutMadeHere(tx, items);
   if (items.length === 0) return;
 
+  const { notices, read } = await foldPortionNotices(tx, cfg, items);
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
     orderId,
-    (await foldPortionNotices(tx, cfg, items)).map(toNoticeItem),
+    notices.map(toNoticeItem),
     kind === "VOID" ? "void" : "recalled",
   );
-  await printCorrectionSlips(tx, cfg, orderId, items, { kind });
+  await printCorrectionSlips(tx, cfg, orderId, items, { kind }, read);
 }
 
 /** Record a reroute and correct the paper at the item's old station before its station changes. */
@@ -1008,24 +1009,28 @@ export async function enqueueStationMoved(
   toStationName: string,
 ): Promise<void> {
   if (items.length === 0) return;
+  const { notices, read } = await foldPortionNotices(tx, cfg, items);
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
     orderId,
-    (await foldPortionNotices(tx, cfg, items)).map(toNoticeItem),
+    notices.map(toNoticeItem),
     "rerouted",
     { reroutedTo: toStationName },
   );
   const fired = items.filter((item) => item.group === undefined);
   const held = items.filter((item) => item.group !== undefined);
   if (fired.length > 0)
-    await printCorrectionSlips(tx, cfg, orderId, fired, {
-      kind: "TO STATION",
-      toStation: toStationName,
-      locale: cfg.locale,
-    });
+    await printCorrectionSlips(
+      tx,
+      cfg,
+      orderId,
+      fired,
+      { kind: "TO STATION", toStation: toStationName, locale: cfg.locale },
+      read,
+    );
   if (held.length > 0)
-    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" });
+    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" }, read);
 }
 
 /**
@@ -1042,15 +1047,19 @@ export async function enqueueHoldCorrections(
 ): Promise<void> {
   items = await withoutMadeHere(tx, items);
   if (items.length === 0) return;
+  const { notices, read } = await foldPortionNotices(tx, cfg, items);
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
     orderId,
-    (await foldPortionNotices(tx, cfg, items)).map(toNoticeItem),
+    notices.map(toNoticeItem),
     change.kind === "HOLD CANCELLED" ? "void" : "changed",
     { direction: change.kind === "HOLD CANCELLED" ? null : change.direction },
   );
-  await printCorrectionSlips(tx, cfg, orderId, items, change);
+  // Work added to a HOLD ticket has its allergy copies frozen inside printCorrectionSlips, after
+  // `read` was taken, so its slips read their ticket items afresh.
+  const added = change.kind === "HOLD CHANGED" && change.direction === "added";
+  await printCorrectionSlips(tx, cfg, orderId, items, change, added ? undefined : read);
 }
 
 /** An extra about to come off its dish, and the dish's kitchen item as the kitchen has it. */
@@ -1153,13 +1162,15 @@ export async function foldPortionNotices<T extends CorrectionItem>(
   cfg: TillConfig,
   items: readonly T[],
   sameAs: (item: T) => unknown = () => null,
-): Promise<T[]> {
+): Promise<{ notices: T[]; read: PortionRead }> {
   const whole = await readWholePortionLines(
     tx,
     items.map((item) => item.workingOrderLineId),
   );
-  if (whole.size === 0) return [...items];
-  const built = await buildTicketItems(tx, cfg, [...whole]);
+  const built: TicketItemsByLine =
+    whole.size === 0 ? new Map() : await buildTicketItems(tx, cfg, [...whole]);
+  const read = { whole, built };
+  if (whole.size === 0) return { notices: [...items], read };
   const out: T[] = [];
   const byKey = new Map<string, number>();
   for (const item of items) {
@@ -1185,7 +1196,16 @@ export async function foldPortionNotices<T extends CorrectionItem>(
     if (key !== undefined) byKey.set(key, out.length);
     out.push(item);
   }
-  return out;
+  return { notices: out, read };
+}
+
+type TicketItemsByLine = Awaited<ReturnType<typeof buildTicketItems>>;
+
+/** What {@link foldPortionNotices} read, handed on so the slips that follow do not read it again:
+ * the whole-portion lines among the items, and their ticket items. */
+export interface PortionRead {
+  whole: ReadonlySet<string>;
+  built: TicketItemsByLine;
 }
 
 function toNoticeItem(item: CorrectionItem) {
@@ -1202,11 +1222,19 @@ export async function enqueueAllergyCorrectionSlips(
   cfg: TradingContext,
   orderId: string,
   items: readonly (CorrectionItem & { allergyBlock: KitchenAllergyBlock | null })[],
+  read?: PortionRead,
 ): Promise<void> {
-  await printCorrectionSlips(tx, cfg, orderId, [...items], {
-    kind: "ALLERGY",
-    blocks: new Map(items.map((item) => [item.workingOrderLineId, item.allergyBlock])),
-  });
+  await printCorrectionSlips(
+    tx,
+    cfg,
+    orderId,
+    [...items],
+    {
+      kind: "ALLERGY",
+      blocks: new Map(items.map((item) => [item.workingOrderLineId, item.allergyBlock])),
+    },
+    read,
+  );
 }
 
 /**
@@ -1219,6 +1247,7 @@ async function printCorrectionSlips(
   orderId: string,
   items: CorrectionItem[],
   change: CorrectionChange,
+  read?: PortionRead,
 ): Promise<void> {
   const heldGroups = items.flatMap((item) => item.holdGroupId ?? []);
   if (heldGroups.length > 0) {
@@ -1245,7 +1274,11 @@ async function printCorrectionSlips(
   }
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
-  const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
+  const unread = lineIds.filter((id) => read?.built.has(id) !== true);
+  const itemsByLine: TicketItemsByLine = new Map([
+    ...(read?.built ?? []),
+    ...(unread.length === 0 ? [] : await buildTicketItems(tx, cfg, unread)),
+  ]);
   const stationNames = await readStations(tx, stationIds);
   const header = await readOrderHeader(tx, cfg, orderId);
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
@@ -1323,7 +1356,7 @@ async function printCorrectionSlips(
 
   // Identical whole portions at a station with the same correction share one slip, whatever the
   // station's grouping, as one line of their summed quantity would.
-  const whole = await readWholePortionLines(tx, lineIds);
+  const whole = read?.whole ?? (await readWholePortionLines(tx, lineIds));
   const slips: {
     stationId: string;
     item: KitchenTicketItem;

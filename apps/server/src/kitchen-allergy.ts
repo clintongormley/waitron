@@ -386,7 +386,8 @@ async function enqueueKitchenAllergyUpdates(
     byOrder.set(row.orderId, items);
   }
   for (const [orderId, items] of byOrder) {
-    for (const item of await foldPortionNotices(tx, cfg, items, allergyKey))
+    const { notices, read } = await foldPortionNotices(tx, cfg, items, allergyKey);
+    for (const item of notices)
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
         cfg,
@@ -402,7 +403,7 @@ async function enqueueKitchenAllergyUpdates(
         item.allergyBlock === null ? "allergy_removed" : "allergy_changed",
         { allergyBlock: item.allergyBlock },
       );
-    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items, read);
   }
 }
 
@@ -503,7 +504,8 @@ export async function notifyKitchenAllergyDestination(
     byOrder.set(row.orderId, [...(byOrder.get(row.orderId) ?? []), item]);
   }
   for (const [orderId, items] of byOrder) {
-    for (const item of await foldPortionNotices(tx, cfg, items, allergyKey))
+    const { notices, read } = await foldPortionNotices(tx, cfg, items, allergyKey);
+    for (const item of notices)
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
         cfg,
@@ -512,6 +514,6 @@ export async function notifyKitchenAllergyDestination(
         item.allergyBlock === null ? "allergy_removed" : "allergy_changed",
         { allergyBlock: item.allergyBlock },
       );
-    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items, read);
   }
 }
