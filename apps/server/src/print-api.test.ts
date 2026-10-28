@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -2186,6 +2187,36 @@ describe("printer cash-drawer calibration", () => {
 });
 
 describe("mountPrintApi — management: test-print", () => {
+  it("A965 sample language reads the saved receipt language for every thermal sample", async () => {
+    const app = mountApp({ venueLocale: "en-GB" });
+    const printerId = await createNetworkPrinter(app, "10.0.0.47", 9100, "Sample language");
+    for (const locale of ["es-ES", "ca-ES"]) {
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: [locale] })
+        .where(eq(locations.id, locationId));
+      const response = await send(
+        app,
+        "POST",
+        `/management-api/printers/${printerId}/sample-receipt`,
+        {
+          cookie: managerCookie,
+          body: { paperWidth: "58mm", resolution: "203dpi" },
+        },
+      );
+      expect(response.status).toBe(202);
+      const { jobId } = (await response.json()) as { jobId: string };
+      const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+      const text = printedLines(job!.payload).join("\n");
+      const labels = receiptLabelsFor(locale);
+      expect(text).toContain(labels.sampleIssuerName);
+      expect(text).toContain(labels.cash);
+      expect(text).toContain(labels.practice);
+      for (const command of printedCommands(job!.payload))
+        if (command.widthDots !== undefined) expect(command.widthDots).toBe(384);
+    }
+  });
+
   it.each([
     { personLocale: "en-GB", browserLocale: "es", venueLocale: "es-ES", expected: "en-GB" },
     { personLocale: "es-ES", browserLocale: "en", venueLocale: "en-GB", expected: "es-ES" },
@@ -2269,7 +2300,7 @@ describe("mountPrintApi — management: test-print", () => {
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
     expect([...new Uint8Array(job!.payload)]).toEqual([
-      ...formatSampleReceipt(settings, undefined),
+      ...formatSampleReceipt(settings, undefined, "es-ES"),
     ]);
   });
 
@@ -2289,7 +2320,7 @@ describe("mountPrintApi — management: test-print", () => {
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
     const payload = new Uint8Array(job!.payload);
-    expect([...payload]).toEqual([...formatSampleReceipt(settings, words)]);
+    expect([...payload]).toEqual([...formatSampleReceipt(settings, words, "es-ES")]);
     expect(printedLines(payload).map((line) => line.trim())).toContain("LEG-Y");
   });
 

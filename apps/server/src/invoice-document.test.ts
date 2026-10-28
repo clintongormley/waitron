@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -9,6 +10,7 @@ import {
   locations,
   parties,
   sales,
+  saleLines,
   tenants,
   tenantReceipts,
   workingOrders,
@@ -190,6 +192,31 @@ describe("stored invoice document projection", () => {
     expect(document.result.qrText).toBeUndefined();
     expect(document.result.payments).toBeUndefined();
     expect(await suite.db.select().from(sales)).toHaveLength(1);
+  });
+
+  it("A965 labels keeps a saved Spanish invoice independent of the current English config", async () => {
+    const backend = none();
+    const sale = await issue(backend, true, "es-ES");
+    const document = await withTransaction(suite.db, (tx) =>
+      readInvoiceDocument(backend, tx, { ...venue.cfg, locale: "en-GB" }, sale.saleId),
+    );
+    expect(document.invoiceLocale).toBe("es-ES");
+    expect(document.result.locale).toBe("es-ES");
+    expect(document.namesLocale).toBe("es-ES");
+    const [stored] = await suite.db
+      .select()
+      .from(saleLines)
+      .where(eq(saleLines.saleId, sale.saleId))
+      .orderBy(saleLines.lineNo);
+    expect(document.result.lines[0]!.descriptions).toEqual({
+      "es-ES": `${stored!.descriptions["es-ES"]} (${stored!.variantDescriptions!["es-ES"]})`,
+    });
+    expect(JSON.stringify(document.result.lines)).not.toContain("Staff meat");
+    const rendered = buildReceiptDocument(document);
+    const text = JSON.stringify(rendered);
+    expect(text).toContain(receiptLabelsFor("es-ES").invoiceHeading);
+    expect(text).toContain(receiptLabelsFor("es-ES").pricesExcludeVat);
+    expect(text).not.toContain("Prices exclude VAT");
   });
 
   it("keeps the filed issuer, customer and issue-day facts after taxpayer and trim changes", async () => {

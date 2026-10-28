@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CardDetails } from "@waitron/payments";
 import { receiptDateTime } from "./receipt-dates.js";
@@ -18,13 +19,8 @@ export interface PaymentSlipInput {
   printer: EscSetting;
 }
 
-const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
-  contactless: "Sin contacto",
-  chip: "Chip",
-  swipe: "Banda",
-};
-
 export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
+  const labels = receiptLabelsFor(input.invoiceLocale);
   const b = esc(input.printer).init();
   const { columns } = b.grid;
   const text = (s: string): void => {
@@ -35,23 +31,28 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
       b.line(line);
     }
   };
-  text("JUSTIFICANTE DE PAGO");
-  text("Este documento no es una factura");
+  text(labels.paymentHeading);
+  text(labels.paymentNotice);
   text(`${input.issuer.venueName} · ${input.issuer.nif}`);
   text(receiptDateTime(input.paidAt, input.invoiceLocale));
-  text([input.orderLabel, `Pedido ${input.orderNumber}`].filter(Boolean).join(" · "));
+  text([input.orderLabel, `${labels.order} ${input.orderNumber}`].filter(Boolean).join(" · "));
   b.line();
   if (input.card !== null) {
-    row("Tarjeta", `${input.card.scheme} **** ${input.card.last4}`);
-    const entry = ENTRY_MODE_LABEL[input.card.entryMode];
-    if (entry !== undefined) row("Entrada", entry);
-    if (input.card.authCode !== null) row("Autorización", input.card.authCode);
+    row(labels.card, `${input.card.scheme} **** ${input.card.last4}`);
+    const entries: Partial<Record<CardDetails["entryMode"], string>> = {
+      contactless: labels.paymentContactless,
+      chip: labels.paymentChip,
+      swipe: labels.paymentSwipe,
+    };
+    const entry = entries[input.card.entryMode];
+    if (entry !== undefined) row(labels.paymentEntry, entry);
+    if (input.card.authCode !== null) row(labels.paymentAuthorization, input.card.authCode);
     b.line();
   }
-  row("Importe", formatMoney(input.amount, input.invoiceLocale));
+  row(labels.paymentAmount, formatMoney(input.amount, input.invoiceLocale));
   // A zero tip prints no line. `tip` comes from `centsToDecimal` (`payment-slip-print.ts`), which
   // always renders two places, so a zero tip is "0.00" and nothing else.
-  if (input.tip !== "0.00") row("Propina", formatMoney(input.tip, input.invoiceLocale));
-  row("Cobrado", formatMoney(input.charged, input.invoiceLocale));
+  if (input.tip !== "0.00") row(labels.tip, formatMoney(input.tip, input.invoiceLocale));
+  row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
   return b.feedAndCut().bytes();
 }

@@ -159,8 +159,7 @@ export function resolveInstalledReceiptLanguageRules(input: VenueGeography): Rec
   return receiptLanguageRules(pack, input.area);
 }
 
-/** A receipt's fixed words in `locale`. A locale no installed pack labels (a stored `en-GB`, a bare
- * `es`) prints Spain's Spanish words, so a receipt never prints without them. */
+/** Exact resource lookup; unlabelled locales use Spain's Spanish words. */
 export function receiptLabelsFor(locale: string): ReceiptLabels {
   for (const pack of COUNTRY_PACKS) {
     const labels = pack.receiptLabels?.[locale];

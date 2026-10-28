@@ -519,6 +519,36 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
   });
 });
 
+it.each(["en-GB", "ca-ES"])(
+  "A965 labels preserves the collection caption for config %s",
+  async (locale) => {
+    const { cfg: original, each, zoneId } = await setupVenue("ticket_then_pay");
+    const cfg = { ...original, locale };
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    await suite.db.execute(sql`
+    update department_sale_policies
+    set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'numbered'
+    where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
+  `);
+    const id = randomUUID();
+    const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+    });
+    await placeOrder(deps(), cfg, id, OPERATOR);
+    const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
+    expect(jobs).toHaveLength(1);
+    const ticket = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    expect(ticket).toContain(receiptLabelsFor(locale === "en-GB" ? "es-ES" : locale).order);
+    expect(ticket).toContain(String(orderNumber));
+    expect(ticket).not.toContain("INVOICE");
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(await registroCount(cfg)).toBe(0);
+  },
+);
+
 it("prints one non-fiscal numbered collection ticket when a pay-on-collection order is placed", async () => {
   const { cfg, each, zoneId } = await setupVenue("ticket_then_pay");
   const printerId = await makePrinter(cfg);

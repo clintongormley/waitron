@@ -300,7 +300,6 @@ export function mountReceiptPreviewApi(
   },
   log: Logger,
 ): void {
-  const sample = sampleSale(deps.receiptQrText);
   const logoCache = createLogoCache();
   app.post("/management-api/receipt-preview", (c) =>
     run(c, log, async () => {
@@ -404,7 +403,14 @@ export function mountReceiptPreviewApi(
           venueLogo,
         };
       });
-      return c.json(await renderDraftPreview(deps, sample, logoCache, snapshot));
+      return c.json(
+        await renderDraftPreview(
+          deps,
+          sampleSale(deps.receiptQrText, snapshot.locale),
+          logoCache,
+          snapshot,
+        ),
+      );
     }),
   );
 }

@@ -145,9 +145,7 @@ catalán demo in Catalunya." So `country-es`, `workforce-es` and `reporting`'s m
 the Veri\*Factu package, for text official only in Spain (BOE holiday names, INE province names,
 AEAT's form descriptions), for Spanish-specific terms, and for Spain-only printed text with its
 translations in Spain's official languages; Spain-only text or logic found in general code moves
-into them. Every country pack must also carry English for the words it shows (Spain's
-does not yet), and a receipt in Spain prints in the venue's receipt language, never English; A963 and A965 fix what
-does not yet. The fixes are queued as A963–A977
+into them. Every country pack must also carry English for the words it shows, and a receipt in Spain prints in the venue's receipt language, never English. The fixes are queued as A963–A977
 ([A913 in the backlog](../backlog/architecture.md#a913s-fix-items-general-code-english-only)).
 
 ## Spanish domain terms are deliberate, and a module declares its own
@@ -4391,6 +4389,8 @@ interface does not provide a reset or erase operation.
 
 
 ## Root receipt excerpts moved on 2026-10-23
+
+_2026-10-27, A965: receipt resources now include English without changing Spain's offered receipt languages. The English-resource gap below records the earlier tree._
 
 These passages retain the root instruction receipts moved by A1026. They are excerpts
 from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.

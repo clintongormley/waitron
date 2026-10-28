@@ -139,7 +139,7 @@ describe("A4 office raster QR black square", () => {
   it.each([
     {
       name: "sample sale",
-      input: sampleDocument({ caption: "QR tributario:", legend: "VERI*FACTU" }),
+      input: sampleDocument({ caption: "QR tributario:", legend: "VERI*FACTU" }, "es-ES"),
       modules: 33,
     },
     { name: "AEAT validation URL", input: fixture, modules: 45 },

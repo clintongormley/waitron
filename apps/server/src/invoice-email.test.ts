@@ -169,6 +169,29 @@ function textPart(message: string) {
 }
 
 describe("invoice SMTP transport", () => {
+  it("A965 labels sends English subject, body and PDF from the document language", async () => {
+    const rig = await smtpRig("accepted");
+    try {
+      const send = createInvoiceEmailSender(rig.config);
+      expect(
+        await send({
+          recipient: "customer@example.test",
+          document: { ...fixture, invoiceLocale: "en-GB", duplicate: true },
+        }),
+      ).toEqual({ status: "sent" });
+      expect(rig.messages).toHaveLength(1);
+      expect(rig.messages[0]).toContain("Subject: Invoice FF/1");
+      expect(textPart(rig.messages[0]!)).toContain("Invoice FF/1");
+      expect(textPart(rig.messages[0]!)).toContain("DUPLICATE");
+      const pdf = await attachmentText(rig.messages[0]!);
+      expect(pdf).toMatch(/INVOICE\s+FF\/1/);
+      expect(pdf).toContain("DUPLICATE");
+      expect(pdf.replace(/\s+/g, " ")).toContain("TOTAL €19.69");
+    } finally {
+      await rig.close();
+    }
+  });
+
   it("routes successive invoices through rotated stored credentials without restarting the sender", async () => {
     await seedTenant(suite.db);
     const first = await smtpRig("accepted");
@@ -254,7 +277,7 @@ describe("invoice SMTP transport", () => {
   );
   it.each([
     ["es-ES", false, "Factura FF/1", /FACTURA\s+FF\/1/, "DUPLICADO"],
-    ["en-GB", true, "Factura FF/1", /FACTURA\s+FF\/1/, "DUPLICADO"],
+    ["en-GB", true, "Invoice FF/1", /INVOICE\s+FF\/1/, "DUPLICATE"],
   ] as const)(
     "sends a readable %s PDF with duplicate=%s after SMTP acceptance",
     async (invoiceLocale, duplicate, subject, caption, marker) => {
@@ -450,7 +473,7 @@ describe("invoice email privacy notice", () => {
     ["es-ES", null, page, false, "Factura", notice("es", false, page)],
     ["eu-ES", email, null, false, "Faktura", notice("es", false, email)],
     ["ca-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
-    ["en-GB", email, page, false, "Factura", notice("en", false, `${email}, ${page}`)],
+    ["en-GB", email, page, false, "Invoice", notice("en", false, `${email}, ${page}`)],
     ["es-ES", null, null, true, "Factura", undefined],
   ] as const)(
     "a %s invoice with email %s and page %s (tax record %s) carries its notice in the text",

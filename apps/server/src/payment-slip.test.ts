@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { describe, expect, it } from "vitest";
 import { formatPaymentSlip } from "./payment-slip.js";
 import {
@@ -20,6 +21,48 @@ const input = {
   printer: { paperWidth: "80mm", resolution: "180dpi" } as const,
 };
 describe("payment slip (pure renderer, no database)", () => {
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "ca", "fr-FR"])(
+    "A965 payment language uses %s resources for each card entry mode",
+    (invoiceLocale) => {
+      const labels = receiptLabelsFor(invoiceLocale);
+      for (const [entryMode, key] of [
+        ["contactless", "paymentContactless"],
+        ["chip", "paymentChip"],
+        ["swipe", "paymentSwipe"],
+        ["unknown", null],
+      ] as const) {
+        const bytes = formatPaymentSlip({
+          ...input,
+          invoiceLocale,
+          amount: "1234.56",
+          card: { ...input.card, entryMode },
+        });
+        const text = decodeTicket(bytes);
+        expect(text).toContain(labels.paymentHeading);
+        expect(text).toContain(labels.paymentNotice);
+        expect(text).toContain(`${labels.order} 41`);
+        expect(text).toContain(labels.card);
+        expect(text).toContain(labels.paymentAuthorization);
+        expect(text).toContain(labels.paymentAmount);
+        expect(text).toContain(labels.charged);
+        if (key !== null) {
+          expect(text).toContain(labels.paymentEntry);
+          expect(text).toContain(labels[key]);
+        } else expect(text).not.toContain(labels.paymentEntry);
+        if (invoiceLocale === "en-GB") expect(text).toContain("€1,234.56");
+        expect(text).not.toContain("VERI*FACTU");
+        expect(commandNames(bytes)).not.toContain("GS ( k");
+      }
+      const missing = decodeTicket(
+        formatPaymentSlip({ ...input, invoiceLocale, card: null, tip: "0.00" }),
+      );
+      expect(missing).not.toContain(labels.paymentEntry);
+      expect(missing).not.toContain(labels.paymentAuthorization);
+      expect(missing).not.toContain(labels.tip);
+      expect(missing).toContain(labels.paymentAmount);
+    },
+  );
+
   it("prints payment identity, grouping and amounts without fiscal identifiers or QR", () => {
     const bytes = formatPaymentSlip({
       ...input,

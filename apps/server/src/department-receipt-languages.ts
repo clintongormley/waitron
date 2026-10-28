@@ -16,7 +16,11 @@ export async function departmentReceiptLanguages(
 ): Promise<DepartmentReceiptLanguages> {
   const { locale: receiptLanguage } = await readReceiptLanguage(tx, cfg.locationId);
   const labelled = [
-    ...new Set(COUNTRY_PACKS.flatMap((pack) => Object.keys(pack.receiptLabels ?? {}))),
+    ...new Set(
+      COUNTRY_PACKS.flatMap((pack) =>
+        pack.invoiceLocales.filter((locale) => pack.receiptLabels?.[locale] !== undefined),
+      ),
+    ),
   ];
   return {
     receiptLanguage,

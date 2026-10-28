@@ -9,6 +9,23 @@ import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice
 
 const languages = [
   {
+    locale: "en-GB",
+    name: "Pine nut and coffee menu",
+    want: [
+      "INVOICE FF/1",
+      "Operation date",
+      "1 Pine nut and coffee menu 10.00 10.00 21%",
+      "Prices exclude VAT",
+      "Discount 10% -1.00 21%",
+      "Taxable base 21% €9.00 VAT 21% €1.89 Taxable base 10% €8.00 VAT 10% €0.80",
+      "TOTAL €19.69",
+      "Cash €20.00",
+      "Change €0.31",
+      "DUPLICATE",
+      "PRACTICE - NO REAL CHARGE",
+    ],
+  },
+  {
     locale: "es-ES",
     name: "Menú de piñón y café",
     want: [

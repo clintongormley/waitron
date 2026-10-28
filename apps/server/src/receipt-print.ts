@@ -297,7 +297,8 @@ export async function enqueueCollectionTicket(
     .init()
     .printArea(builder.grid.widthDots)
     .align("center")
-    .line(receiptLabelsFor(cfg.locale).order)
+    // English receipt resources do not change the collection caption's Spanish fallback.
+    .line(receiptLabelsFor(cfg.locale === "en-GB" ? "es-ES" : cfg.locale).order)
     .line(String(orderNumber))
     .feedAndCut()
     .bytes();

@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { registerModulePermissions } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -658,6 +659,17 @@ describe("POST /management-api/receipt-preview", () => {
   });
 
   describe("language", () => {
+    it("A965 sample language uses selected Galician while retaining the saved Spanish default", async () => {
+      const response = await preview({ receipt: {}, language: "gl-ES" });
+      expect(response.status).toBe(200);
+      const answer = (await response.json()) as ReceiptPreviewResponse;
+      const text = answer.preview.text;
+      expect(text).toContain(receiptLabelsFor("gl-ES").cash);
+      expect(text).toContain(receiptLabelsFor("gl-ES").sampleItemName);
+      expect(text).not.toContain(receiptLabelsFor("es-ES").vatIncluded);
+      expect((await rendered({})).preview.text).toContain(receiptLabelsFor("es-ES").cash);
+    });
+
     const at = async (language?: unknown) => {
       const response = await preview({ receipt: {}, language });
       expect(response.status).toBe(200);

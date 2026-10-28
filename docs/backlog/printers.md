@@ -246,9 +246,7 @@ those letters (not checked).
      it. **Open question for the task:** is the QR measurement needed at all, or does the ruler
      alone settle what printing needs? Answer it from the code (does anything need the width in
      millimetres rather than dots?) before redesigning.
-  3. **The sample receipt (calibration step 2).** Print it in the venue's default receipt language,
-     which follows the province chosen at setup (Catalan for the owner's venue), not always
-     Spanish. Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
+  3. **The sample receipt (calibration step 2).** Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
      letters as ordered items instead (for Catalan: à è é í ï ò ó ú ü ç and l·l). Add horizontal
      rules so the receipt reads in blocks: after the venue name and NIF, before the first item,
      before the tax lines, and before the total. (The owner's photo showed TOTAL and Cambio printed a
@@ -658,6 +656,8 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`ReceiptDocument.guests`), and many function, property and event names (for example
   `readReceiptGuests`, `setPartyGuests`) keep the word.
 
+- **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number and character-probe footer remain; removing the footer and changing the calibration layout remain in A404.
+
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
   «Pedido N» on the right (the order alone on the right when there is no table). Then:
   - **A simplified receipt** puts its number on the left and the date and time on the right, with
@@ -679,6 +679,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
     right-aligned line of its own, as before (`labelAmountLines`, `packages/printing/src/layout.ts`).
     The printer's sample receipt (`apps/server/src/sample-receipt.ts`) keeps its Spanish «Mesa 6»
     and «Café y tostada» on a receipt in another language: they are internal sample values (owner).
+    **2026-10-28:** the owner superseded this sample-name ruling with A965’s translated names above.
 
   The law asks for the date and sets no format (checked 2026-10-19): a full invoice and a simplified
   one each need «La fecha de su expedición», and Orden HAC/1177/2024 sets no format for a printed

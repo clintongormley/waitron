@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -457,4 +458,17 @@ it("requires every substituted original order's zone before exposing an acknowle
     json: { code: "service_zone.not_allowed" },
   });
   expect(await printed()).toEqual(before);
+});
+
+it("A965 payment language defaults to the sale language with conflicting current config", async () => {
+  const row = await target();
+  const before = await immutable();
+  const [saved] = await store.db.select().from(sales).where(eq(sales.id, row.saleId));
+  venue.cfg.locale = "en-GB";
+  venue.cfg.invoiceLocales = ["en-GB"];
+  expect((await print(row.id)).status).toBe(200);
+  const text = decodeTicket((await printed()).jobs.at(-1)!.payload);
+  expect(text).toContain(receiptLabelsFor(saved!.locale).refundHeading);
+  expect(text).toContain(receiptLabelsFor(saved!.locale).refundNotice);
+  expect(await immutable()).toEqual(before);
 });

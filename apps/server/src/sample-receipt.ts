@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import type { EscSetting } from "@waitron/printing";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -9,18 +10,22 @@ const SAMPLE_QR = "https://example.invalid/waitron/sample-receipt";
  * The sale a sample or preview receipt shows: it was never filed. It carries a sample QR only when
  * the venue's fiscal backend has words to print around one, as a filed sale's receipt would.
  */
-export function sampleSale(qrText: ReceiptQrText | undefined): ReceiptDocumentInput["result"] {
+export function sampleSale(
+  qrText: ReceiptQrText | undefined,
+  receiptLocale: string,
+): ReceiptDocumentInput["result"] {
+  const labels = receiptLabelsFor(receiptLocale);
   return {
-    locale: "es-ES",
-    orderLabel: "Mesa 6",
+    locale: receiptLocale,
+    orderLabel: labels.sampleTableLabel,
     orderNumber: 41,
-    invoiceNumber: "MUESTRA/1",
+    invoiceNumber: labels.sampleInvoiceNumber,
     issuedAt: "2026-01-15T12:34:00.000Z",
     total: "5.50",
     vatBreakdown: [{ rate: "10", base: "5.00", tax: "0.50" }],
     lines: [
       {
-        descriptions: { "es-ES": "Café y tostada" },
+        descriptions: { [receiptLocale]: labels.sampleItemName },
         quantity: "1",
         gross: "5.50",
       },
@@ -31,12 +36,16 @@ export function sampleSale(qrText: ReceiptQrText | undefined): ReceiptDocumentIn
 }
 
 /** A realistic but unmistakably non-fiscal document: a sample receipt, or an office printer's test page. */
-export function sampleDocument(qrText: ReceiptQrText | undefined): ReceiptDocumentInput {
+export function sampleDocument(
+  qrText: ReceiptQrText | undefined,
+  receiptLocale: string,
+): ReceiptDocumentInput {
+  const labels = receiptLabelsFor(receiptLocale);
   return {
-    result: sampleSale(qrText),
-    issuer: { venueName: "Waitron - Recibo de muestra", nif: "B00000000" },
-    receipt: { footerMessage: "Café, jamón, niño, pingüino · 5 €" },
-    invoiceLocale: "es-ES",
+    result: sampleSale(qrText, receiptLocale),
+    issuer: { venueName: labels.sampleIssuerName, nif: "B00000000" },
+    receipt: { footerMessage: labels.sampleFooter },
+    invoiceLocale: receiptLocale,
     simulated: true,
   };
 }
@@ -45,6 +54,7 @@ export function sampleDocument(qrText: ReceiptQrText | undefined): ReceiptDocume
 export function formatSampleReceipt(
   printer: EscSetting,
   qrText: ReceiptQrText | undefined,
+  receiptLocale: string,
 ): Uint8Array {
-  return formatReceipt({ ...sampleDocument(qrText), printer });
+  return formatReceipt({ ...sampleDocument(qrText, receiptLocale), printer });
 }

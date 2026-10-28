@@ -1,3 +1,4 @@
+import { readReceiptLanguage } from "@waitron/catalogue";
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -132,7 +133,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
-      await gated(sessionId, async (tx) => {
+      const receiptLocale = await gated(sessionId, async (tx) => {
         const [printer] = await tx
           .select({ agentId: pagePrinters.agentId })
           .from(pagePrinters)
@@ -145,8 +146,11 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
           );
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
         if (printer.agentId === null) throw new AppError("page_printer.no_agent", {});
+        const { locale } = await readReceiptLanguage(tx, deps.locationId);
+        return locale;
       });
-      return c.json(deps.testPages.request(id), 202);
+      // Register the in-memory page only after the database turn commits.
+      return c.json(deps.testPages.request(id, receiptLocale), 202);
     }),
   );
 

@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { joinCustomerPresentationText } from "@waitron/catalogue";
 import {
   FEED_BEFORE_CUT,
@@ -158,7 +159,7 @@ describe("saved F1 operation date", () => {
           ["ca-ES", "Data de l'operació", "28 de febr. 2026"],
           ["gl-ES", "Data da operación", "28 de feb. de 2026"],
           ["eu-ES", "Eragiketaren data", "2026(e)ko ots. 28(a)"],
-          ["en-GB", "Fecha de operación", "28 Feb 2026"],
+          ["en-GB", "Operation date", "28 Feb 2026"],
         ].map(([locale, label, date]) => ({
           printer,
           duplicate,
@@ -242,7 +243,7 @@ it.each(
       ["ca-ES", "IVA inclòs", "Descompte"],
       ["gl-ES", "IVE incluído", "Desconto"],
       ["eu-ES", "BEZa barne", "Deskontua"],
-      ["en-GB", "IVA incluido", "Descuento"],
+      ["en-GB", "VAT included", "Discount"],
     ].map(([locale, included, discount]) => ({
       printer,
       locale: locale!,
@@ -508,17 +509,22 @@ it.each([PRINTER_58, PRINTER_80])(
         formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale, printer }),
       );
       const content = lines.join(" ").replace(/\s+/g, " ").trim();
-      expect(content).toContain("FACTURA A/1");
+      expect(content).toContain(`${receiptLabelsFor(invoiceLocale).invoiceHeading} A/1`);
       const spanish = invoiceLocale === "es-ES";
       expect(content).toContain(spanish ? "1 Plato 10,00 10,00 21%" : "1 Dish 10.00 10.00 21%");
       expect(content).toContain(
         spanish ? "0.32 kg Jamón 25,00 8,00 10%" : "0.32 kg Ham 25.00 8.00 10%",
       );
       const hamStart = content.indexOf(spanish ? "Jamón" : "Ham");
-      const hamEnd = content.indexOf("Base imponible 21%", hamStart);
+      const hamEnd = content.indexOf(
+        `${receiptLabelsFor(invoiceLocale).taxableBase} 21%`,
+        hamStart,
+      );
       expect(hamStart).toBeGreaterThan(-1);
       expect(hamEnd).toBeGreaterThan(hamStart);
-      expect(content.slice(hamEnd)).toContain(`Base imponible 10% ${spanish ? "8,00 €" : "€8.00"}`);
+      expect(content.slice(hamEnd)).toContain(
+        `${receiptLabelsFor(invoiceLocale).taxableBase} 10% ${spanish ? "8,00 €" : "€8.00"}`,
+      );
       expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
       expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
     }
@@ -603,7 +609,7 @@ it.each([PRINTER_58, PRINTER_80])(
       expect(printed).toContain("Avenida del cliente original 123, Madrid");
       expect(printed).toContain("FF/1");
       expect(printed.indexOf("FF/1")).toBeLessThan(printed.indexOf("Original Customer SL"));
-      expect(printed).toContain("DUPLICADO");
+      expect(printed).toContain(receiptLabelsFor(invoiceLocale).duplicate);
       expect(printed).not.toContain(ISSUER.venueName);
       expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
       const commands = printedCommands(bytes);

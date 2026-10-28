@@ -38,7 +38,7 @@ import "./errors.js";
 
 type CountryEs = {
   SPAIN: CountryPack;
-  SPAIN_RECEIPT_LABELS: Record<"es-ES" | "ca-ES" | "gl-ES" | "eu-ES", ReceiptLabels>;
+  SPAIN_RECEIPT_LABELS: Record<"es-ES" | "ca-ES" | "gl-ES" | "eu-ES" | "en-GB", ReceiptLabels>;
 };
 
 // The server does not depend on `@waitron/country-es`, so the specifier does not resolve from here;

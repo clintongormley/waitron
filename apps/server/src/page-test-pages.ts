@@ -26,6 +26,7 @@ export type TestPageView = {
 
 interface TestPage extends TestPageView {
   pagePrinterId: string;
+  receiptLocale: string;
   requestedAt: number;
   finishedAt?: number;
   reported?: true;
@@ -93,7 +94,7 @@ export function createPageTestPages(now: () => Date) {
 
   return {
     /** The printer's page still out, or a new one. */
-    request(pagePrinterId: string): TestPageView {
+    request(pagePrinterId: string, receiptLocale: string): TestPageView {
       const at = settle();
       const current = pages.get(pagePrinterId);
       if (current !== undefined && current.finishedAt === undefined) return view(current);
@@ -101,6 +102,7 @@ export function createPageTestPages(now: () => Date) {
         id: randomUUID(),
         status: "waiting",
         pagePrinterId,
+        receiptLocale,
         requestedAt: at,
       };
       pages.set(pagePrinterId, page);
@@ -186,14 +188,18 @@ export function createPageTestPages(now: () => Date) {
       return { id: next.id, generation: 1, token, pagePrinterId: next.pagePrinterId };
     },
 
-    /** The format and resolution the claim fixed, while it is still printing. */
+    /** The captured rendering inputs while the claimed page is still printing. */
     printing(
       claim: InvoiceDeliveryClaim,
-    ): { format: PageFormat; resolutionDpi: number } | undefined {
+    ): { format: PageFormat; resolutionDpi: number; receiptLocale: string } | undefined {
       settle();
       const page = held(claim);
       if (page?.status !== "printing") return undefined;
-      return { format: page.claim!.format, resolutionDpi: page.claim!.resolutionDpi };
+      return {
+        format: page.claim!.format,
+        resolutionDpi: page.claim!.resolutionDpi,
+        receiptLocale: page.receiptLocale,
+      };
     },
 
     renew(claim: InvoiceDeliveryClaim, hold: A4HoldCode | null): boolean {

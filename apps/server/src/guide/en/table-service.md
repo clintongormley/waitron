@@ -21,6 +21,8 @@ Disabling and enabling the same reader keeps your choice, as does adding that re
 again. Deleting it and adding it as a new reader starts with the setting off. A configuration
 export carries payment policy, not card readers or this setting.
 
+When Waitron prints a card slip for a sale, its words, date and amounts follow that sale’s saved receipt language. Changing your screen language or the venue’s current receipt language keeps the earlier sale’s slip in its original language.
+
 ## Trust the box before opening the till {#certificate-trust}
 
 The till's **This device hasn't trusted the till yet** page follows your browser's preferred
@@ -47,6 +49,8 @@ If a change to a bill would leave it owing less than it has already received, th
 can be refunded, its refund window opens with the excess amount selected. If several payments
 can be refunded, choose which one to refund. If the payments cannot be read, the window explains
 the failure; close it and open it again before choosing a payment.
+
+The refund acknowledgment uses the original sale’s receipt language by default, even when your screen uses another language.
 
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 

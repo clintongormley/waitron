@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { setLocale } from "../i18n/t.js";
+import { t as uiText, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 import type { TicketIssuer } from "./till-ticket-view.js";
@@ -11,6 +11,7 @@ import type {
   TillSaleResult,
 } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
 
 // es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
 // narrow no-break U+202F on some ICU builds); normalise both to a plain space before asserting.
@@ -65,6 +66,66 @@ afterEach(() => {
 });
 
 describe("till-ticket-view", () => {
+  it.each([
+    {
+      ui: "en-GB",
+      saved: "es-ES",
+      fallback: "en-GB",
+      name: "Saved Spanish name",
+      figure: "9,40 €",
+    },
+    { ui: "es-ES", saved: "en-GB", fallback: "es-ES", name: "Saved English name", figure: "€9.40" },
+  ])(
+    "A965 labels uses saved $saved receipt language beside $ui controls",
+    async ({ ui, saved, fallback, name, figure }) => {
+      setLocale(ui);
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result: {
+          ...result,
+          locale: saved,
+          lines: [
+            {
+              descriptions: { "es-ES": "Saved Spanish name", "en-GB": "Saved English name" },
+              quantity: "1",
+              gross: "9.40",
+            },
+          ],
+        },
+        issuer,
+        invoiceLocale: fallback,
+      });
+      const body = text(el);
+      expect(body).toContain(saved === "en-GB" ? "Cash" : receiptLabelsFor("es-ES").cash);
+      expect(body).toContain(saved === "en-GB" ? "Change" : receiptLabelsFor("es-ES").change);
+      expect(body).toContain(name);
+      expect(body).not.toContain(saved === "en-GB" ? "Saved Spanish name" : "Saved English name");
+      expect(body).toContain(figure);
+      expect(el.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain(
+        uiText("action.reprint", ui),
+      );
+    },
+  );
+
+  it("A965 labels uses component English fallback only when the saved locale is absent", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: {
+        ...result,
+        lines: [
+          {
+            descriptions: { "es-ES": "Saved Spanish name", "en-GB": "Saved English name" },
+            quantity: "1",
+            gross: "9.40",
+          },
+        ],
+      },
+      issuer,
+      invoiceLocale: "en-GB",
+    });
+    expect(text(el)).toContain("Cash");
+    expect(text(el)).toContain("Saved English name");
+    expect(text(el)).toContain("€9.40");
+  });
   it("shows a later recalled extra under its original dish with its charged amount", async () => {
     const { el } = await mount({
       total: "34.00",
@@ -125,7 +186,7 @@ describe("till-ticket-view", () => {
     ["ca-ES", "Data de l'operació", "28 de febr. 2026"],
     ["gl-ES", "Data da operación", "28 feb 2026"],
     ["eu-ES", "Eragiketaren data", "28 feb 2026"],
-    ["en-GB", "Fecha de operación", "28 Feb 2026"],
+    ["en-GB", "Operation date", "28 Feb 2026"],
   ])("shows the saved operation day in the filed language %s", async (locale, label, date) => {
     setLocale(locale === "es-ES" ? "en-GB" : "es-ES");
     const { el } = await mount({
@@ -360,7 +421,7 @@ describe("till-ticket-view", () => {
     ["ca-ES", "IVA inclòs"],
     ["gl-ES", "IVE incluído"],
     ["eu-ES", "BEZa barne"],
-    ["en-GB", "IVA incluido"],
+    ["en-GB", "VAT included"],
   ])("identifies VAT-inclusive F1 reductions in %s", async (locale, included) => {
     const invoice = {
       ...result,
@@ -552,7 +613,7 @@ describe("till-ticket-view", () => {
           ],
         },
       });
-      expect(text(el)).toContain("Factura completa");
+      expect(text(el)).toContain(receiptLabelsFor(locale).fullInvoice);
       const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
         norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
           .replace(/\s+/g, " ")
@@ -560,7 +621,7 @@ describe("till-ticket-view", () => {
       );
       expect(facts).toHaveLength(2);
       expect(facts[0]).toContain(
-        `Precio sin IVA ${locale === "es-ES" ? "18,18 €" : "€18.18"} / 1 kg`,
+        `${receiptLabelsFor(locale).netUnitPrice} ${locale === "es-ES" ? "18,18 €" : "€18.18"} / 1 kg`,
       );
       expect(facts[0]).toContain(`Base 10.00% ${locale === "es-ES" ? "5,82 €" : "€5.82"}`);
       expect(facts[1]).toContain(`Base 21.00% ${locale === "es-ES" ? "2,48 €" : "€2.48"}`);

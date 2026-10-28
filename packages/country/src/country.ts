@@ -93,6 +93,25 @@ export const RECEIPT_LABEL_KEYS = [
   "guest",
   "guests",
   "perPerson",
+  "paymentHeading",
+  "paymentNotice",
+  "paymentEntry",
+  "paymentContactless",
+  "paymentChip",
+  "paymentSwipe",
+  "paymentAuthorization",
+  "paymentAmount",
+  "refundHeading",
+  "refundNotice",
+  "refundReference",
+  "refundAmount",
+  "refundTip",
+  "refundTotal",
+  "sampleIssuerName",
+  "sampleInvoiceNumber",
+  "sampleFooter",
+  "sampleTableLabel",
+  "sampleItemName",
 ] as const;
 
 export type ReceiptLabels = Readonly<Record<(typeof RECEIPT_LABEL_KEYS)[number], string>>;
@@ -115,7 +134,7 @@ export interface CountryPack {
   readonly defaultTimeZone: string;
   readonly defaultProductVatClass?: string;
   readonly invoiceLocales: readonly string[];
-  /** Keyed by invoice locale. */
+  /** Resource locales can include display translations beyond the offered invoice locales. */
   readonly receiptLabels?: Readonly<Record<string, ReceiptLabels>>;
   readonly officialLocales?: readonly string[];
   readonly requiredContentLocales?: readonly string[];
