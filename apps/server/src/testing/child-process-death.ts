@@ -8,8 +8,8 @@ interface ChildOutcome {
 }
 
 /**
- * Awaits an `execFile` run that must end in `expected.signal`, after printing exactly
- * `expected.stdout` when that is given. When it does not, the failure names the child's exit code, signal, stdout and
+ * Awaits an `execFile` run that must end in `expected.signal`, having printed exactly
+ * `expected.stdout` when that is given. A failure names the child's exit code, signal, stdout and
  * stderr: the error `execFile` rejects with carries them, but a `toMatchObject` diff prints only
  * the keys it compares.
  */

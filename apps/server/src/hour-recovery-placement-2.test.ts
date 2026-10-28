@@ -485,7 +485,9 @@ describe("selected-hour admission before archive placement", () => {
           wallStartedMs: Date.now(), wallFinishedMs: Date.now(),
           monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() };
       }`;
-      const releaseModule = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
+      // Holds the child for over a second of real time, once, between its clock reading and the
+      // re-check, so a child whose wall and elapsed-time clocks disagree is refused on every run.
+      const releaseModule = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `
         import { registerHooks } from "node:module";
         const realDate = Date;
@@ -493,6 +495,7 @@ describe("selected-hour admission before archive placement", () => {
           constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); }
           static now() { return realDate.parse("2026-10-16T12:42:01Z"); }
         };
+        Object.defineProperty(performance, "now", { value: () => 0 });
         registerHooks({ resolve(specifier, context, next) {
           if (specifier.endsWith("/hour-clock-internet.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(internetModule)}`)} };
           if (specifier.endsWith("/hour-release.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(releaseModule)}`)} };

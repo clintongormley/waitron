@@ -510,6 +510,10 @@ That CI also failed an unchanged recovery process-death case before its child
 printed the activation marker. Its cause remains unknown and is recorded in the
 [CI backlog](../../backlog/ci.md#recovery-activation-child-exits-before-the-process-death-point);
 a local single-case pass is not a repair claim. Retain the original assertions.
+(2026-10-28: A1163 reproduced this outcome with a child that froze `Date` but not
+`performance.now`, inferred that as this failure's cause, and deleted the CI backlog entry
+linked above; see
+[testing-guide.md](../../developers/testing-guide.md#a-child-process-that-freezes-date-freezes-performancenow-with-it).)
 
 ### Cut 3 installed-demo qualification — 2026-10-28
 

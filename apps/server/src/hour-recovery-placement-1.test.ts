@@ -822,8 +822,8 @@ describe("selected-hour admission before archive placement", () => {
         return outcome;
       }`;
       const internet = `export async function authenticatedHourHead() { throw new Error("this test makes no network request"); } export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
-      // Holds the child for over a second of real time once, inside its clock check, so a child
-      // whose wall and elapsed-time clocks disagree is refused here as it was on a slow CI runner.
+      // Holds the child for over a second of real time, once, between its clock reading and the
+      // re-check, so a child whose wall and elapsed-time clocks disagree is refused on every run.
       const release = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `import { registerHooks } from "node:module";
       const RealDate = Date;

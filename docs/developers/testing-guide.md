@@ -2288,25 +2288,28 @@ them. Where it does appear it catches a side effect nobody asserts on: the shape
 here was a memo cache write whose arguments were both plain identifiers.
 
 
-## A child process that fakes `Date` fakes `performance.now` with it
+## A child process that freezes `Date` freezes `performance.now` with it
 
 The setup hour clock (`packages/fiscal-verifactu/src/hour-setup-clock.ts`, `current`) refuses a
 held reading with `sif.allocation_invalid` / `clock_corrected` when the wall time and the
 process's elapsed time since that reading differ by more than a second. A child that freezes
 `Date` but leaves `performance.now` real reads zero wall time against real elapsed time, so it is
 refused whenever the run takes over a second between the reading and its re-check — on a busy CI
-runner, not on a fast laptop. The sibling children in `apps/server/src/first-fiscal-launch.test.ts`
-and `packages/provisioning/src/cli-owned-entry.test.ts` freeze both.
+runner, not on a fast laptop. The in-process form of the same rule, for fake timers, is
+[Freeze both clocks in a fixed first-setup fixture](#freeze-both-clocks-in-a-fixed-first-setup-fixture).
 
 Cost: CI run 40594569075 (server shard 7) failed `hour-recovery-placement-1.test.ts`'s
 archive process-death case: its child exited with no signal and printed nothing, so it never
 reached the kill point. That log omitted the child's error, so the cause there is inferred from the
-same outcome. Reproduced locally (A1163) by holding the child for 1.1 s of real time inside its
-clock check: both process-death cases then exited with code 1 and `clock_corrected`. Freezing
-`performance.now` beside `Date` made both pass with the hold in place, and the hold stays in the
-test so a child with disagreeing clocks fails every run. `expectChildKilled`
-(`apps/server/src/testing/child-process-death.ts`) now prints the exit code, stdout and stderr
-when a child is not killed as expected.
+same outcome. Reproduced locally (A1163) by holding the child for 1.1 s of real time between its
+clock reading and the re-check: both of that file's process-death cases (archive and stream)
+then exited with code 1 and `clock_corrected`. Freezing `performance.now` beside `Date` made both pass with the hold in
+place. The same hold made `hour-recovery-placement-2.test.ts`'s two process-death cases exit 1
+with `clock_corrected`, and a hold in `hour-promotion.test.ts`'s built register-till child made it
+refuse (`second_clock_missing`); freezing `performance.now` made each pass. Unlike the in-process
+experiment, these holds stay in the three tests, so a child whose clocks disagree fails every run.
+`expectChildKilled` (`apps/server/src/testing/child-process-death.ts`) prints the exit code,
+stdout and stderr when a child is not killed as expected.
 
 ## Rejected writes assert their domain error code
 
@@ -2748,7 +2751,9 @@ before the final provision in `fiscal-readiness-first-setup.test.ts` returned
 `sif.allocation_invalid` / `clock_corrected` at the original success assertion. Changing only
 `toFake: ["Date"]` to `toFake: ["Date", "performance"]` passed that same delayed case.
 The delay is an experiment, not part of the shipped fixture. The owner approved the exact
-one-line correction; every assertion and the initial date stay unchanged.
+one-line correction; every assertion and the initial date stay unchanged. The child-process form
+of this rule is
+[A child process that freezes `Date` freezes `performance.now` with it](#a-child-process-that-freezes-date-freezes-performancenow-with-it).
 
 
 ## A floor test pins the till API's clock away from the day change
