@@ -57,8 +57,18 @@ const REFUSED = {
 
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
-/** `discarding`: the id of the backup recovery this Start again is about to discard. */
-type Options = { discarding?: string };
+/**
+ * `discarding`: the id of the backup recovery this Start again is about to discard. `held`: the
+ * setup database holds what activation wrote, so the `modules.json` activation writes after its
+ * commit is deleted with it rather than refused.
+ */
+type Options = { discarding?: string; held?: true };
+const MODULES = "modules.json";
+/** A marker that names `modules.json` was taken with `held`. */
+const heldBy = (marker: StartAgainMarker): Options =>
+  marker.files.some((entry) => entry.root === "state" && entry.name === MODULES)
+    ? { held: true }
+    : {};
 export interface StartAgainFingerprint {
   size: number;
   sha256: string;
@@ -106,6 +116,7 @@ function listed(root: Root, name: string): boolean {
       "module-preparation-state.json",
       "first-setup-node-key.json",
       "module-operation-public.json",
+      MODULES,
       "first-setup.json",
     ].includes(name);
   if (parts[0] === DOCUMENTS) return parts.length === 2;
@@ -290,6 +301,7 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     items.push({ kind: "folder", path: join(roots.stateDir, DOCUMENTS) });
   await file("state", "first-setup-node-key.json");
   await file("state", "module-operation-public.json");
+  if (options.held === true) await file("state", MODULES);
   const kept = await backupRecoveryKept(roots, options);
   if (options.discarding !== undefined && !kept)
     throw incomplete(`layout unexpected: ${RECORDS}/${BACKUP}`);
@@ -467,7 +479,8 @@ export async function assertStartAgainAllowedOnDisk(
     for (const name of REFUSED[root])
       if (
         (await exists(join(rootOf(root), name))) &&
-        !(root === "venue" && name === RECORDS && (await venuePointerOnly(canonical, options)))
+        !(root === "venue" && name === RECORDS && (await venuePointerOnly(canonical, options))) &&
+        !(root === "state" && name === MODULES && options.held === true)
       )
         throw notReady(`refused artifact: ${root}/${name}`);
   await assertNoStartAgainDeletion(canonical.venueDir);
@@ -518,7 +531,7 @@ export async function deleteMarkedAttempt(
   const named = new Set(value.files.map((entry) => `${entry.root}:${entry.name}`));
   let current = "";
   try {
-    for (const item of await itemsOnDisk(canonical)) {
+    for (const item of await itemsOnDisk(canonical, heldBy(value))) {
       current = item.path;
       if (item.kind === "folder") await remove(item.path, "folder");
       else if (item.kind === "side" || named.has(`${item.root}:${item.name}`))
@@ -567,13 +580,17 @@ export async function collectStartAgainFindings(roots: Roots): Promise<{
     throw incomplete("marker folders differ");
   const findings: StartAgainFinding[] = [];
   let blocker: AppError | null = null;
+  const held = heldBy(marker);
   try {
     for (const root of ["state", "venue"] as const)
       for (const name of REFUSED[root])
-        if (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
+        if (
+          !(root === "state" && name === MODULES && held.held === true) &&
+          (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
+        )
           findings.push({ kind: "refused-artifact", root, name });
     const recorded = new Map(marker.files.map((entry) => [`${entry.root}:${entry.name}`, entry]));
-    for (const item of await itemsOnDisk(canonical)) {
+    for (const item of await itemsOnDisk(canonical, held)) {
       if (item.kind !== "file") continue;
       const expected = recorded.get(`${item.root}:${item.name}`);
       if (expected === undefined)
