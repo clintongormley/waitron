@@ -1306,25 +1306,27 @@ describe("A803 portions: raising a dish", () => {
     return (answer.json as unknown as { draft: Draft }).draft;
   }
 
+  async function sendDraftLines(
+    bill: { billId: string; partyId: string },
+    draft: Draft,
+    lines: Draft["lines"],
+  ) {
+    return send(venue.app, venue.cookie, "PUT", `/api/parties/${bill.partyId}/drafts`, {
+      billId: bill.billId,
+      draftId: draft.id,
+      revision: draft.revision,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+      lines,
+      personId: venue.operatorId,
+    });
+  }
+
   async function saveDraftLines(
     bill: { billId: string; partyId: string },
     draft: Draft,
     lines: Draft["lines"],
   ) {
-    const answer = await send(
-      venue.app,
-      venue.cookie,
-      "PUT",
-      `/api/parties/${bill.partyId}/drafts`,
-      {
-        billId: bill.billId,
-        draftId: draft.id,
-        revision: draft.revision,
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
-        lines,
-        personId: venue.operatorId,
-      },
-    );
+    const answer = await sendDraftLines(bill, draft, lines);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     return (answer.json as unknown as BillDraftSnapshot).draft!;
   }
@@ -1620,5 +1622,66 @@ describe("A803 portions: raising a dish", () => {
           where l.working_order_id = ${bound.billId} order by l.line_no`,
     );
     expect(ticked.map((row) => row.lineNo)).toEqual([1, 5]);
+  });
+
+  /** What a refused draft save must leave untouched: the bill's lines, the draft's reserved rows
+   * and its revision. */
+  function draftState(billId: string, draftId: string) {
+    return {
+      lines: linesOf(billId),
+      reserved: venue.db.all(
+        sql`select id, source_line_id from order_draft_recalled_lines
+            where draft_id = ${draftId} order by id`,
+      ),
+      revision: venue.db.all(sql`select revision from order_drafts where id = ${draftId}`),
+    };
+  }
+
+  it("A803 portions: a save that keeps a raised burger's original but leaves out its copies is refused as out of date, writing nothing", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const draft = await raiseRecalled(bound, "3");
+    expect(draft.lines).toHaveLength(3);
+    const before = draftState(bound.billId, draft.id);
+    const edit = await inTx(venue, (tx) => readBillEditState(tx, bound.billId));
+
+    const answer = await sendDraftLines(bound, draft, [{ ...draft.lines[0]!, quantity: "3" }]);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+    expect(answer.json).toEqual({
+      code: "draft.out_of_date",
+      params: { billId: bound.billId, draftId: draft.id, revision: draft.revision, edit },
+    });
+    expect(draftState(bound.billId, draft.id)).toEqual(before);
+  });
+
+  it("A803 portions: a save leaving out a separately recalled dish is still refused as invalid lines", async () => {
+    const today = await billOf([...burgersWithCheese("1"), ...croquetas("1")], {
+      bound: false,
+      fire: true,
+    });
+    const dishes = await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, today.billId),
+          isNull(workingOrderLines.parentLineId),
+        ),
+      )
+      .orderBy(workingOrderLines.lineNo);
+    expect(dishes).toHaveLength(2);
+    await recallLine(today, dishes[0]!.id);
+    const draft = await recallLine(today, dishes[1]!.id);
+    expect(draft.lines).toHaveLength(2);
+    const before = draftState(today.billId, draft.id);
+
+    const answer = await sendDraftLines(today, draft, [draft.lines[0]!]);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(400);
+    expect(answer.json).toEqual({
+      code: "management.request_invalid",
+      params: { field: "lines" },
+    });
+    expect(draftState(today.billId, draft.id)).toEqual(before);
   });
 });

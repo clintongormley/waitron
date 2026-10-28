@@ -69,6 +69,7 @@ import {
   requireBillEditor,
   transferBillEditor,
 } from "./bill-editing.js";
+import { readGrowingPortions } from "./order-portions.js";
 import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { assertBillInvariant } from "./bill-payments.js";
@@ -523,7 +524,28 @@ export async function saveDraft(
       throw invalid(`lines.${index}.sourceLineId`);
     retainedSources.delete(line.id);
   }
-  if (retainedSources.size > 0) throw invalid("lines");
+  if (retainedSources.size > 0) {
+    // A save that began before a raise added copies of a named portion knows only the original;
+    // the till reloads on draft.out_of_date and would otherwise be refused on every later save.
+    const omitted = previous.filter((line) => retainedSources.has(line.id));
+    const portions = await readGrowingPortions(tx, [
+      ...omitted.map((line) => line.sourceLineId!),
+      ...lines.flatMap((line) => (line.sourceLineId === null ? [] : [line.sourceLineId])),
+    ]);
+    const namedCohorts = new Set(
+      lines.flatMap((line) =>
+        line.sourceLineId === null ? [] : (portions.get(line.sourceLineId)?.cohortId ?? []),
+      ),
+    );
+    if (omitted.some((line) => namedCohorts.has(portions.get(line.sourceLineId!)?.cohortId ?? "")))
+      throw new AppError("draft.out_of_date", {
+        billId,
+        draftId: edit.draftId,
+        revision: edit.draftRevision,
+        edit,
+      });
+    throw invalid("lines");
+  }
   const freshLines = lines.filter(isFresh);
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
@@ -663,13 +685,11 @@ export async function saveDraft(
         // A raised portion's copies are placed with it, straight after it.
         return [
           recalled,
-          ...copiesOf
-            .get(line.id)!
-            .map((copy) => ({
-              ...recalled,
-              id: copy.referenceId,
-              sourceLineId: copy.sourceLineId,
-            })),
+          ...copiesOf.get(line.id)!.map((copy) => ({
+            ...recalled,
+            id: copy.referenceId,
+            sourceLineId: copy.sourceLineId,
+          })),
         ];
       }),
     ),
