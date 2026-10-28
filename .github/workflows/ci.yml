@@ -137,9 +137,6 @@ jobs:
       shared: ${{ steps.gates.outputs.shared }}
     steps:
       # Each checkout is three steps: docs/developers/ci-and-gates.md, "Every checkout is bounded".
-      # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
-      # against and no history for pnpm's own change detection — both would then silently report
-      # "nothing changed" and skip the entire suite.
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
@@ -150,6 +147,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -162,6 +160,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       # Needed for the two `pnpm ls` queries below — the workspace layout the classifier resolves,
       # and the membership query that answers the gates. No `pnpm install` is required: `pnpm ls`
@@ -341,6 +344,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -351,6 +355,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -381,6 +390,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -391,6 +401,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -437,6 +452,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -447,6 +463,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -688,6 +709,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -698,6 +720,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -766,10 +793,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -778,10 +806,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -856,6 +889,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -866,6 +900,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -935,10 +974,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -947,10 +987,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1044,6 +1089,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1054,6 +1100,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1160,6 +1211,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1170,6 +1222,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1222,10 +1279,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1234,10 +1292,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1320,6 +1383,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1330,6 +1394,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1394,6 +1463,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1404,6 +1474,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1496,6 +1571,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1506,6 +1582,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1582,6 +1663,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1592,6 +1674,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1657,6 +1744,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1667,6 +1755,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1743,6 +1836,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1753,6 +1847,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1814,6 +1913,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1824,6 +1924,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -1883,6 +1988,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -1893,6 +1999,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2021,6 +2132,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2031,6 +2143,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2086,6 +2203,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2096,6 +2214,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2144,6 +2267,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2154,6 +2278,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2200,10 +2329,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2212,10 +2342,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2264,10 +2399,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2276,10 +2412,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2329,10 +2470,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2341,10 +2483,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2393,10 +2540,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2405,10 +2553,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2461,6 +2614,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2471,6 +2625,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2528,6 +2687,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2538,6 +2698,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2589,10 +2754,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2601,10 +2767,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2637,10 +2808,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2649,10 +2821,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2689,10 +2866,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2701,10 +2879,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2786,10 +2969,11 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2798,10 +2982,15 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -2896,6 +3085,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -2906,6 +3096,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -3145,6 +3340,7 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
       - name: Stop the first checkout's leftover git
         if: steps.checkout.outcome == 'failure'
         run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
@@ -3155,6 +3351,11 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - uses: docker/setup-buildx-action@v4
 

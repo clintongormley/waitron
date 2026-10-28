@@ -3581,6 +3581,28 @@ function checkoutAttempts(text) {
  * `# comment`.
  */
 describe("the workflows' checkouts", () => {
+  it("uses full history only for change classification and sign-off", () => {
+    const historyReaders = ["ci.yml:changes", "licence.yml:dco"];
+    const checkouts = workflowFiles.flatMap((name) =>
+      jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) =>
+        workflowSteps(lines.join("\n"))
+          .filter((step) => step.uses?.startsWith("actions/checkout@"))
+          .map((step) => ({
+            job: `${name}:${id}`,
+            step: step.step,
+            depth: step.with["fetch-depth"] ?? "1",
+          })),
+      ),
+    );
+    expect(checkouts.length).toBeGreaterThan(0);
+    expect([...new Set(checkouts.map(({ job }) => job))]).toEqual(
+      expect.arrayContaining(historyReaders),
+    );
+    for (const { job, step, depth } of checkouts) {
+      expect(depth, `${job}: ${step}`).toBe(historyReaders.includes(job) ? "0" : "1");
+    }
+  });
+
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
   const bounded = `      - id: checkout
         name: Check out the code

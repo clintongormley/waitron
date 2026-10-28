@@ -2116,6 +2116,82 @@ deleted from `licence.yml`'s first job, `pnpm exec vitest run scripts/ci-workflo
 — the first attempt, and the second attempt judged on its own once no stop step sits between them.
 The same command on the unedited file printed `Tests  1 passed | 221 skipped (222)`.
 
+#### Checkout stage diagnostics (28 October 2026, A1178)
+
+A checkout timeout does not identify what Git was waiting for. In three morning main runs
+(`40670031426`, `40674869520`, `40695623711`), each run's 76 first checkouts had medians of
+11, 12 and 12.5 seconds, with no retry. Later run `40723334721` had a 42.5-second median
+and eight retries. Main run `40741827622`, changes job `123005140759`, exhausted both
+120-second attempts while fetching full history. Its log did not identify a transfer or
+indexing stage. The underlying cause remains unknown.
+
+Fresh local HTTPS fetches of morning main `e0f3e261c` and afternoon main `2906505d1`
+produced pack files of 398,612,993 and 404,557,773 bytes, a 1.49% increase, in 17.221 and
+15.171 seconds. These are development-machine controls, not the original hosted transfers.
+They did not reproduce the timeout.
+
+In `ci.yml` and `licence.yml`, both checkout attempts set `GIT_TRACE2_EVENT=1` at step
+scope. Read the JSON events in the checkout log to locate the last entered region and its
+matching exit, or an unfinished child process. After a successful checkout, **Measure checkout
+objects** prints whether the repository is shallow and each pack file's byte count. Those counts describe
+stored packs, not network traffic. The two-minute attempt limits, low-speed settings, cleanup
+and failure-only retry remain in place. Other workflows do not enable these diagnostics.
+
+A local `git ls-remote https://github.com/actions/checkout.git HEAD` control emitted no trace
+events; the same command with `GIT_TRACE2_EVENT=1` emitted 26 JSON events on stderr and
+returned the same ref on stdout.
+
+Hosted comparison run `40765243305` captured first-attempt timeouts in full-history `changes`
+job `123087529127` and shallow `test-payments-stripe` job `123089528738`. Both entered
+`fetch_refs` and started `index-pack`, with no matching completion before the 120-second bound.
+Their second attempts passed in 90 and 19 seconds. An unfinished `index-pack` can still be
+waiting for incoming data; these events do not distinguish transfer from local indexing or
+establish the underlying cause. A later successful checkout alone does not explain an earlier
+timeout.
+
+#### Checkout history belongs to the job that reads it (A1178)
+
+The `changes` job needs history for `scripts/ci-diff-paths.sh`'s merge-base and range
+comparisons. The licence workflow's `dco` job enumerates the push or pull-request range with
+`git rev-list`. Both keep `fetch-depth: 0` on both attempts. The suite jobs use depth one;
+their commands take fixed package filters or scope values supplied by `changes` rather than
+calculating a Git range themselves. This reduces the history requested by those jobs. It does
+not establish the cause of a hosted checkout timeout, including the shallow-checkout failure
+in main run `40750935978`, till shard 3 (`123038600113`).
+
+The “uses full history only for change classification and sign-off” case in
+`scripts/ci-workflow.test.mjs` checks each literal checkout step in the workflow files. It is
+weaker than its name: it reads text, assumes omitted depth means one, and does not inspect
+external reusable workflows, composite actions or dynamically selected actions. It names the
+two full-history jobs and checks both attempts. Local controls reverted each of the 22 changed
+suite checkout inputs independently and deleted each of the four required full-history inputs;
+all 26 changes failed this guard, and the restored candidate passed. Existing behavioral
+assertions are unchanged.
+
+Full diagnostic baseline [40757792434](https://github.com/clintongormley/waitron/actions/runs/40757792434)
+at `f5975bdf5` and full shallow comparison
+[40765243305](https://github.com/clintongormley/waitron/actions/runs/40765243305) at `d6afda128`
+each passed 76 jobs, with only publishing skipped. Their package test-file and test counts
+matched, including all shard merge reports. The root gained one case, the new history guard
+(9,323 to 9,324). Coverage gates, mutation, bundle and image checks passed in both runs.
+Individual coverage percentages varied slightly; passing thresholds does not assert identical
+execution paths.
+
+Across the same 35 converted suite instances:
+
+| Measurement | Full history | Depth one |
+| --- | --- | --- |
+| Stored pack bytes, median (range) | 408,161,710 (404,847,975–408,185,911) | 206,776,315 (206,774,141–206,776,386) |
+| First-checkout seconds, median (range) | 32 (13–114) | 22 (6–120) |
+
+These are stored pack sizes, not bytes transferred over the network. The two hosted runs do
+not isolate timing from runner or network conditions. The shallow Stripe job needed its second
+attempt, so this conversion reduces requested history without eliminating checkout timeouts.
+
+| Source | Source's words | Use |
+| --- | --- | --- |
+| [Git Trace2 API](https://git-scm.com/docs/api-trace2#_enabling_a_target), checked 28 October 2026 | “`1` or `true` - Writes to `STDERR`.” | Send the event target to the existing step log without a separate artifact upload. |
+
 ### The image build bounds its package installs
 
 A hung package install can consume an image job's whole allowance. The build stage in
