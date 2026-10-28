@@ -500,6 +500,7 @@ export class TillShell extends LitElement {
   #counterTargets = new Set<Element>();
   #watchedStrip?: Element;
   #watchedPopup?: Element;
+  #watchedZonePopup?: Element;
   #shownName = false;
   #heldName?: boolean;
   readonly #onPopupToggle = () => {
@@ -507,6 +508,7 @@ export class TillShell extends LitElement {
     if (this.#menuOpen()) return;
     if (this.#stepBackOwed) void this.#fit();
   };
+  readonly #onZonePopupToggle = () => void this.#measureCounterLogo();
 
   /** An open More can hold the name though `steps` puts it on the bar; once it has closed, above
    * phone width, raise `steps` to cover it, so closing it moves nothing back before the fit steps
@@ -664,6 +666,21 @@ export class TillShell extends LitElement {
     for (const target of targets)
       if (!this.#counterTargets.has(target)) this.#counterObserver.observe(target);
     this.#counterTargets = targets;
+    const zonePopup = this.#zonePopup();
+    if (zonePopup !== this.#watchedZonePopup) {
+      this.#watchedZonePopup?.removeEventListener("toggle", this.#onZonePopupToggle);
+      zonePopup?.addEventListener("toggle", this.#onZonePopupToggle);
+      this.#watchedZonePopup = zonePopup;
+    }
+  }
+
+  /** Undefined on a bar with one zone, which has no zone menu. */
+  #zonePopup(): Element | undefined {
+    return (
+      this.renderRoot
+        .querySelector("wt-row-actions[data-counter-zones]")
+        ?.shadowRoot?.querySelector("[popover]") ?? undefined
+    );
   }
 
   #popup(): Element | undefined {
@@ -697,6 +714,8 @@ export class TillShell extends LitElement {
     const run = ++this.#counterRun;
     await this.#settled();
     if (run !== this.#counterRun || this.formFactor !== "till" || !this.isConnected) return;
+    // The open zone menu's popup stays where it opened, so its trigger must not move under it.
+    if (this.#zonePopup()?.matches(":popover-open")) return;
     const head = this.renderRoot.querySelector<HTMLElement>(".head");
     const strip = head?.querySelector<HTMLElement>(".till-strip");
     const box = head?.querySelector<HTMLElement>(":scope > wt-venue-logo.counter-logo");

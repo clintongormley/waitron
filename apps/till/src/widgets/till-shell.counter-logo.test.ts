@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   applyTokens,
   applyVenueTheme,
@@ -489,6 +489,103 @@ describe("the cash register's bar measures its room again", () => {
         observe.mockRestore();
         disconnect.mockRestore();
       }
+    });
+  });
+});
+
+describe("the logo is held while the zone menu is open", () => {
+  const zones = (el: TillShell) => head(el).querySelector<HTMLElement>("[data-counter-zones]")!;
+  const popup = (el: TillShell) => zones(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const isOpen = (el: TillShell) => popup(el).matches(":popover-open");
+
+  /** BUSY in English with room for the logo, the zone menu open and the strip then outgrowing the
+   * room: the logo stays and the popup does not move. */
+  async function openAndOverflow(): Promise<TillShell> {
+    const { wStar } = await edge(BUSY);
+    const el = await mountWithLogo(BUSY);
+    await widthTo(el, wStar + 4);
+    expect(shown(el)).toBe(true);
+    await userEvent.click(zones(el).shadowRoot!.querySelector<HTMLElement>("[part=trigger]")!);
+    await expect.poll(() => isOpen(el)).toBe(true);
+    await settle(el);
+    const left = popup(el).getBoundingClientRect().left;
+    const triggerLeft = zones(el).getBoundingClientRect().left;
+    el.parkedCount = 1000;
+    await settle(el);
+    expect(shown(el)).toBe(true);
+    expect(Math.abs(popup(el).getBoundingClientRect().left - left)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(zones(el).getBoundingClientRect().left - triggerLeft)).toBeLessThanOrEqual(0.5);
+    return el;
+  }
+
+  async function inEnglish(run: () => Promise<void>): Promise<void> {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      await atViewport(1280, 800, run);
+    } finally {
+      setLocale(before);
+    }
+  }
+
+  it("keeps the logo until Escape closes the menu, then measures again", async () => {
+    await inEnglish(async () => {
+      const el = await openAndOverflow();
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => isOpen(el)).toBe(false);
+      await expect.poll(() => shown(el)).toBe(false);
+    });
+  });
+
+  it("measures again once picking a zone closes the menu", async () => {
+    await inEnglish(async () => {
+      const el = await openAndOverflow();
+      await userEvent.click(zones(el).querySelector<HTMLElement>('[data-counter-zone="b"]')!);
+      await expect.poll(() => isOpen(el)).toBe(false);
+      await expect.poll(() => shown(el)).toBe(false);
+    });
+  });
+
+  it("measures again once a click outside closes the menu", async () => {
+    await inEnglish(async () => {
+      const el = await openAndOverflow();
+      const outside = document.createElement("div");
+      outside.style.cssText = "position: fixed; left: 0; bottom: 0; width: 40px; height: 40px";
+      document.body.append(outside);
+      try {
+        await userEvent.click(outside);
+        await expect.poll(() => isOpen(el)).toBe(false);
+        await expect.poll(() => shown(el)).toBe(false);
+      } finally {
+        outside.remove();
+      }
+    });
+  });
+
+  it("narrowing the bar with no new render while it is open measures again once it closes", async () => {
+    await inEnglish(async () => {
+      const { wStar } = await edge(BUSY);
+      const el = await mountWithLogo(BUSY);
+      el.style.width = `${wStar + 4}px`;
+      await settle(el);
+      expect(shown(el)).toBe(true);
+      await userEvent.click(zones(el).shadowRoot!.querySelector<HTMLElement>("[part=trigger]")!);
+      await expect.poll(() => isOpen(el)).toBe(true);
+      el.style.width = `${wStar - 4}px`;
+      await settle(el);
+      expect(shown(el)).toBe(true);
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => isOpen(el)).toBe(false);
+      await expect.poll(() => shown(el)).toBe(false);
+    });
+  });
+
+  it("measures again once its trigger closes the menu", async () => {
+    await inEnglish(async () => {
+      const el = await openAndOverflow();
+      await userEvent.click(zones(el).shadowRoot!.querySelector<HTMLElement>("[part=trigger]")!);
+      await expect.poll(() => isOpen(el)).toBe(false);
+      await expect.poll(() => shown(el)).toBe(false);
     });
   });
 });
