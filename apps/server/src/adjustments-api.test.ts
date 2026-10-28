@@ -28,6 +28,7 @@ import {
   provisionAdjustmentVenue,
   REASONS,
   rowsOf,
+  todayLine,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -238,7 +239,7 @@ describe("corrections through order actions on a station's printers", () => {
       expect(printedLines(before[1]![0]!.payload).join(" ")).not.toContain("CANA");
       const beerVoid = await post(billId, {
         action: "cancel",
-        lineId: await lineIdOf(venue, billId, 2),
+        ...(await todayLine(venue, billId, 2)),
       });
       expect(beerVoid.status).toBe(200);
       const afterBeer = await Promise.all(printerIds.map(on));
@@ -251,7 +252,7 @@ describe("corrections through order actions on a station's printers", () => {
       expect(beerSlips[1]).toHaveLength(0);
       const steakVoid = await post(billId, {
         action: "cancel",
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
       });
       expect(steakVoid.status).toBe(200);
       const afterSteak = await Promise.all(printerIds.map(on));
@@ -353,7 +354,7 @@ describe("weighed lines through the route (plan D4)", () => {
 
 describe("approval through the route (plan D6)", () => {
   const comp = async (billId: string) => ({
-    lineId: await lineIdOf(venue, billId, 1),
+    ...(await todayLine(venue, billId, 1)),
     action: "comp",
     reasonId: venue.reasonId.complaint,
   });
@@ -689,7 +690,7 @@ describe("approval through the route (plan D6)", () => {
 
       for (let i = 0; i < 5; i += 1) {
         const noApprovalNeeded = await postOn(app, billId, {
-          lineId: await lineIdOf(venue, billId, 2),
+          ...(await todayLine(venue, billId, 2)),
           action: "discount_percent",
           percentBp: 100,
           reasonId: venue.reasonId.house,
@@ -722,7 +723,7 @@ describe("approval through the route (plan D6)", () => {
 
 describe("a cancel's approval through the route (A758 D12, D13)", () => {
   const cancel = async (billId: string) => ({
-    lineId: await lineIdOf(venue, billId, 1),
+    ...(await todayLine(venue, billId, 1)),
     action: "cancel",
   });
 
@@ -853,7 +854,7 @@ describe("an approver's PIN derives its key outside the write lock", () => {
     const applied = await post(
       billId,
       {
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         action: "comp",
         reasonId: venue.reasonId.complaint,
         approver: { personId: venue.managerId, pin: PINS.manager },
@@ -873,7 +874,7 @@ describe("an approver's PIN derives its key outside the write lock", () => {
     const refused = await post(
       billId,
       {
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         action: "comp",
         reasonId: venue.reasonId.complaint,
         expectedRevision: (await revisionOf(billId)) + 1,
@@ -894,7 +895,7 @@ describe("an approver's PIN derives its key outside the write lock", () => {
     const applied = await post(
       billId,
       {
-        lineId: await lineIdOf(venue, billId, 2),
+        ...(await todayLine(venue, billId, 2)),
         action: "discount_percent",
         percentBp: 100,
         reasonId: venue.reasonId.house,
@@ -911,11 +912,12 @@ describe("an approver's PIN derives its key outside the write lock", () => {
 describe("a cancel's preview", () => {
   it("names the line it removes and what the bill loses, writing nothing", async () => {
     const { billId } = await billWith(venue, [{ name: "Steak", quantity: "2" }]);
-    const lineId = await lineIdOf(venue, billId, 1);
+    const steak = await todayLine(venue, billId, 1);
+    const { lineId } = steak;
 
     const preview = await post(
       billId,
-      { lineId, action: "cancel", quantity: "1" },
+      { ...steak, action: "cancel", quantity: "1" },
       { path: "/preview" },
     );
 
@@ -931,7 +933,7 @@ describe("a cancel's preview", () => {
 
   it("previews a cancel of 1 of Pizza ×2 with olives as exactly what the applied cancel takes off the bill", async () => {
     const { billId } = await billWith(venue, [{ name: "Pizza", quantity: "2", olives: 1 }]);
-    const lineId = await lineIdOf(venue, billId, 1);
+    const pizza = await todayLine(venue, billId, 1);
     const totalOf = async () =>
       (await rowsOf(venue, billId)).reduce(
         (sum, row) => sum + Math.round(Number(row.lineTotal) * 100),
@@ -941,10 +943,10 @@ describe("a cancel's preview", () => {
 
     const preview = await post(
       billId,
-      { lineId, action: "cancel", quantity: "1" },
+      { ...pizza, action: "cancel", quantity: "1" },
       { path: "/preview" },
     );
-    const applied = await post(billId, { lineId, action: "cancel", quantity: "1" });
+    const applied = await post(billId, { ...pizza, action: "cancel", quantity: "1" });
 
     expect(applied.status).toBe(200);
     expect(
@@ -1034,7 +1036,7 @@ describe("the route's own rules", () => {
       ],
       [{ lineId: bottle, action: "comp", quantity: "2" }, 400, "adjustment.quantity_invalid"],
       [
-        { lineId: await lineIdOf(venue, billId, 3), action: "comp", quantity: "1" },
+        { ...(await todayLine(venue, billId, 3)), action: "comp", quantity: "1" },
         400,
         "adjustment.quantity_invalid",
       ],
@@ -1104,7 +1106,7 @@ describe("the route's own rules", () => {
       return reason.id;
     });
     const comp = async (lineNo: number, extra: Record<string, unknown> = {}) => ({
-      lineId: await lineIdOf(venue, billId, lineNo),
+      ...(await todayLine(venue, billId, lineNo)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
       ...extra,
@@ -1125,7 +1127,7 @@ describe("the route's own rules", () => {
   it("maps a give-away that takes nothing off to 409", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const comp = async () => ({
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       reasonId: venue.reasonId.house,
     });
@@ -1265,7 +1267,7 @@ describe("what the till reads", () => {
         submissionId: randomUUID(),
         expectedRevision: await revisionOf(billId),
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         reasonId: venue.reasonId.complaint,
         action: "comp",
         note: null,
@@ -1282,14 +1284,9 @@ describe("what the till reads", () => {
       { name: "Steak", quantity: "2" },
       { name: "Bread" },
     ]);
-    const [burgerId, steakId] = [
-      await lineIdOf(venue, billId, 1),
-      await lineIdOf(venue, billId, 2),
-    ];
-    expect((await post(billId, { lineId: burgerId, action: "comp" })).status).toBe(200);
-    expect((await post(billId, { lineId: steakId, action: "comp", quantity: "1" })).status).toBe(
-      200,
-    );
+    const [burger, steak] = [await todayLine(venue, billId, 1), await todayLine(venue, billId, 2)];
+    expect((await post(billId, { ...burger, action: "comp" })).status).toBe(200);
+    expect((await post(billId, { ...steak, action: "comp", quantity: "1" })).status).toBe(200);
 
     const answer = await send(
       venue.app,

@@ -2,7 +2,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -16,8 +16,11 @@ import { createAdjustmentReason, type AdjustmentReasonInput } from "@waitron/adj
 import {
   deviceProfiles,
   kitchenStations,
+  orderPortionEvents,
+  orderPortions,
   ticketItems,
   withTransaction,
+  workingLinePortions,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -608,6 +611,142 @@ export async function lineIdOf(
   );
   if (row === undefined) throw new Error(`no line ${lineNo} on bill ${billId}`);
   return row.id;
+}
+
+/**
+ * What a request names for line `lineNo` as today's writer would have numbered the bill: on
+ * grouped lines, that line; on portions, each cohort's dishes as one line, then its extras one line
+ * per extra product in order of first appearance, answered as the portions standing for it. A
+ * cohort's portions an action set apart (another price, group or served state) stand for the line
+ * today's split appends after the bill's other lines; dishes that left the bill leave today's
+ * numbers as they were. Covers one split action at a time, and refuses a bill a whole row of
+ * several dishes left, whose extras it cannot count.
+ */
+export async function todayLine(
+  venue: Pick<AdjustmentVenue, "db">,
+  billId: string,
+  lineNo: number,
+): Promise<{ lineId: string; lineIds?: string[] }> {
+  const { rows, left } = await inTx(venue, async (tx) => ({
+    rows: await tx
+      .select({
+        id: workingOrderLines.id,
+        lineNo: workingOrderLines.lineNo,
+        parentLineId: workingOrderLines.parentLineId,
+        productId: workingOrderLines.productId,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        listUnitPriceGross: workingOrderLines.listUnitPriceGross,
+        groupId: workingOrderLines.groupId,
+        servedAt: workingOrderLines.servedAt,
+        portionId: orderPortions.id,
+        cohortId: orderPortions.cohortId,
+        ordinal: orderPortions.ordinal,
+      })
+      .from(workingOrderLines)
+      .leftJoin(
+        workingLinePortions,
+        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
+      )
+      .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
+      .orderBy(asc(workingOrderLines.lineNo)),
+    left: await tx
+      .select({
+        portionId: orderPortions.id,
+        cohortId: orderPortions.cohortId,
+        ordinal: orderPortions.ordinal,
+      })
+      .from(orderPortionEvents)
+      .innerJoin(orderPortions, eq(orderPortions.id, orderPortionEvents.portionId))
+      .where(eq(orderPortionEvents.fromOrderId, billId)),
+  }));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  // Every dish of each cohort that was on this bill, still here or since gone: its ordinal.
+  const placed = new Map<string, Map<string, number>>();
+  for (const one of [...rows, ...left]) {
+    if (one.cohortId === null || one.portionId === null || one.ordinal === null) continue;
+    const dishes = placed.get(one.cohortId) ?? new Map<string, number>();
+    dishes.set(one.portionId, one.ordinal);
+    placed.set(one.cohortId, dishes);
+  }
+  const present = new Set(rows.map((row) => row.cohortId));
+  for (const [cohort, dishes] of placed) {
+    if (!present.has(cohort) && dishes.size > 1)
+      throw new Error(`todayLine: a row of several dishes left bill ${billId}`);
+  }
+  const productsOf = new Map<string, string[]>();
+  for (const row of rows) {
+    const cohort = row.parentLineId === null ? null : byId.get(row.parentLineId)!.cohortId;
+    if (cohort === null) continue;
+    const products = productsOf.get(cohort) ?? [];
+    if (!products.includes(row.productId!)) products.push(row.productId!);
+    productsOf.set(cohort, products);
+  }
+  // The today's line each dish row folds into: its cohort and the facts a split sets apart.
+  const setOf = (dish: (typeof rows)[number]) =>
+    JSON.stringify([
+      dish.cohortId,
+      dish.unitPriceGross,
+      dish.listUnitPriceGross,
+      dish.groupId,
+      dish.servedAt !== null,
+    ]);
+  const firstSet = new Map<string, string>();
+  const opened = new Map<string, Map<string | null, string[]>>();
+  const inPlace = new Map<number, string[]>();
+  const appended: string[][] = [];
+  // Rows a cohort placed beyond today's one line per dish and per extra product.
+  let folded = 0;
+  for (const row of rows) {
+    const dish = byId.get(row.parentLineId ?? row.id)!;
+    if (dish.cohortId === null) {
+      inPlace.set(row.lineNo - folded, [row.id]);
+      continue;
+    }
+    const products = productsOf.get(dish.cohortId) ?? [];
+    const width = 1 + products.length;
+    const set = setOf(dish);
+    if (!firstSet.has(dish.cohortId)) {
+      firstSet.set(dish.cohortId, set);
+      const ordinals = [...placed.get(dish.cohortId)!.values()].sort((a, b) => a - b);
+      const start = dish.lineNo - ordinals.indexOf(dish.ordinal!) * width - folded;
+      const lines = new Map<string | null, string[]>([[null, []]]);
+      products.forEach((product) => lines.set(product, []));
+      [...lines.values()].forEach((ids, i) => inPlace.set(start + i, ids));
+      opened.set(set, lines);
+      folded += (ordinals.length - 1) * width;
+    }
+    const lines = opened.get(set) ?? new Map<string | null, string[]>();
+    opened.set(set, lines);
+    const key = row.parentLineId === null ? null : row.productId;
+    const line = lines.get(key);
+    if (line !== undefined) line.push(row.id);
+    else {
+      lines.set(key, [row.id]);
+      appended.push(lines.get(key)!);
+    }
+  }
+  const last = Math.max(0, ...inPlace.keys());
+  const ids = inPlace.get(lineNo) ?? appended[lineNo - last - 1];
+  if (ids === undefined || ids.length === 0) throw new Error(`no line ${lineNo} on bill ${billId}`);
+  return ids.length === 1 ? { lineId: ids[0]! } : { lineId: ids[0]!, lineIds: ids };
+}
+
+/** The stored line numbers of the lines {@link todayLine} answers, in line order. */
+export async function todayLineNos(
+  venue: Pick<AdjustmentVenue, "db">,
+  billId: string,
+  lineNo: number,
+): Promise<number[]> {
+  const today = await todayLine(venue, billId, lineNo);
+  const rows = await inTx(venue, (tx) =>
+    tx
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(inArray(workingOrderLines.id, today.lineIds ?? [today.lineId]))
+      .orderBy(asc(workingOrderLines.lineNo)),
+  );
+  return rows.map((row) => row.lineNo);
 }
 
 /** The ticket item of line `lineNo`. */
