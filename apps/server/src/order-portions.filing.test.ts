@@ -1584,4 +1584,41 @@ describe("A803 portions: raising a dish", () => {
       linesOf(bound.billId).map((line) => [line.quantity, line.ordinal, line.measured]),
     ).toEqual([[3000, 1, 1]]);
   });
+
+  it("A803 portions: raising two portions of one cohort, only the first ticked, ticks only the first one's copy", async () => {
+    const bound = await billOf(burgersWithCheese("2"), { bound: true });
+    const [first, second] = bound.portions;
+    await inTx(venue, async (tx) => {
+      await VENUE_SERVICE.writePartyAllergy(
+        tx,
+        bound.partyId,
+        {
+          answer: "allergies",
+          guests: [{ who: "Green coat", allergens: { milk: {} }, note: null }],
+        },
+        venue.adminId,
+      );
+      const { guests } = await VENUE_SERVICE.readPartyAllergy(tx, bound.partyId);
+      await VENUE_SERVICE.setAllergyLineTicks(tx, bound.partyId, [
+        { guestId: guests[0]!.id, draftLineId: null, workingLineId: first!.lineId },
+      ]);
+    });
+    await updateHeldOrder({ db: venue.db }, venue.cfg, bound.billId, {
+      operatorId: venue.adminId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bound.billId)),
+      revision: await inTx(venue, (tx) => readOrderRevision(tx, bound.billId)),
+      lines: [first!, second!].map((portion) => ({
+        workingOrderLineId: portion.lineId,
+        ...burgersWithCheese("2")[0]!,
+      })),
+    });
+
+    // The copies follow the dishes they copy, in the order the edit names them: lines 5 and 7.
+    const ticked = venue.db.all<{ lineNo: number }>(
+      sql`select l.line_no as lineNo from working_order_lines l
+          join allergy_line_ticks t on t.working_line_id = l.id
+          where l.working_order_id = ${bound.billId} order by l.line_no`,
+    );
+    expect(ticked.map((row) => row.lineNo)).toEqual([1, 5]);
+  });
 });
