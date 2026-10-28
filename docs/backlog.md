@@ -5480,11 +5480,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Setup held-summary refusal loses its password field in CI.** At merge
-  `8977d4ad1`, run `40708505640` / setup job `122887931308` failed
-  `setup-app-held-refusals.test.ts:197` in the Spanish trading-settings refusal case:
-  `resume-password` was absent after the refusal text appeared. Retain that check and
-  reproduce the state transition before changing it; cause unknown.
+- **Two setup-app checks for an absent error message cannot fail** (left open by A1176).
+  `apps/setup/src/setup-app-missing-database.test.ts`'s "a damaged record reaches the
+  confirmation" case and the activity re-read case that checks for `initialOwnerStrings.en.error`
+  read the page's own text, but those messages are drawn only inside `wt-form-actions`' shadow
+  root. Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
+  prove each check by injecting the message. Found by reading, not run.
 
 - **The receipt-guests upgrade test reinstalls the append-only triggers itself** (left open by
   A1164, #2176). `packages/db/src/schema/sale-receipt-guests-upgrade.test.ts` calls
