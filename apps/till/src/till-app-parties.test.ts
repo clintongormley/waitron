@@ -5751,6 +5751,13 @@ describe("till-app: the order's groups", () => {
       tableOrder(el)!
         .lines.filter((line) => line.name === "Steak")
         .map((line) => line.quantity);
+    /** The steak rows of group g3 in the Current orders read the screen holds. */
+    const currentSteaks = (el: TillApp) =>
+      tableOrder(el)!
+        .currentOrders!.groups.filter((group) => group.id === "g3")
+        .flatMap((group) => group.rows)
+        .filter((row) => row.name === "Steak")
+        .map((row) => row.quantity);
 
     function requestHeldSplit(el: TillApp, quantity: string) {
       emit(tableOrder(el)!, "split-group-line", {
@@ -5900,11 +5907,13 @@ describe("till-app: the order's groups", () => {
         expect(server.moveLinesToGroup).not.toHaveBeenCalled();
         expect((await heldGroupsList(el))[2]!.lines).toEqual([`Steak ×${quantity}`, "Fish ×1"]);
         expect(steakLines(el)).toEqual(Array<string>(quantity).fill("1.000"));
+        expect(currentSteaks(el)).toEqual(Array<string>(quantity).fill("1.000"));
         expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
         expect(banner(el)).toBeNull();
         await reorderFromSent(el, "g3", "earlier");
         expect((await heldGroupsList(el))[1]!.lines).toEqual([`Steak ×${quantity}`, "Fish ×1"]);
         expect(steakLines(el)).toEqual(Array<string>(quantity).fill("1.000"));
+        expect(currentSteaks(el)).toEqual(Array<string>(quantity).fill("1.000"));
         emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
         await flush(el);
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
@@ -6029,6 +6038,7 @@ describe("till-app: the order's groups", () => {
       expect(banner(el)!.textContent).toContain(t("table.error"));
       expect((await heldGroupsList(el))[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
       expect(steakLines(el)).toEqual(["1.000", "1.000", "1.000", "1.000"]);
+      expect(currentSteaks(el)).toEqual(["1.000", "1.000", "1.000", "1.000"]);
       emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
       await flush(el);
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
@@ -6110,6 +6120,7 @@ describe("till-app: the order's groups", () => {
       expect(banner(el)).toBeNull();
       expect((await heldGroupsList(el))[2]!.lines).toEqual(["Steak ×3", "Fish ×1"]);
       expect(steakLines(el)).toEqual(["1.000", "1.000", "1.000"]);
+      expect(currentSteaks(el)).toEqual(["1.000", "1.000", "1.000"]);
     });
 
     const handheldOrder = (el: TillApp) =>

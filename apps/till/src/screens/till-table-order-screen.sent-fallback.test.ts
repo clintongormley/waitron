@@ -263,7 +263,7 @@ const fallbackRows = (el: HTMLElement) =>
     node.textContent!.replace(/\s+/g, " ").trim(),
   ]);
 
-it("A803 portion grouping: two identical sent portions show one ×2 row with their extras added", async () => {
+it("A803 portion grouping: two identical sent portions show one ×2 row, each extra at its count per portion and its price for both", async () => {
   const { el } = await mount({
     lines: [
       portion("burger-1", 1),
@@ -273,7 +273,22 @@ it("A803 portion grouping: two identical sent portions show one ×2 row with the
     ],
     currentOrders: null,
   });
-  expect(fallbackRows(el)).toEqual([["burger-1", "Burger ×2 €19.00 Cheese ×2 €2.00"]]);
+  expect(fallbackRows(el)).toEqual([["burger-1", "Burger ×2 €19.00 Cheese ×1 €2.00"]]);
+});
+
+it("A803 portion grouping: two portions of two limes each show Lime ×2, priced for all four", async () => {
+  const lime = (id: string, parentLineNo: number) => ({
+    ...portionCheese(id, parentLineNo),
+    name: "Lime",
+    productId: "lime",
+    quantity: "2.000",
+    unitPriceGross: "0.50",
+  });
+  const { el } = await mount({
+    lines: [portion("burger-1", 1), lime("lime-1", 1), portion("burger-2", 2), lime("lime-2", 2)],
+    currentOrders: null,
+  });
+  expect(fallbackRows(el)).toEqual([["burger-1", "Burger ×2 €19.00 Lime ×2 €2.00"]]);
 });
 
 it("A803 portion grouping: a served portion and an unserved one show two rows", async () => {

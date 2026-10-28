@@ -8733,6 +8733,60 @@ describe("recalled draft source splitting", () => {
       expect(banner(el)?.textContent).toContain(t("table.error"));
     });
 
+    function twoPortions(recallToDraft: ReturnType<typeof vi.fn>) {
+      const sent = {
+        sentAt: "2026-10-17T08:00:00Z",
+        firedAt: "2026-10-17T08:00:00Z",
+        state: "queued" as const,
+      };
+      return recallOpening({
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [
+            { ...reference().source.line, ...sent },
+            { ...reference("source-9").source.line, ...sent },
+          ],
+          revision: 7,
+        }),
+        recallToDraft,
+      });
+    }
+
+    it("A803 portion grouping: recalls every member of a grouped row, one request each by line number", async () => {
+      let revision = 3;
+      const recallToDraft = vi.fn(async () => ({ revision: ++revision, draft: recordRecall() }));
+      const { el, order } = await twoPortions(recallToDraft);
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(
+        recallToDraft.mock.calls.map((call) => {
+          const [, lineId, command] = call as unknown as [
+            string,
+            string,
+            { expectedPartyRevision: number },
+          ];
+          return [lineId, command.expectedPartyRevision];
+        }),
+      ).toEqual([
+        ["source-7", 3],
+        ["source-9", 4],
+      ]);
+      expect(order.party?.revision).toBe(5);
+      expect(draft(el).sending).toBe(false);
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
+    it("A803 portion grouping: a grouped Recall that fails on its first member sends no other", async () => {
+      const recallToDraft = vi.fn(async () => {
+        throw new TypeError("offline");
+      });
+      const { el, order } = await twoPortions(recallToDraft);
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(recallToDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(t("table.error"));
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
     it.each(["ticket.already_started", "ticket.already_fired", "order.payment_in_flight"])(
       "reloads the bill and preserves the specific %s Recall refusal",
       async (code) => {

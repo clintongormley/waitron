@@ -563,7 +563,18 @@ describe("till-app table ordering: the table's menus", () => {
   });
 });
 
-it("moves a table dish with one submission id and reloads its current orders", async () => {
+it.each([
+  [
+    "moves a table dish with one submission id and reloads its current orders",
+    undefined,
+    ["line-1"],
+  ],
+  [
+    "A803 portion grouping: moves every member of a grouped row in one request",
+    ["line-1", "line-2"],
+    ["line-1", "line-2"],
+  ],
+] as const)("%s", async (_, lineIds, sent) => {
   const listStations = vi.fn().mockResolvedValue([
     {
       id: "bar",
@@ -613,6 +624,7 @@ it("moves a table dish with one submission id and reloads its current orders", a
   emit(screen, "move-station", {
     workingOrderId: "wo-7",
     lineId: "line-1",
+    ...(lineIds === undefined ? {} : { lineIds }),
     name: "Café",
     stationId: "bar",
   });
@@ -626,7 +638,7 @@ it("moves a table dish with one submission id and reloads its current orders", a
     "wo-7",
     {
       submissionId: expect.any(String),
-      lineIds: ["line-1"],
+      lineIds: sent,
       stationId: "kitchen",
       expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
     },

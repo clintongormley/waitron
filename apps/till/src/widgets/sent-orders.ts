@@ -36,6 +36,8 @@ export interface SentLineInfo {
   lineId: string;
   workingOrderId: string;
   kind: SentSlice["kind"];
+  /** Present when the row shows several identical portions: every member, by line number. */
+  lineIds?: string[];
 }
 interface HeldOrder {
   scope: string;
@@ -237,7 +239,12 @@ export class TillSentOrders extends LitElement {
   #pressedModel: SentPanel | null = null;
   #pressedNow?: number;
   #gestures?: Gestures;
-  #pressed?: { slice: SentSlice; scope: string; billId: string; target: EventTarget };
+  #pressed?: {
+    members: readonly SentSlice[];
+    scope: string;
+    billId: string;
+    target: EventTarget;
+  };
   #suppressClick = false;
   @state() private dragging: string | null = null;
   #headingPress?: { id: string; target: EventTarget; expected: HeldOrder };
@@ -269,7 +276,7 @@ export class TillSentOrders extends LitElement {
           press.scope === this.scope &&
           press.billId === this.billId
         )
-          this.#info(press.slice.row.lineId, press.slice.kind);
+          this.#info(press.members);
         this.#releaseHeading();
       },
       pan: ({ dy }) => {
@@ -425,19 +432,20 @@ export class TillSentOrders extends LitElement {
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
   }
-  #info(lineId: string, kind: SentSlice["kind"]): void {
+  #info(members: readonly SentSlice[]): void {
     if (!this.isConnected || this.busy) return;
     const model = this.#model();
-    const slice =
-      model &&
-      [...model.served, ...model.fired, ...model.held.flatMap((g) => g.rows)].find(
-        (slice) => slice.row.lineId === lineId && slice.kind === kind,
-      );
-    if (slice)
+    const slices = model && [...model.served, ...model.fired, ...model.held.flatMap((g) => g.rows)];
+    const found = members.map((member) =>
+      slices?.find((slice) => slice.row.lineId === member.row.lineId && slice.kind === member.kind),
+    );
+    const slice = found[0];
+    if (slice && found.every((each) => each !== undefined))
       this.#dispatch("sent-line-info", {
-        lineId,
+        lineId: slice.row.lineId,
         workingOrderId: slice.row.workingOrderId,
-        kind,
+        kind: slice.kind,
+        ...(members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {}),
       } satisfies SentLineInfo);
     this.#releasePointer();
   }
@@ -452,12 +460,13 @@ export class TillSentOrders extends LitElement {
     this.#pressedNow = undefined;
     this.requestUpdate();
   }
-  #pressLine(slice: SentSlice, event: PointerEvent): void {
+  #pressLine(members: readonly SentSlice[], event: PointerEvent): void {
+    const slice = members[0]!;
     this.#releaseHeading();
     if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
-    this.#pressed = { slice, scope: this.scope, billId: this.billId, target };
+    this.#pressed = { members, scope: this.scope, billId: this.billId, target };
     if (slice.kind === "fired") {
       this.#pressedModel = this.#model();
       this.#pressedNow = this.now ?? Date.now();
@@ -540,14 +549,14 @@ export class TillSentOrders extends LitElement {
               data-serve-line=${slice.row.lineId}
               ?disabled=${this.busy || !slice.row.released}
               aria-description=${t("table.serve")}
-              @pointerdown=${(event: PointerEvent) => this.#pressLine(slice, event)}
+              @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
               @click=${(event: MouseEvent) => this.#clickServe(members, event)}
             >
               ${contents}
             </button>`
           : html`<div
               class="dish"
-              @pointerdown=${(event: PointerEvent) => this.#pressLine(slice, event)}
+              @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
             >
               ${contents}
             </div>`
@@ -557,7 +566,7 @@ export class TillSentOrders extends LitElement {
         data-sent-info=${slice.row.lineId}
         aria-label=${`${t("table.sent_info")} · ${slice.row.name}`}
         ?disabled=${this.busy}
-        @click=${() => this.#info(slice.row.lineId, slice.kind)}
+        @click=${() => this.#info(members)}
         >ⓘ</wt-button
       >
     </li>`;

@@ -996,3 +996,49 @@ it("A803 portion grouping: a portion ticked for a guest's allergy stands apart f
     ["burger-3", "Burger ×1Blue shirt", "€9.50"],
   ]);
 });
+
+it("A803 portion grouping: a grouped row's information names every member by line number", async () => {
+  const held = { released: false, firedAt: null };
+  const el = await mount(
+    current([], [group("g", [burger("burger-2", 2, held), burger("burger-1", 1, held)])]),
+    { lines: burgers.map((line) => ({ ...line, firedAt: null, groupId: "g" })) },
+  );
+  const details = collect(el, "sent-line-info");
+  await click(el, "[data-sent-toggle]");
+  await click(el, "[data-held-toggle]");
+  await click(el, "[data-sent-info=burger-1]");
+  expect(details).toEqual([
+    { lineId: "burger-1", workingOrderId: "b1", kind: "held", lineIds: ["burger-1", "burger-2"] },
+  ]);
+});
+
+it("A803 portion grouping: a long press on a grouped row names every member", async () => {
+  const el = await mount(current([burger("burger-2", 2), burger("burger-1", 1)]), {
+    lines: burgers,
+  });
+  const serves = collect(el, "serve-lines");
+  const details = collect(el, "sent-line-info");
+  await click(el, "[data-sent-toggle]");
+  const dish = find(el, "[data-serve-line=burger-1]");
+  dish.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  window.dispatchEvent(
+    new PointerEvent("pointerup", { pointerId: 1, pointerType: "mouse", clientX: 10, clientY: 10 }),
+  );
+  dish.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, detail: 1 }));
+  await el.updateComplete;
+  expect(details).toEqual([
+    { lineId: "burger-1", workingOrderId: "b1", kind: "fired", lineIds: ["burger-1", "burger-2"] },
+  ]);
+  expect(serves).toEqual([]);
+});

@@ -1334,6 +1334,8 @@ interface DishMove {
   kind?: undefined;
   workingOrderId: string;
   lineId: string;
+  /** Every portion a grouped row moves, by line number; absent, the move is `lineId` alone. */
+  lineIds?: string[];
   name: string;
   stationId: string | null;
   refusal: string | null;
@@ -12903,17 +12905,19 @@ export class TillApp extends LitElement {
     if (live()) await this.#loadTabLines();
   }
 
+  /** Recall names one line, so a grouped row's members go one request each, by line number; the
+   * first that does not apply stops the rest and says why. */
   async #onRecallLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
     const sync = this.#draftSync;
-    const line = this.tabLines.find((row) => row.lineNo === lineNos[0]);
+    const lines = lineNos.map((lineNo) => this.tabLines.find((row) => row.lineNo === lineNo));
     if (
       sync === undefined ||
       this.#tableDraft() !== sync.store ||
       this.activeTabId !== sync.billId ||
-      lineNos.length !== 1 ||
-      line === undefined ||
-      line.parentLineNo != null ||
+      lines.length === 0 ||
+      new Set(lineNos).size !== lineNos.length ||
+      lines.some((line) => line === undefined || line.parentLineNo != null) ||
       this.groupCommandBusy ||
       sync.store.sending ||
       sync.store.editsLocked
@@ -12928,30 +12932,34 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       if (!(await this.#flushPartyKitchenNote()) || !live()) return;
-      const outcome = await sync.runCommand(async (state, options) => {
-        const party = this.orderParty;
-        if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
-        return this.api.recallToDraft(
-          party.id,
-          line.id,
-          {
-            submissionId: crypto.randomUUID(),
-            expectedPartyRevision: party.revision,
-            expectedEdit: state.expectedEdit,
-          },
-          options,
-        );
-      });
-      if (!live()) return;
-      if (typeof outcome === "object" && "applied" in outcome) {
-        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
-        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
-      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
-      else if (outcome === "failed") this.errorKey = "table.error";
-      else
-        this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
-          ? draftRefusalError(outcome)
-          : lineWriteError({ code: outcome.refused });
+      for (const line of lines.sort((a, b) => a!.lineNo - b!.lineNo)) {
+        const outcome = await sync.runCommand(async (state, options) => {
+          const party = this.orderParty;
+          if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
+          return this.api.recallToDraft(
+            party.id,
+            line!.id,
+            {
+              submissionId: crypto.randomUUID(),
+              expectedPartyRevision: party.revision,
+              expectedEdit: state.expectedEdit,
+            },
+            options,
+          );
+        });
+        if (!live()) return;
+        if (typeof outcome === "object" && "applied" in outcome) {
+          this.#notePartyRevision(sync.partyId, outcome.applied.revision);
+          if (outcome.reloaded) continue;
+          this.errorKey = "table.draft_read_failed";
+        } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+        else if (outcome === "failed") this.errorKey = "table.error";
+        else
+          this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
+            ? draftRefusalError(outcome)
+            : lineWriteError({ code: outcome.refused });
+        break;
+      }
       await this.#loadTabLines();
     } finally {
       delete sync.store.busyAction;
@@ -12964,6 +12972,7 @@ export class TillApp extends LitElement {
       event as CustomEvent<{
         workingOrderId: string;
         lineId: string;
+        lineIds?: string[];
         name: string;
         stationId: string | null;
         counter?: boolean;
@@ -13162,7 +13171,7 @@ export class TillApp extends LitElement {
     }
     const body = {
       submissionId: crypto.randomUUID(),
-      lineIds: [open.lineId],
+      lineIds: open.lineIds ?? [open.lineId],
       stationId,
       expectedEdit: open.bill?.expectedEdit ?? null,
     };
