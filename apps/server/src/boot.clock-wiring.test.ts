@@ -15,6 +15,7 @@ import { AppError } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
+import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
@@ -41,6 +42,10 @@ vi.mock("./backup-supervisor.js", async (original) => {
       }
     },
   };
+});
+vi.mock("./backup-deletion-alert.js", async (original) => {
+  const actual = await original<typeof import("./backup-deletion-alert.js")>();
+  return { ...actual, createBackupRoomHooks: vi.fn(actual.createBackupRoomHooks) };
 });
 vi.mock("./cloud-snapshot-worker.js", async (original) => {
   const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
@@ -74,7 +79,7 @@ vi.mock("./content-suggestions-api.js", async (original) => {
   return { ...actual, mountContentSuggestionsApi: vi.fn(actual.mountContentSuggestionsApi) };
 });
 
-const drain = vi.hoisted(() => ({ calls: [] as FiscalDutyDeps[] }));
+const drain = vi.hoisted(() => ({ calls: [] as FiscalDutyDeps[], slots: [] as unknown[] }));
 
 // Boot hands filing the authority-clock observer only through the drain's deps, so a fake drain stands in for filing.
 vi.mock("@waitron/module", async (importOriginal) => {
@@ -83,7 +88,7 @@ vi.mock("@waitron/module", async (importOriginal) => {
     ...actual,
     fiscalSlot: (...args: Parameters<typeof actual.fiscalSlot>) => {
       const real = actual.fiscalSlot(...args);
-      return {
+      const enabled = {
         ...real,
         drain: async (deps: FiscalDutyDeps) => {
           drain.calls.push(deps);
@@ -95,6 +100,8 @@ vi.mock("@waitron/module", async (importOriginal) => {
           return emptyDrainResult();
         },
       };
+      drain.slots.push(enabled);
+      return enabled;
     },
   };
 });
@@ -179,6 +186,18 @@ describe("boot's authority clock wiring", () => {
           dayCutover: "05:00",
           cutoverChanges: [],
         });
+      // Every backup run gets the room hooks, built over the ENABLED fiscal seat, not every
+      // available fiscal module.
+      expect(createBackupRoomHooks).toHaveBeenCalledOnce();
+      const [hookDeps] = vi.mocked(createBackupRoomHooks).mock.calls[0]!;
+      expect(drain.slots).toContain(hookDeps.fiscal);
+      expect(hookDeps.nodeId).toBe(venue.cfg.nodeId);
+      const hooks = vi.mocked(createBackupRoomHooks).mock.results[0]!.value as ReturnType<
+        typeof createBackupRoomHooks
+      >;
+      expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
+      expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
+      expect(clocks.archive!.statfs).toBeUndefined();
       const changed = await fetch(
         `http://127.0.0.1:${httpPort()}/management-api/venue-details/business-day-start`,
         {
@@ -303,7 +322,9 @@ describe("boot's authority clock wiring", () => {
         vi.useRealTimers();
       }
       drain.calls = [];
+      drain.slots = [];
       clocks.archive = undefined;
+      vi.mocked(createBackupRoomHooks).mockClear();
       vi.mocked(createCloudSnapshotWorker).mockClear();
       vi.mocked(createContentSuggestionRunner).mockClear();
       vi.mocked(mountContentSuggestionsApi).mockClear();

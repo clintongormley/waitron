@@ -21,6 +21,7 @@ import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
+import type { DeletableArchive } from "./backup-room.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
   readDestinationStatus,
@@ -33,6 +34,7 @@ import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { realSleep } from "./loop.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
+import type { Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import { BACKUP_STAGING_DIR } from "./start-space.js";
 import "./errors.js";
@@ -146,6 +148,12 @@ export interface BackupSupervisorDeps {
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   stagingTurn?: StagingTurn;
+  /** Passed to each run as `installationStartedAt`; absent, a run deletes no old backup. */
+  readInstallationStart?: () => Promise<Date | null>;
+  /** Passed to each run as `onArchivesDeleted`. */
+  recordArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
+  /** DI for tests; passed to each run. */
+  statfs?: Statfs;
 }
 
 /** The size of the venue database file, without its write-ahead file; a missing file counts as
@@ -260,6 +268,9 @@ export class BackupSupervisor {
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
         stagingTurn: this.#deps.stagingTurn,
+        installationStartedAt: this.#deps.readInstallationStart,
+        onArchivesDeleted: this.#deps.recordArchivesDeleted,
+        statfs: this.#deps.statfs,
         signal: controller.signal,
         onScheduled: this.#deps.onScheduled,
         onDestinationResult: (result) => {

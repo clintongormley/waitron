@@ -321,6 +321,7 @@ import {
   loadRecoveryKey,
 } from "./backup-config.js";
 import { readArchiveSettings } from "./archive-settings.js";
+import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -2229,6 +2230,7 @@ async function bootServer(
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
   const stagingTurn = createStagingTurn();
+  const backupRoom = createBackupRoomHooks({ db, nodeId: till.nodeId, fiscal: enabledFiscal });
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({
@@ -2254,6 +2256,8 @@ async function bootServer(
       backupDeadlines.archive = at === null ? null : new Date(at).toISOString();
     },
     stagingTurn,
+    readInstallationStart: backupRoom.readInstallationStart,
+    recordArchivesDeleted: backupRoom.recordArchivesDeleted,
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
