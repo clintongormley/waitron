@@ -5920,8 +5920,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Other helpers and screen expectations remain; later cleanup goes package by package from
-  A977's list. Low priority.
+  Other helpers and screen expectations remain, including the main media library suite; later
+  cleanup goes package by package from A977's list. Keep accent-sensitive filename samples and
+  deliberate multilingual metadata. Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
