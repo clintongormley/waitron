@@ -5566,6 +5566,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
 - **A pnpm setup retry does not identify which command failed.**
+  Also investigate the setup step that remained active in main CI run 40644939856 after cancellation.
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
 - **Root guard deadlines under extreme external load (left open by A751).**
@@ -5916,9 +5917,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Other helpers and screen expectations remain. Media's translated UI expectations still need
-  to read from its strings file. Later cleanup goes package by package from A977's list. Keep accent-sensitive filename samples and
-  deliberate multilingual metadata. Low priority.
+  Other helpers and screen expectations remain. Media's main library suite still has a literal
+  translated Save-label expectation; its Spanish card actions,
+  usage labels, preview and form message use the catalogue. Later cleanup goes package by package
+  from A977's list. Keep accent-sensitive filename samples and deliberate multilingual metadata.
+  Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
