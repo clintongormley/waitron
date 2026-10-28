@@ -62,7 +62,7 @@ const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const christmas = theme("t-xmas", "Christmas", CHRISTMAS);
 const LIST: ThemeList = { themes: [lucia, christmas], inUse: lucia.id };
 
-// Folds open at once rather than over their animation; a case about motion turns it back on first.
+// Folds open at once rather than over their animation.
 beforeEach(async () => {
   setLocale("en-GB");
   await commands.emulateReducedMotion("reduce");

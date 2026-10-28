@@ -59,7 +59,7 @@ const lucia: ThemeView = {
   warnings: derived.warnings,
 };
 
-// Folds open at once rather than over their animation; a case about motion turns it back on first.
+// Folds open at once rather than over their animation.
 beforeEach(async () => {
   setLocale("en-GB");
   await commands.emulateReducedMotion("reduce");

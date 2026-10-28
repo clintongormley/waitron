@@ -125,12 +125,7 @@ venue-service, db and provisioning do not pack their shards by measured duration
 does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
 shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
 the fix at the cause. On main run 40597297102 (head `8e454b1eb`, 2026-10-27) the dashboard's four
-shards' runs took about 115, 202, 235 and 239 s, and shard 4's job 4 min 46 s. A simulation of
-Vitest 4.1.12's hash split over A841 slice 12's branch (not read from CI) puts
-`look-card.sections.test.ts`, `look-card.a11y.test.ts` and `theme-advanced.a11y.test.ts` in
-shard 4, `theme-advanced.test.ts` and
-`look-card.unsaved.test.ts` in shard 1, and `theme-words.test.ts` and `look-card.advanced.test.ts`
-in shard 3 ([the plan](../superpowers/plans/2026-10-27-a841-12-advanced-sections.md)).
+shards' runs took about 115, 202, 235 and 239 s, and shard 4's job 4 min 46 s.
 [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## Nothing checks, on every CI run, that each server test file ran in exactly one shard.

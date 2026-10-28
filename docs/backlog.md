@@ -3152,6 +3152,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the link opens Advanced's Buttons section and the code box scrolls only just into view at the
   bottom. Readings: `~/waitron-campaign/a841-12-shots/look-report.md` (lane A's machine).
 
+- **Pick a different colour for dark screens, pressed while Advanced is still closing, ends with a
+  jump (A841 slice 12's finish-branch review).** With motion on and `reveal` called 450 ms after
+  closing Advanced, Advanced's opening aimed at 531 px and jumped to 873 px at its end: its body was
+  still drawn, so Buttons grew inside it. `reveal`, `apps/dashboard/src/widgets/theme-advanced.ts`.
+
 - **The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look
   check).** The bar's middle strip scrolls sideways (`.till-strip`, `apps/till/src/widgets/till-shell.ts`)
   and More repeats its actions, so nothing is lost, but buttons are scrolled out of view. Strip

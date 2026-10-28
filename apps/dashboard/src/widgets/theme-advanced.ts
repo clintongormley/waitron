@@ -195,10 +195,10 @@ export class ThemeAdvanced extends LitElement {
   }
 
   /**
-   * Opens the section holding `key`, then Advanced, and moves focus to that value's code field. When
-   * Advanced starts closed, the section opens first while Advanced's body is hidden, so it opens at
-   * once and Advanced animates once to its full height; the other way round, Advanced would animate
-   * to the height of closed sections while the section grew inside it.
+   * Opens the section holding `key`, then Advanced, and moves focus to that value's code field. While
+   * Advanced's body is hidden (closed, and not mid closing animation), the section opens at once and,
+   * with motion on, Advanced animates once to its full height; the other way round, Advanced would
+   * animate to the height of closed sections while the section grew inside it.
    */
   async reveal(mode: Mode, key: ThemeColour): Promise<void> {
     type Disclosure = HTMLElementTagNameMap["wt-disclosure"];
