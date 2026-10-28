@@ -124,7 +124,8 @@ Fiscal-verifactu, till, dashboard,
 venue-service, db and provisioning do not pack their shards by measured duration as the server
 does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
 shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
-the fix at the cause.
+the fix at the cause. On main run 40597297102 (head `8e454b1eb`, 2026-10-27) the dashboard's four
+shards' runs took about 115, 202, 235 and 239 s, and shard 4's job 4 min 46 s.
 [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## Nothing checks, on every CI run, that each server test file ran in exactly one shard.

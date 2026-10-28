@@ -3046,8 +3046,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
-  its own button colour. Until slice
-  12 it is one flat list. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
+  its own button colour. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
   library image and an optional one for dark screens — checked on save and on import; the image
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
   and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
@@ -3089,7 +3088,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 11b landed 2026-10-27 (#2140): Advanced on the Look card sets the typeface, the four sizes
   and the three weights by hand, warns when text is too small and notes when it is larger than the
   tills are checked at, each with a fix; the saved card lists the text set by hand.
-  Next: 12 and 14 (14 with A1096's last part, below).
+  Slice 12 landed 2026-10-28 (#2167): Advanced is folded into five sections — Page and surfaces, Text
+  colours and links, Buttons, Fields and focus, and Text — each closed when the editor opens and
+  saying what in it is set by hand and how many of those are hard to read; a section
+  holding an error opens itself; Pick a different colour for dark screens opens Buttons.
+  Next: 14 (with A1096's last part, below).
 
 - **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
   A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
@@ -3162,9 +3165,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and the light form
   of the saved row's "set by hand".
 
-- **Advanced's Text rows sit after the colours in one flat list until A841 slice 12 folds Advanced
-  into sections** (A841 slice 11, D11 of
-  [the slice 11 plan](superpowers/plans/2026-10-27-a841-11-text-by-hand.md)).
+- **The dark Main buttons code box sits at the window's bottom edge after Pick a different colour
+  for dark screens (A841 slice 12's look check,
+  [the plan](superpowers/plans/2026-10-27-a841-12-advanced-sections.md)).** In a 900 px tall window
+  the link opens Advanced's Buttons section and the code box scrolls only just into view at the
+  bottom. Readings: `~/waitron-campaign/a841-12-shots/look-report.md` (lane A's machine).
+
+- **Pick a different colour for dark screens, pressed while Advanced is still closing, ends with a
+  jump (A841 slice 12's finish-branch review).** With motion on and `reveal` called 450 ms after
+  closing Advanced, Advanced's opening aimed at 531 px and jumped to 873 px at its end: its body was
+  still drawn, so Buttons grew inside it. `reveal`, `apps/dashboard/src/widgets/theme-advanced.ts`.
 
 - **The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look
   check).** The bar's middle strip scrolls sideways (`.till-strip`, `apps/till/src/widgets/till-shell.ts`)

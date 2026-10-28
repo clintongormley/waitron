@@ -64,8 +64,8 @@ theme's four choices:
   such as "Text on screens: small 12 px · normal 14 px · large 18 px · largest 22 px" at 100%.
 
 Under the brand colour, **Pick a different colour for dark screens** gives the dark version's main
-buttons a colour of their own: it opens Advanced and puts the cursor in the code box of **Main
-buttons** on dark screens. Once that colour is set, the link gives way to a line such as "Buttons on
+buttons a colour of their own: it opens Advanced and its **Buttons** section and puts the cursor in
+the code box of **Main buttons** on dark screens. Once that colour is set, the link gives way to a line such as "Buttons on
 dark screens: #5fa77a, set by hand", and **Use the brand colour** beside it takes the colour away
 again, so dark screens work their buttons out from the brand colour once more.
 
@@ -202,17 +202,28 @@ of the colours and text rows set by hand, such as "2 set by hand: Page (light), 
 are hard to read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
 heading to open it.
 
-Inside, a row for each of the theme's colours gives its value on light screens and on dark
-screens, under the headings **Light screens** and **Dark screens** on a wide card, or each labelled
+Inside, Advanced holds five sections, in this order: **Page and surfaces**, **Text colours and
+links**, **Buttons**, **Fields and focus** and **Text**. Each starts closed when you open the
+editor, and each has a closed line of its own that says what in it is set by hand, such as "1 set by
+hand: Page (light)" or "None set by hand". While colours set by hand in that section, or, in the
+**Text** section, text sizes, are hard to read, the line adds how many, as in "1 set by hand: Page
+(light) · 1 hard to read". The brand colour's own warning counts in none of the sections. Press a
+section's heading to open it. A section stays open or closed as you leave it, closing and opening
+Advanced included, until the editor closes; the next time the editor opens, every section starts
+closed.
+
+In the four colour sections, a row for each of the section's colours gives its value on light
+screens and on dark screens, under the headings **Light screens** and **Dark screens** at the top of
+the section on a wide card, or each labelled
 **Light** or **Dark** on a narrow one, each with a colour picker and a box for a colour code. Beside each value's code, or under it
 on a narrow screen, a colour that is worked out reads **Worked out**; Main buttons reads **Brand colour**, or **Fixed** where a
 readable shade was taken for that kind of screen. Changing either value, with the picker or by
 typing a code, sets that value by hand and leaves the other kind of screen's value as it was. A
 value set by hand is marked **Set by hand**, with **Use worked-out colour** under it to go back to
-the value Waitron works out. **Reset all to worked-out**, at the bottom of the section, puts every
-value back to worked out, the text rows included; it is greyed out while nothing is set by hand.
-After the colours, under **Text**, come the rows for the typeface, the text sizes and the weights,
-which "Set text by hand" below describes.
+the value Waitron works out. **Reset all to worked-out**, at the bottom of Advanced after the
+sections, puts every value back to worked out, the text rows included; it is greyed out while
+nothing is set by hand. The **Text** section holds the rows for the typeface, the text sizes and the
+weights, which "Set text by hand" below describes.
 
 A colour set by hand stays as you set it when you change the brand colour, the background or the
 corners. When you change the brand colour or the background while some colours are set by hand, a
@@ -223,12 +234,12 @@ Setting **Main buttons** by hand replaces the brand colour on that kind of scree
 shade taken for it there is dropped.
 
 A code must be `#` followed by six digits or letters a to f. When one is not, Save says so under
-that code box and saves nothing, and Advanced opens to show it, and it cannot be closed until the
-code is fixed.
+that code box and saves nothing, and Advanced and the section holding that colour open to show it,
+and they cannot be closed until the code is fixed.
 
 ## Set text by hand {#text-by-hand}
 
-Under **Text**, after the colours, Advanced has eight rows: **Typeface**, **Small text**, **Normal
+In Advanced's **Text** section there are eight rows: **Typeface**, **Small text**, **Normal
 text**, **Large text**, **Largest text**, **Normal weight**, **Medium weight** and **Bold weight**.
 Each shows Waitron's own value, marked **Worked out**, until you change it:
 
@@ -251,8 +262,8 @@ the slider lists the sizes drawn.
 A size drawn smaller than 12 px warns under its row, such as "Small text: 10 px is smaller than 12
 px; text that small is often hard to read.", with a button that sets the smallest size that draws
 12 px: **Use 12 px** at 100%, or **Use 9 px (12 px at 130%)** with the slider at 130%. It counts as
-hard to read, as a colour does: Advanced's closed line, **Fix all**, the **Hard to read** dialog and
-the Themes card count it.
+hard to read, as a colour does: Advanced's closed line, the Text section's closed line, **Fix all**,
+the **Hard to read** dialog and the Themes card count it.
 
 A size drawn larger than Waitron checks the tills at, which is Waitron's own size at 130% (16, 18,
 23 and 29 px), gets a note instead: "Largest text: 33 px is larger than Waitron checks the tills at;
@@ -261,7 +272,7 @@ as **Use 22 px (29 px at 130%)**. The note is not a warning: nothing counts it, 
 size as it is.
 
 A size that is not a whole number from 8 to 40 is not used. Save says "Enter a whole number from 8
-to 40." under it, saves nothing, and opens Advanced to show it.
+to 40." under it, saves nothing, and opens Advanced and its Text section to show it.
 
 The typeface and the weights reach every screen the theme paints, and a bold word, heading or table
 header follows **Bold weight** unless its screen gives it a weight of its own. Printed paper and

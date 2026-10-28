@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -79,6 +79,51 @@ export function cleanupWidgets(): void {
   history.replaceState(originalHistoryState, "", originalUrl);
   document.body.style.background = "";
   document.documentElement.style.background = "";
+}
+
+export interface OpenFoldOptions {
+  /**
+   * Clicks the header button in the page's own script instead of through the browser driver: no
+   * pointer, no scrolling into view, and no driver round trip. For a fold
+   * opened as setup, never for a case about the header click itself.
+   */
+  readonly domClick?: boolean;
+}
+
+/** Clicks a closed wt-disclosure's header and waits for it to render open; does nothing when open. */
+export async function openDisclosure(
+  disclosure: HTMLElementTagNameMap["wt-disclosure"],
+  { domClick = false }: OpenFoldOptions = {},
+): Promise<void> {
+  if (!disclosure.open) {
+    const header = disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button.header")!;
+    if (domClick) header.click();
+    else await userEvent.click(header);
+    await disclosure.updateComplete;
+  }
+  expect(disclosure.open).toBe(true);
+}
+
+/**
+ * Opens, outermost first, every wt-disclosure that holds `node`, crossing shadow roots. A
+ * disclosure reached as a shadow root's host is skipped: `node` is in its header, not its body,
+ * and opening it would make a click on that header close it.
+ */
+export async function openFoldsAround(node: Element, options: OpenFoldOptions = {}): Promise<void> {
+  const folds: HTMLElementTagNameMap["wt-disclosure"][] = [];
+  let at: Element | null = node;
+  while (at) {
+    const parent: Element | null = at.parentElement;
+    if (parent) {
+      if (parent.localName === "wt-disclosure")
+        folds.push(parent as HTMLElementTagNameMap["wt-disclosure"]);
+      at = parent;
+    } else {
+      const root = at.getRootNode();
+      at = root instanceof ShadowRoot ? root.host : null;
+    }
+  }
+  for (const fold of folds.reverse()) await openDisclosure(fold, options);
 }
 
 /**

@@ -6,7 +6,6 @@ import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import {
   MODES,
-  THEME_COLOURS,
   colourToken,
   isTextWarning,
   type ColourWarning,
@@ -16,6 +15,12 @@ import {
 } from "@waitron/ui-core/theme";
 import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import {
+  COLOUR_SECTIONS,
+  sectionHasError,
+  sectionOfColour,
+  type AdvancedSectionId,
+} from "./advanced-sections.js";
 import { colourValueField, colourValueStyles } from "./color-field.js";
 import { fixLineStyles } from "./fix-line-styles.js";
 import {
@@ -31,6 +36,8 @@ import {
   handFixLabel,
   handFixedText,
   handWarningLines,
+  sectionHeading,
+  sectionSummary,
   themeColourName,
 } from "./theme-words.js";
 
@@ -135,9 +142,8 @@ export class ThemeAdvanced extends LitElement {
       .notes > .warning {
         margin: 0;
       }
-      .text-group {
-        margin: var(--wt-space-5) 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-md);
+      .section {
+        border-top: 1px solid var(--wt-color-border);
       }
       .reset {
         display: flex;
@@ -188,14 +194,22 @@ export class ThemeAdvanced extends LitElement {
     this.#waitingPick = undefined;
   }
 
-  /** Opens the section and moves focus to that value's code field. */
+  /**
+   * Opens the section holding `key`, then Advanced, and moves focus to that value's code field. While
+   * Advanced's body is hidden (closed, and not mid closing animation), the section opens at once and,
+   * with motion on, Advanced animates once to its full height; the other way round, Advanced would
+   * animate to the height of closed sections while the section grew inside it.
+   */
   async reveal(mode: Mode, key: ThemeColour): Promise<void> {
-    const disclosure =
-      this.renderRoot.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-        "[data-test=advanced]",
-      )!;
-    disclosure.open = true;
-    await disclosure.updateComplete;
+    type Disclosure = HTMLElementTagNameMap["wt-disclosure"];
+    const section = this.renderRoot.querySelector<Disclosure>(
+      `[data-test=section-${sectionOfColour(key)}]`,
+    )!;
+    section.open = true;
+    await section.updateComplete;
+    const advanced = this.renderRoot.querySelector<Disclosure>("[data-test=advanced]")!;
+    advanced.open = true;
+    await advanced.updateComplete;
     this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
   }
 
@@ -355,6 +369,17 @@ export class ThemeAdvanced extends LitElement {
     }`;
   }
 
+  #section(id: AdvancedSectionId, body: TemplateResult): TemplateResult {
+    return html`<wt-disclosure
+      class="section"
+      data-test="section-${id}"
+      heading=${sectionHeading(id)}
+      summary=${sectionSummary(id, this.draft.choices, this.derived.warnings)}
+      ?has-error=${sectionHasError(id, this.errors, this.textErrors)}
+      >${body}</wt-disclosure
+    >`;
+  }
+
   override render() {
     return html`<wt-disclosure
       data-test="advanced"
@@ -365,27 +390,34 @@ export class ThemeAdvanced extends LitElement {
       }
     >
       <p class="intro" data-test="advanced-intro">${t("appearance.advanced_intro")}</p>
-      <div class="table">
-        <div class="row head" aria-hidden="true">
-          <span>${t("appearance.column_colour")}</span>
-          ${MODES.map((mode) => html`<span>${t(`appearance.screens.${mode}`)}</span>`)}
-        </div>
-        ${THEME_COLOURS.map(
-          (key) =>
-            html`<div class="row" data-test="hand-row-${key}">
-              <span class="name">${themeColourName(key)}</span>
-              ${MODES.map((mode) => this.#value(mode, key))}
-              <div class="notes">${MODES.map((mode) => this.#notes(mode, key))}</div>
-            </div>`,
-        )}
-      </div>
-      <h3 class="text-group">${t("appearance.text_group")}</h3>
-      <dashboard-theme-text
-        .draft=${this.draft}
-        .derived=${this.derived}
-        .errors=${this.textErrors}
-        ?busy=${this.busy}
-      ></dashboard-theme-text>
+      ${COLOUR_SECTIONS.map(({ id, keys }) =>
+        this.#section(
+          id,
+          html`<div class="table">
+            <div class="row head" aria-hidden="true">
+              <span>${t("appearance.column_colour")}</span>
+              ${MODES.map((mode) => html`<span>${t(`appearance.screens.${mode}`)}</span>`)}
+            </div>
+            ${keys.map(
+              (key) =>
+                html`<div class="row" data-test="hand-row-${key}">
+                  <span class="name">${themeColourName(key)}</span>
+                  ${MODES.map((mode) => this.#value(mode, key))}
+                  <div class="notes">${MODES.map((mode) => this.#notes(mode, key))}</div>
+                </div>`,
+            )}
+          </div>`,
+        ),
+      )}
+      ${this.#section(
+        "text",
+        html`<dashboard-theme-text
+          .draft=${this.draft}
+          .derived=${this.derived}
+          .errors=${this.textErrors}
+          ?busy=${this.busy}
+        ></dashboard-theme-text>`,
+      )}
       <p class="reset">
         <wt-button
           data-test="reset-all"

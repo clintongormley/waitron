@@ -23,6 +23,7 @@ import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { currentContentLanguages } from "@waitron/ui";
 import { catalogues, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import { type AdvancedSectionId, inSection, sectionKeys } from "./advanced-sections.js";
 import { countOf } from "./count-text.js";
 import { TEXT_FIELDS, textSetByHand, type TextField } from "./look-draft.js";
 
@@ -225,29 +226,64 @@ export function handFixedText(mode: Mode, from: string): string {
   return fill("appearance.hand_fixed", { screens: screens(mode), colour: from });
 }
 
+function handItem(key: ThemeColour, mode: Mode): string {
+  return fill("appearance.hand_item", {
+    name: themeColourName(key),
+    mode: t(`appearance.mode.${mode}`),
+  });
+}
+
 export function handNames(choices: ThemeChoices): string[] {
   return MODES.flatMap((mode) =>
     THEME_COLOURS.filter((key) => choices.handSet[mode][key] !== undefined).map((key) =>
-      fill("appearance.hand_item", {
-        name: themeColourName(key),
-        mode: t(`appearance.mode.${mode}`),
-      }),
+      handItem(key, mode),
     ),
   );
 }
 
-export function advancedSummary(choices: ThemeChoices, warnings: readonly ThemeWarning[]): string {
-  const names = [...handNames(choices), ...textNames(choices)];
+function setByHandLine(names: readonly string[], hardToReadCount: number, none: string): string {
   const set =
     names.length === 0
-      ? t("appearance.advanced_none")
+      ? none
       : names.length === 1
         ? fill("appearance.advanced_set_one", { names: names[0]! })
         : fill("appearance.advanced_set", { n: String(names.length), names: names.join(", ") });
-  const hardToReadCount = warnings.filter((warning) => warning.field !== "brandColor").length;
   return hardToReadCount === 0
     ? set
     : `${set} · ${countOf("appearance.hard_to_read_count", hardToReadCount)}`;
+}
+
+export function advancedSummary(choices: ThemeChoices, warnings: readonly ThemeWarning[]): string {
+  return setByHandLine(
+    [...handNames(choices), ...textNames(choices)],
+    warnings.filter((warning) => warning.field !== "brandColor").length,
+    t("appearance.advanced_none"),
+  );
+}
+
+export function sectionHeading(id: AdvancedSectionId): string {
+  return t(`appearance.section.${id}`);
+}
+
+function sectionNames(id: AdvancedSectionId, choices: ThemeChoices): string[] {
+  if (id === "text") return textNames(choices);
+  return MODES.flatMap((mode) =>
+    sectionKeys(id)
+      .filter((key) => choices.handSet[mode][key] !== undefined)
+      .map((key) => handItem(key, mode)),
+  );
+}
+
+export function sectionSummary(
+  id: AdvancedSectionId,
+  choices: ThemeChoices,
+  warnings: readonly ThemeWarning[],
+): string {
+  return setByHandLine(
+    sectionNames(id, choices),
+    warnings.filter((warning) => inSection(id, warning)).length,
+    t("appearance.section_none"),
+  );
 }
 
 export function keptNote(choices: ThemeChoices): string {

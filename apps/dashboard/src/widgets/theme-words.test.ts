@@ -7,12 +7,15 @@ import {
   isTextWarning,
   type ColourWarning,
   type ThemeChoices,
+  type ThemeWarning,
+  textNotes,
   textWarnings,
 } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { en, es, type StringKey } from "../i18n/strings.js";
 import { fill, setLocale } from "../i18n/t.js";
+import { ADVANCED_SECTIONS, type AdvancedSectionId, inSection } from "./advanced-sections.js";
 import {
   advancedSummary,
   againstNames,
@@ -28,6 +31,8 @@ import {
   previewProductName,
   saveDialogLine,
   savedWarningLine,
+  sectionHeading,
+  sectionSummary,
   TEXT_ROWS,
   textAtStep,
   textFieldName,
@@ -768,6 +773,191 @@ describe("the Text rows' words", () => {
     setLocale("es-ES");
     expect(textLargerLine("xl", 33)).toBe(
       esFill("appearance.text_larger", { name: es["appearance.text.size.xl"], size: "33" }),
+    );
+  });
+});
+
+describe("Advanced's sections", () => {
+  const summaries = (choices: ThemeChoices, warnings: readonly ThemeWarning[]) =>
+    Object.fromEntries(ADVANCED_SECTIONS.map((id) => [id, sectionSummary(id, choices, warnings)]));
+  const derived = (choices: ThemeChoices) => deriveTheme(choices).warnings;
+  const inEach = (warnings: readonly ThemeWarning[]) =>
+    Object.fromEntries(
+      ADVANCED_SECTIONS.map((id) => [id, warnings.filter((w) => inSection(id, w)).length]),
+    );
+  const allNone = (except: Partial<Record<AdvancedSectionId, string>>, none: string) =>
+    Object.fromEntries(ADVANCED_SECTIONS.map((id) => [id, except[id] ?? none]));
+
+  const BOTH_PAGES: ThemeChoices = {
+    ...LUCIA,
+    handSet: { light: { bg: "#f8f1e1" }, dark: { bg: "#1a1a1a" } },
+  };
+  const FOCUS_AND_FILL: ThemeChoices = {
+    ...LUCIA,
+    handSet: { light: { focus: "#1e5b3a", "field-fill": "#ffffff" }, dark: {} },
+  };
+  const FOCUS_LIGHT_FILL_DARK: ThemeChoices = {
+    ...LUCIA,
+    handSet: { light: { focus: "#1e5b3a" }, dark: { "field-fill": "#222222" } },
+  };
+  const DARK_BUTTONS: ThemeChoices = {
+    ...LUCIA,
+    handSet: { light: {}, dark: { primary: "#5fa77a" } },
+  };
+  const NORMAL_TEXT: ThemeChoices = { ...LUCIA, text: { size: { md: 16 } } };
+  const SMALL_TEXT: ThemeChoices = { ...LUCIA, text: { size: { sm: 10 } } };
+  const LARGEST_TEXT: ThemeChoices = { ...LUCIA, text: { size: { xl: 33 } } };
+  const LEMON_GREY: ThemeChoices = {
+    ...LEMON,
+    handSet: { light: { text: "#6a6a6a" }, dark: {} },
+  };
+  const PALE_TEXTS: ThemeChoices = {
+    ...WAITRON_CHOICES,
+    handSet: { light: { text: "#aaaaaa", "text-muted": "#bbbbbb" }, dark: {} },
+  };
+
+  it("sums up each section when it is closed", () => {
+    const none = "None set by hand";
+    expect(summaries(LUCIA, derived(LUCIA))).toEqual(allNone({}, none));
+    expect(summaries(CREAM, derived(CREAM))).toEqual(
+      allNone({ surfaces: "1 set by hand: Page (light)" }, none),
+    );
+    const twoFixes = summaries(TWO_FIXES, derived(TWO_FIXES));
+    expect(twoFixes.surfaces).toBe("1 set by hand: Sunken areas (light) · 1 hard to read");
+    expect(twoFixes["text-colours"]).toBe("1 set by hand: Text (light) · 1 hard to read");
+    expect(sectionSummary("surfaces", BOTH_PAGES, derived(BOTH_PAGES))).toBe(
+      "2 set by hand: Page (light), Page (dark)",
+    );
+    expect(sectionSummary("fields", FOCUS_AND_FILL, derived(FOCUS_AND_FILL))).toBe(
+      "2 set by hand: Field background (light), Focus ring (light)",
+    );
+    expect(sectionSummary("fields", FOCUS_LIGHT_FILL_DARK, derived(FOCUS_LIGHT_FILL_DARK))).toBe(
+      "2 set by hand: Focus ring (light), Field background (dark)",
+    );
+    expect(sectionSummary("buttons", DARK_BUTTONS, derived(DARK_BUTTONS))).toBe(
+      "1 set by hand: Main buttons (dark)",
+    );
+    expect(sectionSummary("buttons", HOVER, derived(HOVER)).endsWith(" · 1 hard to read")).toBe(
+      true,
+    );
+  });
+
+  it("sums up the Text section, where a larger-than-checked note is not hard to read", () => {
+    expect(sectionSummary("text", NORMAL_TEXT, derived(NORMAL_TEXT))).toBe(
+      "1 set by hand: Normal text",
+    );
+    expect(sectionSummary("text", SMALL_TEXT, derived(SMALL_TEXT))).toBe(
+      "1 set by hand: Small text · 1 hard to read",
+    );
+    expect(derived(LARGEST_TEXT)).toEqual([]);
+    expect(textNotes(LARGEST_TEXT, WAITRON_DEFAULTS)).toHaveLength(1);
+    expect(sectionSummary("text", LARGEST_TEXT, derived(LARGEST_TEXT))).toBe(
+      "1 set by hand: Largest text",
+    );
+  });
+
+  it("counts a brand warning in no section, as Advanced's own line does not", () => {
+    const warnings = derived(LEMON_GREY);
+    expect(warnings.map((w) => w.field).sort()).toEqual(["brandColor", "handSet.light.text"]);
+    expect(inEach(warnings)).toEqual({
+      surfaces: 0,
+      "text-colours": 1,
+      buttons: 0,
+      fields: 0,
+      text: 0,
+    });
+    expect(advancedSummary(LEMON_GREY, warnings).endsWith(" · 1 hard to read")).toBe(true);
+  });
+
+  it("counts, over the five sections, what Advanced's own line counts", () => {
+    const fixtures = [
+      LUCIA,
+      CREAM,
+      TWO_FIXES,
+      BOTH_PAGES,
+      FOCUS_AND_FILL,
+      FOCUS_LIGHT_FILL_DARK,
+      DARK_BUTTONS,
+      HOVER,
+      NORMAL_TEXT,
+      SMALL_TEXT,
+      LARGEST_TEXT,
+      LEMON_GREY,
+    ];
+    for (const choices of fixtures) {
+      const warnings = derived(choices);
+      const sum = Object.values(inEach(warnings)).reduce((a, b) => a + b, 0);
+      const count = sum === 1 ? "1 hard to read" : `${sum} hard to read`;
+      const summary = advancedSummary(choices, warnings);
+      if (sum === 0) expect(summary).not.toContain(" · ");
+      else expect(summary.endsWith(` · ${count}`)).toBe(true);
+    }
+  });
+
+  it("sums up each section in Spanish", () => {
+    setLocale("es-ES");
+    const none = es["appearance.section_none"];
+    const item = (key: Parameters<typeof themeColourName>[0], mode: "light" | "dark") =>
+      esFill("appearance.hand_item", {
+        name: es[`appearance.colour.${key}`],
+        mode: es[`appearance.mode.${mode}`],
+      });
+    const one = (names: string) => esFill("appearance.advanced_set_one", { names });
+    const hard = es["appearance.hard_to_read_count_one"];
+    expect(summaries(LUCIA, derived(LUCIA))).toEqual(allNone({}, none));
+    expect(summaries(CREAM, derived(CREAM))).toEqual(
+      allNone({ surfaces: one(item("bg", "light")) }, none),
+    );
+    const twoFixes = summaries(TWO_FIXES, derived(TWO_FIXES));
+    expect(twoFixes.surfaces).toBe(`${one(item("surface-sunken", "light"))} · ${hard}`);
+    expect(twoFixes["text-colours"]).toBe(`${one(item("text", "light"))} · ${hard}`);
+    expect(sectionSummary("surfaces", BOTH_PAGES, derived(BOTH_PAGES))).toBe(
+      esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("bg", "light")}, ${item("bg", "dark")}`,
+      }),
+    );
+    expect(sectionSummary("fields", FOCUS_AND_FILL, derived(FOCUS_AND_FILL))).toBe(
+      esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("field-fill", "light")}, ${item("focus", "light")}`,
+      }),
+    );
+    expect(sectionSummary("fields", FOCUS_LIGHT_FILL_DARK, derived(FOCUS_LIGHT_FILL_DARK))).toBe(
+      esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("focus", "light")}, ${item("field-fill", "dark")}`,
+      }),
+    );
+    expect(sectionSummary("buttons", HOVER, derived(HOVER)).endsWith(` · ${hard}`)).toBe(true);
+    expect(sectionSummary("text-colours", PALE_TEXTS, derived(PALE_TEXTS))).toBe(
+      `${esFill("appearance.advanced_set", {
+        n: "2",
+        names: `${item("text", "light")}, ${item("text-muted", "light")}`,
+      })} · ${esFill("appearance.hard_to_read_count", { count: "2" })}`,
+    );
+    expect(sectionSummary("buttons", DARK_BUTTONS, derived(DARK_BUTTONS))).toBe(
+      one(item("primary", "dark")),
+    );
+    expect(sectionSummary("text", SMALL_TEXT, derived(SMALL_TEXT))).toBe(
+      `${one(es["appearance.text.size.sm"])} · ${hard}`,
+    );
+    expect(sectionSummary("text", LARGEST_TEXT, derived(LARGEST_TEXT))).toBe(
+      one(es["appearance.text.size.xl"]),
+    );
+  });
+
+  it("names each section's heading", () => {
+    expect(ADVANCED_SECTIONS.map(sectionHeading)).toEqual([
+      "Page and surfaces",
+      "Text colours and links",
+      "Buttons",
+      "Fields and focus",
+      "Text",
+    ]);
+    setLocale("es-ES");
+    expect(ADVANCED_SECTIONS.map(sectionHeading)).toEqual(
+      ADVANCED_SECTIONS.map((id) => es[`appearance.section.${id}`]),
     );
   });
 });

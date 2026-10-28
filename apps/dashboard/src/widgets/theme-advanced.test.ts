@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import {
   THEME_COLOURS,
   WAITRON_CHOICES,
@@ -18,8 +18,22 @@ import {
   typeTextSize,
   type LookDraft,
 } from "./look-draft.js";
-import { cleanupWidgets, computedColour, dotOf, mountWidget } from "./test-helpers.js";
-import { advancedSummary, handWarningLines, themeColourName } from "./theme-words.js";
+import {
+  cleanupWidgets,
+  computedColour,
+  dotOf,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "./test-helpers.js";
+import { ADVANCED_SECTIONS, COLOUR_SECTIONS, sectionOfColour } from "./advanced-sections.js";
+import {
+  advancedSummary,
+  handWarningLines,
+  sectionHeading,
+  sectionSummary,
+  themeColourName,
+} from "./theme-words.js";
 import type { HandAction, ThemeAdvanced } from "./theme-advanced.js";
 import "./theme-advanced.js";
 
@@ -35,11 +49,15 @@ const LUCIA: ThemeChoices = {
 };
 const CREAM = setHand(openDraft(LUCIA), "light", "bg", "#f8f1e1");
 
-beforeEach(() => setLocale("en-GB"));
-
-afterEach(() => {
+// Folds open at once rather than over their animation; a case about motion turns it back on first.
+beforeEach(async () => {
+  setLocale("en-GB");
+  await commands.emulateReducedMotion("reduce");
+});
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
+  await commands.emulateReducedMotion(null);
 });
 
 async function mount(draft: LookDraft, extra: Partial<ThemeAdvanced> = {}) {
@@ -66,10 +84,17 @@ const workedOut = (el: ThemeAdvanced, mode: string, key: string) =>
     `[data-test=hand-worked-out-${mode}-${key}]`,
   );
 
+const sections = (el: ThemeAdvanced) => [
+  ...el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-disclosure"]>(
+    "[data-test^=section-]",
+  ),
+];
+
+const sectionAt = (el: ThemeAdvanced, id: string) =>
+  q<HTMLElementTagNameMap["wt-disclosure"]>(el, `[data-test=section-${id}]`);
+
 async function open(el: ThemeAdvanced): Promise<void> {
-  const d = disclosure(el);
-  await userEvent.click(d.shadowRoot!.querySelector("button.header")!);
-  await d.updateComplete;
+  await openDisclosure(disclosure(el));
   await el.updateComplete;
 }
 
@@ -102,19 +127,20 @@ describe("opened", () => {
     expect(q(el, "[data-test=advanced-intro]").textContent!.trim()).toBe(
       t("appearance.advanced_intro"),
     );
-    const head = q(el, ".head");
-    expect(head.getAttribute("aria-hidden")).toBe("true");
-    expect([...head.children].map((c) => c.textContent!.trim())).toEqual([
-      "Colour",
-      "Light screens",
-      "Dark screens",
-    ]);
+    for (const { id } of COLOUR_SECTIONS) {
+      const head = q(el, `[data-test=section-${id}] .head`);
+      expect(head.getAttribute("aria-hidden")).toBe("true");
+      expect([...head.children].map((c) => c.textContent!.trim())).toEqual([
+        "Colour",
+        "Light screens",
+        "Dark screens",
+      ]);
+    }
+    const inOrder = COLOUR_SECTIONS.flatMap((section) => section.keys);
     const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=hand-row-]")];
-    expect(rows.map((row) => row.dataset.test)).toEqual(
-      THEME_COLOURS.map((key) => `hand-row-${key}`),
-    );
+    expect(rows.map((row) => row.dataset.test)).toEqual(inOrder.map((key) => `hand-row-${key}`));
     expect(rows.map((row) => row.querySelector(".name")!.textContent!.trim())).toEqual(
-      THEME_COLOURS.map(themeColourName),
+      inOrder.map(themeColourName),
     );
     expect(el.shadowRoot!.querySelectorAll("wt-input[name^='handSet.']")).toHaveLength(44);
     expect(
@@ -178,12 +204,14 @@ describe("events", () => {
     await open(el);
     const seen = actions(el);
     const input = picker(el, "dark", "surface");
+    await openFoldsAround(input);
     input.value = "#223344";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await nextFrame();
     expect(seen).toEqual([{ kind: "pick", mode: "dark", key: "surface", colour: "#223344" }]);
 
     const inner = codeField(el, "light", "text").shadowRoot!.querySelector("input")!;
+    await openFoldsAround(inner);
     await page.elementLocator(inner).fill("#abc");
     expect(seen.at(-1)).toEqual({ kind: "type", mode: "light", key: "text", text: "#abc" });
 
@@ -191,6 +219,7 @@ describe("events", () => {
     expect(link.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
       "Use worked-out colour: Page, light screens",
     );
+    await openFoldsAround(link);
     await userEvent.click(link);
     expect(seen.at(-1)).toEqual({ kind: "worked-out", mode: "light", key: "bg" });
 
@@ -198,6 +227,7 @@ describe("events", () => {
     expect(reset.variant).toBe("secondary");
     expect(reset.textContent!.trim()).toBe("Reset all to worked-out");
     expect(reset.disabled).toBe(false);
+    await openFoldsAround(reset);
     await userEvent.click(reset);
     expect(seen.at(-1)).toEqual({ kind: "reset-all" });
     expect(seen).toHaveLength(4);
@@ -250,6 +280,7 @@ describe("errors and focus", () => {
     expect(codeField(el, "light", "bg").error).toBe("x");
     expect(disclosure(el).hasAttribute("has-error")).toBe(true);
     expect(disclosure(el).open).toBe(true);
+    expect(sections(el).map((section) => section.open)).toEqual([true, false, false, false, false]);
   });
 
   it("an error key with no message leaves it closed", async () => {
@@ -271,6 +302,7 @@ describe("errors and focus", () => {
     const el = await mount(CREAM);
     await el.reveal("dark", "primary");
     expect(disclosure(el).open).toBe(true);
+    expect(sectionAt(el, "buttons").open).toBe(true);
     let focused: Element | null = document.activeElement;
     while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
     expect(focused).toBe(
@@ -278,6 +310,104 @@ describe("errors and focus", () => {
         "input[name='handSet.dark.primary']",
       ),
     );
+  });
+});
+
+describe("what opens a section", () => {
+  const opened = (el: ThemeAdvanced) => sections(el).map((d) => d.open);
+  const erring = (el: ThemeAdvanced) => sections(el).map((d) => d.hasAttribute("has-error"));
+  const settled = async (el: ThemeAdvanced) => {
+    await el.updateComplete;
+    await disclosure(el).updateComplete;
+    for (const d of sections(el)) await d.updateComplete;
+  };
+  const focusedInner = () => {
+    let focused: Element | null = document.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    return focused;
+  };
+  const innerInput = (el: ThemeAdvanced, mode: string, key: string) =>
+    codeField(el, mode, key).shadowRoot!.querySelector(`input[name='handSet.${mode}.${key}']`);
+
+  it("an error opens its own section only, which stays open once the error clears", async () => {
+    const el = await mount(CREAM);
+    el.errors = { "handSet.dark.field-line": "x" };
+    await settled(el);
+    expect(disclosure(el).open).toBe(true);
+    expect(opened(el)).toEqual([false, false, false, true, false]);
+    expect(erring(el)).toEqual([false, false, false, true, false]);
+    expect(disclosure(el).hasAttribute("has-error")).toBe(true);
+    el.errors = {};
+    await settled(el);
+    expect(sectionAt(el, "fields").open).toBe(true);
+    expect(erring(el)).toEqual([false, false, false, false, false]);
+  });
+
+  it("a text error opens the Text section only", async () => {
+    const el = await mount(openDraft(LUCIA), {
+      textErrors: { "text.size.sm": t("appearance.bad_text_px") },
+    });
+    await settled(el);
+    expect(opened(el)).toEqual([false, false, false, false, true]);
+    expect(erring(el)).toEqual([false, false, false, false, true]);
+  });
+
+  it("errors in two sections open both", async () => {
+    const el = await mount(CREAM, {
+      errors: { "handSet.light.surface": "x" },
+      textErrors: { "text.size.sm": t("appearance.bad_text_px") },
+    });
+    await settled(el);
+    expect(opened(el)).toEqual([true, false, false, false, true]);
+  });
+
+  it("an error key with no message opens no section", async () => {
+    const el = await mount(CREAM, { errors: { "handSet.light.bg": undefined } });
+    await settled(el);
+    expect(opened(el)).toEqual([false, false, false, false, false]);
+    expect(erring(el)).toEqual([false, false, false, false, false]);
+  });
+
+  it("reveal opens Buttons alone for the dark Main buttons and focuses its code", async () => {
+    const el = await mount(CREAM);
+    await el.reveal("dark", "primary");
+    expect(disclosure(el).open).toBe(true);
+    expect(opened(el)).toEqual([false, false, true, false, false]);
+    expect(focusedInner()).toBe(innerInput(el, "dark", "primary"));
+  });
+
+  it("reveal leaves a section already open as it was", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    await openDisclosure(sectionAt(el, "surfaces"));
+    await el.reveal("dark", "primary");
+    expect(opened(el)).toEqual([true, false, true, false, false]);
+  });
+
+  it("reveal opens the section holding the value, not always Buttons", async () => {
+    const el = await mount(CREAM);
+    await el.reveal("light", "focus");
+    expect(opened(el)).toEqual([false, false, false, true, false]);
+    expect(focusedInner()).toBe(innerInput(el, "light", "focus"));
+  });
+
+  it("reveal opens the section before Advanced, so Advanced animates once to its full height", async () => {
+    await commands.emulateReducedMotion(null);
+    const el = await mount(CREAM);
+    await el.reveal("dark", "primary");
+    const buttons = sectionAt(el, "buttons").shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(buttons.classList.contains("animating")).toBe(false);
+    expect(buttons.style.height).toBe("");
+    await nextFrame();
+    expect(sectionAt(el, "buttons").open).toBe(true);
+    const body = disclosure(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(body.classList.contains("animating")).toBe(true);
+    const target = parseFloat(body.style.height);
+    expect(target).toBeGreaterThanOrEqual(body.scrollHeight - 1);
+    await vi.waitFor(() => expect(body.classList.contains("animating")).toBe(false), {
+      timeout: 5000,
+    });
+    expect(target).toBeGreaterThanOrEqual(body.getBoundingClientRect().height - 1);
   });
 });
 
@@ -289,9 +419,10 @@ describe("layout", () => {
     await page.viewport(width, 900);
     const el = await mount(CREAM);
     if (section !== undefined) el.style.width = `${section}px`;
-    await open(el);
-    await nextFrame();
     const row = q(el, `[data-test=hand-row-${key}]`);
+    await openFoldsAround(row);
+    await el.updateComplete;
+    await nextFrame();
     const [light, dark] = [...row.querySelectorAll<HTMLElement>(".value")];
     return { el, row, name: row.querySelector<HTMLElement>(".name")!, light: light!, dark: dark! };
   }
@@ -317,6 +448,39 @@ describe("layout", () => {
       t("theme.dark"),
     ]);
     for (const label of modeLabels(row)) expect(box(label).height).toBeGreaterThan(0);
+  });
+
+  it("stacks the five sections at phone width, each row stacked, nothing scrolling sideways", async () => {
+    await page.viewport(390, 900);
+    const el = await mount(CREAM);
+    await open(el);
+    for (const d of sections(el)) await openDisclosure(d);
+    await el.updateComplete;
+    await nextFrame();
+    const boxes = sections(el).map(box);
+    for (const [i, at] of boxes.entries()) {
+      expect(Math.abs(at.left - boxes[0]!.left), `section ${i}`).toBeLessThanOrEqual(1);
+      if (i > 0) expect(at.top, `section ${i}`).toBeGreaterThanOrEqual(boxes[i - 1]!.bottom);
+    }
+    for (const key of ["bg", "focus"] as const) {
+      const row = q(el, `[data-test=hand-row-${key}]`);
+      const name = row.querySelector<HTMLElement>(".name")!;
+      const [light, dark] = [...row.querySelectorAll<HTMLElement>(".value")];
+      expect(Math.abs(box(light!).left - box(name).left), key).toBeLessThanOrEqual(1);
+      expect(box(dark!).top, key).toBeGreaterThanOrEqual(box(light!).bottom);
+      expect(
+        modeLabels(row).map((label) => label.textContent!.trim()),
+        key,
+      ).toEqual([t("theme.light"), t("theme.dark")]);
+      for (const label of modeLabels(row)) expect(box(label).height, key).toBeGreaterThan(0);
+    }
+    expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+    const typeface = q(el, "dashboard-theme-text").shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="text-row-family"]',
+    )!;
+    expect(box(typeface.querySelector(".value")!).top).toBeGreaterThanOrEqual(
+      box(typeface.querySelector(".name")!).bottom,
+    );
   });
 
   it("sets Light and Dark side by side when wide", async () => {
@@ -359,6 +523,7 @@ describe("layout", () => {
         expect(style.borderBottomStyle, row.dataset.test).toBe("solid");
         expect(parseFloat(style.borderBottomWidth), row.dataset.test).toBeGreaterThan(0);
       }
+      await openFoldsAround(q(el, "[data-test=reset-all]"));
       const reset = box(q(el, "[data-test=reset-all]"));
       expect(Math.abs(reset.right - box(q(el, ".table")).right)).toBeLessThanOrEqual(1);
     });
@@ -427,6 +592,7 @@ describe("warnings under the rows", () => {
     expect(fix.size).toBe("sm");
     expect(innerLabel(fix)).toBe("Use #526a5b: Secondary text, light screens");
     const seen = actions(el);
+    await openFoldsAround(fix);
     await userEvent.click(fix);
     expect(seen).toEqual([{ kind: "fix", mode: "light", key: "text-muted", fix: "#526a5b" }]);
 
@@ -492,6 +658,7 @@ describe("the fixed line", () => {
     expect(undo.textContent!.trim()).toBe("Undo");
     expect(innerLabel(undo)).toBe("Undo: Secondary text, light screens");
     const seen = actions(el);
+    await openFoldsAround(undo);
     await userEvent.click(undo);
     expect(seen).toEqual([{ kind: "undo", mode: "light", key: "text-muted" }]);
   });
@@ -509,6 +676,7 @@ describe("the fixed line", () => {
 
   async function at(el: ThemeAdvanced, width: number) {
     el.style.width = `${width}px`;
+    await openFoldsAround(words(el));
     await nextFrame();
     await nextFrame();
     // elementFromPoint sees only what is inside the viewport.
@@ -548,6 +716,7 @@ describe("the fixed line", () => {
       setLocale(locale);
       const el = await mount(TAKEN, { fixed: FIXED });
       await open(el);
+      await openFoldsAround(words(el));
       const narrow = await at(el, await narrowWidth(el));
       expect(wordLines(el)).toBe(1);
       expect(narrow.undoOnColourLine, JSON.stringify(narrow)).toBe(false);
@@ -601,6 +770,7 @@ describe("one pick per frame", () => {
   it("sends a waiting pick before any other action, and nothing more at the frame", async () => {
     const el = await mount(CREAM);
     await open(el);
+    await openFoldsAround(workedOut(el, "light", "bg")!);
     const seen = actions(el);
     const before = frames.length;
     pick(el, "#111111");
@@ -652,17 +822,20 @@ describe("the Text block", () => {
   const textRows = (el: ThemeAdvanced) =>
     q<HTMLElementTagNameMap["dashboard-theme-text"]>(el, "dashboard-theme-text");
 
-  it("holds the Text block after the colours and before Reset all, under a Text heading", async () => {
+  it("holds the Text block in the last section, after the colours and before Reset all", async () => {
     const draft = typeTextSize(openDraft(LUCIA), "sm", "10");
     const el = await mount(draft);
     const d = disclosure(el);
-    const heading = q(el, "h3.text-group");
-    expect(heading.textContent!.trim()).toBe("Text");
+    const text = q<HTMLElementTagNameMap["wt-disclosure"]>(el, "[data-test=section-text]");
+    expect(sections(el).at(-1)).toBe(text);
+    expect(text.heading).toBe(sectionHeading("text"));
+    expect(el.shadowRoot!.querySelector("h3.text-group")).toBeNull();
+    expect(text.contains(textRows(el))).toBe(true);
     expect(d.contains(textRows(el))).toBe(true);
     const order = (a: Node, b: Node) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
-    expect(order(q(el, ".table"), heading)).toBeTruthy();
-    expect(order(heading, textRows(el))).toBeTruthy();
+    for (const { id } of COLOUR_SECTIONS)
+      expect(order(q(el, `[data-test=section-${id}]`), text)).toBeTruthy();
     expect(order(textRows(el), q(el, "[data-test=reset-all]"))).toBeTruthy();
     expect(textRows(el).draft).toBe(draft);
     expect(textRows(el).derived).toBe(el.derived);
@@ -690,6 +863,7 @@ describe("the Text block", () => {
       textErrors: { "text.size.sm": t("appearance.bad_text_px") },
     });
     expect(disclosure(el).hasAttribute("has-error")).toBe(true);
+    expect(sections(el).map((section) => section.open)).toEqual([false, false, false, false, true]);
     el.textErrors = {};
     await el.updateComplete;
     expect(disclosure(el).hasAttribute("has-error")).toBe(false);
@@ -706,5 +880,144 @@ describe("the Text block", () => {
     expect(q(el, "[data-test=advanced-intro]").textContent!.trim()).toBe(
       "A colour you set here stays as you set it when you change the brand colour, background or corners. A text size you set here grows and shrinks with Text size. Waitron still checks both can be read.",
     );
+  });
+});
+
+describe("sections", () => {
+  const section = (el: ThemeAdvanced, id: string) =>
+    q<HTMLElementTagNameMap["wt-disclosure"]>(el, `[data-test=section-${id}]`);
+  const header = (d: HTMLElementTagNameMap["wt-disclosure"]) =>
+    d.shadowRoot!.querySelector<HTMLButtonElement>("button.header")!;
+  const opened = (el: ThemeAdvanced) => sections(el).map((d) => d.open);
+
+  it("draws five closed sections in order, each headed and with its own closed line", async () => {
+    const el = await mount(CREAM);
+    const warnings = deriveTheme(CREAM.choices).warnings;
+    const check = () => {
+      const found = sections(el);
+      expect(found.map((d) => d.dataset.test)).toEqual(
+        ADVANCED_SECTIONS.map((id) => `section-${id}`),
+      );
+      expect(found.map((d) => d.open)).toEqual([false, false, false, false, false]);
+      expect(found.map((d) => d.heading)).toEqual(ADVANCED_SECTIONS.map(sectionHeading));
+      expect(found.map((d) => d.summary)).toEqual(
+        ADVANCED_SECTIONS.map((id) => sectionSummary(id, CREAM.choices, warnings)),
+      );
+      expect(found.map((d) => d.summary)).toEqual([
+        "1 set by hand: Page (light)",
+        "None set by hand",
+        "None set by hand",
+        "None set by hand",
+        "None set by hand",
+      ]);
+      expect(disclosure(el).summary).toBe(advancedSummary(CREAM.choices, warnings));
+    };
+    check();
+    await open(el);
+    check();
+  });
+
+  it("puts each row in its colour's section, in the section's order", async () => {
+    const el = await mount(CREAM);
+    for (const key of THEME_COLOURS)
+      expect(section(el, sectionOfColour(key)).contains(q(el, `[data-test=hand-row-${key}]`))).toBe(
+        true,
+      );
+    for (const { id, keys } of COLOUR_SECTIONS)
+      expect(
+        [...section(el, id).querySelectorAll<HTMLElement>("[data-test^=hand-row-]")].map(
+          (row) => row.dataset.test,
+        ),
+      ).toEqual(keys.map((key) => `hand-row-${key}`));
+  });
+
+  it("gives each colour section one column-head row before its first row, and Text none", async () => {
+    const el = await mount(CREAM);
+    for (const { id, keys } of COLOUR_SECTIONS) {
+      const heads = section(el, id).querySelectorAll(".head");
+      expect(heads).toHaveLength(1);
+      const head = heads[0]!;
+      expect(head.getAttribute("aria-hidden")).toBe("true");
+      expect([...head.children].map((c) => c.textContent!.trim())).toEqual([
+        "Colour",
+        "Light screens",
+        "Dark screens",
+      ]);
+      const first = q(el, `[data-test=hand-row-${keys[0]}]`);
+      expect(head.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(section(el, "text").querySelectorAll(".head")).toHaveLength(0);
+  });
+
+  it("holds the Text block in the Text section, handed the element's values", async () => {
+    const errors = { "text.size.sm": t("appearance.bad_text_px") };
+    const el = await mount(openDraft(LUCIA), { textErrors: errors, busy: true });
+    const rows = section(el, "text").querySelector<HTMLElementTagNameMap["dashboard-theme-text"]>(
+      "dashboard-theme-text",
+    )!;
+    expect(rows).not.toBeNull();
+    expect(rows.draft).toBe(el.draft);
+    expect(rows.derived).toBe(el.derived);
+    expect(rows.errors).toBe(errors);
+    expect(rows.busy).toBe(true);
+    expect(el.shadowRoot!.querySelector("h3.text-group")).toBeNull();
+  });
+
+  it("puts Reset all after the Text section, inside Advanced", async () => {
+    const el = await mount(CREAM);
+    const reset = q(el, "[data-test=reset-all]");
+    expect(disclosure(el).contains(reset)).toBe(true);
+    expect(section(el, "text").contains(reset)).toBe(false);
+    expect(
+      section(el, "text").compareDocumentPosition(reset) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps each closed line in step with the draft, and a warning opens nothing", async () => {
+    const el = await mount(CREAM);
+    el.draft = TWO_FIXES;
+    el.derived = deriveTheme(TWO_FIXES.choices);
+    await el.updateComplete;
+    expect(section(el, "surfaces").summary.endsWith(" · 1 hard to read")).toBe(true);
+    expect(section(el, "surfaces").open).toBe(false);
+    expect(opened(el)).toEqual([false, false, false, false, false]);
+    expect(sections(el).some((d) => d.hasAttribute("has-error"))).toBe(false);
+  });
+
+  it("opens and closes one section by its header, leaving the rest as they were", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const buttons = section(el, "buttons");
+    await userEvent.click(header(buttons));
+    await buttons.updateComplete;
+    expect(disclosure(el).open).toBe(true);
+    expect(opened(el)).toEqual([false, false, true, false, false]);
+    await userEvent.click(header(buttons));
+    await buttons.updateComplete;
+    expect(disclosure(el).open).toBe(true);
+    expect(opened(el)).toEqual([false, false, false, false, false]);
+  });
+
+  it("follows a language change, keeping an open section open", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    await openDisclosure(section(el, "surfaces"));
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(section(el, "surfaces").heading).toBe(es["appearance.section.surfaces"]);
+    expect(section(el, "surfaces").open).toBe(true);
+    for (const id of ["text-colours", "buttons", "fields", "text"])
+      expect(section(el, id).summary).toBe(es["appearance.section_none"]);
+  });
+
+  it("keeps a section open across closing and reopening Advanced", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    await openDisclosure(section(el, "surfaces"));
+    await userEvent.click(header(disclosure(el)));
+    await disclosure(el).updateComplete;
+    expect(disclosure(el).open).toBe(false);
+    await open(el);
+    expect(opened(el)).toEqual([true, false, false, false, false]);
   });
 });

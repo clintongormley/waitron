@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import {
   chooseOption,
@@ -11,8 +11,15 @@ import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogClosed,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "../widgets/test-helpers.js";
 import type { ImageUpload } from "../widgets/image-upload.js";
+import { ADVANCED_SECTIONS, type AdvancedSectionId } from "../widgets/advanced-sections.js";
 import "./look-card.js";
 
 class LookLeaveApp extends LitElement {
@@ -52,10 +59,15 @@ const lucia: ThemeView = {
   warnings: derived.warnings,
 };
 
-beforeEach(() => setLocale("en-GB"));
-afterEach(() => {
+// Folds open at once rather than over their animation.
+beforeEach(async () => {
+  setLocale("en-GB");
+  await commands.emulateReducedMotion("reduce");
+});
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
+  await commands.emulateReducedMotion(null);
 });
 
 async function mount(view: ThemeView = lucia) {
@@ -236,18 +248,26 @@ async function settle(card: Card) {
   await card.updateComplete;
   await advanced(card).updateComplete;
 }
+const section = (card: Card, id: AdvancedSectionId) =>
+  inAdvanced(card, `[data-test=section-${id}]`) as HTMLElementTagNameMap["wt-disclosure"];
+async function closeByHeader(fold: HTMLElementTagNameMap["wt-disclosure"]) {
+  expect(fold.open).toBe(true);
+  await userEvent.click(fold.shadowRoot!.querySelector("button.header")!);
+  await fold.updateComplete;
+  expect(fold.open).toBe(false);
+}
 async function openAdvanced(card: Card) {
-  if (disclosure(card).open) return;
-  await userEvent.click(disclosure(card).shadowRoot!.querySelector("button.header")!);
-  await disclosure(card).updateComplete;
+  await openDisclosure(disclosure(card));
 }
 async function typeHand(card: Card, mode: string, key: string, value: string) {
-  await openAdvanced(card);
   const field = inAdvanced(card, `wt-input[name="handSet.${mode}.${key}"]`)!;
-  await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
+  const inner = field.shadowRoot!.querySelector("input")!;
+  await openFoldsAround(inner);
+  await page.elementLocator(inner).fill(value);
   await settle(card);
 }
 async function pressInAdvanced(card: Card, name: string) {
+  await openFoldsAround(inAdvanced(card, `[data-test=${name}]`)!);
   await userEvent.click(inAdvanced(card, `[data-test=${name}]`)!);
   await settle(card);
 }
@@ -369,9 +389,58 @@ describe("leaving with Advanced", () => {
     await userEvent.click(q(card, "[data-test=pick-dark]")!);
     await settle(card);
     expect(disclosure(card).open).toBe(true);
+    expect(section(card, "buttons").open).toBe(true);
     expect(save(card).disabled).toBe(true);
     expect(unload()).toBe(false);
     expect(await leave(app)).toBe("proceeded");
+  });
+
+  it("opening Advanced and opening and closing every section, nothing else, asks nothing", async () => {
+    const { app, card } = await mount();
+    await openAdvanced(card);
+    for (const id of ADVANCED_SECTIONS) {
+      await openDisclosure(section(card, id));
+      await closeByHeader(section(card, id));
+    }
+    expect(save(card).disabled).toBe(true);
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
+
+  it("a value set by hand in Buttons, then Buttons and Advanced closed, asks; Discard returns to the saved card without a write", async () => {
+    const { app, card, saveTheme } = await mount();
+    await typeHand(card, "light", "primary", "#225588");
+    expect(advanced(card).draft.choices.handSet.light).toEqual({ primary: "#225588" });
+    await closeByHeader(section(card, "buttons"));
+    await closeByHeader(disclosure(card));
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "discard");
+    expect(await request).toBe("proceeded");
+    await expect.poll(() => editing(card)).toBe(false);
+    expect(q(card, "[data-test=saved-hand]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      t("appearance.none"),
+    );
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
+  });
+
+  it("a text size set in Text, then Text closed, asks", async () => {
+    const { app, card } = await mount();
+    const rows = inAdvanced(card, "dashboard-theme-text")!;
+    const inner = rows
+      .shadowRoot!.querySelector('wt-number-stepper[name="text.size.sm"]')!
+      .shadowRoot!.querySelector("input")!;
+    await openFoldsAround(inner);
+    await page.elementLocator(inner).fill("14");
+    await settle(card);
+    expect(advanced(card).draft.choices.text).toEqual({ size: { sm: 14 } });
+    await closeByHeader(section(card, "text"));
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "keep");
+    expect(await request).toBe("kept");
+    expect(editing(card)).toBe(true);
   });
 });
 
@@ -464,11 +533,9 @@ describe("text set by hand in an unsaved draft", () => {
   const textRows = (card: Card) =>
     inAdvanced(card, "dashboard-theme-text") as HTMLElementTagNameMap["dashboard-theme-text"];
   async function chooseBold(card: Card, value: string) {
-    await openAdvanced(card);
-    await chooseOption(
-      textRows(card).shadowRoot!.querySelector('wt-combobox[name="text.weight.bold"]')!,
-      value,
-    );
+    const bold = textRows(card).shadowRoot!.querySelector('wt-combobox[name="text.weight.bold"]')!;
+    await openFoldsAround(bold);
+    await chooseOption(bold, value);
     await settle(card);
     await textRows(card).updateComplete;
   }
@@ -481,11 +548,11 @@ describe("text set by hand in an unsaved draft", () => {
     // 600 is Waitron's own Bold, but picked it is set by hand.
     expect(unload()).toBe(true);
     expect(save(card).disabled).toBe(false);
-    await userEvent.click(
-      textRows(card).shadowRoot!.querySelector<HTMLElement>(
-        '[data-test="text-worked-out-weight.bold"]',
-      )!,
-    );
+    const workedOut = textRows(card).shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="text-worked-out-weight.bold"]',
+    )!;
+    await openFoldsAround(workedOut);
+    await userEvent.click(workedOut);
     await settle(card);
     expect(unload()).toBe(false);
     expect(save(card).disabled).toBe(true);

@@ -1,5 +1,5 @@
-import { page, userEvent } from "vitest/browser";
-import { afterEach, expect, it, vi } from "vitest";
+import { commands, page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   mediaTestReference,
   mediaTestRendition,
@@ -9,7 +9,18 @@ import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeLogoPrint, ThemeView } from "../api/client.js";
 import { fill, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  openDisclosure,
+  openFoldsAround,
+} from "../widgets/test-helpers.js";
+import {
+  ADVANCED_SECTIONS,
+  COLOUR_SECTIONS,
+  type AdvancedSectionId,
+} from "../widgets/advanced-sections.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -87,22 +98,23 @@ const advanced = (el: Card) => q(el, "dashboard-theme-advanced")!;
 const inAdvanced = (el: Card, selector: string) =>
   advanced(el).shadowRoot!.querySelector<HTMLElement>(selector);
 
+const section = (el: Card, id: AdvancedSectionId) =>
+  inAdvanced(el, `[data-test=section-${id}]`) as HTMLElementTagNameMap["wt-disclosure"];
+
+const visible = (node: Element | null) => expect(node!.checkVisibility()).toBe(true);
+
 async function openAdvanced(el: Card) {
-  const disclosure = inAdvanced(
-    el,
-    "[data-test=advanced]",
-  ) as HTMLElementTagNameMap["wt-disclosure"];
-  if (!disclosure.open) {
-    await userEvent.click(disclosure.shadowRoot!.querySelector("button.header")!);
-    await disclosure.updateComplete;
-  }
-  expect(disclosure.open).toBe(true);
+  await openDisclosure(
+    inAdvanced(el, "[data-test=advanced]") as HTMLElementTagNameMap["wt-disclosure"],
+    { domClick: true },
+  );
 }
 
 async function typeHand(el: Card, mode: string, key: string, value: string) {
-  await openAdvanced(el);
   const field = inAdvanced(el, `wt-input[name="handSet.${mode}.${key}"]`)!;
-  await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
+  const inner = field.shadowRoot!.querySelector("input")!;
+  await openFoldsAround(inner, { domClick: true });
+  await page.elementLocator(inner).fill(value);
   await el.updateComplete;
 }
 
@@ -225,10 +237,25 @@ const states: Record<
       return "wt-input[name=brandColor]";
     },
   },
+  "Advanced open, every section closed": {
+    list: inUse(lucia),
+    reach: async (el) => {
+      await openAdvanced(el);
+      for (const id of ADVANCED_SECTIONS) {
+        expect(section(el, id).open).toBe(false);
+        visible(section(el, id));
+      }
+      return "dashboard-theme-advanced";
+    },
+  },
   "Advanced open, nothing set by hand": {
     list: inUse(lucia),
     reach: async (el) => {
       await openAdvanced(el);
+      for (const id of ADVANCED_SECTIONS) await openDisclosure(section(el, id), { domClick: true });
+      for (const { keys } of COLOUR_SECTIONS)
+        visible(inAdvanced(el, `[data-test=hand-row-${keys[0]}]`));
+      visible(inAdvanced(el, "dashboard-theme-text"));
       return "dashboard-theme-advanced";
     },
   },
@@ -238,6 +265,10 @@ const states: Record<
       await openAdvanced(el);
       const rows = inAdvanced(el, "dashboard-theme-text")!;
       expect(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')).not.toBeNull();
+      await openFoldsAround(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]')!, {
+        domClick: true,
+      });
+      visible(rows.shadowRoot!.querySelector('[data-test="text-warning-size.sm"]'));
       return "dashboard-theme-advanced";
     },
   },
@@ -247,6 +278,14 @@ const states: Record<
       await openAdvanced(el);
       expect(inAdvanced(el, "[data-test=hand-warning-light-text]")).not.toBeNull();
       expect(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")).not.toBeNull();
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-text]")!, {
+        domClick: true,
+      });
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")!, {
+        domClick: true,
+      });
+      visible(inAdvanced(el, "[data-test=hand-warning-light-text]"));
+      visible(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]"));
       return "dashboard-theme-advanced";
     },
   },
@@ -256,6 +295,10 @@ const states: Record<
       await press(el, "fix-all");
       await openAdvanced(el);
       await expect.poll(() => inAdvanced(el, "[data-test=hand-fixed-light-text]")).toBeTruthy();
+      await openFoldsAround(inAdvanced(el, "[data-test=hand-fixed-light-text]")!, {
+        domClick: true,
+      });
+      visible(inAdvanced(el, "[data-test=hand-fixed-light-text]"));
       return "dashboard-theme-advanced";
     },
   },
@@ -275,6 +318,24 @@ const states: Record<
             ).error,
         )
         .not.toBe("");
+      await el.updateComplete;
+      expect(section(el, "surfaces").hasAttribute("has-error")).toBe(true);
+      visible(inAdvanced(el, 'wt-input[name="handSet.light.bg"]'));
+      return "dashboard-theme-advanced";
+    },
+  },
+  "Pick a different colour for dark screens pressed": {
+    list: inUse(lucia),
+    reach: async (el) => {
+      await press(el, "pick-dark");
+      const field = inAdvanced(el, 'wt-input[name="handSet.dark.primary"]')!;
+      const inner = field.shadowRoot!.querySelector("input")!;
+      await expect.poll(() => field.shadowRoot!.activeElement).toBe(inner);
+      expect(
+        (inAdvanced(el, "[data-test=advanced]") as HTMLElementTagNameMap["wt-disclosure"]).open,
+      ).toBe(true);
+      expect(section(el, "buttons").open).toBe(true);
+      visible(field);
       return "dashboard-theme-advanced";
     },
   },
@@ -329,9 +390,12 @@ const cases = ["light", "dark"].flatMap((mode) =>
   ),
 );
 
-afterEach(() => {
+// Folds open at once rather than over their animation.
+beforeEach(() => commands.emulateReducedMotion("reduce"));
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
+  await commands.emulateReducedMotion(null);
 });
 
 it.each(cases)("Look card: $state, $locale / $mode", async ({ mode, locale, state }) => {
