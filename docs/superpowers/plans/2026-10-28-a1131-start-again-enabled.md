@@ -676,7 +676,50 @@ only, as `useVenueDb` does, so (d) shows that activation itself creates nothing 
 a boot does to `node.db` is A1042's measurement. The module configuration is
 `parseModuleConfig({}, ALL_MODULES)`'s defaults, as the fixture's `provision` builds it; a venue
 with other choices may hold a different count, so 105 is one real activation's count, not a
-constant. Task 2's order probe (its Step 1) is recorded here when Task 2 runs.
+constant. Task 2's order probe (its Step 1) is recorded below.
+
+### Task 2 Step 1 — which order reaches the held state (2026-10-28, at `cb2929dd5`)
+
+**Probe.** A throwaway `apps/server/src/zz-a1131-task2-probe.test.ts` (deleted). One shared
+setup per case: `archiveHost()` (its box, roots and archive), `<venue>/venue.db` opened with
+`openVenueDatabase` in the box's own venue folder with every `TEST_MIGRATIONS` set applied,
+`hourFirstFiscalFixture` over those roots and that database with every module in `ALL_MODULES`
+(the fiscal module's `provisioningSecret` stubbed, as `first-fiscal-interruption.test.ts` does),
+the interruption fixture's `SetupDeps` with a failure injected at publication, and a backup
+recovery built as `first-setup-backup-recovery-fixture.ts`'s `fixture()` builds one (the
+`repairFixture` hour-history entry added to the archive). Order A: `open`, select past the waits
+(as `selectedRepair()` does), `close`, then `keepHourRecoveryDocument` and `POST /setup-api/provision`.
+Order B: `keepHourRecoveryDocument` and `POST /setup-api/provision` first, then `open`,
+`prepare({ action: "clock-challenge" })`, `close`, `liveness()`. Failing case for each, written
+before running: a refusal anywhere, the attempt not `committed`, or `liveness()` not `stopped`.
+Command: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/zz-a1131-task2-probe.test.ts`
+(2 tests passed; each case logged its refusal rather than failing).
+
+```
+PROBE inspect no-venue-rows true undefined
+PROBE A selected selected
+PROBE A liveness stopped
+PROBE A refused AppError: setup.not_ready | at refuse (packages/provisioning/src/first-setup-recovery-delivery.ts:55:9) | at packages/provisioning/src/first-setup-recovery-delivery.ts:284:11 | at packages/provisioning/src/first-setup-state.ts:36:18
+PROBE B activate 500 {"error":{"code":"server.internal"}}
+PROBE B attempt committed
+PROBE inspect occupied false undefined
+PROBE B open ok
+PROBE B prepare ok
+PROBE B liveness stopped
+PROBE inspect occupied false undefined
+```
+
+- **Order B works** and is the helper's order: a real activation stopped at `committed` (the
+  injected publication failure answers 500), then a recovery opens, prepares and stops beside the
+  setup database, which the inspection reads as `occupied`.
+- **Order A was refused** before activation: re-registering the recovery document after the
+  recovery ran answered `setup.not_ready` at `first-setup-recovery-delivery.ts:284` (the stored
+  delivery record no longer equals the one rebuilt from the attempt). Not investigated further,
+  since B works; the probe did not try A without the second `keepHourRecoveryDocument`.
+- An earlier run of the same probe, with `hour-recovery-host.js` imported after
+  `@waitron/composition`, failed inside `archiveHost()` with `sif.allocation_invalid`
+  (`hour-selection.ts:383`); the only change before the run above was moving that import to the
+  top, as `first-setup-backup-recovery-fixture.ts` has it. The helper imports it first.
 
 ## Review round 1 (2026-10-28) — what changed
 
