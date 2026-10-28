@@ -2525,8 +2525,8 @@ form's own checks disable the action; an error that comes back from a request ne
   message is the form's generic sentence, equivalent to "Correct the highlighted fields to
   continue."; a field's own sentence is never repeated at the bottom. A refusal that names no field
   and a marked field together show both, one after the other;
-- a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
-  focus lands on the field;
+- a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission — every
+  fold around it, when folds nest — so the focus lands on the field;
 - reopening or resetting a form starts it again: no messages; a form that saves (below) has its
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
@@ -2857,7 +2857,7 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/venue-privacy-panel.unsaved.test.ts`;
 - A841 slice 5: the Look card on Settings → Appearance, editing in place
   (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
-  beside it, Advanced's (A841 slice 6) among them;
+  beside it, Advanced's (A841 slice 6) and its sections' (A841 slice 12) among them;
 - A841 slice 13: the theme name dialog (`apps/dashboard/src/widgets/theme-name-dialog.ts`); Make a
   copy and Save as new theme… open already savable. Its leave cases are in
   `theme-name-dialog.unsaved.test.ts` beside it;
@@ -3478,6 +3478,10 @@ stands.** That is `has-error`: setting it forces `open` true and makes the heade
 header click does nothing and the chevron stops presenting itself as a live control. Without this,
 an invalid submission can point at a field nobody can see. Clearing `has-error` does not re-collapse
 the section — the person is left looking at the field they just corrected.
+
+A folded section may hold folded sections, each with its own closed line: Advanced on the Look card
+holds five (`apps/dashboard/src/widgets/theme-advanced.ts`). An invalid field opens every fold
+around it, and a warning opens none.
 
 **Open/closed state is not remembered across openings.** In the product editor Kitchen starts
 open. Pricing starts open without Active variants; with Active variants it starts closed and
@@ -4204,7 +4208,8 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   clipped away, so no line starts with it.
 - **Under Brand colour's lines, the dark version's own button colour** (A841 slice 6, D13): while
   dark Main buttons is not set by hand, a link "Pick a different colour for dark screens" opens
-  Advanced and focuses that value's code field; once set, the link gives way to "Buttons on dark
+  Advanced's Buttons section, then Advanced, and focuses that value's code field, leaving the other
+  sections as they were; once set, the link gives way to "Buttons on dark
   screens: {colour}, set by hand · Use the brand colour", drawn with the Undo line's markup, and Use
   the brand colour is Use worked-out colour on that value. Both are disabled while a save is under
   way. The light version has no such line.
@@ -4212,19 +4217,27 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   below the editor and preview, closed each time the editor opens. Its closed line is "None set by
   hand. Waitron works out every colour and text size." or "{n} set by hand: {names}", then " · " and
   the "{count} hard to read" count while a hand-set value warns (brand warnings are not counted).
-  Inside, one row per theme colour, one flat list until slice 12, each with a Light and a Dark value
-  drawn by `colourValueField` (a native colour picker and a code field); column heads show from a
-  600 px section, and narrower each value carries its own Light or Dark label. Beside a value's
+  Inside, under its opening line, five `wt-disclosure` sections in this order (A841 slice 12): Page
+  and surfaces, Text colours and links, Buttons, Fields and focus, and Text
+  (`apps/dashboard/src/widgets/advanced-sections.ts`). Each starts closed when the editor opens and
+  keeps its open or closed state while Advanced closes and opens again; which are open is never
+  stored. A line in `--wt-color-border` runs above each. A section's closed line is "None set by
+  hand" or "{n} set by hand: {names}", naming only what is set by hand in it, then the "{count}
+  hard to read" count of its own hand-set colours' warnings (Text: its text sizes'); the brand
+  colour's warning counts in no section. Each colour section has its own column heads (Colour,
+  Light screens, Dark screens) and one row per theme colour it holds, each with a Light and a Dark
+  value drawn by `colourValueField` (a native colour picker and a code field); column heads show
+  from a 600 px section, and narrower each value carries its own Light or Dark label. The rows are
+  drawn while their section is closed. Beside a value's
   code field, or under it on a narrow screen, a worked-out one reads "Worked out" (Main buttons: "Brand colour", or "Fixed" while that kind of
   screen's fix is taken); a hand-set one carries a "Set by hand" tag, with a "Use worked-out colour"
   link on the line below. A hand-set value that warns gets a warning line in the warning colour and icon, a "Use
   {colour}" fix button when a shade exists, and after a fix a "{screens}: fixed from {colour} ·
   Undo" line until the value changes or the editor closes. Reset all to worked-out sits at the
-  bottom, at the right. While a value shows an error, `has-error` holds the section open; a warning does not open
-  it.
-- **Advanced's Text rows** (`apps/dashboard/src/widgets/theme-text.ts`, A841 slice 11) sit after
-  the colour rows and before Reset all, under an `h3` "Text", until slice 12 folds Advanced into
-  sections: Typeface and the three weights are `wt-combobox`es (`hide-label`, `search="never"`,
+  bottom, after the Text section, at the right. While a value shows an error, `has-error` holds
+  open both Advanced and the section holding that value; a warning opens neither.
+- **Advanced's Text rows** (`apps/dashboard/src/widgets/theme-text.ts`, A841 slice 11) are the body
+  of Advanced's Text section, the last one, before Reset all: Typeface and the three weights are `wt-combobox`es (`hide-label`, `search="never"`,
   `stable-width`; weights drawn as digits), each size a `wt-number-stepper` from 8 to 40 with its −
   and + named in the screen's language and "px" beside it, hidden from assistive technology. Rows
   read "Worked out" or carry the "Set by hand" tag and a "Use worked-out size / typeface / weight"
