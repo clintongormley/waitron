@@ -378,6 +378,39 @@ Files: `packages/provisioning/src/first-setup-start-again-confirmation.ts`, its 
   a negative or a non-integer count, or `accepted > records` stays refused.
 - Run: `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-start-again-confirmation.test.ts`.
 
+### Task 4b0: `modules.json` in the held state (amendment, 2026-10-28, found building Task 4b)
+
+Found by the Task 4b implementer: every real activation writes `<state>/modules.json` right after
+the commit (`apps/server/src/provision.ts:183`, unconditional; publication rewrites it,
+`packages/provisioning/src/first-setup-activation.ts:208`), and the disk check refuses that file
+(`packages/provisioning/src/first-setup-start-again-deletion.ts:41`). Probe: with only that refusal
+removed, the Task 4b test file passed 8/8; with it, both held cases answered `setup.not_ready`
+(reason `refused artifact: state/modules.json`). So without this task the held state is never
+reachable in the product. Ruling (most conservative option consistent with existing code: the
+reset already deletes `modules.json` as setup output, `apps/server/src/reset-request.ts:105`):
+
+- A new option `held?: true` beside `discarding` (`Options` in
+  `first-setup-start-again-deletion.ts`). With it, `state/modules.json` is not refused by
+  `assertStartAgainAllowedOnDisk`, and `itemsOnDisk` lists it as a `state` file (so the marker names
+  it with size and SHA-256, and `attemptLastWriteMs` may count it — a later floor only, never an
+  earlier one). Without it, everything is as today.
+- `listed("state", "modules.json")` is true, so a marker may name it.
+- The finisher and the leftovers survey (`collectStartAgainFindings`, `deleteMarkedAttempt`,
+  `finishStartAgainDeletion`) take `held` from the marker: a marker that names `state/modules.json`
+  does not report it as a refused artifact, and deletes it; a changed one is a `changed` finding
+  as for any other named file. A marker that does not name it keeps today's refusal.
+- Failing tests first, in `packages/provisioning/src/first-setup-start-again-deletion.test.ts`:
+  the check passes with `held` and still refuses without it; the marker names it only with `held`;
+  a marker naming it is parsed, finished and deletes it; a marker not naming it still finds
+  `refused-artifact`; a `modules.json` changed after the marker is a `changed` finding.
+- Task 4b and Task 5 pass `held: true` in the held branch only.
+
+Ruling (Task 4b implementer, accepted): the `trading-settings` and `setup-finished` refusals run
+BEFORE the setup password in the held state, because the password step itself refuses a completed
+setup (`packages/provisioning/src/first-setup-owner.ts:212`), so after it the page could never
+reach `setup-finished`. Both refusals carry only a cause, and the page already sees `trading.env`
+in the inspection before the password.
+
 ### Task 4b: The server's summary in the held state
 
 Files: `apps/server/src/first-setup-resolution.ts` (`startAgainSummary` from `:402`, the refusal
