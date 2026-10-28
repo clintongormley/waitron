@@ -43,6 +43,7 @@ const boundary = createErrorBoundary(
     "setup.start_again_incomplete": 409,
     "setup.workspace_unsupported": 409,
     "setup.recovery_in_progress": 409,
+    "setup.start_again_refused": 409,
   },
   "setup.provision_failed",
 );

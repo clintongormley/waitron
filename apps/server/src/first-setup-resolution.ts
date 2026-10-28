@@ -47,6 +47,10 @@ import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
 import { readSeriesPicks, seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
+import {
+  readSetupDatabaseHoldings,
+  type SetupDatabaseHoldings,
+} from "./first-setup-database-holdings.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -76,6 +80,9 @@ const UNREADABLE_ORDER: readonly UnreadableRecord[] = [
 ];
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
+}
+function refused(cause: "setup-finished" | "kept-records" | "trading-settings"): never {
+  throw new AppError("setup.start_again_refused", { cause });
 }
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
@@ -110,6 +117,7 @@ async function gatherStartAgainFloor(
   deletion: { discarding?: string },
   recoveryFloor: Floor | null,
   databaseMissing: boolean,
+  databaseHistory?: SetupDatabaseHoldings["history"],
 ) {
   const attempts = [state, ...state.previous];
   const names = frozenModuleNames(state);
@@ -198,6 +206,9 @@ async function gatherStartAgainFloor(
           })),
         preparations: picks.preparations,
         publicEvidence: usable.map(({ item }) => item),
+        ...(databaseHistory?.[module] !== undefined && {
+          databaseHistory: databaseHistory[module],
+        }),
       },
     });
   }
@@ -421,26 +432,51 @@ export function createFirstSetupResolutionActions(
           }
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
-          if (
+          const held =
             inspection.database !== "missing" &&
             (inspection.database !== "no-venue-rows" ||
-              !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status))
-          )
-            unavailable();
+              !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status));
+          if (held) {
+            const holdsRecords =
+              inspection.database === "occupied" ||
+              (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
+            if (found?.kind !== "stopped" || !holdsRecords) unavailable();
+            // Checked before the password: a setup whose publication completed cannot be signed
+            // into again (`recoverFirstSetupOwner` refuses it), so the page could not learn why.
+            if (
+              inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !==
+              "missing"
+            )
+              refused("trading-settings");
+            if (retained.state.status === "complete") refused("setup-finished");
+          }
           await assertRecoveredOwner(request.owner, retained.state);
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
+          const discarding = found === undefined ? {} : { discarding: found.id };
+          let holdings: SetupDatabaseHoldings | undefined;
+          if (held) {
+            if (host.modules === undefined) unavailable();
+            holdings = await readSetupDatabaseHoldings(roots, host.modules);
+          }
           const gathered = await gatherStartAgainFloor(
             roots,
             retained.state,
             snapshot.originals,
             host.modules,
-            found === undefined ? {} : { discarding: found.id },
+            discarding,
             found?.kind === "stopped" ? found.floor : null,
             inspection.database === "missing",
+            holdings?.history,
           );
           if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
-          return summaryOf(retained.state, gathered, recovery);
+          if (holdings === undefined) return summaryOf(retained.state, gathered, recovery);
+          await assertStartAgainAllowedOnDisk(roots, { ...discarding, held: true });
+          const { rows, kept, records, accepted } = holdings;
+          return {
+            ...summaryOf(retained.state, gathered, recovery),
+            held: { rows, kept, records, accepted },
+          };
         }),
       );
     },

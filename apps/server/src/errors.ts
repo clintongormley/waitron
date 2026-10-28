@@ -1038,6 +1038,12 @@ declare module "@waitron/shared" {
      */
     "setup.start_again_password_required": { seriesPicksUnreadable?: true };
     /**
+     * Start again beside a stopped recovery and a setup database that holds records will not go
+     * ahead: the setup already finished, the database holds rows Waitron never deletes, or the
+     * setup already saved the settings the box trades with.
+     */
+    "setup.start_again_refused": { cause: "setup-finished" | "kept-records" | "trading-settings" };
+    /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`
      * names the device.
