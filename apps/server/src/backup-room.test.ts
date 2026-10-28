@@ -26,6 +26,16 @@ import type { Statfs } from "./free-bytes.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import type { Logger } from "./logger.js";
 
+const statted = vi.hoisted(() => [] as string[]);
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  const stat = ((path: string, options?: { bigint?: boolean }) => {
+    statted.push(String(path));
+    return actual.stat(path, options);
+  }) as typeof actual.stat;
+  return { ...actual, stat, default: { ...actual, stat } };
+});
+
 let root: string;
 
 beforeEach(async () => {
@@ -260,6 +270,16 @@ describe("foldersOnDisk", () => {
         deviceOf,
       ),
     ).toEqual({ folders: [{ destination: "da", dir: a }], copies: 1 });
+  });
+
+  it("reads a local folder's disk and identity with one stat", async () => {
+    const staging = await folder("staging");
+    const a = await folder("a");
+    statted.length = 0;
+
+    await foldersOnDisk([new LocalFsBackend("da", a)], staging);
+
+    expect(statted.filter((path) => path === a)).toHaveLength(1);
   });
 
   it("judges a missing folder by its nearest existing parent", async () => {

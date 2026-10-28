@@ -90,10 +90,12 @@ async function archivesIn(
 export async function foldersOnDisk(
   backends: readonly Pick<StorageBackend, "id" | "localDir">[],
   stagingDir: string,
-  deviceOf: DeviceOf = async (path) => (await fs.stat(path)).dev,
+  deviceOf?: DeviceOf,
 ): Promise<{ folders: BackupFolder[]; copies: number }> {
   const staging = await realOrNearest(stagingDir);
-  const stagingDevice = await deviceOf(staging.existing);
+  const stagingDevice = deviceOf
+    ? await deviceOf(staging.existing)
+    : (await fs.stat(staging.existing)).dev;
   const folders: BackupFolder[] = [];
   const seen = new Set<string>();
   let copies = 0;
@@ -105,8 +107,8 @@ export async function foldersOnDisk(
     try {
       const found = await realOrNearest(localDir);
       real = found.real;
-      device = await deviceOf(found.existing);
       const { dev, ino } = await fs.stat(found.existing, { bigint: true });
+      device = deviceOf ? await deviceOf(found.existing) : Number(dev);
       identity = `${dev}:${ino}:${relative(found.existing, found.real)}`;
     } catch {
       copies += 1;
