@@ -5942,7 +5942,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A976. Finish the server's English test-venue defaults.** Other helpers and screen
   expectations remain. Continue package by package from A977's list; keep accent-sensitive
-  filename samples and deliberate multilingual metadata. Low priority.
+  combobox searches and filename samples, and deliberate multilingual metadata. Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
