@@ -473,6 +473,23 @@ under the tick box; with A1127's longer full-disk words that is about half a pho
 stored error, and a plain 500 also shows twice (look check of 2026-10-28, run on the branch, not on
 `main`).
 
+## The repair page's full-disk words wait for the owner, with two known gaps
+
+A1127 (#2175) shipped `shell.first_setup.disk_full` (`apps/setup/src/i18n/strings/shell.ts`) for the
+owner's approval, and its review named two gaps the owner should see when approving: "Restart the
+box: as it starts, it removes old logs and crash reports to make room" is not true where the `logs`
+folder is inside the state or venue folder, because a repair-stage start deletes logs only outside
+both (`apps/server/src/node-entry.ts`, the repair-stage clean-up); and its reinstall sentence ends
+"everything on it is lost", where the full-disk page adds "sales included, unless a backup is
+restored afterwards". Settle both with the full-boot design above, which rewrites these pages anyway.
+
+## Two spare-file releases at once log the same bytes twice
+
+Two processes releasing `<state>/spare-space` at the same moment (`releaseSpare`,
+`apps/server/src/spare-space.ts`) can each log `storage.spare_released` with the file's size, though
+only one deleted it. The file is removed correctly; only the log overstates. Found by #2175's first
+Codex review (run, not only read), not changed there.
+
 ## A boot test's disk assertion reads the checkout's path
 
 `apps/server/src/first-setup-resolution.boot.test.ts`'s two supervised cases assert the page does

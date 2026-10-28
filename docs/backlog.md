@@ -518,6 +518,14 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The repair page draws a Start-again error twice**, under the password and under the tick box.
   [Detail](backlog/setup.md#the-repair-page-draws-a-start-again-error-twice)
 
+- **The repair page's full-disk words wait for the owner, with two known gaps** — the restart
+  sentence is untrue where logs live inside the state folder, and the reinstall sentence is shorter
+  than the full-disk page's. Left open by A1127.
+  [Detail](backlog/setup.md#the-repair-pages-full-disk-words-wait-for-the-owner-with-two-known-gaps)
+
+- **Two spare-file releases at once log the same bytes twice.** Log only. Left open by A1127.
+  [Detail](backlog/setup.md#two-spare-file-releases-at-once-log-the-same-bytes-twice)
+
 - **A boot test's disk assertion reads the checkout's path**, so it fails in a worktree whose path
   holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
 
