@@ -2292,6 +2292,29 @@ describe("the box's spare file", () => {
     expect(existsSync(markerIn(stateDir))).toBe(false);
   });
 
+  it("a start with exactly 8 MiB free keeps the spare", async () => {
+    const { stateDir } = await planted({ statfs: free(8 * MiB) });
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+  });
+
+  it("a start whose clean-up frees enough keeps the spare", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-log-"));
+    await writeFile(join(logDir, "waitron.log.2"), "old");
+    await writeFile(spareIn(stateDir), Buffer.alloc(4096, 1));
+    // 16 MiB after the clean-up, not more: from 16 MiB + 4096 the top-up would refill a deleted spare.
+    const statfs = async () => ({
+      bavail: existsSync(join(logDir, "waitron.log.2")) ? 6 * MiB : 16 * MiB,
+      frsize: 1,
+    });
+    const d = deps({ stateDir, logDir, statfs, spareBytes: 4096 });
+    await runEntry(d);
+    expect(existsSync(join(logDir, "waitron.log.2"))).toBe(false);
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+    expect(existsSync(markerIn(stateDir))).toBe(false);
+    expect(d.startServer).toHaveBeenCalledOnce();
+  });
+
   it("a start with 12 MiB free after a start that failed for a full disk deletes the spare", async () => {
     const { stateDir } = await planted({
       statfs: free(12 * MiB),

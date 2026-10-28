@@ -262,10 +262,9 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
 }
 
 /**
- * Deletes the box's spare file when the start could not boot without its room: under
- * SPARE_SPACE_BYTES free (a boot was measured to need about 4.25 MiB), or under FULL_DISK_BYTES
- * when the last start failed for a full disk. Runs before first-setup resolution, which on a full
- * disk would serve its own page instead of a boot (item 7 of `runEntry`).
+ * Deletes the box's spare file when the start may lack room to boot: under SPARE_SPACE_BYTES free,
+ * or under FULL_DISK_BYTES when the last start failed for a full disk. A folder whose free space
+ * cannot be read is left out of the lowest; when none can be read, nothing is released.
  */
 async function releaseSpareToStart(
   deps: EntryDeps,
