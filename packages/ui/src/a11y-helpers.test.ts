@@ -19,7 +19,7 @@ test("axe traverses into shadow roots: catches an icon-only button with no acces
 });
 
 test("the same button is clean once aria-label restores its accessible name", async () => {
-  await mount('<wt-button aria-label="Cerrar"><wt-icon name="close"></wt-icon></wt-button>');
+  await mount('<wt-button aria-label="Close"><wt-icon name="close"></wt-icon></wt-button>');
   await expectNoA11yViolations(host);
 });
 
@@ -71,7 +71,7 @@ test.each(["light", "dark"] as const)("readable text passes (%s)", async (theme)
 });
 
 test("an undecided reading that is not about colour still passes: an empty field", async () => {
-  await mountThemed('<wt-input label="Peso (kg)"></wt-input>', "light");
+  await mountThemed('<wt-input label="Weight (kg)"></wt-input>', "light");
   const { reasons } = await undecidedContrastReasons();
   expect(reasons).toContain("emptyValue");
   expect(reasons.filter((reason) => COLOUR_READINGS.includes(reason))).toEqual([]);
