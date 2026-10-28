@@ -158,6 +158,16 @@ async function field(modal: HTMLElementTagNameMap["wt-modal"], value: string, na
   await ((modal.getRootNode() as ShadowRoot).host as PrepStationsScreen).updateComplete;
   await modal.updateComplete;
 }
+/** Every message the form shows: each field's own, then the line above the buttons. */
+function shownErrors(modal: HTMLElementTagNameMap["wt-modal"]) {
+  const holders = [
+    ...modal.querySelectorAll<HTMLElement & { error: string }>(
+      "wt-input, wt-colour-chooser, wt-combobox",
+    ),
+    modal.querySelector<HTMLElement & { error: string }>("wt-form-actions")!,
+  ];
+  return holders.map((holder) => holder.error).filter(Boolean);
+}
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -330,7 +340,7 @@ for (const rename of [false, true])
       ).toBe(false);
       expect(next.querySelector("wt-input")!.value).toBe("New station draft");
       expect(unload()).toBe(true);
-      expect(next.querySelector("[role=alert]")).toBeNull();
+      expect(shownErrors(next)).toEqual([]);
     });
   }
 for (const [name, changed, reverted] of [

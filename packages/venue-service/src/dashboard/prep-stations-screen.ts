@@ -174,6 +174,8 @@ export class PrepStationsScreen extends LitElement {
   #readErrorShown = false;
   @state() private busy = false;
   @state() private stationAttempted = false;
+  /** Add station's server refusal of one field, kept until that field changes, Save runs again or the dialog reopens. */
+  #stationRefusal?: { field: string; message: string };
   @state() private stationAction?: StationAction;
   @state() private tab: PrepTab = "stations";
   /** The station the editor opened for; `token` tells one opening from the next. */
@@ -806,6 +808,7 @@ export class PrepStationsScreen extends LitElement {
       readyWarningAfterMinutes: DEFAULT_READY_WARNING_AFTER_MINUTES,
       printerIds: [],
     };
+    this.#stationRefusal = undefined;
     this.fieldError = {};
     this.#showError("");
   }
@@ -816,12 +819,12 @@ export class PrepStationsScreen extends LitElement {
         field === "name" || field === "colour" || field === "printerIds" ? value : Number(value),
     };
     this.#stationScope?.changed();
-    const refused = field === "printerIds" ? undefined : this.fieldError.printerIds;
+    if (this.#stationRefusal?.field === field) this.#stationRefusal = undefined;
+    const refusal = this.#stationRefusal;
     this.fieldError = {
+      ...(refusal ? { [refusal.field]: refusal.message } : {}),
       ...(this.stationAttempted ? this.#stationErrors() : { ...this.fieldError, [field]: "" }),
-      ...(refused ? { printerIds: refused } : {}),
     };
-    if (!refused) delete this.fieldError.printerIds;
     this.#showError(
       this.stationAttempted && Object.values(this.fieldError).some(Boolean)
         ? t("prep.fix_fields")
@@ -848,6 +851,7 @@ export class PrepStationsScreen extends LitElement {
   async #saveStation() {
     if (saveActionState(this.#stationScope).unchanged) return;
     this.stationAttempted = true;
+    this.#stationRefusal = undefined;
     const d = this.draft;
     const errors = this.#stationErrors();
     this.fieldError = errors;
@@ -882,17 +886,21 @@ export class PrepStationsScreen extends LitElement {
       if (!this.isConnected || identity !== this.#stationIdentity) return;
       const refusal = refusalOf(e);
       const field = stationRefusalField(refusal);
-      if (field === "name") this.fieldError = { name: t("prep.name_taken") };
-      else if (field === "colour") this.fieldError = { colour: t("prep.colour_invalid") };
+      if (field === "name") this.#stationRefusal = { field, message: t("prep.name_taken") };
+      else if (field === "colour")
+        this.#stationRefusal = { field, message: t("prep.colour_invalid") };
       else if (field === "printers")
-        this.fieldError = {
-          printerIds: t(
+        this.#stationRefusal = {
+          field: "printerIds",
+          message: t(
             refusal.code === "authorization.not_permitted"
               ? "prep.printers_not_permitted"
               : "prep.printers_refused",
           ),
         };
-      else if (field !== undefined) this.fieldError = { [field]: timingMessage(field) };
+      else if (field !== undefined) this.#stationRefusal = { field, message: timingMessage(field) };
+      if (this.#stationRefusal)
+        this.fieldError = { [this.#stationRefusal.field]: this.#stationRefusal.message };
       this.#showError(t(field === undefined ? "prep.save_error" : "prep.fix_fields"));
       if (refusal.code === "printer.not_found") void this.#load();
     } finally {
