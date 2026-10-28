@@ -176,6 +176,8 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationAttempted = false;
   /** Add station's server refusal of one field, kept until that field changes, Save runs again or the dialog reopens. */
   #stationRefusal?: { field: string; message: string };
+  /** Add station's refusal naming no field, kept until Save runs again or the dialog reopens. */
+  #stationUnplaced = "";
   @state() private stationAction?: StationAction;
   @state() private tab: PrepTab = "stations";
   /** The station the editor opened for; `token` tells one opening from the next. */
@@ -809,6 +811,7 @@ export class PrepStationsScreen extends LitElement {
       printerIds: [],
     };
     this.#stationRefusal = undefined;
+    this.#stationUnplaced = "";
     this.fieldError = {};
     this.#showError("");
   }
@@ -826,9 +829,14 @@ export class PrepStationsScreen extends LitElement {
       ...(this.stationAttempted ? this.#stationErrors() : { ...this.fieldError, [field]: "" }),
     };
     this.#showError(
-      this.stationAttempted && Object.values(this.fieldError).some(Boolean)
-        ? t("prep.fix_fields")
-        : "",
+      [
+        this.#stationUnplaced,
+        this.stationAttempted && Object.values(this.fieldError).some(Boolean)
+          ? t("prep.fix_fields")
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
   }
   #stationErrors(): Record<string, string> {
@@ -852,6 +860,7 @@ export class PrepStationsScreen extends LitElement {
     if (saveActionState(this.#stationScope).unchanged) return;
     this.stationAttempted = true;
     this.#stationRefusal = undefined;
+    this.#stationUnplaced = "";
     const d = this.draft;
     const errors = this.#stationErrors();
     this.fieldError = errors;
@@ -899,6 +908,7 @@ export class PrepStationsScreen extends LitElement {
           ),
         };
       else if (field !== undefined) this.#stationRefusal = { field, message: timingMessage(field) };
+      else this.#stationUnplaced = t("prep.save_error");
       if (this.#stationRefusal)
         this.fieldError = { [this.#stationRefusal.field]: this.#stationRefusal.message };
       this.#showError(t(field === undefined ? "prep.save_error" : "prep.fix_fields"));
