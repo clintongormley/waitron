@@ -880,6 +880,9 @@ export class SetupApp extends LitElement {
       (mode === "demo" || this.draft.mode === "demo")
     ) {
       const venue = { ...this.draft.venue, location: { ...this.draft.venue?.location } };
+      if (this.draft.mode === "demo" && this.draft.demoLocationNameSource === "automatic") {
+        delete venue.location.name;
+      }
       delete venue.taxId;
       delete venue.legalName;
       delete venue.seriesCode;

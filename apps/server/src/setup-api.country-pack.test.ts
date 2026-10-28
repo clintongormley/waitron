@@ -317,3 +317,19 @@ describe("persisted Demo name ownership", () => {
     },
   );
 });
+
+it("refuses an unknown country before deriving an automatic demo name", async () => {
+  const app = new Hono();
+  const { deps: setupDeps, requests } = deps();
+  mountSetup(app, setupDeps, () => {});
+  const response = await post(app, {
+    mode: "demo",
+    demoLocationNameSource: "automatic",
+    venue: venue("XX"),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "setup.request_invalid", params: { field: "country" } },
+  });
+  expect(requests).toHaveLength(0);
+});

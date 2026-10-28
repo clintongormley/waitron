@@ -14,14 +14,12 @@ export const DEMO_DEVELOPER_PRESETS = {
     postalCode: "08001",
     city: "Barcelona",
     province: "Barcelona",
-    receiptLocale: "ca-ES",
   },
   balearic: {
     ...REGIONAL_ADDRESS,
     postalCode: "07001",
     city: "Palma",
     province: "Balears, Illes",
-    receiptLocale: "es-ES",
   },
   madrid: {
     country: "ES",

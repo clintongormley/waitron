@@ -458,6 +458,47 @@ describe("demo name ownership across wizard drafts", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("review");
     expect((el as unknown as State).draft.demoLocationNameSource).toBe("custom");
   });
+  it.each([false, true])(
+    "keeps name ownership through Demo/Live/Demo (typed in Live: %s)",
+    async (typed) => {
+      const { el, venue } = await mount(demoDraft());
+      const patchMode = (mode: "demo" | "live") =>
+        venue.dispatchEvent(
+          new CustomEvent("setup-patch", {
+            detail: { patch: { mode } },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      patchMode("live");
+      await el.updateComplete;
+      expect((el as unknown as State).draft).not.toHaveProperty("demoLocationNameSource");
+      if (typed)
+        venue.dispatchEvent(
+          new CustomEvent("setup-patch", {
+            detail: { patch: { venue: { location: { name: "My live restaurant" } } } },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      patchMode("demo");
+      await el.updateComplete;
+      Object.assign(el, { screen: "admin" });
+      await el.updateComplete;
+      Object.assign(el, { screen: "venue" });
+      await el.updateComplete;
+      const returned = el.shadowRoot!.querySelector<SetupVenueScreen>("setup-venue-screen")!;
+      await returned.updateComplete;
+      expect(returned).not.toBe(venue);
+      await edit(returned, "postalCode", "08001");
+      expect((await nativeName(returned)).value).toBe(typed ? "My live restaurant" : "Can Delgado");
+      next(returned);
+      await expect.poll(() => (el as unknown as State).screen).toBe("review");
+      expect((el as unknown as State).draft.demoLocationNameSource).toBe(
+        typed ? "custom" : "automatic",
+      );
+    },
+  );
   it("removes the demo-only source from every non-demo wire body", () => {
     for (const mode of ["prepare", "live"] as const)
       expect(assembleBody({ ...demoDraft(), mode })).not.toHaveProperty("demoLocationNameSource");
