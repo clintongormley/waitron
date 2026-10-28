@@ -32,9 +32,9 @@ async function setupVenue(db: Database): Promise<{ cfg: BookingConfig; createdBy
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Front counter",
       invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Restaurant service",
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
@@ -68,7 +68,7 @@ describe("seatBooking compare-and-swap guard", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Ruiz",
+        contactName: "Brown",
         tableId,
         createdBy,
       }),

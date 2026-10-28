@@ -61,7 +61,7 @@ interface Venue {
 async function insertLocation(name: string): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (id, name, invoice_locales, operation_description)
-    values (${newId()}, ${name}, '["es-ES"]', 'Venta en establecimiento')
+    values (${newId()}, ${name}, '["es-ES"]', 'Restaurant service')
     returning id`);
   return loc.rows[0]!.id;
 }
@@ -86,7 +86,7 @@ async function insertDiningTable(
 
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
-  const locationId = await insertLocation("Barra");
+  const locationId = await insertLocation("Front counter");
   return {
     cfg: { locationId: brandLocationId(locationId) },
     createdBy: randomUUID(),
@@ -99,7 +99,7 @@ async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
 
 /** An active table in a SECOND location: the shape the location-scope guard must refuse. */
 async function makeTableInOtherLocation(): Promise<string> {
-  const otherLocationId = await insertLocation("Terraza");
+  const otherLocationId = await insertLocation("Terrace");
   return insertDiningTable(otherLocationId, "B-1");
 }
 
@@ -142,7 +142,7 @@ describe("createBooking + listBookings", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
@@ -151,7 +151,7 @@ describe("createBooking + listBookings", () => {
         bookingDate: "2026-08-20",
         bookingTime: "13:30",
         partySize: 2,
-        contactName: "Ruiz",
+        contactName: "Brown",
         createdBy,
       }),
     );
@@ -210,9 +210,9 @@ describe("createBooking + listBookings", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         contactPhone: "600123456",
-        notes: "ventana",
+        notes: "Window seat",
         createdBy,
       }),
     );
@@ -220,7 +220,7 @@ describe("createBooking + listBookings", () => {
     expect(row).toMatchObject({
       status: "booked",
       contactPhone: "600123456",
-      notes: "ventana",
+      notes: "Window seat",
       tabId: null,
       tableId: null,
     });
@@ -259,7 +259,7 @@ describe("createBooking — optional table link", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "García",
+        contactName: "Taylor",
         tableId,
         createdBy,
       }),
@@ -276,7 +276,7 @@ describe("createBooking — optional table link", () => {
           bookingDate: "2026-08-20",
           bookingTime: "20:00",
           partySize: 2,
-          contactName: "García",
+          contactName: "Taylor",
           tableId: randomUUID(),
           createdBy,
         }),
@@ -293,7 +293,7 @@ describe("createBooking — optional table link", () => {
           bookingDate: "2026-08-20",
           bookingTime: "20:00",
           partySize: 2,
-          contactName: "García",
+          contactName: "Taylor",
           tableId,
           createdBy,
         }),
@@ -310,7 +310,7 @@ describe("createBooking — optional table link", () => {
           bookingDate: "2026-08-20",
           bookingTime: "20:00",
           partySize: 2,
-          contactName: "García",
+          contactName: "Taylor",
           tableId,
           createdBy,
         }),
@@ -327,15 +327,15 @@ describe("updateBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
     await scoped(cfg, (tx) =>
-      updateBooking(tx, cfg, id, { partySize: 6, contactName: "García (6)", notes: "grande" }),
+      updateBooking(tx, cfg, id, { partySize: 6, contactName: "Taylor (6)", notes: "large" }),
     );
     const row = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
-    expect(row).toMatchObject({ partySize: 6, contactName: "García (6)", notes: "grande" });
+    expect(row).toMatchObject({ partySize: 6, contactName: "Taylor (6)", notes: "large" });
   });
 
   it("rejects an absent id with booking.not_found", async () => {
@@ -365,7 +365,7 @@ describe("updateBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
@@ -382,7 +382,7 @@ describe("updateBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
@@ -397,7 +397,7 @@ describe("updateBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
@@ -414,7 +414,7 @@ describe("updateBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
@@ -502,7 +502,7 @@ describe("seatBooking", () => {
     seatedBy: string;
   }> {
     await seedTenant(db);
-    const locationId = await insertLocation("Barra");
+    const locationId = await insertLocation("Front counter");
     const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
       cfg: { locationId: brandLocationId(locationId) },
@@ -520,7 +520,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         tableId,
         createdBy,
       }),
@@ -539,7 +539,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 5,
-        contactName: "Vidal",
+        contactName: "Reed",
         tableId,
         createdBy,
       }),
@@ -564,7 +564,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Ruiz",
+        contactName: "Brown",
         createdBy,
       }),
     );
@@ -583,7 +583,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Ruiz",
+        contactName: "Brown",
         createdBy,
       }),
     );
@@ -599,7 +599,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Ruiz",
+        contactName: "Brown",
         createdBy,
       }),
     );
@@ -618,7 +618,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Ruiz",
+        contactName: "Brown",
         tableId,
         createdBy,
       }),
@@ -641,7 +641,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Núñez",
+        contactName: "Morgan",
         tableId,
         createdBy,
       }),
@@ -668,7 +668,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "Núñez",
+        contactName: "Morgan",
         tableId,
         createdBy,
       }),
@@ -709,7 +709,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
-        contactName: "García",
+        contactName: "Taylor",
         tableId,
         createdBy,
       }),
@@ -729,7 +729,7 @@ describe("seatBooking", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 3,
-        contactName: "Díaz",
+        contactName: "Clark",
         tableId,
         createdBy,
       }),
@@ -803,7 +803,7 @@ describe("a part of a joined table on a layout", () => {
         bookingDate,
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         tableId,
         createdBy,
       }),
@@ -944,7 +944,7 @@ describe("books table 4 while today's recorded layout stands it", () => {
         bookingDate,
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         tableId,
         createdBy,
       }),
@@ -1020,7 +1020,7 @@ describe("books table 4 while today's recorded layout stands it", () => {
         bookingDate: TODAY,
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Taylor",
         createdBy,
       }),
     );
