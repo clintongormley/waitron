@@ -218,3 +218,40 @@ for (const width of [390, 1280])
           path: `../../__screenshots__/a669-table/heading-${locale}-${theme}-${width}.png`,
         });
       });
+
+it("A803 portion grouping: a portion ticked for a guest's allergy stands apart from its twin", async () => {
+  const burger = (id: string, lineNo: number) => ({
+    ...storedDish,
+    id,
+    lineNo,
+    quantity: "1.000",
+    priceQuantity: "1.000",
+    listUnitPriceGross: undefined,
+  });
+  const view = allergy();
+  const ticked: PartyAllergyRead = {
+    ...view,
+    snapshot: {
+      ...view.snapshot,
+      ticks: [{ guestId: "guest", draftLineId: null, workingLineId: "burger-2" }],
+    },
+  };
+  const { el } = await mount({
+    party,
+    allergyView: ticked,
+    currentOrders: null,
+    lines: [burger("burger-1", 1), burger("burger-2", 2), burger("burger-3", 3)],
+  });
+  expect(
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-fallback-line]")].map((node) => [
+      node.dataset.sentFallbackLine,
+      node.querySelector("[data-allergy-tag]")?.textContent ?? null,
+    ]),
+  ).toEqual([
+    ["burger-1", null],
+    ["burger-2", "Blue shirt"],
+  ]);
+  expect(
+    el.shadowRoot!.querySelector('[data-sent-fallback-line="burger-1"]')!.textContent,
+  ).toContain("×2");
+});

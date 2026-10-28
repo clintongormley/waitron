@@ -1,16 +1,24 @@
 import type { PartyAllergySnapshot } from "@waitron/module";
-import { allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
+import { allergyGuestId, allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
-import { addDecimal, decimal, formatMoney } from "@waitron/shared";
-import type { CurrentOrderRow, CurrentOrders } from "../api/client.js";
+import {
+  MONEY_SCALE,
+  addDecimal,
+  decimal,
+  formatMoney,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
+import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
+import { portionGroups, sentSlicePortionKey } from "../state/portion-groups.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { trimQuantity } from "./dish-format.js";
 import { groupName } from "./group-name.js";
@@ -43,6 +51,8 @@ export interface SentReorderDetail {
 @customElement("till-sent-orders")
 export class TillSentOrders extends LitElement {
   @property({ attribute: false }) allergy: PartyAllergySnapshot | null = null;
+  /** The bill's lines, which say which rows are identical portions; none known groups none. */
+  @property({ attribute: false }) lines: readonly TabLine[] = [];
 
   static override styles = [
     baseStyles,
@@ -454,9 +464,9 @@ export class TillSentOrders extends LitElement {
     }
     this.#suppressClick = false;
   }
-  #clickServe(slice: SentSlice, event: MouseEvent): void {
+  #clickServe(members: readonly SentSlice[], event: MouseEvent): void {
     if (event.detail === 0 || !this.#suppressClick)
-      this.#serve([{ lineId: slice.row.lineId, quantity: slice.quantity }]);
+      this.#serve(members.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })));
     this.#releasePointer();
   }
   #displayNow(): number {
@@ -467,6 +477,18 @@ export class TillSentOrders extends LitElement {
   }
   #quantity(value: string): string {
     return formatDecimalInput(trimQuantity(value), currentLocale());
+  }
+  #portions(slices: readonly SentSlice[]): SentSlice[][] {
+    return portionGroups(
+      slices,
+      (slice) =>
+        sentSlicePortionKey(
+          slice,
+          this.lines,
+          allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
+        ),
+      (slice) => slice.row.lineNo,
+    );
   }
   #what(row: CurrentOrderRow, quantity: string): TemplateResult {
     return html`<span class="what"
@@ -494,11 +516,17 @@ export class TillSentOrders extends LitElement {
           .now=${this.#displayNow()}
         ></till-fired-ago>`;
   }
-  #line(slice: SentSlice): TemplateResult {
+  #line(members: readonly SentSlice[]): TemplateResult {
+    const slice = members[0]!;
     const fired = slice.kind === "fired";
-    const contents = html`${this.#what(slice.row, slice.quantity)}<span class="status"
+    const quantity = trimQuantity(sumDecimals(members.map((member) => decimal(member.quantity))));
+    const amount = toScale(
+      sumDecimals(members.map((member) => decimal(member.amount))),
+      MONEY_SCALE,
+    );
+    const contents = html`${this.#what(slice.row, quantity)}<span class="status"
         >${this.#status(slice)}</span
-      ><span class="amount">${this.#money(slice.amount)}</span>`;
+      ><span class="amount">${this.#money(amount)}</span>`;
     return html`<li
       data-fired-line=${fired ? slice.row.lineId : nothing}
       data-served-line=${slice.kind === "served" || slice.kind === "cancelled_charged" ? slice.row.lineId : nothing}
@@ -513,7 +541,7 @@ export class TillSentOrders extends LitElement {
               ?disabled=${this.busy || !slice.row.released}
               aria-description=${t("table.serve")}
               @pointerdown=${(event: PointerEvent) => this.#pressLine(slice, event)}
-              @click=${(event: MouseEvent) => this.#clickServe(slice, event)}
+              @click=${(event: MouseEvent) => this.#clickServe(members, event)}
             >
               ${contents}
             </button>`
@@ -627,7 +655,7 @@ export class TillSentOrders extends LitElement {
         >
       </div>
       <ul>
-        ${entry.rows.map((slice) => this.#line(slice))}
+        ${this.#portions(entry.rows).map((members) => this.#line(members))}
         ${entry.companions.map(
           (row) =>
             html`<li class="companion" data-companion=${row.lineId}>
@@ -740,7 +768,7 @@ export class TillSentOrders extends LitElement {
                   !this.servedOpen
                     ? nothing
                     : html`<ul>
-                        ${model.served.map((slice) => this.#line(slice))}
+                        ${this.#portions(model.served).map((members) => this.#line(members))}
                       </ul>`
                 }
               </section>
@@ -760,9 +788,9 @@ export class TillSentOrders extends LitElement {
                   @pointerleave=${() => this.#releasePointer()}
                 >
                   ${repeat(
-                    fired,
-                    (slice) => slice.row.lineId,
-                    (slice) => this.#line(slice),
+                    this.#portions(fired),
+                    (members) => members[0]!.row.lineId,
+                    (members) => this.#line(members),
                   )}
                 </ul>
               </section>

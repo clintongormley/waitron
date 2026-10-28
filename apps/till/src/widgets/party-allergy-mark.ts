@@ -12,15 +12,25 @@ export const allergyMarkStyles = css`
   }
 `;
 
+/** The guest whose allergy is ticked on a line, or null; nothing is ticked unless the party
+ * answered that it has allergies. */
+export function allergyGuestId(
+  snapshot: PartyAllergySnapshot | null,
+  ref: { kind: "draft" | "working"; id: string },
+): string | null {
+  if (snapshot?.answer !== "allergies") return null;
+  const tick = snapshot.ticks.find((tick) =>
+    ref.kind === "draft" ? tick.draftLineId === ref.id : tick.workingLineId === ref.id,
+  );
+  return tick?.guestId ?? null;
+}
+
 export function allergyMark(
   snapshot: PartyAllergySnapshot | null,
   ref: { kind: "draft" | "working"; id: string },
 ): TemplateResult | typeof nothing {
-  if (snapshot?.answer !== "allergies") return nothing;
-  const tick = snapshot.ticks.find((tick) =>
-    ref.kind === "draft" ? tick.draftLineId === ref.id : tick.workingLineId === ref.id,
-  );
-  const guest = snapshot.guests.find((guest) => guest.id === tick?.guestId);
+  const id = allergyGuestId(snapshot, ref);
+  const guest = snapshot?.guests.find((guest) => guest.id === id);
   return guest === undefined
     ? nothing
     : html`<span class="allergy-tag" data-allergy-tag>${guest.who}</span>`;

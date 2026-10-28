@@ -1,5 +1,5 @@
 import type { PartyAllergyRead } from "@waitron/module";
-import { allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
+import { allergyGuestId, allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupNumberText } from "../widgets/group-name.js";
@@ -51,6 +51,7 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  multiplyDecimal,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
@@ -160,6 +161,7 @@ import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
+import { portionGroups, tabLinePortionKey } from "../state/portion-groups.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
  * Narrower, the draft opens on its own Review view. */
@@ -2200,10 +2202,6 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #lineTotal(line: TabLine): TemplateResult {
-    return lineTotal(listedGross(line), this.#lineGross(line));
-  }
-
   #recallLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("recall-lines", {
@@ -2465,6 +2463,7 @@ export class TillTableOrderScreen extends LitElement {
       ${this.currentOrders === null ? this.#sentFallback() : nothing}
       <till-sent-orders
         .allergy=${this.#allergy()?.snapshot ?? null}
+        .lines=${this.lines}
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
@@ -2523,16 +2522,21 @@ export class TillTableOrderScreen extends LitElement {
     );
     const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
     if (dishes.length === 0) return nothing;
+    const groups = portionGroups(
+      dishes,
+      (dish) => this.#fallbackPortionKey(dish),
+      (dish) => dish.lineNo,
+    );
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
       <h2>${t("table.sent_title")}</h2>
       <ul>
-        ${dishes.map(
-          (dish) =>
-            html`<li data-sent-fallback-line=${dish.id}>
-              ${this.#sentFallbackLine(dish)}
+        ${groups.map(
+          ({ 0: dish, length: count }) =>
+            html`<li data-sent-fallback-line=${dish!.id}>
+              ${this.#sentFallbackLine(dish!, count)}
               <ul>
-                ${this.lines.filter((line) => line.parentLineNo === dish.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra)}</li>`)}
+                ${this.lines.filter((line) => line.parentLineNo === dish!.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra, count)}</li>`)}
               </ul>
             </li>`,
         )}
@@ -2540,15 +2544,36 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #sentFallbackLine(line: TabLine): TemplateResult {
+  /** Portions also differ by what this list prints of each: its allergy mark and a whole payment.
+   * A part payment would print against one portion's count, so such a line stands alone. */
+  #fallbackPortionKey(dish: TabLine): string | null {
+    const balance = this.#balanceShown();
+    const paid = balance === null ? undefined : paidQuantities(balance).get(dish.lineNo);
+    if (
+      paid !== undefined &&
+      compareDecimal(decimal(paid), decimal("0")) > 0 &&
+      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
+    )
+      return null;
+    return tabLinePortionKey(dish, this.lines, [
+      paid ?? null,
+      allergyGuestId(this.#allergy()?.snapshot ?? null, { kind: "working", id: dish.id }),
+    ]);
+  }
+
+  /** `count` identical portions' line, shown once with its quantity and price multiplied. */
+  #sentFallbackLine(line: TabLine, count = 1): TemplateResult {
+    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(count)));
     return html`<div class="sent-fallback-row">
       <span class="sent-fallback-name"
-        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${this.#displayQty(line.quantity)}`}
+        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${this.#displayQty(times(decimal(line.quantity)))}`}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
         ${this.#paidMark(line.lineNo, line.quantity)}
       </span>
-      <span class="sent-fallback-price" data-sent-fallback-price>${this.#lineTotal(line)}</span>
+      <span class="sent-fallback-price" data-sent-fallback-price
+        >${lineTotal(times(listedGross(line)), times(this.#lineGross(line)))}</span
+      >
     </div>`;
   }
 
