@@ -312,11 +312,10 @@ it("sends only the changed VAT class, and changing it back quiets Save", async (
 it("sends both changes in one call and shows the answer in view mode", async () => {
   setLocale("en-GB");
   const r = rig();
-  r.api.putVenueDefaults.mockImplementationOnce(async () => ({
-    ...MADRID,
-    receiptLanguage: "gl-ES",
-    defaultProductVatClass: "general",
-  }));
+  r.api.putVenueDefaults.mockImplementationOnce(async () => {
+    r.state.stored = { ...MADRID, receiptLanguage: "gl-ES", defaultProductVatClass: "general" };
+    return structuredClone(r.state.stored);
+  });
   const el = await mount(r.api);
   await edit(el);
   await pick(el, "receiptLanguage", "ca-ES");
@@ -820,12 +819,15 @@ it("a save in flight when the card turns read-only shows its answer once it succ
   el.readOnly = true;
   await flush(el);
   expect(q(el, "form")).toBeNull();
+  const reread = deferred<VenueDefaults>();
+  r.api.getVenueDefaults.mockImplementationOnce(() => reread.promise);
   pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
   await pending.promise;
   await frame();
   await flush(el);
   expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
   expect(q(el, "form")).toBeNull();
+  reread.resolve({ ...MADRID, defaultProductVatClass: "zero" });
 });
 
 it("a save that succeeds after the card turned read-only and back leaves the new clean draft open on its answer", async () => {
@@ -843,6 +845,8 @@ it("a save that succeeds after the card turned read-only and back leaves the new
   el.readOnly = false;
   await flush(el);
   await edit(el);
+  const reread = deferred<VenueDefaults>();
+  r.api.getVenueDefaults.mockImplementationOnce(() => reread.promise);
   pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
   await pending.promise;
   await frame();
@@ -852,6 +856,7 @@ it("a save that succeeds after the card turned read-only and back leaves the new
   expect(saveButton(el).disabled).toBe(true);
   expect(saveButton(el).loading).toBe(false);
   expect(unload()).toBe(false);
+  reread.resolve({ ...MADRID, defaultProductVatClass: "zero" });
 });
 
 it("in Edit the content warning follows the staged language and goes once its content is enabled", async () => {
