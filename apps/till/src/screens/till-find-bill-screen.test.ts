@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import {
   billOptions,
   billRow,
@@ -572,6 +573,22 @@ it("names a filter chip by its drawn text, then what tapping it does", async () 
   await expect
     .element(page.elementLocator(chip.shadowRoot!.querySelector("button")!))
     .toHaveAccessibleName(`${drawn}, Remove State filter`);
+});
+it("in English the state filter calls an order set aside on the till Parked", async () => {
+  const { el } = await mount();
+  const grid = await ready(el);
+  grid.chooseFilter("state", ["held"]);
+  await vi.waitFor(() =>
+    expect(grid.querySelector('[data-chip="state"]')?.textContent?.replace("×", "").trim()).toBe(
+      "State: Parked",
+    ),
+  );
+});
+it.each([
+  ["English", en],
+  ["Spanish", es],
+])("in %s the state filter's word for a set-aside order is the Parked orders list's", (_, table) => {
+  expect(table["held.title"].toLowerCase()).toContain(table["find_page.held"].toLowerCase());
 });
 it("removing a bill's state chip keeps its zone filter and the resulting query does not repeat", async () => {
   const { el, fetcher } = await mount();
