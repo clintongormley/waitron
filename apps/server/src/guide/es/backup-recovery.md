@@ -31,13 +31,12 @@ ofrece **Recuperar desde una copia**. Si la página dice que falta la base de da
 muestra la recuperación detenida después de que introduzcas la contraseña de administrador que
 elegiste al configurar, y Empezar de nuevo la borra cuando marcas «No se envió nada a la AEAT ni se
 vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, la página muestra **Empezar de nuevo**
-junto a la recuperación detenida. Si la base de datos de la configuración ya guarda elementos, la
-página dice cuántos después de que introduzcas la contraseña, y que ninguno es una factura. Empezar
-de nuevo no se ofrece si la base de datos tiene una factura u otro elemento que Waitron nunca borra,
-si la configuración ya guardó los ajustes con los que vende el equipo, o si ya terminó. Empezar de
-nuevo pide entonces la contraseña de administrador,
-vuelve a mostrar la recuperación y la borra cuando marcas «Borrar el intento anterior y empezar de
-nuevo.» y vuelves a elegir **Empezar de nuevo**.
+junto a la recuperación detenida. Empezar de nuevo pide entonces la contraseña de administrador y
+vuelve a mostrar la recuperación. Si la base de datos de la configuración ya guarda elementos,
+también dice cuántos, y que ninguno es una factura. Lo borra todo cuando marcas «Borrar el intento
+anterior y empezar de nuevo.» y vuelves a elegir **Empezar de nuevo**. Empezar de nuevo no se ofrece
+si la base de datos tiene una factura u otro elemento que Waitron nunca borra, si la configuración
+ya guardó los ajustes con los que vende el equipo, o si ya terminó.
 
 Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
 de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
