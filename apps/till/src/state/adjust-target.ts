@@ -98,3 +98,51 @@ export function lineAdjustTarget(
     ...(isExtra && (line.firedAt !== null || dish?.firedAt != null) ? { kitchenTold: true } : {}),
   };
 }
+
+/**
+ * What the till shows as one row of identical portions (`members`, from `state/portion-groups.ts`),
+ * as one target: named by its first portion with every member in `lineIds`, counted in portions so
+ * the dialog offers part of it, and totalled with every member's extras. `extras` holds one target
+ * per extra product, naming that extra on each member (plan D31, D34).
+ */
+export function rowAdjustTarget(
+  members: readonly TabLine[],
+  lines: readonly TabLine[],
+  name: string,
+  extraName: (extra: TabLine) => string = (extra) => extra.name ?? "",
+): AdjustTarget {
+  const dishes = [...members].sort((a, b) => a.lineNo - b.lineNo);
+  const each = dishes.map((dish) => lineAdjustTarget(dish, lines, name));
+  const total = toScale(sumDecimals(each.map((one) => decimal(one.total))), MONEY_SCALE);
+  const count = String(dishes.length);
+  const extrasOf = dishes.map((dish) =>
+    lines
+      .filter((row) => row.parentLineNo === dish.lineNo)
+      .sort((a, b) => extraOrder(a).localeCompare(extraOrder(b))),
+  );
+  const extras = extrasOf[0]!.map((first, i) => {
+    const standing = extrasOf.map((list) => list[i]!);
+    const one = standing.map((extra) => lineAdjustTarget(extra, lines, extraName(first)));
+    return {
+      ...one[0]!,
+      lineIds: standing.map((extra) => extra.id),
+      quantity: trimQuantity(sumDecimals(standing.map((extra) => decimal(extra.quantity)))),
+      total: toScale(sumDecimals(one.map((target) => decimal(target.total))), MONEY_SCALE),
+      started: one.some((target) => target.started === true),
+    };
+  });
+  return {
+    ...each[0]!,
+    lineIds: dishes.map((dish) => dish.id),
+    quantity: count,
+    total,
+    unitTotal: divideDecimal(total, decimal(count), MONEY_SCALE),
+    started: each.some((one) => one.started === true),
+    extras,
+  };
+}
+
+/** The order identical portions' extras are paired in: one product, name and count per extra. */
+function extraOrder(extra: TabLine): string {
+  return JSON.stringify([extra.productId, extra.name ?? null, trimQuantity(extra.quantity)]);
+}

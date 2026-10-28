@@ -948,6 +948,8 @@ export interface AdjustmentAsk {
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
   lineId: string | null;
+  /** Every portion line of a row the till shows as one, `lineId` among them (plan D31). */
+  lineIds?: string[];
   reasonId: string;
   action: AdjustmentAction;
   quantity?: string;
@@ -4263,13 +4265,18 @@ export class TillApi {
     });
   }
 
+  /** With `lineIds`, the read covers every portion of the row the till shows as one. */
   getCancellation(
     partyId: string,
     lineId: string,
-    options: ReadOptions = {},
+    options: ReadOptions & { lineIds?: readonly string[] } = {},
   ): Promise<CancellationRead> {
+    const query =
+      options.lineIds === undefined
+        ? ""
+        : `?${new URLSearchParams(options.lineIds.map((id) => ["lineIds", id])).toString()}`;
     return this.#request(
-      `/api/parties/${partyId}/lines/${lineId}/cancellation`,
+      `/api/parties/${partyId}/lines/${lineId}/cancellation${query}`,
       "GET",
       undefined,
       options.signal,

@@ -190,25 +190,104 @@ it("A803 portion grouping: Move station on a grouped row moves every member", as
   ]);
 });
 
-it("A803 portion grouping: Fire now, Void and Comp on a grouped row act on its first member and offer no 'all n'", async () => {
-  for (const [selector, type] of [
-    ["[data-sent-line-fire]", "fire-held-line"],
-    ["[data-sent-line-void]", "cancel-item"],
-    ["[data-sent-line-comp]", "adjust"],
-  ] as const) {
-    const el = await openGrouped("held");
-    const events = capture(el, type);
+it("A803 portion grouping: Fire now on a grouped row fires its first member", async () => {
+  const el = await openGrouped("held");
+  const events = capture(el, "fire-held-line");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-fire]"));
+  expect(events).toEqual([{ lineId: "s-1" }]);
+});
+
+it("A803 portion grouping: Void on a grouped row names every member", async () => {
+  const el = await openGrouped("fired", {}, 3);
+  const events = capture(el, "cancel-item");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void]"));
+  expect(events).toEqual([{ lineId: "s-1", lineIds: ["s-1", "s-2", "s-3"] }]);
+});
+
+it("A803 portion grouping: Comp on a grouped row offers the row's total, a count up to 3 and its extras as one", async () => {
+  const el = await openGrouped("fired", {}, 3);
+  const events = capture(el, "adjust");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-comp]"));
+  expect(events).toEqual([
+    {
+      kind: "comp",
+      combined: true,
+      target: expect.objectContaining({
+        lineId: "s-1",
+        lineIds: ["s-1", "s-2", "s-3"],
+        quantity: "3",
+        total: "31.50",
+        unitTotal: "10.50",
+        extras: [
+          expect.objectContaining({
+            lineId: "s-1-lime",
+            lineIds: ["s-1-lime", "s-2-lime", "s-3-lime"],
+            quantity: "6",
+            total: "3.00",
+            extra: true,
+          }),
+        ],
+      }),
+    },
+  ]);
+});
+
+it.each(["void", "comp"] as const)(
+  "A803 portion grouping: %s on a single row still names one line",
+  async (action) => {
+    const el = await openGrouped("fired", {}, 1);
+    const events = capture(el, action === "void" ? "cancel-item" : "adjust");
     await openMore(el);
-    await userEvent.click(q(el, selector));
+    await userEvent.click(q(el, `[data-sent-line-${action}]`));
     expect(events).toHaveLength(1);
-    const detail = events[0] as { lineId?: string; target?: { lineId: string; quantity: string } };
-    expect(detail.lineId ?? detail.target).toEqual(
-      type === "adjust"
-        ? expect.objectContaining({ lineId: "s-1", quantity: "1", unitTotal: null })
-        : "s-1",
+    const detail = events[0] as { lineIds?: unknown; target?: { lineIds?: unknown } };
+    expect(detail).toMatchObject(
+      action === "void" ? { lineId: "s-1" } : { target: { lineId: "s-1", quantity: "1" } },
     );
-    cleanupWidgets();
+    expect(action === "void" ? detail.lineIds : detail.target!.lineIds).toBeUndefined();
+  },
+);
+
+it("A803 portion grouping: two identical unbound one-unit lines show as two rows and act one at a time, as today", async () => {
+  const rows = [2, 1].map((lineNo) => steakRow(`s-${lineNo}`, lineNo, "fired"));
+  const { el } = await mount({
+    currentOrders: current({
+      reminder: null,
+      groups: [currentGroup("g1", 3, "fired", rows)],
+      ungrouped: [],
+    }),
+    groups,
+    now,
+    bills: [bill],
+    lines: [2, 1].flatMap((lineNo) =>
+      steakLines(`s-${lineNo}`, lineNo, "fired").map((line) => ({ ...line, portion: false })),
+    ),
+  });
+  el.style.width = "1280px";
+  await resized(el);
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  for (const name of ["sent", "fired"]) {
+    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${name}-toggle]`);
+    if (toggle?.getAttribute("aria-expanded") === "false") {
+      await userEvent.click(toggle);
+      await panel.updateComplete;
+    }
   }
+  expect(
+    [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")].map(
+      (node) => node.dataset.firedLine,
+    ),
+  ).toEqual(["s-1", "s-2"]);
+  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="s-1"]')!);
+  await el.updateComplete;
+  const events = capture(el, "cancel-item");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void]"));
+  expect(events).toEqual([{ lineId: "s-1" }]);
 });
 
 it("A803 portion grouping: serving 2 of a grouped 3 sends the first two members, quantity 1 each", async () => {

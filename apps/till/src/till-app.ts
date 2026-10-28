@@ -1035,6 +1035,8 @@ interface CancellingItem {
   partyId: string;
   billId: string;
   lineId: string;
+  /** Every portion of the row the till shows as one, `lineId` among them; absent on one line. */
+  lineIds?: string[];
   name: string;
   unitPrecision: number;
   session: number;
@@ -10225,6 +10227,7 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-cancel-item-dialog
         .lineId=${open.lineId}
+        .lineIds=${open.lineIds}
         .name=${open.name}
         .unitPrecision=${open.unitPrecision}
         .consent=${open.consent}
@@ -13416,7 +13419,7 @@ export class TillApp extends LitElement {
     this.cancellingItem = null;
   }
 
-  async #onCancelItem(event: CustomEvent<{ lineId: string }>): Promise<void> {
+  async #onCancelItem(event: CustomEvent<{ lineId: string; lineIds?: string[] }>): Promise<void> {
     if (
       this.cancellingItem !== null ||
       this.#cancelItemRead !== undefined ||
@@ -13428,6 +13431,7 @@ export class TillApp extends LitElement {
     )
       return;
     const lineId = event.detail.lineId;
+    const lineIds = event.detail.lineIds === undefined ? {} : { lineIds: event.detail.lineIds };
     const line = this.tabLines.find((row) => row.id === lineId && row.parentLineNo == null);
     const recorded = [
       ...(this.currentOrders?.ungrouped ?? []),
@@ -13450,6 +13454,7 @@ export class TillApp extends LitElement {
     try {
       const consent = await opening.api.getCancellation(opening.partyId, lineId, {
         signal: opening.controller.signal,
+        ...lineIds,
       });
       if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
       const refundableTenders = await this.#cancellationTenders(
@@ -13464,6 +13469,7 @@ export class TillApp extends LitElement {
         ...opening,
         id: ++this.#cancelItems,
         lineId,
+        ...lineIds,
         name: line?.name ?? recorded?.name ?? "",
         unitPrecision: line?.unitPrecision ?? recorded?.unitPrecision ?? 0,
         consent,
@@ -13550,6 +13556,7 @@ export class TillApp extends LitElement {
         expectedEdit: open.bill.expectedEdits[0]!,
         expectedRevision: choice.consent.billRevision,
         lineId: open.lineId,
+        ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
         action: "cancel",
         quantity: choice.quantity,
         reasonId: choice.reasonId!,
@@ -13626,6 +13633,7 @@ export class TillApp extends LitElement {
     if (choice.outcome === "refund" && !this.#cancellationRefundAvailable(open)) return;
     const command: CancelItemRequest = {
       expectedEdit: open.bill.expectedEdits[0]!,
+      ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
       ...(choice.outcome === "refund" ? { refundHandoff: true } : {}),
@@ -13689,13 +13697,12 @@ export class TillApp extends LitElement {
     approver: CarriedApprover | undefined,
   ): RefundFill | undefined {
     const value = choice.consent.refundValue;
-    const component = choice.consent.context.components.find((row) => row.lineId === open.lineId);
-    if (value === undefined || component === undefined) return undefined;
+    const ids = open.lineIds ?? [open.lineId];
+    const dishes = choice.consent.context.components.filter((row) => ids.includes(row.lineId));
+    if (value === undefined || dishes.length === 0) return undefined;
+    const cancelled = sumDecimals(dishes.map((row) => decimal(row.cancelledQuantity)));
     return {
-      target: toScale(
-        cancelRefundShare(value, component.cancelledQuantity, choice.quantity),
-        MONEY_SCALE,
-      ),
+      target: toScale(cancelRefundShare(value, cancelled, choice.quantity), MONEY_SCALE),
       startReasonId: choice.reasonId ?? "",
       dishes: this.#refundDishWords(choice.quantity, open.name),
       cancellationIds: links
@@ -13721,6 +13728,7 @@ export class TillApp extends LitElement {
       try {
         const consent = await open.api.getCancellation(open.partyId, open.lineId, {
           signal,
+          ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
         });
         if (!this.#itemCancellationShown(open)) return;
         const refundableTenders = await this.#cancellationTenders(open.api, consent, signal);
@@ -19027,7 +19035,7 @@ export class TillApp extends LitElement {
         @move-station=${(event: Event) => void this.#onMoveStation(event)}
         @open-make-at=${(event: Event) => void this.#onOpenMakeAt(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
-        @cancel-item=${(event: CustomEvent<{ lineId: string }>) => void this.#onCancelItem(event)}
+        @cancel-item=${(event: CustomEvent<{ lineId: string; lineIds?: string[] }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}

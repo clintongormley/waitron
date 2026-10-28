@@ -26,6 +26,8 @@ export type AdjustKind = "cancel" | "comp" | "discount";
 export interface AdjustTarget {
   /** The dish or the extra; null for the whole bill. */
   lineId: string | null;
+  /** Every portion line of a row the till shows as one, `lineId` first; absent on a single line. */
+  lineIds?: string[];
   name: string;
   /** Its quantity as shown; null for the bill. */
   quantity: string | null;
@@ -49,6 +51,7 @@ export interface AdjustTarget {
 export interface AdjustmentChoice {
   action: AdjustmentAction;
   lineId?: string;
+  lineIds?: string[];
   reasonId: string;
   note: string | null;
   quantity?: string;
@@ -520,6 +523,8 @@ export class TillAdjustmentDialog extends LitElement {
       )
         choice.quantity = this.#count();
     } else if (this.#partial() && this.quantity === "1") choice.quantity = "1";
+    const lineIds = this.#target()?.lineIds;
+    if (lineIds !== undefined) choice.lineIds = [...lineIds];
     const typed = this.#typedNumber();
     if (choice.action === "discount_percent")
       choice.percentBp = this.#billFree() ? 10000 : Math.round(Number(typed) * 100);
@@ -550,7 +555,8 @@ export class TillAdjustmentDialog extends LitElement {
       (this.#ownErrors().size > 0 ||
         (["action", "lineId", "reasonId", "note", "quantity", "percentBp", "amount"] as const).some(
           (key) => this.#choice()[key] !== choice[key],
-        ))
+        ) ||
+        String(this.#choice().lineIds) !== String(choice.lineIds))
     ) {
       this.#emit("adjust-edit");
       return;

@@ -103,6 +103,7 @@ import {
   billGross,
   isStarted,
   lineAdjustTarget,
+  rowAdjustTarget,
   listedGross,
   tabLineGross,
 } from "../state/adjust-target.js";
@@ -2772,32 +2773,45 @@ export class TillTableOrderScreen extends LitElement {
       (action === "recall" && !members.every((member) => this.#canRecallSent(member))) ||
       (action === "station" && !members.every((member) => this.#canMoveSent(member))) ||
       (action === "void" && !this.#canVoidSent(slice)) ||
-      (action === "comp" && this.#sentOrderLine(slice) === undefined)
+      (action === "comp" && members.some((member) => this.#sentOrderLine(member) === undefined))
     )
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
-    // Fire now, Void and Comp act on the first portion of a grouped row: each request names one
-    // line (D14 for Void and Comp), and firing members one by one would start a fire group and a
-    // ticket for each.
+    // Fire now acts on the first portion of a grouped row: its request names one line, and firing
+    // members one by one would start a fire group and a ticket for each.
+    const lineIds =
+      members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
     else if (action === "recall") this.#recallLines(members.map((member) => member.row.lineNo));
     else if (action === "comp") {
       const line = this.#sentOrderLine(slice)!;
-      const target = lineAdjustTarget(line, this.lines, this.#adjustName(line));
-      target.extras = this.lines
-        .filter(
-          (row) =>
-            row.parentLineNo === line.lineNo && compareDecimal(tabLineGross(row), decimal("0")) > 0,
-        )
-        .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)));
+      const priced = (target: AdjustTarget) =>
+        compareDecimal(decimal(target.total), decimal("0")) > 0;
+      const target =
+        members.length > 1
+          ? rowAdjustTarget(
+              members.map((member) => this.#sentOrderLine(member)!),
+              this.lines,
+              this.#adjustName(line),
+              (extra) => this.#adjustName(extra),
+            )
+          : lineAdjustTarget(line, this.lines, this.#adjustName(line));
+      target.extras =
+        members.length > 1
+          ? target.extras!.filter(priced)
+          : this.lines
+              .filter((row) => row.parentLineNo === line.lineNo)
+              .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)))
+              .filter(priced);
       this.#dispatch("adjust", { kind: "comp", combined: true, target });
-    } else if (action === "void") this.#dispatch("cancel-item", { lineId: slice.row.lineId });
+    } else if (action === "void")
+      this.#dispatch("cancel-item", { lineId: slice.row.lineId, ...lineIds });
     else
       this.#dispatch("move-station", {
         workingOrderId: slice.row.workingOrderId,
         lineId: slice.row.lineId,
-        ...(members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {}),
+        ...lineIds,
         name: slice.row.name,
         stationId: slice.row.kitchen!.stationId,
       });

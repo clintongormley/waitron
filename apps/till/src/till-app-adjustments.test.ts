@@ -1563,6 +1563,59 @@ describe("till-app: service cancellation consent", () => {
     },
   );
 
+  it("A803 portion grouping: Void on a grouped row reads the cancellation for the three and sends them", async () => {
+    const lineIds = ["line-1", "line-2", "line-3"];
+    const base = consent();
+    const read: CancellationRead = {
+      ...base,
+      context: {
+        ...base.context,
+        components: lineIds.map((lineId, i) => ({
+          ...base.context.components[0]!,
+          id: `kitchen-${i + 1}`,
+          lineId,
+        })),
+      },
+    };
+    const methods = apiFor(read);
+    const { el } = await mountApp(methods);
+    await openTable4(el);
+    emit(tableOrder(el), "cancel-item", { lineId: "line-1", lineIds });
+    await flush(el);
+    expect(methods.getCancellation).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+      signal: expect.any(AbortSignal),
+      lineIds,
+    });
+    expect(cancelDialog(el)!.lineIds).toEqual(lineIds);
+    emit(cancelDialog(el)!, "cancel-item-choice", { ...offBillChoice(read), quantity: "2" });
+    await flush(el);
+    expect(api.previewAdjustment).toHaveBeenCalledExactlyOnceWith(
+      "wo-4",
+      expect.objectContaining({ lineId: "line-1", lineIds, quantity: "2", action: "cancel" }),
+    );
+    expect(methods.cancelItem).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "line-1",
+      expect.objectContaining({ lineIds, quantity: "2" }),
+      expect.any(Object),
+    );
+  });
+
+  it("A803 portion grouping: Void on a single line reads and sends that line alone", async () => {
+    const methods = apiFor();
+    const { el } = await mountApp(methods);
+    await openTable4(el);
+    await openCancel(el);
+    expect(methods.getCancellation).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+      signal: expect.any(AbortSignal),
+    });
+    await submitOffBill(el);
+    expect(Object.keys(vi.mocked(api.previewAdjustment).mock.calls[0]![1])).not.toContain(
+      "lineIds",
+    );
+    expect(Object.keys(methods.cancelItem.mock.calls[0]![2] as object)).not.toContain("lineIds");
+  });
+
   it("previews and applies off-bill cancellation from its main dialog without a second editor", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
@@ -4877,3 +4930,47 @@ it.each(["en-GB", "es-ES"])(
     }
   },
 );
+
+describe("A803 portion grouping: Comp on a grouped row", () => {
+  const row = {
+    lineId: "line-1",
+    lineIds: ["line-1", "line-2", "line-3"],
+    name: "Wine",
+    quantity: "3",
+    total: "90.00",
+    unitTotal: "30.00",
+  };
+  async function compRow(count?: string) {
+    const { el } = await mountApp();
+    const order = await openTable4(el);
+    emit(order, "adjust", { kind: "comp", combined: true, target: row });
+    await flush(el);
+    await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
+    if (count !== undefined) {
+      const stepper = inDialog(el, '[name="adjustQuantity"]') as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      await stepper.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(stepper.shadowRoot!.querySelector<HTMLInputElement>("input")!),
+        count,
+      );
+      await flush(el);
+    }
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    return vi.mocked(api.applyAdjustment).mock.calls.map(([, command]) => command);
+  }
+
+  it("Comp on a grouped row of three sends the three line ids and no quantity", async () => {
+    const sent = await compRow();
+    expect(sent).toEqual([expect.objectContaining({ lineId: "line-1", lineIds: row.lineIds })]);
+    expect(sent[0]).not.toHaveProperty("quantity");
+  });
+
+  it("Comp of 2 of the row sends the three ids and quantity 2", async () => {
+    expect(await compRow("2")).toEqual([
+      expect.objectContaining({ lineId: "line-1", lineIds: row.lineIds, quantity: "2" }),
+    ]);
+  });
+});

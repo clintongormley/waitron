@@ -414,3 +414,70 @@ it("sends everything off under a reason that offers Free", async () => {
     { action: "discount_percent", reasonId: "Mixed", note: "cold", percentBp: 10000 },
   ]);
 });
+
+const row: AdjustTarget = { ...dish, lineIds: ["dish", "dish-2", "dish-3"] };
+const rowCheese: AdjustTarget = { ...extra, lineIds: ["cheese", "cheese-2", "cheese-3"] };
+it("A803 portion grouping: a whole grouped row's choice names its three lines and no quantity", async () => {
+  const el = await mount({ target: row });
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([
+    { action: "comp", reasonId: "Free", note: null, lineIds: ["dish", "dish-2", "dish-3"] },
+  ]);
+});
+it("A803 portion grouping: 2 of a grouped row's 3 names its three lines and quantity 2", async () => {
+  const el = await mount({ target: row });
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await type(el, "adjustQuantity", "2");
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([
+    {
+      action: "comp",
+      reasonId: "Free",
+      note: null,
+      lineIds: ["dish", "dish-2", "dish-3"],
+      quantity: "2",
+    },
+  ]);
+});
+it("A803 portion grouping: a grouped row's extra is chosen as one, naming each portion's extra", async () => {
+  const el = await mount({ target: { ...row, extras: [rowCheese] } });
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await click(el, 'input[name="adjustTarget"][value="cheese"]');
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([
+    {
+      action: "comp",
+      reasonId: "Free",
+      note: null,
+      lineId: "cheese",
+      lineIds: ["cheese", "cheese-2", "cheese-3"],
+    },
+  ]);
+});
+it("A803 portion grouping: a preview for a row whose members changed cannot be confirmed", async () => {
+  const el = await mount({ target: row });
+  let asked: AdjustmentChoice | undefined;
+  let confirms = 0;
+  let edits = 0;
+  el.addEventListener(
+    "adjust-preview",
+    (e) => (asked = (e as CustomEvent<AdjustmentChoice>).detail),
+  );
+  el.addEventListener("adjust-confirm", () => confirms++);
+  el.addEventListener("adjust-edit", () => edits++);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await click(el, "[data-adjust-continue]");
+  el.choice = asked!;
+  el.preview = { reduction: "36.00", nominalValue: "36.00", needsApproval: null, lines: [] };
+  await el.updateComplete;
+  const confirm = q(el, "[data-adjust-confirm]");
+  el.target = { ...row, lineIds: ["dish", "dish-2", "dish-4"] };
+  confirm.click();
+  await el.updateComplete;
+  expect(confirms).toBe(0);
+  expect(edits).toBe(1);
+});

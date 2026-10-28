@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TabLine } from "../api/client.js";
-import { lineAdjustTarget } from "./adjust-target.js";
+import { lineAdjustTarget, rowAdjustTarget } from "./adjust-target.js";
 
 function line(over: Partial<TabLine>): TabLine {
   return {
@@ -70,5 +70,59 @@ describe("lineAdjustTarget", () => {
     const dish = line({ ...sent, state: "queued" });
     const chips = { ...olives, ...sent, state: "preparing" as const };
     expect(lineAdjustTarget(dish, [dish, chips], "Pizza").started).toBe(true);
+  });
+});
+
+describe("A803 portion grouping: rowAdjustTarget", () => {
+  const pizza = (n: number, over: Partial<TabLine> = {}) =>
+    line({ ...sent, id: `pizza-${n}`, lineNo: n, state: "queued", portion: true, ...over });
+  const olivesOf = (n: number) =>
+    line({
+      ...sent,
+      id: `olives-${n}`,
+      lineNo: n + 10,
+      productId: "p-olives",
+      parentLineNo: n,
+      unitPriceGross: "1.50",
+      listId: "list-1",
+    });
+  const row = [pizza(3), pizza(1), pizza(2)];
+  const lines = [...row, olivesOf(1), olivesOf(2), olivesOf(3)];
+
+  it("names every member by line number, counts them and totals them with their extras", () => {
+    const target = rowAdjustTarget(row, lines, "Pizza");
+    expect(target).toMatchObject({
+      lineId: "pizza-1",
+      lineIds: ["pizza-1", "pizza-2", "pizza-3"],
+      name: "Pizza",
+      quantity: "3",
+      total: "31.50",
+      unitTotal: "10.50",
+      started: false,
+    });
+  });
+
+  it("is started when any member is", () => {
+    const started = [pizza(1), pizza(2, { state: "preparing" })];
+    expect(rowAdjustTarget(started, [...started, olivesOf(1), olivesOf(2)], "Pizza").started).toBe(
+      true,
+    );
+  });
+
+  it("offers one extra product as one target naming that extra on every member", () => {
+    const target = rowAdjustTarget(row, lines, "Pizza", (extra) => extra.productId ?? "");
+    expect(target.extras).toEqual([
+      {
+        lineId: "olives-1",
+        lineIds: ["olives-1", "olives-2", "olives-3"],
+        name: "p-olives",
+        quantity: "3",
+        total: "4.50",
+        unitTotal: null,
+        started: false,
+        extra: true,
+        kitchenTold: true,
+      },
+    ]);
   });
 });

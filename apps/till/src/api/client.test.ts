@@ -169,6 +169,22 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code, status });
   });
 
+  it.each([
+    [undefined, "/api/parties/v1/lines/l-1/cancellation"],
+    [
+      ["l-1", "l-2", "l-3"],
+      "/api/parties/v1/lines/l-1/cancellation?lineIds=l-1&lineIds=l-2&lineIds=l-3",
+    ],
+  ])("A803 portion grouping: reads a cancellation for lineIds %j", async (lineIds, url) => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 1 }));
+    await new TillApi("", fetchStub).getCancellation(
+      "v1",
+      "l-1",
+      lineIds === undefined ? {} : { lineIds },
+    );
+    expect(fetchStub).toHaveBeenCalledWith(url, expect.objectContaining({ method: "GET" }));
+  });
+
   it("sends an invoice choice under the working order revision", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
     const api = new TillApi("", fetchStub);
