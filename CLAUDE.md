@@ -607,6 +607,9 @@ browser test** — most of these rules exist because a test passed while proving
   `startServer` or after `close()`**. Guard: `apps/server/src/boot.backup-network.test.ts`'s
   `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
+- **A child process that fakes `Date` fakes `performance.now` with it**, or the hour clock refuses
+  it `clock_corrected` only on a slow runner. Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-child-process-that-fakes-date-fakes-performancenow-with-it).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.

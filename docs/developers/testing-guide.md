@@ -2288,6 +2288,26 @@ them. Where it does appear it catches a side effect nobody asserts on: the shape
 here was a memo cache write whose arguments were both plain identifiers.
 
 
+## A child process that fakes `Date` fakes `performance.now` with it
+
+The setup hour clock (`packages/fiscal-verifactu/src/hour-setup-clock.ts`, `current`) refuses a
+held reading with `sif.allocation_invalid` / `clock_corrected` when the wall time and the
+process's elapsed time since that reading differ by more than a second. A child that freezes
+`Date` but leaves `performance.now` real reads zero wall time against real elapsed time, so it is
+refused whenever the run takes over a second between the reading and its re-check — on a busy CI
+runner, not on a fast laptop. The sibling children in `apps/server/src/first-fiscal-launch.test.ts`
+and `packages/provisioning/src/cli-owned-entry.test.ts` freeze both.
+
+Cost: CI run 40594569075 (server shard 7) failed `hour-recovery-placement-1.test.ts`'s
+archive process-death case: its child exited with no signal and printed nothing, so it never
+reached the kill point. That log omitted the child's error, so the cause there is inferred from the
+same outcome. Reproduced locally (A1163) by holding the child for 1.1 s of real time inside its
+clock check: both process-death cases then exited with code 1 and `clock_corrected`. Freezing
+`performance.now` beside `Date` made both pass with the hold in place, and the hold stays in the
+test so a child with disagreeing clocks fails every run. `expectChildKilled`
+(`apps/server/src/testing/child-process-death.ts`) now prints the exit code, stdout and stderr
+when a child is not killed as expected.
+
 ## Rejected writes assert their domain error code
 
 During the Categories review on 2026-09-13, deleting the duplicate-membership guard left

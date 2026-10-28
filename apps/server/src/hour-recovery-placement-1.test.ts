@@ -822,10 +822,13 @@ describe("selected-hour admission before archive placement", () => {
         return outcome;
       }`;
       const internet = `export async function authenticatedHourHead() { throw new Error("this test makes no network request"); } export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
-      const release = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
+      // Holds the child for over a second of real time once, inside its clock check, so a child
+      // whose wall and elapsed-time clocks disagree is refused here as it was on a slow CI runner.
+      const release = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `import { registerHooks } from "node:module";
       const RealDate = Date;
       globalThis.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); } static now() { return RealDate.parse("2026-10-16T12:42:01Z"); } };
+      Object.defineProperty(performance, "now", { value: () => 0 });
       registerHooks({ resolve(specifier, context, next) {
         const replacement = specifier.endsWith("/allocation-preparation.js") ? ${JSON.stringify(wrapper)} : specifier.endsWith("/hour-clock-internet.js") ? ${JSON.stringify(internet)} : specifier.endsWith("/hour-release.js") ? ${JSON.stringify(release)} : undefined;
         return replacement === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(replacement) };
