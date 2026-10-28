@@ -5,10 +5,12 @@ import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
   locationCatalogues,
+  orderPortions,
   products,
   saleLinePortions,
   saleLines,
   sales,
+  workingLinePortions,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -20,6 +22,7 @@ import { withTransaction } from "@waitron/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
+import { createCourse } from "./kitchen.js";
 import { readOrderDetail } from "./orders-list.js";
 import type { PortionRef } from "./order-portions.js";
 import { receiptLines } from "./receipt-adjustments.js";
@@ -717,6 +720,9 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
     ["variant", { variantName: "Large" }],
     ["staff credited", { creditedTo: "0000ffff-2222-4000-8000-0000000000bb" }],
     ["answers", { optionSnapshots: [sauce("Aioli")] }],
+    ["sending", { sentAt: "2026-10-28T08:00:00.000Z" }],
+    ["serving", { servedAt: "2026-10-28T08:00:00.000Z" }],
+    ["part served", { servedQuantity: 500 }],
   ])("A803 portion grouping: a portion whose %s differs stays apart", async (_, change) => {
     const { billId, portions } = await seed(croquetas("2"));
     await inTx(venue, (tx) =>
@@ -784,6 +790,44 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
       { name: "Burger", quantity: "2.000", total: "6.66" },
       { name: "Cheese", quantity: "2.000", total: "0.70" },
       { name: "Bacon", quantity: "2.000", total: "1.00" },
+    ]);
+  });
+
+  it("A803 portion grouping: a portion in another course stays apart", async () => {
+    const { billId, portions } = await seed(croquetas("2"));
+    await inTx(venue, async (tx) => {
+      const course = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 90 });
+      await tx
+        .update(workingOrderLines)
+        .set({ courseId: course.id })
+        .where(eq(workingOrderLines.id, portions[1]!.lineId));
+    });
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+    ]);
+  });
+
+  it("A803 portion grouping: measured portions stay apart", async () => {
+    const { billId, portions } = await seed(croquetas("2"));
+    await inTx(venue, async (tx) => {
+      const cohortId = randomUUID();
+      for (const [at, portion] of portions.entries()) {
+        const [measured] = await tx
+          .insert(orderPortions)
+          .values({ cohortId, ordinal: at + 1, measured: true })
+          .returning({ id: orderPortions.id });
+        await tx
+          .update(workingLinePortions)
+          .set({ portionId: measured!.id })
+          .where(eq(workingLinePortions.workingOrderLineId, portion.lineId));
+      }
+    });
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
     ]);
   });
 
