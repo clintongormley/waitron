@@ -16,7 +16,11 @@ import type { Database } from "@waitron/db";
 import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import { runOnce } from "./backup-sweep.js";
 import { venueStagingEstimate } from "./backup-supervisor.js";
-import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
+import {
+  BACKUP_ENCRYPT_DIR_PREFIX,
+  backupArchiveKey,
+  parseBackupArchiveKey,
+} from "./backup-keys.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DeletableArchive } from "./backup-room.js";
 import { SPACE_LOW_BYTES } from "./free-space-watch.js";
@@ -672,4 +676,168 @@ it("a failing onArchivesDeleted is logged with its code and the run goes on", as
     errno: "EBUSY",
   });
   expect(backend.puts).toBe(1);
+});
+
+/** Answers `before` in turn, then `last` of the encrypted file's real size, read from the working
+ * folder at that moment. */
+function thenEncrypted(
+  f: Awaited<ReturnType<typeof fixture>>,
+  before: number[],
+  last: (encrypted: number) => number,
+) {
+  const seen = { encrypted: 0 };
+  let calls = 0;
+  const statfs = vi.fn(async () => {
+    calls += 1;
+    if (calls <= before.length) return { bavail: before[calls - 1]!, frsize: 1 };
+    const dir = (await readdir(f.stagingDir)).find((n) => n.startsWith(BACKUP_ENCRYPT_DIR_PREFIX));
+    seen.encrypted = (await stat(join(f.stagingDir, dir!, "artifact"))).size;
+    return { bavail: last(seen.encrypted), frsize: 1 };
+  });
+  return { statfs, seen };
+}
+
+it("a copy larger than the estimate is refused before any destination when no backup can be deleted", async () => {
+  const f = await fixture();
+  const folder = new Watched("a", join(f.root, "a"));
+  const bucket = new Bucket("bucket", join(f.root, "bucket"));
+  const outcomes: BackupOutcomeHolder = { failed: new Map() };
+  // Enough for the estimate of a 10-byte database and for the 1000-byte copy, one byte short of
+  // its encrypted file plus the floor.
+  const { statfs, seen } = thenEncrypted(f, [30 + 10, DUMP.length], (encrypted) => encrypted + 9);
+  const err = await runOnce({
+    ...deps(f, [folder, bucket]),
+    outcomes,
+    stagingEstimateBytes: async () => 10,
+    statfs,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 0,
+  }).catch((e: unknown) => e);
+  expect(seen.encrypted).toBeGreaterThan(DUMP.length);
+  expect(err).toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: seen.encrypted + 10, availableBytes: seen.encrypted + 9 },
+  });
+  expect(outcomes.runStopped).toEqual({
+    code: "backup.staging_space_low",
+    at: stamp.toISOString(),
+    sizes: { neededBytes: seen.encrypted + 10, availableBytes: seen.encrypted + 9 },
+  });
+  expect(folder.puts + bucket.puts).toBe(0);
+  expect(statfs).toHaveBeenCalledTimes(3);
+  expect(await readdir(f.stagingDir)).toEqual([]);
+});
+
+it("a copy larger than the estimate deletes the oldest backup at the second check, then stores", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 1_000_000],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = deps(f, [backend]);
+  const onArchivesDeleted = vi.fn<
+    (deleted: readonly DeletableArchive[], at: Date) => Promise<void>
+  >(async () => {});
+  // The first check (10-byte estimate) and the after-copy check (1000 bytes) pass without deleting;
+  // the encrypted file is larger than the copy.
+  await runOnce({
+    ...d,
+    stagingEstimateBytes: async () => 10,
+    statfs: rising(DUMP.length, s.sizes),
+    spaceFloorBytes: 10,
+    spaceAimBytes: 100,
+    installationStartedAt: async () => days(10),
+    onArchivesDeleted,
+  });
+  expect(d.log).toHaveBeenCalledWith("info", "backup.archive_deleted", {
+    destination: "a",
+    key: s.keys[0],
+    bytes: 1_000_000,
+    reason: "backup_room",
+  });
+  expect(onArchivesDeleted).toHaveBeenCalledOnce();
+  expect(onArchivesDeleted.mock.calls[0]![0].map((a) => a.key)).toEqual([s.keys[0]]);
+  expect(onArchivesDeleted.mock.calls[0]![1]).toEqual(stamp);
+  expect(backend.puts).toBe(1);
+  const kept = await left(s.dir);
+  expect(kept).toHaveLength(2);
+  expect(kept).toContain(s.keys[1]);
+  expect(kept).not.toContain(s.keys[0]);
+});
+
+it("the second check counts the encrypted file's real size once per local destination on the disk", async () => {
+  for (const linked of [false, true]) {
+    const f = await fixture();
+    await mkdir(join(f.root, "a"));
+    const second = join(f.root, linked ? "a-link" : "b");
+    if (linked) await symlink(join(f.root, "a"), second);
+    const a = new Watched("a", join(f.root, "a"));
+    const b = new Watched("b", second);
+    const { statfs, seen } = thenEncrypted(f, [10_000, 10_000], (encrypted) => 2 * encrypted + 9);
+    const err = await runOnce({
+      ...deps(f, [a, b]),
+      stagingEstimateBytes: async () => 10,
+      statfs,
+      spaceFloorBytes: 10,
+      spaceAimBytes: 0,
+    }).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      code: "backup.staging_space_low",
+      params: { neededBytes: 2 * seen.encrypted + 10, availableBytes: 2 * seen.encrypted + 9 },
+    });
+    expect(a.puts + b.puts).toBe(0);
+  }
+});
+
+it("the second check counts every local folder, reading the disk once, when the working folder's disk cannot be read", async () => {
+  const f = await fixture();
+  await mkdir(join(f.root, "b"));
+  const staging = join(f.root, "staging");
+  const deviceOf = vi.fn(async (path: string) => {
+    if (path === (await realpath(staging)))
+      throw Object.assign(new Error("denied"), { code: "EACCES" });
+    return path === (await realpath(join(f.root, "b"))) ? -1 : (await stat(path)).dev;
+  });
+  const a = new Watched("a", join(f.root, "a"));
+  const b = new Watched("b", join(f.root, "b"));
+  const d = deps(f, [a, b]);
+  const { statfs, seen } = thenEncrypted(f, [10_000, 10_000], (encrypted) => 2 * encrypted + 9);
+  const err = await runOnce({
+    ...d,
+    stagingEstimateBytes: async () => 10,
+    statfs,
+    deviceOf,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 0,
+  }).catch((e: unknown) => e);
+  expect(err).toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 2 * seen.encrypted + 10 },
+  });
+  expect(a.puts + b.puts).toBe(0);
+  expect(
+    d.log.mock.calls.filter(([, event]) => event === "backup.staging_disk_unreadable"),
+  ).toHaveLength(1);
+});
+
+it("a bucket-only run makes no second check", async () => {
+  const f = await fixture();
+  const bucket = new Bucket("bucket", join(f.root, "bucket"));
+  const statfs = freeSpace(10_000_000);
+  const room = { stagingEstimateBytes: async () => 10, spaceFloorBytes: 10, spaceAimBytes: 0 };
+  await runOnce({ ...deps(f, [bucket]), ...room, statfs });
+  expect(bucket.puts).toBe(1);
+  expect(statfs).toHaveBeenCalledTimes(2);
+  // Control: a folder beside it adds the second check.
+  const g = await fixture();
+  const folder = new Watched("a", join(g.root, "a"));
+  const withFolder = freeSpace(10_000_000);
+  await runOnce({
+    ...deps(g, [folder, new Bucket("bucket", join(g.root, "bucket"))]),
+    ...room,
+    statfs: withFolder,
+  });
+  expect(folder.puts).toBe(1);
+  expect(withFolder).toHaveBeenCalledTimes(3);
 });

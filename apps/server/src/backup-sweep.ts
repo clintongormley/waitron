@@ -103,8 +103,10 @@ export interface BackupSweepDeps {
    * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
    * staged copy and its ciphertext) plus this once more for each local destination on the same disk
    * (each folder copy's working file), and refuses when free space there is under that plus
-   * `spaceFloorBytes`; after the copy it refuses when free space is under the copy's own size.
-   * Advisory: nothing is reserved, and without this there is no check.
+   * `spaceFloorBytes`; after the copy it refuses when free space is under the copy's own size; and
+   * after encrypting, when a local destination is on that disk, it needs the encrypted file's size
+   * once per such destination plus `spaceFloorBytes`. Advisory: nothing is reserved, and without
+   * this there is no check.
    */
   stagingEstimateBytes?: () => Promise<number>;
   /** Free space a tick keeps beyond its need; defaults to `START_FREE_SPACE_FLOOR`. */
@@ -222,22 +224,27 @@ export async function runOnce(
     budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
     budget.addEntry("db.dump", 0);
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+    let room: ((neededBytes: number) => Promise<void>) | undefined;
+    let copies = 0;
     if (deps.stagingEstimateBytes) {
       const installationStartedAt = await readInstallationStart(deps);
       const estimate = await deps.stagingEstimateBytes();
-      const { folders, copies } = await localFoldersOnDisk(deps);
-      await makeRoom({
-        neededBytes: 2 * estimate + estimate * copies,
-        floorBytes: deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
-        aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
-        stagingDir: deps.stagingDir,
-        statfs: deps.statfs,
-        folders,
-        installationStartedAt,
-        signal: deps.signal,
-        log: deps.log,
-        onDeleted: reportDeleted,
-      });
+      const onDisk = await localFoldersOnDisk(deps);
+      copies = onDisk.copies;
+      room = (neededBytes) =>
+        makeRoom({
+          neededBytes,
+          floorBytes: deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
+          aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
+          stagingDir: deps.stagingDir,
+          statfs: deps.statfs,
+          folders: onDisk.folders,
+          installationStartedAt,
+          signal: deps.signal,
+          log: deps.log,
+          onDeleted: reportDeleted,
+        });
+      await room(2 * estimate + estimate * copies);
     }
     await deps.archive(staged);
     dumped = true;
@@ -258,6 +265,9 @@ export async function runOnce(
       deps.recoveryKey,
       deps.signal,
     );
+    // The encrypted file can be larger than the estimate; each folder copy on the disk writes it
+    // whole before its rename.
+    if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
     const key = backupArchiveKey(stamp);
     if (deps.outcomes) delete deps.outcomes.runStopped;
     // Every destination call has settled before `finally` removes the ciphertext they read.

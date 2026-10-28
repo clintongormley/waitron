@@ -1,10 +1,11 @@
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
 import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
@@ -188,4 +189,58 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
   expect(outcomes.failed.size).toBe(0);
   expect(outcomes.runStopped).toBeUndefined();
   expect(deps.log).toHaveBeenCalledWith("warn", "backup.failed", { errorCode: "unknown" });
+});
+
+it("a run whose second check refuses leaves the earlier runStopped; one that passes it clears it", async () => {
+  const controller = new AbortController();
+  let run = 0;
+  let calls = 0;
+  let nowMs = STAMP.getTime();
+  const atSecondCheck: unknown[] = [];
+  const after: unknown[] = [];
+  let stagingDir = "";
+  const { deps, outcomes, backend } = await loopDeps({
+    signal: controller.signal,
+    now: () => new Date(nowMs),
+    stagingEstimateBytes: async () => 10,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 0,
+    // Run 1 is refused at the first check; run 2 passes the first check and the after-copy check
+    // and is refused at the second; run 3 passes all three.
+    statfs: async () => {
+      calls += 1;
+      if (run === 0) return { bavail: 0, frsize: 1 };
+      if (calls < 3) return { bavail: 10_000, frsize: 1 };
+      atSecondCheck.push(outcomes.runStopped);
+      const dir = readdirSync(stagingDir).find((n) => n.startsWith(BACKUP_ENCRYPT_DIR_PREFIX));
+      const encrypted = (await stat(join(stagingDir, dir!, "artifact"))).size;
+      return { bavail: run === 1 ? encrypted + 9 : encrypted + 10, frsize: 1 };
+    },
+    sleep: async (chunk) => {
+      after.push(outcomes.runStopped);
+      if (run === 2) {
+        controller.abort();
+        return;
+      }
+      run += 1;
+      calls = 0;
+      nowMs += chunk;
+    },
+  });
+  stagingDir = deps.stagingDir;
+
+  await runBackupSweep(deps);
+
+  const first = {
+    code: "backup.staging_space_low",
+    at: STAMP.toISOString(),
+    sizes: { neededBytes: 40, availableBytes: 0 },
+  };
+  expect(atSecondCheck).toEqual([first, after[1]]);
+  expect(after[0]).toEqual(first);
+  expect(after[1]).toMatchObject({ code: "backup.staging_space_low" });
+  expect(after[1]).not.toEqual(first);
+  expect(after[2]).toBeUndefined();
+  expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
+  expect(readdirSync(stagingDir)).toEqual([]);
 });
