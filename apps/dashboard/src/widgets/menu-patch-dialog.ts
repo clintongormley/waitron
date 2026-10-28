@@ -17,6 +17,7 @@ import {
   MONEY_SCALE,
   decimal,
   foldForSearch,
+  formatMoney,
   textSearch,
   toScale,
   type AppError,
@@ -242,6 +243,15 @@ export class MenuPatchDialog extends LitElement {
       .link {
         color: var(--wt-color-primary-text);
         text-decoration: underline;
+      }
+      .variant {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: var(--wt-space-2);
+      }
+      .variant-values {
+        color: var(--wt-color-text-muted);
       }
       .dot {
         flex: none;
@@ -794,6 +804,20 @@ export class MenuPatchDialog extends LitElement {
     );
   }
 
+  /** A variant's price and VAT class, as putting the draft live would leave them. */
+  #variantValues(target: MenuPatchTarget): string {
+    const price = formatMoney(this.#putValue(target, "price") as string, currentLocale());
+    return `${price} · ${vatClassName(this.#putValue(target, "vatClass") as string)}`;
+  }
+
+  /** The field's value as putting the draft live would leave it: its staged change's, else the
+   * live one. */
+  #putValue(target: MenuPatchTarget, field: string): unknown {
+    const key = `${targetKey(target)}/${field}`;
+    const staged = this.changes.find((change) => changeKey(change) === key);
+    return staged === undefined ? this.#liveValue(target, field) : staged.value;
+  }
+
   #liveValue(target: MenuPatchTarget, field: string): unknown {
     return patchFieldValue(this.live!.document, target, field, currentContentLanguages());
   }
@@ -1145,24 +1169,26 @@ export class MenuPatchDialog extends LitElement {
           : html`<p class="note" data-test="variants-note">${t("menu_patch.variants_note")}</p>
               <h4>${t("menu_patch.variants")}</h4>
               <ul>
-                ${variants.map(
-                  (variant) =>
-                    html`<li>
-                      <button
-                        type="button"
-                        class="link"
-                        data-test="variant-link"
-                        @click=${() =>
-                          void this.#pick({
-                            kind: "variant",
-                            menuItemId: offer!.id,
-                            variantId: variant.id,
-                          })}
-                      >
-                        ${variant.name}
-                      </button>
-                    </li>`,
-                )}
+                ${variants.map((variant) => {
+                  const target: MenuPatchTarget = {
+                    kind: "variant",
+                    menuItemId: offer!.id,
+                    variantId: variant.id,
+                  };
+                  return html`<li class="variant" data-test="variant">
+                    <button
+                      type="button"
+                      class="link"
+                      data-test="variant-link"
+                      @click=${() => void this.#pick(target)}
+                    >
+                      ${variant.name}
+                    </button>
+                    <span class="variant-values" data-test="variant-values"
+                      >${this.#variantValues(target)}</span
+                    >
+                  </li>`;
+                })}
               </ul>`
       }
     </div>`;

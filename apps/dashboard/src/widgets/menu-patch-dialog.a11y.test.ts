@@ -142,4 +142,49 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     );
     await expectNoA11yViolations(host);
   });
+
+  it("renders a dish's variants with their values accessibly", async () => {
+    const document = structuredClone(LIVE.document);
+    const variant = (id: string, name: string) => ({
+      id,
+      name,
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: "2.00",
+      menuPrice: null,
+      unit: {},
+      pricingUnit: {},
+      vatClass: "reduced",
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+    });
+    (document.offers["mi-soup"] as { variants: unknown }).variants = [
+      variant("v-cup", "Cup"),
+      variant("v-bowl", "Bowl"),
+    ];
+    const api = {
+      getLiveMenu: vi.fn(async () => ({ ...LIVE, document })),
+      getMenuPublications: vi.fn(async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: [],
+      })),
+      imageLibraryRequest: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPatchDialog>(
+      "dashboard-menu-patch-dialog",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", open: true },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
+    );
+    await pick(el, "Soup");
+    expect(el.shadowRoot!.querySelectorAll('[data-test="variant-values"]')).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
 });

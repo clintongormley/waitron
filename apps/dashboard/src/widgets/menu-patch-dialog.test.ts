@@ -557,6 +557,53 @@ it("lists a dish's variants as links that pick them, and says it sells through t
   expect(form(el).querySelector('[data-test="variants-note"]')).toBeNull();
 });
 
+/** Each variant row of the dish's form: its link's text and the values shown beside it. */
+const variantRows = (el: MenuPatchDialog) =>
+  [...form(el).querySelectorAll('[data-test="variant"]')].map((row) => ({
+    link: row.querySelector('[data-test="variant-link"]')!.textContent!.trim(),
+    values: row.querySelector('[data-test="variant-values"]')!.textContent!.trim(),
+  }));
+
+it("lists each variant with its price and VAT class beside its link, as a patch would put them live", async () => {
+  const document = lunch();
+  const large = document.offers["mi-lemonade"]!.variants[1]!;
+  large.unitPrice = "2.50";
+  large.vatClass = "general";
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Lemonade");
+  expect(variantRows(el)).toEqual([
+    { link: "Small", values: "€2.00 · Reduced" },
+    { link: "Large", values: "€2.50 · General" },
+  ]);
+  await pick(el, "Small");
+  await type(el, "wt-price-input", "price", "1.80");
+  await pick(el, "Lemonade");
+  expect(variantRows(el)[0]).toEqual({ link: "Small", values: "€1.80 · Reduced" });
+  setLocale("es");
+  await el.updateComplete;
+  expect(variantRows(el)[1]).toEqual({ link: "Large", values: "2,50 € · General" });
+});
+
+it(`fits a dish's variants and their values in the form at 390 px`, async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const document = lunch();
+    document.offers["mi-lemonade"]!.variants[1]!.name =
+      "Large jug of fresh lemonade for the whole table";
+    const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+    await pick(el, "Lemonade");
+    const formBox = form(el).getBoundingClientRect();
+    for (const row of form(el).querySelectorAll('[data-test="variant"]')) {
+      const box = row.getBoundingClientRect();
+      expect(box.right).toBeLessThanOrEqual(formBox.right + 0.5);
+      expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+    }
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
 it("shows only a list's three name fields", async () => {
   const el = await mount();
   await pick(el, "Toppings");
