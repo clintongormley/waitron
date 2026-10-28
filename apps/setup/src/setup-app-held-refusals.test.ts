@@ -31,8 +31,19 @@ const startAgainSends = (requests: { path: string }[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
 const refusedLines = (app: SetupApp) =>
   [...q(app, "held-refused")!.querySelectorAll("p")].map((p) => p.textContent!.trim());
-const startAgainDeletesIt = (t: ReturnType<typeof stringsFor>) =>
-  t.recoveryStopped.split("{started}")[1]!;
+const refusedStoppedParts = (t: ReturnType<typeof stringsFor>) =>
+  t.recoveryStoppedRefused.split("{started}");
+const startAgainDeletesIt = (t: ReturnType<typeof stringsFor>) => {
+  const tail = t.recoveryStopped.split("{started}")[1]!;
+  const refusedTail = refusedStoppedParts(t)[1]!;
+  expect(tail.startsWith(refusedTail)).toBe(true);
+  return tail.slice(refusedTail.length).trim();
+};
+function expectStoppedRefused(app: SetupApp, t: ReturnType<typeof stringsFor>) {
+  const stopped = q(app, "recovery-stopped")!.textContent!;
+  for (const part of refusedStoppedParts(t)) expect(stopped).toContain(part);
+  expect(text(app)).not.toContain(startAgainDeletesIt(t));
+}
 function expectNoHeldConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   expect(q(app, "held-database")).toBeNull();
   expect(text(app)).not.toContain(startAgainDeletesIt(t));
@@ -70,6 +81,7 @@ for (const locale of locales) {
     expect(refusedLines(app)).toEqual(lines);
     expectInOrder(app, lines);
     expectNoHeldConfirmation(app, t);
+    expectStoppedRefused(app, t);
     expect(q<WtButton>(app, "cancel-start-again")!.disabled).toBe(false);
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
@@ -94,6 +106,7 @@ for (const locale of locales) {
     expect(refusedLines(app)).toEqual(lines);
     expectInOrder(app, lines);
     expectNoHeldConfirmation(app, t);
+    expectStoppedRefused(app, t);
   });
 
   it(`${locale}: one kept row and several invoices use the singular and the plural`, async () => {
@@ -124,6 +137,7 @@ for (const locale of locales) {
     expect(text(app)).not.toContain(t.startUnavailableOccupied);
     expect(text(app)).not.toContain(t.startUnavailable);
     expect(q(app, "resume-password")).not.toBeNull();
+    expectStoppedRefused(app, t);
     expect(startAgainSends(requests)).toEqual([]);
   });
 }
@@ -166,6 +180,7 @@ for (const locale of locales) {
     expect(text(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
     expect(text(app)).not.toContain(t.recoveryDetailsUnread);
     expect(text(app)).not.toContain(t.startUnavailableOccupied);
+    expectStoppedRefused(app, t);
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
   });

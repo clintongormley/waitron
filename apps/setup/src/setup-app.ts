@@ -2605,17 +2605,22 @@ export class SetupApp extends LitElement {
       }}
       >${t.startAgain}</wt-button
     >`;
-    const stoppedBlock = (recovery: {
-      startedAt: string;
-      lastActiveAt: string;
-      lastActiveSource?: "memory" | "saved-step";
-      cloud?: boolean;
-    }) =>
-      html`<div data-test="recovery-stopped">
-        <p>${t.recoveryStopped.replace("{started}", shownAt(recovery.startedAt))}</p>
+    const stoppedBlock = (
+      recovery: {
+        startedAt: string;
+        lastActiveAt: string;
+        lastActiveSource?: "memory" | "saved-step";
+        cloud?: boolean;
+      },
+      refused = false,
+    ) => {
+      const started = refused ? t.recoveryStoppedRefused : t.recoveryStopped;
+      return html`<div data-test="recovery-stopped">
+        <p>${started.replace("{started}", shownAt(recovery.startedAt))}</p>
         <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
         ${recovery.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
       </div>`;
+    };
     const held = this.firstStoppedSummary?.held;
     const heldRowsLine = (rows: number) =>
       html`<p>${rows === 1 ? t.heldRowsOne : t.heldRows.replace("{rows}", String(rows))}</p>`;
@@ -2685,6 +2690,7 @@ export class SetupApp extends LitElement {
       ? nothing
       : !missing && held !== undefined && (held.kept > 0 || held.records > 0)
         ? html`${heldRefused(held.rows, held.kept, held.records, held.accepted)}
+            ${stoppedShown ? stoppedBlock(stoppedShown, true) : nothing}
             <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}
               >${cancelStartAgain}</wt-form-actions
             >`
@@ -2836,7 +2842,14 @@ export class SetupApp extends LitElement {
                     ${stopped ? nothing : recoverBackup(this.firstBackupPhase === "uncertain")}${offersStartAgain ? startAgain : nothing}
                   </div>
                   ${offersStartAgain ? startAgainConfirm : nothing}`
-              : html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${
+              : html`${
+                  stoppedHere
+                    ? stoppedBlock(
+                        stoppedHere,
+                        tradingSaved || this.firstStartAgainRefused === "setup-finished",
+                      )
+                    : nothing
+                }${
                   unsettled
                     ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
                     : nothing

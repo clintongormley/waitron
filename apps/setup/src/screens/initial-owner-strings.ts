@@ -22,6 +22,7 @@ export const initialOwnerStrings = {
     recoveryRunningNext: "If it stops before it finishes, you can start again here.",
     recoveryStopped:
       "A recovery from backup started on {started} and did not finish. Start again deletes it.",
+    recoveryStoppedRefused: "A recovery from backup started on {started} and did not finish.",
     recoveryStoppedCloud:
       "Its approval in Waitron Cloud closes by itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's venue.",
     recoveryUnreadable: "This box found a recovery from backup whose records cannot be read.",
@@ -105,6 +106,7 @@ export const initialOwnerStrings = {
     recoveryRunningNext: "Si se detiene antes de terminar, podrás empezar de nuevo aquí.",
     recoveryStopped:
       "Una recuperación desde una copia, iniciada el {started}, no terminó. Empezar de nuevo la borra.",
+    recoveryStoppedRefused: "Una recuperación desde una copia, iniciada el {started}, no terminó.",
     recoveryStoppedCloud:
       "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
     recoveryUnreadable:
