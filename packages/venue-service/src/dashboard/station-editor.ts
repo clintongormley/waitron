@@ -275,6 +275,11 @@ export class StationEditor extends LitElement {
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
       }
+      .readout,
+      .note,
+      .timing-fields {
+        max-width: var(--wt-field-max-width);
+      }
       .readout {
         display: grid;
         gap: var(--wt-space-1);

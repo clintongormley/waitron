@@ -239,20 +239,6 @@ slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and C
 taken off) — still print the bare order number (`formatCorrectionSlip`,
 `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
-## A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields
-
-- **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its
-  fields** (they end at about x 951, the fields at about 905, measured in Chromium by A756 PRs 5 and
-  8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837); the
-  note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
-  every field is full width. Left open by A756 PR 5.
-
-  Re-measured 2026-10-26 by A797 slice 6's LOOK, after the four minutes fields went two to a
-  row: Name, Colour, Printers, the dropdowns and the switches run x 329–905 (576 px); the minutes
-  grid, the held-work note and the other note run x 329–951 (622 px), so the right-hand column
-  (Overdue, Ready warning, x 644–951) is the part that sticks out. At 390 px everything runs
-  x 17–373. Still not traced why the fields stop at 576 px.
-
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
 Within one dish `ticket.already_started` is checked first, but across a
@@ -322,6 +308,11 @@ station should offer more. Every other choice starts at its default and is chang
 identical dishes, no held printing, MOVED slips printed, one item at a time on the screen, and
 changes allowed while held or waiting.
 **2026-10-26 (A797 slice 6):** Add station also sets the Ready warning time, 3 minutes by default.
+
+### Held groups keep the switch "Print held groups in advance" (owner, 2026-10-28; A1062)
+
+The station editor keeps its switch. Picture 10's "Held courses: Print when sent / Print when
+fired" dropdown (A773) is not adopted.
 
 ### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
 

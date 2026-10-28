@@ -974,6 +974,44 @@ it.each([390, 1280])("A725 draws the four minutes two to a row at %ipx", async (
   }
 });
 
+it.each([
+  [390, true],
+  [1280, true],
+  [1280, false],
+])(
+  "at %ipx (printers managed: %s) the minutes, notes and read-out end where the fields end",
+  async (width, canManagePrinters) => {
+    const previous = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(width, 1100);
+      const el = await mount({ ...GRILL, active: false }, { canManagePrinters });
+      const blocks = [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+          ".timing-fields, .note, .readout, wt-input, wt-combobox, wt-colour-chooser, wt-switch",
+        ),
+      ];
+      expect(blocks.filter((block) => block.matches(".note"))).toHaveLength(
+        canManagePrinters ? 3 : 2,
+      );
+      expect(blocks.some((block) => block.matches(".readout"))).toBe(true);
+      const name = nameField(el).getBoundingClientRect();
+      for (const block of blocks.filter(
+        (block) => !block.parentElement!.closest(".timing-fields"),
+      )) {
+        const box = block.getBoundingClientRect();
+        expect(Math.round(box.left), block.className || block.localName).toBe(
+          Math.round(name.left),
+        );
+        expect(Math.round(box.right), block.className || block.localName).toBeLessThanOrEqual(
+          Math.round(name.right),
+        );
+      }
+    } finally {
+      await page.viewport(previous[0]!, previous[1]!);
+    }
+  },
+);
+
 it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", async (locale) => {
   const previous = [window.innerWidth, window.innerHeight];
   try {

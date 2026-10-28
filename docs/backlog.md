@@ -1594,17 +1594,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
   one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
 
-- **A1166. Add station drops "The change could not be saved." at the next keystroke.** design-system.md →
-  Forms keeps a request refusal until Save is pressed again; `#change` in `prep-stations-screen.ts`
-  clears the bottom line whenever no field has an error. Found in A1134's review; the line is
-  already at `914d55202`.
-
-- **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields**
-  [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-minutes-grid-and-held-work-note-are-wider-than-its-fields)
-
-- **A1062. Ask whether picture 10's Held courses dropdown, "Print when sent", replaces the station
-  editor's switch "Print held groups in advance"** (left open by A756 PR 6).
-
 - **A1063. Picture 10 lists Identical dishes and Held courses above MOVED slips; the station editor
   puts them after it.** Owner FYI from A756 PR 6; say if the editor should follow the picture.
 
