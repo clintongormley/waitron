@@ -47,9 +47,8 @@ beforeAll(() => {
 });
 afterEach(() => disk?.unfill());
 afterAll(() => {
-  if (disk === undefined) return;
   vi.unstubAllEnvs();
-  disk.close();
+  disk?.close();
 });
 
 function needDisk(ctx: { skip: (note?: string) => never }): SmallDisk {
