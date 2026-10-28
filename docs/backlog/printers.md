@@ -656,7 +656,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`ReceiptDocument.guests`), and many function, property and event names (for example
   `readReceiptGuests`, `setPartyGuests`) keep the word.
 
-- **Sample wording (A965, 2026-10-27).** The question about translating the two internal sample names is unanswered. Retain A754’s existing values meanwhile; the synthetic number and character-probe footer also remain. Removing the footer and changing the calibration layout remain in A404.
+- **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number and character-probe footer remain; removing the footer and changing the calibration layout remain in A404.
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
   «Pedido N» on the right (the order alone on the right when there is no table). Then:
@@ -679,6 +679,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
     right-aligned line of its own, as before (`labelAmountLines`, `packages/printing/src/layout.ts`).
     The printer's sample receipt (`apps/server/src/sample-receipt.ts`) keeps its Spanish «Mesa 6»
     and «Café y tostada» on a receipt in another language: they are internal sample values (owner).
+    **2026-10-28:** the owner superseded this sample-name ruling with A965’s translated names above.
 
   The law asks for the date and sets no format (checked 2026-10-19): a full invoice and a simplified
   one each need «La fecha de su expedición», and Orden HAC/1177/2024 sets no format for a printed

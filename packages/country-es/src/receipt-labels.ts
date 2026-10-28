@@ -60,8 +60,8 @@ export const SPAIN_RECEIPT_LABELS = {
     sampleIssuerName: "Waitron - Sample receipt",
     sampleInvoiceNumber: "MUESTRA/1",
     sampleFooter: "Café, jamón, niño, pingüino · 5 €",
-    sampleTableLabel: "Mesa 6",
-    sampleItemName: "Café y tostada",
+    sampleTableLabel: "Outside 6",
+    sampleItemName: "Coffee and toast",
   },
   "es-ES": {
     nif: "NIF",
@@ -118,7 +118,7 @@ export const SPAIN_RECEIPT_LABELS = {
     sampleIssuerName: "Waitron - Recibo de muestra",
     sampleInvoiceNumber: "MUESTRA/1",
     sampleFooter: "Café, jamón, niño, pingüino · 5 €",
-    sampleTableLabel: "Mesa 6",
+    sampleTableLabel: "Terraza 6",
     sampleItemName: "Café y tostada",
   },
   "ca-ES": {
@@ -176,8 +176,8 @@ export const SPAIN_RECEIPT_LABELS = {
     sampleIssuerName: "Waitron - Rebut de mostra",
     sampleInvoiceNumber: "MUESTRA/1",
     sampleFooter: "Café, jamón, niño, pingüino · 5 €",
-    sampleTableLabel: "Mesa 6",
-    sampleItemName: "Café y tostada",
+    sampleTableLabel: "Terrassa 6",
+    sampleItemName: "Cafè i torrada",
   },
   "gl-ES": {
     nif: "NIF",
@@ -234,8 +234,8 @@ export const SPAIN_RECEIPT_LABELS = {
     sampleIssuerName: "Waitron - Recibo de mostra",
     sampleInvoiceNumber: "MUESTRA/1",
     sampleFooter: "Café, jamón, niño, pingüino · 5 €",
-    sampleTableLabel: "Mesa 6",
-    sampleItemName: "Café y tostada",
+    sampleTableLabel: "Terraza 6",
+    sampleItemName: "Café e torrada",
   },
   "eu-ES": {
     nif: "IFZ",
@@ -292,7 +292,7 @@ export const SPAIN_RECEIPT_LABELS = {
     sampleIssuerName: "Waitron - Lagin ordainagiria",
     sampleInvoiceNumber: "MUESTRA/1",
     sampleFooter: "Café, jamón, niño, pingüino · 5 €",
-    sampleTableLabel: "Mesa 6",
-    sampleItemName: "Café y tostada",
+    sampleTableLabel: "Kanpoan 6",
+    sampleItemName: "Kafea eta ogi txigortua",
   },
 } as const satisfies Readonly<Record<string, ReceiptLabels>>;

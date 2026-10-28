@@ -271,12 +271,18 @@ describe("receipt language", () => {
 });
 
 describe("receipt labels", () => {
-  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
-    "A965 labels keeps the internal sample values in %s",
-    (locale) => {
+  it.each([
+    ["en-GB", "Outside 6", "Coffee and toast"],
+    ["es-ES", "Terraza 6", "Café y tostada"],
+    ["ca-ES", "Terrassa 6", "Cafè i torrada"],
+    ["gl-ES", "Terraza 6", "Café e torrada"],
+    ["eu-ES", "Kanpoan 6", "Kafea eta ogi txigortua"],
+  ])(
+    "translates the sample names into %s without repeating the table caption",
+    (locale, table, item) => {
       expect(SPAIN.receiptLabels?.[locale]).toMatchObject({
-        sampleTableLabel: "Mesa 6",
-        sampleItemName: "Café y tostada",
+        sampleTableLabel: table,
+        sampleItemName: item,
         sampleInvoiceNumber: "MUESTRA/1",
         sampleFooter: "Café, jamón, niño, pingüino · 5 €",
       });

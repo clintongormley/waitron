@@ -4449,9 +4449,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
   paper it drops to its own line wherever it prints in words.
 
-- **The two internal sample names:** the owner question about translating «Mesa 6» and
-  «Café y tostada» remains open. Keep their existing values meanwhile.
-  [Decision](backlog/printers.md#decisions-and-deliberate-limits)
 
 ### Alerts, logging and diagnostics
 
