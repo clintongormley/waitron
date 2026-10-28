@@ -196,6 +196,7 @@ export async function splitBill(
   const before = await readSentWork(tx, billId);
   const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
     refuseHeld: true,
+    actorId: command.operatorId,
   });
   await bumpRevision(tx, [billId, newBillId]);
   await assertBillInvariant(tx, [billId]);
@@ -257,7 +258,9 @@ export async function mergeCheckedBills(
   const mainBillId =
     known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
-  await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined);
+  await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, {
+    actorId: known.operatorId,
+  });
   await moveDraftsToBill(
     tx,
     cfg,
@@ -312,6 +315,7 @@ export async function transferItems(
   const before = await readSentWork(tx, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
     refuseHeld: false,
+    actorId: command.operatorId,
   });
   await bumpRevision(tx, [fromBillId, toBillId]);
   await assertBillInvariant(tx, [fromBillId]);

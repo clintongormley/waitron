@@ -1122,6 +1122,38 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
     });
   });
 
+  it("A803 monetary comparison: a raised dish's first portion cancelled, then €0.01 off", async () => {
+    await withTransaction(db, async (tx) => {
+      const today = await createTableKitchenOrder(tx, cfg, [
+        many(ids.steak, 2),
+        many(ids.bread, 2),
+      ]);
+      await cancelLine(tx, cfg, today, 1, "1");
+      const { billId: bill } = await registeredPortionBill(
+        tx,
+        cfg,
+        offers.zoneId,
+        offers.toOfferLines([many(ids.steak, 1)]),
+      );
+      await addPortionRound(tx, cfg, bill, offers.toOfferLines([many(ids.bread, 2)]));
+      await addPortionRound(tx, cfg, bill, offers.toOfferLines([many(ids.steak, 1)]));
+      await cancelLine(tx, cfg, bill, 1);
+      expect(await dishLines(tx, bill)).toEqual(["2 Bread", "3 Bread", "4 Steak"]);
+      await discountBill(tx, today, "0.01");
+      await discountBill(tx, bill, "0.01");
+
+      const before = await filedOf(tx, today);
+      const after = await filedOf(tx, bill);
+      expect(before.gross).toEqual(["Bread 2.000 gross 2.00", "Steak 1.000 gross 1.99"]);
+      expect(after.gross).toEqual([
+        "Bread 1.000 gross 0.99",
+        "Bread 1.000 gross 1.00",
+        "Steak 1.000 gross 2.00",
+      ]);
+      expect(after.total).toBe(before.total);
+    });
+  });
+
   it("A803 monetary comparison: €1.50 off the first bill files the same rows (a behaviour check: one-row and grouped spreads agree here)", async () => {
     await withTransaction(db, async (tx) => {
       const { today, bill } = await bills(tx, [many(ids.drink, 3), many(ids.plate, 1)]);

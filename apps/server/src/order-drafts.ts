@@ -231,6 +231,7 @@ export async function splitDraft(
           billId,
           newBillId,
           families.map((line) => line.lineNo),
+          { actorId: input.operatorId },
         );
         await assertBillInvariant(tx, [billId]);
         await bumpRevision(tx, [billId, newBillId]);

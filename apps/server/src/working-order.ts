@@ -54,7 +54,7 @@ import {
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import { projectPortionSale, type PortionBinding } from "./portion-sale-projection.js";
-import { linkSalePortions } from "./order-portions.js";
+import { cancelPortions, linkSalePortions, recordPortionEvents } from "./order-portions.js";
 import {
   buildLineExtras,
   editLineExtras,
@@ -3142,6 +3142,8 @@ export async function removeFromLine(
   }
   await bumpRevision(tx, [tabId]);
   if (removed === null) {
+    if (target.parentLineId === null)
+      await cancelPortions(tx, tabId, [target.id], operatorId ?? null);
     // Takes the line's child modifier lines in the same statement: the parent alone would be
     // refused by the self-referencing foreign key.
     await tx
@@ -3883,6 +3885,7 @@ export async function moveOrderLines(
   fromTabId: string,
   toTabId: string,
   lineNos: number[] | undefined,
+  opts: { actorId?: string } = {},
 ): Promise<string[]> {
   // A self-transfer would allocate line numbers that collide with the rows being moved.
   if (fromTabId === toTabId) {
@@ -3952,6 +3955,12 @@ export async function moveOrderLines(
       .update(ticketItems)
       .set({ workingOrderId: toTabId })
       .where(inArray(ticketItems.workingOrderLineId, lineIds));
+    await recordPortionEvents(tx, lineIds, {
+      kind: "moved",
+      fromOrderId: fromTabId,
+      toOrderId: toTabId,
+      actorId: opts.actorId ?? null,
+    });
     await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
   }
   return source.map((line) => line.id);
@@ -4413,7 +4422,7 @@ export async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { refuseHeld: boolean; splitExtras?: boolean },
+  opts: { refuseHeld: boolean; splitExtras?: boolean; actorId?: string },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
   return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
 }
@@ -4424,7 +4433,7 @@ async function carveLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { refuseHeld: boolean; splitExtras?: boolean; splitIntoUnits?: boolean },
+  opts: { refuseHeld: boolean; splitExtras?: boolean; splitIntoUnits?: boolean; actorId?: string },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -4588,7 +4597,9 @@ async function carveLines(
   const before =
     partials.length > 0 && fromTabId !== toTabId ? await totalBeforeEdit(tx, cfg, toTabId) : null;
   const movedLineIds =
-    wholeLineNos.length > 0 ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos) : [];
+    wholeLineNos.length > 0
+      ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { actorId: opts.actorId })
+      : [];
 
   const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
@@ -6276,6 +6287,7 @@ async function applyLineEdits(
   );
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);
+    await cancelPortions(tx, orderId, removedIds, operatorId ?? null);
     await tx
       .delete(workingOrderLines)
       .where(

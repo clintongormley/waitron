@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import {
+  orderPortionEvents,
   orderPortions,
   saleLinePortions,
   saleLines,
@@ -156,6 +157,48 @@ export async function deletePortionBindings(
   await tx
     .delete(workingLinePortions)
     .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]));
+}
+
+export type PortionEvent =
+  | { kind: "moved"; fromOrderId: string; toOrderId: string; actorId: string | null }
+  | { kind: "cancelled"; fromOrderId: string; actorId: string | null };
+
+/** Record `event` for the portion each of `lineIds` holds; a line holding none records nothing. */
+export async function recordPortionEvents(
+  tx: Transaction,
+  lineIds: readonly string[],
+  event: PortionEvent,
+): Promise<void> {
+  const bound = await readPortionBindings(tx, lineIds);
+  const rows = lineIds.flatMap((lineId) => {
+    const binding = bound.get(lineId);
+    return binding === undefined
+      ? []
+      : [
+          {
+            portionId: binding.portionId,
+            kind: event.kind,
+            fromOrderId: event.fromOrderId,
+            toOrderId: event.kind === "moved" ? event.toOrderId : null,
+            actorId: event.actorId,
+          },
+        ];
+  });
+  if (rows.length > 0) await tx.insert(orderPortionEvents).values(rows);
+}
+
+/**
+ * Before `lineIds` are deleted with their charge: record each held portion as cancelled and unbind
+ * it. The registry row stays.
+ */
+export async function cancelPortions(
+  tx: Transaction,
+  orderId: string,
+  lineIds: readonly string[],
+  actorId: string | null,
+): Promise<void> {
+  await recordPortionEvents(tx, lineIds, { kind: "cancelled", fromOrderId: orderId, actorId });
+  await deletePortionBindings(tx, lineIds);
 }
 
 /**
