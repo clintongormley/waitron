@@ -142,7 +142,14 @@ const START_AGAIN_WRITE_MARGIN_MS = 150_000;
 export function hourStartAgainFloor(
   retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
 ): NonNullable<InitialSetupContribution["startAgainFloor"]> {
-  return ({ attempts, preparations, publicEvidence, recoveryInputs = [], lastWriteMs }) => {
+  return ({
+    attempts,
+    preparations,
+    publicEvidence,
+    recoveryInputs = [],
+    lastWriteMs,
+    databaseHistory = [],
+  }) => {
     let minutes: number[];
     try {
       minutes = [
@@ -167,6 +174,16 @@ export function hourStartAgainFloor(
         ...recoveryInputs.flatMap((input) => {
           const identity = hourInputIdentity(input);
           return identity === null ? [] : [decodeMinuteIdentity(identity)];
+        }),
+        // Every name the database ever held, whatever its taxpayer or environment: a name is
+        // never reused, so no record is filtered out.
+        ...databaseHistory.flatMap((source) => {
+          if (!record(source) || source.complete !== true || !Array.isArray(source.records))
+            refuse();
+          return source.records.map((row: unknown) => {
+            if (!record(row) || !isMinuteIdentity(row.identity)) refuse();
+            return decodeMinuteIdentity(row.identity);
+          });
         }),
       ];
     } catch {
