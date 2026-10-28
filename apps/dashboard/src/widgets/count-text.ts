@@ -21,7 +21,8 @@ export function countOf(
     | "appearance.hard_to_read_count"
     | "appearance.colour_count"
     | "appearance.text_size_count"
-    | "invoice_customer.count",
+    | "invoice_customer.count"
+    | "overview.overdue_count",
   count: number,
 ): string {
   return t(count === 1 ? `${key}_one` : key).replace("{count}", String(count));
