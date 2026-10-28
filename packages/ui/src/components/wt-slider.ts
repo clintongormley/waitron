@@ -147,7 +147,22 @@ export class WtSlider extends LitElement {
   @state() private shown: number | null = null;
 
   readonly #id = uniqueId("wt-slider");
+  readonly #offPage = Object.assign(document.createElement("input"), { type: "range" });
   #lastContinuousInput: number | null = null;
+
+  /**
+   * The value a range with this min, max and step holds once given `value`, clamped and snapped
+   * by the browser itself, so the number shown is the one the thumb sits at.
+   */
+  #onRange(value: number): number {
+    Object.assign(this.#offPage, {
+      min: String(this.min),
+      max: String(this.max),
+      step: String(this.step),
+      value: String(value),
+    });
+    return this.#offPage.valueAsNumber;
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("value")) this.shown = null;
@@ -196,7 +211,7 @@ export class WtSlider extends LitElement {
   override render() {
     const errorId = `${this.#id}-error`;
     const hintId = `${this.#id}-hint`;
-    const shown = this.shown ?? this.value;
+    const shown = this.#onRange(this.shown ?? this.value);
     const describedBy = [this.hint && hintId, this.error && errorId].filter(Boolean).join(" ");
     const value = html`<span part="value" aria-hidden="true">${this.format(shown)}</span>`;
     const input = html`<input

@@ -188,6 +188,21 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  test("a merge held while it has keyboard focus", async () => {
+    await mountMap(theme, [
+      t("Terrace 4", { x: 0 }, { joinId: "j1" }),
+      t("Terrace 5", { x: 6 }, { joinId: "j1" }),
+    ]);
+    const merge = host
+      .querySelector("wt-floor-map")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-table-id="Terrace 4"]')!;
+    merge.focus();
+    await userEvent.keyboard("{Shift}");
+    merge.setAttribute("data-held", "");
+    expect(merge.matches("[data-merge]:focus-visible")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   test("a fixed table's copy over a target", async () => {
     await mountMap(theme, [t("T1", { x: 8 }, { fixed: true }), t("T2", { x: 0 })]);
     const el = host.querySelector("wt-floor-map")!;
