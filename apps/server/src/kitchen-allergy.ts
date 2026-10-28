@@ -399,24 +399,33 @@ async function enqueueKitchenAllergyUpdates(
   }
 }
 
-export async function copyAllergyWorkingTick(
+/** Gives each `to` dish line the guest tick its `from` dish line holds, if any. */
+export async function copyAllergyWorkingTicks(
   tx: Transaction,
-  fromLineId: string,
-  toLineId: string,
+  pairs: readonly { from: string; to: string }[],
 ): Promise<void> {
-  const [line] = await tx
-    .select({ partyId: workingOrders.partyId })
+  if (pairs.length === 0) return;
+  const lines = await tx
+    .selectDistinct({ partyId: workingOrders.partyId })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(eq(workingOrderLines.id, fromLineId));
-  if (line?.partyId == null) return;
-  const partyId = await survivingParty(tx, line.partyId);
-  const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
-  const tick = snapshot.ticks.find((item) => item.workingLineId === fromLineId);
-  if (tick !== undefined)
-    await VENUE_SERVICE.setAllergyLineTicks(tx, partyId, [
-      { workingLineId: toLineId, guestId: tick.guestId },
-    ]);
+    .where(
+      inArray(
+        workingOrderLines.id,
+        pairs.map(({ from }) => from),
+      ),
+    );
+  for (const line of lines) {
+    if (line.partyId === null) continue;
+    const partyId = await survivingParty(tx, line.partyId);
+    const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+    const guestOf = new Map(snapshot.ticks.map((tick) => [tick.workingLineId, tick.guestId]));
+    const ticks = pairs.flatMap(({ from, to }) => {
+      const guestId = guestOf.get(from);
+      return guestId === undefined ? [] : [{ workingLineId: to, guestId }];
+    });
+    if (ticks.length > 0) await VENUE_SERVICE.setAllergyLineTicks(tx, partyId, ticks);
+  }
 }
 
 export async function notifyKitchenAllergyDestination(

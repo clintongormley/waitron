@@ -150,10 +150,11 @@ export async function readPortionBindings(
   return new Map(rows.map((row) => [row.lineId, row]));
 }
 
-/** A raised dish's portion: its cohort, whether it is measured, and the next ordinal the cohort takes. */
+/** A raised dish's portion: its cohort and whether it is measured. */
 export interface GrowingPortion {
   cohortId: string;
   measured: boolean;
+  /** One past the cohort's highest ordinal when read, the same for every line of the cohort. */
   nextOrdinal: number;
 }
 

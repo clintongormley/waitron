@@ -23,7 +23,7 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   attachKitchenAllergyCopies,
-  copyAllergyWorkingTick,
+  copyAllergyWorkingTicks,
   notifyKitchenAllergyDestination,
   freezeKitchenAllergies,
   freezeKitchenAllergyItems,
@@ -4678,7 +4678,8 @@ async function carveLines(
         .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
-      if (parentLineId === null) await copyAllergyWorkingTick(tx, row.id, splitRowId);
+      if (parentLineId === null)
+        await copyAllergyWorkingTicks(tx, [{ from: row.id, to: splitRowId }]);
       return splitRowId;
     };
     for (const partial of partials) {
@@ -5593,9 +5594,10 @@ async function assertProductsSellable(
  *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
  *   carries no price. A kept extra is matched by list, product and quantity.
  * - A line with no ticket item, or a held or recalled one, is changed in place, except that units
- *   added to one a comp or a discount repriced go on a new line, priced now (ruling R12). A held one
- *   whose group has a queued HOLD ticket also prints HOLD corrections for its change or its removal
- *   ({@link planHeldCorrections}).
+ *   added to one a comp or a discount repriced go on a new line, priced now (ruling R12), and any
+ *   other whole portion rises by copies of itself in its cohort (a measured one rises in place). A
+ *   held one whose group has a queued HOLD ticket also prints HOLD corrections for its change or its
+ *   removal ({@link planHeldCorrections}).
  * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
  *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
@@ -6071,6 +6073,9 @@ async function applyLineEdits(
   const keepSentNumber = new Map<number, string[]>();
   const newPortions: PortionRef[] = [];
   const copiedContexts: { from: string; to: string }[] = [];
+  const copiedDishes: { from: string; to: string }[] = [];
+  // Two raised portions of one cohort number their copies on from each other.
+  const nextOrdinal = new Map<string, number>();
   const joinedHeld: { groupId: string; lineIds: string[] }[] = [];
   const replacing = changes
     .filter(({ action }) => action === "change")
@@ -6184,6 +6189,8 @@ async function applyLineEdits(
       const addedExtras = inserted.filter((row) => row.parentLineId === parent.id);
       const kitchen = kitchenStateOf(parent);
       const copyIds: string[] = [];
+      const { cohortId } = change.portion!;
+      let ordinal = nextOrdinal.get(cohortId) ?? change.portion!.nextOrdinal;
       for (let k = 0; k < change.copies; k++) {
         const dishId = randomUUID();
         copyIds.push(dishId);
@@ -6195,11 +6202,12 @@ async function applyLineEdits(
           servedQuantity: 0,
         });
         copiedContexts.push({ from: parent.id, to: dishId });
+        copiedDishes.push({ from: parent.id, to: dishId });
         newPortions.push({
           portionId: randomUUID(),
           lineId: dishId,
-          ordinal: change.portion!.nextOrdinal + k,
-          pricingCohortId: change.portion!.cohortId,
+          ordinal: ordinal++,
+          pricingCohortId: cohortId,
           measured: false,
         });
         for (const extra of storedExtras) {
@@ -6244,6 +6252,7 @@ async function applyLineEdits(
               (stored!.courseId !== null && order.firedCourseIds.has(stored!.courseId))),
         });
       }
+      nextOrdinal.set(cohortId, ordinal);
       if (kitchen === "hold" && parent.groupId !== null)
         joinedHeld.push({ groupId: parent.groupId, lineIds: copyIds });
     }
@@ -6311,9 +6320,9 @@ async function applyLineEdits(
   if (inserted.length > 0) {
     await tx.insert(workingOrderLines).values(inserted);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
-    for (const { from, to } of copiedContexts)
-      await VENUE_SERVICE.copyLineContext(tx, cfg, from, to);
+    await VENUE_SERVICE.copyLineContexts(tx, cfg, copiedContexts);
     await registerPortions(tx, newPortions);
+    await copyAllergyWorkingTicks(tx, copiedDishes);
   }
   const addedToExisting = changes.filter(
     (change) =>
