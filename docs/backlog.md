@@ -1166,12 +1166,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   by A1151).** After a content-language change, or a Reload onto the version already shown, the
   menu patch window redraws a typed "3" as "3.00". Found by reading the code, not run.
 
-- **Typed name text in the menu patch window goes without a note when a newer version's folder
-  starts fixing that language (left open by A1151).** A section name typed in English is dropped
-  on Reload once a newer version's included folder fixes English, and the window says nothing;
-  the note counts a fixed name only when the whole change becomes a no-op. Found by a review
-  experiment on the branch.
-
 - **Owner question: the menu patch window's locked section name says why on a line under the field
   (left open by A1151).** "The included folder sets this name." is a muted line under a disabled
   field (`apps/dashboard/src/widgets/form-fields.ts`, `optionalTextFields`). The house rule makes a

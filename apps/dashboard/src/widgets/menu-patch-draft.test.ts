@@ -330,7 +330,7 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: salad, field: "price", value: "5.00" });
     const next = lunch();
     next.offers["mi-soup"]!.variants = [variant("v-cup", "Cup")];
-    expect(draft.rebase(next)).toEqual({ dropped: 1, trimmed: [] });
+    expect(draft.rebase(next)).toEqual({ dropped: 1, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
     expect(draft.changed(bowl)).toBe(false);
   });
@@ -341,7 +341,7 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: soup, field: "price", value: "6.00" });
     const next = lunch();
     next.offers["mi-salad"]!.unitPrice = "5.00";
-    expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([{ target: soup, field: "price", value: "6.00" }]);
     draft.set({ target: salad, field: "price", value: "5.00" });
     expect(draft.changes()).toHaveLength(1);
@@ -354,7 +354,7 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: bowl, field: "price", value: "9.00" });
     const next = lunch();
     next.offers["mi-soup"]!.variants = [];
-    expect(draft.rebase(next)).toEqual({ dropped: 2, trimmed: [] });
+    expect(draft.rebase(next)).toEqual({ dropped: 2, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
   });
 
@@ -370,7 +370,7 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: salad, field: "price", value: "5.00" });
     const next = lunch();
     next.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Potage" };
-    expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "customerName", value: { en: "Soup", es: "Caldo" } },
       { target: salad, field: "price", value: "5.00" },
@@ -389,7 +389,11 @@ describe("MenuPatchDraft", () => {
     draft.set({ target: salad, field: "price", value: "5.00" });
     const next = lunch();
     next.offers["mi-soup"]!.customerName = { en: "Soup", es: "Sopa", fr: "Potage" };
-    expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: ["offer:mi-soup/customerName"] });
+    expect(draft.rebase(next)).toEqual({
+      dropped: 0,
+      trimmed: ["offer:mi-soup/customerName"],
+      fixed: [],
+    });
     expect(draft.changes()).toEqual([
       { target: soup, field: "customerName", value: { en: "Soup", es: "Caldo" } },
       { target: salad, field: "price", value: "5.00" },
@@ -405,7 +409,11 @@ describe("MenuPatchDraft", () => {
       field: "customerName",
       value: { en: "Soup", es: "Sopa", fr: "Bouillon" },
     });
-    expect(draft.rebase(document)).toEqual({ dropped: 0, trimmed: ["offer:mi-soup/customerName"] });
+    expect(draft.rebase(document)).toEqual({
+      dropped: 0,
+      trimmed: ["offer:mi-soup/customerName"],
+      fixed: [],
+    });
     expect(draft.changes()).toEqual([]);
   });
 
@@ -421,11 +429,12 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(document, { defaultLanguage: "es", languages: ["es"] })).toEqual({
       dropped: 0,
       trimmed: [],
+      fixed: [],
     });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { es: "Sopa nueva" } },
     ]);
-    expect(draft.rebase(document, languages)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(document, languages)).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "Old soup", es: "Sopa nueva" } },
     ]);
@@ -443,8 +452,9 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(document, { defaultLanguage: "es", languages: ["es"] })).toEqual({
       dropped: 0,
       trimmed: ["offer:mi-soup/description"],
+      fixed: [],
     });
-    expect(draft.rebase(document, languages)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(document, languages)).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "Old soup", es: "Sopa nueva" } },
     ]);
@@ -465,6 +475,7 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(description("Other soup", "Sopa de otro"))).toEqual({
       dropped: 0,
       trimmed: [],
+      fixed: [],
     });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "New soup", es: "Sopa de otro" } },
@@ -472,6 +483,7 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(description("Other soup", "Sopa cinco"))).toEqual({
       dropped: 0,
       trimmed: [],
+      fixed: [],
     });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "New soup", es: "Sopa cinco" } },
@@ -481,7 +493,7 @@ describe("MenuPatchDraft", () => {
         defaultLanguage: "en",
         languages: ["en"],
       }),
-    ).toEqual({ dropped: 0, trimmed: [] });
+    ).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "New soup" } },
     ]);
@@ -502,6 +514,7 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(description("Other soup", "Sopa nueva"))).toEqual({
       dropped: 0,
       trimmed: [],
+      fixed: [],
     });
     expect(draft.changes()).toEqual([]);
   });
@@ -517,7 +530,11 @@ describe("MenuPatchDraft", () => {
     });
     draft.set({ target: salad, field: "description", value: { en: "Fresh", es: "" } });
     const withFrenchAndItalian = { defaultLanguage: "en", languages: ["en", "es", "fr", "it"] };
-    expect(draft.rebase(document, withFrenchAndItalian)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(document, withFrenchAndItalian)).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: [],
+    });
     expect(draft.changes()).toEqual([
       {
         target: soup,
@@ -546,6 +563,7 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(document, { defaultLanguage: "en", languages: ["en"] })).toEqual({
       dropped: 0,
       trimmed: [],
+      fixed: [],
     });
     expect(draft.changes()).toEqual([{ target, field: "names", value: { en: "Refreshments" } }]);
   });
@@ -573,11 +591,12 @@ describe("MenuPatchDraft", () => {
     const draft = new MenuPatchDraft(fixedNames(), languages);
     draft.set({ target, field: "names", value: { en: "Bar", es: "Copas" } });
     expect(draft.changes()).toHaveLength(1);
-    expect(draft.rebase(fixedNames(), languages)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(fixedNames(), languages)).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toHaveLength(1);
     expect(draft.rebase(fixedNames(), { defaultLanguage: "en", languages: ["en"] })).toEqual({
       dropped: 0,
       trimmed: ["section:sec-drinks/names"],
+      fixed: [],
     });
     expect(draft.changes()).toEqual([]);
   });
@@ -602,7 +621,7 @@ describe("MenuPatchDraft", () => {
       value: "Bar drinks",
     });
     expect(draft.changes()).toHaveLength(2);
-    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 1, trimmed: [] });
+    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 1, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([{ target, field: "internalName", value: "Bar drinks" }]);
     draft.set({ target, field: "names", value: { en: "Refreshments", es: "Copas" } });
     expect(draft.changes()).toContainEqual({
@@ -611,7 +630,7 @@ describe("MenuPatchDraft", () => {
       value: { en: "Bar", es: "Copas" },
     });
     // The fixed language already holds the live text, so nothing typed is lost.
-    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 0, trimmed: [], fixed: [] });
   });
 
   it("on rebase does not count as dropped a name change still staged in another language once one is fixed", () => {
@@ -628,7 +647,11 @@ describe("MenuPatchDraft", () => {
     const target = { kind: "section", sectionId: "sec-drinks" } as const;
     const draft = new MenuPatchDraft(drinksWith(false), languages);
     draft.set({ target, field: "names", value: { en: "Refreshments", es: "Copas" } });
-    expect(draft.rebase(drinksWith(true))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(drinksWith(true))).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: ["section:sec-drinks/names"],
+    });
     expect(draft.changes()).toEqual([
       { target, field: "names", value: { en: "Bar", es: "Copas" } },
     ]);
@@ -648,13 +671,14 @@ describe("MenuPatchDraft", () => {
     const typed = [
       { target: soup, field: "description", value: { en: "New soup", es: "Sopa mia" } },
     ];
-    expect(draft.rebase(soupIn("Sopa mia"))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa mia"))).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual(typed);
-    expect(draft.rebase(soupIn("Sopa de otro"))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa de otro"))).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual(typed);
     expect(draft.rebase(soupIn("Sopa de otro"), englishOnly)).toEqual({
       dropped: 0,
       trimmed: ["offer:mi-soup/description"],
+      fixed: [],
     });
   });
 
@@ -662,7 +686,7 @@ describe("MenuPatchDraft", () => {
     const draft = new MenuPatchDraft(soupIn("Sopa vieja"), languages);
     draft.set({ target: soup, field: "description", value: { en: "New soup", es: "Sopa mia" } });
     draft.set({ target: soup, field: "description", value: { en: "New soup", es: "Sopa vieja" } });
-    expect(draft.rebase(soupIn("Sopa de otro"))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa de otro"))).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "New soup", es: "Sopa de otro" } },
     ]);
@@ -673,30 +697,40 @@ describe("MenuPatchDraft", () => {
     const long = "x".repeat(5000);
     draft.hold(soup, "description");
     expect(draft.changes()).toEqual([]);
-    expect(draft.rebase(soupIn("Sopa de otro"))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa de otro"))).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.follow(soup, "description", { en: long, es: "Sopa vieja" })).toEqual({
       value: { en: long, es: "Sopa de otro" },
       lost: false,
+      fixed: false,
     });
     draft.set({
       target: soup,
       field: "description",
       value: { en: "New soup", es: "Sopa de otro" },
     });
-    expect(draft.rebase(soupIn("Sopa cinco"))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa cinco"))).toEqual({ dropped: 0, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([
       { target: soup, field: "description", value: { en: "New soup", es: "Sopa cinco" } },
     ]);
-    expect(draft.rebase(soupIn("Sopa cinco"), englishOnly)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa cinco"), englishOnly)).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: [],
+    });
   });
 
   it("follows a held field's typed text in a removed language out, saying it was typed", () => {
     const draft = new MenuPatchDraft(soupIn("Sopa vieja"), languages);
     draft.hold(soup, "description");
-    expect(draft.rebase(soupIn("Sopa vieja"), englishOnly)).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa vieja"), englishOnly)).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: [],
+    });
     expect(draft.follow(soup, "description", { en: "x", es: "Sopa mia" })).toEqual({
       value: { en: "x" },
       lost: true,
+      fixed: false,
     });
   });
 
@@ -727,7 +761,11 @@ describe("MenuPatchDraft", () => {
   it("on rebase forgets what a change was typed over once a newer version holds it", () => {
     const draft = new MenuPatchDraft(soupIn("Sopa vieja"), languages);
     draft.set({ target: soup, field: "description", value: { en: "New soup", es: "Sopa mia" } });
-    expect(draft.rebase(soupIn("Sopa mia", "New soup"))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(soupIn("Sopa mia", "New soup"))).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: [],
+    });
     expect(draft.changes()).toEqual([]);
     draft.set({
       target: soup,
@@ -750,13 +788,45 @@ describe("MenuPatchDraft", () => {
     };
     const draft = new MenuPatchDraft(bowlNamed("Cuenco"), languages);
     draft.set({ target: bowl, field: "customerName", value: { en: "Bowl", es: "Tazon" } });
-    expect(draft.rebase(bowlNamed("Cuenco", false))).toEqual({ dropped: 1, trimmed: [] });
+    expect(draft.rebase(bowlNamed("Cuenco", false))).toEqual({
+      dropped: 1,
+      trimmed: [],
+      fixed: [],
+    });
     draft.rebase(bowlNamed("Tazon"));
     draft.set({ target: bowl, field: "customerName", value: { en: "Big bowl", es: "Cuenco" } });
     draft.rebase(bowlNamed("Cuenco hondo"));
     expect(draft.changes()).toEqual([
       { target: bowl, field: "customerName", value: { en: "Big bowl", es: "Cuenco" } },
     ]);
+  });
+
+  it("follows a held name's text typed in a language a newer version's folder fixes onto the fixed text, saying so", () => {
+    const drinksWith = (fixed: boolean) => {
+      const document = menuDocument([documentSection("sec-drinks", "Drinks", [])], {});
+      const drinks = document.root.members[0] as Extract<
+        MenuDocument["root"]["members"][number],
+        { kind: "section" }
+      >;
+      drinks.names = { en: fixed ? "Bar" : "Drinks", es: "Bebidas" };
+      if (fixed) drinks.fixed = { names: { en: "Bar" } };
+      return document;
+    };
+    const target = { kind: "section", sectionId: "sec-drinks" } as const;
+    const long = "x".repeat(5000);
+    const draft = new MenuPatchDraft(drinksWith(false), languages);
+    draft.hold(target, "names");
+    draft.rebase(drinksWith(true));
+    expect(draft.follow(target, "names", { en: "Refreshments", es: long })).toEqual({
+      value: { en: "Bar", es: long },
+      lost: false,
+      fixed: true,
+    });
+    expect(draft.follow(target, "names", { en: "Bar", es: long })).toEqual({
+      value: { en: "Bar", es: long },
+      lost: false,
+      fixed: false,
+    });
   });
 
   it("on rebase treats a name language a folder fixed as untyped once a newer version frees it", () => {
@@ -773,8 +843,16 @@ describe("MenuPatchDraft", () => {
     const target = { kind: "section", sectionId: "sec-drinks" } as const;
     const draft = new MenuPatchDraft(drinksWith("Drinks", false), languages);
     draft.set({ target, field: "names", value: { en: "Refreshments", es: "Copas" } });
-    expect(draft.rebase(drinksWith("Bar", true))).toEqual({ dropped: 0, trimmed: [] });
-    expect(draft.rebase(drinksWith("Beverages", false))).toEqual({ dropped: 0, trimmed: [] });
+    expect(draft.rebase(drinksWith("Bar", true))).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: ["section:sec-drinks/names"],
+    });
+    expect(draft.rebase(drinksWith("Beverages", false))).toEqual({
+      dropped: 0,
+      trimmed: [],
+      fixed: [],
+    });
     expect(draft.changes()).toEqual([
       { target, field: "names", value: { en: "Beverages", es: "Copas" } },
     ]);

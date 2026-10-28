@@ -312,6 +312,9 @@ export class MenuPatchDialog extends LitElement {
   /** The `changeKey`s of the edited fields, staged or failing their own check, that have let go of
    * text typed in a language removed since the dialog opened. */
   @state() private trimmed = new Set<string>();
+  /** The `changeKey`s of the edited fields, staged or failing their own check, whose text typed in
+   * a name language gave way to the text a newer version's folders fix it to. */
+  @state() private refixed = new Set<string>();
   @state() private queued: LocalTime[] = [];
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
    * Reload, or until a later delivery finds nothing staged and no field failing its check. */
@@ -416,6 +419,7 @@ export class MenuPatchDialog extends LitElement {
     this.reloadFailure = null;
     this.dropped = 0;
     this.trimmed = new Set();
+    this.refixed = new Set();
     this.queued = [];
     this.newer = null;
     this.#held = null;
@@ -522,9 +526,10 @@ export class MenuPatchDialog extends LitElement {
   /** Checks the draft against the shown version with the venue's content languages as they are. */
   #revalidate(): void {
     const { document } = this.live!;
-    const { dropped, trimmed } = this.#draft!.rebase(document, currentContentLanguages());
+    const { dropped, trimmed, fixed } = this.#draft!.rebase(document, currentContentLanguages());
     this.dropped += dropped;
     if (trimmed.length > 0) this.trimmed = new Set([...this.trimmed, ...trimmed]);
+    if (fixed.length > 0) this.refixed = new Set([...this.refixed, ...fixed]);
     this.#typeSettled();
     this.#followHeld();
     this.dropped += this.#forgetSettled(document);
@@ -560,13 +565,14 @@ export class MenuPatchDialog extends LitElement {
     for (const [key, typed] of this.#failing()) {
       const field = key.slice(key.lastIndexOf("/") + 1);
       if (!TRANSLATED.has(field)) continue;
-      const { value, lost } = this.#draft!.follow(
+      const { value, lost, fixed } = this.#draft!.follow(
         typed.target,
         field,
         typed.value as Record<string, string>,
       );
       typed.value = value;
       if (lost) this.trimmed = new Set([...this.trimmed, key]);
+      if (fixed) this.refixed = new Set([...this.refixed, key]);
     }
   }
 
@@ -1008,6 +1014,13 @@ export class MenuPatchDialog extends LitElement {
             this.trimmed.size === 1
               ? t("menu_patch.trimmed_one")
               : fill("menu_patch.trimmed_many", { count: String(this.trimmed.size) }),
+          ]),
+      ...(this.refixed.size === 0
+        ? []
+        : [
+            this.refixed.size === 1
+              ? t("menu_patch.refixed_one")
+              : fill("menu_patch.refixed_many", { count: String(this.refixed.size) }),
           ]),
     ];
   }

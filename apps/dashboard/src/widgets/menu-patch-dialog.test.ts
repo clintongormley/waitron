@@ -673,6 +673,89 @@ it("shows a newer version's folder name in its locked language beside a staged c
   ]);
 });
 
+it("says so when a Reload replaces typed name text that a newer version's folder now sets, keeping the rest", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, before))
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "Para empezar");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "names-es").value).toBe("Para empezar");
+  expect(el.changes).toHaveLength(1);
+  expect(folderNote(el)).toBe(
+    "1 change lost the name typed in a language the included folder now sets.",
+  );
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBeNull();
+});
+
+it("says so when a Reload replaces typed name text that a newer version's folder now sets in a field failing its own check", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, before))
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "x".repeat(5000));
+  await press(el, "review");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
+  expect(field(el, "wt-input", "names-es").error).not.toBe("");
+  expect(folderNote(el)).toBe(
+    "1 change lost the name typed in a language the included folder now sets.",
+  );
+  await type(el, "wt-input", "names-es", "Para empezar");
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-starters" },
+      field: "names",
+      value: { en: "Fixed English", es: "Para empezar" },
+    },
+  ]);
+});
+
+it("says in Spanish that a newer version's folder took typed name text", async () => {
+  const data = new LiveData();
+  const before = lunch();
+  (before.root.members[0] as { names: Record<string, string> }).names = {
+    en: "Starters",
+    es: "Entrantes",
+  };
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, before))
+    .mockResolvedValue(live(4, startersFixedInEnglish()));
+  const el = await mount(stubApi({ liveData: data, getLiveMenu }));
+  await pick(el, "Starters");
+  await type(el, "wt-input", "names-en", "Openers");
+  await type(el, "wt-input", "names-es", "Para empezar");
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  setLocale("es");
+  await el.updateComplete;
+  expect(bottomMessage(el)).toBe(
+    "1 corrección ha perdido el nombre escrito en un idioma que ahora fija la carpeta incluida.",
+  );
+});
+
 it("says in Spanish that the included folder sets a fixed name", async () => {
   setLocale("es");
   const document = startersFixedInEnglish();
@@ -887,7 +970,7 @@ const bottomMessage = (el: MenuPatchDialog) =>
 /** The bottom message without the sentences saying what newer versions and removed languages
  * took, which follow everything else in it. */
 const refusalsIn = (el: MenuPatchDialog) =>
-  [droppedNote(el), trimmedNote(el)]
+  [droppedNote(el), trimmedNote(el), folderNote(el)]
     .reduce<string>(
       (message, note) => (note === null ? message : message.replace(note, "")),
       bottomMessage(el),
@@ -903,6 +986,12 @@ const droppedNote = (el: MenuPatchDialog) =>
 /** The bottom message's sentence saying how many changes a removed language cut, if any. */
 const trimmedNote = (el: MenuPatchDialog) =>
   /\d+ changes? lost what was typed in a language removed from the content languages\./.exec(
+    bottomMessage(el),
+  )?.[0] ?? null;
+
+/** The bottom message's sentence saying how many changes lost a name a folder now sets, if any. */
+const folderNote = (el: MenuPatchDialog) =>
+  /\d+ changes? lost the name typed in a language the included folder now sets\./.exec(
     bottomMessage(el),
   )?.[0] ?? null;
 

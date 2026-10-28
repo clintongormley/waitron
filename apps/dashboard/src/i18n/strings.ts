@@ -2977,6 +2977,10 @@ export const en = {
     "1 change lost what was typed in a language removed from the content languages.",
   "menu_patch.trimmed_many":
     "{count} changes lost what was typed in a language removed from the content languages.",
+  "menu_patch.refixed_one":
+    "1 change lost the name typed in a language the included folder now sets.",
+  "menu_patch.refixed_many":
+    "{count} changes lost the name typed in a language the included folder now sets.",
   "menu_publications.version": "Version {number}",
   "menu_publications.state_queued": "Scheduled",
   "menu_publications.state_cancelled": "Cancelled",
@@ -6512,6 +6516,10 @@ export const es: Record<StringKey, string> = {
     "1 corrección ha perdido lo escrito en un idioma que se ha quitado de los idiomas del contenido.",
   "menu_patch.trimmed_many":
     "{count} correcciones han perdido lo escrito en un idioma que se ha quitado de los idiomas del contenido.",
+  "menu_patch.refixed_one":
+    "1 corrección ha perdido el nombre escrito en un idioma que ahora fija la carpeta incluida.",
+  "menu_patch.refixed_many":
+    "{count} correcciones han perdido el nombre escrito en un idioma que ahora fija la carpeta incluida.",
   "menu_publications.version": "Versión {number}",
   "menu_publications.state_queued": "Programada",
   "menu_publications.state_cancelled": "Cancelada",
