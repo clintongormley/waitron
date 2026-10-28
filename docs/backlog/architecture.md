@@ -508,8 +508,8 @@ until A977).
   The bookings dashboard's form, day-list, client, validation, draft and accessibility suites
   use English sample names; form and picker labels read the catalogue. Keep printing’s accented
   glyph cases and preserve text lengths when translating its remaining samples.
-  Remaining helper and screen fixtures stay with this item; continue package by package from
-  A977's list. Keep existing behavioral assertions. Low priority.
+  Remaining helper and screen fixtures, including reporting's supplier-name sample, stay with this
+  item; continue package by package from A977's list. Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the
