@@ -435,50 +435,50 @@ given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d
 `packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
 `packages/backups/src/recovery.ts`, `recovery_active`).
 
-## A full disk while a backup recovery fills it is a dead end for the person
+## On a full disk, boot fully from the spare file, then prompt to delete old backups
 
-Left open by A1042. What the box does today:
+The owner's answer to A1127 Q1 (2026-10-28, `~/waitron-campaign/questions.md`, "OWNER ANSWER … A1127
+Q1"): when the disk is full, the box deletes its spare file (`<state>/spare-space`, A1127) to make
+room and starts NORMALLY; once up, it prompts the person to delete old backups kept on the box,
+oldest first, naming what each choice does, with the administrator sign-in in place and a safe Stop;
+only if the person does not follow those prompts, or nothing can be freed, does today's explain-only
+full-disk page apply (A1127's words, `storage.disk_full` in `apps/server/src/recovery-surface.ts`).
+Next: a design, parked `needs-owner-review` before any build, saying where the prompt appears
+(repair page, dashboard or both) and when the spare is written back.
 
-- The box empties a discarded backup recovery only while holding its venue folders' locks
-  (CLAUDE.md §3; `emptyAbandonedBackupRecovery`,
-  `packages/provisioning/src/first-setup-backup-discard.ts`). Taking a lock writes a file, so on
-  a full disk it is refused (`errcode` 14), and the discarded recovery's restored database stays on
-  disk.
-- **At the start:** below the free-space floor, a start through the box's entry point deletes
-  rotated logs numbered 2 or higher and crash reports older than 7 days
-  (`apps/server/src/start-space.ts`, `freeSpaceAtStart`, called from `runEntry` in
-  `apps/server/src/node-entry.ts`).
-  - If that frees a little room, the locks are taken and the discarded recovery is emptied.
-    Measured by A1042's U7d on a 32 MB HFS+ test volume filled to 0 bytes free: freeing 1 MiB (one
-    rotated log, or a filler file) was enough, and emptying a 4 MiB restored database left
-    5,271,552 bytes free (`apps/server/src/start-full-disk.e2e.test.ts`).
-  - If it frees nothing, the emptying is logged `setup.recovery_cleanup_refused` with
-    `reason: "storage.disk_full"` and the start serves the full-disk page. That page tells the
-    person to ask whoever installed the box to free some space, against the 2026-10-25 rule never to
-    send the person to somebody else. It also says "The box has deleted what it could make again",
-    which is untrue while the discarded database is still there
-    (`apps/server/src/recovery-surface.ts`, `storage.disk_full`).
-- **At Start again, with the disk already full:** Start again and its summary answer
-  `500 server.internal` at the turn's own lock, before any step (measured by the A1042 plan's
-  fourth-revision check, through the repair host's own lock and the real error boundary). The page
-  draws "Reconnect to check the saved result. Do not repeat activation." for Start again's refusal;
-  with the venue database present, a summary read refused this way draws "This box could not read
-  the details of the recovery from backup. Check again." instead (`apps/setup/src/setup-app.ts`,
-  `#presentReadsFailed`; read, not run). Every recovery step runs in the same turn
-  (`apps/server/src/first-setup-backup-recovery.ts`, `turn`); I believe each answers the same way
-  (read, not run), and that Start again did the same before A1042 (read, not run).
-- **A recovery not yet discarded that fills the disk** (a restore that runs out of room part-way)
-  gets no clean-up at the start: the start resolves the repair page and skips the space clean-up
-  (`apps/server/src/node-entry.ts`, `backupEntry.kind === "repair"`, from #2043). The person meets
-  the 500 above and cannot discard it.
-- **Start again on a disk that fills between its `abandoned` record and the emptying** answers
-  "Start again has not finished. Reload this page to see what is left to do. If the box is
-  restarting, wait until it answers." The box restarts by itself, and the next start tries the
-  emptying again; on a disk still full, that start serves the full-disk page above.
+## A resume can use the room the spare file gave
 
-Follow-up: A1127, as the owner chose on 2026-10-26 ("A1042 full disk: A"): on a full disk the box
-frees a discarded recovery's copy and keeps the folder-lock rule, and the repair and full-disk pages
-stop sending the person elsewhere.
+After the repair host deletes the spare beside a stopped recovery, a resume of that recovery could
+use the freed room: the page does not offer **Recover from backup** beside a stopped recovery, but
+the server's `open` accepts its id (`apps/server/src/first-setup-backup-recovery.ts`, `open`); and a
+release on a plain read while an idle, unsealed setup session can still continue lets that session
+use the room too. Also: a recovery that fails before its `placement-started` record counts as running
+for up to its 5-minute lease, so the repair host releases nothing until the lease lapses. All read,
+not run (A1127's design, "Accepted limits", and the Task 5a/5b review).
+
+## The spare file's size is measured on HFS+ and Linux tmpfs only
+
+A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,
+and CI runs the real-disk cases on 32 MiB Linux tmpfs mounts. Not measured: ext4 (the box's likely
+filesystem: 4 KiB blocks, its journal, root-reserved blocks), copy-on-write filesystems with
+snapshots or compression (btrfs, zfs), and whether the `logs` volume shares the state folder's disk
+on every box, which the repair-stage log clean-up assumes when it deletes logs to make room. Detail:
+A1127's design, "Open, not measured".
+
+## The repair page draws a Start-again error twice
+
+On the Start-again confirmation, a refusal's message appears under the password field and again
+under the tick box; with A1127's longer full-disk words that is about half a phone screen at 375 px
+(`~/waitron-campaign/a1127-measure/look/`). Believed to predate A1127: both slots show the same
+stored error, and a plain 500 also shows twice (look check of 2026-10-28, run on the branch, not on
+`main`).
+
+## A boot test's disk assertion reads the checkout's path
+
+`apps/server/src/first-setup-resolution.boot.test.ts`'s two supervised cases assert the page does
+not match `/disk/i`, and the page prints a stack trace holding the checkout's path, so the cases fail
+in any worktree whose path contains "disk" (A1127's own worktree, `…-full-disk-spare-file`). They pass
+in a copy at another path and on `main`.
 
 ## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
 

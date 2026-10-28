@@ -502,10 +502,24 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1042.
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
-- **A full disk while a backup recovery fills it is a dead end for the person.** The box empties a
-  discarded recovery only under its folders' locks, which a full disk refuses; the full-disk page
-  then sends the person elsewhere. Follow-up: A1127. Left open by A1042.
-  [Detail](backlog/setup.md#a-full-disk-while-a-backup-recovery-fills-it-is-a-dead-end-for-the-person)
+- **On a full disk, boot fully from the spare file, then prompt to delete old backups.** The
+  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Next: a
+  design, parked for the owner. Left open by A1127.
+  [Detail](backlog/setup.md#on-a-full-disk-boot-fully-from-the-spare-file-then-prompt-to-delete-old-backups)
+
+- **A resume can use the room the spare file gave.** Accepted limits of A1127's release beside a
+  stopped recovery, read not run. Left open by A1127.
+  [Detail](backlog/setup.md#a-resume-can-use-the-room-the-spare-file-gave)
+
+- **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write
+  filesystems, or a `logs` volume on another disk. Left open by A1127.
+  [Detail](backlog/setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
+
+- **The repair page draws a Start-again error twice**, under the password and under the tick box.
+  [Detail](backlog/setup.md#the-repair-page-draws-a-start-again-error-twice)
+
+- **A boot test's disk assertion reads the checkout's path**, so it fails in a worktree whose path
+  holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
   again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the

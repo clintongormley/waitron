@@ -2855,7 +2855,8 @@ turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
 `<stateDir>/backup-staging`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
 whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
 so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
-`holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
+`holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). Never the box's spare file
+(see "The box's spare file"). That is the start's forced
 clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses)
 minus the staged recovery copies in `<state>/restore-staging/staged-recovery`, and minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
 the link and its size is not space freed. Also minus a configured backup folder: a `backup-encrypt-`
@@ -3287,6 +3288,41 @@ The landing listener, started last, is the one step not on the list.
 **What the guard does not see.** `apps/server/src/boot.failed-start.test.ts` is weaker than its
 name — it covers only the duties it names, so a new one that forgets is seen by nothing. Removing
 `await loop` still passes, so not every stop is proven to finish before the store closes.
+
+## The box's spare file
+
+**The rule.** The box keeps `<state>/spare-space` (`SPARE_SPACE_FILE`, `@waitron/provisioning`;
+`SPARE_SPACE_BYTES`, 8 MiB of random bytes, `apps/server/src/spare-space.ts`) so that, on a nearly full
+disk, it still has the room to take the venue locks that freeing a backup recovery's copy needs. Only
+two paths delete it, and only when the lower free space of the state and venue folders is under
+`FULL_DISK_BYTES` (16 MiB): the start's emptying of a discarded recovery (`emptyDiscardedRecovery`,
+`apps/server/src/first-setup-entry.ts`), and the repair host before the four requests of the
+Start-again flow (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`). Only a start
+(`runEntry`, `apps/server/src/node-entry.ts`) writes it back, when at least 24 MiB is free. It is never
+venue data: never backed up, exported or streamed, and the backup recovery's originals walk
+(`packages/provisioning/src/first-setup-backup-workspace.ts`) leaves it out, so writing or deleting it
+cannot refuse a resume. Guard: `scripts/spare-space.test.ts`, weaker than its name: it reads text.
+
+**Why 8 MiB.** Measured on a 32 MiB HFS+ image (scripts and output kept outside the repo, under
+`~/waitron-campaign/a1127-measure/`): one lock needed 8 KiB, the emptying 16 KiB, the whole
+Start-again flow 64 KiB; a 16 KiB spare released on a full disk was enough for the emptying and a
+4 KiB one was not. 8 MiB stays under `FULL_DISK_BYTES`, so a disk whose spare was just released still
+reads as full to `fullDiskFailure`. Random bytes written out, never `truncate`: on a 32 MiB APFS image
+a file truncated to 4 MiB took 4096 bytes. ext4 and copy-on-write filesystems are not measured (the
+backlog holds that).
+
+**Why no lock is taken to delete or write it.** It is in neither a venue folder nor
+`<state>/backup-staging`, and a lock taken to delete it would need the room it exists to give. A
+release is an `unlink` that treats `ENOENT` as done; a top-up appends only while the file is short of
+the cap and opens with `O_NOFOLLOW`, leaving anything that is not a regular file alone
+(`storage.spare_unusable`). The lock rule itself is unchanged: the emptying and every Start-again
+step still take the venue locks; the spare only gives them room to.
+
+**Which walks see it.** Only code that lists the state folder: the originals walk (which leaves it
+out). Start again's deletion list, its leftovers survey and its series-name floor read named entries
+only, as do the setup inspection's fingerprints. The design
+(`docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md`, "Which walks see it") has
+the line references and says which were read rather than run.
 
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 

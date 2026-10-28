@@ -1294,6 +1294,17 @@ Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted a
 `WAITRON_FULL_DISK_DIR: /home/runner/work/_temp/full-disk`; the job's whole run printed
 `Tests  36 passed (36)`.
 
+**A second real-disk file has its own small filesystem.** `apps/server/src/start-again-full-disk.e2e.test.ts`
+(A1127) runs the repair page's Start-again flow beside a stopped backup recovery on a full disk: with
+the box's spare file the flow works and the spare is gone; without it the password step answers
+`507 storage.disk_full`. It builds its stopped recovery from the A731 fixture, whose module-level
+hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and two files filling
+one filesystem at once would fail each other: it calls `openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN")`,
+and CI mounts a second 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-start-again` for it in the same
+`test-server-stream` step. On macOS each file makes its own image. The real-disk cases that need no
+spare pass `spareBytes: 0` to `entryDeps` (or to `startedBefore`), so a start in the test writes no
+8 MiB spare onto a 32 MiB disk; the cases about the spare pass a size or plant one.
+
 **A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
 slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for
 it. Find it, detach it by its mount path, then remove its folder:

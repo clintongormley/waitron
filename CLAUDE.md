@@ -453,6 +453,12 @@ called weaker than its name, the topic file lists what it does not see.
 - **A full disk is not one error code; code 14 also names a missing folder.**
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
   under 16 MiB free. Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
+- **On a nearly full disk, only the start's emptying of a discarded recovery and the repair page's
+  Start-again flow delete `<state>/spare-space`, and only a start with room writes it back; it is
+  never venue data, and a recovery's originals walk leaves it out.** Cost if not: on a full disk the
+  venue locks cannot be taken, so a recovery's copy could never be freed (A1127). Guard:
+  `scripts/spare-space.test.ts`, weaker than its name: reads text.
+  [Detail](docs/developers/conventions-data.md#the-boxs-spare-file).
 - **One process owns a venue folder at a time.** Tools documented to run beside the server use
   `exclusive: false`; file-changing commands take `lockVenueDatabase` before changing anything.
   Never unlink `venue.lock`/`recovery.lock`; change `recovery.json` only through `updateRecoveryState`.
@@ -588,9 +594,10 @@ browser test** — most of these rules exist because a test passed while proving
   interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
 - **Full-disk start tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
-  needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Interrupted macOS images
-  can remain attached; `pnpm reap` does not detach them. Guard: `scripts/ci-workflow.test.mjs`,
-  weaker than its name: reads workflow text.
+  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN` for the second file: two
+  files filling one filesystem fail each other), otherwise skips locally and fails CI. Interrupted
+  macOS images can remain attached; `pnpm reap` does not detach them. Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
   OUTER config's `test.browser` block**; the command-line flag and that project's own `browser`
   block are ignored without a word. Nothing guards it. Receipt:
