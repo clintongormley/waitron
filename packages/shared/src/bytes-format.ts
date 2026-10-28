@@ -4,8 +4,8 @@ function sizeLocale(l: string): string {
   return language === "es" ? "es-ES" : "en-GB";
 }
 
-/** A number of bytes as `l` writes gigabytes or megabytes, for display only; anything that is not
- * a byte count is written as a dash. */
+/** Gigabytes or megabytes, in Spain's number style when `l` is Spanish and British English's
+ * otherwise; anything that is not a finite byte count is a dash. */
 export function formatBytes(value: unknown, l: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—";
   const v = Math.max(0, value);
