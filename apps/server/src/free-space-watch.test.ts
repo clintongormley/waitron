@@ -296,11 +296,10 @@ describe("startFreeSpaceWatch", () => {
   });
 
   it("a reading reads free space once, after the restore", async () => {
-    let w: ReturnType<typeof watch> | undefined;
     const restoreSpare = async () => {
-      w!.reading.free = 3 * GIB - 8 * MIB;
+      w.reading.free = 3 * GIB - 8 * MIB;
     };
-    w = watch({ restoreSpare });
+    const w = watch({ restoreSpare });
     w.reading.free = 3 * GIB;
     await w.tick();
     expect(w.state.current().freeBytes).toBe(3 * GIB - 8 * MIB);
@@ -343,11 +342,10 @@ describe("startFreeSpaceWatch", () => {
   });
 
   it("a stop during the restore records and arms nothing", async () => {
-    let w: ReturnType<typeof watch> | undefined;
     const restoreSpare = async () => {
-      void w!.handle.stop();
+      void w.handle.stop();
     };
-    w = watch({ restoreSpare });
+    const w = watch({ restoreSpare });
     w.armed[0]!.fn();
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));

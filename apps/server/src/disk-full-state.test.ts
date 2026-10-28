@@ -212,13 +212,12 @@ describe("createDiskFullState with the spare's marker", () => {
   });
 
   it("keeps the stop when a refusal is noted while the marker is read", async () => {
-    let state!: DiskFullState;
     const spareReleased = async () => {
       state.noteRefused();
       return false;
     };
     const set = setup({ spareReleased });
-    state = set.state;
+    const state: DiskFullState = set.state;
     state.noteRefused();
     set.disk.free(FULL_DISK_BYTES);
     expect(await state.full()).toBe(true);
