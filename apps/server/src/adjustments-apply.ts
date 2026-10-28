@@ -209,7 +209,7 @@ interface Plan {
   covered: number | null;
   /** A cancel's quantity taken off the dish, null for all of it. */
   removed: number | null;
-  /** On a row, the whole portions a cancel takes, each with its extras. */
+  /** On a row, the dish portions a cancel takes whole. */
   removedPortions: Row[] | null;
   carve: Carve | null;
   /** The prices the action sets, on the line, or on a row's stand-in lines (plan D32). */

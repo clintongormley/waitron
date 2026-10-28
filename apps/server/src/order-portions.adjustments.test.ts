@@ -32,7 +32,7 @@ import {
   thousandthsToDecimal,
   toScale,
 } from "@waitron/shared";
-import { writePartyAllergy } from "@waitron/venue-service";
+import { listStationNotices, writePartyAllergy } from "@waitron/venue-service";
 import { applyAdjustment, previewAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { mergeCheckedBills, transferItems } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -2843,6 +2843,19 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     await cancelOn(portions, members[0]!, { ...ask, lineIds: members });
 
     expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
+    const voids = async (billId: string) =>
+      (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, venue.stationId)))
+        .filter((notice) => notice.workingOrderId === billId)
+        .map(({ kind, lineName, quantity, wasStarted }) => ({
+          kind,
+          lineName,
+          quantity,
+          wasStarted,
+        }));
+    expect(await voids(grouped.billId)).toEqual([
+      { kind: "void", lineName: "BURG", quantity: "2.000", wasStarted: true },
+    ]);
+    expect(await voids(portions.billId)).toEqual(await voids(grouped.billId));
     expect(await cancelRecord(portions.billId, members)).toEqual({
       ...(await cancelRecord(grouped.billId, [line!])),
       line: 0,
@@ -3052,6 +3065,36 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       });
     },
   );
+
+  it("A803 portions: a cancel naming a row's olives together is refused management.request_invalid on lineIds, changing nothing", async () => {
+    const bill = await portionsBill([{ name: "Pizza", quantity: "3", olives: 1 }]);
+    const pizzas = await dishesNamed(bill.billId, "Pizza");
+    const olives = (await rowsOf(venue, bill.billId))
+      .filter((row) => row.parentLineId !== null)
+      .map((row) => row.id);
+    expect(olives).toHaveLength(3);
+    const before = await rowsOf(venue, bill.billId);
+    await expect(
+      adjust(bill.billId, { lineId: olives[0]!, lineIds: olives, action: "cancel" }),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineIds" } });
+    expect(await rowsOf(venue, bill.billId)).toEqual(before);
+    expect(pizzas).toHaveLength(3);
+  });
+
+  it("A803 portions: a keep-charge cancel sent on the row's second portion records the cancel and the refund link on its first", async () => {
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    await paid(bill);
+    const answer = await cancelOn(bill, members[1]!, {
+      quantity: "1",
+      outcome: "keep_charge",
+      refundHandoff: true,
+      lineIds: members,
+    });
+    expect(answer.refundLinks).toEqual([{ lineId: members[0], adjustmentId: expect.any(String) }]);
+    expect((await cancelRecord(bill.billId, members)).line).toBe(0);
+    expect(await cancelledOf(members)).toEqual({ [members[2]!]: 1000 });
+  });
 
   it("A803 portions: a cancel naming portions of two different rows is refused management.request_invalid on lineIds, changing nothing", async () => {
     const bill = await portionsBill([

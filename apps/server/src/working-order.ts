@@ -3191,7 +3191,7 @@ export async function removeFromLine(
 
 /**
  * {@link removeFromLine} for several whole dish portions of one till row at once, each with its
- * extras (plan D32): the kitchen is told in one correction, so a station prints one slip for them.
+ * extras (plan D32): the kitchen is told in one correction, as for today's one line of them.
  */
 export async function removePortions(
   tx: Transaction,
