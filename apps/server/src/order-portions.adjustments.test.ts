@@ -20,7 +20,14 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { decimal, decimalToCents, sumDecimals, toScale } from "@waitron/shared";
+import {
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  sumDecimals,
+  thousandthsToDecimal,
+  toScale,
+} from "@waitron/shared";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { applyAdjustment, previewAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { mergeCheckedBills } from "./bill-actions.js";
@@ -1217,19 +1224,6 @@ function serve(billId: string, lineId: string, quantity = "1.000") {
   });
 }
 
-/** The lines each of the bill's adjustments covered, as what they stand for, in record order. */
-async function coveredOn(billId: string): Promise<string[][]> {
-  const ids = await describeIds(billId);
-  const records = await recordedOn(billId);
-  const rows = await inTx(venue, (tx) => tx.select().from(adjustmentLines));
-  return records.map((record) =>
-    rows
-      .filter((row) => row.adjustmentId === record.id)
-      .map((row) => ids.get(row.lineId) ?? row.lineId)
-      .sort(),
-  );
-}
-
 const burgers = (quantity: string): RoundLine[] => [{ name: "Burger", quantity }, bread];
 
 describe("A803 portions: the lines a comp or discount covered", () => {
@@ -1265,15 +1259,144 @@ describe("A803 portions: the lines a comp or discount covered", () => {
     ]);
   });
 
-  it("A803 portions: a discount of the whole bill, and one on an unbound line, record no covered lines", async () => {
+  it("A803 portions: a discount of the whole bill, and one on an unbound line, record what they took off each line", async () => {
     const portions = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
     await adjust(portions.billId, tenOff);
     const grouped = await groupedBill([{ name: "Croquetas", quantity: "3" }]);
     const [line] = await dishesNamed(grouped.billId, "Croquetas");
     await adjust(grouped.billId, { ...tenOff, lineId: line!, quantity: "1" });
 
-    expect(await coveredOn(portions.billId)).toEqual([[]]);
-    expect(await coveredOn(grouped.billId)).toEqual([[]]);
+    expect(await takenOn(portions.billId)).toEqual([
+      [
+        "Croquetas 2.99 off 0.34 of 1.000",
+        "Croquetas 3.00 off 0.33 of 1.000",
+        "Croquetas 3.00 off 0.33 of 1.000",
+      ],
+    ]);
+    expect(await takenOn(grouped.billId)).toEqual([["Croquetas 3.00 off 0.33 of 1.000"]]);
+  });
+});
+
+/** What each of the bill's comps and discounts took off each line, as `name unit-price off amount
+ * of quantity`, in record order; and, unless `copied` (a copy carries its original's rows), that
+ * each record's rows add up to its reduction. */
+async function takenOn(billId: string, copied = false): Promise<string[][]> {
+  const ids = await describeIds(billId);
+  const records = await recordedOn(billId);
+  const rows = await inTx(venue, (tx) => tx.select().from(adjustmentLines));
+  return records.map((record) => {
+    const own = rows.filter((row) => row.adjustmentId === record.id);
+    if (!copied) expect(own.reduce((sum, row) => sum + row.reduction, 0)).toBe(record.reduction);
+    return own
+      .map(
+        (row) =>
+          `${ids.get(row.lineId) ?? row.lineId} off ${centsToDecimal(row.reduction)} of ${thousandthsToDecimal(row.quantity)}`,
+      )
+      .sort();
+  });
+}
+
+describe("A803 portions: what each comp or discount took off each line (plan D37)", () => {
+  it("A803 portions: 10% off a pizza with olives records what it took off the pizza and off the olives, with each line's quantity", async () => {
+    const { billId } = await portionsBill([{ name: "Pizza", quantity: "1", olives: 2 }]);
+    const [pizzaLine] = await dishesNamed(billId, "Pizza");
+    await adjust(billId, { ...tenOff, lineId: pizzaLine! });
+
+    expect(await takenOn(billId)).toEqual([
+      ["Olives 1.35 off 0.30 of 2.000", "Pizza 8.10 off 0.90 of 1.000"],
+    ]);
+  });
+
+  it("A803 portions: a whole-bill discount records its share on every line it changed", async () => {
+    const { billId } = await portionsBill([{ name: "Burger", quantity: "2" }, bread]);
+    await adjust(billId, tenOff);
+
+    expect(await takenOn(billId)).toEqual([
+      [
+        "Bread 2.25 off 0.25 of 1.000",
+        "Burger 10.80 off 1.20 of 1.000",
+        "Burger 10.80 off 1.20 of 1.000",
+      ],
+    ]);
+  });
+
+  it("A803 portions: a whole-bill discount that leaves an unbound line beside bound portions at two prices records a row on each line it leaves", async () => {
+    const billId = await inTx(venue, async (tx) => {
+      const bill = await seated(tx);
+      await addPortionRound(tx, venue.cfg, bill.billId, roundOf([{ name: "Burger" }]), {
+        fire: true,
+      });
+      const round = await priceTabRound(
+        tx,
+        venue.cfg,
+        bill.billId,
+        roundOf([{ name: "Croquetas", quantity: "3" }]),
+        "checked",
+      );
+      await insertTabRound(tx, venue.cfg, round, round.rows);
+      await bumpRevision(tx, [bill.billId]);
+      return bill.billId;
+    });
+    await adjust(billId, tenOff);
+
+    expect(await dishesNamed(billId, "Croquetas")).toHaveLength(2);
+    expect(await takenOn(billId)).toEqual([
+      [
+        "Burger 10.80 off 1.20 of 1.000",
+        "Croquetas 2.99 off 0.34 of 1.000",
+        "Croquetas 3.00 off 0.66 of 2.000",
+      ],
+    ]);
+  });
+
+  it("A803 portions: a discount on an unbound line of three records one row", async () => {
+    const { billId } = await groupedBill([{ name: "Burger", quantity: "3" }]);
+    const [line] = await dishesNamed(billId, "Burger");
+    await adjust(billId, { ...tenOff, lineId: line! });
+
+    expect(await takenOn(billId)).toEqual([["Burger 10.80 off 3.60 of 3.000"]]);
+  });
+
+  it("A803 portions: a discount that leaves an unbound line at two prices records a row on each line it leaves", async () => {
+    const { billId } = await groupedBill([{ name: "Croquetas", quantity: "3" }]);
+    const [line] = await dishesNamed(billId, "Croquetas");
+    await adjust(billId, { ...tenOff, lineId: line! });
+
+    expect(await dishesNamed(billId, "Croquetas")).toHaveLength(2);
+    expect(await takenOn(billId)).toEqual([
+      ["Croquetas 2.99 off 0.34 of 1.000", "Croquetas 3.00 off 0.66 of 2.000"],
+    ]);
+  });
+
+  it("A803 portions: a part of an unbound line records its row on the part carved off", async () => {
+    const { billId } = await groupedBill([{ name: "Burger", quantity: "3" }]);
+    const [line] = await dishesNamed(billId, "Burger");
+    await adjust(billId, { ...tenOff, lineId: line!, quantity: "1" });
+
+    expect(await takenOn(billId)).toEqual([["Burger 10.80 off 1.20 of 1.000"]]);
+  });
+
+  it("A803 portions: €0.01 off 2 of a row of three breads records a row only on the bread it took the cent off", async () => {
+    const { billId } = await portionsBill([{ name: "Bread", quantity: "3" }]);
+    const breads = await dishesNamed(billId, "Bread");
+    await adjust(billId, {
+      action: "discount_amount",
+      amount: "0.01",
+      ...rowOf(breads),
+      quantity: "2",
+    });
+
+    expect(await takenOn(billId)).toEqual([["Bread 2.49 off 0.01 of 1.000"]]);
+  });
+
+  it("A803 portions: a comp of a pizza records the pizza and its olives at their whole price", async () => {
+    const { billId } = await groupedBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+    const [pizzaLine] = await dishesNamed(billId, "Pizza");
+    await adjust(billId, { action: "comp", lineId: pizzaLine! });
+
+    expect(await takenOn(billId)).toEqual([
+      ["Olives 0.00 off 3.00 of 2.000", "Pizza 0.00 off 18.00 of 2.000"],
+    ]);
   });
 });
 
@@ -1491,7 +1614,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
     expect(await verdicts(portions.billId, rowOf(row.slice(0, 2)))).toEqual(today);
   });
 
-  describe("A803 portions: an unbound line of three gets the floor's verdicts and records no covered lines", () => {
+  describe("A803 portions: an unbound line of three gets the floor's verdicts and records what each discount took", () => {
     // 25% steps, then 20%: a burger 25% off stays above its floor after 20% more, one 25% off twice
     // does not.
     const quarter = (target: Target, quantity?: string) => crew(target, quantity, 2500);
@@ -1506,7 +1629,10 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
 
       expect(await asked(billId, fifth(rest!))).toBeNull();
       expect(await asked(billId, fifth(part!))).toMatchObject(ASKS);
-      expect(await coveredOn(billId)).toEqual([[], []]);
+      expect(await takenOn(billId)).toEqual([
+        ["Burger 9.00 off 9.00 of 3.000"],
+        ["Burger 6.75 off 2.25 of 1.000"],
+      ]);
     });
 
     it("A803 portions: H1c — 25% off 2 of 3, then 1 of that part: 20% on the last part asks", async () => {
@@ -1518,7 +1644,10 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
       const [, , last] = await dishesNamed(billId, "Burger");
 
       expect(await asked(billId, fifth(last!))).toMatchObject(ASKS);
-      expect(await coveredOn(billId)).toEqual([[], []]);
+      expect(await takenOn(billId)).toEqual([
+        ["Burger 9.00 off 6.00 of 2.000"],
+        ["Burger 6.75 off 2.25 of 1.000"],
+      ]);
     });
   });
 
@@ -1868,10 +1997,9 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     const today = await asked(grouped.billId, crew({ lineId: line! }, "1"));
     expect(today).toMatchObject(ASKS);
     expect(await asked(portions.billId, crew({ lineId: copy! }))).toEqual(today);
-    const price = (await describeIds(portions.billId)).get(burger!);
-    expect(await coveredOn(portions.billId)).toEqual([
-      [price, price],
-      [price, price],
+    expect(await takenOn(portions.billId, true)).toEqual([
+      ["Burger 5.40 off 1.20 of 1.000", "Burger 5.40 off 1.20 of 1.000"],
+      ["Burger 5.40 off 5.40 of 1.000", "Burger 5.40 off 5.40 of 1.000"],
     ]);
   });
 
@@ -1936,8 +2064,9 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     const today = await asked(grouped.billId, crew({ lineId: olive! }));
     expect(today).toBeNull();
     expect(await asked(portions.billId, crew({ lineId: copyOlive! }))).toEqual(today);
-    const olivePrice = (await describeIds(portions.billId)).get(portionOlive!);
-    expect(await coveredOn(portions.billId)).toEqual([[olivePrice, olivePrice]]);
+    expect(await takenOn(portions.billId, true)).toEqual([
+      ["Olives 0.75 off 0.75 of 1.000", "Olives 0.75 off 0.75 of 1.000"],
+    ]);
   });
 
   it("A803 portions: 50% off an unsent pizza's olive, the pizza raised to two by an edit: 50% off the copy's olive goes through, as on today's widened olives line, the pizza staying above its floor", async () => {
@@ -1957,8 +2086,9 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     const today = await asked(grouped.billId, crew({ lineId: olive! }));
     expect(today).toBeNull();
     expect(await asked(portions.billId, crew({ lineId: copyOlive! }))).toEqual(today);
-    const olivePrice = (await describeIds(portions.billId)).get(portionOlive!);
-    expect(await coveredOn(portions.billId)).toEqual([[olivePrice, olivePrice]]);
+    expect(await takenOn(portions.billId, true)).toEqual([
+      ["Olives 0.75 off 0.75 of 1.000", "Olives 0.75 off 0.75 of 1.000"],
+    ]);
   });
 
   it("A803 portions: 50% off an unsent burger, raised to two by an edit, adds a burger at a fresh price that takes 50% off without asking, as today's separately priced line does", async () => {
@@ -1979,7 +2109,7 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     const today = await asked(grouped.billId, crew({ lineId: added! }));
     expect(today).toBeNull();
     expect(await asked(portions.billId, crew({ lineId: portionAdded! }))).toEqual(today);
-    expect(await coveredOn(portions.billId)).toEqual([["Burger 6.00"]]);
+    expect(await takenOn(portions.billId)).toEqual([["Burger 6.00 off 6.00 of 1.000"]]);
   });
 
   it("A803 portions: an undiscounted unsent burger raised to two by an edit copies no covered lines", async () => {

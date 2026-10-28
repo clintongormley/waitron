@@ -250,7 +250,7 @@ describe("adjustment backup evidence", () => {
     async (change) => {
       for (const db of [original.db, restored.db])
         db.run(
-          sql`insert into adjustment_lines (id,adjustment_id,line_id) values ('covered','adjustment','deleted-line')`,
+          sql`insert into adjustment_lines (id,adjustment_id,line_id,reduction,quantity) values ('covered','adjustment','deleted-line',100,1000)`,
         );
       expect(await run()).toEqual(passed);
       await corrupt(restored.db, change);

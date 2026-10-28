@@ -64,7 +64,7 @@ async function discount(): Promise<string> {
 
 function cover(adjustmentId: string, lineId: string) {
   return db.run(
-    sql`insert into adjustment_lines (id, adjustment_id, line_id) values (${randomUUID()}, ${adjustmentId}, ${lineId})`,
+    sql`insert into adjustment_lines (id, adjustment_id, line_id, reduction, quantity) values (${randomUUID()}, ${adjustmentId}, ${lineId}, 100, 1000)`,
   );
 }
 

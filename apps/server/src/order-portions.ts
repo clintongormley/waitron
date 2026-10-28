@@ -132,14 +132,20 @@ export async function registerPortions(
   }
 }
 
-/** For each `{ from, to }` copy, the comps and discounts that covered `from` cover `to` as well. */
+/** For each `{ from, to }` copy, what each comp or discount took off `from` it took off `to` as
+ * well. */
 export async function copyCoveredLines(
   tx: Transaction,
   pairs: readonly { from: string; to: string }[],
 ): Promise<void> {
   if (pairs.length === 0) return;
   const covered = await tx
-    .select({ adjustmentId: adjustmentLines.adjustmentId, lineId: adjustmentLines.lineId })
+    .select({
+      adjustmentId: adjustmentLines.adjustmentId,
+      lineId: adjustmentLines.lineId,
+      reduction: adjustmentLines.reduction,
+      quantity: adjustmentLines.quantity,
+    })
     .from(adjustmentLines)
     .where(
       inArray(
@@ -148,9 +154,7 @@ export async function copyCoveredLines(
       ),
     );
   const rows = pairs.flatMap(({ from, to }) =>
-    covered
-      .filter((row) => row.lineId === from)
-      .map((row) => ({ adjustmentId: row.adjustmentId, lineId: to })),
+    covered.filter((row) => row.lineId === from).map((row) => ({ ...row, lineId: to })),
   );
   if (rows.length > 0) await tx.insert(adjustmentLines).values(rows);
 }

@@ -217,9 +217,6 @@ interface Plan {
   stamped: string[];
   /** On a row, the split today's second price would have recorded (plan D33). */
   rowSplits: AdjustmentSplit[];
-  /** The lines a comp or discount of bound whole portions or their extras covered (plan D33); none
-   * on any other line or the whole bill. */
-  coveredLines: string[];
   /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
   compedExtras: string[];
   reduction: Decimal;
@@ -730,7 +727,6 @@ export async function planAdjustment(
   let writes: Change[] | null = null;
   let stamped: string[] = [];
   const rowSplits: AdjustmentSplit[] = [];
-  let coveredLines: string[] = [];
   let row: StandIn | null = null;
   let view: readonly Row[] = rows;
   let compedExtras: string[] = [];
@@ -861,7 +857,6 @@ export async function planAdjustment(
             rowSplits.push({ from: standingFor(standIn)[0]!.id, to: takenOf(standIn)[0]!.id });
           }
         }
-        coveredLines = takenOf(target).map(({ id }) => id);
         stamped = changes.flatMap((change) => standingFor(change.row).map((one) => one.id));
         writes = changes.flatMap((change) => {
           const portions = handOut(
@@ -885,7 +880,6 @@ export async function planAdjustment(
           return portions;
         });
       }
-      if (row === null) coveredLines = [...(await readWholePortionLines(tx, [target.id]))];
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
       await refusePaidLines(
@@ -959,7 +953,6 @@ export async function planAdjustment(
     writes: writes ?? changes,
     stamped,
     rowSplits,
-    coveredLines,
     compedExtras,
     reduction,
     nominal,
@@ -1168,7 +1161,7 @@ async function setPrice(
 /**
  * Writes the plan's new prices, first splitting the part `carve` covers off its dish, with its
  * extras, when a change is to that part; answers each row it split off, with the row it came from,
- * a carved dish before its extras.
+ * a carved dish before its extras, and what each change took off each line it lowered.
  */
 async function reprice(
   tx: Transaction,
@@ -1177,7 +1170,7 @@ async function reprice(
   carve: Carve | null,
   changes: readonly Change[],
   stamped: readonly string[],
-): Promise<AdjustmentSplit[]> {
+): Promise<{ splits: AdjustmentSplit[]; taken: LineReduction[] }> {
   const touched = [...new Set([...changes.map(({ row }) => row.id), ...stamped])];
   // Before any split, so a split row copies the price its line had (plan D21).
   await tx
@@ -1210,15 +1203,40 @@ async function reprice(
           orderId,
           twoRows.map(({ lineNo, change }) => ({ lineNo, quantity: change.rows[1]!.quantity })),
         );
+  const taken: LineReduction[] = [];
   for (const { id, change } of subjects) {
-    await setPrice(tx, id, change.rows[0]!, change.row.priceQuantity);
+    const [first, lower] = change.rows;
+    await setPrice(tx, id, first!, change.row.priceQuantity);
     const second = seconds.get(id);
+    let firstReduction = change.reduction;
     if (second !== undefined) {
       splits.push({ from: id, to: second.id });
-      await setPrice(tx, second.id, change.rows[1]!, change.row.priceQuantity);
+      await setPrice(tx, second.id, lower!, change.row.priceQuantity);
+      const quantity = decimalToThousandths(lower!.quantity);
+      const reduction = subtractDecimal(
+        gross(change.row, quantity),
+        gross(change.row, quantity, decimalToCents(lower!.unitGross)),
+      );
+      firstReduction = subtractDecimal(change.reduction, reduction);
+      taken.push({ lineId: second.id, reduction, quantity });
     }
+    taken.push({
+      lineId: id,
+      reduction: firstReduction,
+      quantity: decimalToThousandths(first!.quantity),
+    });
   }
-  return splits;
+  return {
+    splits,
+    taken: taken.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0),
+  };
+}
+
+/** What a comp or a discount took off one line, `quantity` of it then (plan D37). */
+interface LineReduction {
+  lineId: string;
+  reduction: Decimal;
+  quantity: number;
 }
 
 /**
@@ -1257,6 +1275,7 @@ export async function applyAdjustment(
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
       let splits: AdjustmentSplit[] = [];
+      let taken: LineReduction[] = [];
       if (args.action === "cancel") {
         await removeFromLine(
           tx,
@@ -1269,10 +1288,16 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else {
-        splits = [
-          ...(await reprice(tx, cfg, args.orderId, plan.carve, plan.writes, plan.stamped)),
-          ...plan.rowSplits,
-        ];
+        const repriced = await reprice(
+          tx,
+          cfg,
+          args.orderId,
+          plan.carve,
+          plan.writes,
+          plan.stamped,
+        );
+        splits = [...repriced.splits, ...plan.rowSplits];
+        taken = repriced.taken;
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
@@ -1335,10 +1360,15 @@ export async function applyAdjustment(
         note: args.note,
         preparationStarted: args.recordedPreparationStarted ?? null,
       });
-      if (plan.coveredLines.length > 0) {
-        await tx
-          .insert(adjustmentLines)
-          .values(plan.coveredLines.map((lineId) => ({ adjustmentId: id, lineId })));
+      if (taken.length > 0) {
+        await tx.insert(adjustmentLines).values(
+          taken.map(({ lineId, reduction, quantity }) => ({
+            adjustmentId: id,
+            lineId,
+            reduction: decimalToCents(reduction),
+            quantity,
+          })),
+        );
       }
       const revision = await readOrderRevision(tx, args.orderId);
       if (attendance !== undefined) {

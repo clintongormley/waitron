@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ad8290bd-914e-4392-831d-86f0dd8017b9",
+  "id": "09dec1ee-33e8-4df9-901f-79c2b5805470",
   "prevId": "912bc7db-a534-4a9d-9a40-d4ce363a61f9",
   "tables": {
     "adjustment_reasons": {
@@ -587,6 +587,20 @@
         "line_id": {
           "name": "line_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reduction": {
+          "name": "reduction",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
