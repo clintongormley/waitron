@@ -2346,7 +2346,7 @@ async function bootServer(
       reading.settle(read.unavailable);
       return read;
     },
-    clockIncidents: () => readOpenEmailedIncidents(db),
+    emailedIncidents: () => readOpenEmailedIncidents(db),
     backupStopped: () => backupOutcomes.runStopped,
     context: () =>
       readBoxEmailContext(db, {

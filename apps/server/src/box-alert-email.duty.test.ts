@@ -48,7 +48,7 @@ function duty() {
     delivery: state.delivery,
   }));
   const moduleNotices = vi.fn(async (): Promise<StaffNoticesRead> => state.notices);
-  const clockIncidents = vi.fn(async (): Promise<readonly EmailedIncident[]> => state.incidents);
+  const emailedIncidents = vi.fn(async (): Promise<readonly EmailedIncident[]> => state.incidents);
   const send = vi.fn<TextEmailSender>(async () => "sent");
   const handle = startBoxEmailDuty({
     disk: { since: () => state.diskSince },
@@ -59,7 +59,7 @@ function duty() {
           : { freeBytes: 1, readAt: state.lowSince, lowSince: state.lowSince },
     },
     moduleNotices,
-    clockIncidents,
+    emailedIncidents,
     backupStopped: () => state.backupStopped,
     context,
     send,
@@ -89,7 +89,7 @@ function duty() {
     state,
     context,
     moduleNotices,
-    clockIncidents,
+    emailedIncidents,
     send,
     sent,
     tick,
@@ -577,7 +577,7 @@ describe("startBoxEmailDuty", () => {
     d.state.recipients = [BEN];
     d.state.incidents = [RESTART];
     await d.tick();
-    d.clockIncidents.mockRejectedValueOnce(new Error("busy"));
+    d.emailedIncidents.mockRejectedValueOnce(new Error("busy"));
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([clockEmail(RESTART, BEN)]);
@@ -587,9 +587,9 @@ describe("startBoxEmailDuty", () => {
   it("stop during the alert read sends nothing", async () => {
     const d = duty();
     const read = held<readonly EmailedIncident[]>();
-    d.clockIncidents.mockImplementationOnce(() => read.promise);
+    d.emailedIncidents.mockImplementationOnce(() => read.promise);
     d.armed[0]!.fn();
-    await vi.waitFor(() => expect(d.clockIncidents).toHaveBeenCalled());
+    await vi.waitFor(() => expect(d.emailedIncidents).toHaveBeenCalled());
     const stopping = d.handle.stop();
     read.release([RESTART]);
     await stopping;
@@ -607,7 +607,7 @@ describe("startBoxEmailDuty", () => {
     expect(d.armed).toHaveLength(3);
     expect(d.context).not.toHaveBeenCalled();
     expect(d.moduleNotices).not.toHaveBeenCalled();
-    expect(d.clockIncidents).not.toHaveBeenCalled();
+    expect(d.emailedIncidents).not.toHaveBeenCalled();
     expect(d.send).not.toHaveBeenCalled();
   });
 

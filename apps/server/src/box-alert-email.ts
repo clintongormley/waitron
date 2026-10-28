@@ -27,7 +27,7 @@ import { unrefTimer, type Timer } from "./unref-timer.js";
 
 export type BoxEmailCode = keyof typeof BOX_EMAIL_WORDS;
 
-/** The codes the duty reads from the stop and the warning; every other code from module notices. */
+/** The codes the duty reads from the stop and the warning. */
 export const STORAGE_EMAIL_CODES = ["storage.space_low", "storage.disk_full"] as const;
 
 export function isBoxEmailCode(code: string): code is BoxEmailCode {
@@ -113,8 +113,6 @@ function wordsFor(
   return BOX_EMAIL_WORDS[code][language];
 }
 
-/** The subject and text for `code` in `language`, `{venue}` replaced by the venue's name and each
- * time placeholder by its param, written `dd/mm/yyyy hh:mm` in its own offset. */
 export function boxEmailMessage(
   code: EmailCode,
   language: "en" | "es",
@@ -208,7 +206,7 @@ export function startBoxEmailDuty(deps: {
   space: Pick<FreeSpaceState, "current">;
   /** The enabled modules' notices, read in turns. */
   moduleNotices: () => Promise<StaffNoticesRead>;
-  clockIncidents: () => Promise<readonly EmailedIncident[]>;
+  emailedIncidents: () => Promise<readonly EmailedIncident[]>;
   /** The backup run's memory of its last stop. */
   backupStopped: () => BackupOutcomeHolder["runStopped"];
   context: () => Promise<BoxEmailContext>;
@@ -339,7 +337,7 @@ export function startBoxEmailDuty(deps: {
         begin(key, notice.code, notice.owner, notice.params);
         moduleSeen.add(key);
       }
-      const open = await read(deps.clockIncidents);
+      const open = await read(deps.emailedIncidents);
       if (stopped) return;
       const incidentSeen = new Set<string>();
       for (const incident of open) {
