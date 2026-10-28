@@ -11,6 +11,7 @@ import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+import { SPARE_SPACE_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
 export interface BackupRepairTarget {
@@ -323,6 +324,8 @@ async function originals(
       return;
     // Moved files are never a recovery's input, and the box may be unable to read one.
     if (rootsToRead.some((root) => path === join(root, START_AGAIN_SET_ASIDE_DIR))) return;
+    // The spare file is deleted and written back around a full disk; it holds nothing.
+    if (rootsToRead.some((root) => path === join(root, SPARE_SPACE_FILE))) return;
     if (entries.has(path)) return;
     let info;
     try {

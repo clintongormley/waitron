@@ -8,6 +8,7 @@ import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
 import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+import { SPARE_SPACE_FILE } from "./spare-space-name.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -223,6 +224,25 @@ it("does not treat lock heartbeat updates as changes to retained business eviden
     sequence: 2,
   });
 });
+it("a spare file written, grown or deleted in the box's state folder leaves a recovery's originals digest unchanged", async () => {
+  const f = await fixture();
+  const spare = join(f.anchor.stateDir, SPARE_SPACE_FILE);
+  const before = await f.store.inspect(recoveryId);
+  await writeFile(spare, Buffer.alloc(1024, 1));
+  expect(await f.store.inspect(recoveryId)).toBe(before);
+  await writeFile(spare, Buffer.alloc(2048, 2));
+  expect(await f.store.inspect(recoveryId)).toBe(before);
+  await rm(spare);
+  expect(await f.store.inspect(recoveryId)).toBe(before);
+});
+
+it("any other new file in the box's state folder changes a recovery's originals digest", async () => {
+  const f = await fixture();
+  const before = await f.store.inspect(recoveryId);
+  await writeFile(join(f.anchor.stateDir, `${SPARE_SPACE_FILE}-2`), Buffer.alloc(1024, 1));
+  expect(await f.store.inspect(recoveryId)).not.toBe(before);
+});
+
 it("refuses symlink originals without changing their target", async () => {
   const f = await fixture(),
     outside = join(f.root, "outside");
