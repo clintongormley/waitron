@@ -1303,6 +1303,39 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads a menu's live version and patches it against the version it was read from", async () => {
+    const live = { versionId: "v3", number: 3, since: "2026-10-27T09:00:00.000Z", document: {} };
+    const changes = [
+      { target: { kind: "offer" as const, menuItemId: "mi1" }, field: "price", value: "2.50" },
+    ];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(live))
+      .mockResolvedValueOnce(jsonResponse(null))
+      .mockResolvedValueOnce(jsonResponse({ versionId: "v4", number: 4, requeued: [] }))
+      .mockResolvedValueOnce(refusal("menu_patch.base_changed", 409));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getLiveMenu("c1")).resolves.toEqual(live);
+    await expect(api.getLiveMenu("c2")).resolves.toBeNull();
+    await expect(api.patchLiveMenu("c1", { baseVersionId: "v3", changes })).resolves.toEqual({
+      versionId: "v4",
+      number: 4,
+      requeued: [],
+    });
+    await expect(api.patchLiveMenu("c1", { baseVersionId: "v2", changes })).rejects.toMatchObject({
+      code: "menu_patch.base_changed",
+      status: 409,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/catalogues/c1/live", "GET", undefined],
+      ["/management-api/catalogues/c2/live", "GET", undefined],
+      ["/management-api/catalogues/c1/patch", "POST", { baseVersionId: "v3", changes }],
+      ["/management-api/catalogues/c1/patch", "POST", { baseVersionId: "v2", changes }],
+    ]);
+  });
+
   it("reads the venue's servers and removes one by its id, passing a refusal's code through", async () => {
     const listing = {
       term: 2,

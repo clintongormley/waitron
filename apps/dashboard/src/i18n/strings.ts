@@ -2820,6 +2820,11 @@ export const en = {
   "menus.status": "Status",
   "menus.status_loading": "Checking…",
   "menus.status_error": "Could not be checked",
+  "menus.patch_live": "Patch live menu…",
+  "menus.patch_live_help_label": "What a patch changes",
+  "menus.patch_live_help":
+    "A patch corrects wording, prices, pictures or VAT classes in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
+  "menus.patch_live_help_guide": "More about patching the live menu",
   "menus.changes": "Changes",
   "menus.changes_link": "Unpublished changes",
   "menu_status.unpublished": "Unpublished",
@@ -2930,6 +2935,52 @@ export const en = {
   "menu_publications.time_column": "Goes live",
   "menu_publications.state_column": "Status",
   "menu_publications.actions": "Actions",
+  "menu_patch.heading": "Patch version {number} of {menu}",
+  "menu_patch.search": "Search",
+  "menu_patch.search_placeholder": "Search dishes, extras and sections",
+  "menu_patch.tree": "Items in the live menu",
+  "menu_patch.lists": "Extras and options",
+  "menu_patch.no_matches": "No items match the search.",
+  "menu_patch.pick": "Pick an item to patch.",
+  "menu_patch.changed": "Changed",
+  "menu_patch.variants": "Variants",
+  "menu_patch.variants_note":
+    "Sold through its variants: the till charges each variant's own price and VAT class.",
+  "menu_patch.review_one": "Review 1 change",
+  "menu_patch.review_many": "Review {count} changes",
+  "menu_patch.review_heading": "Check the changes before putting them live",
+  "menu_patch.change_line": "{item}: {field} {from} → {to}",
+  "menu_patch.empty": "(empty)",
+  "menu_patch.folder_fixed": "The included folder sets this name.",
+  "menu_patch.no_image": "no image",
+  "menu_patch.current_image": "current image",
+  "menu_patch.new_image": "new image",
+  "menu_patch.image_not_found":
+    "This image is no longer in the image library. Choose another, or remove it.",
+  "menu_patch.open_orders_note": "Lines already on open orders keep their old price and VAT class.",
+  "menu_patch.queued_note": "The version going live on {date} does not include these changes.",
+  "menu_patch.queued_note_many": "The versions going live on {dates} do not include these changes.",
+  "menu_patch.needs_correcting": "Needs correcting",
+  "menu_patch.fix_items": "Correct the fields marked on {items} to continue.",
+  "menu_patch.no_longer_fits":
+    "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu again and checks each change against it with the content languages this page has: it drops each one that does not fit, says how many, and keeps the rest.",
+  "menu_patch.products_note":
+    "The next normal publish from the products puts the old values back unless you fix the products too.",
+  "menu_patch.keep_editing": "Keep editing",
+  "menu_patch.put_live": "Put live now",
+  "menu_patch.reload": "Reload",
+  "menu_patch.base_changed_live":
+    "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+  "menu_patch.dropped_one": "1 change no longer fits the live version and was dropped.",
+  "menu_patch.dropped_many": "{count} changes no longer fit the live version and were dropped.",
+  "menu_patch.trimmed_one":
+    "1 change lost what was typed in a language removed from the content languages.",
+  "menu_patch.trimmed_many":
+    "{count} changes lost what was typed in a language removed from the content languages.",
+  "menu_patch.refixed_one":
+    "1 change lost the name typed in a language the included folder now sets.",
+  "menu_patch.refixed_many":
+    "{count} changes lost the name typed in a language the included folder now sets.",
   "menu_publications.version": "Version {number}",
   "menu_publications.state_queued": "Scheduled",
   "menu_publications.state_cancelled": "Cancelled",
@@ -6301,6 +6352,11 @@ export const es: Record<StringKey, string> = {
   "menus.status": "Estado",
   "menus.status_loading": "Comprobando…",
   "menus.status_error": "No se pudo comprobar",
+  "menus.patch_live": "Corregir la carta publicada…",
+  "menus.patch_live_help_label": "Qué cambia una corrección",
+  "menus.patch_live_help":
+    "Una corrección cambia textos, precios, imágenes o clases de IVA en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
+  "menus.patch_live_help_guide": "Más sobre corregir la carta publicada",
   "menus.changes": "Cambios",
   "menus.changes_link": "Cambios sin publicar",
   "menu_status.unpublished": "Sin publicar",
@@ -6415,6 +6471,55 @@ export const es: Record<StringKey, string> = {
   "menu_publications.time_column": "Se publica",
   "menu_publications.state_column": "Estado",
   "menu_publications.actions": "Acciones",
+  "menu_patch.heading": "Corregir la versión {number} de {menu}",
+  "menu_patch.search": "Buscar",
+  "menu_patch.search_placeholder": "Busca platos, extras y secciones",
+  "menu_patch.tree": "Elementos de la carta publicada",
+  "menu_patch.lists": "Extras y opciones",
+  "menu_patch.no_matches": "Ningún elemento coincide con la búsqueda.",
+  "menu_patch.pick": "Elige un elemento para corregirlo.",
+  "menu_patch.changed": "Con cambios",
+  "menu_patch.variants": "Variantes",
+  "menu_patch.variants_note":
+    "Se vende a través de sus variantes: la caja cobra el precio y la clase de IVA de cada variante.",
+  "menu_patch.review_one": "Revisar 1 corrección",
+  "menu_patch.review_many": "Revisar {count} correcciones",
+  "menu_patch.review_heading": "Revisa las correcciones antes de publicarlas",
+  "menu_patch.change_line": "{item}: {field} {from} → {to}",
+  "menu_patch.empty": "(vacío)",
+  "menu_patch.folder_fixed": "La carpeta incluida fija este nombre.",
+  "menu_patch.no_image": "sin imagen",
+  "menu_patch.current_image": "imagen actual",
+  "menu_patch.new_image": "imagen nueva",
+  "menu_patch.image_not_found":
+    "Esta imagen ya no está en la biblioteca de imágenes. Elige otra o quítala.",
+  "menu_patch.open_orders_note":
+    "Las líneas que ya están en pedidos abiertos mantienen su precio y su clase de IVA anteriores.",
+  "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",
+  "menu_patch.queued_note_many":
+    "Las versiones que se publican en estas fechas no incluyen estas correcciones: {dates}.",
+  "menu_patch.needs_correcting": "Necesita corrección",
+  "menu_patch.fix_items": "Corrige los campos marcados en {items} para continuar.",
+  "menu_patch.no_longer_fits":
+    "Una de estas correcciones ya no encaja en la carta publicada, por ejemplo porque los idiomas del contenido del local han cambiado mientras editabas. No se ha publicado nada. Volver a cargar lee de nuevo la carta publicada y comprueba cada corrección con los idiomas del contenido que tiene esta página: descarta las que no encajan, dice cuántas y conserva el resto.",
+  "menu_patch.products_note":
+    "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, salvo que corrijas también los productos.",
+  "menu_patch.keep_editing": "Seguir editando",
+  "menu_patch.put_live": "Publicar la corrección",
+  "menu_patch.reload": "Volver a cargar",
+  "menu_patch.base_changed_live":
+    "La versión {liveNumber} se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
+  "menu_patch.dropped_one": "1 corrección ya no encaja en la versión publicada y se ha descartado.",
+  "menu_patch.dropped_many":
+    "{count} correcciones ya no encajan en la versión publicada y se han descartado.",
+  "menu_patch.trimmed_one":
+    "1 corrección ha perdido lo escrito en un idioma que se ha quitado de los idiomas del contenido.",
+  "menu_patch.trimmed_many":
+    "{count} correcciones han perdido lo escrito en un idioma que se ha quitado de los idiomas del contenido.",
+  "menu_patch.refixed_one":
+    "1 corrección ha perdido el nombre escrito en un idioma que ahora fija la carpeta incluida.",
+  "menu_patch.refixed_many":
+    "{count} correcciones han perdido el nombre escrito en un idioma que ahora fija la carpeta incluida.",
   "menu_publications.version": "Versión {number}",
   "menu_publications.state_queued": "Programada",
   "menu_publications.state_cancelled": "Cancelada",

@@ -195,8 +195,8 @@ result.
 `GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or
 `{ state, clashes, version, publishedAt, hash }`, with `state` current or changed relative to the
 live version. `publishedAt` is when the live version became live: the moment of an immediate
-publish, or a queued edition's scheduled time, which a status read counts as live from that time
-on, before anything has marked it activated. `clashes` counts unresolved settings.
+publish or a patch, or a queued edition's scheduled time, which a status read counts as live from
+that time on, before anything has marked it activated. `clashes` counts unresolved settings.
 `GET /management-api/catalogues/status` gives all menus' statuses keyed by menu id. `GET /management-api/catalogues/:id/preview` gives
 `{ hash, changes, warnings, status, clashes, document }`. `clashes` lists the products, sizes and
 fields that need a decision. `document` is the proposed published document, with the combined
@@ -217,11 +217,14 @@ answers `management.request_invalid` (400). A malformed menu id answers `shared.
 an unknown menu `catalogue.not_found` (404).
 
 A menu edition can also be queued to go live at a set minute, then moved or cancelled until then.
-Its content and number are fixed when it is queued; a later change to the working menu is not in
-it. The routes below take the time as a date and time on the venue location's clock, answer the
-instant, and list each time as that clock shows it. Each of them, and the publish route, needs the
-`catalogue.manage` permission (403 `authorization.not_permitted`). A write that succeeds first marks
-the menu's editions whose time has come as activated, then makes its own change.
+Its content is fixed when it is queued; a later change to the working menu is not in it. A patch
+(below) cancels every queued edition and queues a copy of each under a new number and version id,
+with the same content and time; the original then reads `cancelled`, with the patch's moment as its
+`cancelledAt`. The routes below take the time as a date and time on the venue location's clock,
+answer the instant, and list each time as that clock shows it. Each of them, the publish route and
+the two patch routes need the `catalogue.manage` permission (403 `authorization.not_permitted`). A
+write that succeeds first marks the menu's editions whose time has come as activated, then makes its
+own change.
 
 - `POST /management-api/catalogues/:id/publications`, with
   `{ expectedHash, activatesAt: { date, time, occurrence? } }`, gives `{ versionId, number,
@@ -262,7 +265,29 @@ queue or move is cleared by cancelling each edition named, or by moving it out o
 lower-numbered one earlier, a higher-numbered one later), and then repeating the request. A refused
 immediate publish is cleared only by cancelling each edition named, or by waiting until its time
 has come: a move must land after now, and the publish overtakes every lower-numbered edition still
-queued at or after now, wherever it is moved.
+queued at or after now, wherever it is moved. A patch is never refused for overtaking: it queues
+every waiting edition again after itself.
+
+A manager can correct the live version itself, leaving the products and the working menu as they
+were.
+
+- `GET /management-api/catalogues/:id/live` gives `{ versionId, number, since, document }` for the
+  version live now, with `since` as `publishedAt` above, or `null` when the menu has none. An
+  unknown menu answers `catalogue.not_found` (404).
+- `POST /management-api/catalogues/:id/patch`, with `{ baseVersionId, changes }`, puts the changes
+  live at once as a new version under the next number and gives `{ versionId, number, requeued }`
+  (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
+  number first. Each change is `{ target, field, value }`; the fields each kind of target takes are
+  `PATCH_FIELDS` in `packages/catalogue/src/menu-patch-types.ts`. A missing or non-string
+  `baseVersionId`, or a `changes` that is not a list, answers `management.request_invalid` (400,
+  `field` naming it); a malformed menu id or `baseVersionId` answers `shared.invalid_id` (400). An
+  unknown menu answers `catalogue.not_found` (404), a menu with no live version
+  `menu_patch.not_published` (409, `menuId`), and a live version other than `baseVersionId`
+  `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). A change the route cannot apply
+  answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
+  refused field, and `reason` with the code behind a refused translation, or `image.not_found`
+  for a picture the image library does not hold). A patch that leaves the
+  live version as it was answers `menu_patch.unchanged` (409, `menuId`).
 
 Tills sell from live versions of active menus. Reading a live version outside document format 3 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu

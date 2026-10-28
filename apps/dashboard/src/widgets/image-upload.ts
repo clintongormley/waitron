@@ -64,6 +64,11 @@ export class ImageUpload extends LitElement {
       wt-button[aria-invalid="true"]::part(button):hover:not(:disabled) {
         box-shadow: inset 0 0 0 1px var(--wt-color-danger);
       }
+      .error {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+      }
 
       .preview {
         display: block;
@@ -205,6 +210,8 @@ export class ImageUpload extends LitElement {
   @property() inheritedImage: string | null = null;
   /** Marks the control's button invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
+  /** The full control's sentence under it, also read as its Choose button's description. */
+  @property() error = "";
   @property({ type: Boolean, reflect: true }) thumbnail = false;
   @property({ type: Boolean, reflect: true }) logo = false;
   @property({ type: Boolean, reflect: true, attribute: "venue-logo" }) venueLogo = false;
@@ -403,6 +410,7 @@ export class ImageUpload extends LitElement {
           data-test="choose-image"
           variant="secondary"
           aria-invalid=${this.invalid ? "true" : nothing}
+          aria-description=${this.error || nothing}
           ?disabled=${this.disabled}
           @click=${() => this.#setOpen(true)}
           >${t("image.choose")}</wt-button
@@ -438,7 +446,8 @@ export class ImageUpload extends LitElement {
               alt=${t("editor.inherited_image_alt")}
             />`
           : nothing
-      }`;
+      }
+      ${this.error ? html`<p class="error" data-test="image-error">${this.error}</p>` : nothing}`;
   }
 
   #renderPicker() {

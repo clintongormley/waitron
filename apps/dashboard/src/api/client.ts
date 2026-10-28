@@ -240,6 +240,13 @@ export type {
 import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
 export type { MenuPriceRow, MenuPriceVariant };
 import type {
+  LiveMenu,
+  MenuPatchChange,
+  MenuPatchResult,
+  MenuPatchTarget,
+} from "@waitron/catalogue/src/menu-patch-types.js";
+export type { LiveMenu, MenuPatchChange, MenuPatchResult, MenuPatchTarget };
+import type {
   DocumentMember,
   FrozenOffer,
   HomeDevice,
@@ -2821,6 +2828,23 @@ export class DashboardApi {
     return this.#request<PublishedMenuVersion>(`/management-api/catalogues/${id}/publish`, "POST", {
       expectedHash,
     });
+  }
+
+  /** `null` when the menu has never been published. */
+  getLiveMenu(menuId: string): Promise<LiveMenu | null> {
+    return this.#request<LiveMenu | null>(`/management-api/catalogues/${menuId}/live`, "GET");
+  }
+
+  /** A live version other than `baseVersionId` is refused `menu_patch.base_changed`. */
+  patchLiveMenu(
+    menuId: string,
+    body: { baseVersionId: string; changes: MenuPatchChange[] },
+  ): Promise<MenuPatchResult> {
+    return this.#request<MenuPatchResult>(
+      `/management-api/catalogues/${menuId}/patch`,
+      "POST",
+      body,
+    );
   }
 
   getMenuPublications(menuId: string): Promise<MenuPublicationsAnswer> {

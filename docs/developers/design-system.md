@@ -2457,7 +2457,8 @@ only by that screen's own tests: SumUp's affiliate badge by the "the affiliate
 help is hidden until help is on, then hangs over the heading's top trailing corner" case in
 `packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; the till's screen badges by
 the `*.help.test.ts` files beside the counter, floor and table-order screens, `menu-browser.ts` and
-`till-shell.ts`; nothing checks a new one.
+`till-shell.ts`; the menu editor's Patch live menu badge by the cases under "patching the live
+menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new one.
 
 ### Forms
 
@@ -2524,7 +2525,9 @@ form's own checks disable the action; an error that comes back from a request ne
   When a field is marked — by the form's own checks, or by a refusal placed under it — the bottom
   message is the form's generic sentence, equivalent to "Correct the highlighted fields to
   continue."; a field's own sentence is never repeated at the bottom. A refusal that names no field
-  and a marked field together show both, one after the other;
+  and a marked field together show both, one after the other. The Patch live menu window adds,
+  last, the sentences saying how many changes a newer live version dropped or a removed content
+  language cut, so they are seen however far down its form the person is working;
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission — every
   fold around it, when folds nest — so the focus lands on the field;
 - reopening or resetting a form starts it again: no messages; a form that saves (below) has its
@@ -2719,8 +2722,8 @@ and the staffing grid's block editor in the A761 entry):
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
   edit and new person forms, the variant and purchase forms, the bookings form, the
-  product editor and the department dialogs, Settings and zone settings
-  do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
+  product editor and the department dialogs, Settings and zone settings and the Patch live menu
+  window do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
   scope last committed — the opened value, then each saved value and, in the till's party name, Guests and Split a table
@@ -2733,7 +2736,8 @@ and the staffing grid's block editor in the A761 entry):
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase and bookings forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
-  dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case. The recipe editor
+  dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
+  live menu window, whose committed value is always no changes. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, Guests, Split a table, invoice recipient,
   extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
@@ -5055,7 +5059,10 @@ after "All printers ›" inside its `nav`; A405 plans to turn its details into a
 
 The menu editor (`apps/dashboard/src/screens/menus-screen.ts`) reads "Menus ›" above the menu's
 name, then its live version in brackets — "(Live: version 2 · <time>)", or "(Unpublished)" for a
-menu never published. A state resolved on one of the page's own tabs marks that tab rather than
+menu never published. While the menu has a live version, a secondary "Patch live menu…" button
+follows those words, with a help-mode badge over its top trailing corner whose box links to the
+guide's patch section. The heading's wrapped rows leave half a badge's height between them, help on
+or off, so turning help on moves nothing. A state resolved on one of the page's own tabs marks that tab rather than
 adding a link to it: while a menu has unpublished changes, or has never been published, its
 Preview tab reads "Preview*", drawn
 in `--wt-color-primary-text` whether it is selected or not, and is named "Preview, unpublished
@@ -5063,7 +5070,35 @@ changes" for a screen reader (`marked` on the `wt-tabs` item). A menu whose publ
 clashes says so on a line under the heading, as a link to its own Price overrides tab in
 `--wt-color-danger`, and as plain words on the Price overrides tab itself. Guards:
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
-beside it.
+beside it; the patch button and its badge: "patching the live menu" in `menus-screen.test.ts`.
+
+The button opens the patch dialog (`apps/dashboard/src/widgets/menu-patch-dialog.ts`), a wide
+`wt-modal` headed "Patch version N of <menu>". Its edit step puts a search box above a tree of the
+live version's items on the leading side, and the picked item's form on the other side; the two
+stack where there is no room for both. The tree scrolls inside its own box, at most twelve
+`--wt-tap-min` rows tall, with `--wt-space-1` of room around its rows for their focus ring, so an
+item picked low in it stays in view beside its form. Picking an item also scrolls the dialog to
+the form where that is needed, as it is when the two stack on a short screen; focus stays on the
+item picked. A variant link on a dish's form goes with that form, so following one moves focus to
+the variant form's heading. Each variant link is followed by its price and VAT class, as putting
+the patch live would leave them, in `--wt-color-text-muted`, wrapping under the link where there
+is no room. Until an item is picked, the form's place reads "Pick an
+item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
+item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
+A section's customer-facing name in a language that every included folder showing it fixes is drawn
+disabled, with "The included folder sets this name." under it in `--wt-color-text-muted` at
+`--wt-font-size-sm`. That line is hidden from a screen reader, which reads the same words as the
+field's description.
+The footer holds Close and "Review N changes", N counting each edited field, including one whose
+value fails its check. Following Forms, a field's own error, the tree's "!" and the bottom sentence
+appear only once Review has been pressed. That press stays on the item shown if one of its fields
+fails its check, otherwise opens the first item, in the order edited, with a field that fails, and
+focuses the first field marked on the item's form. A refusal placed under a field keeps its change staged and Review enabled, and
+its sentence goes when that field changes or the patch is sent again. The review step lists each change as "<item>:
+<field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
+"Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live
+version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to
+either step's footer, with the refusal's sentence above the buttons.
 
 The Preview clash link opens Price overrides with Clashes selected, including in a new tab.
 That explicit destination overrides a remembered price filter once after the rows load. Later

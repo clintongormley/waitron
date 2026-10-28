@@ -178,6 +178,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
     es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
   },
+  "menu_patch.base_changed": {
+    en: "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+    es: "Otra versión se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
+  },
+  "menu_patch.unchanged": {
+    en: "These values are already live. Nothing was saved.",
+    es: "Estos valores ya están publicados. No se ha guardado nada.",
+  },
+  "menu_patch.not_published": {
+    en: "This menu has never been published, so there is nothing live to patch. Publish it first.",
+    es: "Esta carta no se ha publicado nunca, así que no hay nada publicado que corregir. Publícala primero.",
+  },
+  "menu_patch.invalid": {
+    en: "Check this value.",
+    es: "Revisa este valor.",
+  },
   "menu_publication.overtakes_queued": {
     en: "A version that is already scheduled would go live in the wrong order. Cancel it or change its time, then try again.",
     es: "Una versión ya programada se publicaría en el orden equivocado. Cancélala o cambia su hora y vuelve a intentarlo.",

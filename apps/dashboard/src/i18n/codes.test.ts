@@ -363,6 +363,29 @@ it("has English and Spanish copy for a publish refused because the menu changed"
   );
 });
 
+it("has English and Spanish copy for each refusal of a live menu patch", () => {
+  const english: Record<string, string> = {
+    "menu_patch.base_changed":
+      "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+    "menu_patch.unchanged": "These values are already live. Nothing was saved.",
+    "menu_patch.not_published":
+      "This menu has never been published, so there is nothing live to patch. Publish it first.",
+    "menu_patch.invalid": "Check this value.",
+  };
+  const spanish: Record<string, string> = {
+    "menu_patch.base_changed":
+      "Otra versión se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
+    "menu_patch.unchanged": "Estos valores ya están publicados. No se ha guardado nada.",
+    "menu_patch.not_published":
+      "Esta carta no se ha publicado nunca, así que no hay nada publicado que corregir. Publícala primero.",
+    "menu_patch.invalid": "Revisa este valor.",
+  };
+  for (const [code, text] of Object.entries(english)) {
+    expect(codeMessage(code, "en"), code).toBe(text);
+    expect(codeMessage(code, "es"), code).toBe(spanish[code]);
+  }
+});
+
 it("has a sentence of its own for each refusal of a stuck card payment's check", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");

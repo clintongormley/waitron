@@ -62,7 +62,7 @@ function namesOf(value: unknown): Record<string, string> {
 }
 
 /** Does the media library hold this file? Never, where the media module is not installed. */
-async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
+export async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
   if (!(await tableExists(tx, "media_images"))) return false;
   // The media module owns the reference. The row cannot be deleted between this read and the
   // write that depends on it: one write transaction runs on the venue file at a time, so there is

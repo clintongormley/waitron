@@ -226,12 +226,15 @@ elige **Editar** en el ⋮ de esa inclusión, después **Quitar imagen**, y guar
 bloqueando la eliminación mientras la inclusión muestra sus secciones directamente; activa
 **Mostrar como carpeta** para ver el campo de la foto.
 
-Una carta publicada también retiene todas las fotografías que incluía su última publicación, aunque
+Una carta publicada también retiene todas las fotografías que incluye su versión publicada, aunque
 quites la fotografía de un producto o de una sección. La biblioteca muestra esa carta por su nombre,
 seguido de **(Carta publicada)**, y su enlace abre la carta. Vuelve a publicar la carta sin la
 fotografía para liberarla. Si la carta tiene además versiones programadas para entrar en vigor más
 tarde, se rechaza publicar ahora mientras alguna de ellas espera, así que cancélalas primero, como
-se explica más abajo.
+se explica más abajo. Una corrección también es una versión: retiene las fotografías que muestra,
+así que una corrección que quita la fotografía de todos los elementos de la versión publicada
+también hace que la carta publicada deje de retenerla, y las versiones programadas no la impiden. Consulta
+[Corrige la carta publicada en una emergencia](products.md#patch-live-menu).
 
 Una carta con una versión programada para entrar en vigor más tarde también retiene todas las
 fotografías que incluye esa versión. La biblioteca muestra esa carta por su nombre, seguido de

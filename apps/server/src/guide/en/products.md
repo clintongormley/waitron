@@ -9,6 +9,8 @@ and enter its price. Its VAT starts on the class chosen as **VAT class for new p
 **Venue details** tab of **Venue settings**; change it here when this product is taxed differently.
 For a product with no VAT, choose **No tax (0%)**. A change of VAT class reaches the tills when the
 menu is published again; until then they sell the product at the class the menu was published with.
+To correct the class on the live menu without publishing your other changes to the products, see
+[Patch the live menu in an emergency](products.md#patch-live-menu).
 A line already on an order keeps the class it was added with.
 
 The editor keeps the fields you change often on screen and folds the rest away behind a heading that
@@ -248,6 +250,69 @@ lists each menu's **Top level** and the sections inside it: tick the places you 
 place that refuses it does not undo the save. The window names the places that failed and keeps
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
+
+## Patch the live menu in an emergency {#patch-live-menu}
+
+Use a patch when you find a mistake in the menu that is live now, such as a wrong price, while the
+products already hold work for the next menu that you do not want on the till yet. Publishing would
+put that work live as well. A patch changes only the values you correct, in the live version of one
+menu.
+
+Open the menu in **Products and menus → Menus** and choose **Patch live menu…** beside its live
+version in the heading. The button appears only while the menu has a live version, and anyone who
+can publish the menu can patch it. The window lists the items in the live menu, with a search box,
+and its extras and options lists under **Extras and options**. Pick an item to see what you can
+change:
+
+- A dish: its name, customer-facing name, kitchen name, description, image, price and VAT class.
+- A variant or an extra: the same, without a description.
+- An options list's choice, and the name of an extras list or an options list: its three names.
+- A section: its internal name, customer-facing name and image.
+
+Customer-facing names and descriptions show a field for each content language. Choose or remove an
+image as you would in the product editor. A dish with variants is charged at each variant's own
+price and VAT class, so correct those on its variants, which its form lists with their price and VAT class; correcting the dish never changes them. A
+change to an extra, an options list's choice or a list's name is made everywhere that list appears
+in this menu. A product sold both as a dish and as an extra is corrected in each place separately. A
+section shown inside an included menu's folder keeps any name or picture that folder sets for it,
+and a language's name that the folders set in every place the section appears is shown greyed out,
+with **The included folder sets this name.** under it, and cannot be changed here.
+
+A patch cannot change anything else. Allergens and diet labels are declared on the product itself;
+see [Declare allergens and dietary suitability directly](products.md#allergens). Nor can it change
+the unit, availability, course or category, the order of items, colours, or which items and
+sections the menu holds.
+
+Each item you change is marked with a dot. A value the patch cannot take is pointed out when you
+choose **Review**: its field says what to correct, its item is marked with **!**, and **Review** stays
+unavailable until you correct it. If **Put live now** is refused because of one value, the
+window goes back to that value's field and says why there; your change stays in the window.
+An image deleted from the image library after you chose it is refused this way: choose another, or
+remove it.
+**Review 1 change**, or **Review** followed by the number of changes, lists each one as the old
+value → the new one. Choose **Keep editing** to go back, or **Put live now**. What putting a patch live does:
+
+- It goes live at once as a new version of this menu, under the next number. Lines added to orders
+  from then on use the corrected values. Lines already on open orders keep their old price and VAT
+  class.
+- On a parked counter order, renaming an options list or one of its choices does what it does after
+  a publish, as [What the till does with a list](modifiers.md#till) describes: a new staff name
+  makes the till ask for that answer to be chosen again, and a new customer-facing or kitchen name
+  is saved onto those lines at the next change to the order, which can send a line the kitchen
+  already has to it again as a new ticket. Those lines keep their prices.
+- It changes nothing else: not the products, not the menu's own items and sections, not your other
+  menus. A product on two menus is patched on each one.
+- A version scheduled to go live later keeps its date and its content, and goes live then without
+  the patch. It is given a new number after the patch's, under **Scheduled versions** on the
+  **Preview** tab.
+- The next normal publish builds the menu from the products again, so it puts the old values back
+  unless you correct the products too.
+
+A field set back to its live value is not counted as a change. If another version goes live while
+you have changes or a field to correct in the window, the window keeps showing the version you were
+correcting and says so, and **Put live now** is refused: **Reload** opens the version that is live
+now and keeps the changes that still fit it. If it goes live while you have neither, the window
+moves to it by itself.
 
 ## Keep choices reusable {#reusable-choices}
 

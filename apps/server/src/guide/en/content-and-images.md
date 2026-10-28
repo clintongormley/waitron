@@ -220,11 +220,14 @@ another one can hold a photograph of its own for its folder. The library lists t
 photograph still blocks deletion while the include shows its sections directly; turn **Show as a
 folder** on to see the photo field.
 
-A published menu also holds every photograph its last publish included, even after you remove the
+A published menu also holds every photograph its live version includes, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by
 **(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
 to release it. If the menu also has versions scheduled to go live later, publishing now is
-refused while any of them waits, so cancel them first, as described below.
+refused while any of them waits, so cancel them first, as described below. A patch is a version
+too: it holds the photographs it shows, so a patch that takes the photograph off every item in the
+live version also ends the published menu's hold on it, and scheduled versions do not refuse it. See
+[Patch the live menu in an emergency](products.md#patch-live-menu).
 
 A menu with a version scheduled to go live later also holds every photograph that version includes.
 The library lists that menu by name, followed by **(Scheduled menu)**, and its link opens the menu.

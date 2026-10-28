@@ -1241,3 +1241,25 @@ it("refreshes the box's health every fifteen seconds, from no table, passively a
   expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
   expect(active).toHaveBeenCalledOnce();
 });
+
+it("refreshes the live menu read only when a publication or version changes", async () => {
+  expect([...QUERY_DEPENDENCIES.getLiveMenu].sort()).toEqual([
+    "menu_publications",
+    "menu_scheduled_publications",
+    "menu_versions",
+  ]);
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response("null"),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const observed = api.liveData.observe(dashboardQuery(api, "getLiveMenu", ["lunch"]), () => {});
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/catalogues/lunch/live");
+    const before = fetchImpl.mock.calls.length;
+    api.liveData.invalidate([{ type: "menu_versions", id: "v4" }]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
+  } finally {
+    observed.unsubscribe();
+  }
+});

@@ -106,7 +106,11 @@ in `apps/dashboard`, Vitest (browser mode for the dashboard).
   `change` is the index; `field` is `"target"`, `"field"` or the field's name; `reason` is the
   code a validator underneath threw (e.g. `content.translation_invalid`), so the dashboard can
   show that code's own wording. Register it in `errors.ts` beside `menu_publication.*`. A body
-  that is not an array refuses with `change: -1, field: "changes"`.
+  that is not an array refuses with `change: -1, field: "changes"`. (2026-10-27, finish-branch
+  review: a body whose `changes` is not a list is now refused `management.request_invalid` with
+  `field: "changes"`, like the route's other body checks.) (2026-10-28, finish-branch review: a
+  picture the image library does not hold is refused with `reason: "image.not_found"`, the media
+  package's own code.)
 
 Value rules:
 - `name`, `internalName`: string, trimmed, non-blank.
@@ -140,7 +144,8 @@ Write rules for this task:
     all enabled blank and nothing else stored → `null`.
   - `"refuses a field outside the list, naming the change"`: index 1 with `"unit"`, `"allergens"`,
     `"dietaryDeclarations"`, `"color"` → `{ change: 1, field: "field" }`; unknown target kind →
-    `field: "target"`; a non-array body → `{ change: -1, field: "changes" }`.
+    `field: "target"`; a non-array body → `{ change: -1, field: "changes" }`. (2026-10-27, finish-branch review: now `management.request_invalid` with
+    `field: "changes"`; see Task 1's interface note.)
   - `"refuses each bad value under its field"`: price `"abc"` and `"-1"`, vatClass `"luxury"`,
     blank name, a non-string kitchen name, a non-object customer name, an unknown language key
     (with `reason`), an empty-string image, a missing variant.
@@ -320,6 +325,8 @@ Write rules:
   depend on; there is no per-write invalidation to add).
 - Code messages (exact English; Spanish to match in meaning and register):
   - `menu_patch.base_changed`: "Version {liveNumber} went live while you were patching. Reload to patch it instead; changes that still fit are kept."
+    (2026-10-27, finish-branch review: the code message no longer holds `{liveNumber}`; the
+    numbered sentence is the `strings.ts` key `menu_patch.base_changed_live`, filled by the dialog.)
   - `menu_patch.unchanged`: "These values are already live. Nothing was saved."
   - `menu_patch.not_published`: "This menu has never been published, so there is nothing live to patch. Publish it first."
   - `menu_patch.invalid`: "Check this value."
@@ -384,7 +391,9 @@ Layout (spec decision 5, mockup option A):
   beside price and VAT class: "Sold through its variants: the till charges each variant's own price
   and VAT class."
 - Values are checked in the browser with the same parsers before staging; a bad value shows its
-  error under the field and is not staged.
+  error under the field and is not staged. (2026-10-27, finish-branch fix wave: the error shows
+  only once Review has been pressed, per the Forms contract; a value the server refuses stays
+  staged, with its error under the field.)
 - A refresh of the live document while the dialog is open never resets staged changes.
 
 - [ ] **Step 1: Write failing tests:** the heading shows the live number; search narrows the tree;
@@ -414,7 +423,9 @@ Behaviour:
   Buttons: "Keep editing" and "Put live now" (primary).
 - `menu_patch.invalid` returns to the form, picks the item of the named change, and shows the
   `reason` code's own message (or "Check this value.") under the named field, plus the one bottom
-  message the Forms contract requires.
+  message the Forms contract requires. (2026-10-28, finish-branch review: a picture refused with
+  `image.not_found` says "This image is no longer in the image library. Choose another, or remove
+  it.")
 - `menu_patch.base_changed` shows its message with a "Reload" button that fetches `getLiveMenu`,
   calls `draft.rebase`, and when `dropped > 0` says "{dropped} changes no longer fit the live
   version and were dropped."

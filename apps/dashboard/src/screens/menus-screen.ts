@@ -24,6 +24,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -42,6 +43,7 @@ import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
 import "../widgets/home-shortcut-picker.js";
+import "../widgets/menu-patch-dialog.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
@@ -81,6 +83,7 @@ import {
 } from "@waitron/catalogue/src/device-home.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { fill, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
@@ -397,7 +400,17 @@ export class MenusScreen extends LitElement {
         flex-wrap: wrap;
         align-items: baseline;
         column-gap: var(--wt-space-2);
+        /* Room for the half of the patch help badge that hangs above the button when it wraps, help
+           on or off, so turning help on moves nothing. */
+        row-gap: calc(var(--wt-help-badge-target) / 2);
         min-width: 0;
+      }
+      /* The help badge hangs over this box's top trailing corner. */
+      .patch-action {
+        position: relative;
+        display: flex;
+        gap: var(--wt-space-1);
+        align-items: center;
       }
       .heading h1 {
         margin: 0;
@@ -696,6 +709,7 @@ export class MenusScreen extends LitElement {
    * between, where the link sits under the status. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
+  @state() private patching = false;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -1289,6 +1303,7 @@ export class MenusScreen extends LitElement {
     this.priceRefusals = {};
     this.priceOutcome = null;
     this.publishResult = null;
+    this.patching = false;
     this.#releasePrices();
     this.#releasePreview();
     this.#releaseHome();
@@ -3292,7 +3307,50 @@ export class MenusScreen extends LitElement {
       : this.status === null
         ? t("menus.status_loading")
         : liveWords(this.status);
-    return html`<span class="live" data-test="menu-status">(${words})</span>`;
+    const live =
+      !this.statusError && (this.status?.state === "current" || this.status?.state === "changed");
+    return html`<span class="live" data-test="menu-status">(${words})</span>${
+        live
+          ? html`<span class="patch-action"
+              ><wt-button
+                variant="secondary"
+                data-test="patch-live-menu"
+                @click=${() => {
+                  this.patching = true;
+                }}
+                >${t("menus.patch_live")}</wt-button
+              ><wt-help-tooltip
+                mode="help-mode"
+                data-test="patch-live-menu-help"
+                aria-label=${t("menus.patch_live_help_label")}
+                guide-href=${guideHref("products.patch-live-menu")}
+                guide-label=${t("menus.patch_live_help_guide")}
+                >${t("menus.patch_live_help")}</wt-help-tooltip
+              ></span
+            >`
+          : nothing
+      }`;
+  }
+
+  #renderPatchDialog(menuId: string) {
+    return html`<dashboard-menu-patch-dialog
+      .api=${this.api}
+      menuId=${menuId}
+      menuName=${this.#menuName()}
+      .open=${this.patching}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        // The picture picker's modal inside the dialog closes with a composed wt-close too.
+        this.patching = (
+          event.currentTarget as HTMLElementTagNameMap["dashboard-menu-patch-dialog"]
+        ).open;
+      }}
+      @wt-menu-patched=${(event: Event) => {
+        event.stopPropagation();
+        // The patch is not this screen's working state, so the status is read rather than set.
+        this.#followStatus(true);
+      }}
+    ></dashboard-menu-patch-dialog>`;
   }
 
   /** A menu never published has none of it live, so it is marked as well. */
@@ -3699,7 +3757,7 @@ export class MenusScreen extends LitElement {
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
-      ${this.#renderShortcutPicker()}`;
+      ${this.#renderShortcutPicker()} ${this.#renderPatchDialog(menuId)}`;
   }
 
   override render() {

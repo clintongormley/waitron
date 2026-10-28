@@ -1,7 +1,7 @@
 import { navigateMenuChanges } from "./menu-navigation.js";
 import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { BATCH_SIZE, batches } from "./batches.js";
 import { alias, unionAll } from "drizzle-orm/sqlite-core";
 import {
@@ -22,6 +22,11 @@ import {
   menuVersions,
 } from "./schema/publication.js";
 import { menusContaining, reachableProducts } from "./section-graph.js";
+import { readContentLanguages } from "./content-languages.js";
+import { applyMenuPatch, parseMenuPatch } from "./menu-patch.js";
+import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
+import { mediaImageExists } from "./sections.js";
+import { catalogueExists } from "./operations.js";
 import type {
   MenuChangeBody,
   MenuDocument,
@@ -29,6 +34,7 @@ import type {
   MenuStatus,
   OvertakenEdition,
   PublishedMenuVersion,
+  QueuedEdition,
 } from "./menu-document-types.js";
 import "./errors.js";
 
@@ -643,11 +649,161 @@ export async function publishMenu(
     publishedAt,
     publishedBy: personId,
   });
+  await pointTo(tx, menuId, versionId, publishedAt);
+  return { versionId, number };
+}
+
+/** Makes `versionId` the menu's live version as of `publishedAt`. */
+async function pointTo(
+  tx: Transaction,
+  menuId: string,
+  versionId: string,
+  publishedAt: Date,
+): Promise<void> {
   await tx
     .insert(menuPublications)
     .values({ menuId, versionId, publishedAt })
     .onConflictDoUpdate({ target: menuPublications.menuId, set: { versionId, publishedAt } });
-  return { versionId, number };
+}
+
+async function requireMenu(tx: Transaction, menuId: string): Promise<void> {
+  if (!(await catalogueExists(tx, menuId)))
+    throw new AppError("catalogue.not_found", { catalogueId: menuId });
+}
+
+/** The menu's version live at `at` and its document, or `null` when it has none. */
+export async function readLiveMenu(
+  tx: Transaction,
+  menuId: string,
+  at: Date = now(),
+): Promise<LiveMenu | null> {
+  const live = (await liveVersions(tx, [menuId], "document", at)).get(menuId);
+  if (live === undefined) {
+    await requireMenu(tx, menuId);
+    return null;
+  }
+  return {
+    versionId: live.versionId,
+    number: live.number,
+    since: live.since.toISOString(),
+    document: live.document!,
+  };
+}
+
+/**
+ * Puts `changes` live at once as a new version of the menu's live version `baseVersionId`, inside
+ * the caller's one transaction, then queues every still-queued version again after it, with the
+ * same content and date. The products, the working menu and every other menu are left as they
+ * were. Translated fields merge against the venue's saved content languages, or `fallbackLanguage`
+ * alone when none are saved.
+ */
+export async function patchLiveMenu(
+  tx: Transaction,
+  menuId: string,
+  baseVersionId: string,
+  changes: unknown,
+  personId: string,
+  options: { at?: Date; fallbackLanguage?: string } = {},
+): Promise<MenuPatchResult> {
+  const at = options.at ?? now();
+  await settleDue(tx, at, [menuId]);
+  const live = (await liveVersions(tx, [menuId], "document", at)).get(menuId);
+  if (live === undefined) {
+    await requireMenu(tx, menuId);
+    throw new AppError("menu_patch.not_published", { menuId });
+  }
+  if (live.versionId !== baseVersionId)
+    throw new AppError("menu_patch.base_changed", {
+      menuId,
+      baseVersionId,
+      liveVersionId: live.versionId,
+      liveNumber: live.number,
+    });
+  const parsed = parseMenuPatch(changes);
+  for (const [index, { field, value }] of parsed.entries())
+    if (field === "image" && value !== null && !(await mediaImageExists(tx, value as string)))
+      throw new AppError("menu_patch.invalid", {
+        change: index,
+        field: "image",
+        reason: "image.not_found",
+      });
+  const document = applyMenuPatch(
+    live.document!,
+    parsed,
+    await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE),
+  );
+  const contentHash = menuDocumentHash(document);
+  if (contentHash === live.contentHash) throw new AppError("menu_patch.unchanged", { menuId });
+  const number = await nextNumber(tx, menuId);
+  const versionId = await insertVersion(tx, {
+    menuId,
+    number,
+    document,
+    contentHash,
+    publishedAt: at,
+    publishedBy: personId,
+  });
+  await pointTo(tx, menuId, versionId, at);
+  return { versionId, number, requeued: await requeueAfter(tx, menuId, at, personId) };
+}
+
+/** Queues every version of the menu still waiting after `at` again under new numbers, in order. */
+async function requeueAfter(
+  tx: Transaction,
+  menuId: string,
+  at: Date,
+  personId: string,
+): Promise<QueuedEdition[]> {
+  const waiting = await tx
+    .select({
+      versionId: menuScheduledPublications.versionId,
+      document: menuVersions.document,
+      contentHash: menuVersions.contentHash,
+      publishedAt: menuVersions.publishedAt,
+      publishedBy: menuVersions.publishedBy,
+      activatesAt: menuScheduledPublications.activatesAt,
+      queuedAt: menuScheduledPublications.queuedAt,
+      queuedBy: menuScheduledPublications.queuedBy,
+    })
+    .from(menuScheduledPublications)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .where(
+      and(
+        eq(menuScheduledPublications.menuId, menuId),
+        eq(menuScheduledPublications.state, "queued"),
+        gt(menuScheduledPublications.activatesAt, at),
+      ),
+    )
+    .orderBy(asc(menuVersions.number));
+  if (waiting.length === 0) return [];
+  // Every original is cancelled before any copy is queued: at most one queued row may hold an
+  // instant, and each copy takes its original's.
+  for (const batch of batches(waiting.map(({ versionId }) => versionId)))
+    await tx
+      .update(menuScheduledPublications)
+      .set({ state: "cancelled", cancelledAt: at, cancelledBy: personId })
+      .where(inArray(menuScheduledPublications.versionId, batch));
+  const requeued: QueuedEdition[] = [];
+  for (const edition of waiting) {
+    const number = await nextNumber(tx, menuId);
+    const versionId = await insertVersion(tx, {
+      menuId,
+      number,
+      document: edition.document,
+      contentHash: edition.contentHash,
+      publishedAt: edition.publishedAt,
+      publishedBy: edition.publishedBy,
+    });
+    await tx.insert(menuScheduledPublications).values({
+      versionId,
+      menuId,
+      activatesAt: edition.activatesAt,
+      queuedAt: edition.queuedAt,
+      queuedBy: edition.queuedBy,
+    });
+    requeued.push({ versionId, number, activatesAt: edition.activatesAt.toISOString() });
+  }
+  return requeued;
 }
 
 /** Writes a version and the photos its document names; both rows are never changed again. */

@@ -70,6 +70,8 @@ import {
   menuStatus,
   previewMenu,
   publishMenu,
+  patchLiveMenu,
+  readLiveMenu,
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,
@@ -346,6 +348,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_publication.unchanged": 409,
   "menu_publication.time_skipped": 400,
   "menu_publication.time_repeated": 400,
+  "menu_patch.invalid": 400,
+  "menu_patch.not_published": 409,
+  "menu_patch.base_changed": 409,
+  "menu_patch.unchanged": 409,
   "time_zone.unreadable": 409,
   "menu.shortcut_unreachable": 409,
   "menu.home_display_invalid": 400,
@@ -1100,6 +1106,36 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(
         await gated(c, sessionId, (tx, personId) =>
           publishMenu(tx, menuId, expectedHash, personId),
+        ),
+      );
+    }),
+  );
+
+  app.get("/management-api/catalogues/:id/live", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      return c.json(await gated(c, sessionId, (tx) => readLiveMenu(tx, menuId)));
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/patch", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<{ baseVersionId?: unknown; changes?: unknown }>(c);
+      const baseVersionId = requireUuidParam(
+        requireString(body.baseVersionId, "baseVersionId"),
+        "MenuVersionId",
+      );
+      const changes = body.changes;
+      if (!Array.isArray(changes))
+        throw new AppError("management.request_invalid", { field: "changes" });
+      return c.json(
+        await gated(c, sessionId, (tx, personId) =>
+          patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
+            fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
+          }),
         ),
       );
     }),

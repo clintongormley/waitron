@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, setHelpMode } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -671,6 +671,8 @@ function api(
       }));
     }),
     setHomeDisplay: vi.fn().mockResolvedValue(undefined),
+    getLiveMenu: vi.fn().mockResolvedValue(null),
+    patchLiveMenu: vi.fn(),
     ...overrides,
   };
   Object.assign(client, {
@@ -9946,6 +9948,292 @@ describe("publishing", () => {
     inPanel(el, "preview-retry")!.click();
     await vi.waitFor(() => expect(inPanel(el, "changes")).not.toBeNull());
     expect(inPanel(el, "preview-error")).toBeNull();
+  });
+});
+
+describe("patching the live menu", () => {
+  beforeEach(() => setLocale("en"));
+  afterEach(() => setLocale("es-ES"));
+
+  const PATCHED_AT = "2026-10-27T09:30:00.000Z";
+  const patched = {
+    state: "changed" as const,
+    clashes: 0,
+    version: 3,
+    publishedAt: PATCHED_AT,
+    hash: "c".repeat(64),
+  };
+
+  function patchButton(el: MenusScreen): HTMLElement | null {
+    return q(el, '[data-test="patch-live-menu"]');
+  }
+
+  function dialog(el: MenusScreen): HTMLElementTagNameMap["dashboard-menu-patch-dialog"] {
+    return q<HTMLElementTagNameMap["dashboard-menu-patch-dialog"]>(
+      el,
+      "dashboard-menu-patch-dialog",
+    )!;
+  }
+
+  function previewMarked(el: MenusScreen): string | undefined {
+    const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
+    return tabs.items.find((item) => item.key === "preview")?.marked;
+  }
+
+  function announcePatch(el: MenusScreen): void {
+    dialog(el).dispatchEvent(
+      new CustomEvent("wt-menu-patched", {
+        detail: { versionId: "v-lunch-3", number: 3, requeued: [] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Lunch with version 2 live and nothing changed since it was published. */
+  function currentLunch(overrides: Partial<Api> = {}) {
+    return api({
+      getMenuStatus: vi.fn().mockResolvedValue({ ...statuses()["menu-lunch"]!, state: "current" }),
+      ...overrides,
+    });
+  }
+
+  it("offers the patch beside the live words of a menu with a live version", async () => {
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    expect(text(patchButton(el))).toBe("Patch live menu…");
+    expect(patchButton(el)!.getAttribute("variant")).toBe("secondary");
+    expect(patchButton(el)!.closest(".title")).not.toBeNull();
+    cleanupWidgets();
+
+    const changed = await mountLunch(api());
+    await vi.waitFor(() =>
+      expect(text(q(changed, '[data-test="menu-status"]'))).toContain("version 2"),
+    );
+    expect(patchButton(changed)).not.toBeNull();
+  });
+
+  it("offers no patch for a menu never published, nor while its state cannot be read", async () => {
+    const el = await mountLunch(
+      api({ getMenuStatus: vi.fn().mockResolvedValue({ state: "unpublished", clashes: 0 }) }),
+    );
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
+    expect(patchButton(el)).toBeNull();
+    cleanupWidgets();
+
+    const failed = await mountLunch(
+      api({ getMenuStatus: vi.fn().mockRejectedValue(new Error("offline")) }),
+    );
+    await vi.waitFor(() =>
+      expect(text(q(failed, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
+    );
+    expect(patchButton(failed)).toBeNull();
+  });
+
+  function patchHelp(el: MenusScreen): HTMLElement | null {
+    return q(el, '[data-test="patch-live-menu-help"]');
+  }
+
+  it.each([
+    ["en", "/help/en/products#patch-live-menu"],
+    ["es", "/help/es/products#patch-live-menu"],
+  ])(
+    "explains the patch in a help-mode tooltip beside its button, linking to the guide in %s",
+    async (locale, href) => {
+      setLocale(locale);
+      const el = await mountLunch(currentLunch());
+      await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+      const tooltip = patchHelp(el)!;
+      expect(tooltip.tagName).toBe("WT-HELP-TOOLTIP");
+      expect(tooltip.previousElementSibling).toBe(patchButton(el));
+      expect(tooltip.getAttribute("mode")).toBe("help-mode");
+      expect(tooltip.getAttribute("aria-label")).toBe(t("menus.patch_live_help_label"));
+      expect(text(tooltip)).toBe(t("menus.patch_live_help"));
+      expect(tooltip.getAttribute("guide-href")).toBe(href);
+      expect(tooltip.getAttribute("guide-label")).toBe(t("menus.patch_live_help_guide"));
+    },
+  );
+
+  it("hangs the patch's help badge over its button's top trailing corner while help is on", async () => {
+    setHelpMode(true);
+    onTestFinished(() => setHelpMode(false));
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    const button = patchButton(el)!.getBoundingClientRect();
+    const badge = patchHelp(el)!.getBoundingClientRect();
+    expect(badge.width).toBeGreaterThan(0);
+    const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
+    expect(Math.abs(x - button.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
+  });
+
+  it("keeps the patch's help badge off the live words and the title when the heading wraps on a phone", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(width, height));
+    setHelpMode(true);
+    onTestFinished(() => setHelpMode(false));
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    const words = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
+    const title = q(el, ".title h1")!.getBoundingClientRect();
+    const button = patchButton(el)!.getBoundingClientRect();
+    const badge = patchHelp(el)!.getBoundingClientRect();
+    expect(button.top).toBeGreaterThanOrEqual(words.bottom);
+    expect(badge.width).toBeGreaterThan(0);
+    for (const box of [words, title])
+      expect(
+        badge.left < box.right &&
+          box.left < badge.right &&
+          badge.top < box.bottom &&
+          box.top < badge.bottom,
+      ).toBe(false);
+  });
+
+  it("shows no patch tooltip where there is no patch button", async () => {
+    const el = await mountLunch(
+      api({ getMenuStatus: vi.fn().mockResolvedValue({ state: "unpublished", clashes: 0 }) }),
+    );
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
+    expect(patchHelp(el)).toBeNull();
+  });
+
+  it("opens the patch dialog for the open menu, and again after it closes", async () => {
+    const client = currentLunch();
+    const el = await mountLunch(client);
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    expect(dialog(el).open).toBe(false);
+    await userEvent.click(patchButton(el)!);
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(true);
+    expect(dialog(el).menuId).toBe("menu-lunch");
+    expect(dialog(el).menuName).toBe("Lunch Menu");
+    expect(dialog(el).api).toBe(client);
+    const closed = new Promise<void>((resolve) =>
+      dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    void dialog(el).shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await closed;
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(false);
+    await userEvent.click(patchButton(el)!);
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(true);
+  });
+
+  it("does not reopen the patch dialog on coming back to a menu left while it was open", async () => {
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    await userEvent.click(patchButton(el)!);
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(true);
+    await click(el, "back");
+    await vi.waitFor(() => expect(table(el)).not.toBeNull());
+    await inTable(el, "open-menu-lunch");
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("keeps the patch dialog open when a dialog inside it closes", async () => {
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    await userEvent.click(patchButton(el)!);
+    await el.updateComplete;
+    // The picture picker's own modal closes with a composed `wt-close`, which reaches the screen
+    // from the patch dialog while that dialog stays open.
+    dialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(true);
+  });
+
+  it("keeps the patch dialog's close inside the screen", async () => {
+    const el = await mountLunch(currentLunch());
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    await userEvent.click(patchButton(el)!);
+    await el.updateComplete;
+    const outside = vi.fn();
+    el.parentElement!.addEventListener("wt-close", outside);
+    onTestFinished(() => el.parentElement?.removeEventListener("wt-close", outside));
+    const closed = new Promise<void>((resolve) =>
+      dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    void dialog(el).shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await closed;
+    await el.updateComplete;
+    expect(dialog(el).open).toBe(false);
+    expect(outside).not.toHaveBeenCalled();
+  });
+
+  it("reads the menu's state again after a patch, showing the new version as changed", async () => {
+    const client = currentLunch();
+    const el = await mountLunch(client);
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    expect(previewMarked(el)).toBeUndefined();
+    const reads = client.getMenuStatus.mock.calls.length;
+    client.getMenuStatus.mockResolvedValue(patched);
+    await userEvent.click(patchButton(el)!);
+    announcePatch(el);
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(
+        `(Live: version 3 · ${formatIsoMinute(PATCHED_AT)})`,
+      ),
+    );
+    expect(client.getMenuStatus.mock.calls.length).toBeGreaterThan(reads);
+    expect(client.getMenuStatus).toHaveBeenLastCalledWith("menu-lunch");
+    expect(previewMarked(el)).toBe(t("menus.tab_preview_unpublished"));
+    expect(client.publishMenu).not.toHaveBeenCalled();
+  });
+
+  it("says the state could not be checked when the read after a patch fails, as a load failure", async () => {
+    const client = currentLunch();
+    const el = await mountLunch(client);
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    client.getMenuStatus.mockRejectedValue(new Error("offline"));
+    announcePatch(el);
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
+    );
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("shows the renumbered scheduled version on the Preview tab after a patch", async () => {
+    const live = new LiveData();
+    const edition = (versionId: string, number: number) => ({
+      versionId,
+      number,
+      state: "queued" as const,
+      activatesAt: "2030-01-01T11:00:00.000Z",
+      queuedAt: "2026-10-26T08:00:00.000Z",
+      cancelledAt: null,
+      contentHash: "3".repeat(64),
+      local: { date: "2030-01-01", time: "12:00", offset: "+01:00", repeated: false },
+    });
+    const client = api({
+      liveData: live,
+      getMenuPublications: vi.fn().mockResolvedValue({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: [edition("v-lunch-3", 3)],
+      }),
+    });
+    const el = await mount(client, PREVIEW_PATH);
+    const schedule = () =>
+      q(el, "dashboard-menu-preview")!.querySelector<
+        HTMLElementTagNameMap["dashboard-menu-publications"]
+      >("dashboard-menu-publications")!;
+    const version = (id: string) =>
+      schedule()
+        .shadowRoot!.querySelector('wt-data-table[data-test="editions"]')
+        ?.shadowRoot?.querySelector(`[data-test="version-${id}"]`) ?? null;
+    await vi.waitFor(() => expect(version("v-lunch-3")).not.toBeNull());
+    client.getMenuPublications.mockResolvedValue({
+      timeZone: "Europe/Madrid",
+      live: null,
+      editions: [edition("v-lunch-5", 5)],
+    });
+    announcePatch(el);
+    await vi.waitFor(() => expect(version("v-lunch-5")).not.toBeNull());
+    expect(version("v-lunch-3")).toBeNull();
   });
 });
 

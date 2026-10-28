@@ -1151,10 +1151,36 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-- **A1151. Patch live menu: change wording, price, picture or VAT class in a menu's live version
-  without touching the products** (owner, 2026-10-27). Design approved and plan reviewed:
-  `docs/superpowers/specs/2026-10-27-patch-live-menu-design.md`,
-  `docs/superpowers/plans/2026-10-27-patch-live-menu.md`. Queued for a lane.
+- **The menu patch window's Reload re-reads the live menu but not the venue's content languages
+  (left open by A1151).**
+
+- **The menu patch window's "no longer fit" count is a running total since the window opened (left
+  open by A1151).** A change the live version already holds is removed without being counted.
+
+- **A field typed equal to the live value can be redrawn in the live value's spelling (left open
+  by A1151).** After a content-language change, or a Reload onto the version already shown, the
+  menu patch window redraws a typed "3" as "3.00". Found by reading the code, not run.
+
+- **Owner question: the menu patch window's locked section name says why on a line under the field
+  (left open by A1151).** "The included folder sets this name." is a muted line under a disabled
+  field (`apps/dashboard/src/widgets/form-fields.ts`, `optionalTextFields`). The house rule makes a
+  field's hint its placeholder, never a line under it, and puts an explanation for a filled field
+  in a help-mode `wt-help-tooltip`, which would hide the reason while help is off. No rule names a
+  disabled field's reason; decide whether this line is the pattern or the tooltip is.
+
+- **Split the menu patch window's file before adding to it (left open by A1151).**
+  `apps/dashboard/src/widgets/menu-patch-dialog.ts` is large; split it before more is added to it.
+
+- **After Remove image, or a pick from the image library, focus drops to the page instead of
+  returning to "Choose image" (found in the menu patch window, A1151).** `dashboard-image-upload`
+  (`apps/dashboard/src/widgets/image-upload.ts`, `#setOpen`) returns focus when the picker closes
+  only in its logo modes; the plain chooser every product form uses has no such step. The logo
+  step came from main (A841 slice 8a, #2035); A1151 did not change it.
+
+- **While the content-languages read is slow, a refused send in the menu patch window can show
+  "Enter text for each translation." under a Spanish name field that has text (left open by
+  A1151).** Seen with a forced 4-second delay on that read; in normal use it would flash for about
+  a tenth of a second at most.
 
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
@@ -1163,8 +1189,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   until the menu is published again, and nothing says which is which. The owner chose one source,
   the live product, the way availability already works. The design covers every reader of a
   version's `allergens`, `dietaryDeclarations` and `diet`, the publish warnings and change list
-  that compare them, and the guide's wording. The menu patch editor (branch
-  `feat/patch-live-menu`) leaves allergens out because of this decision.
+  that compare them, and the guide's wording. The menu patch window (A1151)
+  leaves allergens out because of this decision.
 
 ### Service periods, opening hours and departments
 
