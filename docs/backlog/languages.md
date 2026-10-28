@@ -49,37 +49,6 @@ caller admits those locales is unverified.
 
 **Next:** check own locale keys, test the English fallback and trace the callers.
 
-## A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads
-
-- The image library marks a use by an inactive product "Disabled product" ("Producto
-  deshabilitado"; `image.disabled_product`, `packages/media/src/dashboard/strings.ts`, drawn in
-  `packages/media/src/dashboard/image-library.ts`), where the product screens say "Archived"
-  (`product.archived_badge`).
-- The Spanish `product.refusal_menus` is "Menús" and `folders.delete_off_menus` says "menús"
-  (`apps/dashboard/src/i18n/strings.ts`), where the neighbouring strings in that file, such as
-  `product.off_menus` and `folders.off_menus_unknown`, say "carta". Two strings in
-  `packages/venue-service/src/dashboard/strings.ts` say "menús" too: `routing.period_not_on_menus`
-  ("No está en los menús de {periods}", drawn by `routing-cell-editor.ts` and
-  `routing-grid-model.ts`) and `venue.delete_item_staff_menus` with its `_one` twin ("Quita {count}
-  ajustes de menús del personal", "Quita 1 ajuste de menú del personal").
-- `product.disable_warning` and `product.disabled_badge` are declared in English and Spanish, and no
-  other file under `apps/` or `packages/` names them (grep, 2026-10-18); the last change to their
-  use was A435's first step (#1464, products and variants archived for good). Delete them.
-
-Done when the three are changed and the dashboard's strings tests pass.
-
-## A887. Find a bill's state filter still says "Held" for an order the till now calls parked
-
-The English guides call an
-order set aside on the till a "parked order" (`grep -n "parked order" apps/server/src/guide/en/*.md`:
-`modifiers.md` and `products.md`), and since A738 (`d99a9f403`) the till's own button and list say
-**Park** and **Parked orders** (`action.hold`, `held.title`, `apps/till/src/i18n/strings.ts:317`,
-`:468`), with **Aparcar** and **Pedidos aparcados** in Spanish (`:1928`, `:2070`), so the guides and
-Park agree. What is left: Find a bill's state filter (`till-find-bill-screen.ts:42`, `:394`) calls
-an open, unpaid order with no table (`apps/server/src/find-bill-bills.ts:83`) **Held** /
-**En espera** (`find_page.held`, `strings.ts:525`, `:2125`). Done when that filter uses the till's
-word.
-
 ## The adjustment-reason and venue delete windows still use older wording
 
 The A1014 retrospective review of A831 (#1974) found two other windows outside A831's prep-station
