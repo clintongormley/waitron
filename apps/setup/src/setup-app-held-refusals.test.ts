@@ -13,6 +13,7 @@ import {
   heldPasswordAccepted,
   heldSummary,
   refusedCause,
+  settled,
   tradingEnv,
 } from "../test/held-database-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
@@ -27,6 +28,12 @@ const locales = ["en-GB", "es-ES"] as const;
 const stringsFor = (locale: string) => initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
 const shellFor = (locale: string) => (locale.startsWith("es") ? shellEs : shellEn);
 const text = (app: SetupApp) => app.shadowRoot!.textContent!;
+const formErrors = (app: SetupApp) =>
+  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+    (f) => f.error,
+  );
+// A form's error is drawn inside wt-form-actions' own shadow root, out of reach of text(app).
+const shown = (app: SetupApp) => [text(app), ...formErrors(app)].join("\n");
 const startAgainSends = (requests: { path: string }[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
 const refusedLines = (app: SetupApp) =>
@@ -177,8 +184,9 @@ for (const locale of locales) {
     await heldPasswordAccepted(app);
     await expect.poll(() => text(app)).toContain(t.setupFinished);
     await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(true);
-    expect(text(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
-    expect(text(app)).not.toContain(t.recoveryDetailsUnread);
+    await settled(app);
+    expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
+    expect(shown(app)).not.toContain(t.recoveryDetailsUnread);
     expect(text(app)).not.toContain(t.startUnavailableOccupied);
     expectStoppedRefused(app, t);
     expect(q(app, "reconnect-first")).not.toBeNull();
@@ -194,9 +202,10 @@ for (const locale of locales) {
     await heldPasswordAccepted(app);
     await expect.poll(() => text(app)).toContain(`${t.tradingSaved} ${t.tradingSavedPassword}`);
     await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(true);
+    await settled(app);
     expect(q(app, "resume-password")).not.toBeNull();
-    expect(text(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
-    expect(text(app)).not.toContain(t.recoveryDetailsUnread);
+    expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
+    expect(shown(app)).not.toContain(t.recoveryDetailsUnread);
   });
 }
 
@@ -215,15 +224,11 @@ it.each(["setup-finished", "trading-settings"] as const)(
       .poll(() => text(app))
       .toContain(cause === "setup-finished" ? t.setupFinished : t.tradingSaved);
     await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(true);
-    expect(text(app)).not.toContain(t.error);
-    expect(text(app)).not.toContain(shellEn["shell.not_ready"]);
+    await settled(app);
+    expect(shown(app)).not.toContain(t.error);
+    expect(shown(app)).not.toContain(shellEn["shell.not_ready"]);
   },
 );
-
-const formErrors = (app: SetupApp) =>
-  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
-    (f) => f.error,
-  );
 
 for (const locale of locales) {
   it(`${locale}: Start again refused at the send with kept-records: says the setup database changed and asks for the password again`, async () => {
@@ -257,10 +262,7 @@ it("Start again refused at the send with a cause the page has no words for keeps
   await expect.poll(() => startAgainSends(requests)).toHaveLength(1);
   await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
   await app.updateComplete;
-  const errors = [
-    ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-  ].map((f) => f.error);
-  expect(errors).toEqual([t.error]);
+  expect(formErrors(app)).toEqual([t.error]);
   expect(text(app)).not.toContain(t.setupFinished);
   expect(text(app)).not.toContain(t.tradingSaved);
 });
@@ -270,6 +272,7 @@ it("Reconnect after a refusal reads the box again and forgets it", async () => {
   const { app } = await heldFixture({ summary: () => refusedCause("setup-finished") });
   await heldPasswordAccepted(app);
   await expect.poll(() => text(app)).toContain(t.setupFinished);
+  await settled(app);
   await click(app, "reconnect-first");
   await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(false);
   expect(text(app)).not.toContain(t.setupFinished);

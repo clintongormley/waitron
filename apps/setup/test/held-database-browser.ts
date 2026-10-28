@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtInput } from "@waitron/ui";
+import type { WtButton, WtInput } from "@waitron/ui";
 import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import type { FirstSetupInspection, StartAgainSummary } from "../src/api/first-setup-types.js";
@@ -94,3 +94,10 @@ export async function heldPasswordAccepted(app: SetupApp) {
   );
   await click(app, "damaged-record-continue");
 }
+/**
+ * After a refusal the page shows its reason and a disabled Start again while it is still re-reading
+ * the box. Reconnect is always drawn and disabled only while the page is busy, so its enabling marks
+ * the reads done.
+ */
+export const settled = (app: SetupApp) =>
+  expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);

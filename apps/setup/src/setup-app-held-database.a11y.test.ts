@@ -13,6 +13,7 @@ import {
   heldPasswordAccepted,
   heldSummary,
   refusedCause,
+  settled,
   tradingEnv,
 } from "../test/held-database-browser.js";
 
@@ -126,6 +127,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 ) || null,
           )
           .not.toBeNull();
+        if (view === "setup-finished") await settled(app);
         await app.updateComplete;
         await expectNoA11yViolations(host);
         const focusable = q<WtButton>(
